@@ -11,6 +11,29 @@ declare module '@/features/news-extras' {
     className?: string;
     children?: ReactNode;
   }>;
+
+  export const QuickAlerts: FC<{
+    dataSource?: unknown;
+    symbol?: string | null;
+    refreshInterval?: number;
+    className?: string;
+    variant?: 'default' | 'sidebar';
+  }>;
+
+  export const NextCatalysts: FC<{
+    dataSource?: unknown;
+    symbol?: string | null;
+    windowHours?: number;
+    refreshInterval?: number;
+    className?: string;
+    variant?: 'default' | 'sidebar';
+  }>;
+
+  export const HotkeySheet: FC<{
+    rows?: Array<{ group?: string; keys: string[]; label: string }>;
+    className?: string;
+    variant?: 'panel' | 'banner';
+  }>;
 }
 
 declare module '@/features/news-extras/examples/StubAlertsDataSource' {
@@ -47,4 +70,21 @@ declare module '@/features/analyses-library' {
 
 declare module '@/features/analyses-library/examples/StubAnalysesDataSource' {
   export function createStubAnalysesDataSource(opts?: { latencyMs?: number }): unknown;
+}
+
+declare module '@/features/smart-money' {
+  import type { FC } from 'react';
+
+  export const SmartMoneyBanner: FC<{
+    dataSource: unknown;
+    refreshMs?: number;
+    onSignalSelect?: (s: { symbol: string }) => void;
+    activeSymbol?: string | null;
+    config?: unknown;
+    windowHours?: number;
+  }>;
+}
+
+declare module '@/features/smart-money/examples/StubSmartMoneyDataSource' {
+  export function createStubSmartMoneyDataSource(opts?: { latencyMs?: number }): unknown;
 }
