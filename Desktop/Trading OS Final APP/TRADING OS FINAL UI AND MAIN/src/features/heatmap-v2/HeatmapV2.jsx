@@ -43,21 +43,23 @@ export function HeatmapV2({
         onRefresh={refetch}
         loading={loading}
       />
-      <div className={styles.canvasWrap} ref={ref}>
-        {error ? (
-          <div className={styles.state}>Failed to load: {String(error.message || error)}</div>
-        ) : loading && !data ? (
-          <div className={styles.state}>Loading heatmap...</div>
-        ) : tickers.length === 0 ? (
-          <div className={styles.state}>No tickers.</div>
-        ) : (
-          <TreemapCanvas
-            tickers={tickers}
-            size={size}
-            timeframe={timeframe}
-            metric={metric}
-          />
-        )}
+      <div className={styles.canvasWrap}>
+        <div className={styles.canvasViewport} ref={ref}>
+          {error ? (
+            <div className={styles.state}>Failed to load: {String(error.message || error)}</div>
+          ) : loading && !data ? (
+            <div className={styles.state}>Loading heatmap...</div>
+          ) : tickers.length === 0 ? (
+            <div className={styles.state}>No tickers.</div>
+          ) : (
+            <TreemapCanvas
+              tickers={tickers}
+              size={size}
+              timeframe={timeframe}
+              metric={metric}
+            />
+          )}
+        </div>
       </div>
       <Legend metric={metric} />
     </div>

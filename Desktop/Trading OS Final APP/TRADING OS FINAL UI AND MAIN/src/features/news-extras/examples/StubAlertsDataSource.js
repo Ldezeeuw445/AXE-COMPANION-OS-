@@ -186,7 +186,13 @@ export function createStubAlertsDataSource({ latencyMs = 120 } = {}) {
       return delay(active.slice());
     },
 
-    async createFromTemplate(templateId, symbol) {
+    async createFromTemplate(payload) {
+      const templateId =
+        payload && typeof payload === "object"
+          ? payload.templateId
+          : payload;
+      const symbol =
+        payload && typeof payload === "object" ? payload.symbol : undefined;
       const tpl = TEMPLATES.find((t) => t.id === templateId);
       if (!tpl) throw new Error("Unknown template: " + templateId);
       const created = {

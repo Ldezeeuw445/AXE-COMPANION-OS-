@@ -21,6 +21,7 @@ export function NextCatalysts({
   windowHours = 48,
   refreshInterval = 60_000,
   className = '',
+  variant = 'default',
 }) {
   const q = useAsync({
     fetcher: dataSource
@@ -34,9 +35,16 @@ export function NextCatalysts({
   const { imminent, today, upcoming } = useMemo(() => groupCatalysts(items), [items]);
 
   return (
-    <div className={cx(s.panel, s.elevation2, className)}>
+    <div
+      className={cx(
+        s.panel,
+        s.elevation2,
+        variant === 'sidebar' && s.panelSidebar,
+        className,
+      )}
+    >
       <div className={s.panel__head}>
-        <span className={s.mono}>NEXT CATALYSTS</span>
+        <span className="tos-block-title">NEXT CATALYSTS</span>
         <span className={cx(s.mono, s.muted)}>{windowHours}h · {items.length}</span>
       </div>
 

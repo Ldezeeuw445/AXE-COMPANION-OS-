@@ -121,15 +121,35 @@ function buildCatalysts(now = Date.now()) {
   ];
 }
 
-export function createStubCatalystsDataSource({ latencyMs = 120 } = {}) {
+function normalizeForPanel(c) {
   return {
+    ...c,
+    startAt: c.startAt ?? c.at,
+    impact: c.impact ?? c.importance ?? "low",
+    note: c.note ?? c.detail,
+  };
+}
+
+export function createStubCatalystsDataSource({ latencyMs = 120 } = {}) {
+  const delay = (value) =>
+    new Promise((resolve) => setTimeout(() => resolve(value), latencyMs));
+
+  return {
+    /** Matches CatalystsDataSource.fetchCatalysts — NextCatalysts reads `catalysts`. */
+    async fetchCatalysts({ windowHours = 48, symbol: _symbol, signal: _signal } = {}) {
+      const now = Date.now();
+      const cutoff = now + windowHours * HOUR;
+      const list = buildCatalysts(now)
+        .filter((c) => c.at <= cutoff)
+        .map(normalizeForPanel);
+      return delay({ catalysts: list });
+    },
+
     async listUpcoming(windowHours = 48) {
       const now = Date.now();
       const cutoff = now + windowHours * HOUR;
       const list = buildCatalysts(now).filter((c) => c.at <= cutoff);
-      return new Promise((resolve) =>
-        setTimeout(() => resolve(list), latencyMs)
-      );
+      return delay(list);
     },
   };
 }

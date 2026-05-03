@@ -1,29 +1,47 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Target, Plane, Ship, TrendingUp, AlertTriangle,
-  Radio, Activity, Bitcoin,
+  Activity, Bitcoin,
   Eye, BarChart3,
 } from 'lucide-react';
 import TrackingMap from '../components/TrackingMap';
 import type { MapMarker } from '../components/InteractiveMap';
-import { SmartMoneyBanner } from '@/features/smart-money';
-import { createStubSmartMoneyDataSource } from '@/features/smart-money/examples/StubSmartMoneyDataSource';
+import { useSymbol } from '@/contexts/SymbolContext';
+import { DataLiveBadge } from '@/components/DataLiveBadge';
 import {
   corporateJets, vesselStream, senateTrades, insiderTrades,
   whaleTransactions, darkPoolPrints,
+  isIntelFeedLive,
+  getIntelFeedRefreshedSecondsAgo,
+  getIntelFeedLastError,
+  getCorporateJetsTop50,
 } from '../lib/engineAdapter';
-import type { JetPosition, Vessel, VesselAlert, SenateTrade, InsiderTrade, WhaleTx, DarkPoolPrint } from '../lib/engineAdapter';
+import type {
+  JetPosition,
+  CorporateJet,
+  JetSignal,
+  Vessel,
+  VesselAlert,
+  SenateTrade,
+  InsiderTrade,
+  WhaleTx,
+  DarkPoolPrint,
+} from '../lib/engineAdapter';
 
-// ── Signal badge ──
-function SignalBadge({ signal }: { signal: string }) {
-  const map: Record<string, { bg: string; text: string; label: string }> = {
-    normal:   { bg: 'bg-green-500/15',  text: 'text-green-400',  label: 'NORMAL' },
-    anomaly:  { bg: 'bg-red-500/15',    text: 'text-red-400',    label: 'ANOMALY' },
-    meeting:  { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'MEETING' },
-    regulatory: { bg: 'bg-orange-500/15', text: 'text-orange-400', label: 'REGULATORY' },
-  };
-  const s = map[signal] || map.normal;
-  return <span className={`text-[7px] px-1.5 py-0.5 rounded font-bold ${s.bg} ${s.text}`}>{s.label}</span>;
+function SignalBadge({ signal }: { signal: JetSignal }) {
+  const cls =
+    signal === 'anomaly'
+      ? 'border-red-400/35 text-red-400/95 bg-red-400/[0.07]'
+      : signal === 'meeting'
+        ? 'border-amber-400/35 text-amber-300/90 bg-amber-400/[0.06]'
+        : signal === 'regulatory'
+          ? 'border-orange-400/35 text-orange-300/90 bg-orange-400/[0.06]'
+          : 'border-white/[0.08] text-white/45 bg-white/[0.03]';
+  return (
+    <span className={`inline-flex rounded px-1 py-0.5 text-[7px] font-bold uppercase tracking-wider border ${cls}`}>
+      {signal}
+    </span>
+  );
 }
 
 function FlightHeatmapToday({
@@ -187,9 +205,14 @@ export default function Intel() {
     import.meta.env.VITE_VESSEL_FEED_LIVE === 'true' ||
     (import.meta.env.DEV && import.meta.env.VITE_VESSEL_FEED_LIVE !== 'false');
 
-  const smartMoneyDS = useMemo(() => createStubSmartMoneyDataSource(), []);
-  const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const { symbol: globalSymbol } = useSymbol();
+  const [, setActiveSymbol] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveSymbol(globalSymbol);
+  }, [globalSymbol]);
   const [jets, setJets] = useState<JetPosition[]>([]);
+  const [jetsTop50, setJetsTop50] = useState<CorporateJet[]>([]);
   const [vessels, setVessels] = useState<Vessel[]>([]);
   const [vesselAlerts, setVesselAlerts] = useState<VesselAlert[]>([]);
   const [senate, setSenate] = useState<SenateTrade[]>([]);
@@ -198,14 +221,42 @@ export default function Intel() {
   const [darkPool, setDarkPool] = useState<DarkPoolPrint[]>([]);
   const [vesselTab, setVesselTab] = useState<'vessels' | 'chokepoints' | 'signals'>('vessels');
 
+  const [jetsLive, setJetsLive] = useState(false);
+  const [vesselsLive, setVesselsLive] = useState(false);
+  const [insidersLive, setInsidersLive] = useState(false);
+  const [whalesLive, setWhalesLive] = useState(false);
+  const darkPoolLive = false;
+
   useEffect(() => {
-    corporateJets().then(setJets);
-    vesselStream().then(({ vessels, alerts }) => { setVessels(vessels); setVesselAlerts(alerts); });
+    corporateJets().then((data) => {
+      setJets(data);
+      setJetsTop50(getCorporateJetsTop50());
+      setJetsLive(isIntelFeedLive('corporateJets'));
+    });
+
+    vesselStream().then(({ vessels, alerts }) => {
+      setVessels(vessels);
+      setVesselAlerts(alerts);
+      setVesselsLive(isIntelFeedLive('vesselStream'));
+    });
     senateTrades().then(setSenate);
-    insiderTrades().then(setInsiders);
-    whaleTransactions().then(setWhales);
+
+    insiderTrades().then((data) => {
+      setInsiders(data);
+      setInsidersLive(isIntelFeedLive('insiderTrades'));
+    });
+
+    whaleTransactions().then((data) => {
+      setWhales(data);
+      setWhalesLive(isIntelFeedLive('whaleTransactions'));
+    });
     darkPoolPrints().then(setDarkPool);
   }, []);
+
+  const jetsAge = getIntelFeedRefreshedSecondsAgo('corporateJets');
+  const vesselsAge = getIntelFeedRefreshedSecondsAgo('vesselStream');
+  const insidersAge = getIntelFeedRefreshedSecondsAgo('insiderTrades');
+  const whalesAge = getIntelFeedRefreshedSecondsAgo('whaleTransactions');
 
   const jetMapMarkers = useMemo(() => jetMarkers(jets), [jets]);
   const vesselMapMarkers = useMemo(() => vesselMarkers(vessels), [vessels]);
@@ -219,43 +270,47 @@ export default function Intel() {
           <span className="text-[10px] text-white/40 px-1.5 py-0.5 bg-white/5 rounded">INTEL</span>
           <span className="text-[10px] text-white/30">Alternative Data Intelligence</span>
         </div>
-        <span className="text-[9px] text-green-400 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> LIVE
-        </span>
+        <DataLiveBadge status={(jetsLive || vesselsLive || insidersLive || whalesLive || darkPoolLive) ? 'live' : 'off'} />
       </div>
 
       <div className="p-4 space-y-3">
-        {/* ── SMART MONEY SIGNALS (NEW, full-width thin banner) ── */}
-        <div className="w-full" style={{ height: 115 }}>
-          <SmartMoneyBanner
-            dataSource={smartMoneyDS}
-            activeSymbol={activeSymbol}
-            onSignalSelect={(s: { symbol: string }) => setActiveSymbol(s.symbol)}
-            windowHours={48}
-            refreshMs={30000}
-          />
-        </div>
+        {/* SmartMoneyBanner hidden until live (no stub). */}
 
         {/* ════════════════════════════════════════════
             ROW 1: JET INTELLIGENCE + VESSEL TRACKING
         ════════════════════════════════════════════ */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="relative z-0 grid grid-cols-2 gap-3">
 
           {/* ── CORPORATE JET INTELLIGENCE ── */}
           <div className="tos-card rounded-lg overflow-hidden">
             <div className="px-3 py-2 border-b border-white/[0.05] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Plane size={12} className="text-white/50" />
-                <span className="text-[10px] font-semibold text-white/50">CORPORATE JET INTELLIGENCE</span>
+                <span className="tos-block-title">CORPORATE JET INTELLIGENCE</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] text-green-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> LIVE</span>
+                <DataLiveBadge
+                  status={jetsLive ? 'live' : 'off'}
+                  label={jetsLive ? (jetsAge != null ? `${jetsAge}s` : undefined) : undefined}
+                  title={!jetsLive ? getIntelFeedLastError('corporateJets') ?? undefined : undefined}
+                />
                 <span className="text-[8px] text-white/25">{new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC</span>
               </div>
             </div>
             <div className="p-3 space-y-3">
+              {!jetsLive ? (
+                <div className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] text-white/35">
+                  No live jet feed yet.
+                  {getIntelFeedLastError('corporateJets') ? (
+                    <div className="mt-1 font-mono text-[9px] text-white/35">
+                      {String(getIntelFeedLastError('corporateJets'))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <TrackingMap markers={jetMapMarkers} mode="jets" height={300} />
               {/* Anomaly feed */}
+              {jetsLive ? (
               <div className="space-y-1">
                 {jets.filter(j => j.signal !== 'normal').slice(0, 3).map((j, i) => (
                   <div key={i} className="flex items-center gap-2 text-[9px]">
@@ -267,32 +322,62 @@ export default function Intel() {
                   </div>
                 ))}
               </div>
-              {/* Jet table */}
+              ) : null}
+              {/* Top 50 corporate jets (enriched when intel-proxy bundle available) */}
+              {jetsLive ? (
               <div className="overflow-x-auto custom-scrollbar">
+                <div className="text-[8px] text-white/25 uppercase tracking-wider mb-1">Top 50 · ranked (corporate → likely → unknown, then most recent)</div>
                 <table className="w-full text-[9px]">
                   <thead>
                     <tr className="border-b border-white/[0.05]">
-                      {['TIME', 'COMPANY', 'AIRCRAFT', 'ROUTE', 'ALT', 'SPD', 'SIGNAL'].map(h => (
+                      {['SEEN', 'OPERATOR', 'TYPE', 'ICAO / TAIL', 'ALT', 'SPD', 'CAT', 'SIG', 'SRC'].map((h) => (
                         <th key={h} className="px-1.5 py-1.5 text-left text-[8px] text-white/30 uppercase tracking-wider font-medium">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {jets.slice(0, 8).map((j, i) => (
-                      <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors">
-                        <td className="px-1.5 py-1.5 text-white/30">{j.departureTime.slice(11, 16)}</td>
-                        <td className="px-1.5 py-1.5 text-white/60 font-medium">{j.company}</td>
-                        <td className="px-1.5 py-1.5 text-white/40">{j.aircraft}</td>
-                        <td className="px-1.5 py-1.5 text-white/40">{j.route}</td>
-                        <td className="px-1.5 py-1.5 text-white/40 tabular-nums">{j.altitude.toLocaleString()}</td>
-                        <td className="px-1.5 py-1.5 text-white/40 tabular-nums">{j.speed}</td>
-                        <td className="px-1.5 py-1.5"><SignalBadge signal={j.signal} /></td>
-                      </tr>
-                    ))}
+                    {jetsTop50.length > 0
+                      ? jetsTop50.map((j) => (
+                          <tr key={j.id} className="border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors">
+                            <td className="px-1.5 py-1.5 text-white/30">{j.lastSeen.slice(11, 16)}</td>
+                            <td className="px-1.5 py-1.5 text-white/60 font-medium">{j.operator ?? 'Unknown operator'}</td>
+                            <td className="px-1.5 py-1.5 text-white/40">{j.aircraftType ?? j.callsign}</td>
+                            <td className="px-1.5 py-1.5 text-white/40 font-mono text-[8px]">
+                              {j.icao24.toUpperCase()}
+                              {j.tailNumber ? ` · ${j.tailNumber}` : ''}
+                            </td>
+                            <td className="px-1.5 py-1.5 text-white/40 tabular-nums">{j.altitude.toLocaleString()}</td>
+                            <td className="px-1.5 py-1.5 text-white/40 tabular-nums">{j.speed}</td>
+                            <td className="px-1.5 py-1.5 text-white/45 text-[8px] uppercase">{j.category}</td>
+                            <td className="px-1.5 py-1.5">
+                              <SignalBadge signal={j.signal ?? 'normal'} />
+                            </td>
+                            <td className="px-1.5 py-1.5 text-white/35 text-[8px]">
+                              {j.source}
+                              {j.enrichmentSource ? ` +${j.enrichmentSource}` : ''}
+                            </td>
+                          </tr>
+                        ))
+                      : jets.slice(0, 50).map((j, i) => (
+                          <tr key={`${j.icao24}-${i}`} className="border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors">
+                            <td className="px-1.5 py-1.5 text-white/30">{j.departureTime.slice(11, 16)}</td>
+                            <td className="px-1.5 py-1.5 text-white/60 font-medium">{j.company}</td>
+                            <td className="px-1.5 py-1.5 text-white/40">{j.aircraft}</td>
+                            <td className="px-1.5 py-1.5 text-white/40 font-mono text-[8px]">{j.icao24.toUpperCase()}</td>
+                            <td className="px-1.5 py-1.5 text-white/40 tabular-nums">{j.altitude.toLocaleString()}</td>
+                            <td className="px-1.5 py-1.5 text-white/40 tabular-nums">{j.speed}</td>
+                            <td className="px-1.5 py-1.5 text-white/35">—</td>
+                            <td className="px-1.5 py-1.5">
+                              <SignalBadge signal={j.signal} />
+                            </td>
+                            <td className="px-1.5 py-1.5 text-white/35">engine</td>
+                          </tr>
+                        ))}
                   </tbody>
                 </table>
               </div>
-              <FlightHeatmapToday jets={jets} />
+              ) : null}
+              {jetsLive ? <FlightHeatmapToday jets={jets} /> : null}
             </div>
           </div>
 
@@ -301,50 +386,68 @@ export default function Intel() {
             <div className="px-3 py-2 border-b border-white/[0.05] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Ship size={12} className="text-white/50" />
-                <span className="text-[10px] font-semibold text-white/50">VESSEL TRACKING INTELLIGENCE</span>
+                <span className="tos-block-title">VESSEL TRACKING INTELLIGENCE</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] text-cyan-400 flex items-center gap-1"><Radio size={8} /> SIMULATED</span>
+                <DataLiveBadge
+                  status={vesselsLive ? 'live' : 'off'}
+                  label={vesselsLive ? (vesselsAge != null ? `${vesselsAge}s` : undefined) : undefined}
+                  title={!vesselsLive ? getIntelFeedLastError('vesselStream') ?? undefined : undefined}
+                />
                 <span className="text-[8px] text-white/25">14:23 UTC</span>
               </div>
             </div>
             <div className="p-3 space-y-3">
+              {!vesselsLive ? (
+                <div className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] text-white/35">
+                  No live vessel feed yet.
+                  {getIntelFeedLastError('vesselStream') ? (
+                    <div className="mt-1 font-mono text-[9px] text-white/35">
+                      {String(getIntelFeedLastError('vesselStream'))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <TrackingMap
                 markers={vesselMapMarkers}
                 mode="vessels"
                 height={300}
-                vesselFeedLive={vesselFeedLive}
+                vesselFeedLive={vesselsLive && vesselFeedLive}
               />
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="stat-box text-center">
-                  <div className="stat-label">DISRUPTED</div>
-                  <div className="text-lg font-bold text-red-400">14</div>
-                </div>
-                <div className="stat-box text-center">
-                  <div className="stat-label">ALERTS</div>
-                  <div className="text-lg font-bold text-yellow-400">4</div>
-                </div>
-                <div className="stat-box text-center">
-                  <div className="stat-label">TRACKED</div>
-                  <div className="text-lg font-bold text-cyan-400">2,847</div>
-                </div>
-              </div>
-              {/* Alerts feed */}
-              <div className="space-y-1.5">
-                {vesselAlerts.slice(0, 4).map((a, i) => (
-                  <div key={i} className="flex items-start gap-2 p-1.5 rounded bg-white/[0.02] border border-white/[0.03]">
-                    <AlertTriangle size={9} className="text-yellow-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-[9px] text-white/60">{a.message}</div>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-[7px] px-1 py-0.5 rounded bg-orange-500/15 text-orange-400 font-bold">{a.category}</span>
-                        <span className="text-[7px] text-white/20">{a.timestamp}</span>
-                      </div>
+              {vesselsLive ? (
+                <>
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="stat-box text-center">
+                      <div className="stat-label">DISRUPTED</div>
+                      <div className="text-lg font-bold text-red-400">14</div>
+                    </div>
+                    <div className="stat-box text-center">
+                      <div className="stat-label">ALERTS</div>
+                      <div className="text-lg font-bold text-yellow-400">4</div>
+                    </div>
+                    <div className="stat-box text-center">
+                      <div className="stat-label">TRACKED</div>
+                      <div className="text-lg font-bold text-cyan-400">2,847</div>
                     </div>
                   </div>
-                ))}
-              </div>
+                  {/* Alerts feed */}
+                  <div className="space-y-1.5">
+                    {vesselAlerts.slice(0, 4).map((a, i) => (
+                      <div key={i} className="flex items-start gap-2 p-1.5 rounded bg-white/[0.02] border border-white/[0.03]">
+                        <AlertTriangle size={9} className="text-yellow-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="text-[9px] text-white/60">{a.message}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-[7px] px-1 py-0.5 rounded bg-orange-500/15 text-orange-400 font-bold">{a.category}</span>
+                            <span className="text-[7px] text-white/20">{a.timestamp}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
               {/* Sub-tabs */}
               <div className="flex gap-1">
                 {(['vessels', 'chokepoints', 'signals'] as const).map(t => (
@@ -352,7 +455,7 @@ export default function Intel() {
                 ))}
               </div>
               {/* Vessel table */}
-              {vesselTab === 'vessels' && (
+              {vesselsLive && vesselTab === 'vessels' && (
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-[9px]">
                     <thead><tr className="border-b border-white/[0.05]">
@@ -385,7 +488,7 @@ export default function Intel() {
           <div className="tos-card rounded-lg overflow-hidden">
             <div className="px-3 py-2 border-b border-white/[0.05] flex items-center gap-2">
               <TrendingUp size={12} className="text-white/50" />
-              <span className="text-[10px] font-semibold text-white/50">SMART MONEY FLOW</span>
+              <span className="tos-block-title">SMART MONEY FLOW</span>
             </div>
             <div className="p-3">
               <div className="overflow-x-auto custom-scrollbar">
@@ -411,25 +514,42 @@ export default function Intel() {
 
           {/* ── INSIDER TRANSACTIONS ── */}
           <div className="tos-card rounded-lg overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/[0.05] flex items-center gap-2">
-              <Eye size={12} className="text-white/50" />
-              <span className="text-[10px] font-semibold text-white/50">INSIDER TRANSACTIONS</span>
+            <div className="px-3 py-2 border-b border-white/[0.05] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Eye size={12} className="text-white/50" />
+                <span className="tos-block-title">INSIDER TRANSACTIONS</span>
+              </div>
+              <DataLiveBadge
+                status={insidersLive ? 'live' : 'off'}
+                label={insidersLive ? (insidersAge != null ? `${insidersAge}s` : undefined) : undefined}
+                title={!insidersLive ? getIntelFeedLastError('insiderTrades') ?? undefined : undefined}
+              />
             </div>
             <div className="p-3">
+              {!insidersLive ? (
+                <div className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] text-white/35">
+                  No live insider feed yet.
+                  {getIntelFeedLastError('insiderTrades') ? (
+                    <div className="mt-1 font-mono text-[9px] text-white/35">
+                      {String(getIntelFeedLastError('insiderTrades'))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-[9px]">
                   <thead><tr className="border-b border-white/[0.05]">
                     {['TICKER', 'INSIDER', 'TYPE', 'VALUE'].map(h => <th key={h} className="px-1.5 py-1.5 text-left text-[8px] text-white/30 uppercase font-medium">{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {insiders.map((t, i) => (
+                    {insidersLive ? insiders.map((t, i) => (
                       <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.02]">
                         <td className="px-1.5 py-1.5 text-white/70 font-medium">{t.ticker}</td>
                         <td className="px-1.5 py-1.5 text-white/50">{t.insider}</td>
                         <td className={`px-1.5 py-1.5 font-bold ${t.type === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{t.type}</td>
                         <td className="px-1.5 py-1.5 text-white/60 tabular-nums">${(t.value / 1e6).toFixed(0)}M</td>
                       </tr>
-                    ))}
+                    )) : null}
                   </tbody>
                 </table>
               </div>
@@ -438,18 +558,35 @@ export default function Intel() {
 
           {/* ── WHALE ACTIVITY ── */}
           <div className="tos-card rounded-lg overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/[0.05] flex items-center gap-2">
-              <Bitcoin size={12} className="text-white/50" />
-              <span className="text-[10px] font-semibold text-white/50">WHALE ACTIVITY</span>
+            <div className="px-3 py-2 border-b border-white/[0.05] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bitcoin size={12} className="text-white/50" />
+                <span className="tos-block-title">WHALE ACTIVITY</span>
+              </div>
+              <DataLiveBadge
+                status={whalesLive ? 'live' : 'off'}
+                label={whalesLive ? (whalesAge != null ? `${whalesAge}s` : undefined) : undefined}
+                title={!whalesLive ? getIntelFeedLastError('whaleTransactions') ?? undefined : undefined}
+              />
             </div>
             <div className="p-3">
+              {!whalesLive ? (
+                <div className="rounded-md border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] text-white/35">
+                  No live whale feed yet.
+                  {getIntelFeedLastError('whaleTransactions') ? (
+                    <div className="mt-1 font-mono text-[9px] text-white/35">
+                      {String(getIntelFeedLastError('whaleTransactions'))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="overflow-x-auto custom-scrollbar">
                 <table className="w-full text-[9px]">
                   <thead><tr className="border-b border-white/[0.05]">
                     {['CHAIN', 'FROM→TO', 'AMOUNT', 'TYPE'].map(h => <th key={h} className="px-1.5 py-1.5 text-left text-[8px] text-white/30 uppercase font-medium">{h}</th>)}
                   </tr></thead>
                   <tbody>
-                    {whales.map((w, i) => (
+                    {whalesLive ? whales.map((w, i) => (
                       <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.02]">
                         <td className="px-1.5 py-1.5">
                           <span className={`text-[8px] px-1 py-0.5 rounded font-bold ${w.chain === 'BTC' ? 'bg-orange-500/15 text-orange-400' : w.chain === 'ETH' ? 'bg-purple-500/15 text-purple-400' : 'bg-cyan-500/15 text-cyan-400'}`}>{w.chain}</span>
@@ -458,7 +595,7 @@ export default function Intel() {
                         <td className="px-1.5 py-1.5 text-white/60 tabular-nums">${(w.amountUsd / 1e6).toFixed(1)}M</td>
                         <td className="px-1.5 py-1.5 text-white/40">{w.type}</td>
                       </tr>
-                    ))}
+                    )) : null}
                   </tbody>
                 </table>
               </div>
@@ -476,9 +613,12 @@ export default function Intel() {
             <div className="px-3 py-2 border-b border-white/[0.05] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <BarChart3 size={12} className="text-white/50" />
-                <span className="text-[10px] font-semibold text-white/50">DARK POOL PRINTS</span>
+                <span className="tos-block-title">DARK POOL PRINTS</span>
               </div>
-              <span className="text-[8px] text-white/30">24H</span>
+              <div className="flex items-center gap-2">
+                <DataLiveBadge status={darkPoolLive ? 'live' : 'off'} />
+                <span className="text-[8px] text-white/30">24H</span>
+              </div>
             </div>
             <div className="p-3">
               <div className="overflow-x-auto custom-scrollbar">
@@ -505,7 +645,7 @@ export default function Intel() {
           <div className="tos-card rounded-lg overflow-hidden">
             <div className="px-3 py-2 border-b border-white/[0.05] flex items-center gap-2">
               <Activity size={12} className="text-white/50" />
-              <span className="text-[10px] font-semibold text-white/50">UNUSUAL OPTIONS ACTIVITY</span>
+              <span className="tos-block-title">UNUSUAL OPTIONS ACTIVITY</span>
             </div>
             <div className="p-3">
               <div className="overflow-x-auto custom-scrollbar">

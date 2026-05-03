@@ -18,6 +18,7 @@ export function QuickAlerts({
   symbol,
   refreshInterval = 45_000,
   className = '',
+  variant = 'default',
 }) {
   const [filter, setFilter] = useState('all'); // 'all' | AlertCategory
 
@@ -66,9 +67,16 @@ export function QuickAlerts({
   };
 
   return (
-    <div className={cx(s.panel, s.elevation2, className)}>
+    <div
+      className={cx(
+        s.panel,
+        s.elevation2,
+        variant === 'sidebar' && s.panelSidebar,
+        className,
+      )}
+    >
       <div className={s.panel__head}>
-        <span className={s.mono}>1-CLICK ALERTS</span>
+        <span className="tos-block-title">1-CLICK ALERTS</span>
         <span className={cx(s.mono, s.muted)}>{symbol || 'GLOBAL'}</span>
       </div>
 

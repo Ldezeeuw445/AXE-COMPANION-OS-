@@ -1,29 +1,18 @@
 import { useMemo } from 'react';
 import { Newspaper } from 'lucide-react';
+import { useSymbol } from '@/contexts/SymbolContext';
 import { NewsTab } from '@/features/news';
-import type { DataSource } from '@/features/news/types';
+import { createEngineNewsDataSource } from '@/lib/engineNewsDataSource';
 import { ContextPanels } from '@/features/news-context';
-import { stubContextDataSource } from '@/features/news-context/examples/StubContextDataSource';
-import { NewsExtras } from '@/features/news-extras';
-import { createStubAlertsDataSource } from '@/features/news-extras/examples/StubAlertsDataSource';
-import { createStubCatalystsDataSource } from '@/features/news-extras/examples/StubCatalystsDataSource';
-
-/** Shared with NewsTab + context asides — keep in sync with NewsTab `initialSymbol`. */
-const INITIAL_SYMBOL = 'AAPL';
-
-const stubDataSource: DataSource = {
-  fetchFeed: async () => [],
-  fetchMiniFeed: async () => [],
-  fetchQuote: async () => null,
-  fetchTicker: async () => [],
-  searchSymbols: async () => [],
-};
-
-// TODO: Replace stubContextDataSource with the shared engine adapter when it exposes context APIs.
+import { createEngineContextDataSource } from '@/lib/engineContextDataSource';
+import {
+  HotkeySheet,
+} from '@/features/news-extras';
 
 export default function News() {
-  const alertsDS = useMemo(() => createStubAlertsDataSource(), []);
-  const catalystsDS = useMemo(() => createStubCatalystsDataSource(), []);
+  const { symbol, setSymbol } = useSymbol();
+  const newsDataSource = useMemo(() => createEngineNewsDataSource(), []);
+  const contextDataSource = useMemo(() => createEngineContextDataSource(), []);
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col overflow-hidden bg-[#0a0a0a]">
@@ -33,33 +22,50 @@ export default function News() {
           <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/40">NEWS</span>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="w-[320px] shrink-0 overflow-hidden border-r border-white/5">
-          <ContextPanels
-            dataSource={stubContextDataSource}
-            symbol={INITIAL_SYMBOL}
-            side="left"
-          />
+      <HotkeySheet variant="banner" className="border-b border-white/5" />
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        {/*
+          min-h-0: flex item may shrink so overflow-y works.
+          Inner flex-1 min-h-0: fixed-height scroll strip; shrink-0 on sections so panels are never squashed.
+        */}
+        <aside className="flex h-full min-h-0 w-[min(300px,28vw)] shrink-0 flex-col overflow-hidden border-r border-white/5">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-1 py-1 scrollbar-hide overscroll-y-contain">
+            <div className="shrink-0">
+              <ContextPanels
+                dataSource={contextDataSource}
+                symbol={symbol}
+                side="left"
+                naturalHeight
+              />
+            </div>
+            <div className="shrink-0">
+              {/* Hidden until a real (non-stub) data source exists. */}
+            </div>
+          </div>
         </aside>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <NewsTab dataSource={stubDataSource} initialSymbol={INITIAL_SYMBOL} />
-          </div>
-          <div className="max-h-[min(40vh,420px)] shrink-0 overflow-y-auto border-t border-white/5 scrollbar-hide">
-            <NewsExtras
-              panels={['alerts', 'catalysts', 'hotkeys']}
-              alertsDataSource={alertsDS}
-              catalystsDataSource={catalystsDS}
-              symbol={INITIAL_SYMBOL}
-            />
-          </div>
-        </main>
-        <aside className="w-[320px] shrink-0 overflow-hidden border-l border-white/5">
-          <ContextPanels
-            dataSource={stubContextDataSource}
-            symbol={INITIAL_SYMBOL}
-            side="right"
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <NewsTab
+            key={symbol}
+            dataSource={newsDataSource}
+            initialSymbol={symbol}
+            onSymbolChange={setSymbol}
+            fillShell
           />
+        </main>
+        <aside className="flex h-full min-h-0 w-[min(300px,28vw)] shrink-0 flex-col overflow-hidden border-l border-white/5">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-1 py-1 scrollbar-hide overscroll-y-contain">
+            <div className="shrink-0">
+              <ContextPanels
+                dataSource={contextDataSource}
+                symbol={symbol}
+                side="right"
+                naturalHeight
+              />
+            </div>
+            <div className="shrink-0">
+              {/* Hidden until a real (non-stub) data source exists. */}
+            </div>
+          </div>
         </aside>
       </div>
     </div>

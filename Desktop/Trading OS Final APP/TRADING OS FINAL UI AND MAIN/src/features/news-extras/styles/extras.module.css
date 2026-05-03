@@ -22,22 +22,38 @@
   --nx-warm-1:      rgba(255, 247, 230, 0.03);
   --nx-warm-2:      rgba(255, 247, 230, 0.05);
   --nx-warm-3:      rgba(255, 247, 230, 0.07);
-  --nx-mono:        ui-monospace, SFMono-Regular, Menlo, Monaco, "JetBrains Mono", Consolas, monospace;
+  --nx-mono:        inherit;
 
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px 12px 14px;
-  background: var(--nx-bg-elev);
-  border: 1px solid var(--nx-border);
-  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.95) 0%, rgba(12, 12, 12, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
   color: var(--nx-text);
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 12px;
   line-height: 1.4;
   overflow: hidden;
   isolation: isolate;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.panel:hover {
+  border-color: rgba(6, 182, 212, 0.15);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 30px rgba(6, 182, 212, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* News page side column: drop inner scroll caps; parent column scrolls once */
+.panelSidebar {
+  overflow: visible;
+}
+.panelSidebar .templateList,
+.panelSidebar .activeList {
+  max-height: none;
+  overflow-y: visible;
 }
 
 .elevation2 {
@@ -59,7 +75,7 @@
   z-index: -1;
 }
 
-.mono    { font-family: var(--nx-mono); font-size: 11px; letter-spacing: 0.02em; }
+.mono    { font-family: inherit; font-size: 11px; letter-spacing: 0.02em; }
 .muted   { color: var(--nx-text-muted); }
 .up      { color: var(--nx-up); }
 .down    { color: var(--nx-down); }
@@ -71,7 +87,7 @@
   align-items: center;
   padding: 2px 2px 8px;
   border-bottom: 1px solid var(--nx-border-soft);
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -134,7 +150,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 10px;
   letter-spacing: 0.04em;
   color: var(--nx-text-muted);
@@ -211,7 +227,7 @@
   text-overflow: ellipsis;
 }
 .badge {
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -229,7 +245,7 @@
   margin-top: 2px;
 }
 .addBtn {
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 14px;
   font-weight: 500;
   color: var(--nx-text-muted);
@@ -251,7 +267,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 6px 2px 4px;
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--nx-text-muted);
@@ -309,7 +325,7 @@
 
 .activeText { min-width: 0; }
 .activeTitle {
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 11px;
   color: var(--nx-text);
   white-space: nowrap;
@@ -325,7 +341,7 @@
 }
 
 .removeBtn {
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 14px;
   color: var(--nx-text-dim);
   background: transparent;
@@ -354,7 +370,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--nx-text-muted);
@@ -404,7 +420,7 @@
   text-overflow: ellipsis;
 }
 .catSym {
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 10px;
   font-weight: 600;
   color: var(--nx-text);
@@ -454,7 +470,7 @@
   gap: 4px;
 }
 .hkGroupLabel {
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--nx-text-muted);
@@ -493,7 +509,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  font-family: var(--nx-mono);
+  font-family: inherit;
   font-size: 10px;
   color: var(--nx-text);
   background: rgba(255, 255, 255, 0.06);
@@ -505,6 +521,102 @@
 .hkLabel {
   color: var(--nx-text-muted);
   font-size: 11px;
+}
+
+/* ---------- compact hotkey banner (News page top strip) ---------- */
+.hotkeyBanner {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 4px 10px 5px;
+  background: var(--nx-bg-elev);
+  border-bottom: 1px solid var(--nx-border);
+  flex-shrink: 0;
+  min-height: 0;
+}
+.hotkeyBannerTag {
+  flex-shrink: 0;
+  align-self: center;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--nx-text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--nx-border-soft);
+}
+.hotkeyBannerScroll {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding: 1px 0;
+}
+.hotkeyBannerScroll::-webkit-scrollbar {
+  height: 3px;
+}
+.hotkeyBannerScroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+.hotkeyBannerGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--nx-border-soft);
+}
+.hotkeyBannerGroup:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+.hotkeyBannerGroupLabel {
+  font-family: inherit;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--nx-text-dim);
+  flex-shrink: 0;
+}
+.hotkeyBannerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  max-width: 200px;
+}
+.hotkeyBannerKeys {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.hotkeyBannerChipLabel {
+  font-size: 10px;
+  color: var(--nx-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kbdSm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--nx-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
 /* Wide viewports: three panels in one row (matches news-context density) */

@@ -30,7 +30,7 @@ const DEFAULT_ROWS = [
   { group: 'SYMBOL', keys: ['r'],          label: 'Force refresh' },
 ];
 
-export function HotkeySheet({ rows, className = '' }) {
+export function HotkeySheet({ rows, className = '', variant = 'panel' }) {
   const data = rows && rows.length ? rows : DEFAULT_ROWS;
 
   // Group rows preserving first-seen order
@@ -43,6 +43,34 @@ export function HotkeySheet({ rows, className = '' }) {
       groups.push({ name: g, rows: [] });
     }
     groups[seen.get(g)].rows.push(r);
+  }
+
+  if (variant === 'banner') {
+    return (
+      <div className={cx(s.hotkeyBanner, className)} role="region" aria-label="Keyboard shortcuts">
+        <span className={s.hotkeyBannerTag}>HOTKEYS</span>
+        <div className={s.hotkeyBannerScroll}>
+          {groups.map((g) => (
+            <div key={g.name} className={s.hotkeyBannerGroup}>
+              <span className={s.hotkeyBannerGroupLabel}>{g.name}</span>
+              {g.rows.map((r, i) => (
+                <span key={i} className={s.hotkeyBannerChip}>
+                  <span className={s.hotkeyBannerKeys}>
+                    {r.keys.map((k, j) => (
+                      <React.Fragment key={j}>
+                        {j > 0 && <span className={s.hkPlus}>+</span>}
+                        <kbd className={s.kbdSm}>{formatKey(k)}</kbd>
+                      </React.Fragment>
+                    ))}
+                  </span>
+                  <span className={s.hotkeyBannerChipLabel}>{r.label}</span>
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (

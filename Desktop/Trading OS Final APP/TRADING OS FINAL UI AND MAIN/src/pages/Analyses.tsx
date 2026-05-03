@@ -12,10 +12,15 @@ const SentIcon = ({ s }: { s: string }) => {
 
 function AnalysesHeader() {
   return (
-    <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-2">
-      <div className="flex items-center gap-2">
-        <PieChart size={14} className="text-cyan-400" />
-        <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/40">ANALYSES</span>
+    <div className="flex shrink-0 flex-col border-b border-white/5">
+      <div className="flex items-center justify-between px-4 py-2">
+        <div className="flex items-center gap-2">
+          <PieChart size={14} className="text-cyan-400" />
+          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-white/40">ANALYSES</span>
+        </div>
+      </div>
+      <div className="border-t border-amber-500/15 bg-amber-500/5 px-4 py-1.5 text-[10px] text-amber-200/90">
+        PLACEHOLDER: analyses list/detail use StubAnalysesDataSource — no engineAdapter API.
       </div>
     </div>
   );
