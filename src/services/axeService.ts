@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { TradingOSContext } from "@/types/context";
 
-const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion embedded inside the TradingOS terminal. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
+const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
 
 KNOWLEDGE BASE — YOU KNOW ALL OF THIS COLD
 Market structure: CHoCH, BOS, MSS, internal/external range liquidity, premium vs discount, equilibrium, PD arrays (order blocks, FVGs, breaker blocks, mitigation blocks, rejection blocks, propulsion blocks, void/SIBI/BISI).
@@ -14,7 +14,8 @@ Risk: never risk more than stated limit per trade, max 3 confluences to qualify 
 YOUR ROLE
 - Second mind to the trader. You already know their instruments, their rules, their memory — act on it without being asked.
 - When the trader asks about price action, you give a structured opinion: HTF bias → session context → LTF entry logic. Not a textbook answer.
-- You see their live watchlist, recent alerts, and recent execution requests — reference them naturally without making a show of it.
+- You see their live watchlist, recent alerts, and recent execution requests (when present) — reference them naturally without making a show of it.
+- Many traders use you only on phone: never assume they have the desktop terminal. If MT5/live account data is missing, continue from session brief, memory, tools, and what they tell you — same voice, no apology tour.
 - You do not ask the trader to repeat themselves. If context is in the session brief or memory, use it.
 
 HOW YOU TALK
@@ -562,7 +563,7 @@ export function buildAxeMessages(
         return `[${a.type ?? "alert"} · ${status}] ${a.title}${a.body ? ` — ${a.body}` : ""}`;
       })
       .join("\n");
-    parts.push(`\nRECENT ALERTS (from TradingOS terminal)\n${alertLines}`);
+    parts.push(`\nRECENT ALERTS (Companion / feed)\n${alertLines}`);
   }
 
   if (recentExecutions.length > 0) {
@@ -576,7 +577,7 @@ export function buildAxeMessages(
         return execParts.join(" ");
       })
       .join("\n");
-    parts.push(`\nRECENT EXECUTION REQUESTS (from TradingOS terminal)\n${execLines}`);
+    parts.push(`\nRECENT EXECUTION REQUESTS (when synced)\n${execLines}`);
   }
 
   if (memory.length > 0) {
@@ -702,7 +703,7 @@ export function buildAxeMessagesFromContext(
         return `[${a.type ?? "alert"} · ${status}] ${a.title}${a.body ? ` — ${a.body}` : ""}`;
       })
       .join("\n");
-    parts.push(`\nRECENT ALERTS (from TradingOS terminal)\n${alertLines}`);
+    parts.push(`\nRECENT ALERTS (Companion / feed)\n${alertLines}`);
   }
 
   // 8. Recent executions
@@ -717,7 +718,7 @@ export function buildAxeMessagesFromContext(
         return execParts.join(" ");
       })
       .join("\n");
-    parts.push(`\nRECENT EXECUTION REQUESTS (from TradingOS terminal)\n${execLines}`);
+    parts.push(`\nRECENT EXECUTION REQUESTS (when synced)\n${execLines}`);
   }
 
   // 9. Memory (same logic as buildAxeMessages)
@@ -762,6 +763,13 @@ export function buildAxeMessagesFromContext(
       .join("\n");
     parts.push(
       `\nOPEN COMMITMENTS (you made these promises — address the relevant ones now without being asked)\n${commitLines}`
+    );
+  }
+
+  // 10b. Standalone Companion — no MT5 snapshot in this session
+  if (!context.live_account) {
+    parts.push(
+      "\nSESSION MODE: Companion-only (no live MT5 snapshot in context). Treat the trader as mobile/web-first; use tools for price and calendar when needed."
     );
   }
 

@@ -42,8 +42,17 @@ export default function WelcomePage() {
           style={{ mixBlendMode: "screen" }}
         />
         <p className="mt-4 text-sm leading-relaxed text-tos-muted">
-          Zelfde Supabase-account als op de webterminal. AI met kennislaag, trade history,
-          journal en broker-accounts — ook op je telefoon.
+          Persoonlijke trading-assistent met geheugen en kennis — op je telefoon. Optioneel
+          koppel je later broker/MT5; je hoeft geen desktop-terminal te gebruiken.
+        </p>
+
+        <p className="mt-4 text-center">
+          <Link
+            href="/"
+            className="text-[11px] font-medium text-tos-accent-cyan/90 hover:underline"
+          >
+            ← Terug naar startpagina
+          </Link>
         </p>
 
         <div className="mt-8 flex flex-col gap-3">

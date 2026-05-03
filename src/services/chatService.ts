@@ -245,7 +245,9 @@ export async function sendChatMessage(
   // Helper: execute a single tool call and return its string result
   async function executeTool(tc: AxeToolCall): Promise<string> {
     if (tc.tool === "create_alert") {
-      const { title, body, type, symbol: alertSymbol } = tc.args;
+      const { title, body, type: rawType, symbol: alertSymbol } = tc.args;
+      const allowed = new Set(["price", "news", "risk", "system"]);
+      const type = allowed.has(String(rawType)) ? String(rawType) : "system";
       let alertError = null;
       if (alertSymbol) {
         const { error: e1 } = await supabase.from("alerts").insert({
@@ -273,7 +275,7 @@ export async function sendChatMessage(
       }
       // Push notification: alert is set — fire and don't wait
       firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
-      return "Alert created and visible in TradingOS.";
+      return "Alert created — visible under Alerts in the app.";
 
     } else if (tc.tool === "track_commitment") {
       const { description, symbol: commitSymbol } = tc.args as TrackCommitmentArgs;

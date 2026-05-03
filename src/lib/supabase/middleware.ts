@@ -76,9 +76,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (path === "/") {
+  // `/` = public marketing landing; logged-in users go straight to chat.
+  if (path === "/" && user) {
     const url = request.nextUrl.clone();
-    url.pathname = user ? "/chat" : "/welcome";
+    url.pathname = "/chat";
     return NextResponse.redirect(url);
   }
 
