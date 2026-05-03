@@ -7,8 +7,8 @@ type Props = {
 };
 
 /**
- * Posts a single dummy closed trade to axe-mt5-ingest from the browser.
- * CORS on the Edge function allows this — no curl or EA required to verify the token works.
+ * Posts a single synthetic closed trade to axe-mt5-ingest from the browser (development verification).
+ * CORS on the Edge function allows this — not a substitute for production EA/bridge fills.
  */
 export function Mt5InAppConnectionTest({ className }: Props) {
   const [token, setToken] = useState("");
@@ -82,11 +82,15 @@ export function Mt5InAppConnectionTest({ className }: Props) {
 
   return (
     <div className={className}>
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-dim">Test in the app</p>
+      <p className="inline-flex rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-200/95">
+        Dev — synthetic trade
+      </p>
+      <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-tos-dim">Test in the app</p>
       <p className="mt-1 text-xs text-tos-muted">
         No MetaTrader plugin needed to <strong className="font-medium text-tos-text">verify</strong> your token.
-        Paste the token below (save it somewhere safe first), tap Test — we send one minimal test trade to the same
-        ingest your EA will use.
+        Paste the token below (save it somewhere safe first), tap Test — we send one minimal{" "}
+        <strong className="text-tos-text">synthetic</strong> closed trade to the same ingest your EA will use (marked
+        in <code className="text-[10px]">raw</code> for filtering).
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
         <input

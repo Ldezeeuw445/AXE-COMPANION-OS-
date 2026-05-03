@@ -6,6 +6,7 @@ import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import type { JournalEntryRow, TradeHighlight } from "@/lib/journal/loadJournalPageData";
+import { TradeJournalLabelForm } from "@/components/journal/TradeJournalLabelForm";
 
 type Props = {
   entries: JournalEntryRow[];
@@ -60,8 +61,10 @@ export function JournalScreen({ entries, tradeHighlight, loadError }: Props) {
             ) : null}
           </p>
           <p className="mt-2 text-xs text-tos-muted">
-            Label: {tradeHighlight.label ?? "—"} {tradeHighlight.note ? `— ${tradeHighlight.note}` : ""}
+            Current: {tradeHighlight.label ?? "—"}
+            {tradeHighlight.note ? ` — ${tradeHighlight.note}` : ""}
           </p>
+          <TradeJournalLabelForm trade={tradeHighlight} />
           <Link
             href="/history"
             className="mt-3 inline-block text-xs text-tos-warm hover:underline"

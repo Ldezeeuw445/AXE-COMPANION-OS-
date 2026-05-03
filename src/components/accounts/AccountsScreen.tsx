@@ -13,6 +13,7 @@ import {
   type CreateBrokerResult,
 } from "@/app/actions/brokerAccounts";
 import { Mt5InAppConnectionTest } from "@/components/accounts/Mt5InAppConnectionTest";
+import { Mt5LiveProofChecklist } from "@/components/accounts/Mt5LiveProofChecklist";
 
 type Props = {
   initialAccounts: BrokerAccountRow[];
@@ -81,6 +82,8 @@ export function AccountsScreen({
           {loadError}
         </p>
       ) : null}
+
+      <Mt5LiveProofChecklist />
 
       <GlassPanel className="mb-4 p-4">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-300/90">

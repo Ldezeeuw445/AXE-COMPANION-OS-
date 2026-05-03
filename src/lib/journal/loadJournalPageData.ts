@@ -11,6 +11,7 @@ export type JournalEntryRow = {
 
 export type TradeHighlight = {
   id: string;
+  accountId: string;
   symbol: string;
   side: string;
   pnl: number;
@@ -76,6 +77,7 @@ export async function loadJournalPageData(opts: {
 
       tradeHighlight = {
         id: tr.id as string,
+        accountId: aid,
         symbol: tr.symbol as string,
         side: tr.side as string,
         pnl: Number(tr.pnl ?? 0) || 0,
