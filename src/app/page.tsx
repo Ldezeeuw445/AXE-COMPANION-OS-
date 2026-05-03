@@ -16,6 +16,7 @@ import {
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
 import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
+import { LEGAL_COPY } from "@/lib/legal/constants";
 
 export const metadata: Metadata = {
   title: "AXE Companion — your trading copilot",
@@ -397,6 +398,10 @@ export default function HomeLandingPage() {
               </Link>
             </div>
           </div>
+
+          <p className="mx-auto mt-6 max-w-2xl px-2 text-center text-[10px] leading-relaxed text-tos-dim">
+            {LEGAL_COPY.tradingShort} {LEGAL_COPY.pricing}
+          </p>
 
           <div className="mx-auto mt-14 max-w-2xl">
             <LandingWaitlist />

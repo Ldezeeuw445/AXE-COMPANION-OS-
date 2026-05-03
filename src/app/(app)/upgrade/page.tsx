@@ -4,6 +4,7 @@ import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
+import { LEGAL_COPY } from "@/lib/legal/constants";
 
 export default async function UpgradePage() {
   const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK?.trim() ?? "";
@@ -92,6 +93,11 @@ export default async function UpgradePage() {
           )}
         </GlassPanel>
       </div>
+
+      <p className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-center text-[10px] leading-relaxed text-tos-dim">
+        {LEGAL_COPY.tradingShort}{" "}
+        {LEGAL_COPY.pricing}
+      </p>
 
       <p className="mt-4 px-1 text-center text-[10px] text-tos-dim">
         Questions? Open{" "}

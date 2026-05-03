@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { hasSupabaseConfig } from "@/lib/env";
 import { signInAction, signUpAction } from "@/app/actions/auth";
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -103,6 +104,25 @@ export function LoginForm() {
                   minLength={8}
                 />
               </div>
+              <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-snug text-tos-muted">
+                <input
+                  type="checkbox"
+                  name="acceptTerms"
+                  required
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-white/20 bg-tos-bg/80 text-tos-accent-cyan focus:ring-tos-accent-cyan/40"
+                />
+                <span>
+                  I agree to the{" "}
+                  <Link href="/terms" className="text-tos-warm underline-offset-2 hover:underline">
+                    Terms
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="text-tos-warm underline-offset-2 hover:underline">
+                    Privacy Policy
+                  </Link>{" "}
+                  and understand that AXE does not provide financial advice.
+                </span>
+              </label>
               {state?.error ? (
                 <p className="rounded-xl bg-red-500/10 px-3 py-2 text-sm font-medium text-red-400" role="alert">
                   {state.error}

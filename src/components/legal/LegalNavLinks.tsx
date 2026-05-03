@@ -1,14 +1,15 @@
 import Link from "next/link";
 
 const LINKS = [
-  { href: "/legal/terms", label: "Terms" },
-  { href: "/legal/privacy", label: "Privacy" },
-  { href: "/legal/risk", label: "Risk" },
-  { href: "/legal/ai-disclaimer", label: "AI" },
-  { href: "/legal/cookies", label: "Cookies" },
-  { href: "/legal/refunds", label: "Refunds" },
-  { href: "/legal/subprocessors", label: "Subprocessors" },
-  { href: "/legal/contact", label: "Contact" },
+  { href: "/legal", label: "Legal" },
+  { href: "/terms", label: "Terms" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/risk-disclaimer", label: "Risk Disclaimer" },
+  { href: "/ai-disclaimer", label: "AI Disclaimer" },
+  { href: "/cookies", label: "Cookies" },
+  { href: "/refunds", label: "Refunds" },
+  { href: "/subprocessors", label: "Subprocessors" },
+  { href: "/contact", label: "Contact" },
 ] as const;
 
 type Props = {

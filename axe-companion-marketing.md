@@ -3,6 +3,8 @@
 **Canonical public landing:** Next.js `src/app/page.tsx` (this repo, deployed on Vercel / GitHub `AXE-COMPANION-OS-`).  
 The `/marketing` route **redirects to `/`** so there is no second consumer landing; dev-only screenshot routes remain under `/marketing/*`.
 
+**Legal (canonical paths):** `/terms`, `/privacy`, `/risk-disclaimer`, `/ai-disclaimer`, `/cookies`, `/refunds`, `/subprocessors`, `/contact`, overview `/legal`. Older `/legal/*` URLs redirect (308) to these.
+
 Keep this file as a **reference / brainstorm** doc; ship copy changes in the page first, then sync bullets here if useful.
 
 ---

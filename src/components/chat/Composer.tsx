@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mic, MicOff, Paperclip, Send, X, ImageIcon, ChevronRight } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
+import { LEGAL_COPY } from "@/lib/legal/constants";
 
 declare global {
   interface Window {
@@ -370,6 +371,8 @@ export function Composer({ initialQuota = null, showQuota = true }: ComposerProp
           <Send className="h-4 w-4" />
         </button>
       </div>
+
+      <p className="mt-2 px-1 text-center text-[10px] leading-relaxed text-tos-dim">{LEGAL_COPY.chatDisclaimer}</p>
 
       {error ? (
         <p className="mt-2 text-center text-[10px] text-tos-risk">{error}</p>

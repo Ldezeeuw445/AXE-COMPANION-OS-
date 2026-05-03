@@ -1,0 +1,11 @@
+import type { Metadata } from "next";
+import { RefundsPageContent } from "@/content/legal/RefundsPageContent";
+
+export const metadata: Metadata = {
+  title: "Refunds & cancellation · AXE Companion",
+  description: "Refund and cancellation policy for AXE Companion and Trading OS.",
+};
+
+export default function RefundsPage() {
+  return <RefundsPageContent />;
+}

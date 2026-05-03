@@ -11,7 +11,8 @@
     "lint": "eslint",
     "capture:marketing": "node scripts/capture-marketing.mjs",
     "copy-logo": "node scripts/copy-logo.mjs",
-    "seed:axe-knowledge": "node scripts/seed-axe-knowledge.mjs"
+    "seed:axe-knowledge": "node scripts/seed-axe-knowledge.mjs",
+    "verify:legal": "node scripts/check-legal-routes.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",

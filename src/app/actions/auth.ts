@@ -43,6 +43,14 @@ export async function signInAction(_prevState: unknown, formData: FormData) {
 export async function signUpAction(_prevState: unknown, formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  const acceptTerms = formData.get("acceptTerms");
+
+  if (acceptTerms !== "on") {
+    return {
+      error:
+        "Please confirm you agree to the Terms and Privacy Policy and understand that AXE does not provide financial advice.",
+    };
+  }
 
   if (!hasSupabaseConfig()) {
     return { error: "Supabase is not configured." };
