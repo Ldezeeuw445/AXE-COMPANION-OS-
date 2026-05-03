@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AXE Companion OS</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+    }
+    .vignette {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 2;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 50% 42%, rgba(20, 80, 75, 0.06) 0%, transparent 45%),
+        radial-gradient(ellipse at center, transparent 15%, rgba(0,0,0,0.60) 100%);
+    }
+    .fade-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 10;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="vignette"></div>
+  <div class="fade-overlay" id="fadeOverlay"></div>
+
+  <script>
+    // ══════════════════════════════════════════════════════
+    //  AXE COMPANION OS — AI Data Splash v2
+    //  Neural network + horizontal data streams + particles
+    //  Dense, rich, AI-data aesthetic
+    //  3-phase text reveal, ~8 seconds
+    // ══════════════════════════════════════════════════════
+
+    const DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const IS_MOBILE = W < 600;
+
+    const T = {
+      NODE_BUILD:    1600,
+      STREAM_START:  600,
+      LINE1_START:   2400,
+      LINE1_DONE:    3600,
+      LINE2_START:   3800,
+      LINE2_DONE:    5000,
+      LOGO_START:    5400,
+      LOGO_DONE:     6600,
+      LINGER:        7200,
+      FADE:          7600,
+      END:           8800
+    };
+
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    ctx.scale(DPR, DPR);
+
+    // ─── Palette ───
+    const COL = {
+      text:     [78, 210, 196],
+      textHi:   [90, 230, 215],
+      logoBlu:  [75, 160, 230],
+      logoGrn:  [105, 210, 130],
+      logoGray: [185, 192, 200],
+    };
+
+    // App color palette for wave ribbons — extracted from screenshots
+    const WAVE_COLORS = [
+      { r: 66, g: 188, b: 175 },   // primary teal #42bcaf
+      { r: 17, g: 185, b: 123 },   // emerald green #11b97b
+      { r: 75, g: 160, b: 230 },   // logo blue #4ba0e6
+      { r: 105, g: 210, b: 130 },  // logo green #69d282
+      { r: 55, g: 150, b: 140 },   // darker teal
+      { r: 217, g: 184, b: 77 },   // gold accent #d9b84d
+      { r: 46, g: 204, b: 113 },   // bright green #2ecc71
+      { r: 59, g: 123, b: 232 },   // blue ring #3b7be8
+    ];
+
+    const FONT_SIZE = IS_MOBILE ? Math.max(9, Math.min(11, W / 40)) : Math.max(11, Math.min(14, W / 110));
+
+    // ──────────────────────────────────────────────────────
+    //  NEURAL NETWORK NODES
+    // ──────────────────────────────────────────────────────
+    const NODE_COUNT = IS_MOBILE ? Math.floor(W * H / 9000) : Math.floor(W * H / 5500);
+    const CONNECTION_DIST = IS_MOBILE ? Math.min(W, H) * 0.13 : Math.min(W, H) * 0.16;
+
+    const nodes = [];
+    function initNodes() {
+      nodes.length = 0;
+      for (let i = 0; i < NODE_COUNT; i++) {
+        // ~70% teal, ~30% other app colors for variety
+        const col = Math.random() < 0.7
+          ? WAVE_COLORS[0]  // primary teal
+          : WAVE_COLORS[Math.floor(Math.random() * WAVE_COLORS.length)];
+        nodes.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: (Math.random() - 0.5) * 0.18,
+          vy: (Math.random() - 0.5) * 0.12,
+          radius: 1 + Math.random() * 1.8,
+          pulsePhase: Math.random() * Math.PI * 2,
+          pulseSpeed: 0.003 + Math.random() * 0.004,
+          brightness: 0.25 + Math.random() * 0.75,
+          delay: Math.random() * 1400,
+          color: col,
+        });
+      }
+    }
+    initNodes();
+
+    let connectionCache = [];
+    function buildConnections() {
+      connectionCache = [];
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < CONNECTION_DIST) {
+            connectionCache.push({ a: i, b: j, dist: d });
+          }
+        }
+      }
+    }
+    buildConnections();
+
+    // ──────────────────────────────────────────────────────
+    //  HORIZONTAL DATA STREAMS — dense & rich
+    // ──────────────────────────────────────────────────────
+    const DATA_CHARS = '0123456789ABCDEFabcdef.:/<>[]{}|=-+*#@$%&~^_∆Ωπ∂λ';
+
+    function rdc() {
+      return DATA_CHARS[Math.floor(Math.random() * DATA_CHARS.length)];
+    }
+
+    const STREAM_COUNT = IS_MOBILE ? Math.floor(H / 22) : Math.floor(H / 10);
+
+    const streams = [];
+    function initStreams() {
+      streams.length = 0;
+      for (let i = 0; i < STREAM_COUNT; i++) {
+        const y = (i / STREAM_COUNT) * H + (Math.random() - 0.5) * 6;
+        const len = 15 + Math.floor(Math.random() * 45);
+        const chars = [];
+        for (let j = 0; j < len; j++) chars.push(rdc());
+
+        // Vary: some streams go right→left
+        const dir = Math.random() < 0.15 ? -1 : 1;
+
+        streams.push({
+          y, dir,
+          x: dir > 0
+            ? -Math.random() * W * 3
+            : W + Math.random() * W * 1.5,
+          speed: (0.3 + Math.random() * 2.5) * dir,
+          chars,
+          charWidth: 6.5 + Math.random() * 1.5,
+          opacity: IS_MOBILE ? 0.03 + Math.random() * 0.08 : 0.06 + Math.random() * 0.18,
+          headOpacity: IS_MOBILE ? 0.12 + Math.random() * 0.20 : 0.25 + Math.random() * 0.40,
+          swapTimer: 0,
+          swapRate: 12 + Math.floor(Math.random() * 35),
+          fontSize: FONT_SIZE * (0.5 + Math.random() * 0.3),
+        });
+      }
+    }
+    initStreams();
+
+    // ──────────────────────────────────────────────────────
+    //  FLOATING DATA PARTICLES
+    // ──────────────────────────────────────────────────────
+    const PARTICLE_COUNT = IS_MOBILE ? Math.floor(W * H / 10000) : Math.floor(W * H / 4000);
+    const particles = [];
+    function initParticles() {
+      particles.length = 0;
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: 0.05 + Math.random() * 0.5,
+          vy: (Math.random() - 0.5) * 0.12,
+          char: rdc(),
+          opacity: 0.07 + Math.random() * 0.18,
+          size: FONT_SIZE * (0.45 + Math.random() * 0.35),
+          swapTimer: Math.floor(Math.random() * 100),
+          swapRate: 25 + Math.floor(Math.random() * 60),
+        });
+      }
+    }
+    initParticles();
+
+    // ──────────────────────────────────────────────────────
+    //  DATA PULSES traveling connections
+    // ──────────────────────────────────────────────────────
+    const pulses = [];
+    function spawnPulse() {
+      if (connectionCache.length === 0) return;
+      const idx = Math.floor(Math.random() * connectionCache.length);
+      pulses.push({
+        connIdx: idx,
+        progress: 0,
+        speed: 0.006 + Math.random() * 0.018,
+        brightness: 0.4 + Math.random() * 0.6,
+      });
+    }
+
+    // ──────────────────────────────────────────────────────
+    //  FLOWING DATA WAVES — sinusoidal ribbons with data dots
+    // ──────────────────────────────────────────────────────
+    const WAVE_COUNT = 10;  // ribbon bundles in app colors
+    const waves = [];
+    function initWaves() {
+      waves.length = 0;
+      for (let i = 0; i < WAVE_COUNT; i++) {
+        const baseY = H * 0.08 + (i / WAVE_COUNT) * H * 0.84 + (Math.random() - 0.5) * H * 0.05;
+        const ribbonLines = 3 + Math.floor(Math.random() * 5);
+        // Assign a color from the app palette
+        const color = WAVE_COLORS[i % WAVE_COLORS.length];
+        waves.push({
+          baseY,
+          amplitude: 35 + Math.random() * 75,
+          frequency: 0.0015 + Math.random() * 0.003,
+          speed: 0.0008 + Math.random() * 0.0014,
+          phase: Math.random() * Math.PI * 2,
+          ribbonLines,
+          ribbonSpread: 3 + Math.random() * 8,
+          baseOpacity: 0.10 + Math.random() * 0.18,
+          baseLineWidth: 0.8 + Math.random() * 1.4,
+          color,  // { r, g, b } from app palette
+          dotCount: 4 + Math.floor(Math.random() * 7),
+          dotPositions: [],
+          dotSpeeds: [],
+          dotSizes: [],
+          // Each dot gets its own color from palette
+          dotColors: [],
+        });
+        const w = waves[waves.length - 1];
+        for (let d = 0; d < w.dotCount; d++) {
+          w.dotPositions.push(Math.random() * W);
+          w.dotSpeeds.push(0.4 + Math.random() * 1.5);
+          w.dotSizes.push(2.0 + Math.random() * 2.5);
+          // Dots can be a different color from the wave itself
+          w.dotColors.push(WAVE_COLORS[Math.floor(Math.random() * WAVE_COLORS.length)]);
+        }
+      }
+    }
+    initWaves();
+
+    // ──────────────────────────────────────────────────────
+    //  SCAN LINES — subtle horizontal scan effect
+    // ──────────────────────────────────────────────────────
+    let scanY = -100;
+    const scanSpeed = 0.6;
+
+    // ──────────────────────────────────────────────────────
+    //  TEXT REVEALS
+    // ──────────────────────────────────────────────────────
+    const LINE1_TEXT = 'YOUR ENCRYPTED COMMENT CENTER.';
+    const LINE2_TEXT = 'SECURE. INTELLIGENT. PRIVATE.';
+    const LOGO_TEXT  = 'AXE  COMPANION OS';
+    const AXE_LEN = 3;
+
+    ctx.font = `400 ${FONT_SIZE}px 'JetBrains Mono', monospace`;
+    const CHAR_W_MEASURE = ctx.measureText('0').width;
+
+    const textY1 = H * 0.43;
+    const textY2 = textY1 + FONT_SIZE * 2.2;
+    const textY3 = textY1 + FONT_SIZE * 5.5;
+
+    function mw(text) { return text.length * CHAR_W_MEASURE; }
+
+    const textX1 = (W - mw(LINE1_TEXT)) / 2;
+    const textX2 = (W - mw(LINE2_TEXT)) / 2;
+    const textX3 = (W - mw(LOGO_TEXT)) / 2;
+
+    function makeTextChars(text) {
+      return text.split('').map(ch => ({
+        target: ch,
+        current: ch === ' ' ? ' ' : rdc(),
+        done: ch === ' ',
+      }));
+    }
+
+    let line1Chars, line2Chars, logoChars;
+
+    function initText() {
+      line1Chars = makeTextChars(LINE1_TEXT);
+      line2Chars = makeTextChars(LINE2_TEXT);
+      logoChars  = makeTextChars(LOGO_TEXT);
+    }
+    initText();
+
+    // ──────────────────────────────────────────────────────
+    //  FINGERPRINT — procedural, centered behind text
+    // ──────────────────────────────────────────────────────
+    const fpCx = W / 2;
+    const fpCy = textY2 + FONT_SIZE * 0.5;  // centered on line 2 ("SECURE...")
+    const fpScale = IS_MOBILE ? W * 0.55 : Math.min(W, H) * 0.26;
+
+    // Pre-generate fingerprint ridges as arrays of points
+    const fpRidges = [];
+    function initFingerprint() {
+      fpRidges.length = 0;
+      const ridgeCount = 28;
+      // Seed random for reproducible shape
+      let seed = 42;
+      function srand() { seed = (seed * 16807 + 0) % 2147483647; return (seed - 1) / 2147483646; }
+
+      for (let i = 0; i < ridgeCount; i++) {
+        const t = i / ridgeCount;
+        const radiusX = fpScale * (0.12 + t * 0.88);
+        const radiusY = fpScale * (0.15 + t * 0.85) * 1.35; // taller than wide
+        const points = [];
+        const segments = 60 + Math.floor(srand() * 20);
+
+        // Each ridge is an elliptical arc with organic wobble
+        // Not all ridges are complete — some have gaps (like a real fingerprint)
+        const startAngle = -Math.PI * 0.8 + srand() * 0.3;
+        const endAngle = Math.PI * 0.8 - srand() * 0.3;
+        // Inner ridges are more circular, outer ones are more elliptical
+        const flattenTop = t > 0.5 ? (t - 0.5) * 0.6 : 0;
+
+        // Occasional gap in the ridge
+        const gapStart = srand() * 0.6 + 0.2;
+        const gapWidth = srand() * 0.08 + 0.02;
+        const hasGap = srand() > 0.55;
+
+        for (let j = 0; j <= segments; j++) {
+          const jt = j / segments;
+          const angle = startAngle + (endAngle - startAngle) * jt;
+
+          // Skip gap region
+          if (hasGap && jt > gapStart && jt < gapStart + gapWidth) {
+            if (points.length > 0) {
+              fpRidges.push(points.slice());
+              points.length = 0;
+            }
+            continue;
+          }
+
+          // Wobble: organic displacement
+          const wobble = Math.sin(angle * 7 + i * 2.3) * fpScale * 0.015
+            + Math.sin(angle * 13 + i * 5.1) * fpScale * 0.008;
+
+          // Flatten the top for outer ridges (fingerprint shape)
+          let ry = radiusY;
+          if (angle < 0 && flattenTop > 0) {
+            ry *= (1 - flattenTop * Math.pow(Math.abs(angle) / Math.PI, 0.5) * 0.3);
+          }
+
+          const x = fpCx + Math.cos(angle) * (radiusX + wobble);
+          const y = fpCy + Math.sin(angle) * (ry + wobble);
+          points.push({ x, y });
+        }
+        if (points.length > 2) fpRidges.push(points);
+      }
+
+      // Add a spiral core (center of fingerprint)
+      const coreSpirals = 5;
+      for (let s = 0; s < coreSpirals; s++) {
+        const points = [];
+        const segments = 40;
+        const baseR = fpScale * (0.03 + s * 0.025);
+        const spiralOffset = s * 0.4;
+        for (let j = 0; j <= segments; j++) {
+          const jt = j / segments;
+          const angle = spiralOffset + jt * Math.PI * 1.8;
+          const r = baseR * (0.5 + jt * 0.8);
+          const wobble = Math.sin(angle * 5 + s * 3) * fpScale * 0.008;
+          const x = fpCx + Math.cos(angle) * (r + wobble) * 0.8;
+          const y = fpCy + Math.sin(angle) * (r + wobble) * 1.1;
+          points.push({ x, y });
+        }
+        if (points.length > 2) fpRidges.push(points);
+      }
+    }
+    initFingerprint();
+
+    function updateTextLine(chars, elapsed, startTime, endTime) {
+      if (elapsed <= startTime) return;
+      const progress = Math.min(1, (elapsed - startTime) / (endTime - startTime));
+      for (let i = 0; i < chars.length; i++) {
+        const tc = chars[i];
+        if (tc.done) continue;
+        const threshold = (i / chars.length) * 0.55 + 0.05;
+        if (progress >= threshold + 0.3 || progress >= 0.95) {
+          tc.done = true;
+          tc.current = tc.target;
+        } else if (progress > threshold * 0.3) {
+          if (Math.random() < 0.10) tc.current = rdc();
+          if (progress > threshold && Math.random() < (progress - threshold) * 4) {
+            tc.current = tc.target;
+          }
+        }
+      }
+    }
+
+    function getLogoColor(i) {
+      if (i < AXE_LEN) {
+        const t = i / (AXE_LEN - 1);
+        return [
+          Math.floor(COL.logoBlu[0] + (COL.logoGrn[0] - COL.logoBlu[0]) * t),
+          Math.floor(COL.logoBlu[1] + (COL.logoGrn[1] - COL.logoBlu[1]) * t),
+          Math.floor(COL.logoBlu[2] + (COL.logoGrn[2] - COL.logoBlu[2]) * t),
+        ];
+      }
+      return COL.logoGray;
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  RENDER
+    // ══════════════════════════════════════════════════════
+
+    let t0 = null;
+    let frameCount = 0;
+
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+    function easeInCubic(t) { return t * t * t; }
+
+    function render(ts) {
+      if (!t0) t0 = ts;
+      const elapsed = ts - t0;
+      if (elapsed > T.END + 500) return;
+      frameCount++;
+
+      let gf = 1; // global fade
+      if (elapsed > T.FADE) {
+        gf = Math.max(0, 1 - (elapsed - T.FADE) / 1200);
+      }
+
+      const nodeAlpha = easeOutCubic(Math.min(1, elapsed / T.NODE_BUILD));
+
+      // Spawn pulses
+      if (frameCount % 5 === 0 && elapsed < T.FADE && pulses.length < 40) {
+        spawnPulse();
+      }
+
+      // ── Clear ──
+      ctx.fillStyle = '#030506';
+      ctx.fillRect(0, 0, W, H);
+
+      // ══════ LAYER 0: SUBTLE DOT GRID ══════
+      // Very faint background grid for depth
+      if (nodeAlpha > 0.3) {
+        const gridSpacing = 40;
+        const gridOp = 0.025 * gf;
+        ctx.fillStyle = `rgba(40, 100, 95, ${gridOp})`;
+        for (let gx = 0; gx < W; gx += gridSpacing) {
+          for (let gy = 0; gy < H; gy += gridSpacing) {
+            ctx.fillRect(gx, gy, 1, 1);
+          }
+        }
+      }
+
+      // ══════ LAYER 1: HORIZONTAL DATA STREAMS ══════
+      if (elapsed > T.STREAM_START) {
+        const sFade = easeOutCubic(Math.min(1, (elapsed - T.STREAM_START) / 1200));
+
+        for (const s of streams) {
+          s.x += s.speed;
+          s.swapTimer++;
+          if (s.swapTimer >= s.swapRate) {
+            s.swapTimer = 0;
+            const idx = Math.floor(Math.random() * s.chars.length);
+            s.chars[idx] = rdc();
+          }
+
+          const tw = s.chars.length * s.charWidth;
+          if (s.dir > 0 && s.x > W + 50) s.x = -tw - Math.random() * 300;
+          if (s.dir < 0 && s.x < -tw - 50) s.x = W + Math.random() * 300;
+
+          ctx.font = `300 ${s.fontSize}px 'JetBrains Mono', monospace`;
+          ctx.textBaseline = 'middle';
+
+          for (let j = 0; j < s.chars.length; j++) {
+            const px = s.x + j * s.charWidth;
+            if (px < -15 || px > W + 15) continue;
+
+            const isHead = s.dir > 0
+              ? j >= s.chars.length - 3
+              : j <= 2;
+            const baseOp = isHead ? s.headOpacity : s.opacity;
+            const op = baseOp * sFade * gf;
+            if (op < 0.008) continue;
+
+            if (isHead) {
+              ctx.fillStyle = `rgba(66, 188, 175, ${op.toFixed(3)})`;
+            } else {
+              ctx.fillStyle = `rgba(35, 105, 98, ${op.toFixed(3)})`;
+            }
+            ctx.fillText(s.chars[j], px, s.y);
+          }
+        }
+      }
+
+      // ══════ LAYER 1.5: FLOWING DATA WAVE RIBBONS (app colors) ══════
+      if (elapsed > 400) {
+        const waveFade = easeOutCubic(Math.min(1, (elapsed - 400) / 1800));
+
+        for (const w of waves) {
+          w.phase += w.speed;
+          const baseOp = w.baseOpacity * waveFade * gf;
+          if (baseOp < 0.005) continue;
+
+          const { r, g, b } = w.color;
+
+          // Helper: get Y for a given x on this wave's center path
+          function waveY(x) {
+            return w.baseY
+              + Math.sin(x * w.frequency + w.phase) * w.amplitude
+              + Math.sin(x * w.frequency * 2.3 + w.phase * 1.7) * w.amplitude * 0.3
+              + Math.sin(x * w.frequency * 0.7 + w.phase * 0.5) * w.amplitude * 0.15;
+          }
+
+          // Draw ribbon: multiple parallel lines with slight vertical offset
+          const step = 3;
+          for (let li = 0; li < w.ribbonLines; li++) {
+            const t = w.ribbonLines > 1 ? li / (w.ribbonLines - 1) : 0.5;
+            const yOffset = (t - 0.5) * w.ribbonSpread * 2;
+            const centerDist = Math.abs(t - 0.5) * 2;
+            const lineOp = baseOp * (1 - centerDist * 0.5);
+            const lw = w.baseLineWidth * (1 - centerDist * 0.3);
+
+            // Slight brightness variation per sub-line
+            const lr = Math.min(255, r + Math.floor(li * 6));
+            const lg = Math.min(255, g + Math.floor(li * 5));
+            const lb = Math.min(255, b + Math.floor(li * 4));
+
+            ctx.strokeStyle = `rgba(${lr}, ${lg}, ${lb}, ${lineOp.toFixed(3)})`;
+            ctx.lineWidth = lw;
+            ctx.beginPath();
+            for (let x = 0; x <= W; x += step) {
+              const y = waveY(x) + yOffset;
+              if (x === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+          }
+
+          // Draw dots riding the wave — each dot has its own color
+          for (let d = 0; d < w.dotCount; d++) {
+            w.dotPositions[d] += w.dotSpeeds[d];
+            if (w.dotPositions[d] > W + 20) w.dotPositions[d] = -20;
+
+            const dx = w.dotPositions[d];
+            const dy = waveY(dx);
+            const dotR = w.dotSizes[d];
+            const dc = w.dotColors[d];
+
+            const pulse = 0.7 + Math.sin(frameCount * 0.025 + d * 1.3) * 0.3;
+            const dotOp = Math.min(0.9, baseOp * 2.5 * pulse);
+
+            // Outer glow in dot's color
+            const glowR = dotR * 4;
+            const dg = ctx.createRadialGradient(dx, dy, 0, dx, dy, glowR);
+            dg.addColorStop(0, `rgba(${Math.min(255, dc.r + 50)}, ${Math.min(255, dc.g + 60)}, ${Math.min(255, dc.b + 50)}, ${Math.min(0.7, dotOp * 1.8).toFixed(3)})`);
+            dg.addColorStop(0.4, `rgba(${dc.r}, ${dc.g}, ${dc.b}, ${(dotOp * 0.4).toFixed(3)})`);
+            dg.addColorStop(1, `rgba(${dc.r}, ${dc.g}, ${dc.b}, 0)`);
+            ctx.fillStyle = dg;
+            ctx.beginPath();
+            ctx.arc(dx, dy, glowR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Bright core
+            ctx.fillStyle = `rgba(${Math.min(255, dc.r + 80)}, ${Math.min(255, dc.g + 80)}, ${Math.min(255, dc.b + 80)}, ${Math.min(0.95, dotOp * 2.5).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Tiny white center
+            ctx.fillStyle = `rgba(220, 255, 250, ${Math.min(0.7, dotOp * 1.5).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(dx, dy, dotR * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      // ══════ LAYER 2: NEURAL CONNECTIONS ══════
+      ctx.lineWidth = 0.5;
+      for (const conn of connectionCache) {
+        const a = nodes[conn.a];
+        const b = nodes[conn.b];
+        if (elapsed < a.delay || elapsed < b.delay) continue;
+
+        const distFactor = 1 - (conn.dist / CONNECTION_DIST);
+        const op = distFactor * 0.28 * nodeAlpha * gf;
+        if (op < 0.005) continue;
+
+        ctx.strokeStyle = `rgba(40, 120, 110, ${op.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+
+      // ══════ LAYER 3: DATA PULSES (colored) ══════
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.progress += p.speed;
+        if (p.progress > 1) { pulses.splice(i, 1); continue; }
+
+        const conn = connectionCache[p.connIdx];
+        if (!conn) { pulses.splice(i, 1); continue; }
+        const a = nodes[conn.a];
+        const b = nodes[conn.b];
+        const px = a.x + (b.x - a.x) * p.progress;
+        const py = a.y + (b.y - a.y) * p.progress;
+
+        const pulseOp = p.brightness * Math.sin(p.progress * Math.PI) * nodeAlpha * gf;
+        if (pulseOp < 0.01) continue;
+
+        // Use the source node's color
+        const pc = a.color;
+        const grad = ctx.createRadialGradient(px, py, 0, px, py, 5);
+        grad.addColorStop(0, `rgba(${Math.min(255, pc.r + 15)}, ${Math.min(255, pc.g + 20)}, ${Math.min(255, pc.b + 15)}, ${(pulseOp * 0.9).toFixed(3)})`);
+        grad.addColorStop(1, `rgba(${pc.r}, ${pc.g}, ${pc.b}, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ══════ LAYER 4: NEURAL NODES (multi-color) ══════
+      for (const n of nodes) {
+        if (elapsed < n.delay) continue;
+
+        const ap = easeOutCubic(Math.min(1, (elapsed - n.delay) / 700));
+
+        n.x += n.vx;
+        n.y += n.vy;
+        if (n.x < -30) n.x = W + 30;
+        if (n.x > W + 30) n.x = -30;
+        if (n.y < -30) n.y = H + 30;
+        if (n.y > H + 30) n.y = -30;
+
+        n.pulsePhase += n.pulseSpeed;
+        const pulse = 0.55 + Math.sin(n.pulsePhase) * 0.45;
+        const op = n.brightness * pulse * ap * gf;
+        if (op < 0.01) continue;
+
+        const nc = n.color;
+
+        // Glow halo
+        const glowR = n.radius * 4;
+        const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glowR);
+        grad.addColorStop(0, `rgba(${nc.r}, ${nc.g}, ${nc.b}, ${(op * 0.5).toFixed(3)})`);
+        grad.addColorStop(0.4, `rgba(${nc.r}, ${nc.g}, ${nc.b}, ${(op * 0.12).toFixed(3)})`);
+        grad.addColorStop(1, `rgba(${nc.r}, ${nc.g}, ${nc.b}, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core
+        ctx.fillStyle = `rgba(${Math.min(255, nc.r + 15)}, ${Math.min(255, nc.g + 20)}, ${Math.min(255, nc.b + 15)}, ${(op * 0.85).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.radius * ap, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ══════ LAYER 5: FLOATING PARTICLES ══════
+      ctx.textBaseline = 'middle';
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy + Math.sin(frameCount * 0.008 + p.x * 0.003) * 0.04;
+
+        if (p.x > W + 25) {
+          p.x = -25;
+          p.y = Math.random() * H;
+        }
+
+        p.swapTimer++;
+        if (p.swapTimer >= p.swapRate) {
+          p.swapTimer = 0;
+          p.char = rdc();
+        }
+
+        const op = p.opacity * gf;
+        if (op < 0.01) continue;
+
+        ctx.font = `300 ${p.size}px 'JetBrains Mono', monospace`;
+        ctx.fillStyle = `rgba(55, 150, 140, ${op.toFixed(3)})`;
+        ctx.fillText(p.char, p.x, p.y);
+      }
+
+      // ══════ LAYER 6: SCAN LINE ══════
+      scanY += scanSpeed;
+      if (scanY > H + 60) scanY = -60;
+      const scanOp = 0.04 * gf;
+      if (scanOp > 0.005) {
+        const scanGrad = ctx.createLinearGradient(0, scanY - 30, 0, scanY + 30);
+        scanGrad.addColorStop(0, 'rgba(66, 188, 175, 0)');
+        scanGrad.addColorStop(0.5, `rgba(66, 188, 175, ${scanOp})`);
+        scanGrad.addColorStop(1, 'rgba(66, 188, 175, 0)');
+        ctx.fillStyle = scanGrad;
+        ctx.fillRect(0, scanY - 30, W, 60);
+      }
+
+      // ══════ LAYER 7: TEXT REVEALS ══════
+      updateTextLine(line1Chars, elapsed, T.LINE1_START, T.LINE1_DONE);
+      updateTextLine(line2Chars, elapsed, T.LINE2_START, T.LINE2_DONE);
+      updateTextLine(logoChars,  elapsed, T.LOGO_START,  T.LOGO_DONE);
+
+      ctx.font = `400 ${FONT_SIZE}px 'JetBrains Mono', monospace`;
+      ctx.textBaseline = 'top';
+
+      // Dark backdrop behind text
+      if (elapsed > T.LINE1_START - 400) {
+        const bop = easeOutCubic(Math.min(1, (elapsed - T.LINE1_START + 400) / 700)) * 0.6 * gf;
+        const bx = Math.min(textX1, textX2, textX3) - 30;
+        const by = textY1 - 20;
+        const bw = Math.max(mw(LINE1_TEXT), mw(LINE2_TEXT), mw(LOGO_TEXT)) + 60;
+        const bh = textY3 + FONT_SIZE + 20 - by;
+
+        // Soft rounded backdrop
+        const bgGrad = ctx.createRadialGradient(
+          bx + bw/2, by + bh/2, 0,
+          bx + bw/2, by + bh/2, Math.max(bw, bh) * 0.7
+        );
+        bgGrad.addColorStop(0, `rgba(0, 0, 0, ${(bop * 0.9).toFixed(3)})`);
+        bgGrad.addColorStop(0.7, `rgba(0, 0, 0, ${(bop * 0.5).toFixed(3)})`);
+        bgGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(bx - 40, by - 30, bw + 80, bh + 60);
+      }
+
+      // ── Fingerprint (on top of backdrop, behind text) ──
+      if (elapsed > 1400) {
+        const fpFadeIn = easeOutCubic(Math.min(1, (elapsed - 1400) / 2200));
+        const fpOp = fpFadeIn * 0.14 * gf;
+
+        if (fpOp > 0.005) {
+          ctx.lineWidth = IS_MOBILE ? 1.0 : 1.2;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          for (let ri = 0; ri < fpRidges.length; ri++) {
+            const ridge = fpRidges[ri];
+            if (ridge.length < 3) continue;
+
+            const ridgeOp = fpOp * (0.55 + Math.sin(ri * 0.7) * 0.45);
+            ctx.strokeStyle = `rgba(50, 170, 160, ${ridgeOp.toFixed(4)})`;
+
+            ctx.beginPath();
+            ctx.moveTo(ridge[0].x, ridge[0].y);
+            for (let j = 1; j < ridge.length - 1; j++) {
+              const cpx = (ridge[j].x + ridge[j + 1].x) / 2;
+              const cpy = (ridge[j].y + ridge[j + 1].y) / 2;
+              ctx.quadraticCurveTo(ridge[j].x, ridge[j].y, cpx, cpy);
+            }
+            const last = ridge[ridge.length - 1];
+            ctx.lineTo(last.x, last.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Line 1
+      if (elapsed > T.LINE1_START - 200) {
+        const fi = easeOutCubic(Math.min(1, Math.max(0, (elapsed - T.LINE1_START) / 600)));
+        drawTextLine(line1Chars, textX1, textY1, fi * gf, false);
+      }
+      // Line 2
+      if (elapsed > T.LINE2_START - 200) {
+        const fi = easeOutCubic(Math.min(1, Math.max(0, (elapsed - T.LINE2_START) / 600)));
+        drawTextLine(line2Chars, textX2, textY2, fi * gf, false);
+      }
+      // Logo
+      if (elapsed > T.LOGO_START - 200) {
+        const fi = easeOutCubic(Math.min(1, Math.max(0, (elapsed - T.LOGO_START) / 600)));
+        drawTextLine(logoChars, textX3, textY3, fi * gf, true);
+      }
+
+      // Fade overlay
+      if (elapsed > T.FADE) {
+        document.getElementById('fadeOverlay').style.opacity =
+          easeInCubic(Math.min(1, (elapsed - T.FADE) / 1200));
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    function drawTextLine(chars, startX, y, fadeIn, isLogo) {
+      for (let i = 0; i < chars.length; i++) {
+        const tc = chars[i];
+        if (tc.current === ' ') continue;
+
+        const x = startX + i * CHAR_W_MEASURE;
+        let col, boost;
+
+        if (isLogo) {
+          col = tc.done ? getLogoColor(i) : COL.text;
+          boost = tc.done ? 1.45 : 0.8;
+        } else {
+          col = tc.done ? COL.textHi : COL.text;
+          boost = tc.done ? 1.2 : 0.8;
+        }
+
+        const b = Math.min(1, 0.12 + fadeIn * 0.88);
+        const cr = Math.min(255, Math.floor(col[0] * b * boost));
+        const cg = Math.min(255, Math.floor(col[1] * b * boost));
+        const cb = Math.min(255, Math.floor(col[2] * b * boost));
+
+        ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+        ctx.fillText(tc.current, x, y);
+
+        // Subtle glow behind resolved text
+        if (tc.done && fadeIn > 0.5) {
+          const glowOp = (fadeIn - 0.5) * 0.08;
+          ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${glowOp.toFixed(3)})`;
+          ctx.fillText(tc.current, x + 0.5, y + 0.5);
+        }
+      }
+    }
+
+    // ── Replay ──
+    function startAnimation() {
+      t0 = null;
+      frameCount = 0;
+      pulses.length = 0;
+      scanY = -100;
+      document.getElementById('fadeOverlay').style.opacity = 0;
+      initNodes();
+      buildConnections();
+      initStreams();
+      initParticles();
+      initWaves();
+      initFingerprint();
+      initText();
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+      requestAnimationFrame(render);
+    }
+
+    document.addEventListener('click', () => startAnimation());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') startAnimation();
+    });
+
+    document.fonts.ready.then(() => requestAnimationFrame(render));
+  </script>
+<script data-pplx-inline-edit>
+(function(){
+  if(window===window.top)return;
+  function inlineAll(orig,clone){
+    if(orig.nodeType!==1)return;
+    try{
+      var cs=getComputedStyle(orig);
+      var t='';
+      for(var i=0;i<cs.length;i++){t+=cs[i]+':'+cs.getPropertyValue(cs[i])+';';}
+      clone.style.cssText=t;
+    }catch(e){}
+    var oc=orig.children,cc=clone.children;
+    for(var j=0;j<oc.length&&j<cc.length;j++){inlineAll(oc[j],cc[j]);}
+  }
+  function stripExternal(clone){
+    var imgs=clone.querySelectorAll('img');
+    for(var i=0;i<imgs.length;i++){
+      var s=imgs[i].getAttribute('src');
+      if(s&&!s.startsWith('data:'))imgs[i].removeAttribute('src');
+    }
+    var all=clone.querySelectorAll('*');
+    for(var i=0;i<all.length;i++){
+      var st=all[i].style.cssText;
+      if(st&&st.indexOf('url(')>=0){
+        all[i].style.cssText=st.replace(/url\(["']?(?!data:)[^)"']*["']?\)/gi,'none');
+      }
+    }
+  }
+  window.addEventListener('message',function(e){
+    if(!e.data||e.data.type!=='INLINE_EDIT_CAPTURE_REQUEST')return;
+    var scrollX=window.scrollX||window.pageXOffset||0;
+    var scrollY=window.scrollY||window.pageYOffset||0;
+    var w=window.innerWidth,h=window.innerHeight;
+    try{
+      var clone=document.documentElement.cloneNode(true);
+      var rm=clone.querySelectorAll('script,link[rel="stylesheet"],style');
+      for(var i=0;i<rm.length;i++){rm[i].remove();}
+      inlineAll(document.documentElement,clone);
+      stripExternal(clone);
+      var html=new XMLSerializer().serializeToString(clone);
+      var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'
+        +'<foreignObject width="100%" height="100%">'
+        +'<div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;height:'+h+'px;overflow:hidden">'
+        +'<div style="transform:translate(-'+scrollX+'px,-'+scrollY+'px);transform-origin:top left">'
+        +html+'</div></div></foreignObject></svg>';
+      var svgUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+      var img=new Image();
+      img.onload=function(){
+        var c=document.createElement('canvas');c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0);
+        window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:c.toDataURL('image/png'),scrollX:scrollX,scrollY:scrollY},'*');
+      };
+      img.onerror=function(){
+        window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:null,scrollX:scrollX,scrollY:scrollY},'*');
+      };
+      img.src=svgUrl;
+    }catch(err){
+      window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:null,scrollX:scrollX,scrollY:scrollY},'*');
+    }
+  });
+})();
+</script></body>
+</html>

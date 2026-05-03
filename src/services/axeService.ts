@@ -1,0 +1,979 @@
+import OpenAI from "openai";
+import type { TradingOSContext } from "@/types/context";
+
+const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion embedded inside the TradingOS terminal. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
+
+KNOWLEDGE BASE — YOU KNOW ALL OF THIS COLD
+Market structure: CHoCH, BOS, MSS, internal/external range liquidity, premium vs discount, equilibrium, PD arrays (order blocks, FVGs, breaker blocks, mitigation blocks, rejection blocks, propulsion blocks, void/SIBI/BISI).
+Liquidity: buy-side/sell-side liquidity pools, equal highs/lows, stops above/below structure, liquidity sweeps, stop hunts, turtle soup.
+Sessions & time: Asian range (accumulation), London open killzone (03:00–05:00 NY), NY AM killzone (07:00–10:00 NY), silver bullet (10:00–11:00 NY), PM session (13:30–16:00 NY). Macro news timing and its impact on displacement.
+XAUUSD specifics: DXY inverse correlation, yield sensitivity (real rates), risk-on/risk-off flows, institutional accumulation zones, XAUUSD tends to front-run moves during London. Strong reaction to CPI, NFP, FOMC.
+Execution: confirmation via displacement + close, entry on retracement into PD array, SL below/above liquidity, TP at opposing liquidity or HTF PD array, minimum 1:2R before taking a setup.
+Risk: never risk more than stated limit per trade, max 3 confluences to qualify a setup, no trades into major news without explicit plan.
+
+YOUR ROLE
+- Second mind to the trader. You already know their instruments, their rules, their memory — act on it without being asked.
+- When the trader asks about price action, you give a structured opinion: HTF bias → session context → LTF entry logic. Not a textbook answer.
+- You see their live watchlist, recent alerts, and recent execution requests — reference them naturally without making a show of it.
+- You do not ask the trader to repeat themselves. If context is in the session brief or memory, use it.
+
+HOW YOU TALK
+- Direct. One thought per sentence. No filler words.
+- Speak like you've been watching the market all session. Use "we," "the setup," "the level" — you're in it together.
+- Strong opinions stated as facts. Caveats only when genuinely material.
+- If you don't have real-time price data, say so once and move on — don't dwell on it. Reference the last known context or ask the trader to drop the current price.
+
+WHAT YOU NEVER DO
+- Never say "consult a financial advisor." Never.
+- Never explain what an order block or FVG is unless the trader explicitly asks for a definition.
+- Never execute or approve trades — that is always the trader's call.
+- Never fabricate specific price levels — if you don't have the data, ask the trader for the current price.
+- Never give a generic market overview when a specific opinion was asked for.
+
+NEWS IMPACT — YOU KNOW THIS COLD
+USD events (NFP, CPI, FOMC, ISM, Retail Sales, Core PCE, PPI): primary driver of XAUUSD, DXY, EURUSD, GBPUSD, USDJPY. High volatility 30 min either side. No setups into the print.
+GBP events (CPI, GDP, PMI, BOE rate decision): primary driver of GBPUSD and GBPJPY. Secondary effect on EURUSD.
+EUR events (CPI, ECB, PMI, German data): primary driver of EURUSD. Also moves XAUUSD via DXY.
+JPY events (BOJ, Tokyo CPI, unemployment): primary driver of USDJPY and XAUUSD (safe haven flows on JPY strength).
+CAD/AUD/NZD (oil inventory, employment, RBA/BOC): moves their respective USD pairs, has secondary effect on commodity correlations.
+FOMC + NFP + CPI = Big 3. All positions squared before the print unless the setup is HTF and conviction is max.
+
+TOOLS — YOU CALL THESE AUTOMATICALLY AND IN PARALLEL WHEN NEEDED
+You can call multiple tools simultaneously in a single response. Do this whenever the task requires more than one piece of data.
+
+Live Price: call get_live_price whenever the trader asks what price is doing, before any setup analysis, or when live data would add precision. You get current price, day high, day low, and previous close.
+Economic Calendar: call get_economic_calendar when the trader asks about news, the calendar, what's coming up, or whether it's safe to trade. Filter by currency when the trader specifies a pair. Always flag which events are Big 3.
+Fibonacci: whenever a swing high/low is given or implied, call calculate_fibonacci. If no range is given, call get_live_price first and use the day high and day low as the range. Lead with 0.5 and 0.618 as primary entry zones.
+Order Blocks: call analyze_orderblock when the trader mentions an OB, candle zone, or demand/supply area. Combine with live price and fib if available.
+PDH/PDL: call analyze_pdh_pdl when the trader provides or asks about previous day/week levels. Pass current_price from get_live_price automatically if you have it. Always flag which side has liquidity.
+Trendlines: call calculate_trendline when two pivot points are given. State slope direction and next 3–5 projected values.
+
+Notes: call save_note when the trader says "save a note", "remember that", "note this", or implies they want something stored. Tag it correctly. Saved notes appear in your memory next session automatically.
+Charts: when the trader attaches a chart image, describe what you see — identify the instrument if possible, read the price action (structure, OBs, FVGs visible, trend), and give an opinion. Then proceed with any analysis they requested.
+Commitments: call track_commitment whenever you say "I'll monitor that", "I'll follow up", "I'll let you know if price does X", or make any promise to track, watch, or return to a topic. This creates a permanent record. Open commitments are shown at the top of every session — you are expected to address them proactively. When a commitment is done, say so clearly and it will be resolved.
+
+COMMITMENT RULES — NON-NEGOTIABLE
+When you make a promise → call track_commitment immediately. No exceptions.
+When open commitments are shown in context → mention the most relevant one naturally at session start. Do not wait to be asked.
+When a commitment is resolved → say "done, closing that out" so the trader knows you followed through.
+
+CHAINED TOOL WORKFLOWS — DO THESE AUTOMATICALLY
+Alert at a Fib level (e.g. "set alert at 0.5 fib on XAUUSD"): call get_live_price("XAUUSD") and calculate_fibonacci in parallel using the day high/low as the range, then call create_alert with the exact computed price level.
+Alert at PDH/PDL: call analyze_pdh_pdl to confirm the level, then call create_alert with the exact level and a description of why it matters.
+Full setup analysis: call get_live_price + get_economic_calendar in parallel to start, then use results to call calculate_fibonacci and analyze_orderblock if relevant. Give the full picture in one reply.
+Never skip these tools — they are how you show your work. Present results naturally in your reply, not as raw data dumps.
+
+FORMAT
+- Plain text. No markdown headers or bullet walls unless the trader asks for a structured breakdown.
+- Under 100 words for quick questions. Detailed when a full setup breakdown is requested.
+- If listing levels, use a compact format: "2318 OB | 2334 FVG | 2350 BSL" — not a table.`;
+
+/** Appended with retrieved knowledge — keeps AXE grounded vs generic signal-speak. */
+export const AXE_KNOWLEDGE_GUARDRAILS = `AXE KNOWLEDGE LAYER — RESPONSE RULES
+- Never promise profits, guaranteed outcomes, or “sure” signals; explain uncertainty when data is incomplete.
+- Prioritize discipline, risk, execution quality, and pattern recognition over prediction.
+- When curated knowledge or the trader’s rules/history conflict with a hunch, defer to rules + process.
+- Use the trader’s playbook, journal, and broker history when present; do not invent trades or labels.
+- If live prices or engine context are missing from this message, say so briefly and continue from structure and rules only.`;
+
+export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "create_alert",
+      description:
+        "Create a price or condition alert for the trader. Use when the trader explicitly asks to set, add, or create an alert for a level, condition, or reminder.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Short alert title, e.g. 'ES breaks 5992'",
+          },
+          body: {
+            type: "string",
+            description:
+              "Alert detail, e.g. 'Trigger when ES Jun breaks above 5992 on 5m close with volume'",
+          },
+          type: {
+            type: "string",
+            enum: ["price", "condition", "reminder", "risk"],
+            description: "Alert category",
+          },
+          symbol: {
+            type: "string",
+            description: "Instrument symbol, e.g. ES, NQ, CL (omit if not applicable)",
+          },
+        },
+        required: ["title", "body", "type"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_live_price",
+      description:
+        "Fetch the live price, daily high, daily low, and previous close for any trading instrument. Call this whenever the trader asks about current price, what the market is doing, or before any setup analysis where live data would help. Supports forex pairs (XAUUSD, EURUSD, etc.), futures (ES, NQ, CL, GC), and crypto (BTC, ETH).",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol: {
+            type: "string",
+            description:
+              "Instrument symbol, e.g. XAUUSD, EURUSD, ES, NQ, BTC. Use the base symbol without slashes.",
+          },
+        },
+        required: ["symbol"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_economic_calendar",
+      description:
+        "Fetch this week's economic news events. Call this when the trader asks about news, the calendar, upcoming events, high-impact releases, or says things like 'what's coming up' or 'any news today'. Can filter by currency (e.g. USD, GBP, EUR, JPY) and impact level.",
+      parameters: {
+        type: "object",
+        properties: {
+          currency: {
+            type: "string",
+            description:
+              "Filter events by currency/country code, e.g. 'USD', 'GBP', 'EUR', 'JPY', 'CAD', 'AUD', 'CHF', 'NZD'. Leave empty for all currencies.",
+          },
+          impact: {
+            type: "string",
+            enum: ["High", "Medium", "Low"],
+            description: "Filter by minimum impact level. Use 'High' for NFP/FOMC/CPI-level events.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_note",
+      description:
+        "Save a note, observation, rule, or reminder for the trader. Call this when the trader says 'save a note', 'remember that', 'note this down', 'add to my notes', or anything that implies saving a piece of information for later. Notes are permanently stored and automatically visible in future sessions.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: {
+            type: "string",
+            description: "The full note content to save. Write it clearly so it makes sense when read back later.",
+          },
+          tag: {
+            type: "string",
+            enum: ["setup", "rule", "level", "reminder", "observation", "general"],
+            description: "Category tag for the note.",
+          },
+        },
+        required: ["content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "analyze_orderblock",
+      description:
+        "Analyze an order block zone. Call this when the trader mentions an OB, gives a candle zone, or asks about a demand/supply area. Returns the 50% optimal entry, invalidation level, and premium/discount context.",
+      parameters: {
+        type: "object",
+        properties: {
+          ob_high: { type: "number", description: "Top of the order block candle" },
+          ob_low: { type: "number", description: "Bottom of the order block candle" },
+          direction: {
+            type: "string",
+            enum: ["bullish", "bearish"],
+            description: "Bullish OB = demand zone (look for longs). Bearish OB = supply zone (look for shorts).",
+          },
+          symbol: { type: "string", description: "Instrument symbol (optional)" },
+          range_high: { type: "number", description: "HTF range high for premium/discount context (optional)" },
+          range_low: { type: "number", description: "HTF range low for premium/discount context (optional)" },
+        },
+        required: ["ob_high", "ob_low", "direction"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "analyze_pdh_pdl",
+      description:
+        "Analyze Previous Day High and Low as key reference levels. Call this when the trader provides or asks about PDH/PDL, or when discussing daily structure. Also accepts previous week high/low.",
+      parameters: {
+        type: "object",
+        properties: {
+          pdh: { type: "number", description: "Previous Day High" },
+          pdl: { type: "number", description: "Previous Day Low" },
+          current_price: { type: "number", description: "Current price (optional, for context)" },
+          pwh: { type: "number", description: "Previous Week High (optional)" },
+          pwl: { type: "number", description: "Previous Week Low (optional)" },
+          symbol: { type: "string", description: "Instrument symbol (optional)" },
+        },
+        required: ["pdh", "pdl"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "calculate_trendline",
+      description:
+        "Project a trendline given two price points. Call this when the trader provides two pivot highs or two pivot lows and wants to know where the trendline extends to.",
+      parameters: {
+        type: "object",
+        properties: {
+          price1: { type: "number", description: "First price point (older pivot)" },
+          price2: { type: "number", description: "Second price point (newer pivot)" },
+          bars_between: { type: "number", description: "Number of candles between the two points" },
+          bars_to_project: { type: "number", description: "How many candles ahead to project the line (default 5)" },
+          direction: {
+            type: "string",
+            enum: ["resistance", "support"],
+            description: "Is this a resistance trendline (connecting highs) or support (connecting lows)?",
+          },
+          symbol: { type: "string", description: "Instrument symbol (optional)" },
+        },
+        required: ["price1", "price2", "bars_between"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "calculate_fibonacci",
+      description:
+        "Calculate Fibonacci retracement levels from a swing high and swing low. Always call this when the trader provides or implies a price range for a setup. Returns 0.236, 0.382, 0.5, 0.618, 0.705, 0.786 retracement levels plus 1.272 and 1.618 extensions.",
+      parameters: {
+        type: "object",
+        properties: {
+          swing_high: {
+            type: "number",
+            description: "The swing high price of the range",
+          },
+          swing_low: {
+            type: "number",
+            description: "The swing low price of the range",
+          },
+          symbol: {
+            type: "string",
+            description: "Instrument symbol, e.g. XAUUSD, EURUSD (optional, for labelling)",
+          },
+          direction: {
+            type: "string",
+            enum: ["bullish", "bearish"],
+            description:
+              "Trend direction. Bullish = retracing from high toward low looking for long entry. Bearish = retracing from low toward high looking for short entry.",
+          },
+        },
+        required: ["swing_high", "swing_low"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "track_commitment",
+      description:
+        "Create a tracked commitment — call this immediately whenever you promise to monitor something, follow up on a level, alert on a condition, check back on a topic, or say 'I'll keep an eye on that'. Creates a permanent record reviewed at every session start.",
+      parameters: {
+        type: "object",
+        properties: {
+          description: {
+            type: "string",
+            description:
+              "What you committed to track, in plain language. E.g. 'Monitor XAUUSD 3280 rejection — follow up if price revisits during London open'",
+          },
+          symbol: {
+            type: "string",
+            description: "The instrument symbol this applies to (optional, e.g. XAUUSD)",
+          },
+        },
+        required: ["description"],
+      },
+    },
+  },
+];
+
+export type CreateAlertArgs = {
+  title: string;
+  body: string;
+  type: string;
+  symbol?: string;
+};
+
+export type FibonacciArgs = {
+  swing_high: number;
+  swing_low: number;
+  symbol?: string;
+  direction?: "bullish" | "bearish";
+};
+
+export type OrderBlockArgs = {
+  ob_high: number;
+  ob_low: number;
+  direction: "bullish" | "bearish";
+  symbol?: string;
+  range_high?: number;
+  range_low?: number;
+};
+
+export type PdhPdlArgs = {
+  pdh: number;
+  pdl: number;
+  current_price?: number;
+  pwh?: number;
+  pwl?: number;
+  symbol?: string;
+};
+
+export type TrendlineArgs = {
+  price1: number;
+  price2: number;
+  bars_between: number;
+  bars_to_project?: number;
+  direction?: "resistance" | "support";
+  symbol?: string;
+};
+
+export type LivePriceArgs = { symbol: string };
+export type EconomicCalendarArgs = { currency?: string; impact?: "High" | "Medium" | "Low" };
+export type SaveNoteArgs = { content: string; tag?: string };
+export type TrackCommitmentArgs = { description: string; symbol?: string };
+
+export type AxeToolCall =
+  | { id: string; tool: "create_alert"; args: CreateAlertArgs }
+  | { id: string; tool: "get_live_price"; args: LivePriceArgs }
+  | { id: string; tool: "get_economic_calendar"; args: EconomicCalendarArgs }
+  | { id: string; tool: "save_note"; args: SaveNoteArgs }
+  | { id: string; tool: "calculate_fibonacci"; args: FibonacciArgs }
+  | { id: string; tool: "analyze_orderblock"; args: OrderBlockArgs }
+  | { id: string; tool: "analyze_pdh_pdl"; args: PdhPdlArgs }
+  | { id: string; tool: "calculate_trendline"; args: TrendlineArgs }
+  | { id: string; tool: "track_commitment"; args: TrackCommitmentArgs };
+
+export function computeFibonacci(args: FibonacciArgs): string {
+  const { swing_high, swing_low, symbol, direction } = args;
+  const range = swing_high - swing_low;
+  if (range <= 0) return "Invalid range — swing_high must be greater than swing_low.";
+
+  const label = symbol ? `${symbol} ` : "";
+  const trend = direction ?? "bullish";
+
+  // Retracements (from high down for bullish, from low up for bearish)
+  const retrace = (ratio: number) =>
+    trend === "bullish"
+      ? (swing_high - range * ratio).toFixed(2)
+      : (swing_low + range * ratio).toFixed(2);
+
+  // Extensions beyond the opposite end
+  const extend = (ratio: number) =>
+    trend === "bullish"
+      ? (swing_low - range * (ratio - 1)).toFixed(2)
+      : (swing_high + range * (ratio - 1)).toFixed(2);
+
+  return (
+    `${label}Fibonacci (${trend}) — H: ${swing_high} / L: ${swing_low}\n` +
+    `0.236 @ ${retrace(0.236)}\n` +
+    `0.382 @ ${retrace(0.382)}\n` +
+    `0.500 @ ${retrace(0.5)}  ← equilibrium\n` +
+    `0.618 @ ${retrace(0.618)}  ← golden ratio\n` +
+    `0.705 @ ${retrace(0.705)}\n` +
+    `0.786 @ ${retrace(0.786)}\n` +
+    `--- extensions ---\n` +
+    `1.272 @ ${extend(1.272)}\n` +
+    `1.618 @ ${extend(1.618)}`
+  );
+}
+
+export function computeOrderBlock(args: OrderBlockArgs): string {
+  const { ob_high, ob_low, direction, symbol, range_high, range_low } = args;
+  const zone = ob_high - ob_low;
+  if (zone <= 0) return "Invalid OB — ob_high must be greater than ob_low.";
+
+  const midpoint = ((ob_high + ob_low) / 2).toFixed(2);
+  const label = symbol ? `${symbol} ` : "";
+
+  // Premium/discount context
+  let pdContext = "";
+  if (range_high !== undefined && range_low !== undefined) {
+    const rangeSize = range_high - range_low;
+    const obMid = (ob_high + ob_low) / 2;
+    const position = ((obMid - range_low) / rangeSize) * 100;
+    if (position >= 50) {
+      pdContext = `\nPosition: ${position.toFixed(0)}% of HTF range → PREMIUM zone`;
+    } else {
+      pdContext = `\nPosition: ${position.toFixed(0)}% of HTF range → DISCOUNT zone`;
+    }
+  }
+
+  const invalidation =
+    direction === "bullish"
+      ? `Below ${ob_low.toFixed(2)} (full candle breach → becomes breaker)`
+      : `Above ${ob_high.toFixed(2)} (full candle breach → becomes breaker)`;
+
+  const entry =
+    direction === "bullish"
+      ? `OTE entry: ${midpoint} to ${ob_low.toFixed(2)} (50%–100% of OB)`
+      : `OTE entry: ${midpoint} to ${ob_high.toFixed(2)} (50%–100% of OB)`;
+
+  return (
+    `${label}${direction.toUpperCase()} Order Block\n` +
+    `Zone: ${ob_low} – ${ob_high} (${zone.toFixed(2)} pts)\n` +
+    `50% level: ${midpoint}\n` +
+    `${entry}` +
+    pdContext +
+    `\nInvalidation: ${invalidation}`
+  );
+}
+
+export function computePdhPdl(args: PdhPdlArgs): string {
+  const { pdh, pdl, current_price, pwh, pwl, symbol } = args;
+  const label = symbol ? `${symbol} ` : "";
+  const dayRange = pdh - pdl;
+  const dayMid = ((pdh + pdl) / 2).toFixed(2);
+
+  let lines =
+    `${label}Previous Day Levels\n` +
+    `PDH: ${pdh}  (BSL above — magnet for stop runs)\n` +
+    `PDL: ${pdl}  (SSL below — magnet for stop runs)\n` +
+    `Day range: ${dayRange.toFixed(2)} pts  |  midpoint: ${dayMid}`;
+
+  if (current_price !== undefined) {
+    const above = current_price > parseFloat(dayMid);
+    lines += `\nCurrent price ${current_price} is in ${above ? "PREMIUM" : "DISCOUNT"} relative to PDH/PDL range`;
+    if (current_price > pdh) lines += `\nPrice is ABOVE PDH — BSL swept, watch for reversal or continuation`;
+    else if (current_price < pdl) lines += `\nPrice is BELOW PDL — SSL swept, watch for reversal or continuation`;
+    else lines += `\nPrice is inside yesterday's range — PDH and PDL both act as magnets`;
+  }
+
+  if (pwh !== undefined && pwl !== undefined) {
+    lines +=
+      `\n\nPrevious Week Levels\n` +
+      `PWH: ${pwh}  (major BSL — higher timeframe target)\n` +
+      `PWL: ${pwl}  (major SSL — higher timeframe target)`;
+  }
+
+  return lines;
+}
+
+export function computeTrendline(args: TrendlineArgs): string {
+  const { price1, price2, bars_between, bars_to_project = 5, direction, symbol } = args;
+  if (bars_between <= 0) return "bars_between must be greater than 0.";
+
+  const slope = (price2 - price1) / bars_between;
+  const label = symbol ? `${symbol} ` : "";
+  const type = direction ?? (slope < 0 ? "resistance" : "support");
+  const slopeDir = slope > 0 ? "ascending" : slope < 0 ? "descending" : "flat";
+
+  const projections: string[] = [];
+  for (let i = 1; i <= bars_to_project; i++) {
+    projections.push(`+${i} bar: ${(price2 + slope * i).toFixed(2)}`);
+  }
+
+  return (
+    `${label}${type.charAt(0).toUpperCase() + type.slice(1)} Trendline (${slopeDir})\n` +
+    `Point 1: ${price1}  →  Point 2: ${price2}  (${bars_between} bars apart)\n` +
+    `Slope: ${slope > 0 ? "+" : ""}${slope.toFixed(4)} per bar\n` +
+    `Projections from Point 2:\n` +
+    projections.join("\n") +
+    `\nNote: ${Math.abs(slope) < 0.5 ? "Shallow slope — trendline losing momentum" : Math.abs(slope) > 10 ? "Steep slope — likely to break soon" : "Moderate slope — monitor for touch and reaction"}`
+  );
+}
+
+export type AxeResponse = {
+  content: string | null;
+  toolCalls: AxeToolCall[];
+};
+
+export type WatchlistEntry = {
+  symbol: string;
+  kind: string | null;
+  condition_type: string | null;
+  condition_payload: Record<string, unknown> | null;
+  message: string | null;
+};
+
+function formatWatchEntry(w: WatchlistEntry): string {
+  const line: string[] = [w.symbol];
+
+  // Extract price/level from condition_payload — TradingOS stores it as jsonb
+  const payload = w.condition_payload ?? {};
+  const price =
+    payload.price ?? payload.level ?? payload.entry ?? payload.trigger ?? payload.value;
+
+  if (price !== undefined) {
+    const condition = w.condition_type ?? w.kind ?? "";
+    line.push(`@ ${price}${condition ? ` (${condition})` : ""}`);
+  } else if (w.condition_type) {
+    line.push(w.condition_type);
+  }
+
+  if (w.message) line.push(`— ${w.message}`);
+
+  return line.join(" ");
+}
+
+export type TerminalAlert = {
+  title: string;
+  body: string | null;
+  type: string | null;
+  read: boolean;
+};
+
+export type TerminalExecution = {
+  symbol: string | null;
+  direction: string | null;
+  status: string | null;
+  notes: string | null;
+};
+
+export function buildAxeMessages(
+  pinnedContext: string,
+  memory: { scope: string; entry_key: string | null; content: string }[],
+  watchlist: WatchlistEntry[],
+  recentAlerts: TerminalAlert[],
+  recentExecutions: TerminalExecution[],
+  history: { role: "user" | "assistant"; content: string }[],
+  newUserMessage: string,
+  imageBase64?: string,
+  imageType?: string
+): OpenAI.Chat.ChatCompletionMessageParam[] {
+  const parts: string[] = [AXE_SYSTEM_PROMPT];
+
+  if (pinnedContext.trim()) {
+    parts.push(`\nSESSION BRIEF (set by trader — treat as ground truth)\n${pinnedContext.trim()}`);
+  }
+
+  if (watchlist.length > 0) {
+    const watchLines = watchlist.map(formatWatchEntry).join("\n");
+    parts.push(`\nACTIVE WATCHLIST\n${watchLines}`);
+  }
+
+  if (recentAlerts.length > 0) {
+    const alertLines = recentAlerts
+      .map((a) => {
+        const status = a.read ? "seen" : "unread";
+        return `[${a.type ?? "alert"} · ${status}] ${a.title}${a.body ? ` — ${a.body}` : ""}`;
+      })
+      .join("\n");
+    parts.push(`\nRECENT ALERTS (from TradingOS terminal)\n${alertLines}`);
+  }
+
+  if (recentExecutions.length > 0) {
+    const execLines = recentExecutions
+      .map((e) => {
+        const execParts: string[] = [];
+        if (e.symbol) execParts.push(e.symbol);
+        if (e.direction) execParts.push(e.direction.toUpperCase());
+        if (e.status) execParts.push(`[${e.status}]`);
+        if (e.notes) execParts.push(`— ${e.notes}`);
+        return execParts.join(" ");
+      })
+      .join("\n");
+    parts.push(`\nRECENT EXECUTION REQUESTS (from TradingOS terminal)\n${execLines}`);
+  }
+
+  if (memory.length > 0) {
+    const tradingMemory = memory.filter((m) => m.scope !== "watchlist");
+    const accountEntry = tradingMemory.find((m) => m.scope === "account" && m.entry_key === "name");
+    const notes = tradingMemory.filter((m) => m.scope === "notes");
+    const other = tradingMemory.filter((m) => m.scope !== "notes" && m.scope !== "account");
+
+    if (accountEntry) {
+      parts.push(
+        `\nACTIVE ACCOUNT: ${accountEntry.content}\nAlways reference this account by name when confirming alerts, setups, or any action taken. Say "on your ${accountEntry.content}" naturally in context.`
+      );
+    }
+    if (notes.length > 0) {
+      const noteLines = notes.map((m) => `— ${m.content}`).join("\n");
+      parts.push(`\nSAVED NOTES (trader's own notes — reference when relevant)\n${noteLines}`);
+    }
+    if (other.length > 0) {
+      const memLines = other
+        .map((m) => {
+          const label = [m.scope, m.entry_key].filter(Boolean).join(" / ");
+          return `${label}: ${m.content}`;
+        })
+        .join("\n");
+      parts.push(`\nTRADER MEMORY\n${memLines}`);
+    }
+  }
+
+  const systemContent = parts.join("\n");
+
+  // Build the user message — multimodal if an image is attached
+  let userMessage: OpenAI.Chat.ChatCompletionMessageParam;
+  if (imageBase64 && imageType) {
+    const mimeType = imageType.startsWith("image/") ? imageType : `image/${imageType}`;
+    userMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: newUserMessage },
+        {
+          type: "image_url",
+          image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "high" },
+        },
+      ],
+    };
+  } else {
+    userMessage = { role: "user", content: newUserMessage };
+  }
+
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemContent },
+    ...history,
+    userMessage,
+  ];
+
+  return messages;
+}
+
+/**
+ * buildAxeMessagesFromContext — unified context variant.
+ *
+ * Builds OpenAI messages from a full TradingOSContext object (assembled by
+ * contextService). Pre-injects filtered_news, key_levels, and the active
+ * symbol/timeframe into the system prompt so AXE has immediate situational
+ * awareness without needing tool calls for common context.
+ */
+export function buildAxeMessagesFromContext(
+  context: TradingOSContext,
+  history: { role: "user" | "assistant"; content: string }[],
+  newUserMessage: string,
+  imageBase64?: string,
+  imageType?: string
+): OpenAI.Chat.ChatCompletionMessageParam[] {
+  const pinnedContext = context.candles_summary ?? "";
+
+  // 1. Base system prompt
+  const parts: string[] = [AXE_SYSTEM_PROMPT];
+
+  // 2. Active pair / timeframe block
+  if (context.symbol || context.timeframe) {
+    const pair = context.symbol ?? "—";
+    const tf = context.timeframe ?? "—";
+    parts.push(`\nACTIVE PAIR: ${pair}   TF: ${tf}`);
+  }
+
+  // 3. Session brief (candles_summary / pinned_context)
+  if (pinnedContext.trim()) {
+    parts.push(`\nSESSION BRIEF (set by trader — treat as ground truth)\n${pinnedContext.trim()}`);
+  }
+
+  // 4. Active watchlist
+  const { watchlist, recentAlerts, recentExecutions } = context.account_state;
+  if (watchlist.length > 0) {
+    const watchLines = watchlist.map(formatWatchEntry).join("\n");
+    parts.push(`\nACTIVE WATCHLIST\n${watchLines}`);
+  }
+
+  // 5. Key levels extracted from watch_requests
+  if (context.key_levels.length > 0) {
+    parts.push(`\nKEY LEVELS (active watches)\n${context.key_levels.join("\n")}`);
+  }
+
+  // 6. Pre-loaded news (high-impact, symbol-relevant — no tool call needed)
+  if (context.filtered_news.length > 0) {
+    const BIG3 = ["Non-Farm", "FOMC", "Federal Funds", "Consumer Price Index", "CPI"];
+    const newsLines = context.filtered_news.map((e) => {
+      const isBig3 = BIG3.some((kw) => e.title.includes(kw));
+      const tag = isBig3 ? " ⚡BIG3" : "";
+      const fc = e.forecast ? ` | F: ${e.forecast}` : "";
+      const prev = e.previous ? ` | P: ${e.previous}` : "";
+      return `[${e.impact.toUpperCase()}] ${e.currency} — ${e.title}${tag}  ${e.date} ${e.time}${fc}${prev}`;
+    });
+    const label = context.symbol
+      ? `HIGH-IMPACT EVENTS THIS WEEK (relevant to ${context.symbol})`
+      : "HIGH-IMPACT EVENTS THIS WEEK";
+    parts.push(`\n${label}\n${newsLines.join("\n")}`);
+  }
+
+  // 7. Recent alerts
+  if (recentAlerts.length > 0) {
+    const alertLines = recentAlerts
+      .map((a) => {
+        const status = a.read ? "seen" : "unread";
+        return `[${a.type ?? "alert"} · ${status}] ${a.title}${a.body ? ` — ${a.body}` : ""}`;
+      })
+      .join("\n");
+    parts.push(`\nRECENT ALERTS (from TradingOS terminal)\n${alertLines}`);
+  }
+
+  // 8. Recent executions
+  if (recentExecutions.length > 0) {
+    const execLines = recentExecutions
+      .map((e) => {
+        const execParts: string[] = [];
+        if (e.symbol) execParts.push(e.symbol);
+        if (e.direction) execParts.push(e.direction.toUpperCase());
+        if (e.status) execParts.push(`[${e.status}]`);
+        if (e.notes) execParts.push(`— ${e.notes}`);
+        return execParts.join(" ");
+      })
+      .join("\n");
+    parts.push(`\nRECENT EXECUTION REQUESTS (from TradingOS terminal)\n${execLines}`);
+  }
+
+  // 9. Memory (same logic as buildAxeMessages)
+  const { user_memory: memory } = context;
+  if (memory.length > 0) {
+    const tradingMemory = memory.filter((m) => m.scope !== "watchlist");
+    const accountEntry = tradingMemory.find(
+      (m) => m.scope === "account" && m.entry_key === "name"
+    );
+    const notes = tradingMemory.filter((m) => m.scope === "notes");
+    const other = tradingMemory.filter(
+      (m) => m.scope !== "notes" && m.scope !== "account"
+    );
+
+    if (accountEntry) {
+      parts.push(
+        `\nACTIVE ACCOUNT: ${accountEntry.content}\nAlways reference this account by name when confirming alerts, setups, or any action taken. Say "on your ${accountEntry.content}" naturally in context.`
+      );
+    }
+    if (notes.length > 0) {
+      const noteLines = notes.map((m) => `— ${m.content}`).join("\n");
+      parts.push(`\nSAVED NOTES (trader's own notes — reference when relevant)\n${noteLines}`);
+    }
+    if (other.length > 0) {
+      const memLines = other
+        .map((m) => {
+          const label = [m.scope, m.entry_key].filter(Boolean).join(" / ");
+          return `${label}: ${m.content}`;
+        })
+        .join("\n");
+      parts.push(`\nTRADER MEMORY\n${memLines}`);
+    }
+  }
+
+  // 10. Open commitments — AXE must address these proactively
+  if (context.open_commitments && context.open_commitments.length > 0) {
+    const commitLines = context.open_commitments
+      .map((c) => {
+        const sym = c.symbol ? `[${c.symbol}] ` : "";
+        return `— ${sym}${c.description}`;
+      })
+      .join("\n");
+    parts.push(
+      `\nOPEN COMMITMENTS (you made these promises — address the relevant ones now without being asked)\n${commitLines}`
+    );
+  }
+
+  // 11. Live MT5 account snapshot
+  if (context.live_account) {
+    const a = context.live_account;
+    const cur = a.currency ?? "USD";
+    const bal = a.balance != null ? `${cur} ${a.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+    const eq = a.equity != null ? `${cur} ${a.equity.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+    const fm = a.free_margin != null ? `${cur} ${a.free_margin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+    const lev = a.leverage != null ? `1:${a.leverage}` : "—";
+    const acctName = a.name ? ` (${a.name})` : "";
+    parts.push(
+      `\nLIVE ACCOUNT${acctName} — synced ${a.updated_at ? new Date(a.updated_at).toUTCString() : "recently"}\nBalance: ${bal}   Equity: ${eq}   Free margin: ${fm}   Leverage: ${lev}`
+    );
+  }
+
+  // 12. Live open positions
+  if (context.live_positions && context.live_positions.length > 0) {
+    const posLines = context.live_positions.map((p) => {
+      const dir = p.type;
+      const pnl = p.profit != null
+        ? (p.profit >= 0 ? `+${p.profit.toFixed(2)}` : p.profit.toFixed(2))
+        : "—";
+      const sl = p.stop_loss != null ? ` SL:${p.stop_loss}` : "";
+      const tp = p.take_profit != null ? ` TP:${p.take_profit}` : "";
+      const cur = p.current_price != null ? ` @${p.current_price}` : "";
+      return `${p.symbol} ${dir} ${p.volume}lot  open:${p.open_price}${cur}  P&L:${pnl}${sl}${tp}`;
+    });
+    parts.push(`\nOPEN POSITIONS (live — TradingOS sync)\n${posLines.join("\n")}`);
+  } else if (context.live_account) {
+    parts.push(`\nOPEN POSITIONS\nNo open positions.`);
+  }
+
+  // 13. Recent closed positions (trade history)
+  if (context.closed_positions && context.closed_positions.length > 0) {
+    const closeLines = context.closed_positions.slice(0, 10).map((p) => {
+      const pnl = p.profit != null
+        ? (p.profit >= 0 ? `+${p.profit.toFixed(2)}` : p.profit.toFixed(2))
+        : "—";
+      const dur = p.opened_at && p.closed_at
+        ? (() => {
+            const mins = Math.round((new Date(p.closed_at).getTime() - new Date(p.opened_at).getTime()) / 60000);
+            return mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
+          })()
+        : "—";
+      const reason = p.close_reason ? ` [${p.close_reason}]` : "";
+      return `${p.symbol} ${p.type} ${p.volume}lot  in:${p.open_price} → out:${p.close_price}  P&L:${pnl}  held:${dur}${reason}`;
+    });
+    parts.push(`\nRECENT CLOSED TRADES (last ${context.closed_positions.length}, newest first)\n${closeLines.join("\n")}`);
+  }
+
+  if (context.knowledge_layer?.trim()) {
+    parts.push(
+      `\n--- AXE KNOWLEDGE LAYER (retrieved; prefer these frames over generic textbook talk when relevant)\n${context.knowledge_layer.trim()}`
+    );
+  }
+
+  parts.push(`\n${AXE_KNOWLEDGE_GUARDRAILS}`);
+
+  const systemContent = parts.join("\n");
+
+  // Build user message (multimodal if chart image attached)
+  let userMessage: OpenAI.Chat.ChatCompletionMessageParam;
+  if (imageBase64 && imageType) {
+    const mimeType = imageType.startsWith("image/") ? imageType : `image/${imageType}`;
+    userMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: newUserMessage },
+        {
+          type: "image_url",
+          image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "high" },
+        },
+      ],
+    };
+  } else {
+    userMessage = { role: "user", content: newUserMessage };
+  }
+
+  return [
+    { role: "system", content: systemContent },
+    ...history,
+    userMessage,
+  ];
+}
+
+const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
+  "create_alert",
+  "get_live_price",
+  "get_economic_calendar",
+  "save_note",
+  "calculate_fibonacci",
+  "analyze_orderblock",
+  "analyze_pdh_pdl",
+  "calculate_trendline",
+  "track_commitment",
+]);
+
+export async function callAxe(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+): Promise<AxeResponse> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error("[axeService] OPENAI_API_KEY not set");
+    return { content: null, toolCalls: [] };
+  }
+
+  const client = new OpenAI({ apiKey });
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      tools: AXE_TOOLS,
+      tool_choice: "auto",
+      parallel_tool_calls: true,
+      max_tokens: 800,
+      temperature: 0.55,
+    });
+
+    const choice = response.choices[0];
+    const rawToolCalls = choice.message.tool_calls ?? [];
+
+    if (rawToolCalls.length > 0) {
+      const toolCalls: AxeToolCall[] = [];
+      for (const raw of rawToolCalls) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fn = (raw as any).function as { name: string; arguments: string };
+        const name = fn.name as AxeToolCall["tool"];
+        if (VALID_TOOL_NAMES.has(name)) {
+          const parsed = JSON.parse(fn.arguments);
+          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+        }
+      }
+      if (toolCalls.length > 0) {
+        return { content: null, toolCalls };
+      }
+    }
+
+    return { content: choice.message.content ?? null, toolCalls: [] };
+  } catch (err) {
+    console.error("[axeService] OpenAI error:", err);
+    return { content: null, toolCalls: [] };
+  }
+}
+
+// Intermediate call after tool results — can still trigger a second tool round (e.g. create_alert after fib)
+export async function callAxeAfterTool(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+): Promise<AxeResponse> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { content: null, toolCalls: [] };
+
+  const client = new OpenAI({ apiKey });
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      tools: AXE_TOOLS,
+      tool_choice: "auto",
+      parallel_tool_calls: true,
+      max_tokens: 600,
+      temperature: 0.4,
+    });
+
+    const choice = response.choices[0];
+    const rawToolCalls = choice.message.tool_calls ?? [];
+
+    if (rawToolCalls.length > 0) {
+      const toolCalls: AxeToolCall[] = [];
+      for (const raw of rawToolCalls) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fn = (raw as any).function as { name: string; arguments: string };
+        const name = fn.name as AxeToolCall["tool"];
+        if (VALID_TOOL_NAMES.has(name)) {
+          const parsed = JSON.parse(fn.arguments);
+          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+        }
+      }
+      if (toolCalls.length > 0) {
+        return { content: null, toolCalls };
+      }
+    }
+
+    return { content: choice.message.content ?? null, toolCalls: [] };
+  } catch (err) {
+    console.error("[axeService] callAxeAfterTool error:", err);
+    return { content: null, toolCalls: [] };
+  }
+}
+
+// Final natural-language reply after all tools are done — no more tool calls
+export async function callAxeFinal(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const client = new OpenAI({ apiKey });
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      max_tokens: 500,
+      temperature: 0.4,
+    });
+    return response.choices[0]?.message?.content ?? null;
+  } catch (err) {
+    console.error("[axeService] callAxeFinal error:", err);
+    return null;
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "AXE Companion",
+  "short_name": "AXE",
+  "description": "Private AI trading companion — alerts, chat, and market intelligence.",
+  "start_url": "/chat",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#06070a",
+  "background_color": "#06070a",
+  "icons": [
+    {
+      "src": "/axe-icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/axe-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "lang": "en"
+}
