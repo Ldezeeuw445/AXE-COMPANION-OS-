@@ -6,11 +6,6 @@ const nextConfig: NextConfig = {
     "*.riker.replit.dev",
     "*.replit.dev",
   ].filter(Boolean),
-  turbopack: {
-    resolveAlias: {
-      "...": "./public/empty.js",
-    },
-  },
 };
 
 export default nextConfig;
