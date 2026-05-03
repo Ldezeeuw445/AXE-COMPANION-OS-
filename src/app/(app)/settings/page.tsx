@@ -41,7 +41,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-4">
-      <ScreenHeader title="Settings" subtitle="You · Assistant · Terminal" />
+      <ScreenHeader title="Settings" subtitle="You · AXE · one Supabase account" />
 
       {/* Account Name */}
       <GlassPanel className="mb-4 p-4">
@@ -107,14 +107,15 @@ export default async function SettingsPage() {
       {/* Terminal Status */}
       <GlassPanel className="mb-4 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          TradingOS connection
+          Trading OS — upcoming premium terminal
         </h2>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Badge variant="long">Synced via Supabase</Badge>
+          <Badge variant="long">Same Supabase as AXE Companion</Badge>
         </div>
         <p className="mt-2 text-xs text-tos-muted">
-          Both TradingOS and this Companion read and write the same database in real time —
-          alerts, memory, watchlist, chat, vault and actions stay in sync automatically.
+          Trading OS is our upcoming full desk: live charts, market intelligence, alerts, execution workspace, and
+          multi-source data — with AXE embedded. This Companion app is the standalone brain today; one account and
+          memory carry over when the terminal ships. Not a separate data island.
         </p>
         <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-tos-muted">
           <span className="font-medium text-tos-text">MT5 link token:</span> not here in Settings. Create a token under{" "}
@@ -192,7 +193,9 @@ export default async function SettingsPage() {
           Plan & billing
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          Free includes the full experience with 20 chat sends per day (UTC). Pro removes the daily cap.
+          Free includes the full experience with 20 chat sends per day (UTC). Pro (~€19/mo) removes the daily cap when
+          Stripe checkout is configured. Internal testers can use{" "}
+          <code className="text-[10px] text-tos-muted">chat_quota_exempt</code> in Supabase.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-tos-dim">
           Each signed-in user only sees their own chats, memory, accounts, and trades — Supabase RLS scopes every row

@@ -1,5 +1,8 @@
 # AXE Companion — Marketing Copy
 
+**Canonical public landing:** Next.js `src/app/page.tsx` (this repo, deployed on Vercel / GitHub `AXE-COMPANION-OS-`).  
+Keep this file as a **reference / brainstorm** doc; ship copy changes in the page first, then sync bullets here if useful.
+
 ---
 
 ## 1. Homepage Hero Section
