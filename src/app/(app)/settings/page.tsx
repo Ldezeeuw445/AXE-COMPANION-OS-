@@ -116,6 +116,15 @@ export default async function SettingsPage() {
           Both TradingOS and this Companion read and write the same database in real time —
           alerts, memory, watchlist, chat, vault and actions stay in sync automatically.
         </p>
+        <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-tos-muted">
+          <span className="font-medium text-tos-text">MT5 link-token:</span> niet hier in Settings. Maak een token onder{" "}
+          <Link href="/accounts" className="text-tos-accent-cyan underline-offset-2 hover:underline">
+            Accounts
+          </Link>{" "}
+          en plak het in je Expert Advisor / bridge die naar{" "}
+          <code className="rounded bg-black/40 px-1 text-[10px] text-tos-text">axe-mt5-ingest</code> post — daarmee
+          wordt je broker-account echt verbonden.
+        </p>
       </GlassPanel>
 
       {/* Learning */}
