@@ -83,11 +83,30 @@ export function AccountsScreen({
       ) : null}
 
       <GlassPanel className="mb-4 p-4">
-        <Mt5InAppConnectionTest />
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-300/90">
+          Recommended — cloud / VPS MT5
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-tos-muted">
+          The production path is one HTTPS endpoint: your Supabase Edge function{" "}
+          <code className="rounded bg-black/40 px-1 text-[10px] text-tos-text">axe-mt5-ingest</code>. Run MetaTrader 5
+          on a broker-side VPS, MetaQuotes VPS, or any always-on box, install a small EA or bridge that POSTs closed
+          fills with your link token — same flow whether the machine is &quot;in the cloud&quot; or at your desk. We
+          never show a fake &quot;connected&quot; state: linkage is proven when trades appear in{" "}
+          <strong className="text-tos-text">History</strong>.
+        </p>
+        <ul className="mt-3 list-disc space-y-1.5 pl-4 text-[11px] text-tos-dim">
+          <li>Token stays in your EA config — not in AXE settings.</li>
+          <li>Only a hash is stored server-side after you create the account below.</li>
+          <li>No execution from AXE v1; ingest-only.</li>
+        </ul>
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-dim">Verify token (optional)</p>
+        <Mt5InAppConnectionTest className="mt-2" />
         <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] leading-relaxed text-tos-dim">
-          For <strong className="text-tos-muted">automatic</strong> sync of every real trade, one technical step remains:
-          MetaTrader (desktop) or a small bridge must POST fills to this server — brokers do not expose that from a
-          mobile website alone. The test above confirms your token before you wire an EA or bridge.
+          Pastes your token in-browser to send one minimal test trade — confirms CORS + ingest before you deploy a
+          real EA. For automatic sync of every fill, the EA/bridge must run where MT5 has market access.
         </p>
       </GlassPanel>
 
@@ -200,10 +219,12 @@ export function AccountsScreen({
 
       <GlassPanel glow="warm" className="p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          Connect MT5 account
+          Advanced — create broker row &amp; link token
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          Creates a broker row and a one-time link token (hashed in the database).
+          Creates <code className="text-[10px] text-tos-text">user_broker_accounts</code> and a one-time link token
+          (hashed at rest). Use for local bridge or any custom poster to{" "}
+          <code className="text-[10px] text-tos-text">axe-mt5-ingest</code>.
         </p>
         <form action={createAction} className="mt-4 space-y-3">
           <div>

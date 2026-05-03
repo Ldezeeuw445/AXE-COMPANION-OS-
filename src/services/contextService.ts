@@ -10,7 +10,18 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { TradingOSContext, FilteredNewsEvent, OpenCommitment, Mt5AccountSnapshot, Mt5Position, Mt5ClosedPosition } from "@/types/context";
+import type {
+  TradingOSContext,
+  FilteredNewsEvent,
+  OpenCommitment,
+  Mt5AccountSnapshot,
+  Mt5Position,
+  Mt5ClosedPosition,
+  CompanionBrokerAccount,
+  CompanionBrokerTrade,
+  CompanionTradeLabel,
+  CompanionJournalEntry,
+} from "@/types/context";
 import type { WatchlistEntry, TerminalAlert, TerminalExecution } from "@/services/axeService";
 import { fetchEconomicCalendar } from "@/services/marketDataService";
 
@@ -240,6 +251,89 @@ export async function fetchTradingOSContext(
   // ── closed_positions (MT5 trade history) ─────────────────────────────────
   const closed_positions = (closedPositionsResult.data ?? []) as Mt5ClosedPosition[];
 
+  // ── Companion broker ledger (same tables as /history, /journal) ─────────
+  const [companionAccountsRes, workspacePrefsRes, companionJournalRes] = await Promise.all([
+    supabase
+      .from("user_broker_accounts")
+      .select("id,label,provider,status")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("user_workspace_preferences")
+      .select("active_account_id")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("user_journal_entries")
+      .select("symbol,notes,created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
+
+  const companion_accounts: CompanionBrokerAccount[] = (companionAccountsRes.data ?? []).map(
+    (r: Record<string, unknown>) => ({
+      id: String(r.id),
+      label: String(r.label ?? ""),
+      provider: String(r.provider ?? ""),
+      status: r.status != null ? String(r.status) : null,
+    }),
+  );
+
+  const companion_active_account_id =
+    (workspacePrefsRes.data?.active_account_id as string | null | undefined) ?? null;
+
+  let companion_broker_trades: CompanionBrokerTrade[] = [];
+  let companion_trade_labels: CompanionTradeLabel[] = [];
+
+  if (companion_active_account_id) {
+    const tradesRes = await supabase
+      .from("broker_trades")
+      .select("id,symbol,side,volume,pnl,close_time")
+      .eq("user_id", userId)
+      .eq("account_id", companion_active_account_id)
+      .order("close_time", { ascending: false, nullsFirst: false })
+      .limit(25);
+
+    companion_broker_trades = (tradesRes.data ?? []).map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      symbol: String(r.symbol ?? ""),
+      side: String(r.side ?? ""),
+      volume: Number(r.volume ?? 0) || 0,
+      pnl: Number(r.pnl ?? 0) || 0,
+      close_time: (r.close_time as string | null) ?? null,
+    }));
+
+    const ids = companion_broker_trades.map((t) => t.id);
+    if (ids.length > 0) {
+      const labelsRes = await supabase
+        .from("trade_journal_labels")
+        .select("trade_id,label,note")
+        .eq("user_id", userId)
+        .in("trade_id", ids);
+
+      const symByTrade = new Map(companion_broker_trades.map((t) => [t.id, t.symbol]));
+      companion_trade_labels = (labelsRes.data ?? []).map((r: Record<string, unknown>) => {
+        const tid = String(r.trade_id ?? "");
+        return {
+          trade_id: tid,
+          symbol: symByTrade.get(tid) ?? "—",
+          label: (r.label as string | null | undefined) ?? null,
+          note: (r.note as string | null | undefined) ?? null,
+        };
+      });
+    }
+  }
+
+  const companion_journal_entries: CompanionJournalEntry[] = (companionJournalRes.data ?? []).map(
+    (r: Record<string, unknown>) => ({
+      symbol: String(r.symbol ?? ""),
+      notes: String(r.notes ?? ""),
+      created_at: String(r.created_at ?? ""),
+    }),
+  );
+
   // ── candles_summary ────────────────────────────────────────────────────────
   // The pinned_context from the active conversation acts as the candles/session brief.
   // Fetched by chatService and passed in — we surface it as-is here.
@@ -263,5 +357,10 @@ export async function fetchTradingOSContext(
     live_positions,
     closed_positions,
     knowledge_layer: null,
+    companion_accounts,
+    companion_active_account_id,
+    companion_broker_trades,
+    companion_trade_labels,
+    companion_journal_entries,
   };
 }

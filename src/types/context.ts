@@ -69,6 +69,37 @@ export type Mt5ClosedPosition = {
   comment: string | null;
 };
 
+/** Companion-linked broker accounts (MT5 ingest / user_broker_accounts). */
+export type CompanionBrokerAccount = {
+  id: string;
+  label: string;
+  provider: string;
+  status: string | null;
+};
+
+/** Closed trades from broker_trades (same ledger as History). */
+export type CompanionBrokerTrade = {
+  id: string;
+  symbol: string;
+  side: string;
+  volume: number;
+  pnl: number;
+  close_time: string | null;
+};
+
+export type CompanionTradeLabel = {
+  trade_id: string;
+  symbol: string;
+  label: string | null;
+  note: string | null;
+};
+
+export type CompanionJournalEntry = {
+  symbol: string;
+  notes: string;
+  created_at: string;
+};
+
 export type TradingOSContext = {
   symbol: string | null;
   timeframe: string | null;
@@ -83,4 +114,10 @@ export type TradingOSContext = {
   closed_positions: Mt5ClosedPosition[];
   /** Assembled retrieval block (knowledge + journal + broker snapshot + rules). */
   knowledge_layer: string | null;
+  /** AXE Companion — linked broker rows (RLS). */
+  companion_accounts: CompanionBrokerAccount[];
+  companion_active_account_id: string | null;
+  companion_broker_trades: CompanionBrokerTrade[];
+  companion_trade_labels: CompanionTradeLabel[];
+  companion_journal_entries: CompanionJournalEntry[];
 };

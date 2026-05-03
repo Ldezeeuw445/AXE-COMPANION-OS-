@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
+import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
 
 export const metadata: Metadata = {
   title: "AXE Companion — your trading copilot",
@@ -455,6 +456,7 @@ export default function HomeLandingPage() {
             Join the Trading OS waitlist
           </a>
         </p>
+        <LegalNavLinks className="mt-6" />
       </footer>
     </div>
   );

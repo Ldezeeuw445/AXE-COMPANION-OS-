@@ -33,7 +33,8 @@ export async function updateSession(request: NextRequest) {
   }
 
   const pathEarly = request.nextUrl.pathname;
-  if (pathEarly.startsWith("/marketing")) {
+  // Dev screenshot routes under /marketing/* stay public; `/marketing` itself redirects to `/` in app router.
+  if (pathEarly.startsWith("/marketing/")) {
     return NextResponse.next({ request });
   }
 

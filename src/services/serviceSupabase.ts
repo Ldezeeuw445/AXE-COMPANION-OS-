@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const SERVICES_USE_MOCK_DATA = isMockDataSource();
 
+/** Authenticated server Supabase (user session + anon key, RLS). Not the service role. */
 export async function getAuthedServiceSupabase() {
   if (SERVICES_USE_MOCK_DATA) return null;
   const supabase = await createServerSupabaseClient();

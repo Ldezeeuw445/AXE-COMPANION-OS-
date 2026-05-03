@@ -29,7 +29,7 @@ export function JournalScreen({ entries, tradeHighlight, loadError }: Props) {
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
       <ScreenHeader
         title="Journal"
-        subtitle="Notes + trade context — labels on trades land here next."
+        subtitle="Notes plus trade context — labels from trade_journal_labels when you open a trade from History."
         left={<BookOpen className="h-6 w-6 text-tos-warm/80" aria-hidden />}
         right={<Badge variant="warm">Supabase</Badge>}
       />
@@ -73,11 +73,12 @@ export function JournalScreen({ entries, tradeHighlight, loadError }: Props) {
 
       {entries.length === 0 ? (
         <GlassPanel className="!py-12 text-center text-sm text-tos-muted">
-          No journal entries yet. Free-form notes live here; trade labels from{" "}
+          No free-form journal rows yet in <code className="text-[11px] text-tos-text">user_journal_entries</code>.
+          Trade-specific labels live on rows in{" "}
           <Link href="/history" className="text-tos-warm hover:underline">
             History
           </Link>{" "}
-          will tie in next.
+          (journal link per trade).
         </GlassPanel>
       ) : (
         <div className="flex flex-col gap-2">

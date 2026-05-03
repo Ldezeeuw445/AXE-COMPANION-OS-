@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
+import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
@@ -217,6 +219,28 @@ export default async function SettingsPage() {
           Broker / execution API placeholders — disabled until approval flow is
           production-tested.
         </p>
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Mobile &amp; PWA
+        </h2>
+        <p className="mt-1 text-xs text-tos-muted">
+          Same install flow as the public landing — scan or open the signed-in chat route on your phone.
+        </p>
+        <div className="mt-4">
+          <LandingOpenAppQr />
+        </div>
+      </GlassPanel>
+
+      <GlassPanel className="mb-6 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Legal &amp; policies
+        </h2>
+        <p className="mt-1 text-xs text-tos-muted">
+          Draft documents — replace placeholders and review with counsel before marketing to retail.
+        </p>
+        <LegalNavLinks className="mt-4" />
       </GlassPanel>
 
       <SignOutButton />

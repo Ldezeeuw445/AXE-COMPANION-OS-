@@ -766,11 +766,58 @@ export function buildAxeMessagesFromContext(
     );
   }
 
-  // 10b. Standalone Companion — no MT5 snapshot in this session
+  // 10b. Session mode — terminal snapshot vs Companion ingest ledger
   if (!context.live_account) {
+    const hasIngestLedger = (context.companion_broker_trades?.length ?? 0) > 0;
+    const hasLinkedAccounts = (context.companion_accounts?.length ?? 0) > 0;
+    if (hasIngestLedger || hasLinkedAccounts) {
+      parts.push(
+        "\nSESSION MODE: AXE Companion — MT5 ingest ledger is present below (broker_trades). No live desktop-terminal snapshot in this session; use tools for intraday price when needed."
+      );
+    } else {
+      parts.push(
+        "\nSESSION MODE: Companion-only (no live MT5 snapshot and no ingest ledger yet). Treat the trader as mobile/web-first; use tools for price and calendar when needed."
+      );
+    }
+  }
+
+  if (context.companion_accounts && context.companion_accounts.length > 0) {
+    const lines = context.companion_accounts.map((a) => {
+      const active =
+        context.companion_active_account_id && a.id === context.companion_active_account_id
+          ? " [ACTIVE]"
+          : "";
+      return `— ${a.label} (${a.provider}) status:${a.status ?? "—"}${active}`;
+    });
+    parts.push(`\nLINKED BROKER ACCOUNTS (Companion)\n${lines.join("\n")}`);
+  }
+
+  if (context.companion_broker_trades && context.companion_broker_trades.length > 0) {
+    const lines = context.companion_broker_trades.slice(0, 15).map((t) => {
+      const pnl =
+        t.pnl > 0 ? `+${t.pnl.toFixed(2)}` : t.pnl < 0 ? t.pnl.toFixed(2) : t.pnl.toFixed(2);
+      const when = t.close_time ? new Date(t.close_time).toISOString().slice(0, 16) : "open/pending";
+      return `${t.symbol} ${t.side} vol:${t.volume} PnL:${pnl} close:${when}`;
+    });
     parts.push(
-      "\nSESSION MODE: Companion-only (no live MT5 snapshot in context). Treat the trader as mobile/web-first; use tools for price and calendar when needed."
+      `\nRECENT BROKER TRADES (ingested — active account, same as History tab)\n${lines.join("\n")}`
     );
+  }
+
+  if (context.companion_trade_labels && context.companion_trade_labels.length > 0) {
+    const lines = context.companion_trade_labels.map((l) => {
+      const bits = [l.symbol, l.label ?? "—", l.note ? `note:${l.note}` : ""].filter(Boolean);
+      return `— trade ${l.trade_id.slice(0, 8)}… ${bits.join(" · ")}`;
+    });
+    parts.push(`\nTRADE JOURNAL LABELS (on ingested trades)\n${lines.join("\n")}`);
+  }
+
+  if (context.companion_journal_entries && context.companion_journal_entries.length > 0) {
+    const lines = context.companion_journal_entries.map((j) => {
+      const excerpt = j.notes.length > 220 ? `${j.notes.slice(0, 220)}…` : j.notes;
+      return `[${j.symbol}] ${excerpt}`;
+    });
+    parts.push(`\nJOURNAL ENTRIES (user_journal_entries)\n${lines.join("\n")}`);
   }
 
   // 11. Live MT5 account snapshot
