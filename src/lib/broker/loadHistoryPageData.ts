@@ -141,7 +141,9 @@ export async function loadHistoryPageData(
   const [accsRes, prefsRes] = await Promise.all([
     supabase
       .from("user_broker_accounts")
-      .select("id,label,provider,status,mt5_login,mt5_server,created_at")
+      .select(
+        "id,label,provider,status,mt5_login,mt5_server,created_at,connection_method,external_connection_id,provider_status,last_sync_at,masked_login,metadata",
+      )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
     supabase

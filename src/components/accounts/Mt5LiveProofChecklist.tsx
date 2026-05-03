@@ -7,38 +7,26 @@ function GlassPanelStatic({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Ordered checklist to prove ingest → broker_trades → history → journal labels → AXE context.
- * No MetaApi; uses existing Edge `axe-mt5-ingest` + token flow.
+ * Checklist: MetaApi cloud (primary) and link-token ingest (advanced).
  */
 export function Mt5LiveProofChecklist() {
   const steps = [
     {
       n: 1,
-      title: "Create broker row + link token",
+      title: "Connect MT5 (MetaApi cloud)",
       body: (
         <>
           On{" "}
           <Link href="/accounts" className="text-tos-warm hover:underline">
             Accounts
           </Link>
-          , use <strong className="text-tos-text">Advanced — create broker row &amp; link token</strong>. Copy the
-          one-time <code className="text-[10px] text-tos-text">axe_…</code> token.
+          , use <strong className="text-tos-text">Recommended — Connect MT5 account (MetaApi cloud)</strong>. Confirm
+          read-only password, then <strong className="text-tos-text">Test</strong> and <strong className="text-tos-text">Sync</strong> on the account card.
         </>
       ),
     },
     {
       n: 2,
-      title: "Verify ingest (optional dev step)",
-      body: (
-        <>
-          Use <strong className="text-tos-text">Verify token</strong> only if you accept one{" "}
-          <strong className="text-tos-text">synthetic</strong> closed trade for connectivity proof. Production fills
-          should come from your EA/bridge POSTing to <code className="text-[10px] text-tos-text">axe-mt5-ingest</code>.
-        </>
-      ),
-    },
-    {
-      n: 3,
       title: "Confirm broker_trades",
       body: (
         <>
@@ -46,22 +34,22 @@ export function Mt5LiveProofChecklist() {
           <Link href="/history" className="text-tos-warm hover:underline">
             History
           </Link>{" "}
-          with the account selected / set active. You should see rows (PnL, symbol, close time).
+          with the account active. You should see closed rows (PnL, symbol, close time) from MetaApi sync or ingest.
+        </>
+      ),
+    },
+    {
+      n: 3,
+      title: "Label a trade",
+      body: (
+        <>
+          From History, use <strong className="text-tos-text">Journal → Open</strong> on a row. Save a label/note to{" "}
+          <code className="text-[10px] text-tos-text">trade_journal_labels</code>.
         </>
       ),
     },
     {
       n: 4,
-      title: "Label a trade",
-      body: (
-        <>
-          From History, use <strong className="text-tos-text">Journal → Open</strong> on a row. Save a label/note;
-          data is written to <code className="text-[10px] text-tos-text">trade_journal_labels</code>.
-        </>
-      ),
-    },
-    {
-      n: 5,
       title: "AXE chat context",
       body: (
         <>
@@ -69,8 +57,19 @@ export function Mt5LiveProofChecklist() {
           <Link href="/chat" className="text-tos-warm hover:underline">
             AXE chat
           </Link>
-          . Context includes active account, recent <code className="text-[10px] text-tos-text">broker_trades</code>,
-          labels, and <code className="text-[10px] text-tos-text">user_journal_entries</code> (server-side assembly).
+          . Context includes the active account, recent <code className="text-[10px] text-tos-text">broker_trades</code>
+          , labels, and journal entries (server-side assembly).
+        </>
+      ),
+    },
+    {
+      n: 5,
+      title: "Advanced — link token / EA",
+      body: (
+        <>
+          Optional: <strong className="text-tos-text">Advanced — Local MT5 bridge token</strong> for{" "}
+          <code className="text-[10px] text-tos-text">axe-mt5-ingest</code> when you prefer your own bridge instead of
+          MetaApi.
         </>
       ),
     },
@@ -80,10 +79,9 @@ export function Mt5LiveProofChecklist() {
     <GlassPanelStatic>
       <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-300/90">MT5 live proof checklist</p>
       <p className="mt-2 text-xs leading-relaxed text-tos-muted">
-        End-to-end path for the <strong className="text-tos-text">current</strong> release: token / EA →{" "}
-        <code className="text-[10px] text-tos-text">axe-mt5-ingest</code> → <code className="text-[10px] text-tos-text">broker_trades</code> → UI
-        + AXE. In-app MetaApi cloud connect is a <strong className="text-tos-text">separate future build</strong> (Edge{" "}
-        <code className="text-[10px] text-tos-text">axe-mt5-cloud</code>).
+        Primary path: <strong className="text-tos-text">MetaApi cloud</strong> from this app →{" "}
+        <code className="text-[10px] text-tos-text">broker_trades</code> → History / Journal / AXE. Advanced path: token +{" "}
+        <code className="text-[10px] text-tos-text">axe-mt5-ingest</code>.
       </p>
       <ol className="mt-4 space-y-3 text-[11px] leading-relaxed text-tos-muted">
         {steps.map((s) => (

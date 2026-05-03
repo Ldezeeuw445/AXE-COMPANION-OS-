@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Landmark, Copy, Check } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
@@ -14,6 +15,8 @@ import {
 } from "@/app/actions/brokerAccounts";
 import { Mt5InAppConnectionTest } from "@/components/accounts/Mt5InAppConnectionTest";
 import { Mt5LiveProofChecklist } from "@/components/accounts/Mt5LiveProofChecklist";
+import { Mt5CloudConnectForm } from "@/components/accounts/Mt5CloudConnectForm";
+import { Mt5CloudAccountActions } from "@/components/accounts/Mt5CloudAccountActions";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 
 type Props = {
@@ -33,11 +36,21 @@ function formatDate(iso: string) {
   }
 }
 
-export function AccountsScreen({
-  initialAccounts,
-  initialActiveId,
-  loadError,
-}: Props) {
+function connectionKind(a: BrokerAccountRow): "cloud" | "cloud_off" | "token" {
+  if (a.connection_method === "cloud_mt5" && a.external_connection_id) return "cloud";
+  if (a.connection_method === "cloud_mt5_disconnected" || (a.connection_method === "cloud_mt5" && !a.external_connection_id))
+    return "cloud_off";
+  return "token";
+}
+
+function statusBadgeVariant(s: string | null | undefined): "warm" | "neutral" | "long" {
+  const v = (s ?? "").toLowerCase();
+  if (v === "connected" || v === "provisioned") return "long";
+  if (v === "failed" || v === "invalid_credentials" || v === "sync_failed") return "warm";
+  return "neutral";
+}
+
+export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [createState, createAction] = useActionState<CreateBrokerResult | undefined, FormData>(
@@ -73,7 +86,7 @@ export function AccountsScreen({
     <div className="flex min-h-0 flex-1 flex-col pb-4">
       <ScreenHeader
         title="Trading accounts"
-        subtitle="Same accounts as AXE web — MT5 bridge uses your link token once."
+        subtitle="Recommended: MetaApi cloud MT5 from this app. Advanced: link-token ingest via axe-mt5-ingest."
         left={<Landmark className="h-6 w-6 text-tos-warm/80" aria-hidden />}
         right={<Badge variant="warm">Supabase</Badge>}
       />
@@ -90,32 +103,52 @@ export function AccountsScreen({
         {LEGAL_COPY.mt5Connect}
       </p>
 
-      <GlassPanel className="mb-4 p-4">
+      <GlassPanel glow="warm" className="mb-4 p-4">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-300/90">
-          Recommended — cloud / VPS MT5
+          Recommended — Connect MT5 account (MetaApi cloud)
         </p>
         <p className="mt-2 text-xs leading-relaxed text-tos-muted">
-          The production path is one HTTPS endpoint: your Supabase Edge function{" "}
-          <code className="rounded bg-black/40 px-1 text-[10px] text-tos-text">axe-mt5-ingest</code>. Run MetaTrader 5
-          on a broker-side VPS, MetaQuotes VPS, or any always-on box, install a small EA or bridge that POSTs closed
-          fills with your link token — same flow whether the machine is &quot;in the cloud&quot; or at your desk. We
-          never show a fake &quot;connected&quot; state: linkage is proven when trades appear in{" "}
-          <strong className="text-tos-text">History</strong>.
+          No EA required for this path: credentials go from this form to your Next.js server, then to MetaApi
+          (London). Only a MetaApi account id and masked login are stored in Supabase — never the investor password or
+          MetaApi token. After <strong className="text-tos-text">Sync</strong>, closed trades land in the same{" "}
+          <code className="text-[10px] text-tos-text">broker_trades</code> ledger as History and AXE chat context.
         </p>
         <ul className="mt-3 list-disc space-y-1.5 pl-4 text-[11px] text-tos-dim">
-          <li>Token stays in your EA config — not in AXE settings.</li>
-          <li>Only a hash is stored server-side after you create the account below.</li>
-          <li>No execution from AXE v1; ingest-only.</li>
+          <li>Use investor (read-only) password only; confirm with the checkbox.</li>
+          <li>Execution / order placement from AXE stays disabled — sync and context only.</li>
+          <li>Requires server env <code className="text-[10px] text-tos-text">METAAPI_TOKEN</code> (or AXE_MT5_METAAPI_TOKEN).</li>
         </ul>
+        <Mt5CloudConnectForm />
       </GlassPanel>
 
-      <GlassPanel className="mb-4 p-4">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-dim">Verify token (optional)</p>
-        <Mt5InAppConnectionTest className="mt-2" />
-        <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] leading-relaxed text-tos-dim">
-          Pastes your token in-browser to send one minimal test trade — confirms CORS + ingest before you deploy a
-          real EA. For automatic sync of every fill, the EA/bridge must run where MT5 has market access.
-        </p>
+      <GlassPanel className="mb-4 border border-cyan-500/15 p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-300/90">After sync — quick proof</p>
+        <ul className="mt-2 list-inside list-disc space-y-1 text-[11px] text-tos-muted">
+          <li>
+            <Link href="/accounts" className="text-tos-warm hover:underline">
+              Cloud account
+            </Link>{" "}
+            row shows MetaApi status + last sync time.
+          </li>
+          <li>
+            <Link href="/history" className="text-tos-warm hover:underline">
+              History
+            </Link>{" "}
+            lists closed positions from <code className="text-[10px] text-tos-text">broker_trades</code>.
+          </li>
+          <li>
+            <Link href="/journal" className="text-tos-warm hover:underline">
+              Journal
+            </Link>{" "}
+            can label trades (trade id + account query).
+          </li>
+          <li>
+            <Link href="/chat" className="text-tos-warm hover:underline">
+              AXE chat
+            </Link>{" "}
+            includes recent broker trades for the active account.
+          </li>
+        </ul>
       </GlassPanel>
 
       {showToken ? (
@@ -166,9 +199,10 @@ export function AccountsScreen({
 
       {empty && !loadError ? (
         <GlassPanel className="mb-4 p-6 text-center">
-          <p className="text-sm font-medium text-tos-text">No trading account connected yet</p>
+          <p className="text-sm font-medium text-tos-text">No trading account row yet</p>
           <p className="mt-2 text-xs text-tos-muted">
-            Connect an MT5 account with a secure link token. Trades will sync into the same ledger as AXE web.
+            Use <strong className="text-tos-text">Connect MT5 (MetaApi cloud)</strong> above, or Advanced link-token
+            flow.
           </p>
         </GlassPanel>
       ) : null}
@@ -177,6 +211,8 @@ export function AccountsScreen({
         <div className="mb-4 space-y-3">
           {initialAccounts.map((a) => {
             const active = a.id === initialActiveId;
+            const kind = connectionKind(a);
+            const loginDisp = a.masked_login ?? a.mt5_login ?? "";
             return (
               <GlassPanel key={a.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -188,12 +224,25 @@ export function AccountsScreen({
                       ) : (
                         <Badge variant="neutral">Inactive</Badge>
                       )}
+                      {kind === "cloud" ? (
+                        <Badge variant="long">MetaApi cloud</Badge>
+                      ) : kind === "cloud_off" ? (
+                        <Badge variant="neutral">MetaApi disconnected</Badge>
+                      ) : (
+                        <Badge variant="neutral">Link token</Badge>
+                      )}
+                      {a.provider_status ? (
+                        <Badge variant={statusBadgeVariant(a.provider_status)}>{a.provider_status}</Badge>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-[11px] text-tos-dim">
                       {a.provider.toUpperCase()}
-                      {a.mt5_login ? ` · ${a.mt5_login}` : ""}
+                      {loginDisp ? ` · ${loginDisp}` : ""}
                       {a.mt5_server ? ` · ${a.mt5_server}` : ""}
                     </p>
+                    {a.last_sync_at ? (
+                      <p className="mt-1 text-[10px] text-tos-dim/80">Last sync {formatDate(a.last_sync_at)}</p>
+                    ) : null}
                     <p className="mt-1 text-[10px] text-tos-dim/80">Added {formatDate(a.created_at)}</p>
                   </div>
                   {!active ? (
@@ -209,6 +258,7 @@ export function AccountsScreen({
                     <span className="text-[10px] text-tos-dim">In use for chat &amp; journal</span>
                   )}
                 </div>
+                {kind === "cloud" ? <Mt5CloudAccountActions accountId={a.id} /> : null}
               </GlassPanel>
             );
           })}
@@ -227,12 +277,18 @@ export function AccountsScreen({
 
       <GlassPanel glow="warm" className="p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          Advanced — create broker row &amp; link token
+          Advanced — Local MT5 bridge token
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
           Creates <code className="text-[10px] text-tos-text">user_broker_accounts</code> and a one-time link token
-          (hashed at rest). Use for local bridge or any custom poster to{" "}
+          (hashed at rest). Use when you run an EA or custom bridge that POSTs closed fills to{" "}
           <code className="text-[10px] text-tos-text">axe-mt5-ingest</code>.
+        </p>
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-widest text-tos-dim">Verify token (optional)</p>
+        <Mt5InAppConnectionTest className="mt-2" />
+        <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] leading-relaxed text-tos-dim">
+          Pastes your token in-browser to send one minimal test trade — confirms CORS + ingest before you deploy a real
+          EA. For automatic sync of every fill, the EA/bridge must run where MT5 has market access.
         </p>
         <form action={createAction} className="mt-4 space-y-3">
           <div>
