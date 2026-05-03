@@ -16,12 +16,14 @@ export default async function UpgradePage() {
     if (user) {
       const { data } = await supabase
         .from("axe_user_entitlements")
-        .select("plan, pro_until")
+        .select("plan, pro_until, chat_quota_exempt")
         .eq("user_id", user.id)
         .maybeSingle();
       const until = data?.pro_until ? new Date(data.pro_until) : null;
       isPro =
-        data?.plan === "pro" || (!!until && until > new Date());
+        data?.plan === "pro" ||
+        (!!until && until > new Date()) ||
+        data?.chat_quota_exempt === true;
     }
   }
 

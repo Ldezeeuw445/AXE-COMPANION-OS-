@@ -117,13 +117,13 @@ export default async function SettingsPage() {
           alerts, memory, watchlist, chat, vault and actions stay in sync automatically.
         </p>
         <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-tos-muted">
-          <span className="font-medium text-tos-text">MT5 link-token:</span> niet hier in Settings. Maak een token onder{" "}
+          <span className="font-medium text-tos-text">MT5 link token:</span> not here in Settings. Create a token under{" "}
           <Link href="/accounts" className="text-tos-accent-cyan underline-offset-2 hover:underline">
             Accounts
           </Link>{" "}
-          en plak het in je Expert Advisor / bridge die naar{" "}
-          <code className="rounded bg-black/40 px-1 text-[10px] text-tos-text">axe-mt5-ingest</code> post — daarmee
-          wordt je broker-account echt verbonden.
+          and paste it into your Expert Advisor or bridge that POSTs to{" "}
+          <code className="rounded bg-black/40 px-1 text-[10px] text-tos-text">axe-mt5-ingest</code> — that is what
+          actually links your broker account.
         </p>
       </GlassPanel>
 
@@ -193,6 +193,10 @@ export default async function SettingsPage() {
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
           Free includes the full experience with 20 chat sends per day (UTC). Pro removes the daily cap.
+        </p>
+        <p className="mt-2 text-[11px] leading-relaxed text-tos-dim">
+          Each signed-in user only sees their own chats, memory, accounts, and trades — Supabase RLS scopes every row
+          by <code className="text-[10px] text-tos-muted">user_id</code>.
         </p>
         <Link
           href="/upgrade"

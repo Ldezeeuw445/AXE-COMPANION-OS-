@@ -3,9 +3,9 @@ import Link from "next/link";
 import { getPublicAppBaseUrl } from "@/lib/env";
 
 export const metadata = {
-  title: "AXE Companion — start",
+  title: "AXE Companion — welcome",
   description:
-    "AXE met kennislaag, accounts en chat. Voeg toe aan je beginscherm of log in.",
+    "AXE with knowledge layer, accounts, and chat. Add to your home screen or sign in.",
 };
 
 export default function WelcomePage() {
@@ -42,8 +42,8 @@ export default function WelcomePage() {
           style={{ mixBlendMode: "screen" }}
         />
         <p className="mt-4 text-sm leading-relaxed text-tos-muted">
-          Persoonlijke trading-assistent met geheugen en kennis — op je telefoon. Optioneel
-          koppel je later broker/MT5; je hoeft geen desktop-terminal te gebruiken.
+          Your personal trading copilot with memory and knowledge — on your phone. Optionally link broker/MT5 later;
+          no desktop terminal required to start.
         </p>
 
         <p className="mt-4 text-center">
@@ -51,7 +51,7 @@ export default function WelcomePage() {
             href="/"
             className="text-[11px] font-medium text-tos-accent-cyan/90 hover:underline"
           >
-            ← Terug naar startpagina
+            ← Back to home
           </Link>
         </p>
 
@@ -60,38 +60,38 @@ export default function WelcomePage() {
             href="/login"
             className="rounded-2xl bg-gradient-to-r from-tos-warm/90 to-teal-500/90 py-3.5 text-center text-sm font-semibold text-[#06070a] shadow-lg shadow-teal-900/30"
           >
-            Inloggen / starten
+            Log in / get started
           </Link>
           <Link
             href="/chat"
             className="rounded-2xl border border-white/15 py-3 text-center text-sm font-medium text-tos-text hover:bg-white/5"
           >
-            Naar chat (als je al bent ingelogd)
+            Go to chat (if already signed in)
           </Link>
         </div>
 
         <div className="mt-10 rounded-2xl border border-white/10 bg-tos-surface-928/50 p-5 text-left">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-tos-warm">
-            Op je telefoon — geen App Store nodig
+            On your phone — no App Store required
           </p>
           <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-relaxed text-tos-muted">
             <li>
-              <strong className="text-tos-text">iPhone (Safari):</strong> Deel-knop →{" "}
-              <em>Zet op beginscherm</em>.
+              <strong className="text-tos-text">iPhone (Safari):</strong> Share →{" "}
+              <em>Add to Home Screen</em>.
             </li>
             <li>
               <strong className="text-tos-text">Android (Chrome):</strong> Menu →{" "}
-              <em>App installeren</em> of <em>Toevoegen aan startscherm</em>.
+              <em>Install app</em> or <em>Add to Home screen</em>.
             </li>
           </ul>
           <p className="mt-3 text-[11px] text-tos-dim">
-            Daarna open je AXE vanaf je startscherm; login blijft via Supabase.
+            Then open AXE from your home screen; sign-in stays on Supabase.
           </p>
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-3">
           <p className="text-[11px] font-medium uppercase tracking-wide text-tos-dim">
-            Scan om chat te openen
+            Scan to open chat
           </p>
           <div className="rounded-xl border border-white/10 bg-white/5 p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}

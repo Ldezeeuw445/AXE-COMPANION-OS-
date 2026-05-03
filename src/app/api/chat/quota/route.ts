@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { skipChatQuota } from "@/lib/chatQuota";
+import { isUnlimitedChatUserId, skipChatQuota } from "@/lib/chatQuota";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -18,6 +18,17 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       plan: "pro",
+      limit: 20,
+      used: 0,
+      remaining: -1,
+      skipped: true,
+    });
+  }
+
+  if (isUnlimitedChatUserId(user.id)) {
+    return NextResponse.json({
+      ok: true,
+      plan: "exempt",
       limit: 20,
       used: 0,
       remaining: -1,

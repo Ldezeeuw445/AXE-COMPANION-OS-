@@ -164,7 +164,7 @@ export async function sendChatMessage(
 
   const { supabase, user } = authed;
 
-  const quota = await tryConsumeChatQuota(supabase);
+  const quota = await tryConsumeChatQuota(supabase, user.id);
   if (!quota.ok) {
     if (quota.quotaExceeded) return { ok: false, quotaExceeded: true };
     return { ok: false };

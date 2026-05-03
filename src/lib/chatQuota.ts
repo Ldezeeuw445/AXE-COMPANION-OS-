@@ -5,6 +5,16 @@ export function skipChatQuota(): boolean {
   return process.env.AXE_SKIP_CHAT_QUOTA === "true";
 }
 
+/** Comma-separated auth user UUIDs (Vercel env) — unlimited chat without DB row. */
+export function isUnlimitedChatUserId(userId: string): boolean {
+  const raw = process.env.AXE_UNLIMITED_CHAT_USER_IDS ?? "";
+  const ids = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.includes(userId);
+}
+
 /** JSON from `axe_chat_quota_status` RPC (shape matches DB function). */
 export type ChatQuotaPayload = {
   ok: boolean;
@@ -25,9 +35,11 @@ type TryConsumeRow = {
  * Atomically reserves one user send for today (UTC). Call before inserting the user message.
  */
 export async function tryConsumeChatQuota(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  userId: string
 ): Promise<{ ok: true } | { ok: false; quotaExceeded: boolean }> {
   if (skipChatQuota()) return { ok: true };
+  if (isUnlimitedChatUserId(userId)) return { ok: true };
 
   const { data, error } = await supabase.rpc("axe_chat_try_consume");
 

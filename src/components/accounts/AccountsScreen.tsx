@@ -85,10 +85,9 @@ export function AccountsScreen({
       <GlassPanel className="mb-4 p-4">
         <Mt5InAppConnectionTest />
         <p className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] leading-relaxed text-tos-dim">
-          Voor <strong className="text-tos-muted">automatische</strong> sync van elke echte trade blijft er één
-          technische stap: MetaTrader (desktop) of een klein bridge-script moet trades naar deze server kunnen
-          sturen — brokers bieden daarvoor geen knop in een mobiele website. Met de test hierboven weet je in ieder
-          geval zeker dat je token goed staat voordat je verder bouwt.
+          For <strong className="text-tos-muted">automatic</strong> sync of every real trade, one technical step remains:
+          MetaTrader (desktop) or a small bridge must POST fills to this server — brokers do not expose that from a
+          mobile website alone. The test above confirms your token before you wire an EA or bridge.
         </p>
       </GlassPanel>
 
@@ -98,15 +97,15 @@ export function AccountsScreen({
             Link token (shown once)
           </p>
           <p className="mt-1 text-xs text-tos-muted">
-            <strong className="font-medium text-tos-text">Niet</strong> in deze app invullen — alleen in je{" "}
-            <strong className="font-medium text-tos-text">MT5 EA, script of bridge</strong> die JSON naar de ingest-URL
-            post. Alleen een hash wordt bewaard; bewaar dit token nu zelf veilig.
+            <strong className="font-medium text-tos-text">Do not</strong> paste this into the Companion app settings —
+            only into your <strong className="font-medium text-tos-text">MT5 EA, script, or bridge</strong> that POSTs
+            JSON to the ingest URL. Only a hash is stored; save this token somewhere safe now.
           </p>
           <ol className="mt-3 list-decimal space-y-1.5 pl-4 text-[11px] leading-relaxed text-tos-muted">
-            <li>Kopieer het token hieronder.</li>
-            <li>Zet het in je EA/bridge-config (zelfde plek als je API-URL).</li>
+            <li>Copy the token below.</li>
+            <li>Put it in your EA/bridge config (same place as your API URL).</li>
             <li>
-              POST naar{" "}
+              POST to{" "}
               {ingestUrl ? (
                 <code className="break-all rounded bg-black/50 px-1 py-0.5 text-[10px] text-emerald-200/90">
                   {ingestUrl}
@@ -114,9 +113,9 @@ export function AccountsScreen({
               ) : (
                 <code className="text-[10px]">…/functions/v1/axe-mt5-ingest</code>
               )}{" "}
-              met veld <code className="text-[10px] text-tos-text">token</code> + je trades/snapshot.
+              with field <code className="text-[10px] text-tos-text">token</code> plus your trades/snapshot.
             </li>
-            <li>Na de eerste succesvolle post wordt dit account gekoppeld en zie je data in History / chat-context.</li>
+            <li>After the first successful post, this account is linked and data appears in History / chat context.</li>
           </ol>
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-white/10 bg-black/40 p-3">
             <code className="min-w-0 flex-1 break-all text-[11px] text-tos-text">{showToken}</code>

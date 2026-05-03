@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "AXE Companion OS — jouw trading-assistent",
+  title: "AXE Companion OS — your trading copilot",
   description:
-    "Chat, alerts, journal, vault en live broker-context — dezelfde Supabase als Trading OS, ook op je telefoon.",
+    "Chat, alerts, journal, vault, and optional live broker context — same Supabase as Trading OS, on your phone too.",
 };
 
 const TICKER = [
@@ -30,38 +30,38 @@ const TICKER = [
 
 const FEATURES = [
   {
-    title: "Chat met context",
-    desc: "AXE kent je sessie-brief, watchlist en (optioneel) live account — minder herhalen, scherpere antwoorden.",
+    title: "Context-rich chat",
+    desc: "AXE reads your session brief, watchlist, and optional live account — less repetition, sharper answers.",
     Icon: LineChart,
     color: "text-emerald-400",
   },
   {
     title: "Alerts & journal",
-    desc: "Zelf meldingen bijhouden en trades labelen in hetzelfde ledger als op de webterminal.",
+    desc: "Track what matters and label trades in the same ledger as the web terminal.",
     Icon: Radio,
     color: "text-sky-400",
   },
   {
-    title: "Vault & acties",
-    desc: "Notities, screenshots en guarded approvals — één stack voor desktop en mobiel.",
+    title: "Vault & actions",
+    desc: "Notes, screenshots, and guarded approvals — one stack for desktop and mobile.",
     Icon: Database,
     color: "text-amber-400",
   },
   {
-    title: "Leren & cockpit",
-    desc: "Alignment en setup-stats — dezelfde leer-laag als je gewend bent van Trading OS.",
+    title: "Learning & cockpit",
+    desc: "Alignment and setup stats — the same learning layer you expect from Trading OS.",
     Icon: Brain,
     color: "text-violet-400",
   },
   {
     title: "Multi-account",
-    desc: "Koppel MT5 via een eenmalige link-token naar de ingest-bridge; kies welk account actief is.",
+    desc: "Link MT5 with a one-time token to the ingest bridge; pick which account is active.",
     Icon: Target,
     color: "text-teal-400",
   },
   {
     title: "Supabase sync",
-    desc: "Eén database: chat, geheugen, alerts en brokerdata blijven realtime gelijk met Trading OS.",
+    desc: "One database: chat, memory, alerts, and broker data stay in sync with Trading OS in real time.",
     Icon: Shield,
     color: "text-emerald-400/80",
   },
@@ -69,16 +69,16 @@ const FEATURES = [
 
 const FAQ = [
   {
-    q: "Waar vul ik de link-token in?",
-    a: "Niet in deze app. Je plakt de token in je MT5 Expert Advisor of bridge-script die trades en account-snapshots naar de Supabase Edge-functie post. Daarna verschijnen trades en live stats automatisch — zie Accounts na het aanmaken van een token.",
+    q: "Where do I paste the link token?",
+    a: "Not inside this app. Put it in your MT5 Expert Advisor or bridge script that POSTs trades and snapshots to the Supabase Edge function. After the first successful post, trades and live stats flow automatically — see Accounts right after you create a token.",
   },
   {
-    q: "Heb ik Trading OS op desktop nodig?",
-    a: "Nee om te starten: chat, alerts en journal werken standalone. Met dezelfde Supabase-login sluit alles naadloos aan als je wél de terminal gebruikt.",
+    q: "Do I need Trading OS on desktop?",
+    a: "No to get started: chat, alerts, and journal work standalone. With the same Supabase login, everything lines up if you also use the terminal.",
   },
   {
-    q: "Is dit een app-store app?",
-    a: "Je kunt de site als PWA op je beginscherm zetten (Safari / Chrome) — geen App Store nodig voor de kernflow.",
+    q: "Is this an App Store app?",
+    a: "You can install the site as a PWA on your home screen (Safari / Chrome) — no App Store required for the core flow.",
   },
 ];
 
@@ -106,13 +106,13 @@ export default function HomeLandingPage() {
               href="/login"
               className="rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-tos-muted hover:bg-white/[0.08] hover:text-tos-text"
             >
-              Inloggen
+              Log in
             </Link>
             <Link
               href="/login"
               className="rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-black hover:bg-emerald-400"
             >
-              Starten
+              Get started
             </Link>
           </div>
         </div>
@@ -166,18 +166,18 @@ export default function HomeLandingPage() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
               </span>
-              <span className="text-emerald-300/95">Live stack · zelfde Supabase als Trading OS</span>
+              <span className="text-emerald-300/95">Live stack · same Supabase as Trading OS</span>
             </div>
 
             <h1 className="mt-7 max-w-[560px] text-4xl font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.15rem]">
-              Jouw AXE-assistent,
+              Your AXE copilot,
               <br />
-              <span className="axe-landing-heading-shimmer">overal waar je trade.</span>
+              <span className="axe-landing-heading-shimmer">wherever you trade.</span>
             </h1>
 
             <p className="mt-5 max-w-[520px] text-sm leading-relaxed text-white/55 sm:text-base">
-              Chat, alerts, journal, vault en broker-sync in één donkere, rustige UI — bewust in de lijn van{" "}
-              <span className="text-white/75">Trading OS</span>: diepte, teal-accenten, geen speelse AI-slop.
+              Chat, alerts, journal, vault, and broker sync in one calm, dark UI — aligned with{" "}
+              <span className="text-white/75">Trading OS</span>: depth, teal accents, no gimmicky AI chrome.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -185,7 +185,7 @@ export default function HomeLandingPage() {
                 href="/login"
                 className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-6 text-sm font-semibold text-black shadow-lg shadow-emerald-900/25 hover:bg-emerald-400"
               >
-                Inloggen of account maken
+                Log in or create account
                 <ChevronRight className="ml-1 h-4 w-4" aria-hidden />
               </Link>
               <Link
@@ -193,13 +193,13 @@ export default function HomeLandingPage() {
                 className="inline-flex h-11 items-center justify-center rounded-full border border-white/14 bg-white/[0.04] px-5 text-sm font-medium text-white/85 hover:bg-white/[0.08]"
               >
                 <Smartphone className="mr-2 h-4 w-4 text-cyan-400/90" aria-hidden />
-                PWA op je telefoon
+                Phone (PWA)
               </Link>
               <Link
                 href="/chat"
                 className="text-center text-xs text-white/40 hover:text-white/65 sm:text-left"
               >
-                Al ingelogd? → Chat openen
+                Already signed in? → Open chat
               </Link>
             </div>
 
@@ -248,16 +248,15 @@ export default function HomeLandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-tos-muted">
             <Zap className="h-3 w-3 text-emerald-400" aria-hidden />
-            Gebouwd voor serieuze traders
+            Built for serious traders
           </div>
           <h2 className="mb-3 text-3xl font-bold tracking-tight text-white md:text-4xl">
-            Alles wat je op de terminal mist
+            What the terminal skips,
             <br />
-            <span className="axe-landing-heading-shimmer">op mobiel en web.</span>
+            <span className="axe-landing-heading-shimmer">on mobile and web.</span>
           </h2>
           <p className="mb-12 max-w-xl text-sm text-tos-muted md:text-base">
-            Geen tweede identiteit: login met hetzelfde Supabase-account als Trading OS. Data, alerts en geheugen
-            lopen synchroon.
+            One identity: sign in with the same Supabase account as Trading OS. Data, alerts, and memory stay in sync.
           </p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -278,10 +277,10 @@ export default function HomeLandingPage() {
               <div className="flex items-start gap-3">
                 <BarChart2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-400/85" aria-hidden />
                 <div>
-                  <h3 className="text-base font-semibold text-white">MT5-link — veilig en herroepbaar</h3>
+                  <h3 className="text-base font-semibold text-white">MT5 link — safe and revocable</h3>
                   <p className="mt-1 max-w-2xl text-sm text-tos-muted">
-                    Je maakt een token onder Accounts. Die gaat in je EA/bridge (niet in Settings). Alleen een hash
-                    staat in de database; fills komen binnen via de ingest-functie.
+                    Create a token under Accounts. It lives in your EA or bridge (not in Settings). Only a hash is
+                    stored; fills arrive through the ingest function.
                   </p>
                 </div>
               </div>
@@ -289,7 +288,7 @@ export default function HomeLandingPage() {
                 href="/login"
                 className="shrink-0 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-center text-xs font-medium text-white hover:bg-white/10"
               >
-                Accounts openen na login
+                Open Accounts after login
               </Link>
             </div>
           </div>
@@ -298,7 +297,7 @@ export default function HomeLandingPage() {
 
       <section className="border-t border-white/[0.04] px-5 py-14 md:py-20">
         <div className="mx-auto max-w-3xl">
-          <h2 className="mb-8 text-center text-2xl font-bold text-white md:text-3xl">Veelgestelde vragen</h2>
+          <h2 className="mb-8 text-center text-2xl font-bold text-white md:text-3xl">FAQ</h2>
           <div className="space-y-2">
             {FAQ.map((item) => (
               <details
@@ -319,29 +318,29 @@ export default function HomeLandingPage() {
 
       <section className="border-t border-white/[0.04] px-5 py-14">
         <div className="axe-landing-card mx-auto max-w-3xl p-8 text-center">
-          <p className="text-sm font-medium text-white">Klaar om AXE mee te nemen?</p>
+          <p className="text-sm font-medium text-white">Bring AXE with you</p>
           <p className="mt-2 text-xs text-tos-muted">
-            Zelfde stack als Trading OS — minder context verliezen tussen schermen.
+            Same stack as Trading OS — less context lost between screens.
           </p>
           <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:justify-center">
             <Link
               href="/login"
               className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-8 text-sm font-semibold text-black hover:bg-emerald-400"
             >
-              Start nu
+              Get started
             </Link>
             <Link
               href="/welcome"
               className="inline-flex h-11 items-center justify-center rounded-full border border-white/15 px-8 text-sm font-medium text-white/85 hover:bg-white/[0.06]"
             >
-              PWA-installatie
+              PWA install
             </Link>
           </div>
         </div>
       </section>
 
       <footer className="border-t border-white/[0.04] px-5 py-8 text-center text-[11px] text-tos-dim">
-        AXE Companion OS · niet-financieel advies · trade verantwoord
+        AXE Companion OS · not financial advice · trade responsibly
       </footer>
     </div>
   );

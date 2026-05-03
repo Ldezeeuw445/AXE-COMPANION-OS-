@@ -18,12 +18,12 @@ export function Mt5InAppConnectionTest({ className }: Props) {
   async function runTest() {
     const trimmed = token.trim();
     if (!trimmed.startsWith("axe_")) {
-      setMsg({ kind: "err", text: "Plak een token die begint met axe_ (zoals na ‘Create link token’)." });
+      setMsg({ kind: "err", text: "Paste a token that starts with axe_ (as shown after Create link token)." });
       return;
     }
     const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
     if (!base) {
-      setMsg({ kind: "err", text: "NEXT_PUBLIC_SUPABASE_URL ontbreekt — verbinding testen kan niet." });
+      setMsg({ kind: "err", text: "NEXT_PUBLIC_SUPABASE_URL is missing — cannot run test." });
       return;
     }
     setBusy(true);
@@ -58,7 +58,7 @@ export function Mt5InAppConnectionTest({ className }: Props) {
       if (!res.ok || !json.ok) {
         setMsg({
           kind: "err",
-          text: json.error ? `Server: ${json.error}` : `HTTP ${res.status} — controleer token en of de functie axe-mt5-ingest live staat.`,
+          text: json.error ? `Server: ${json.error}` : `HTTP ${res.status} — check token and that axe-mt5-ingest is deployed.`,
         });
         return;
       }
@@ -67,13 +67,13 @@ export function Mt5InAppConnectionTest({ className }: Props) {
         kind: "ok",
         text:
           accepted > 0
-            ? "Verbinding werkt. Deze testtrade staat in je geschiedenis — je kunt nu je EA/bridge dezelfde URL laten gebruiken voor echte fills."
-            : "Geen trades geaccepteerd — controleer of het token nog geldig is en of er minstens één trade in de payload zit.",
+            ? "Connection works. This test trade is in your history — use the same URL in your EA/bridge for real fills."
+            : "No trades accepted — check token validity and payload.",
       });
     } catch (e) {
       setMsg({
         kind: "err",
-        text: e instanceof Error ? e.message : "Netwerkfout — probeer opnieuw of test op wifi.",
+        text: e instanceof Error ? e.message : "Network error — try again.",
       });
     } finally {
       setBusy(false);
@@ -82,11 +82,11 @@ export function Mt5InAppConnectionTest({ className }: Props) {
 
   return (
     <div className={className}>
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-dim">In de app testen</p>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-dim">Test in the app</p>
       <p className="mt-1 text-xs text-tos-muted">
-        Geen MetaTrader-plugin nodig om te <strong className="font-medium text-tos-text">controleren</strong> of je
-        token werkt. Plak hieronder de token (bewaar hem eerst ergens veilig), tik op test — we sturen één minimale
-        testtrade naar dezelfde ingest als je EA later gebruikt.
+        No MetaTrader plugin needed to <strong className="font-medium text-tos-text">verify</strong> your token.
+        Paste the token below (save it somewhere safe first), tap Test — we send one minimal test trade to the same
+        ingest your EA will use.
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
         <input
@@ -94,7 +94,7 @@ export function Mt5InAppConnectionTest({ className }: Props) {
           autoComplete="off"
           value={token}
           onChange={(e) => setToken(e.target.value)}
-          placeholder="axe_… (plak je link-token)"
+          placeholder="axe_… (paste link token)"
           className="tos-neu-inset min-w-0 flex-1 rounded-2xl px-3 py-2.5 font-mono text-[11px] text-tos-text placeholder:text-tos-dim"
         />
         <button
@@ -103,7 +103,7 @@ export function Mt5InAppConnectionTest({ className }: Props) {
           onClick={() => void runTest()}
           className="shrink-0 rounded-2xl border border-tos-warm/35 bg-tos-warm/12 px-4 py-2.5 text-xs font-semibold text-tos-warm hover:bg-tos-warm/20 disabled:opacity-50"
         >
-          {busy ? "Bezig…" : "Test verbinding"}
+          {busy ? "Working…" : "Test connection"}
         </button>
       </div>
       {msg ? (
