@@ -105,27 +105,25 @@ export default async function SettingsPage() {
         </div>
       </GlassPanel>
 
-      {/* Terminal Status */}
-      <GlassPanel className="mb-4 p-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          Trading OS — upcoming premium terminal
-        </h2>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Badge variant="long">Same Supabase as AXE Companion</Badge>
+      {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}
+      <GlassPanel glow="cyan" className="mb-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-[10px] font-medium uppercase tracking-widest text-cyan-300/95">
+            Trading OS terminal · coming soon
+          </h2>
+          <Badge variant="long">Same Supabase</Badge>
         </div>
-        <p className="mt-2 text-xs text-tos-muted">
-          Trading OS is our upcoming full desk: live charts, market intelligence, alerts, execution workspace, and
-          multi-source data — with AXE embedded. This Companion app is the standalone brain today; one account and
-          memory carry over when the terminal ships. Not a separate data island.
+        <p className="mt-2 text-xs leading-relaxed text-tos-muted">
+          AXE Companion is the brain. Trading OS is the upcoming premium terminal — live charts, market intelligence,
+          alerts, execution review and multi-source context, with AXE embedded in every workflow. Your account, memory
+          and journal carry over when the terminal ships.
         </p>
-        <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[11px] leading-relaxed text-tos-muted">
-          <span className="font-medium text-tos-text">MT5 link token:</span> not here in Settings. Create a token under{" "}
-          <Link href="/accounts" className="text-tos-accent-cyan underline-offset-2 hover:underline">
-            Accounts
-          </Link>{" "}
-          and paste it into your Expert Advisor or bridge that POSTs to{" "}
-          <code className="rounded bg-black/40 px-1 text-[10px] text-tos-text">axe-mt5-ingest</code> — that is what
-          actually links your broker account.
+        <p className="mt-2 text-[11px] text-tos-dim">
+          Need a local MT5 bridge token? It lives under{" "}
+          <Link href="/accounts" className="text-cyan-300/95 underline-offset-2 hover:underline">
+            Accounts → Advanced
+          </Link>
+          .
         </p>
       </GlassPanel>
 
@@ -190,47 +188,33 @@ export default async function SettingsPage() {
       </GlassPanel>
 
       <GlassPanel className="mb-4 p-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          Plan & billing
-        </h2>
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Subscription</h2>
         <p className="mt-1 text-xs text-tos-muted">
-          Free includes the full experience with 20 chat sends per day (UTC). Pro (~€19/mo) removes the daily cap when
-          Stripe checkout is configured. Internal testers can use{" "}
-          <code className="text-[10px] text-tos-muted">chat_quota_exempt</code> in Supabase.
-        </p>
-        <p className="mt-2 text-[11px] leading-relaxed text-tos-dim">
-          Each signed-in user only sees their own chats, memory, accounts, and trades — Supabase RLS scopes every row
-          by <code className="text-[10px] text-tos-muted">user_id</code>.
+          Free includes the full experience with 20 chat sends per day. Pro removes the daily cap when checkout opens.
         </p>
         <Link
           href="/upgrade"
           className="mt-3 inline-flex text-xs font-medium text-tos-accent-cyan hover:underline"
         >
-          View plans →
+          Manage subscription →
         </Link>
       </GlassPanel>
 
-      <GlassPanel className="mb-6 p-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          Execution connections
-        </h2>
-        <p className="mt-2 text-xs text-tos-dim">
-          Broker / execution API placeholders — disabled until approval flow is
-          production-tested.
-        </p>
-      </GlassPanel>
-
-      <GlassPanel className="mb-4 p-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          Mobile &amp; PWA
-        </h2>
-        <p className="mt-1 text-xs text-tos-muted">
-          Same install flow as the public landing — scan or open the signed-in chat route on your phone.
-        </p>
-        <div className="mt-4">
-          <LandingOpenAppQr />
+      {/* Mobile install — folded by default, no QR clutter on the main flow */}
+      <details className="group mb-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/25">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-tos-dim [&::-webkit-details-marker]:hidden">
+          Install on another device
+          <span className="text-[10px] text-tos-dim/85 group-open:hidden">Open</span>
+        </summary>
+        <div className="border-t border-white/[0.05] px-4 py-4">
+          <p className="text-xs text-tos-muted">
+            Scan or open the signed-in chat route on your phone to install AXE as a mobile app.
+          </p>
+          <div className="mt-3">
+            <LandingOpenAppQr />
+          </div>
         </div>
-      </GlassPanel>
+      </details>
 
       <GlassPanel className="mb-6 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">

@@ -1,9 +1,9 @@
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { Composer } from "@/components/chat/Composer";
 import { PinnedContext } from "@/components/chat/PinnedContext";
+import { ChatAxeContextButton } from "@/components/chat/ChatAxeContextButton";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
-import { Badge } from "@/components/ui/Badge";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
@@ -65,7 +65,7 @@ export default async function ChatPage() {
           left={<BrandMark />}
           title="AXE"
           subtitle={operatorName ? `AXE ↔ ${operatorName}` : conversation.title}
-          right={<Badge variant="warm">Secure</Badge>}
+          right={<ChatAxeContextButton conversationTitle={conversation.title ?? null} />}
         />
         <PinnedContext text={conversation.pinnedContext} />
         <ChatMessageList messages={messages} />

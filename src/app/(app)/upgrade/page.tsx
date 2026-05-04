@@ -1,13 +1,31 @@
 import Link from "next/link";
+import { Check, Crown, Mail, Sparkles, Zap } from "lucide-react";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { Badge } from "@/components/ui/Badge";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 
-export default async function UpgradePage() {
+const FREE_FEATURES = [
+  "Full AXE Companion experience",
+  "MT5 broker chart with live stream",
+  "Journal, Vault and AXE memory",
+  "20 chat sends per day (UTC reset)",
+];
+
+const PRO_FEATURES = [
+  "Unlimited chat sends (fair use)",
+  "AXE memory grows with you",
+  "Weekly journal reviews",
+  "Account intelligence + cockpit",
+  "Priority on upcoming Trading OS terminal",
+];
+
+export default async function SubscriptionsPage() {
   const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK?.trim() ?? "";
+  const billingConfigured = paymentLink.length > 0;
   const supabase = await createServerSupabaseClient();
   let isPro = false;
   if (supabase) {
@@ -30,24 +48,30 @@ export default async function UpgradePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-6">
-      <ScreenHeader left={<BrandMark />} title="Plans" subtitle="AXE Companion" />
+      <ScreenHeader
+        left={<BrandMark />}
+        title="Subscriptions"
+        subtitle="Pick what fits — billing stays simple."
+      />
 
       {skipChatQuota() ? (
         <p className="mb-3 rounded-lg border border-tos-gold/25 bg-tos-gold/5 px-3 py-2 text-center text-[11px] text-tos-muted">
-          Quota enforcement is disabled in this environment (
-          <code className="text-tos-gold/90">AXE_SKIP_CHAT_QUOTA</code>).
+          Quota enforcement is disabled in this environment.
         </p>
       ) : null}
 
       {isPro ? (
-        <GlassPanel className="mb-4 p-4">
-          <p className="text-sm font-medium text-tos-accent-cyan">You are on Pro</p>
+        <GlassPanel glow="cyan" className="mb-4 p-4">
+          <div className="flex items-center gap-2">
+            <Crown className="h-4 w-4 text-cyan-300" aria-hidden />
+            <p className="text-sm font-semibold text-cyan-200/95">You are on Pro</p>
+          </div>
           <p className="mt-1 text-xs text-tos-muted">
             Unlimited chat sends (fair use). Thank you for supporting AXE.
           </p>
           <Link
             href="/chat"
-            className="mt-4 inline-flex text-xs font-medium text-tos-muted hover:text-tos-text hover:underline"
+            className="mt-3 inline-flex text-xs font-medium text-tos-muted hover:text-tos-text hover:underline"
           >
             ← Back to chat
           </Link>
@@ -55,52 +79,90 @@ export default async function UpgradePage() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <GlassPanel className="p-4">
-          <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Free</h2>
-          <p className="mt-2 text-2xl font-semibold tracking-tight text-tos-text">€0</p>
-          <ul className="mt-3 space-y-2 text-xs text-tos-muted">
-            <li>Full product UX</li>
-            <li>20 chat sends per day (UTC midnight reset)</li>
-            <li>Each Send counts once, including tool rounds</li>
+        <GlassPanel className="p-5">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Free</h2>
+            <Badge variant="neutral">Current</Badge>
+          </div>
+          <p className="mt-2 font-mono text-3xl font-semibold tracking-tight text-tos-text">€0</p>
+          <p className="mt-1 text-[11px] text-tos-dim">No card required.</p>
+          <ul className="mt-4 space-y-2 text-xs text-tos-muted">
+            {FREE_FEATURES.map((f) => (
+              <li key={f} className="flex items-start gap-2">
+                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400/85" aria-hidden />
+                <span>{f}</span>
+              </li>
+            ))}
           </ul>
         </GlassPanel>
 
-        <GlassPanel className="border-tos-accent-cyan/25 p-4 ring-1 ring-tos-accent-cyan/15">
-          <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-accent-cyan">
-            Pro
-          </h2>
-          <p className="mt-2 text-2xl font-semibold tracking-tight text-tos-text">~€19/mo</p>
-          <ul className="mt-3 space-y-2 text-xs text-tos-muted">
-            <li>Unlimited sends (reasonable fair use)</li>
-            <li>Same features as Free</li>
-            <li>Billed via Stripe when checkout is configured</li>
+        <GlassPanel
+          glow="cyan"
+          className="relative overflow-hidden border-cyan-400/20 p-5 ring-1 ring-cyan-400/15"
+        >
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300/95">Pro</h2>
+            <Badge variant="long">Recommended</Badge>
+          </div>
+          <p className="mt-2 font-mono text-3xl font-semibold tracking-tight text-tos-text">
+            €19<span className="text-base text-tos-muted">/mo</span>
+          </p>
+          <p className="mt-1 text-[11px] text-tos-dim">Cancel anytime, prices may exclude VAT.</p>
+          <ul className="mt-4 space-y-2 text-xs text-tos-muted">
+            {PRO_FEATURES.map((f) => (
+              <li key={f} className="flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300/85" aria-hidden />
+                <span>{f}</span>
+              </li>
+            ))}
           </ul>
-          {paymentLink ? (
+          {billingConfigured ? (
             <a
               href={paymentLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="tos-btn-cyan mt-4 inline-flex w-full items-center justify-center rounded-xl py-2.5 text-xs font-semibold"
+              className="tos-btn-cyan mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold"
             >
-              Upgrade with Stripe
+              <Zap className="h-3.5 w-3.5" />
+              Upgrade to Pro
             </a>
           ) : (
-            <p className="mt-4 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[11px] text-tos-dim">
-              Checkout link not configured yet. Set{" "}
-              <code className="text-tos-muted">NEXT_PUBLIC_STRIPE_PAYMENT_LINK</code>{" "}
-              (Stripe Payment Link or Checkout URL) on the server, then redeploy.
-            </p>
+            <div className="mt-5 space-y-2">
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.05] px-3 py-2 text-[11px] text-amber-200/95">
+                Pro checkout is being prepared.
+              </div>
+              <Link
+                href={`mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@tradingosapp.com"}?subject=AXE%20Pro%20waitlist`}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 py-2.5 text-xs font-semibold text-cyan-100/95 transition-colors hover:bg-cyan-500/15"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                Notify me when Pro opens
+              </Link>
+            </div>
           )}
         </GlassPanel>
       </div>
 
+      <GlassPanel className="mt-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+            Trading OS terminal · upcoming
+          </h3>
+          <Badge variant="warm">Same Supabase</Badge>
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-tos-muted">
+          Trading OS is the upcoming premium terminal powered by the same AXE brain — charts, workspace
+          intelligence, alerts, execution review and multi-source market context. AXE Companion is the
+          mobile command layer today; your account, memory and journal carry over when the terminal ships.
+        </p>
+      </GlassPanel>
+
       <p className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-center text-[10px] leading-relaxed text-tos-dim">
-        {LEGAL_COPY.tradingShort}{" "}
-        {LEGAL_COPY.pricing}
+        {LEGAL_COPY.tradingShort} {LEGAL_COPY.pricing}
       </p>
 
       <p className="mt-4 px-1 text-center text-[10px] text-tos-dim">
-        Questions? Open{" "}
+        Questions? Visit{" "}
         <Link href="/settings" className="text-tos-muted underline-offset-2 hover:underline">
           Settings
         </Link>{" "}
