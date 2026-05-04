@@ -3,26 +3,19 @@
 /**
  * AXE Companion — chart edge worker.
  *
- * Exposes:
+ * Routes:
  *   GET  /health
  *   GET  /ws/chart?account=…&symbol=…&tf=…&token=<HS256 JWT>
- *   POST /internal/publish      (HMAC-signed payloads from a Node MetaApi streamer)
+ *   POST /internal/publish      (HMAC X-Streamer-Secret)
  *
- * Why Durable Objects?
- *   - Stateful per-room: one ChartLiveRoom per (userId, accountId, brokerSymbol, timeframe).
- *   - Hold a websocket fan-out, throttle MetaApi REST polling, broadcast to all devices,
- *     reconnect with backoff.
+ * Two modes (env `WORKER_MODE`):
+ *   - "poll" (default) — Durable Object polls MetaApi REST itself; standard
+ *     WebSocket fan-out using in-memory client set and a setTimeout loop.
+ *   - "push"           — Durable Object uses the WebSocket Hibernation API.
+ *     No timers run inside the DO; events arrive only via /internal/publish
+ *     from a Node MetaApi streamer (see `node/metaapi-streamer/`).
  *
- * Honest caveat:
- *   The official MetaApi socket.io SDK is a Node-targeted package. It does not run cleanly
- *   in the Workers runtime. Two production paths are supported here:
- *
- *   A) (current default) The DO polls MetaApi REST endpoints itself: current-price (~2.5s),
- *      last candle (~12s), positions (~8s). Same shape as the SSE fallback in /api/chart/live.
- *
- *   B) (preferred for serious scale) A separate Node MetaApi streamer connects to MetaApi via
- *      socket.io and POSTs normalized events to /internal/publish (HMAC-signed). The DO becomes
- *      a pure fan-out room. The frontend contract does not change.
+ * Frontend contract is identical in both modes.
  */
 
 import { verifyChartSessionToken } from "./sessionToken";
@@ -36,6 +29,7 @@ export interface Env {
   METAAPI_MARKET_DATA_URL?: string;
   ALLOWED_ORIGINS?: string;
   STREAMER_SECRET?: string;
+  WORKER_MODE?: string;
 }
 
 const DEFAULT_CLIENT = "https://mt-client-api-vzsrmwxzqcwfarnn.london.agiliumtrade.ai";
@@ -56,13 +50,20 @@ const POSITIONS_INTERVAL_MS = 8_000;
 const DELAYED_THRESHOLD_FAILURES = 3;
 const IDLE_HARD_CLOSE_MS = 5 * 60_000;
 
+function isPushMode(env: Env): boolean {
+  return (env.WORKER_MODE ?? "poll").toLowerCase() === "push";
+}
+
 function corsHeaders(env: Env, origin: string | null): Record<string, string> {
-  const allowed = (env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const allowed = (env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const allow = origin && allowed.includes(origin) ? origin : "";
   return {
     "Access-Control-Allow-Origin": allow || (allowed.length === 0 ? "*" : ""),
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Streamer-Secret",
   };
 }
 
@@ -75,13 +76,13 @@ export default {
     }
 
     if (url.pathname === "/health") {
-      return new Response("ok", { status: 200, headers: corsHeaders(env, req.headers.get("Origin")) });
+      return new Response(`ok mode=${isPushMode(env) ? "push" : "poll"}`, {
+        status: 200,
+        headers: corsHeaders(env, req.headers.get("Origin")),
+      });
     }
 
-    if (url.pathname === "/ws/chart") {
-      return handleWsRoute(req, env, url);
-    }
-
+    if (url.pathname === "/ws/chart") return handleWsRoute(req, env, url);
     if (url.pathname === "/internal/publish" && req.method === "POST") {
       return handlePublishRoute(req, env);
     }
@@ -100,9 +101,7 @@ async function handleWsRoute(req: Request, env: Env, url: URL): Promise<Response
     return new Response("session_not_configured", { status: 503 });
   }
   const payload = await verifyChartSessionToken(token, env.CHART_SESSION_JWT_SECRET);
-  if (!payload) {
-    return new Response("invalid_token", { status: 401 });
-  }
+  if (!payload) return new Response("invalid_token", { status: 401 });
 
   const account = url.searchParams.get("account") ?? "";
   const requestedSymbol = (url.searchParams.get("symbol") ?? "").toUpperCase();
@@ -164,9 +163,12 @@ type RoomState = {
   metaApiTimeframe: string;
 };
 
+const ROOM_STORAGE_KEY = "room_state_v1";
+
 export class ChartLiveRoom implements DurableObject {
   private readonly state: DurableObjectState;
   private readonly env: Env;
+  /** poll mode only */
   private readonly clients = new Set<WebSocket>();
   private room: RoomState | null = null;
   private pollHandle: ReturnType<typeof setTimeout> | null = null;
@@ -185,7 +187,7 @@ export class ChartLiveRoom implements DurableObject {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
 
-    if (url.pathname === "/publish" || (req.method === "POST" && url.pathname.endsWith("/publish"))) {
+    if (url.pathname.endsWith("/publish") && req.method === "POST") {
       return this.handleInternalPublish(req);
     }
 
@@ -198,7 +200,8 @@ export class ChartLiveRoom implements DurableObject {
     if (!payload) return new Response("invalid_token", { status: 401 });
 
     if (!this.room) {
-      this.room = {
+      const stored = (await this.state.storage.get<RoomState>(ROOM_STORAGE_KEY)) ?? null;
+      this.room = stored ?? {
         userId: payload.userId,
         accountId: payload.accountId,
         metaApiAccountId: payload.metaApiAccountId,
@@ -207,19 +210,26 @@ export class ChartLiveRoom implements DurableObject {
         timeframe: payload.timeframe,
         metaApiTimeframe: TF_MAP[payload.timeframe] ?? "1h",
       };
+      await this.state.storage.put(ROOM_STORAGE_KEY, this.room);
     }
 
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
-    server.accept();
 
-    this.clients.add(server);
-    this.idleSince = null;
-
-    server.addEventListener("message", (ev) => this.handleClientMessage(server, ev));
-    server.addEventListener("close", () => this.handleClientClose(server));
-    server.addEventListener("error", () => this.handleClientClose(server));
+    if (isPushMode(this.env)) {
+      // Hibernation API — DO can sleep between events; broadcast iterates
+      // state.getWebSockets() on demand.
+      this.state.acceptWebSocket(server);
+    } else {
+      server.accept();
+      this.clients.add(server);
+      this.idleSince = null;
+      server.addEventListener("message", (ev: MessageEvent) => this.handleClientMessage(server, ev));
+      server.addEventListener("close", () => this.handleClientClose(server));
+      server.addEventListener("error", () => this.handleClientClose(server));
+      this.kickPollLoop();
+    }
 
     this.send(server, {
       type: "ready",
@@ -231,15 +241,15 @@ export class ChartLiveRoom implements DurableObject {
       source: "metaapi_mt5",
     });
 
-    this.kickPollLoop();
-
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  private handleClientMessage(_ws: WebSocket, ev: MessageEvent) {
+  // ── poll-mode listeners ───────────────────────────────────────────────────
+
+  private handleClientMessage(ws: WebSocket, ev: MessageEvent) {
     if (typeof ev.data === "string" && ev.data === "ping") {
       try {
-        _ws.send(JSON.stringify({ type: "heartbeat" } satisfies ChartLiveEvent));
+        ws.send(JSON.stringify({ type: "heartbeat" } satisfies ChartLiveEvent));
       } catch {
         /* ignore */
       }
@@ -253,6 +263,28 @@ export class ChartLiveRoom implements DurableObject {
     }
   }
 
+  // ── hibernation handlers (push mode) ──────────────────────────────────────
+
+  webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
+    if (typeof message === "string" && message === "ping") {
+      try {
+        ws.send(JSON.stringify({ type: "heartbeat" } satisfies ChartLiveEvent));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  webSocketClose(_ws: WebSocket): void {
+    /* hibernation auto-cleans when no sockets remain */
+  }
+
+  webSocketError(_ws: WebSocket): void {
+    /* same as close */
+  }
+
+  // ── publish & broadcast ───────────────────────────────────────────────────
+
   private async handleInternalPublish(req: Request): Promise<Response> {
     let evt: ChartLiveEvent;
     try {
@@ -264,7 +296,15 @@ export class ChartLiveRoom implements DurableObject {
     return new Response("ok", { status: 200 });
   }
 
+  private allSockets(): WebSocket[] {
+    if (isPushMode(this.env)) {
+      return this.state.getWebSockets();
+    }
+    return Array.from(this.clients);
+  }
+
   private kickPollLoop() {
+    if (isPushMode(this.env)) return; // never poll in push mode
     if (this.pollHandle) return;
     const tick = async () => {
       this.pollHandle = null;
@@ -272,6 +312,7 @@ export class ChartLiveRoom implements DurableObject {
       if (this.clients.size === 0) {
         if (this.idleSince && Date.now() - this.idleSince > IDLE_HARD_CLOSE_MS) {
           this.room = null;
+          await this.state.storage.delete(ROOM_STORAGE_KEY);
           return;
         }
         this.pollHandle = setTimeout(tick, 5_000);
@@ -281,7 +322,7 @@ export class ChartLiveRoom implements DurableObject {
       try {
         await this.pollOnce();
       } catch {
-        /* keep stream alive — handled inside pollOnce */
+        /* tolerated; pollOnce updates status internally */
       }
       this.pollHandle = setTimeout(tick, 750);
     };
@@ -417,11 +458,11 @@ export class ChartLiveRoom implements DurableObject {
 
   private broadcast(event: ChartLiveEvent) {
     const msg = JSON.stringify(event);
-    for (const ws of this.clients) {
+    for (const ws of this.allSockets()) {
       try {
         ws.send(msg);
       } catch {
-        /* ignore broken socket; close handler removes it */
+        /* dropped socket cleaned up by the platform */
       }
     }
   }

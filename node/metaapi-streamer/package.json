@@ -1,0 +1,21 @@
+{
+  "name": "axe-metaapi-streamer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MetaApi MT5 streaming service. Subscribes via the official socket.io SDK and pushes normalized events to the Cloudflare ChartLiveRoom /internal/publish endpoint.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --enable-source-maps dist/index.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "metaapi.cloud-sdk": "^29.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

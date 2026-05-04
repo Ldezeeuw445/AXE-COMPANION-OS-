@@ -25,7 +25,11 @@ import {
   type LiveTransport,
   type LiveUiStatus,
 } from "@/components/chart/useLiveChart";
+import { usePageVisible } from "@/components/chart/usePageVisible";
 import { CHART_THEME } from "@/components/chart/chartTheme";
+
+const TICK_REACT_THROTTLE_MS = 150;
+const SNAPSHOT_INTERVAL_MS = 30_000;
 
 type Props = {
   data: ChartPageData;
@@ -190,15 +194,30 @@ export function ChartScreen({ data }: Props) {
   const [overlays, setOverlays] = useState<ChartOverlayRow[]>(data.positionsOnSymbol);
   const [livePositionsCount, setLivePositionsCount] = useState<number>(data.totalPositions);
   const canvasRef = useRef<ChartCanvasHandle>(null);
+  const lastReactPriceAt = useRef<number>(0);
+  const lastBidRef = useRef<number | null>(null);
+  const lastAskRef = useRef<number | null>(null);
 
-  const liveEnabled = data.failure === "ok" && Boolean(accountId);
+  const isVisible = usePageVisible();
+  const liveEnabled = data.failure === "ok" && Boolean(accountId) && isVisible;
 
-  const onTick = useCallback(({ mid, time }: { mid: number | null; time: string | null }) => {
-    if (mid == null || !Number.isFinite(mid)) return;
-    setLivePrice(mid);
-    setLastTickAt(time ?? new Date().toISOString());
-    canvasRef.current?.applyTick(mid);
-  }, []);
+  const onTick = useCallback(
+    ({ mid, bid, ask, time }: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => {
+      if (mid == null || !Number.isFinite(mid)) return;
+      lastBidRef.current = bid;
+      lastAskRef.current = ask;
+      // Always patch the chart canvas (cheap, imperative, no rerender).
+      canvasRef.current?.applyTick(mid);
+      // Throttle React state to keep mobile rerenders cheap.
+      const now = Date.now();
+      if (now - lastReactPriceAt.current >= TICK_REACT_THROTTLE_MS) {
+        lastReactPriceAt.current = now;
+        setLivePrice(mid);
+        setLastTickAt(time ?? new Date().toISOString());
+      }
+    },
+    [],
+  );
 
   const onCandleUpdate = useCallback((candle: { time: string; open: number; high: number; low: number; close: number }) => {
     canvasRef.current?.updateLastCandle(candle);
@@ -234,6 +253,46 @@ export function ChartScreen({ data }: Props) {
     onCandleUpdate,
     onPositions,
   });
+
+  // Periodic audit snapshot — best-effort, fails silently if migration not applied.
+  useEffect(() => {
+    if (!liveEnabled || liveStatus !== "live_stream" || !accountId) return;
+    const post = () => {
+      void fetch("/api/chart/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          accountId,
+          displaySymbol: data.symbol,
+          brokerSymbol: data.brokerSymbol,
+          timeframe: data.timeframeKey,
+          lastPrice: livePrice,
+          lastBid: lastBidRef.current,
+          lastAsk: lastAskRef.current,
+          lastTickAt,
+          lastCandleAt: data.lastCandleTime,
+          openPositionsCount: livePositionsCount,
+          openPositions: overlays,
+          status: liveStatus,
+        }),
+      }).catch(() => undefined);
+    };
+    const t = setInterval(post, SNAPSHOT_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [
+    liveEnabled,
+    liveStatus,
+    accountId,
+    data.symbol,
+    data.brokerSymbol,
+    data.timeframeKey,
+    livePrice,
+    lastTickAt,
+    data.lastCandleTime,
+    livePositionsCount,
+    overlays,
+  ]);
 
   // Reset live state when navigation changes the underlying data.
   // We bypass the effect-driven setState lint by writing directly during commit:

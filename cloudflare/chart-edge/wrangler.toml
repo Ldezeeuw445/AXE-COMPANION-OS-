@@ -11,6 +11,10 @@ compatibility_flags = ["nodejs_compat"]
 ALLOWED_ORIGINS = ""
 METAAPI_CLIENT_API_URL = "https://mt-client-api-vzsrmwxzqcwfarnn.london.agiliumtrade.ai"
 METAAPI_MARKET_DATA_URL = "https://mt-market-data-client-api-v1.london.agiliumtrade.ai"
+# "poll" (default) → DO polls MetaApi REST itself.
+# "push"            → DO uses WebSocket Hibernation API and only fans out
+#                     events from /internal/publish (Node streamer required).
+WORKER_MODE = "poll"
 
 [[durable_objects.bindings]]
 name = "CHART_LIVE_ROOM"

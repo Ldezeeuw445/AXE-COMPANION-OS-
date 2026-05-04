@@ -125,11 +125,18 @@ Never store these in the repo.
 
 ## Production hardening
 
-- Deploy a Node streamer that uses the official MetaApi SDK and POSTs
-  `/internal/publish`. The DO becomes a pure fan-out room — REST polling can
-  be disabled.
-- Move logic to WebSocket Hibernation API once the polling loop has been
-  replaced by streamer push (timers prevent hibernation).
-- Persist resolved broker symbols in `user_broker_accounts.metadata.symbol_map`
-  so resolution is cached across reconnects (already implemented in the loader).
+- Deploy the Node streamer in `node/metaapi-streamer/` (uses the official
+  MetaApi SDK socket.io). It POSTs `/internal/publish` to this Worker.
+- Switch the Worker to `WORKER_MODE = "push"` in `wrangler.toml`. The
+  Durable Object then uses the **WebSocket Hibernation API** and stops
+  polling MetaApi REST itself. See `cloudflare/chart-edge/src/worker.ts`.
+- Resolved broker symbols are already cached in
+  `user_broker_accounts.metadata.symbol_map` by the loader, so reconnects skip
+  the suffix probe.
+- Audit snapshots: apply `supabase/migrations/20260504130000_chart_live_snapshots.sql`
+  and let the chart push to `/api/chart/snapshot`. Browser already does this
+  every 30s while the stream is live and the tab is visible.
+- Mobile UX: when the tab goes hidden, the live stream is disconnected to
+  save battery/data; it reconnects on visibility (see `usePageVisible`).
 - Configure `ALLOWED_ORIGINS` to your production hostnames.
+- See `docs/chart-edge-deploy-runbook.md` for the full step-by-step.
