@@ -3,6 +3,8 @@
 const DEFAULT_PROVISIONING = "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai";
 const DEFAULT_CLIENT_LONDON =
   "https://mt-client-api-vzsrmwxzqcwfarnn.london.agiliumtrade.ai";
+/** Historical candles / market data REST (region-specific; London default). */
+const DEFAULT_MARKET_DATA_LONDON = "https://mt-market-data-client-api-v1.london.agiliumtrade.ai";
 
 export function getMetaApiToken(): string | null {
   const t =
@@ -19,6 +21,10 @@ export function getMetaApiProvisioningBaseUrl(): string {
 
 export function getMetaApiClientBaseUrl(): string {
   return (process.env.METAAPI_CLIENT_API_URL ?? DEFAULT_CLIENT_LONDON).replace(/\/$/, "");
+}
+
+export function getMetaApiMarketDataBaseUrl(): string {
+  return (process.env.METAAPI_MARKET_DATA_URL ?? DEFAULT_MARKET_DATA_LONDON).replace(/\/$/, "");
 }
 
 export function getMetaApiDefaultRegion(): string {

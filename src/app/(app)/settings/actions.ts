@@ -72,6 +72,7 @@ export async function addWatchlistItem(
 
   if (error) return { error: error.message };
   revalidatePath("/settings");
+  revalidatePath("/watchlist");
   return {};
 }
 
@@ -89,6 +90,7 @@ export async function removeWatchlistItem(id: string): Promise<{ error?: string 
 
   if (error) return { error: error.message };
   revalidatePath("/settings");
+  revalidatePath("/watchlist");
   return {};
 }
 

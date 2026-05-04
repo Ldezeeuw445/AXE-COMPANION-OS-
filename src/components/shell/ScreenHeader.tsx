@@ -22,7 +22,9 @@ export function ScreenHeader({
             {title}
           </h1>
           {subtitle ? (
-            <p className="mt-0.5 truncate text-[11px] text-tos-muted">{subtitle}</p>
+            <p className="mt-0.5 max-w-full whitespace-normal break-words text-[11px] leading-snug text-tos-muted">
+              {subtitle}
+            </p>
           ) : null}
         </div>
       </div>

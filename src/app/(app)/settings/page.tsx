@@ -52,7 +52,7 @@ export default async function SettingsPage() {
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
           A short name so AXE can reference your account in conversation — e.g. &quot;FTMO Challenge&quot; or &quot;Live IC Markets&quot;.
-          Balance, equity, margin and open positions are pulled live from TradingOS automatically — no input needed.
+          AXE uses your connected MT5 account (MetaApi cloud) to understand balance, equity, margin, trades and open positions — no manual entry.
         </p>
         <div className="mt-3">
           <AccountNameEditor initialValue={accountName} />
@@ -88,8 +88,7 @@ export default async function SettingsPage() {
           My watchlist
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          TradingOS syncs your active watches automatically. Add extra pairs here for instruments
-          you follow outside the terminal — AXE merges both lists on every message.
+          AXE uses your watchlist to filter chat context, news, macro and alerts. Add the pairs you care about most.
         </p>
         <div className="mt-3">
           <WatchlistManager items={watchlist} />

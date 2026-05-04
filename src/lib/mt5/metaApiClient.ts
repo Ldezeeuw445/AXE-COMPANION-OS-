@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import {
   getMetaApiClientBaseUrl,
   getMetaApiDefaultRegion,
+  getMetaApiMarketDataBaseUrl,
   getMetaApiProvisioningBaseUrl,
   getMetaApiToken,
 } from "@/lib/mt5/metaApiEnv";
@@ -280,4 +281,43 @@ export async function clientGetHistoryDealsRange(
 
 export function defaultRegionForProvisioning(): string {
   return getMetaApiDefaultRegion();
+}
+
+export type MetaApiCandle = {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+/** OHLC from MT5 terminal via MetaApi market-data host (not the trade REST host). */
+export async function clientGetHistoricalCandles(
+  accountId: string,
+  symbol: string,
+  timeframe: string,
+  limit: number,
+): Promise<MetaApiCandle[]> {
+  const base = getMetaApiMarketDataBaseUrl();
+  const sym = encodeURIComponent(symbol);
+  const tf = encodeURIComponent(timeframe);
+  const lim = Math.min(Math.max(1, limit), 1000);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/historical-market-data/symbols/${sym}/timeframes/${tf}/candles?limit=${lim}`;
+  const res = await fetchWithTimeout(url, {
+    method: "GET",
+    headers: authHeadersGet(),
+    timeoutMs: 120_000,
+  });
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new MetaApiRequestError(classifyHttpStatus(res.status), `Candles ${res.status}`, res.status, body);
+  }
+  if (!Array.isArray(body)) return [];
+  return (body as MetaApiCandle[]).map((c) => ({
+    time: String(c.time ?? ""),
+    open: Number(c.open) || 0,
+    high: Number(c.high) || 0,
+    low: Number(c.low) || 0,
+    close: Number(c.close) || 0,
+  }));
 }

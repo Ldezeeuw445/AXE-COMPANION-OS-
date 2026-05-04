@@ -1,0 +1,14 @@
+import { PositionsScreen } from "@/components/positions/PositionsScreen";
+import { loadPositionsPageData } from "@/lib/broker/loadPositionsPageData";
+
+export default async function PositionsPage() {
+  const data = await loadPositionsPageData();
+  return (
+    <PositionsScreen
+      positions={data.positions}
+      providerStatus={data.providerStatus}
+      error={data.error}
+      hint={data.hint}
+    />
+  );
+}

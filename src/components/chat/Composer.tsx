@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useRef, useCallback, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mic, MicOff, Paperclip, Send, X, ImageIcon, ChevronRight } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
@@ -27,8 +27,13 @@ type ComposerProps = {
   showQuota?: boolean;
 };
 
-export function Composer({ initialQuota = null, showQuota = true }: ComposerProps) {
+function ComposerFallback() {
+  return <div className="mt-3 h-24 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03]" aria-hidden />;
+}
+
+function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +56,20 @@ export function Composer({ initialQuota = null, showQuota = true }: ComposerProp
     setSymbol(localStorage.getItem(LS_SYMBOL) ?? "");
     setTf(localStorage.getItem(LS_TF) ?? "");
   }, []);
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (!q) return;
+    const decoded = decodeURIComponent(q);
+    setValue((prev) => (prev.trim() ? prev : decoded));
+    if (typeof window !== "undefined") {
+      const u = new URL(window.location.href);
+      if (u.searchParams.has("q")) {
+        u.searchParams.delete("q");
+        window.history.replaceState({}, "", `${u.pathname}${u.search}${u.hash}`);
+      }
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     setQuota(initialQuota);
@@ -84,9 +103,11 @@ export function Composer({ initialQuota = null, showQuota = true }: ComposerProp
   function commitSymbol() {
     const upper = symbolDraft.trim().toUpperCase();
     setSymbol(upper);
-    upper
-      ? localStorage.setItem(LS_SYMBOL, upper)
-      : localStorage.removeItem(LS_SYMBOL);
+    if (upper) {
+      localStorage.setItem(LS_SYMBOL, upper);
+    } else {
+      localStorage.removeItem(LS_SYMBOL);
+    }
     setEditingSymbol(false);
   }
 
@@ -94,9 +115,11 @@ export function Composer({ initialQuota = null, showQuota = true }: ComposerProp
     const idx = tf ? TIMEFRAMES.indexOf(tf) : -1;
     const next = idx === TIMEFRAMES.length - 1 ? "" : (TIMEFRAMES[idx + 1] ?? "");
     setTf(next);
-    next
-      ? localStorage.setItem(LS_TF, next)
-      : localStorage.removeItem(LS_TF);
+    if (next) {
+      localStorage.setItem(LS_TF, next);
+    } else {
+      localStorage.removeItem(LS_TF);
+    }
   }
 
   function clearContext() {
@@ -383,5 +406,13 @@ export function Composer({ initialQuota = null, showQuota = true }: ComposerProp
         </p>
       ) : null}
     </div>
+  );
+}
+
+export function Composer(props: ComposerProps) {
+  return (
+    <Suspense fallback={<ComposerFallback />}>
+      <ComposerInner {...props} />
+    </Suspense>
   );
 }
