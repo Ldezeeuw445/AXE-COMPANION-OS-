@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
 import {
   createBrokerAccountAction,
+  deleteBrokerAccountAction,
   setActiveAccountAction,
   type CreateBrokerResult,
 } from "@/app/actions/brokerAccounts";
@@ -65,6 +66,21 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
   async function onSetActive(id: string | null) {
     startTransition(async () => {
       const r = await setActiveAccountAction(id);
+      if (!r.error) router.refresh();
+      else alert(r.error);
+    });
+  }
+
+  async function onRemoveAccount(id: string) {
+    if (
+      !confirm(
+        "Remove this account from AXE? This deletes synced trades and journal tags for this account (MetaApi cloud is removed if still linked).",
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const r = await deleteBrokerAccountAction(id);
       if (!r.error) router.refresh();
       else alert(r.error);
     });
@@ -245,18 +261,28 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
                     ) : null}
                     <p className="mt-1 text-[10px] text-tos-dim/80">Added {formatDate(a.created_at)}</p>
                   </div>
-                  {!active ? (
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    {!active ? (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => void onSetActive(a.id)}
+                        className="rounded-xl border border-tos-warm/30 bg-tos-warm/10 px-3 py-1.5 text-[10px] font-semibold text-tos-warm hover:bg-tos-warm/20 disabled:opacity-50"
+                      >
+                        Set active
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-tos-dim">In use for chat &amp; journal</span>
+                    )}
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => void onSetActive(a.id)}
-                      className="shrink-0 rounded-xl border border-tos-warm/30 bg-tos-warm/10 px-3 py-1.5 text-[10px] font-semibold text-tos-warm hover:bg-tos-warm/20 disabled:opacity-50"
+                      onClick={() => void onRemoveAccount(a.id)}
+                      className="rounded-lg border border-red-500/25 px-2 py-1 text-[10px] font-medium text-red-300/90 hover:bg-red-500/10 disabled:opacity-50"
                     >
-                      Set active
+                      Remove account
                     </button>
-                  ) : (
-                    <span className="text-[10px] text-tos-dim">In use for chat &amp; journal</span>
-                  )}
+                  </div>
                 </div>
                 {kind === "cloud" ? <Mt5CloudAccountActions accountId={a.id} /> : null}
               </GlassPanel>

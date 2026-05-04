@@ -16,6 +16,9 @@ export default async function JournalPage({ searchParams }: PageProps) {
     <JournalScreen
       entries={data.entries}
       tradeHighlight={data.tradeHighlight}
+      journalTrades={data.journalTrades}
+      analytics={data.analytics}
+      activeAccountId={data.activeAccountId}
       loadError={data.loadError}
     />
   );

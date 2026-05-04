@@ -6,11 +6,16 @@ import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import type { JournalEntryRow, TradeHighlight } from "@/lib/journal/loadJournalPageData";
+import type { JournalAnalytics } from "@/lib/journal/computeJournalAnalytics";
 import { TradeJournalLabelForm } from "@/components/journal/TradeJournalLabelForm";
+import { JournalAnalyticsPanel } from "@/components/journal/JournalAnalyticsPanel";
 
 type Props = {
   entries: JournalEntryRow[];
   tradeHighlight: TradeHighlight | null;
+  journalTrades: TradeHighlight[];
+  analytics: JournalAnalytics | null;
+  activeAccountId: string | null;
   loadError: string | null;
 };
 
@@ -25,13 +30,24 @@ function fmt(iso: string) {
   }
 }
 
-export function JournalScreen({ entries, tradeHighlight, loadError }: Props) {
+export function JournalScreen({
+  entries,
+  tradeHighlight,
+  journalTrades,
+  analytics,
+  activeAccountId,
+  loadError,
+}: Props) {
+  const rowsToShow = tradeHighlight
+    ? journalTrades.filter((t) => t.id !== tradeHighlight.id)
+    : journalTrades;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
       <ScreenHeader
         title="Journal"
-        subtitle="Notes plus trade context — labels from trade_journal_labels when you open a trade from History."
-        left={<BookOpen className="h-6 w-6 text-tos-warm/80" aria-hidden />}
+        subtitle="Preset tags per trade, analytics, and free-form notes — same ledger as History."
+        left={<BookOpen className="h-6 w-6 text-cyan-400/80" aria-hidden />}
         right={<Badge variant="warm">Supabase</Badge>}
       />
 
@@ -41,10 +57,22 @@ export function JournalScreen({ entries, tradeHighlight, loadError }: Props) {
         </p>
       ) : null}
 
+      {!activeAccountId ? (
+        <GlassPanel className="!p-4 text-sm text-tos-muted">
+          Set an <strong className="text-tos-text">active account</strong> on{" "}
+          <Link href="/accounts" className="text-cyan-400 hover:underline">
+            Accounts
+          </Link>{" "}
+          to load trades and journal analytics here.
+        </GlassPanel>
+      ) : null}
+
+      {analytics && activeAccountId ? <JournalAnalyticsPanel analytics={analytics} /> : null}
+
       {tradeHighlight ? (
         <GlassPanel className="!p-4">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-tos-muted">
-            Linked trade (from history)
+            Open from history
           </p>
           <p className="mt-2 text-sm text-tos-text">
             <span className="font-semibold">{tradeHighlight.symbol}</span>{" "}
@@ -61,30 +89,61 @@ export function JournalScreen({ entries, tradeHighlight, loadError }: Props) {
             ) : null}
           </p>
           <p className="mt-2 text-xs text-tos-muted">
-            Current: {tradeHighlight.label ?? "—"}
+            Current tag: {tradeHighlight.label ?? "—"}
             {tradeHighlight.note ? ` — ${tradeHighlight.note}` : ""}
           </p>
           <TradeJournalLabelForm trade={tradeHighlight} />
-          <Link
-            href="/history"
-            className="mt-3 inline-block text-xs text-tos-warm hover:underline"
-          >
-            ← Back to history
+          <Link href="/journal" className="mt-3 inline-block text-xs text-cyan-400 hover:underline">
+            ← All journal trades
           </Link>
         </GlassPanel>
       ) : null}
 
-      {entries.length === 0 ? (
-        <GlassPanel className="!py-12 text-center text-sm text-tos-muted">
-          No free-form journal rows yet in <code className="text-[11px] text-tos-text">user_journal_entries</code>.
-          Trade-specific labels live on rows in{" "}
-          <Link href="/history" className="text-tos-warm hover:underline">
-            History
+      {activeAccountId && rowsToShow.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+            Trades ({journalTrades.length} recent)
+          </p>
+          {rowsToShow.map((t) => (
+            <GlassPanel key={t.id} className="!p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-tos-text">{t.symbol}</span>
+                <span className={`text-sm font-medium ${t.pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                  {t.pnl.toFixed(2)}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[10px] text-tos-dim">
+                <span className="capitalize">{t.side}</span>
+                {t.close_time ? <> · {fmt(t.close_time)}</> : null}
+                {t.label ? (
+                  <>
+                    {" "}
+                    · <span className="text-cyan-300/90">Tag: {t.label}</span>
+                  </>
+                ) : null}
+              </p>
+              <TradeJournalLabelForm trade={t} compact />
+            </GlassPanel>
+          ))}
+        </div>
+      ) : activeAccountId && journalTrades.length === 0 && !tradeHighlight ? (
+        <GlassPanel className="!py-8 text-center text-sm text-tos-muted">
+          No closed trades in <code className="text-[11px] text-tos-text">broker_trades</code> for the active account
+          yet. Sync from{" "}
+          <Link href="/accounts" className="text-cyan-400 hover:underline">
+            Accounts
           </Link>{" "}
-          (journal link per trade).
+          or post via ingest.
+        </GlassPanel>
+      ) : null}
+
+      {entries.length === 0 ? (
+        <GlassPanel className="!py-8 text-center text-sm text-tos-muted">
+          No free-form rows in <code className="text-[11px] text-tos-text">user_journal_entries</code> yet.
         </GlassPanel>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Free-form notes</p>
           {entries.map((e) => (
             <GlassPanel key={e.id} className="!p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -94,9 +153,7 @@ export function JournalScreen({ entries, tradeHighlight, loadError }: Props) {
               {e.rating ? (
                 <p className="mt-1 text-[10px] uppercase text-tos-muted">Rating: {e.rating}</p>
               ) : null}
-              <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-tos-muted">
-                {e.notes}
-              </p>
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-tos-muted">{e.notes}</p>
             </GlassPanel>
           ))}
         </div>

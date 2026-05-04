@@ -18,7 +18,7 @@ export function ScreenHeader({
       <div className="flex min-w-0 items-start gap-3">
         {left ? <div className="pt-0.5">{left}</div> : null}
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold tracking-tight text-tos-text">
+          <h1 className="truncate text-lg font-bold uppercase tracking-[0.12em] text-cyan-400">
             {title}
           </h1>
           {subtitle ? (

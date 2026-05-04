@@ -70,17 +70,8 @@ export function Mt5CloudConnectForm() {
           Sent once to MetaApi over HTTPS. Never stored in Supabase or browser storage.
         </p>
       </div>
-      <div>
-        <label className="text-[10px] uppercase tracking-wider text-tos-dim" htmlFor="cloud-region">
-          Region
-        </label>
-        <input
-          id="cloud-region"
-          name="region"
-          defaultValue="london"
-          className="tos-neu-inset mt-1 w-full rounded-2xl px-3 py-2.5 text-sm text-tos-text"
-        />
-      </div>
+      <input type="hidden" name="region" value="london" />
+      <p className="text-[10px] text-tos-dim">MetaApi region is fixed to London for this app build.</p>
       <label className="flex cursor-pointer items-start gap-2 text-[11px] text-tos-muted">
         <input type="checkbox" name="readOnlyConfirm" className="mt-0.5 rounded border-white/20" required />
         <span>
