@@ -5,9 +5,9 @@
  * Bull/bear stay readable on phones without becoming candy-bright.
  */
 export const CHART_THEME = {
-  background: "#03070C",
+  background: "#0A0F14",
   textColor: "rgba(208,220,234,0.92)",
-  grid: "rgba(110,170,200,0.06)",
+  grid: "rgba(110,170,200,0.05)",
   crosshair: "rgba(140,200,220,0.48)",
   borderColor: "rgba(110,170,200,0.10)",
   // Bull: vibrant teal-green close to AXE accent without going neon.
