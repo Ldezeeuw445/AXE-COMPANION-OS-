@@ -11,7 +11,7 @@ type VaultClientProps = {
   media: VaultMediaItem[];
 };
 
-type Tab = "all" | "notes" | "media" | "voice";
+type Tab = "all" | "axe" | "notes" | "media" | "voice";
 
 export function VaultClient({ notes, media }: VaultClientProps) {
   const [q, setQ] = useState("");
@@ -26,12 +26,24 @@ export function VaultClient({ notes, media }: VaultClientProps) {
     [media]
   );
 
+  const axeNotes = useMemo(
+    () => notes.filter((n) => (n.tags ?? []).map((t) => t.toLowerCase()).includes("axe")),
+    [notes],
+  );
+
   const filteredNotes = useMemo(() => {
     return notes.filter((n) => {
       const hay = `${n.title} ${n.body} ${n.tags.join(" ")} ${n.symbol ?? ""}`.toLowerCase();
       return hay.includes(q.toLowerCase());
     });
   }, [notes, q]);
+
+  const filteredAxe = useMemo(() => {
+    return axeNotes.filter((n) => {
+      const hay = `${n.title} ${n.body} ${n.tags.join(" ")} ${n.symbol ?? ""}`.toLowerCase();
+      return hay.includes(q.toLowerCase());
+    });
+  }, [axeNotes, q]);
 
   const filteredVisual = useMemo(() => {
     return visualItems.filter((m) => {
@@ -47,6 +59,7 @@ export function VaultClient({ notes, media }: VaultClientProps) {
     });
   }, [voiceItems, q]);
 
+  const showAxe = tab === "axe";
   const showNotes = tab === "all" || tab === "notes";
   const showVisual = tab === "all" || tab === "media";
   const showVoice = tab === "all" || tab === "voice";
@@ -64,6 +77,7 @@ export function VaultClient({ notes, media }: VaultClientProps) {
         {(
           [
             ["all", "All"],
+            ["axe", `AXE${axeNotes.length ? ` (${axeNotes.length})` : ""}`],
             ["notes", "Notes"],
             ["media", "Images"],
             ["voice", "Voice"],
@@ -85,6 +99,44 @@ export function VaultClient({ notes, media }: VaultClientProps) {
       </div>
 
       <div className="flex flex-col gap-4">
+        {showAxe
+          ? filteredAxe.map((n) => (
+              <GlassPanel key={n.id} className="p-4">
+                <div className="flex items-start gap-3">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--tos-accent-cyan)]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="long">AXE</Badge>
+                      <h3 className="text-sm font-medium text-tos-text">{n.title}</h3>
+                      {n.symbol ? <Badge variant="neutral">{n.symbol}</Badge> : null}
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap text-xs text-tos-muted">{n.body}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {n.tags
+                        .filter((t) => t.toLowerCase() !== "axe")
+                        .map((t) => (
+                          <span
+                            key={t}
+                            className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-tos-dim"
+                          >
+                            #{t}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              </GlassPanel>
+            ))
+          : null}
+        {showAxe && filteredAxe.length === 0 ? (
+          <GlassPanel className="p-4 text-center">
+            <p className="text-sm font-medium text-tos-text">No AXE replies saved yet</p>
+            <p className="mt-1 text-xs text-tos-muted">
+              In Chat, tap the bookmark on any AXE reply to save it here.
+            </p>
+          </GlassPanel>
+        ) : null}
+
         {showNotes
           ? filteredNotes.map((n) => (
               <GlassPanel key={n.id} className="p-4">

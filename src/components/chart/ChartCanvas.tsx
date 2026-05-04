@@ -5,6 +5,7 @@ import {
   CandlestickSeries,
   ColorType,
   CrosshairMode,
+  LineSeries,
   LineStyle,
   createChart,
 } from "lightweight-charts";
@@ -13,12 +14,21 @@ import type {
   IChartApi,
   IPriceLine,
   ISeriesApi,
+  LineData,
+  MouseEventParams,
   UTCTimestamp,
 } from "lightweight-charts";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartOverlayRow } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME } from "@/components/chart/chartTheme";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
+import {
+  FIB_LEVELS,
+  type AnnotationPoint,
+  type ChartAnnotation,
+} from "@/components/chart/annotations/types";
+
+type DrawingMode = "fib_retracement" | "trendline" | null;
 
 type Props = {
   /** Initial OHLC dataset; replaced on symbol/timeframe change. */
@@ -26,6 +36,10 @@ type Props = {
   overlays: ChartOverlayRow[];
   /** Used to format right-axis prices (digits) and entry/SL/TP price labels. */
   symbol: string;
+  annotations?: ChartAnnotation[];
+  drawingMode?: DrawingMode;
+  /** Called when a chart point is tapped while in drawing mode. */
+  onPointClick?: (point: AnnotationPoint) => void;
 };
 
 export type ChartCanvasHandle = {
@@ -53,14 +67,23 @@ function buildSeriesData(candles: MetaApiCandle[]): CandlestickData[] {
 }
 
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
-  { candles, overlays, symbol },
+  { candles, overlays, symbol, annotations = [], drawingMode = null, onPointClick },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const lastBarRef = useRef<CandlestickData | null>(null);
-  const priceLinesRef = useRef<IPriceLine[]>([]);
+  const positionLinesRef = useRef<IPriceLine[]>([]);
+  const annotationLinesRef = useRef<IPriceLine[]>([]);
+  const annotationLineSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
+  const drawingModeRef = useRef<DrawingMode>(drawingMode);
+  const onPointClickRef = useRef<typeof onPointClick>(onPointClick);
+
+  useEffect(() => {
+    drawingModeRef.current = drawingMode;
+    onPointClickRef.current = onPointClick;
+  }, [drawingMode, onPointClick]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -121,6 +144,18 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
     chart.timeScale().fitContent();
 
+    const handleClick = (params: MouseEventParams) => {
+      const mode = drawingModeRef.current;
+      const cb = onPointClickRef.current;
+      if (!mode || !cb) return;
+      const ser = seriesRef.current;
+      if (!ser || !params.point || params.time == null) return;
+      const price = ser.coordinateToPrice(params.point.y);
+      if (price == null || Number.isNaN(price)) return;
+      cb({ time: Number(params.time), price: Number(price) });
+    };
+    chart.subscribeClick(handleClick);
+
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
     });
@@ -129,14 +164,35 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
     return () => {
       ro.disconnect();
-      for (const pl of priceLinesRef.current) {
+      try {
+        chart.unsubscribeClick(handleClick);
+      } catch {
+        /* ignore */
+      }
+      for (const pl of positionLinesRef.current) {
         try {
           series.removePriceLine(pl);
         } catch {
-          /* removed already */
+          /* ignore */
         }
       }
-      priceLinesRef.current = [];
+      positionLinesRef.current = [];
+      for (const pl of annotationLinesRef.current) {
+        try {
+          series.removePriceLine(pl);
+        } catch {
+          /* ignore */
+        }
+      }
+      annotationLinesRef.current = [];
+      for (const ls of annotationLineSeriesRef.current) {
+        try {
+          chart.removeSeries(ls);
+        } catch {
+          /* ignore */
+        }
+      }
+      annotationLineSeriesRef.current = [];
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -144,23 +200,24 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     };
   }, [candles, symbol]);
 
+  // Render open-position overlays.
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
 
-    for (const pl of priceLinesRef.current) {
+    for (const pl of positionLinesRef.current) {
       try {
         series.removePriceLine(pl);
       } catch {
         /* ignore */
       }
     }
-    priceLinesRef.current = [];
+    positionLinesRef.current = [];
 
     overlays.forEach((o, idx) => {
       const sideTitle = o.side === "buy" ? "Long" : o.side === "sell" ? "Short" : o.side;
       if (o.entryPrice != null && o.entryPrice > 0) {
-        priceLinesRef.current.push(
+        positionLinesRef.current.push(
           series.createPriceLine({
             price: o.entryPrice,
             title: `${sideTitle} ${o.volume}${overlays.length > 1 ? ` · #${idx + 1}` : ""}`,
@@ -171,7 +228,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         );
       }
       if (o.stopLoss != null && o.stopLoss > 0) {
-        priceLinesRef.current.push(
+        positionLinesRef.current.push(
           series.createPriceLine({
             price: o.stopLoss,
             title: "SL",
@@ -182,7 +239,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         );
       }
       if (o.takeProfit != null && o.takeProfit > 0) {
-        priceLinesRef.current.push(
+        positionLinesRef.current.push(
           series.createPriceLine({
             price: o.takeProfit,
             title: "TP",
@@ -194,6 +251,81 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       }
     });
   }, [overlays]);
+
+  // Render user annotations (fib + trendline + horizontal levels).
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    // Tear down previous annotation render.
+    for (const pl of annotationLinesRef.current) {
+      try {
+        series.removePriceLine(pl);
+      } catch {
+        /* ignore */
+      }
+    }
+    annotationLinesRef.current = [];
+    for (const ls of annotationLineSeriesRef.current) {
+      try {
+        chart.removeSeries(ls);
+      } catch {
+        /* ignore */
+      }
+    }
+    annotationLineSeriesRef.current = [];
+
+    annotations.forEach((ann, idx) => {
+      if (ann.type === "fib_retracement" && ann.points.length >= 2) {
+        const a = ann.points[0];
+        const b = ann.points[1];
+        const high = Math.max(a.price, b.price);
+        const low = Math.min(a.price, b.price);
+        const range = high - low;
+        if (range <= 0) return;
+        for (const lvl of FIB_LEVELS) {
+          const price = high - range * lvl;
+          annotationLinesRef.current.push(
+            series.createPriceLine({
+              price,
+              title: `FIB ${(lvl * 100).toFixed(1)}%`,
+              color:
+                lvl === 0 || lvl === 1
+                  ? "rgba(168,180,196,0.6)"
+                  : "rgba(244,191,99,0.55)",
+              lineWidth: 1,
+              lineStyle: lvl === 0.5 || lvl === 0.618 ? LineStyle.Solid : LineStyle.Dotted,
+            }),
+          );
+        }
+      } else if (ann.type === "trendline" && ann.points.length >= 2) {
+        const ls = chart.addSeries(LineSeries, {
+          color: "rgba(110,178,252,0.85)",
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        const lineData: LineData[] = [...ann.points]
+          .sort((p1, p2) => p1.time - p2.time)
+          .map((p) => ({ time: p.time as UTCTimestamp, value: p.price }));
+        ls.setData(lineData);
+        annotationLineSeriesRef.current.push(ls);
+      } else if (ann.type === "horizontal_level" && ann.points.length >= 1) {
+        annotationLinesRef.current.push(
+          series.createPriceLine({
+            price: ann.points[0].price,
+            title: `Level ${idx + 1}`,
+            color: "rgba(168,180,196,0.55)",
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+          }),
+        );
+      }
+    });
+  }, [annotations]);
 
   useImperativeHandle(
     ref,
@@ -241,8 +373,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
   return (
     <div
       ref={hostRef}
-      className="relative h-[min(64vh,560px)] min-h-[320px] w-full overflow-hidden rounded-2xl border border-white/[0.06]"
-      style={{ background: CHART_THEME.background }}
+      className="absolute inset-0 h-full w-full"
+      style={{
+        background: CHART_THEME.background,
+        cursor: drawingMode ? "crosshair" : undefined,
+      }}
     />
   );
 });
