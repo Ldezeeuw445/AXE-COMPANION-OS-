@@ -6,66 +6,35 @@ import {
   clientGetPositions,
   clientGetSymbolPrice,
   MetaApiRequestError,
-  type MetaApiCandle,
 } from "@/lib/mt5/metaApiClient";
 import { metaApiTimeframeFromKey, normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
+import type {
+  ChartLiveEvent,
+  ChartLiveStatus,
+  LivePositionPayload,
+} from "@/lib/chart/liveContract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Server-Sent Events live channel for the chart.
+ * SSE fallback for the chart live stream.
  *
- * Architecture:
- *   MetaApi REST (current-price, positions, last candle)
- *     → server SSE loop here
- *     → browser EventSource → ChartCanvas live patch
+ * Same normalized event contract as the Cloudflare ChartLiveRoom websocket
+ * (see src/lib/chart/liveContract.ts). The browser uses one parser for both.
  *
- * Why SSE instead of socket.io?
- * - Vercel-friendly: no long-lived process required.
- * - Loop bounded by `MAX_DURATION_MS`; the client auto-reconnects.
- * - Falls back to plain REST in the page loader when SSE is unavailable.
- *
- * Future hardening: swap REST polling for MetaApi streaming SDK in a long-running worker
- * and forward via Supabase Realtime/broadcast — public payload shape stays the same.
+ * The SSE keeps the system production-runnable when no Cloudflare edge is
+ * deployed (or when WS is blocked by a network/proxy). Bounded by
+ * MAX_DURATION_MS — the client auto-reconnects.
  */
 
 const TICK_INTERVAL_MS = 2_500;
 const CANDLE_INTERVAL_MS = 12_000;
 const POSITIONS_INTERVAL_MS = 8_000;
 const MAX_DURATION_MS = 50_000;
+const DELAYED_THRESHOLD_FAILURES = 3;
 
-type SsePayload =
-  | { type: "ready"; account: { id: string; label: string }; brokerSymbol: string; timeframe: string }
-  | {
-      type: "tick";
-      symbol: string;
-      bid: number | null;
-      ask: number | null;
-      mid: number | null;
-      time: string | null;
-    }
-  | { type: "candle-update"; candle: MetaApiCandle }
-  | {
-      type: "positions";
-      total: number;
-      onSymbol: Array<{
-        id: string;
-        side: string;
-        symbol: string;
-        volume: number;
-        entryPrice: number | null;
-        currentPrice: number | null;
-        profit: number | null;
-        stopLoss: number | null;
-        takeProfit: number | null;
-        openTime: string | null;
-      }>;
-    }
-  | { type: "status"; status: "live" | "delayed" | "failed" | "connected"; reason?: string }
-  | { type: "ping" };
-
-function encodeSse(event: SsePayload): string {
+function encodeSse(event: ChartLiveEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
@@ -79,12 +48,13 @@ function mapSide(t: string | undefined): string {
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const accountIdParam = url.searchParams.get("account") ?? "";
-  const requestedSymbol = (url.searchParams.get("symbol") ?? "").trim().toUpperCase();
+  const requestedDisplaySymbol = (url.searchParams.get("symbol") ?? "").trim().toUpperCase();
+  const brokerSymbolParam = (url.searchParams.get("broker") ?? "").trim();
   const tfKey = normalizeChartTfKey(url.searchParams.get("tf") ?? undefined);
   const tf = metaApiTimeframeFromKey(tfKey);
 
   const supabase = await createServerSupabaseClient();
-  if (!supabase) return new Response("supabase-not-configured", { status: 503 });
+  if (!supabase) return new Response("supabase_not_configured", { status: 503 });
 
   const {
     data: { user },
@@ -92,12 +62,12 @@ export async function GET(request: NextRequest) {
   if (!user) return new Response("unauthorized", { status: 401 });
 
   if (!getMetaApiToken()) {
-    return new Response("provider-not-configured", { status: 503 });
+    return new Response("provider_not_configured", { status: 503 });
   }
 
   const { data: account } = await supabase
     .from("user_broker_accounts")
-    .select("id,label,connection_method,external_connection_id")
+    .select("id,connection_method,external_connection_id")
     .eq("user_id", user.id)
     .eq("id", accountIdParam)
     .maybeSingle();
@@ -108,13 +78,14 @@ export async function GET(request: NextRequest) {
     typeof account.external_connection_id !== "string" ||
     !account.external_connection_id
   ) {
-    return new Response("account-not-connected", { status: 404 });
+    return new Response("account_not_connected", { status: 404 });
   }
 
-  if (!requestedSymbol) {
-    return new Response("symbol-required", { status: 400 });
+  if (!requestedDisplaySymbol) {
+    return new Response("symbol_required", { status: 400 });
   }
 
+  const brokerSymbol = brokerSymbolParam || requestedDisplaySymbol;
   const metaAccountId = account.external_connection_id;
 
   const stream = new ReadableStream<Uint8Array>({
@@ -123,7 +94,7 @@ export async function GET(request: NextRequest) {
       const startedAt = Date.now();
       let closed = false;
 
-      function send(p: SsePayload) {
+      function send(p: ChartLiveEvent) {
         if (closed) return;
         try {
           controller.enqueue(encoder.encode(encodeSse(p)));
@@ -146,26 +117,29 @@ export async function GET(request: NextRequest) {
 
       send({
         type: "ready",
-        account: { id: account.id as string, label: (account.label as string) ?? "MT5 Account" },
-        brokerSymbol: requestedSymbol,
+        userId: user.id,
+        accountId: account.id as string,
+        displaySymbol: requestedDisplaySymbol,
+        brokerSymbol,
         timeframe: tf,
+        source: "metaapi_mt5",
       });
 
       let lastTickAt = 0;
       let lastCandleAt = 0;
       let lastPositionsAt = 0;
       let consecutiveTickFailures = 0;
-      let lastStatus: "live" | "delayed" | "failed" | "connected" = "connected";
+      let lastStatus: ChartLiveStatus | null = null;
 
-      function setStatus(next: "live" | "delayed" | "failed" | "connected", reason?: string) {
+      function setStatus(next: ChartLiveStatus, reason?: string) {
         if (next === lastStatus) return;
         lastStatus = next;
-        send({ type: "status", status: next, reason });
+        send({ type: "live_status", status: next, reason });
       }
 
       while (!closed) {
         if (Date.now() - startedAt > MAX_DURATION_MS) {
-          send({ type: "ping" });
+          send({ type: "heartbeat" });
           close();
           break;
         }
@@ -175,29 +149,33 @@ export async function GET(request: NextRequest) {
         if (now - lastTickAt >= TICK_INTERVAL_MS) {
           lastTickAt = now;
           try {
-            const price = await clientGetSymbolPrice(metaAccountId, requestedSymbol);
+            const price = await clientGetSymbolPrice(metaAccountId, brokerSymbol);
             const mid =
               price.bid != null && price.ask != null
                 ? (price.bid + price.ask) / 2
                 : price.bid ?? price.ask;
             send({
               type: "tick",
-              symbol: requestedSymbol,
+              userId: user.id,
+              accountId: account.id as string,
+              displaySymbol: requestedDisplaySymbol,
+              brokerSymbol,
               bid: price.bid,
               ask: price.ask,
-              mid: mid != null ? Number(mid) : null,
-              time: price.brokerTime ?? price.time,
+              price: mid != null ? Number(mid) : null,
+              timestamp: price.brokerTime ?? price.time,
+              source: "metaapi_mt5",
             });
             consecutiveTickFailures = 0;
             setStatus("live");
           } catch (e) {
             consecutiveTickFailures += 1;
             if (e instanceof MetaApiRequestError && e.code === "not_found") {
-              setStatus("failed", "broker_symbol_not_found");
+              setStatus("error", "broker_symbol_not_found");
               close();
               break;
             }
-            if (consecutiveTickFailures >= 3) {
+            if (consecutiveTickFailures >= DELAYED_THRESHOLD_FAILURES) {
               setStatus("delayed", "tick_unavailable");
             }
           }
@@ -206,9 +184,20 @@ export async function GET(request: NextRequest) {
         if (now - lastCandleAt >= CANDLE_INTERVAL_MS) {
           lastCandleAt = now;
           try {
-            const candles = await clientGetHistoricalCandles(metaAccountId, requestedSymbol, tf, 2);
+            const candles = await clientGetHistoricalCandles(metaAccountId, brokerSymbol, tf, 2);
             const last = candles[candles.length - 1];
-            if (last) send({ type: "candle-update", candle: last });
+            if (last)
+              send({
+                type: "candle_update",
+                userId: user.id,
+                accountId: account.id as string,
+                displaySymbol: requestedDisplaySymbol,
+                brokerSymbol,
+                timeframe: tf,
+                candle: last,
+                patch: true,
+                source: "metaapi_mt5",
+              });
           } catch {
             /* ignore — tick stream still informative */
           }
@@ -218,8 +207,8 @@ export async function GET(request: NextRequest) {
           lastPositionsAt = now;
           try {
             const raw = (await clientGetPositions(metaAccountId, false)) as Record<string, unknown>[];
-            const onSymbol = raw
-              .filter((p) => String(p.symbol ?? "") === requestedSymbol)
+            const onSymbol: LivePositionPayload[] = raw
+              .filter((p) => String(p.symbol ?? "") === brokerSymbol)
               .map((p, i) => ({
                 id: String(p.id ?? p.positionId ?? i),
                 symbol: String(p.symbol ?? ""),
@@ -238,7 +227,14 @@ export async function GET(request: NextRequest) {
                 takeProfit: p.takeProfit != null ? Number(p.takeProfit) : null,
                 openTime: (p.time as string) ?? (p.updateTime as string) ?? null,
               }));
-            send({ type: "positions", total: raw.length, onSymbol });
+            send({
+              type: "positions_update",
+              userId: user.id,
+              accountId: account.id as string,
+              total: raw.length,
+              onSymbol,
+              source: "metaapi_mt5",
+            });
           } catch {
             /* keep stream alive */
           }

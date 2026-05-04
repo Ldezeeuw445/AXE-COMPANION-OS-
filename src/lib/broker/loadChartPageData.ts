@@ -180,7 +180,7 @@ export async function loadChartPageData(
       .maybeSingle(),
     supabase
       .from("user_broker_accounts")
-      .select("id,label,connection_method,external_connection_id,mt5_server,provider_status")
+      .select("id,label,connection_method,external_connection_id,mt5_server,provider_status,metadata")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
     listWatchlistItems(),
@@ -251,9 +251,22 @@ export async function loadChartPageData(
   }
 
   const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);
-  const knownAccountSymbols = Array.from(new Set([...fromPositions]));
+  const accountRaw = (accountsRows ?? []).find((r) => r.id === account.brokerAccountId);
+  const accountMetadata = (accountRaw?.metadata ?? {}) as { symbol_map?: Record<string, string> };
+  const symbolMap = accountMetadata.symbol_map ?? {};
+  const knownFromMetadata = Object.values(symbolMap).filter((s): s is string => typeof s === "string" && s.length > 0);
+  const knownAccountSymbols = Array.from(new Set([...fromPositions, ...knownFromMetadata]));
   const requested = normalizeSymbol(symbolParam) || allPositions[0]?.symbol || watchSyms[0] || DEFAULT_SYMBOL;
-  const resolution = resolveBrokerSymbol(requested, knownAccountSymbols);
+  const cachedBroker = symbolMap[requested];
+  const resolution = cachedBroker
+    ? {
+        brokerSymbol: cachedBroker,
+        displaySymbol: requested,
+        exact: cachedBroker === requested,
+        attempted: [requested, cachedBroker].filter((v, i, a) => a.indexOf(v) === i),
+        reason: cachedBroker === requested ? ("exact_match" as const) : ("suffix_variant" as const),
+      }
+    : resolveBrokerSymbol(requested, knownAccountSymbols);
 
   const symbolSet = new Set<string>([
     requested,
@@ -278,6 +291,16 @@ export async function loadChartPageData(
     );
     const last = candles.length > 0 ? candles[candles.length - 1]?.close ?? null : null;
     const lastTime = candles.length > 0 ? candles[candles.length - 1]?.time ?? null : null;
+
+    // Persist successful broker symbol resolution per account.
+    if (candles.length > 0 && symbolMap[requested] !== resolution.brokerSymbol) {
+      const nextMetadata = { ...accountMetadata, symbol_map: { ...symbolMap, [requested]: resolution.brokerSymbol } };
+      void supabase
+        .from("user_broker_accounts")
+        .update({ metadata: nextMetadata })
+        .eq("id", account.brokerAccountId)
+        .eq("user_id", user.id);
+    }
 
     if (candles.length === 0) {
       return {

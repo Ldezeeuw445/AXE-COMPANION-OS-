@@ -1,0 +1,85 @@
+/**
+ * Normalized realtime event contract shared between:
+ *  - Cloudflare ChartLiveRoom Durable Object websocket
+ *  - Next /api/chart/live SSE fallback
+ *  - Frontend useLiveChart hook
+ *
+ * Keep payload shapes identical across transports so the client only has one parser.
+ */
+
+export type LiveCandle = {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+};
+
+export type LivePositionPayload = {
+  id: string;
+  symbol: string;
+  side: "buy" | "sell" | string;
+  volume: number;
+  entryPrice: number | null;
+  currentPrice: number | null;
+  profit: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  openTime: string | null;
+};
+
+export type ChartLiveStatus = "live" | "delayed" | "reconnecting" | "offline" | "error";
+
+export type ChartLiveSource = "metaapi_mt5";
+
+export type ChartLiveEvent =
+  | {
+      type: "ready";
+      userId?: string;
+      accountId: string;
+      displaySymbol: string;
+      brokerSymbol: string;
+      timeframe: string;
+      source: ChartLiveSource;
+    }
+  | {
+      type: "tick";
+      userId?: string;
+      accountId: string;
+      displaySymbol: string;
+      brokerSymbol: string;
+      bid: number | null;
+      ask: number | null;
+      price: number | null;
+      timestamp: string | null;
+      source: ChartLiveSource;
+    }
+  | {
+      type: "candle_update";
+      userId?: string;
+      accountId: string;
+      displaySymbol: string;
+      brokerSymbol: string;
+      timeframe: string;
+      candle: LiveCandle;
+      patch: boolean;
+      source: ChartLiveSource;
+    }
+  | {
+      type: "positions_update";
+      userId?: string;
+      accountId: string;
+      total: number;
+      onSymbol: LivePositionPayload[];
+      source: ChartLiveSource;
+    }
+  | {
+      type: "live_status";
+      status: ChartLiveStatus;
+      reason?: string;
+      lastTickAt?: string | null;
+      lastCandleAt?: string | null;
+    }
+  | { type: "heartbeat" }
+  | { type: "error"; reason: string };

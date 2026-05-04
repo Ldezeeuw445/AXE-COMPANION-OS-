@@ -19,7 +19,12 @@ import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import type { ChartOverlayRow, ChartPageData } from "@/lib/broker/loadChartPageData";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
-import { useLiveChart, type LivePosition, type LiveStatus } from "@/components/chart/useLiveChart";
+import {
+  useLiveChart,
+  type LivePosition,
+  type LiveTransport,
+  type LiveUiStatus,
+} from "@/components/chart/useLiveChart";
 import { CHART_THEME } from "@/components/chart/chartTheme";
 
 type Props = {
@@ -56,7 +61,12 @@ function elapsedSince(iso: string | null): string | null {
   return `${Math.round(diff / 86_400)}d open`;
 }
 
-function statusPillCopy(live: LiveStatus, providerStatus: string | null, hasCandles: boolean): {
+function statusPillCopy(
+  live: LiveUiStatus,
+  transport: LiveTransport,
+  providerStatus: string | null,
+  hasCandles: boolean,
+): {
   label: string;
   className: string;
   dot: string;
@@ -75,18 +85,32 @@ function statusPillCopy(live: LiveStatus, providerStatus: string | null, hasCand
       dot: "bg-amber-300/85",
     };
   }
-  if (live === "live") {
+  if (live === "live_stream") {
     return {
-      label: "Live",
+      label: transport === "ws" ? "Live stream" : "Live",
       className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95",
       dot: "bg-emerald-300 animate-pulse",
     };
   }
-  if (live === "delayed") {
+  if (live === "delayed_polling") {
     return {
-      label: "Delayed",
+      label: transport === "sse" ? "Delayed polling" : "Delayed",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85",
+    };
+  }
+  if (live === "reconnecting") {
+    return {
+      label: "Reconnecting",
+      className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
+      dot: "bg-amber-300/85 animate-pulse",
+    };
+  }
+  if (live === "offline") {
+    return {
+      label: "Offline",
+      className: "border-white/12 bg-white/[0.04] text-tos-muted",
+      dot: "bg-white/30",
     };
   }
   if (live === "connecting") {
@@ -200,9 +224,10 @@ export function ChartScreen({ data }: Props) {
     [],
   );
 
-  const { status: liveStatus } = useLiveChart({
+  const { status: liveStatus, transport: liveTransport } = useLiveChart({
     enabled: liveEnabled,
     accountId,
+    displaySymbol: data.symbol,
     brokerSymbol: data.brokerSymbol,
     timeframeKey: data.timeframeKey,
     onTick,
@@ -233,7 +258,7 @@ export function ChartScreen({ data }: Props) {
     data.totalPositions,
   ]);
 
-  const statusPill = statusPillCopy(liveStatus, data.providerStatus, data.candles.length > 0);
+  const statusPill = statusPillCopy(liveStatus, liveTransport, data.providerStatus, data.candles.length > 0);
 
   const goSymbol = useCallback(
     (sym: string) => {
@@ -556,7 +581,10 @@ export function ChartScreen({ data }: Props) {
           </div>
           <div>
             <dt className="text-tos-dim">Live stream</dt>
-            <dd className="text-tos-text capitalize">{liveStatus}</dd>
+            <dd className="text-tos-text">
+              {statusPill.label}
+              {liveTransport !== "off" ? ` · ${liveTransport.toUpperCase()}` : ""}
+            </dd>
           </div>
           <div>
             <dt className="text-tos-dim">Attempted symbols</dt>
