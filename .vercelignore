@@ -1,0 +1,24 @@
+# Cloudflare worker project deploys via wrangler, not Vercel.
+/cloudflare/
+
+# Node MetaApi streamer deploys to its own host (Railway/Fly/Render/VPS).
+/node/
+
+# Docs and Supabase migrations are not part of the Next.js bundle.
+/docs/
+/supabase/
+
+# Repo / tooling artifacts that must never reach the build context.
+/.cursor/
+/.claude/
+/.local/
+/.agents/
+/.canvas/
+/artifacts/
+/attached_assets/
+/exports/
+/screenshots/
+/skills/
+/skills-lock.json
+/app-icons/
+*.zip

@@ -14,6 +14,9 @@
     "seed:axe-knowledge": "node scripts/seed-axe-knowledge.mjs",
     "verify:legal": "node scripts/check-legal-routes.mjs"
   },
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.100.1",
