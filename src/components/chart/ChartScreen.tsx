@@ -631,8 +631,8 @@ export function ChartScreen({ data }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Compact top row */}
-      <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-white/[0.04] bg-tos-bg/80 py-2 backdrop-blur">
+      {/* Compact top row — symbol+TF (left), LIVE pill (center), AXE button (right) */}
+      <div className="sticky top-0 z-30 grid grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] bg-tos-bg/80 py-2 backdrop-blur">
         <div className="flex shrink-0 items-baseline gap-1.5">
           <span className="font-mono text-sm font-semibold uppercase tracking-wider text-tos-text">
             {data.symbol}
@@ -647,11 +647,13 @@ export function ChartScreen({ data }: Props) {
           <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
           {statusPill.label}
         </span>
-        <AxeContextToolbar
-          title="Chart"
-          subtitle={`${data.symbol} · ${tfLabel}`}
-          sections={toolbarSections}
-        />
+        <div className="flex justify-end">
+          <AxeContextToolbar
+            title="Chart"
+            subtitle={`${data.symbol} · ${tfLabel}`}
+            sections={toolbarSections}
+          />
+        </div>
       </div>
 
       {/* Drawing mode hint */}
@@ -691,15 +693,15 @@ export function ChartScreen({ data }: Props) {
 
         {/* In-chart price overlay (top-left) */}
         <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%]">
-          <p className="font-mono text-2xl font-semibold tracking-tight text-tos-text drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)] sm:text-3xl">
+          <p className="font-mono text-3xl font-bold tracking-tight text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.7)] sm:text-4xl">
             {lastPriceText}
           </p>
-          <p className="mt-0.5 text-[10px] uppercase tracking-[0.16em] text-tos-dim">
+          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/75">
             {tfLabel} close · MetaApi MT5
             {accountLabel ? ` · ${accountLabel}` : ""}
           </p>
           {liveSummary ? (
-            <p className="mt-1 inline-block rounded-full border border-white/10 bg-black/40 px-2 py-0.5 text-[9.5px] uppercase tracking-wider text-tos-muted">
+            <p className="mt-1.5 inline-block rounded-full border border-cyan-400/20 bg-black/55 px-2 py-0.5 text-[9.5px] uppercase tracking-wider text-cyan-100/85 backdrop-blur">
               {liveSummary}
             </p>
           ) : null}

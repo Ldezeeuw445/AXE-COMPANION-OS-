@@ -79,9 +79,21 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
         aria-expanded={open}
         aria-label={`Open AXE actions for ${title}`}
         onClick={() => setOpen((v) => !v)}
-        className="group inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur transition-colors hover:border-cyan-400/40 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+        className="group relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/12 bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-transparent backdrop-blur transition-all hover:border-cyan-400/45 hover:from-white/[0.10] focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
+        style={{
+          boxShadow:
+            "0 0 0 1px rgba(34,211,238,0.10), 0 8px 24px -10px rgba(34,211,238,0.30), inset 0 1px 0 rgba(255,255,255,0.10)",
+        }}
       >
-        <BrandMark size={26} className="!bg-transparent !ring-0" />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-2xl opacity-60 transition-opacity group-hover:opacity-90"
+          style={{
+            background:
+              "radial-gradient(60% 60% at 50% 0%, rgba(34,211,238,0.20) 0%, rgba(34,211,238,0) 70%)",
+          }}
+        />
+        <BrandMark size={32} className="!bg-transparent !ring-0" />
         <span className="sr-only">AXE</span>
       </button>
 

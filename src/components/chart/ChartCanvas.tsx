@@ -371,13 +371,50 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
   );
 
   return (
-    <div
-      ref={hostRef}
-      className="absolute inset-0 h-full w-full"
-      style={{
-        background: CHART_THEME.background,
-        cursor: drawingMode ? "crosshair" : undefined,
-      }}
-    />
+    <>
+      <div
+        ref={hostRef}
+        className="absolute inset-0 h-full w-full"
+        style={{
+          background: CHART_THEME.background,
+          cursor: drawingMode ? "crosshair" : undefined,
+        }}
+      />
+      {/* Subtle cyan glow — "light on it" without affecting candle readability */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 mix-blend-screen"
+        style={{
+          background:
+            "radial-gradient(95% 60% at 78% 22%, rgba(34,211,238,0.18) 0%, rgba(34,211,238,0) 60%)",
+        }}
+      />
+      {/* Top + bottom matte vignette */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 18%, rgba(0,0,0,0) 78%, rgba(0,0,0,0.55) 100%)",
+        }}
+      />
+      {/* Diagonal matte lines */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.06]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(135deg, rgba(255,255,255,0.5) 0px, rgba(255,255,255,0.5) 1px, transparent 1px, transparent 4px)",
+          maskImage:
+            "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,0.45) 100%)",
+        }}
+      />
+      {/* Inner cyan glow ring */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-2xl"
+        style={{ boxShadow: CHART_THEME.frameGlow }}
+      />
+    </>
   );
 });
