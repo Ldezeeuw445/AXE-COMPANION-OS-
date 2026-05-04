@@ -71,7 +71,6 @@ export function Mt5CloudConnectForm() {
         </p>
       </div>
       <input type="hidden" name="region" value="london" />
-      <p className="text-[10px] text-tos-dim">MetaApi region is fixed to London for this app build.</p>
       <label className="flex cursor-pointer items-start gap-2 text-[11px] text-tos-muted">
         <input type="checkbox" name="readOnlyConfirm" className="mt-0.5 rounded border-white/20" required />
         <span>
@@ -80,11 +79,14 @@ export function Mt5CloudConnectForm() {
         </span>
       </label>
       {err ? (
-        <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-200">
-          <span className="font-mono text-[10px] text-red-300/90">{err.code}</span>
-          {" — "}
-          {err.message}
-        </p>
+        <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-200/95">
+          <p className="font-medium text-red-100/95">Could not connect</p>
+          <p className="mt-1 text-[10px] leading-relaxed text-red-200/85">{err.message}</p>
+          <details className="mt-2 text-[10px] text-red-300/70">
+            <summary className="cursor-pointer select-none text-red-300/90 hover:text-red-200">Technical details</summary>
+            <p className="mt-1 font-mono text-[10px] break-all opacity-90">{err.code}</p>
+          </details>
+        </div>
       ) : null}
       {ok?.data?.accountId ? (
         <p className="text-[11px] text-emerald-300/90">

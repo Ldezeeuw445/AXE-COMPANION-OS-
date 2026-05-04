@@ -17,6 +17,15 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
 
+  function parseMsg(): { headline: string; detail?: string } | null {
+    if (!msg) return null;
+    try {
+      return JSON.parse(msg) as { headline: string; detail?: string };
+    } catch {
+      return { headline: msg };
+    }
+  }
+
   function run(
     fn: (id: string) => Promise<{ ok: boolean; code?: string; message?: string; data?: unknown }>,
     label: string,
@@ -25,23 +34,45 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
     start(() => {
       void (async () => {
         const r = await fn(accountId);
-        if (r.ok && label === "Sync" && r.data && typeof r.data === "object") {
-          const d = r.data as { dealsFetched?: number; dealsUpserted?: number; tradesNormalized?: number };
+        if (r.ok && label === "Sync") {
+          const d =
+            r.data && typeof r.data === "object"
+              ? (r.data as { dealsFetched?: number; dealsUpserted?: number; tradesNormalized?: number })
+              : null;
+          const detail =
+            d != null
+              ? `Fetched ${d.dealsFetched ?? 0} · Saved ${d.dealsUpserted ?? 0} closed rows` +
+                ((d.tradesNormalized ?? 0) === 0 && (d.dealsFetched ?? 0) > 0
+                  ? " · Window had open legs only."
+                  : "")
+              : "";
           setMsg(
-            `Synced: ${d.dealsFetched ?? 0} deals fetched, ${d.dealsUpserted ?? 0} closed positions upserted` +
-              ((d.tradesNormalized ?? 0) === 0 && (d.dealsFetched ?? 0) > 0
-                ? " (only open legs in window — no completed positions to write)."
-                : "."),
+            JSON.stringify({
+              headline: "Sync completed.",
+              detail: detail || undefined,
+            }),
           );
         } else if (r.ok) {
-          setMsg(`${label} OK.`);
+          setMsg(
+            JSON.stringify({
+              headline: label === "Test" ? "Connection test passed." : "Done.",
+              detail: undefined,
+            }),
+          );
         } else {
-          setMsg(`${r.code ?? "error"} — ${r.message ?? "Failed"}`);
+          setMsg(
+            JSON.stringify({
+              headline: "Something went wrong.",
+              detail: `${r.code ?? "error"} — ${r.message ?? "Failed"}`,
+            }),
+          );
         }
         router.refresh();
       })();
     });
   }
+
+  const feedback = parseMsg();
 
   return (
     <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
@@ -74,7 +105,19 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           Disconnect
         </button>
       </div>
-      {msg ? <p className="text-[10px] leading-relaxed text-tos-muted">{msg}</p> : null}
+      {feedback ? (
+        <div className="text-[10px] leading-relaxed text-tos-muted">
+          <p className="text-tos-text/95">{feedback.headline}</p>
+          {feedback.headline === "Something went wrong." && feedback.detail ? (
+            <details className="mt-2 text-tos-dim">
+              <summary className="cursor-pointer select-none hover:text-tos-muted">Details</summary>
+              <p className="mt-1 font-mono text-[9px] break-all opacity-90">{feedback.detail}</p>
+            </details>
+          ) : feedback.detail ? (
+            <p className="mt-1 text-tos-dim">{feedback.detail}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
