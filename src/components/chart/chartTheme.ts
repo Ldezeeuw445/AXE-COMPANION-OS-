@@ -1,0 +1,21 @@
+/** Premium dark trader-grade palette for the AXE chart. */
+export const CHART_THEME = {
+  background: "#04070C",
+  textColor: "rgba(200,211,224,0.92)",
+  grid: "rgba(120,150,180,0.07)",
+  crosshair: "rgba(120,150,180,0.45)",
+  borderColor: "rgba(120,150,180,0.10)",
+  bull: "#3CB6A6",
+  bear: "#D9684F",
+  bullWick: "rgba(60,182,166,0.85)",
+  bearWick: "rgba(217,104,79,0.85)",
+  entryLine: "rgba(110,178,252,0.65)",
+  stopLine: "rgba(217,104,79,0.65)",
+  takeLine: "rgba(95,178,148,0.6)",
+  pendingLine: "rgba(110,178,252,0.45)",
+  alertLine: "rgba(244,191,99,0.6)",
+  positiveText: "rgba(95,178,148,0.95)",
+  negativeText: "rgba(217,104,79,0.95)",
+  neutralText: "rgba(168,180,196,0.95)",
+  cyanAccent: "rgba(33,212,216,0.85)",
+} as const;

@@ -3,7 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Landmark, Copy, Check, ChevronDown } from "lucide-react";
+import { Landmark, Copy, Check, ChevronDown, LineChart } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
@@ -220,6 +220,15 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[9.5rem] sm:items-end">
+                      {kind === "cloud" ? (
+                        <Link
+                          href={`/chart?account=${encodeURIComponent(a.id)}&symbol=XAUUSD&tf=h1`}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+                        >
+                          <LineChart className="h-3.5 w-3.5" aria-hidden />
+                          Open chart
+                        </Link>
+                      ) : null}
                       {active ? (
                         <button
                           type="button"

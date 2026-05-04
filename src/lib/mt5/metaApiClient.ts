@@ -249,6 +249,38 @@ export async function clientGetPositions(accountId: string, refreshTerminalState
   return Array.isArray(body) ? body : [];
 }
 
+export type MetaApiSymbolPrice = {
+  symbol: string;
+  bid: number | null;
+  ask: number | null;
+  brokerTime: string | null;
+  time: string | null;
+};
+
+/** Lightweight latest price for a broker symbol via MetaApi client API. */
+export async function clientGetSymbolPrice(accountId: string, symbol: string): Promise<MetaApiSymbolPrice> {
+  const base = getMetaApiClientBaseUrl();
+  const sym = encodeURIComponent(symbol);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/symbols/${sym}/current-price`;
+  const res = await fetchWithTimeout(url, {
+    method: "GET",
+    headers: authHeadersGet(),
+    timeoutMs: 20_000,
+  });
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new MetaApiRequestError(classifyHttpStatus(res.status), `Symbol price ${res.status}`, res.status, body);
+  }
+  const r = (body ?? {}) as { bid?: number; ask?: number; time?: string; brokerTime?: string };
+  return {
+    symbol,
+    bid: r.bid != null ? Number(r.bid) : null,
+    ask: r.ask != null ? Number(r.ask) : null,
+    brokerTime: r.brokerTime ?? null,
+    time: r.time ?? null,
+  };
+}
+
 export async function clientGetHistoryDealsRange(
   accountId: string,
   startIso: string,
