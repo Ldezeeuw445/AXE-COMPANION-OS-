@@ -65,8 +65,11 @@ export function FibAnnotationLayer({
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{
     annotationId: string;
-    handle: 0 | 1;
+    handle: 0 | 1 | "body";
     pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    originPoints: AnnotationPoint[];
   } | null>(null);
 
   // Track container size for absolute positioning of the SVG.
@@ -134,11 +137,25 @@ export function FibAnnotationLayer({
   }, [annotations, canvasRef]);
 
   // ── Drag handling ───────────────────────────────────────────────────────
-  function startDrag(e: React.PointerEvent<SVGCircleElement>, annotationId: string, handleIdx: 0 | 1) {
+  function stopChartPointer(e: React.PointerEvent<SVGElement>) {
     e.stopPropagation();
     e.preventDefault();
+    e.nativeEvent.stopImmediatePropagation?.();
+  }
+
+  function startDrag(e: React.PointerEvent<SVGElement>, annotationId: string, handleIdx: 0 | 1 | "body") {
+    stopChartPointer(e);
+    const ann = annotations.find((a) => a.id === annotationId);
+    if (!ann || ann.type !== "fib_retracement") return;
     svgRef.current?.setPointerCapture(e.pointerId);
-    dragRef.current = { annotationId, handle: handleIdx, pointerId: e.pointerId };
+    dragRef.current = {
+      annotationId,
+      handle: handleIdx,
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      originPoints: ann.points.map((p) => ({ ...p })),
+    };
     setActiveId(annotationId);
     setIsDragging(true);
   }
@@ -146,8 +163,7 @@ export function FibAnnotationLayer({
   function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    e.stopPropagation();
-    e.preventDefault();
+    stopChartPointer(e);
     const handle = canvasRef.current;
     const host = hostRef.current;
     if (!handle || !host) return;
@@ -161,8 +177,24 @@ export function FibAnnotationLayer({
     const ann = annotations.find((a) => a.id === drag.annotationId);
     if (!ann || ann.type !== "fib_retracement") return;
 
-    const nextPoints: AnnotationPoint[] = [...ann.points] as AnnotationPoint[];
-    nextPoints[drag.handle] = { time, price };
+    let nextPoints: AnnotationPoint[];
+    if (drag.handle === "body") {
+      const dx = e.clientX - drag.startClientX;
+      const dy = e.clientY - drag.startClientY;
+      nextPoints = drag.originPoints.map((point) => {
+        const originalX = handle.timeToCoordinate(point.time);
+        const originalY = handle.priceToCoordinate(point.price);
+        if (originalX == null || originalY == null) return point;
+        const nextTime = handle.coordinateToTime(originalX + dx);
+        const nextPrice = handle.coordinateToPrice(originalY + dy);
+        if (nextTime == null || nextPrice == null) return point;
+        return { time: nextTime, price: nextPrice };
+      });
+    } else {
+      nextPoints = [...ann.points] as AnnotationPoint[];
+      nextPoints[drag.handle] = { time, price };
+    }
+
     onUpdate({
       ...ann,
       points: nextPoints,
@@ -174,8 +206,7 @@ export function FibAnnotationLayer({
     const drag = dragRef.current;
     if (!drag) return;
     if (drag.pointerId !== e.pointerId) return;
-    e.stopPropagation();
-    e.preventDefault();
+    stopChartPointer(e);
     dragRef.current = null;
     setIsDragging(false);
   }
@@ -205,6 +236,8 @@ export function FibAnnotationLayer({
           const isActive = activeId === g.id;
           const labelLeftX = Math.max(8, g.startX - 6);
           const labelRightX = Math.min(containerSize.w - 8, g.endX + 6);
+          const removeX = Math.max(8, g.startX - 30);
+          const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
           return (
             <g key={g.id}>
               {/* Translucent fill between 0 and 1 to mark the trade range */}
@@ -213,8 +246,12 @@ export function FibAnnotationLayer({
                 y={Math.min(g.anchorY, g.swingY)}
                 width={Math.max(2, g.endX - g.startX)}
                 height={Math.abs(g.swingY - g.anchorY)}
-                fill="rgba(244,191,99,0.06)"
-                pointerEvents="none"
+                fill={isActive ? "rgba(34,211,238,0.08)" : "rgba(244,191,99,0.06)"}
+                stroke={isActive ? "rgba(34,211,238,0.22)" : "transparent"}
+                strokeWidth={1}
+                pointerEvents="all"
+                onPointerDown={(e) => startDrag(e, g.id, "body")}
+                style={{ cursor: "move", touchAction: "none" }}
               />
 
               {/* Fib level lines */}
@@ -227,7 +264,18 @@ export function FibAnnotationLayer({
                     ? "rgba(244,191,99,0.85)"
                     : "rgba(244,191,99,0.55)";
                 return (
-                  <g key={ln.level} pointerEvents="none">
+                  <g key={ln.level}>
+                    <line
+                      x1={g.startX}
+                      x2={g.endX}
+                      y1={ln.y}
+                      y2={ln.y}
+                      stroke="transparent"
+                      strokeWidth={22}
+                      pointerEvents="stroke"
+                      onPointerDown={(e) => startDrag(e, g.id, "body")}
+                      style={{ cursor: "move", touchAction: "none" }}
+                    />
                     <line
                       x1={g.startX}
                       x2={g.endX}
@@ -236,6 +284,7 @@ export function FibAnnotationLayer({
                       stroke={stroke}
                       strokeWidth={isOuter || isMid ? 1.1 : 0.9}
                       strokeDasharray={isOuter ? "" : "4 3"}
+                      pointerEvents="none"
                     />
                     {/* Percentage label — left side */}
                     <text
@@ -246,6 +295,7 @@ export function FibAnnotationLayer({
                       fontSize="10"
                       fontWeight={isMid ? 600 : 500}
                       fill={isMid ? "rgba(244,191,99,0.95)" : "rgba(232,238,246,0.78)"}
+                      pointerEvents="none"
                     >
                       {(ln.level * 100).toFixed(1).replace(".", ",")}%
                     </text>
@@ -258,6 +308,7 @@ export function FibAnnotationLayer({
                       fontSize="10"
                       fontWeight={isMid ? 600 : 500}
                       fill={isMid ? "rgba(244,191,99,0.95)" : "rgba(232,238,246,0.78)"}
+                      pointerEvents="none"
                     >
                       {ln.price.toFixed(digits)}
                     </text>
@@ -278,11 +329,12 @@ export function FibAnnotationLayer({
               />
 
               {/* Two draggable handles — pointer-events auto so they catch input */}
+              {isActive ? (
               <g style={{ pointerEvents: "auto" }}>
                 <circle
                   cx={g.startX}
                   cy={g.anchorY}
-                  r={isActive ? 9 : 7}
+                  r={9}
                   fill="rgba(34,211,238,0.95)"
                   stroke="rgba(255,255,255,0.85)"
                   strokeWidth={1.5}
@@ -300,7 +352,7 @@ export function FibAnnotationLayer({
                 <circle
                   cx={g.endX}
                   cy={g.swingY}
-                  r={isActive ? 9 : 7}
+                  r={9}
                   fill="rgba(34,211,238,0.95)"
                   stroke="rgba(255,255,255,0.85)"
                   strokeWidth={1.5}
@@ -315,20 +367,20 @@ export function FibAnnotationLayer({
                   style={{ cursor: "grab" }}
                 />
               </g>
+              ) : null}
 
               {/* Remove pill on the right edge near the connector line midpoint */}
-              {onRemove ? (
+              {onRemove && isActive ? (
                 <g
                   style={{ pointerEvents: "auto", cursor: "pointer" }}
                   onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
+                    stopChartPointer(e);
                     onRemove(g.id);
                   }}
                 >
                   <rect
-                    x={g.endX - 22}
-                    y={Math.min(g.anchorY, g.swingY) - 18}
+                    x={removeX}
+                    y={removeY}
                     width={20}
                     height={14}
                     rx={3}
@@ -336,8 +388,8 @@ export function FibAnnotationLayer({
                     stroke="rgba(255,255,255,0.18)"
                   />
                   <text
-                    x={g.endX - 12}
-                    y={Math.min(g.anchorY, g.swingY) - 8}
+                    x={removeX + 10}
+                    y={removeY + 10}
                     textAnchor="middle"
                     fontFamily="ui-sans-serif, system-ui"
                     fontSize="9"

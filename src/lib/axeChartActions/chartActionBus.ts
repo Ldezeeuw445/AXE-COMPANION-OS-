@@ -52,6 +52,16 @@ export function detectFallbackChartActionIntent(text: string): ChartActionComman
     normalized.includes("draw fibonacci") ||
     normalized.includes("put fib") ||
     normalized.includes("zet fib") ||
+    normalized.includes("fib op de chart") ||
+    normalized.includes("fib op chart") ||
+    normalized.includes("fib tekenen") ||
+    normalized.includes("fibonacci tekenen") ||
+    normalized.includes("fibonacci op de chart") ||
+    normalized.includes("fibonacci op chart") ||
+    normalized.includes("fib die je net zei") ||
+    normalized.includes("fib die je zei") ||
+    normalized.includes("maak de fib") ||
+    normalized.includes("maak fib") ||
     normalized.includes("fibonacci on latest swing") ||
     normalized.includes("fib on latest swing")
   ) {
@@ -60,7 +70,9 @@ export function detectFallbackChartActionIntent(text: string): ChartActionComman
   if (
     normalized.includes("draw trendline") ||
     normalized.includes("draw trend line") ||
-    normalized.includes("teken trendline")
+    normalized.includes("teken trendline") ||
+    normalized.includes("trendline tekenen") ||
+    normalized.includes("trendline op de chart")
   ) {
     return "draw_trendline";
   }
