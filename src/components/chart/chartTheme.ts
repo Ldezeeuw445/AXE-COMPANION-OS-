@@ -5,7 +5,10 @@
  * Bull/bear stay readable on phones without becoming candy-bright.
  */
 export const CHART_THEME = {
+  /** Base color shown behind the carbon-fiber weave on the host div. */
   background: "#0A0F14",
+  /** Chart series itself is rendered transparent so the host pattern shows through. */
+  chartCanvasBackground: "rgba(0,0,0,0)",
   textColor: "rgba(208,220,234,0.92)",
   grid: "rgba(110,170,200,0.05)",
   crosshair: "rgba(140,200,220,0.48)",

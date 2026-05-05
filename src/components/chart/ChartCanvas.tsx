@@ -92,7 +92,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
     const chart = createChart(el, {
       layout: {
-        background: { type: ColorType.Solid, color: CHART_THEME.background },
+        background: { type: ColorType.Solid, color: CHART_THEME.chartCanvasBackground },
         textColor: CHART_THEME.textColor,
         fontSize: 11,
         fontFamily:
@@ -372,52 +372,46 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
   return (
     <>
+      {/* Layer 0: base color + carbon-fiber weave + cyan spotlights, full visibility */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(60% 38% at 80% 16%, rgba(34,211,238,0.55) 0%, rgba(34,211,238,0.18) 35%, rgba(34,211,238,0) 65%),
+            radial-gradient(70% 50% at 10% 95%, rgba(43,212,160,0.22) 0%, rgba(43,212,160,0) 60%),
+            ${CHART_THEME.background}
+          `,
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-90"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 5px), repeating-linear-gradient(45deg, rgba(0,0,0,0.42) 0px, rgba(0,0,0,0.42) 1px, transparent 1px, transparent 5px)",
+          backgroundSize: "5px 5px",
+        }}
+      />
+
+      {/* Layer 1: the chart canvas itself, transparent so the bg pattern shows through */}
       <div
         ref={hostRef}
         className="absolute inset-0 h-full w-full"
         style={{
-          background: CHART_THEME.background,
           cursor: drawingMode ? "crosshair" : undefined,
         }}
       />
-      {/* Carbon-fiber weave — tight diagonal pattern across the full frame */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.32]"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(135deg, rgba(255,255,255,0.7) 0px, rgba(255,255,255,0.7) 0.8px, transparent 0.8px, transparent 4px), repeating-linear-gradient(45deg, rgba(0,0,0,0.7) 0px, rgba(0,0,0,0.7) 0.8px, transparent 0.8px, transparent 4px)",
-          backgroundSize: "4px 4px",
-        }}
-      />
-      {/* Strong cyan glow — "light on it", visible on mobile */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 mix-blend-screen"
-        style={{
-          background:
-            "radial-gradient(60% 40% at 80% 18%, rgba(34,211,238,0.42) 0%, rgba(34,211,238,0.16) 35%, rgba(34,211,238,0) 65%)",
-        }}
-      />
-      {/* Secondary soft teal glow bottom-left for depth */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 mix-blend-screen"
-        style={{
-          background:
-            "radial-gradient(70% 50% at 12% 92%, rgba(43,212,160,0.18) 0%, rgba(43,212,160,0) 60%)",
-        }}
-      />
-      {/* Top + bottom matte vignette */}
+
+      {/* Layer 2: top + bottom matte vignette + inner glow ring */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 16%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.6) 100%)",
+            "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 16%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.55) 100%)",
         }}
       />
-      {/* Inner cyan glow ring */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-2xl"
