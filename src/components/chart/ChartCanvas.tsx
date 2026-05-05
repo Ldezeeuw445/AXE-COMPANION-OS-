@@ -383,19 +383,29 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       {/* Carbon-fiber weave — tight diagonal pattern across the full frame */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.14]"
+        className="pointer-events-none absolute inset-0 opacity-[0.32]"
         style={{
           backgroundImage:
-            "repeating-linear-gradient(135deg, rgba(255,255,255,0.55) 0px, rgba(255,255,255,0.55) 0.6px, transparent 0.6px, transparent 3px), repeating-linear-gradient(45deg, rgba(0,0,0,0.45) 0px, rgba(0,0,0,0.45) 0.6px, transparent 0.6px, transparent 3px)",
+            "repeating-linear-gradient(135deg, rgba(255,255,255,0.7) 0px, rgba(255,255,255,0.7) 0.8px, transparent 0.8px, transparent 4px), repeating-linear-gradient(45deg, rgba(0,0,0,0.7) 0px, rgba(0,0,0,0.7) 0.8px, transparent 0.8px, transparent 4px)",
+          backgroundSize: "4px 4px",
         }}
       />
-      {/* Subtle cyan glow — "light on it" without affecting candle readability */}
+      {/* Strong cyan glow — "light on it", visible on mobile */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 mix-blend-screen"
         style={{
           background:
-            "radial-gradient(95% 60% at 78% 22%, rgba(34,211,238,0.20) 0%, rgba(34,211,238,0) 60%)",
+            "radial-gradient(60% 40% at 80% 18%, rgba(34,211,238,0.42) 0%, rgba(34,211,238,0.16) 35%, rgba(34,211,238,0) 65%)",
+        }}
+      />
+      {/* Secondary soft teal glow bottom-left for depth */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 mix-blend-screen"
+        style={{
+          background:
+            "radial-gradient(70% 50% at 12% 92%, rgba(43,212,160,0.18) 0%, rgba(43,212,160,0) 60%)",
         }}
       />
       {/* Top + bottom matte vignette */}
@@ -404,7 +414,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 18%, rgba(0,0,0,0) 78%, rgba(0,0,0,0.55) 100%)",
+            "linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 16%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.6) 100%)",
         }}
       />
       {/* Inner cyan glow ring */}
