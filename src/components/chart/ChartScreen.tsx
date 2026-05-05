@@ -13,6 +13,7 @@ import {
   Info,
   Landmark,
   MessageSquare,
+  RotateCcw,
   Save,
   Sparkles,
   Spline,
@@ -732,6 +733,12 @@ export function ChartScreen({ data, initialAction }: Props) {
     el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  const resetChartView = useCallback(() => {
+    canvasRef.current?.fitContent();
+    setSnapshotMessage("Chart view reset.");
+    setTimeout(() => setSnapshotMessage(null), 2_500);
+  }, []);
+
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
     const drawDisabled = data.failure !== "ok";
     return [
@@ -878,6 +885,7 @@ export function ChartScreen({ data, initialAction }: Props) {
     removeLastAnnotation,
     saveSnapshotToVault,
     focusDataDetails,
+    resetChartView,
   ]);
 
   // Inject the LIVE pill (center) and AXE button (right) into the global mobile top bar.
@@ -1041,6 +1049,16 @@ export function ChartScreen({ data, initialAction }: Props) {
             </GlassPanel>
           </div>
         ) : null}
+
+        <button
+          type="button"
+          onClick={resetChartView}
+          className="absolute bottom-3 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/25 bg-black/65 text-cyan-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/45 hover:bg-cyan-400/12 active:scale-95"
+          aria-label="Reset chart view"
+          title="Reset chart view"
+        >
+          <RotateCcw className="h-4 w-4" aria-hidden />
+        </button>
       </div>
 
       {/* Compact selectors row under the chart */}

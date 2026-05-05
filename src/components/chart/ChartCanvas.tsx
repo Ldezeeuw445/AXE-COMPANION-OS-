@@ -54,6 +54,8 @@ export type ChartCanvasHandle = {
   coordinateToPrice: (y: number) => number | null;
   /** Inverse of timeToCoordinate. */
   coordinateToTime: (x: number) => number | null;
+  /** Reset chart viewport so candles are back in view. */
+  fitContent: () => void;
   /** Subscribe to viewport changes (pan, zoom, resize, data load). */
   subscribeViewport: (cb: () => void) => () => void;
 };
@@ -388,6 +390,18 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         if (!chart) return null;
         const t = chart.timeScale().coordinateToTime(x);
         return t == null ? null : Number(t);
+      },
+      fitContent() {
+        const chart = chartRef.current;
+        if (!chart) return;
+        chart.timeScale().fitContent();
+        for (const cb of viewportSubscribersRef.current) {
+          try {
+            cb();
+          } catch {
+            /* ignore */
+          }
+        }
       },
       subscribeViewport(cb: () => void) {
         viewportSubscribersRef.current.add(cb);

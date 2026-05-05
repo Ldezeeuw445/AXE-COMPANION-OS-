@@ -136,6 +136,27 @@ export function FibAnnotationLayer({
     return unsubscribe;
   }, [annotations, canvasRef]);
 
+  useEffect(() => {
+    if (!activeId) return;
+
+    function deselectWhenChartIsTapped(event: PointerEvent) {
+      const host = hostRef.current;
+      const target = event.target;
+      if (!host || !(target instanceof Node)) return;
+      if (host.contains(target)) return;
+      setActiveId(null);
+    }
+
+    window.addEventListener("pointerdown", deselectWhenChartIsTapped, true);
+    return () => window.removeEventListener("pointerdown", deselectWhenChartIsTapped, true);
+  }, [activeId]);
+
+  useEffect(() => {
+    if (!activeId) return;
+    if (annotations.some((annotation) => annotation.id === activeId)) return;
+    setActiveId(null);
+  }, [activeId, annotations]);
+
   // ── Drag handling ───────────────────────────────────────────────────────
   function stopChartPointer(e: React.PointerEvent<SVGElement>) {
     e.stopPropagation();
@@ -330,43 +351,43 @@ export function FibAnnotationLayer({
 
               {/* Two draggable handles — pointer-events auto so they catch input */}
               {isActive ? (
-              <g style={{ pointerEvents: "auto" }}>
-                <circle
-                  cx={g.startX}
-                  cy={g.anchorY}
-                  r={9}
-                  fill="rgba(34,211,238,0.95)"
-                  stroke="rgba(255,255,255,0.85)"
-                  strokeWidth={1.5}
-                  onPointerDown={(e) => {
-                    // Determine which annotation point this handle represents.
-                    const ann = annotations.find((a) => a.id === g.id);
-                    if (!ann) return;
-                    const a = ann.points[0];
-                    const b = ann.points[1];
-                    const useFirst = a.time <= b.time;
-                    startDrag(e, g.id, useFirst ? 0 : 1);
-                  }}
-                  style={{ cursor: "grab" }}
-                />
-                <circle
-                  cx={g.endX}
-                  cy={g.swingY}
-                  r={9}
-                  fill="rgba(34,211,238,0.95)"
-                  stroke="rgba(255,255,255,0.85)"
-                  strokeWidth={1.5}
-                  onPointerDown={(e) => {
-                    const ann = annotations.find((a) => a.id === g.id);
-                    if (!ann) return;
-                    const a = ann.points[0];
-                    const b = ann.points[1];
-                    const useFirst = a.time <= b.time;
-                    startDrag(e, g.id, useFirst ? 1 : 0);
-                  }}
-                  style={{ cursor: "grab" }}
-                />
-              </g>
+                <g style={{ pointerEvents: "auto" }}>
+                  <circle
+                    cx={g.startX}
+                    cy={g.anchorY}
+                    r={9}
+                    fill="rgba(34,211,238,0.95)"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth={1.5}
+                    onPointerDown={(e) => {
+                      // Determine which annotation point this handle represents.
+                      const ann = annotations.find((a) => a.id === g.id);
+                      if (!ann) return;
+                      const a = ann.points[0];
+                      const b = ann.points[1];
+                      const useFirst = a.time <= b.time;
+                      startDrag(e, g.id, useFirst ? 0 : 1);
+                    }}
+                    style={{ cursor: "grab", touchAction: "none" }}
+                  />
+                  <circle
+                    cx={g.endX}
+                    cy={g.swingY}
+                    r={9}
+                    fill="rgba(34,211,238,0.95)"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth={1.5}
+                    onPointerDown={(e) => {
+                      const ann = annotations.find((a) => a.id === g.id);
+                      if (!ann) return;
+                      const a = ann.points[0];
+                      const b = ann.points[1];
+                      const useFirst = a.time <= b.time;
+                      startDrag(e, g.id, useFirst ? 1 : 0);
+                    }}
+                    style={{ cursor: "grab", touchAction: "none" }}
+                  />
+                </g>
               ) : null}
 
               {/* Remove pill on the right edge near the connector line midpoint */}
