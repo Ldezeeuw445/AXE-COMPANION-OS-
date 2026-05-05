@@ -372,29 +372,20 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
   return (
     <>
-      {/* Layer 0: base color + carbon-fiber weave + cyan spotlights, full visibility */}
+      {/* Chart frame base — clean dark, soft cyan glow rechtsboven, geen weave-patroon */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background: `
-            radial-gradient(60% 38% at 80% 16%, rgba(34,211,238,0.55) 0%, rgba(34,211,238,0.18) 35%, rgba(34,211,238,0) 65%),
-            radial-gradient(70% 50% at 10% 95%, rgba(43,212,160,0.22) 0%, rgba(43,212,160,0) 60%),
+            radial-gradient(70% 45% at 82% 14%, rgba(34,211,238,0.32) 0%, rgba(34,211,238,0.08) 38%, rgba(34,211,238,0) 65%),
+            radial-gradient(80% 55% at 8% 100%, rgba(31,156,123,0.10) 0%, rgba(31,156,123,0) 60%),
             ${CHART_THEME.background}
           `,
         }}
       />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-90"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 5px), repeating-linear-gradient(45deg, rgba(0,0,0,0.42) 0px, rgba(0,0,0,0.42) 1px, transparent 1px, transparent 5px)",
-          backgroundSize: "5px 5px",
-        }}
-      />
 
-      {/* Layer 1: the chart canvas itself, transparent so the bg pattern shows through */}
+      {/* Chart canvas itself — transparent so the bg blend shows through */}
       <div
         ref={hostRef}
         className="absolute inset-0 h-full w-full"
@@ -403,13 +394,13 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         }}
       />
 
-      {/* Layer 2: top + bottom matte vignette + inner glow ring */}
+      {/* Soft top + bottom matte vignette */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 16%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.55) 100%)",
+            "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 82%, rgba(0,0,0,0.45) 100%)",
         }}
       />
       <div
