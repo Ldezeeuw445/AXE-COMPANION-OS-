@@ -22,6 +22,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
+import { AxeWordmark } from "@/components/brand/AxeWordmark";
 
 type NavItem = {
   href: string;
@@ -112,7 +113,7 @@ export function AppNavigation() {
         </button>
         <div className="flex min-w-0 justify-center">
           {slots.center ?? (
-            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-tos-dim">AXE</span>
+            <AxeWordmark />
           )}
         </div>
         <div className="flex justify-end">{slots.right}</div>

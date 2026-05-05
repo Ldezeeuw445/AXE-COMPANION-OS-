@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo } from "react";
 import { BookOpen } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import { useAppTopBar } from "@/components/shell/AppTopBarContext";
+import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import type { JournalEntryRow, TradeHighlight } from "@/lib/journal/loadJournalPageData";
 import type { JournalAnalytics } from "@/lib/journal/computeJournalAnalytics";
 import { TradeJournalLabelForm } from "@/components/journal/TradeJournalLabelForm";
@@ -42,13 +45,72 @@ export function JournalScreen({
     ? journalTrades.filter((t) => t.id !== tradeHighlight.id)
     : journalTrades;
 
+  const focusSymbol = tradeHighlight?.symbol ?? journalTrades[0]?.symbol ?? null;
+
+  const toolbarSections: AxeToolbarSection[] = useMemo(
+    () => [
+      {
+        id: "ask-axe",
+        title: "Ask AXE",
+        items: [
+          {
+            id: "review",
+            label: "Review my recent trades",
+            description: "Patterns, mistakes, next rule",
+            href: `/chat?q=${encodeURIComponent(
+              `[AXE · journal]\nReview my recent MT5 trades and journal tags. Extract patterns, mistakes, and one concrete rule to enforce next week.`,
+            )}`,
+          },
+          {
+            id: "setup",
+            label: "Journal this setup",
+            description: focusSymbol ? `${focusSymbol} — what to log` : "What to log",
+            href: `/chat?q=${encodeURIComponent(
+              `[AXE · journal]\nGive me a short journal checklist for my next trade${focusSymbol ? ` on ${focusSymbol}` : ""}: bias, entry reason, invalidation, exit plan, emotions.`,
+            )}`,
+          },
+        ],
+      },
+      {
+        id: "shortcuts",
+        title: "Shortcuts",
+        items: [
+          { id: "history", label: "History", description: "Closed trades ledger", href: "/history" },
+          { id: "vault", label: "Vault", description: "Save insights", href: "/vault" },
+        ],
+      },
+    ],
+    [focusSymbol],
+  );
+
+  const { setCenter, setRight } = useAppTopBar();
+  useEffect(() => {
+    setCenter(
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-tos-muted">
+        Journal
+      </span>,
+    );
+    setRight(<AxeContextToolbar title="Journal" subtitle={focusSymbol ? `${focusSymbol} review` : "Trades & notes"} sections={toolbarSections} />);
+    return () => {
+      setCenter(null);
+      setRight(null);
+    };
+  }, [focusSymbol, setCenter, setRight, toolbarSections]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
       <ScreenHeader
         title="Journal"
         subtitle="Preset tags per trade, analytics, and free-form notes — same ledger as History."
         left={<BookOpen className="h-6 w-6 text-cyan-400/80" aria-hidden />}
-        right={<Badge variant="warm">Supabase</Badge>}
+        right={
+          <div className="flex items-center gap-2">
+            <Badge variant="warm">Supabase</Badge>
+            <span className="hidden md:inline-flex">
+              <AxeContextToolbar title="Journal" subtitle={focusSymbol ? `${focusSymbol} review` : "Trades & notes"} sections={toolbarSections} />
+            </span>
+          </div>
+        }
       />
 
       {loadError ? (

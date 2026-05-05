@@ -58,6 +58,7 @@ export function FibAnnotationLayer({
   onRemove,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const [geoms, setGeoms] = useState<FibGeom[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -136,7 +137,7 @@ export function FibAnnotationLayer({
   function startDrag(e: React.PointerEvent<SVGCircleElement>, annotationId: string, handleIdx: 0 | 1) {
     e.stopPropagation();
     e.preventDefault();
-    (e.target as Element).setPointerCapture(e.pointerId);
+    svgRef.current?.setPointerCapture(e.pointerId);
     dragRef.current = { annotationId, handle: handleIdx, pointerId: e.pointerId };
     setActiveId(annotationId);
     setIsDragging(true);
@@ -145,6 +146,8 @@ export function FibAnnotationLayer({
   function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
+    e.stopPropagation();
+    e.preventDefault();
     const handle = canvasRef.current;
     const host = hostRef.current;
     if (!handle || !host) return;
@@ -171,6 +174,8 @@ export function FibAnnotationLayer({
     const drag = dragRef.current;
     if (!drag) return;
     if (drag.pointerId !== e.pointerId) return;
+    e.stopPropagation();
+    e.preventDefault();
     dragRef.current = null;
     setIsDragging(false);
   }
@@ -184,8 +189,9 @@ export function FibAnnotationLayer({
   }
 
   return (
-    <div ref={hostRef} className="pointer-events-none absolute inset-0">
+    <div ref={hostRef} className="absolute inset-0">
       <svg
+        ref={svgRef}
         width={containerSize.w}
         height={containerSize.h}
         viewBox={`0 0 ${containerSize.w} ${containerSize.h}`}
@@ -193,7 +199,7 @@ export function FibAnnotationLayer({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        style={{ touchAction: isDragging ? "none" : "auto" }}
+        style={{ touchAction: "none" }}
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;
@@ -316,6 +322,7 @@ export function FibAnnotationLayer({
                   style={{ pointerEvents: "auto", cursor: "pointer" }}
                   onPointerDown={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     onRemove(g.id);
                   }}
                 >

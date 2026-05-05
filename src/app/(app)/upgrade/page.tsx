@@ -4,6 +4,8 @@ import { BrandMark } from "@/components/brand/BrandMark";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
+import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import { LEGAL_COPY } from "@/lib/legal/constants";
@@ -46,12 +48,51 @@ export default async function SubscriptionsPage() {
     }
   }
 
+  const toolbarSections: AxeToolbarSection[] = [
+    {
+      id: "ask-axe",
+      title: "Ask AXE",
+      items: [
+        {
+          id: "pro",
+          label: "What do I get on Pro?",
+          description: "Clear value, no fluff",
+          href: `/chat?q=${encodeURIComponent(
+            "[AXE · subscriptions]\nSummarize what changes if I upgrade to Pro. Keep it short and honest.",
+          )}`,
+        },
+        {
+          id: "quota",
+          label: "How does chat quota work?",
+          description: "Daily cap, reset, fair use",
+          href: `/chat?q=${encodeURIComponent(
+            "[AXE · quota]\nExplain the Free chat quota (20/day) and what 'fair use' means on Pro.",
+          )}`,
+        },
+      ],
+    },
+    {
+      id: "shortcuts",
+      title: "Shortcuts",
+      items: [
+        { id: "chat", label: "Back to chat", href: "/chat" },
+        { id: "settings", label: "Settings", href: "/settings" },
+      ],
+    },
+  ];
+
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-6">
+      <AxeTopBarInjector title="Subscriptions" subtitle={isPro ? "You’re on Pro" : "Free → Pro"} sections={toolbarSections} />
       <ScreenHeader
         left={<BrandMark />}
         title="Subscriptions"
         subtitle="Pick what fits — billing stays simple."
+        right={
+          <span className="hidden md:inline-flex">
+            <AxeContextToolbar title="Subscriptions" subtitle={isPro ? "Pro active" : "Upgrade"} sections={toolbarSections} />
+          </span>
+        }
       />
 
       {skipChatQuota() ? (

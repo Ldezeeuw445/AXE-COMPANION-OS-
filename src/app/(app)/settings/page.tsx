@@ -13,6 +13,8 @@ import { PinnedContextEditor } from "@/components/settings/PinnedContextEditor";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
+import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
+import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 
 async function getPrimaryConversation() {
   const authed = await getAuthedServiceSupabase();
@@ -41,9 +43,56 @@ export default async function SettingsPage() {
     getAccountName(),
   ]);
 
+  const toolbarSections: AxeToolbarSection[] = [
+    {
+      id: "ask-axe",
+      title: "Ask AXE",
+      items: [
+        {
+          id: "profile",
+          label: "Tune my AXE session brief",
+          description: "Bias, style, pairs, rules",
+          href: `/chat?q=${encodeURIComponent(
+            "[AXE · setup]\nHelp me write a strong pinned context: my trading style, risk rules, active pairs, and what you should always remember.",
+          )}`,
+        },
+        {
+          id: "push",
+          label: "Push notification setup",
+          description: "What’s live today + what’s needed",
+          href: `/chat?q=${encodeURIComponent(
+            "[AXE · push]\nExplain how push notifications work in AXE Companion today. What is wired, what’s missing, and what I should do on iOS/Android/PWA.",
+          )}`,
+        },
+      ],
+    },
+    {
+      id: "shortcuts",
+      title: "Shortcuts",
+      items: [
+        { id: "accounts", label: "Accounts", description: "MT5 connect + sync", href: "/accounts" },
+        { id: "alerts", label: "Alerts", description: "Saved rules", href: "/alerts" },
+        { id: "subscription", label: "Subscription", description: "Manage plan", href: "/upgrade" },
+      ],
+    },
+  ];
+
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-4">
-      <ScreenHeader title="Settings" subtitle="You · AXE · one Supabase account" />
+      <AxeTopBarInjector
+        title="Settings"
+        subtitle="You · AXE · one Supabase"
+        sections={toolbarSections}
+      />
+      <ScreenHeader
+        title="Settings"
+        subtitle="You · AXE · one Supabase account"
+        right={
+          <span className="hidden md:inline-flex">
+            <AxeContextToolbar title="Settings" subtitle="Setup & preferences" sections={toolbarSections} />
+          </span>
+        }
+      />
 
       {/* Account Name */}
       <GlassPanel className="mb-4 p-4">

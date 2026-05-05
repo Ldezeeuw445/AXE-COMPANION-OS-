@@ -47,6 +47,7 @@ import type {
   ChartAnnotation,
 } from "@/components/chart/annotations/types";
 import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotationLayer";
+import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
 import { ChartExecutionBridge } from "@/components/chart/ChartExecutionBridge";
 
 const TICK_REACT_THROTTLE_MS = 150;
@@ -742,6 +743,14 @@ export function ChartScreen({ data }: Props) {
           annotations={annotations}
           canvasRef={canvasRef}
           digits={priceDigitsForSymbol(data.brokerSymbol)}
+          onUpdate={updateAnnotation}
+          onRemove={removeAnnotationById}
+        />
+
+        {/* Interactive Trendline layer — draggable endpoints */}
+        <TrendlineAnnotationLayer
+          annotations={annotations}
+          canvasRef={canvasRef}
           onUpdate={updateAnnotation}
           onRemove={removeAnnotationById}
         />

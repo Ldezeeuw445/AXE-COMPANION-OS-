@@ -308,21 +308,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         // handled by FibAnnotationLayer
         return;
       }
-      if (ann.type === "trendline" && ann.points.length >= 2) {
-        const ls = chart.addSeries(LineSeries, {
-          color: "rgba(110,178,252,0.85)",
-          lineWidth: 2,
-          lineStyle: LineStyle.Solid,
-          lastValueVisible: false,
-          priceLineVisible: false,
-          crosshairMarkerVisible: false,
-        });
-        const lineData: LineData[] = [...ann.points]
-          .sort((p1, p2) => p1.time - p2.time)
-          .map((p) => ({ time: p.time as UTCTimestamp, value: p.price }));
-        ls.setData(lineData);
-        annotationLineSeriesRef.current.push(ls);
-      } else if (ann.type === "horizontal_level" && ann.points.length >= 1) {
+      if (ann.type === "trendline") {
+        // handled by TrendlineAnnotationLayer (interactive SVG overlay)
+        return;
+      }
+      if (ann.type === "horizontal_level" && ann.points.length >= 1) {
         annotationPriceLinesRef.current.push(
           series.createPriceLine({
             price: ann.points[0].price,

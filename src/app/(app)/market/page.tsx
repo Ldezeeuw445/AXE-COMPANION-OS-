@@ -3,6 +3,8 @@ import { CalendarDays, Globe2, Newspaper, Sparkles } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
+import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import type {
@@ -30,6 +32,56 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
 
   const ctx = await buildMarketContext({ symbol, watchlist });
 
+  const livePill = (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/95">
+      <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
+      {ctx.hasLiveData ? "Live" : "Idle"}
+    </span>
+  );
+
+  const toolbarSections: AxeToolbarSection[] = [
+    {
+      id: "ask-axe",
+      title: "Ask AXE",
+      items: [
+        {
+          id: "macro",
+          label: "Macro risk today",
+          description: `${symbol} — rates, DXY proxy, CPI/NFP map`,
+          href: chatQ(
+            `[AXE · macro]\nWalk me through today's macro risk on ${symbol}: rates, yields, DXY proxy and the gold/USD axis. Anchor it on my active pair.`,
+          ),
+        },
+        {
+          id: "news",
+          label: "What moved price?",
+          description: `${symbol} headlines → trading impact`,
+          href: chatQ(
+            `[AXE · news]\nSummarize the most market-moving headlines for ${symbol} today. Tie them back to my open positions if any.`,
+          ),
+        },
+      ],
+    },
+    {
+      id: "actions",
+      title: "Actions",
+      items: [
+        {
+          id: "chart",
+          label: "Open chart",
+          description: `Chart ${symbol}`,
+          href: `/chart?symbol=${encodeURIComponent(symbol)}`,
+        },
+        {
+          id: "alert",
+          label: "Create alert",
+          description: "Price, news, macro",
+          href: `/alerts?symbol=${encodeURIComponent(symbol)}`,
+        },
+      ],
+    },
+  ];
+
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
   const newsProviderLabel =
     ctx.providers.find((p) => p.id === "fmp")?.state === "live"
@@ -44,15 +96,27 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
+      <AxeTopBarInjector
+        title="Market"
+        subtitle={`${symbol} context`}
+        sections={toolbarSections}
+        center={livePill}
+      />
       <ScreenHeader
         title="Market context"
         subtitle={`Filtered by ${symbol}${ctx.symbols.length > 1 ? ` + ${ctx.symbols.length - 1} watch` : ""} — macro, news and calendar.`}
         left={<Globe2 className="h-6 w-6 text-cyan-400/85" aria-hidden />}
         right={
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/95">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
-            {ctx.hasLiveData ? "Live" : "Idle"}
-          </span>
+          <div className="flex items-center gap-2">
+            {livePill}
+            <span className="hidden md:inline-flex">
+              <AxeContextToolbar
+                title="Market"
+                subtitle={`${symbol} context`}
+                sections={toolbarSections}
+              />
+            </span>
+          </div>
         }
       />
 
