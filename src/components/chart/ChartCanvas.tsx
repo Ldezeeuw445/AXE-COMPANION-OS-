@@ -23,7 +23,6 @@ import type { ChartOverlayRow } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME } from "@/components/chart/chartTheme";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import {
-  FIB_LEVELS,
   type AnnotationPoint,
   type ChartAnnotation,
 } from "@/components/chart/annotations/types";
@@ -47,6 +46,16 @@ export type ChartCanvasHandle = {
   updateLastCandle: (candle: MetaApiCandle) => void;
   /** Apply a tick to the in-progress candle without changing time bucket. */
   applyTick: (price: number) => void;
+  /** Project a price to its current pixel y-coordinate inside the chart frame. */
+  priceToCoordinate: (price: number) => number | null;
+  /** Project a UTC timestamp (seconds) to its pixel x-coordinate. */
+  timeToCoordinate: (time: number) => number | null;
+  /** Inverse of priceToCoordinate. */
+  coordinateToPrice: (y: number) => number | null;
+  /** Inverse of timeToCoordinate. */
+  coordinateToTime: (x: number) => number | null;
+  /** Subscribe to viewport changes (pan, zoom, resize, data load). */
+  subscribeViewport: (cb: () => void) => () => void;
 };
 
 function toUtcTimestamp(iso: string): UTCTimestamp | null {
@@ -75,10 +84,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const lastBarRef = useRef<CandlestickData | null>(null);
   const positionLinesRef = useRef<IPriceLine[]>([]);
-  const annotationLinesRef = useRef<IPriceLine[]>([]);
   const annotationLineSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
+  const annotationPriceLinesRef = useRef<IPriceLine[]>([]);
   const drawingModeRef = useRef<DrawingMode>(drawingMode);
   const onPointClickRef = useRef<typeof onPointClick>(onPointClick);
+  const viewportSubscribersRef = useRef<Set<() => void>>(new Set());
 
   useEffect(() => {
     drawingModeRef.current = drawingMode;
@@ -156,16 +166,32 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     };
     chart.subscribeClick(handleClick);
 
+    const fireViewport = () => {
+      for (const cb of viewportSubscribersRef.current) {
+        try {
+          cb();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    chart.timeScale().subscribeVisibleTimeRangeChange(fireViewport);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(fireViewport);
+
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+      fireViewport();
     });
     ro.observe(el);
     chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+    queueMicrotask(fireViewport);
 
     return () => {
       ro.disconnect();
       try {
         chart.unsubscribeClick(handleClick);
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(fireViewport);
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(fireViewport);
       } catch {
         /* ignore */
       }
@@ -177,14 +203,14 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         }
       }
       positionLinesRef.current = [];
-      for (const pl of annotationLinesRef.current) {
+      for (const pl of annotationPriceLinesRef.current) {
         try {
           series.removePriceLine(pl);
         } catch {
           /* ignore */
         }
       }
-      annotationLinesRef.current = [];
+      annotationPriceLinesRef.current = [];
       for (const ls of annotationLineSeriesRef.current) {
         try {
           chart.removeSeries(ls);
@@ -252,21 +278,22 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     });
   }, [overlays]);
 
-  // Render user annotations (fib + trendline + horizontal levels).
+  // Render user annotations (trendline + horizontal levels). Fib retracement
+  // is rendered as an interactive SVG overlay outside the canvas.
   useEffect(() => {
     const chart = chartRef.current;
     const series = seriesRef.current;
     if (!chart || !series) return;
 
     // Tear down previous annotation render.
-    for (const pl of annotationLinesRef.current) {
+    for (const pl of annotationPriceLinesRef.current) {
       try {
         series.removePriceLine(pl);
       } catch {
         /* ignore */
       }
     }
-    annotationLinesRef.current = [];
+    annotationPriceLinesRef.current = [];
     for (const ls of annotationLineSeriesRef.current) {
       try {
         chart.removeSeries(ls);
@@ -277,29 +304,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     annotationLineSeriesRef.current = [];
 
     annotations.forEach((ann, idx) => {
-      if (ann.type === "fib_retracement" && ann.points.length >= 2) {
-        const a = ann.points[0];
-        const b = ann.points[1];
-        const high = Math.max(a.price, b.price);
-        const low = Math.min(a.price, b.price);
-        const range = high - low;
-        if (range <= 0) return;
-        for (const lvl of FIB_LEVELS) {
-          const price = high - range * lvl;
-          annotationLinesRef.current.push(
-            series.createPriceLine({
-              price,
-              title: `FIB ${(lvl * 100).toFixed(1)}%`,
-              color:
-                lvl === 0 || lvl === 1
-                  ? "rgba(168,180,196,0.6)"
-                  : "rgba(244,191,99,0.55)",
-              lineWidth: 1,
-              lineStyle: lvl === 0.5 || lvl === 0.618 ? LineStyle.Solid : LineStyle.Dotted,
-            }),
-          );
-        }
-      } else if (ann.type === "trendline" && ann.points.length >= 2) {
+      if (ann.type === "fib_retracement") {
+        // handled by FibAnnotationLayer
+        return;
+      }
+      if (ann.type === "trendline" && ann.points.length >= 2) {
         const ls = chart.addSeries(LineSeries, {
           color: "rgba(110,178,252,0.85)",
           lineWidth: 2,
@@ -314,7 +323,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         ls.setData(lineData);
         annotationLineSeriesRef.current.push(ls);
       } else if (ann.type === "horizontal_level" && ann.points.length >= 1) {
-        annotationLinesRef.current.push(
+        annotationPriceLinesRef.current.push(
           series.createPriceLine({
             price: ann.points[0].price,
             title: `Level ${idx + 1}`,
@@ -365,6 +374,36 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         };
         series.update(next);
         lastBarRef.current = next;
+      },
+      priceToCoordinate(price: number) {
+        const ser = seriesRef.current;
+        if (!ser || !Number.isFinite(price)) return null;
+        const y = ser.priceToCoordinate(price);
+        return y == null ? null : Number(y);
+      },
+      timeToCoordinate(time: number) {
+        const chart = chartRef.current;
+        if (!chart || !Number.isFinite(time)) return null;
+        const x = chart.timeScale().timeToCoordinate(time as UTCTimestamp);
+        return x == null ? null : Number(x);
+      },
+      coordinateToPrice(y: number) {
+        const ser = seriesRef.current;
+        if (!ser) return null;
+        const p = ser.coordinateToPrice(y);
+        return p == null || Number.isNaN(p) ? null : Number(p);
+      },
+      coordinateToTime(x: number) {
+        const chart = chartRef.current;
+        if (!chart) return null;
+        const t = chart.timeScale().coordinateToTime(x);
+        return t == null ? null : Number(t);
+      },
+      subscribeViewport(cb: () => void) {
+        viewportSubscribersRef.current.add(cb);
+        return () => {
+          viewportSubscribersRef.current.delete(cb);
+        };
       },
     }),
     [],

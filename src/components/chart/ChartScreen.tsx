@@ -39,12 +39,14 @@ import {
 import {
   appendAnnotation,
   loadAnnotations,
+  removeAnnotation,
   saveAnnotations,
 } from "@/components/chart/annotations/store";
 import type {
   AnnotationPoint,
   ChartAnnotation,
 } from "@/components/chart/annotations/types";
+import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotationLayer";
 import { ChartExecutionBridge } from "@/components/chart/ChartExecutionBridge";
 
 const TICK_REACT_THROTTLE_MS = 150;
@@ -449,6 +451,25 @@ export function ChartScreen({ data }: Props) {
     });
   }, [data.symbol, data.timeframeKey]);
 
+  const updateAnnotation = useCallback(
+    (updated: ChartAnnotation) => {
+      setAnnotations((prev) => {
+        const next = prev.map((a) => (a.id === updated.id ? updated : a));
+        saveAnnotations(data.symbol, data.timeframeKey, next);
+        return next;
+      });
+    },
+    [data.symbol, data.timeframeKey],
+  );
+
+  const removeAnnotationById = useCallback(
+    (id: string) => {
+      const next = removeAnnotation(data.symbol, data.timeframeKey, id);
+      setAnnotations(next);
+    },
+    [data.symbol, data.timeframeKey],
+  );
+
   const saveSnapshotToVault = useCallback(async () => {
     setSnapshotMessage("Saving snapshot…");
     try {
@@ -714,6 +735,15 @@ export function ChartScreen({ data }: Props) {
           annotations={annotations}
           drawingMode={drawingMode}
           onPointClick={handlePointClick}
+        />
+
+        {/* Interactive Fibonacci layer — handles, levels, percentage + price labels */}
+        <FibAnnotationLayer
+          annotations={annotations}
+          canvasRef={canvasRef}
+          digits={priceDigitsForSymbol(data.brokerSymbol)}
+          onUpdate={updateAnnotation}
+          onRemove={removeAnnotationById}
         />
 
         {/* In-chart price overlay (top-left) */}
