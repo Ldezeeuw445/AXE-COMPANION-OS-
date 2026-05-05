@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Mic, MicOff, Paperclip, Send, X, ImageIcon, ChevronRight } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { LEGAL_COPY } from "@/lib/legal/constants";
+import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
 
 declare global {
   interface Window {
@@ -29,6 +30,25 @@ type ComposerProps = {
 
 function ComposerFallback() {
   return <div className="mt-3 h-24 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03]" aria-hidden />;
+}
+
+function toChartTfKey(raw: string): string {
+  const normalized = raw.toLowerCase().trim();
+  if (normalized === "5m") return "m5";
+  if (normalized === "15m") return "m15";
+  if (normalized === "30m") return "m30";
+  if (normalized === "1h" || normalized === "h1") return "h1";
+  if (normalized === "4h" || normalized === "h4") return "h4";
+  if (normalized === "d" || normalized === "1d" || normalized === "d1") return "d1";
+  return "h1";
+}
+
+function chartActionHref(action: string, symbol: string, tf: string): string {
+  const params = new URLSearchParams();
+  params.set("symbol", symbol || "XAUUSD");
+  params.set("tf", toChartTfKey(tf || "h1"));
+  params.set("action", action);
+  return `/chart?${params.toString()}`;
 }
 
 function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps) {
@@ -134,6 +154,13 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   async function submit() {
     const text = value.trim();
     if ((!text && !image) || sending) return;
+
+    const chartAction = detectFallbackChartActionIntent(text);
+    if (chartAction && !image) {
+      setValue("");
+      router.push(chartActionHref(chartAction, symbol || "XAUUSD", tf || "h1"));
+      return;
+    }
 
     setSending(true);
     setError(null);

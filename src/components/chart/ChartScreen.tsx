@@ -23,6 +23,12 @@ import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import type { ChartOverlayRow, ChartPageData } from "@/lib/broker/loadChartPageData";
+import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
+import { buildFibonacciActionFromCandles } from "@/lib/axeChartActions/swingAnalysis";
+import type {
+  ChartActionCommand,
+  ChartActionResult,
+} from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import {
   useLiveChart,
@@ -55,6 +61,7 @@ const SNAPSHOT_INTERVAL_MS = 30_000;
 
 type Props = {
   data: ChartPageData;
+  initialAction?: string;
 };
 
 type DrawingMode = "fib_retracement" | "trendline" | null;
@@ -209,7 +216,7 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
   }
 }
 
-export function ChartScreen({ data }: Props) {
+export function ChartScreen({ data, initialAction }: Props) {
   const router = useRouter();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
@@ -229,6 +236,7 @@ export function ChartScreen({ data }: Props) {
 
   // Annotations
   const [annotations, setAnnotations] = useState<ChartAnnotation[]>([]);
+  const [annotationsLoadedKey, setAnnotationsLoadedKey] = useState<string | null>(null);
   const [drawingMode, setDrawingMode] = useState<DrawingMode>(null);
   const drawingPointsRef = useRef<AnnotationPoint[]>([]);
   const [drawingHint, setDrawingHint] = useState<string | null>(null);
@@ -239,10 +247,16 @@ export function ChartScreen({ data }: Props) {
   useEffect(() => {
     queueMicrotask(() => {
       setAnnotations(loadAnnotations(data.symbol, data.timeframeKey));
+      setAnnotationsLoadedKey(`${data.symbol}|${data.timeframeKey}`);
       setDrawingMode(null);
       drawingPointsRef.current = [];
       setDrawingHint(null);
     });
+  }, [data.symbol, data.timeframeKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem("axe_active_symbol", data.symbol);
+    window.localStorage.setItem("axe_active_tf", data.timeframeKey);
   }, [data.symbol, data.timeframeKey]);
 
   const onTick = useCallback(
@@ -438,11 +452,6 @@ export function ChartScreen({ data }: Props) {
     [drawingMode, data.symbol, data.timeframeKey],
   );
 
-  const clearAllAnnotations = useCallback(() => {
-    saveAnnotations(data.symbol, data.timeframeKey, []);
-    setAnnotations([]);
-  }, [data.symbol, data.timeframeKey]);
-
   const removeLastAnnotation = useCallback(() => {
     setAnnotations((prev) => {
       if (prev.length === 0) return prev;
@@ -470,6 +479,217 @@ export function ChartScreen({ data }: Props) {
     },
     [data.symbol, data.timeframeKey],
   );
+
+  const appendAndRenderAnnotation = useCallback(
+    (annotation: ChartAnnotation): ChartAnnotation[] => {
+      const list = appendAnnotation(data.symbol, data.timeframeKey, annotation);
+      setAnnotations(list);
+      return list;
+    },
+    [data.symbol, data.timeframeKey],
+  );
+
+  const executeChartAction = useCallback(
+    (command: ChartActionCommand): ChartActionResult => {
+      const bus = new AxeChartActionBus({
+        drawFibonacci: (cmd) => {
+          const points = Array.isArray(cmd.payload.points) ? cmd.payload.points : [];
+          const pointA = points[0] as AnnotationPoint | undefined;
+          const pointB = points[1] as AnnotationPoint | undefined;
+
+          if (!pointA || !pointB) {
+            return {
+              id: cmd.id,
+              type: cmd.type,
+              status: "failed",
+              message: "AXE could not find two valid swing anchors for Fibonacci.",
+            };
+          }
+
+          const now = new Date().toISOString();
+          const annotation: ChartAnnotation = {
+            id: cmd.id,
+            accountId: cmd.accountId ?? null,
+            symbol: cmd.symbol,
+            timeframe: cmd.timeframe,
+            type: "fib_retracement",
+            points: [pointA, pointB],
+            settings: {
+              source: cmd.source,
+              explanation: typeof cmd.payload.explanation === "string" ? cmd.payload.explanation : undefined,
+            },
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          appendAndRenderAnnotation(annotation);
+          return {
+            id: cmd.id,
+            type: cmd.type,
+            status: "rendered",
+            message: "AXE added Fibonacci to the chart. You can drag the anchors to adjust it.",
+            annotation,
+          };
+        },
+        drawTrendline: (cmd) => {
+          const points = Array.isArray(cmd.payload.points) ? cmd.payload.points : [];
+          if (points.length >= 2) {
+            const now = new Date().toISOString();
+            const annotation: ChartAnnotation = {
+              id: cmd.id,
+              accountId: cmd.accountId ?? null,
+              symbol: cmd.symbol,
+              timeframe: cmd.timeframe,
+              type: "trendline",
+              points: points.slice(0, 2) as AnnotationPoint[],
+              settings: { source: cmd.source },
+              createdAt: now,
+              updatedAt: now,
+            };
+            appendAndRenderAnnotation(annotation);
+            return {
+              id: cmd.id,
+              type: cmd.type,
+              status: "rendered",
+              message: "AXE added a trendline. You can drag the endpoints to adjust it.",
+              annotation,
+            };
+          }
+
+          startDrawing("trendline");
+          return {
+            id: cmd.id,
+            type: cmd.type,
+            status: "prepared",
+            message: "Trendline tool ready. Tap two points on the chart.",
+          };
+        },
+        markKeyLevel: (cmd) => {
+          const price = Number(cmd.payload.price);
+          if (!Number.isFinite(price)) {
+            return {
+              id: cmd.id,
+              type: cmd.type,
+              status: "prepared",
+              message: "Key level action prepared. A price is required to render it.",
+            };
+          }
+
+          const now = new Date().toISOString();
+          const annotation: ChartAnnotation = {
+            id: cmd.id,
+            accountId: cmd.accountId ?? null,
+            symbol: cmd.symbol,
+            timeframe: cmd.timeframe,
+            type: "horizontal_level",
+            points: [{ time: Math.floor(Date.now() / 1000), price }],
+            settings: { source: cmd.source, label: cmd.payload.label },
+            createdAt: now,
+            updatedAt: now,
+          };
+          appendAndRenderAnnotation(annotation);
+          return {
+            id: cmd.id,
+            type: cmd.type,
+            status: "rendered",
+            message: "AXE marked the key level on the chart.",
+            annotation,
+          };
+        },
+        addIndicator: (cmd) => ({
+          id: cmd.id,
+          type: cmd.type,
+          status: "prepared",
+          message: "Indicator layer prepared, renderer not connected yet.",
+        }),
+        clearAiDrawings: (cmd) => {
+          saveAnnotations(cmd.symbol, cmd.timeframe, []);
+          setAnnotations([]);
+          return {
+            id: cmd.id,
+            type: cmd.type,
+            status: "rendered",
+            message: "AXE cleared the chart drawings.",
+            annotations: [],
+          };
+        },
+      });
+
+      const result = bus.dispatch(command);
+      setSnapshotMessage(result.message);
+      setTimeout(() => setSnapshotMessage(null), 4_000);
+      return result;
+    },
+    [appendAndRenderAnnotation, startDrawing],
+  );
+
+  const executeActionByType = useCallback(
+    (type: ChartActionCommand["type"], source: "axe" | "user" = "axe"): ChartActionResult => {
+      if (type === "draw_fibonacci") {
+        try {
+          const command = buildFibonacciActionFromCandles({
+            id: newAnnotationId(),
+            source,
+            symbol: data.symbol,
+            timeframe: data.timeframeKey,
+            accountId: accountId ?? undefined,
+            candles: data.candles,
+            strength: 3,
+          });
+          return executeChartAction(command);
+        } catch {
+          const failed: ChartActionResult = {
+            id: newAnnotationId(),
+            type,
+            status: "failed",
+            message: "AXE could not find a clean recent swing. Use manual Fibonacci and tap two anchors.",
+          };
+          setSnapshotMessage(failed.message);
+          setTimeout(() => setSnapshotMessage(null), 4_000);
+          return failed;
+        }
+      }
+
+      return executeChartAction({
+        id: newAnnotationId(),
+        type,
+        source,
+        symbol: data.symbol,
+        timeframe: data.timeframeKey,
+        accountId: accountId ?? undefined,
+        payload: {},
+      });
+    },
+    [accountId, data.candles, data.symbol, data.timeframeKey, executeChartAction],
+  );
+
+  useEffect(() => {
+    if (!initialAction) return;
+    if (annotationsLoadedKey !== `${data.symbol}|${data.timeframeKey}`) return;
+    if (data.failure !== "ok") return;
+
+    const normalized = initialAction.toLowerCase();
+    const action =
+      normalized === "draw_fibonacci" || normalized === "draw_trendline" || normalized === "clear_ai_drawings"
+        ? normalized
+        : null;
+    if (!action) return;
+
+    executeActionByType(action);
+
+    const params = new URLSearchParams(window.location.search);
+    params.delete("action");
+    const next = params.toString();
+    router.replace(next ? `/chart?${next}` : "/chart", { scroll: false });
+  }, [
+    annotationsLoadedKey,
+    data.failure,
+    data.symbol,
+    data.timeframeKey,
+    executeActionByType,
+    initialAction,
+    router,
+  ]);
 
   const saveSnapshotToVault = useCallback(async () => {
     setSnapshotMessage("Saving snapshot…");
@@ -554,7 +774,15 @@ export function ChartScreen({ data }: Props) {
         items: [
           {
             id: "fib",
-            label: "Add Fibonacci",
+            label: "AXE Fibonacci",
+            description: "Auto from latest swing",
+            icon: <Spline className="h-3.5 w-3.5" />,
+            disabled: drawDisabled,
+            onSelect: () => executeActionByType("draw_fibonacci", "user"),
+          },
+          {
+            id: "fib-manual",
+            label: "Manual Fibonacci",
             description: "Tap swing high → swing low",
             icon: <Spline className="h-3.5 w-3.5" />,
             disabled: drawDisabled,
@@ -566,7 +794,7 @@ export function ChartScreen({ data }: Props) {
             description: "Two-tap anchored line",
             icon: <Triangle className="h-3.5 w-3.5" />,
             disabled: drawDisabled,
-            onSelect: () => startDrawing("trendline"),
+            onSelect: () => executeActionByType("draw_trendline", "user"),
           },
           {
             id: "remove-last",
@@ -580,7 +808,7 @@ export function ChartScreen({ data }: Props) {
             label: "Clear all drawings",
             icon: <Eraser className="h-3.5 w-3.5" />,
             disabled: annotations.length === 0,
-            onSelect: clearAllAnnotations,
+            onSelect: () => executeActionByType("clear_ai_drawings", "user"),
           },
         ],
       },
@@ -646,8 +874,8 @@ export function ChartScreen({ data }: Props) {
     executionBridgeOpen,
     data.failure,
     startDrawing,
+    executeActionByType,
     removeLastAnnotation,
-    clearAllAnnotations,
     saveSnapshotToVault,
     focusDataDetails,
   ]);
