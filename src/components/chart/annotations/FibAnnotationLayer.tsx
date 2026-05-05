@@ -181,25 +181,25 @@ export function FibAnnotationLayer({
   }
 
   if (containerSize.w === 0 || containerSize.h === 0) {
-    return <div ref={hostRef} className="absolute inset-0" aria-hidden />;
+    return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
   if (geoms.length === 0) {
-    return <div ref={hostRef} className="absolute inset-0" aria-hidden />;
+    return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
   return (
-    <div ref={hostRef} className="absolute inset-0">
+    <div ref={hostRef} className="pointer-events-none absolute inset-0">
       <svg
         ref={svgRef}
         width={containerSize.w}
         height={containerSize.h}
         viewBox={`0 0 ${containerSize.w} ${containerSize.h}`}
-        className="absolute inset-0"
+        className="pointer-events-none absolute inset-0"
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        style={{ touchAction: "none" }}
+        style={{ touchAction: isDragging ? "none" : "manipulation" }}
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;

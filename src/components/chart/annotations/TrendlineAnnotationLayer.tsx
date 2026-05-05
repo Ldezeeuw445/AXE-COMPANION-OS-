@@ -30,6 +30,7 @@ export function TrendlineAnnotationLayer({
   const [geoms, setGeoms] = useState<TrendGeom[]>([]);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const dragRef = useRef<{
     annotationId: string;
@@ -86,6 +87,7 @@ export function TrendlineAnnotationLayer({
     svgRef.current?.setPointerCapture(e.pointerId);
     dragRef.current = { annotationId, handle: handleIdx, pointerId: e.pointerId };
     setActiveId(annotationId);
+    setIsDragging(true);
   }
 
   function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
@@ -117,27 +119,28 @@ export function TrendlineAnnotationLayer({
     e.stopPropagation();
     e.preventDefault();
     dragRef.current = null;
+    setIsDragging(false);
   }
 
   if (containerSize.w === 0 || containerSize.h === 0) {
-    return <div ref={hostRef} className="absolute inset-0" aria-hidden />;
+    return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
   if (geoms.length === 0) {
-    return <div ref={hostRef} className="absolute inset-0" aria-hidden />;
+    return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
   return (
-    <div ref={hostRef} className="absolute inset-0">
+    <div ref={hostRef} className="pointer-events-none absolute inset-0">
       <svg
         ref={svgRef}
         width={containerSize.w}
         height={containerSize.h}
         viewBox={`0 0 ${containerSize.w} ${containerSize.h}`}
-        className="absolute inset-0"
+        className="pointer-events-none absolute inset-0"
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        style={{ touchAction: "none" }}
+        style={{ touchAction: isDragging ? "none" : "manipulation" }}
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;

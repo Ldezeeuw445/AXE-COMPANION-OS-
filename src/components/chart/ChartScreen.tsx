@@ -737,10 +737,8 @@ export function ChartScreen({ data }: Props) {
           onPointClick={handlePointClick}
         />
 
-        {/* Interactive Fibonacci layer — handles, levels, percentage + price labels */}
-        <div className="pointer-events-none absolute inset-0 z-[15]" aria-hidden />
-
-        <div className="absolute inset-0 z-[25]">
+        {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
+        <div className="pointer-events-none absolute inset-0 z-[25]">
           <FibAnnotationLayer
             annotations={annotations}
             canvasRef={canvasRef}
