@@ -655,20 +655,19 @@ export function ChartScreen({ data }: Props) {
   // Inject the LIVE pill (center) and AXE button (right) into the global mobile top bar.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    setCenter(
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusPill.className}`}
-      >
-        <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
-        {statusPill.label}
-      </span>,
-    );
+    // Keep the global mobile top bar center reserved for the AXE wordmark.
+    // Chart status + AXE actions live on the right slot (stacked).
+    setCenter(null);
     setRight(
-      <AxeContextToolbar
-        title="Chart"
-        subtitle={`${data.symbol} · ${tfLabel}`}
-        sections={toolbarSections}
-      />,
+      <div className="flex max-w-[min(16rem,calc(100vw-7rem))] flex-col items-end gap-1">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusPill.className}`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
+          {statusPill.label}
+        </span>
+        <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />
+      </div>,
     );
     return () => {
       setCenter(null);
@@ -739,21 +738,25 @@ export function ChartScreen({ data }: Props) {
         />
 
         {/* Interactive Fibonacci layer — handles, levels, percentage + price labels */}
-        <FibAnnotationLayer
-          annotations={annotations}
-          canvasRef={canvasRef}
-          digits={priceDigitsForSymbol(data.brokerSymbol)}
-          onUpdate={updateAnnotation}
-          onRemove={removeAnnotationById}
-        />
+        <div className="pointer-events-none absolute inset-0 z-[15]" aria-hidden />
 
-        {/* Interactive Trendline layer — draggable endpoints */}
-        <TrendlineAnnotationLayer
-          annotations={annotations}
-          canvasRef={canvasRef}
-          onUpdate={updateAnnotation}
-          onRemove={removeAnnotationById}
-        />
+        <div className="absolute inset-0 z-[25]">
+          <FibAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            digits={priceDigitsForSymbol(data.brokerSymbol)}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
+          />
+
+          {/* Interactive Trendline layer — draggable endpoints */}
+          <TrendlineAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
+          />
+        </div>
 
         {/* In-chart price overlay (top-left) */}
         <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%]">

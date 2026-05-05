@@ -102,20 +102,30 @@ export function AppNavigation() {
   return (
     <>
       {/* Mobile top bar — hamburger | page center slot | page right slot */}
-      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.06] bg-tos-bg/90 px-2 backdrop-blur-md md:hidden">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-white/[0.04] text-cyan-300 transition-colors hover:bg-white/[0.08]"
-          aria-label="Open menu"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        <div className="flex min-w-0 justify-center">
-          {slots.center ?? (
-            <AxeWordmark />
-          )}
+      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-tos-bg/90 px-2 backdrop-blur-md md:hidden">
+        <div className="flex justify-start">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-white/[0.04] text-cyan-300 transition-colors hover:bg-white/[0.08]"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
         </div>
+
+        {/* True center column — AXE wordmark stays visually centered regardless of injected slots */}
+        <div className="pointer-events-none relative flex min-w-0 items-center justify-center">
+          <AxeWordmark />
+
+          {/* Optional page-injected center content (stacked under AXE, does not shift the wordmark) */}
+          {slots.center ? (
+            <div className="pointer-events-auto absolute left-1/2 top-[calc(100%-0.15rem)] z-[41] flex -translate-x-1/2 justify-center px-1">
+              <div className="max-w-[min(18rem,calc(100vw-7rem))]">{slots.center}</div>
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex justify-end">{slots.right}</div>
       </div>
 
