@@ -99,7 +99,7 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
 
       {open ? (
         <div
-          className="fixed inset-0 z-[80] flex items-end justify-center sm:items-start sm:justify-end sm:pr-4 sm:pt-3"
+          className="fixed inset-0 z-[80] flex items-start justify-end p-2 sm:p-3"
           role="dialog"
           aria-modal="true"
           aria-labelledby={`${triggerId}-title`}
@@ -112,7 +112,8 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
           />
           <div
             ref={sheetRef}
-            className="relative z-[81] w-full max-w-md rounded-t-3xl border border-white/10 bg-[#070A10]/95 p-3 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_-20px_rgba(34,211,238,0.25)] sm:max-h-[80vh] sm:rounded-2xl sm:pb-3"
+            className="relative z-[81] mt-[3.25rem] w-[min(20rem,calc(100vw-1rem))] origin-top-right rounded-2xl border border-white/10 bg-[#070A10]/95 p-3 shadow-[0_24px_60px_-20px_rgba(34,211,238,0.35),0_0_0_1px_rgba(34,211,238,0.10)] backdrop-blur-xl sm:mt-[3.5rem]"
+            style={{ animation: "axeSheetIn 160ms ease-out both" }}
           >
             <header className="mb-2 flex items-center justify-between gap-3 px-2 pt-1">
               <div className="min-w-0">
@@ -136,6 +137,12 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
               </button>
             </header>
 
+            <style>{`
+              @keyframes axeSheetIn {
+                from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+              }
+            `}</style>
             <div className="tos-scrollbar max-h-[70vh] overflow-y-auto pr-1 sm:max-h-[68vh]">
               {sections.map((section) => (
                 <section key={section.id} className="mb-2 last:mb-0">

@@ -19,6 +19,7 @@ import {
   Triangle,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import type { ChartOverlayRow, ChartPageData } from "@/lib/broker/loadChartPageData";
@@ -629,10 +630,34 @@ export function ChartScreen({ data }: Props) {
     focusDataDetails,
   ]);
 
+  // Inject the LIVE pill (center) and AXE button (right) into the global mobile top bar.
+  const { setCenter, setRight } = useAppTopBar();
+  useEffect(() => {
+    setCenter(
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusPill.className}`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
+        {statusPill.label}
+      </span>,
+    );
+    setRight(
+      <AxeContextToolbar
+        title="Chart"
+        subtitle={`${data.symbol} · ${tfLabel}`}
+        sections={toolbarSections}
+      />,
+    );
+    return () => {
+      setCenter(null);
+      setRight(null);
+    };
+  }, [setCenter, setRight, statusPill.className, statusPill.dot, statusPill.label, data.symbol, tfLabel, toolbarSections]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Compact top row — symbol+TF (left), LIVE pill (center), AXE button (right) */}
-      <div className="sticky top-0 z-30 grid grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] bg-tos-bg/80 py-2 backdrop-blur">
+      {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
+      <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
         <div className="flex shrink-0 items-baseline gap-1.5">
           <span className="font-mono text-sm font-semibold uppercase tracking-wider text-tos-text">
             {data.symbol}

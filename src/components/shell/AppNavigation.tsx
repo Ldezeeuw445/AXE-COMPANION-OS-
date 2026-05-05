@@ -21,6 +21,7 @@ import {
   X,
   Landmark,
 } from "lucide-react";
+import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
 
 type NavItem = {
   href: string;
@@ -89,6 +90,7 @@ function NavLink({
 export function AppNavigation() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const slots = useAppTopBarSlots();
 
   const close = useCallback(() => setOpen(false), []);
   useEffect(() => {
@@ -98,17 +100,22 @@ export function AppNavigation() {
 
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="sticky top-0 z-40 flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-tos-bg/90 px-1 py-2 backdrop-blur-md md:hidden">
+      {/* Mobile top bar — hamburger | page center slot | page right slot */}
+      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.06] bg-tos-bg/90 px-2 backdrop-blur-md md:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300 hover:bg-white/[0.08]"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-white/[0.04] text-cyan-300 transition-colors hover:bg-white/[0.08]"
           aria-label="Open menu"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-tos-dim">AXE</span>
+        <div className="flex min-w-0 justify-center">
+          {slots.center ?? (
+            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-tos-dim">AXE</span>
+          )}
+        </div>
+        <div className="flex justify-end">{slots.right}</div>
       </div>
 
       {/* Desktop rail */}
