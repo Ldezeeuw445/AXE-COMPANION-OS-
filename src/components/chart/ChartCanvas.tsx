@@ -423,17 +423,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
   return (
     <>
-      {/* Chart frame base — clean dark, soft cyan glow rechtsboven, geen weave-patroon */}
+      {/* Flat terminal base: keep the chart feeling native, not like a floating card. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
-        style={{
-          background: `
-            radial-gradient(70% 45% at 82% 14%, rgba(34,211,238,0.32) 0%, rgba(34,211,238,0.08) 38%, rgba(34,211,238,0) 65%),
-            radial-gradient(80% 55% at 8% 100%, rgba(31,156,123,0.10) 0%, rgba(31,156,123,0) 60%),
-            ${CHART_THEME.background}
-          `,
-        }}
+        style={{ background: CHART_THEME.chartCanvasBackground }}
       />
 
       {/* Chart canvas itself — transparent so the bg blend shows through */}
@@ -445,18 +439,9 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         }}
       />
 
-      {/* Soft top + bottom matte vignette */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 14%, rgba(0,0,0,0) 82%, rgba(0,0,0,0.45) 100%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-2xl"
         style={{ boxShadow: CHART_THEME.frameGlow }}
       />
     </>

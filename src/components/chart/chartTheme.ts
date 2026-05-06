@@ -7,8 +7,8 @@
 export const CHART_THEME = {
   /** Base color of the chart frame — sits on top of the woven app background. */
   background: "#070C13",
-  /** Chart canvas itself paints transparent so glow + base color blend cleanly. */
-  chartCanvasBackground: "rgba(0,0,0,0)",
+  /** Chart canvas itself stays solid/flat so it feels like a native trading terminal. */
+  chartCanvasBackground: "#05070A",
   textColor: "rgba(208,220,234,0.92)",
   grid: "rgba(110,170,200,0.05)",
   crosshair: "rgba(140,200,220,0.48)",
@@ -28,6 +28,6 @@ export const CHART_THEME = {
   negativeText: "rgba(201,84,80,0.95)",
   neutralText: "rgba(168,180,196,0.95)",
   cyanAccent: "rgba(33,212,216,0.85)",
-  /** Soft inner glow used for the chart frame to evoke "matte + light on it". */
-  frameGlow: "0 0 0 1px rgba(34,211,238,0.06) inset, 0 80px 120px -80px rgba(34,211,238,0.18) inset",
+  /** Thin edge only; avoid a floating/3D card feel on the chart tab. */
+  frameGlow: "0 0 0 1px rgba(255,255,255,0.04) inset",
 } as const;

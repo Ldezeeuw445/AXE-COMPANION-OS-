@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import {
   Activity,
   BarChart3,
@@ -235,6 +236,107 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
   }
 }
 
+function PendingOrderLine({
+  canvasRef,
+  price,
+  side,
+  digits,
+  onChange,
+}: {
+  canvasRef: RefObject<ChartCanvasHandle | null>;
+  price: number | null;
+  side: "buy" | "sell";
+  digits: number;
+  onChange: (price: number) => void;
+}) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [y, setY] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect();
+      setSize({ w: rect.width, h: rect.height });
+    });
+    ro.observe(el);
+    const rect = el.getBoundingClientRect();
+    setSize({ w: rect.width, h: rect.height });
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handle = canvasRef.current;
+    if (!handle) return;
+    const compute = () => setY(price == null ? null : handle.priceToCoordinate(price));
+    compute();
+    return handle.subscribeViewport(compute);
+  }, [canvasRef, price]);
+
+  function updateFromPointer(clientY: number) {
+    const host = hostRef.current;
+    const handle = canvasRef.current;
+    if (!host || !handle) return;
+    const rect = host.getBoundingClientRect();
+    const next = handle.coordinateToPrice(clientY - rect.top);
+    if (next != null && Number.isFinite(next)) onChange(next);
+  }
+
+  if (price == null || y == null || size.w <= 0 || size.h <= 0) {
+    return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
+  }
+
+  const color = side === "buy" ? "#1f8cff" : "#ef4444";
+  return (
+    <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[24]">
+      <svg
+        width={size.w}
+        height={size.h}
+        viewBox={`0 0 ${size.w} ${size.h}`}
+        className="absolute inset-0"
+        style={{ touchAction: dragging ? "none" : "manipulation" }}
+        onPointerMove={(event) => {
+          if (!dragging) return;
+          event.preventDefault();
+          event.stopPropagation();
+          updateFromPointer(event.clientY);
+        }}
+        onPointerUp={(event) => {
+          if (!dragging) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setDragging(false);
+        }}
+        onPointerCancel={() => setDragging(false)}
+      >
+        <line x1={0} x2={size.w} y1={y} y2={y} stroke={color} strokeWidth={1.5} strokeDasharray="6 4" />
+        <g
+          style={{ pointerEvents: "auto", cursor: "ns-resize" }}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setDragging(true);
+            event.currentTarget.setPointerCapture(event.pointerId);
+            updateFromPointer(event.clientY);
+          }}
+        >
+          <rect x={6} y={y - 16} width={118} height={24} rx={5} fill="rgba(0,0,0,0.72)" stroke={color} />
+          <text x={14} y={y} fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontSize={11} fontWeight={700} fill={color}>
+            {side.toUpperCase()} LIMIT
+          </text>
+          <circle cx={132} cy={y - 4} r={8} fill={color} stroke="rgba(255,255,255,0.86)" strokeWidth={1.5} />
+          <rect x={size.w - 74} y={y - 15} width={68} height={24} rx={3} fill="rgba(0,0,0,0.72)" stroke={color} />
+          <text x={size.w - 40} y={y + 1} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize={12} fontWeight={700} fill={color}>
+            {price.toFixed(digits)}
+          </text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 export function ChartScreen({ data, initialAction }: Props) {
   const router = useRouter();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
@@ -262,8 +364,11 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [executionBridgeOpen, setExecutionBridgeOpen] = useState<boolean>(false);
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
-  const [toolRailOpen, setToolRailOpen] = useState(true);
+  const [toolRailOpen, setToolRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
+  const [pendingOrderSide, setPendingOrderSide] = useState<"buy" | "sell">("buy");
+  const [pendingOrderPrice, setPendingOrderPrice] = useState<number | null>(data.lastPrice);
+  const [pendingOrderVisible, setPendingOrderVisible] = useState(false);
 
   // Load saved annotations when symbol/tf changes
   useEffect(() => {
@@ -280,6 +385,10 @@ export function ChartScreen({ data, initialAction }: Props) {
     window.localStorage.setItem("axe_active_symbol", data.symbol);
     window.localStorage.setItem("axe_active_tf", data.timeframeKey);
   }, [data.symbol, data.timeframeKey]);
+
+  useEffect(() => {
+    setPendingOrderPrice((prev) => prev ?? data.lastPrice);
+  }, [data.lastPrice]);
 
   const onTick = useCallback(
     ({ mid, bid, ask, time }: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => {
@@ -982,12 +1091,12 @@ export function ChartScreen({ data, initialAction }: Props) {
         </div>
       ) : null}
 
-      {/* Chart frame — fills most of the viewport */}
+      {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        className="relative mt-1 w-full overflow-hidden rounded-xl border border-white/[0.06]"
+        className="relative -mx-4 mt-0 w-auto overflow-hidden border-y border-white/[0.08] md:mx-0 md:rounded-none md:border-x"
         style={{
           background: CHART_THEME.background,
-          height: "min(calc(100dvh - 8.25rem), 780px)",
+          height: "min(calc(100dvh - 8.1rem), 860px)",
           minHeight: 520,
         }}
       >
@@ -1011,6 +1120,16 @@ export function ChartScreen({ data, initialAction }: Props) {
             structure: activeToolFlags.structure,
           }}
         />
+
+        {pendingOrderVisible ? (
+          <PendingOrderLine
+            canvasRef={canvasRef}
+            price={pendingOrderPrice}
+            side={pendingOrderSide}
+            digits={priceDigitsForSymbol(data.brokerSymbol)}
+            onChange={setPendingOrderPrice}
+          />
+        ) : null}
 
         <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/55 px-2 py-1.5 backdrop-blur">
           <div className="flex min-w-0 items-center gap-2">
@@ -1050,9 +1169,20 @@ export function ChartScreen({ data, initialAction }: Props) {
           </div>
         </div>
 
+        {!toolRailOpen ? (
+          <button
+            type="button"
+            onClick={() => setToolRailOpen(true)}
+            className="absolute left-0 top-14 z-30 grid h-12 w-5 place-items-center rounded-r-full border border-l-0 border-white/10 bg-black/72 text-cyan-200 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur"
+            aria-label="Open drawing toolbar"
+          >
+            <ChevronDown className="-rotate-90 h-4 w-4" aria-hidden />
+          </button>
+        ) : null}
+
         <div
-          className={`absolute left-2 top-12 z-30 flex flex-col items-center gap-1 rounded-full border border-white/10 bg-black/55 p-1 backdrop-blur transition-all ${
-            toolRailOpen ? "translate-x-0" : "-translate-x-[2.65rem]"
+          className={`absolute left-0 top-12 z-30 flex flex-col items-center gap-1 rounded-r-full border border-l-0 border-white/10 bg-black/72 p-1 backdrop-blur transition-transform ${
+            toolRailOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
           }`}
         >
           <button
@@ -1179,31 +1309,65 @@ export function ChartScreen({ data, initialAction }: Props) {
         >
           <RotateCcw className="h-4 w-4" aria-hidden />
         </button>
-
-        <div className="absolute bottom-2 left-1/2 z-30 flex w-[min(24rem,calc(100%-1rem))] -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-black/72 p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-          <button
-            type="button"
-            className="rounded-full bg-rose-500/90 px-2.5 py-1.5 text-left font-mono text-[10px] font-bold text-white"
-            onClick={() => setExecutionBridgeOpen(true)}
-          >
-            SELL {lastPriceText}
-          </button>
-          <button
-            type="button"
-            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1.5 text-center text-[10px] font-semibold text-tos-text"
-            onClick={() => setExecutionBridgeOpen((v) => !v)}
-          >
-            Buy Limit · 0.5
-          </button>
-          <button
-            type="button"
-            className="rounded-full bg-cyan-500/90 px-2.5 py-1.5 text-right font-mono text-[10px] font-bold text-white"
-            onClick={() => setExecutionBridgeOpen(true)}
-          >
-            BUY {lastPriceText}
-          </button>
-        </div>
       </div>
+
+      <div className="-mx-4 flex h-11 items-stretch gap-px border-b border-white/[0.08] bg-black md:mx-0">
+        <button
+          type="button"
+          className={`flex min-w-0 flex-1 items-center justify-between px-2.5 text-left ${
+            pendingOrderSide === "sell" ? "bg-rose-500/95 text-white" : "bg-white/[0.035] text-tos-muted"
+          }`}
+          onClick={() => {
+            setPendingOrderSide("sell");
+            setPendingOrderVisible(true);
+            setExecutionBridgeOpen(true);
+          }}
+        >
+          <span className="text-[10px] font-semibold uppercase">Sell</span>
+          <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
+        </button>
+        <button
+          type="button"
+          className="flex min-w-[6.2rem] items-center justify-center gap-1.5 bg-black px-2 text-[11px] font-semibold text-tos-text"
+          onClick={() => {
+            setPendingOrderVisible(true);
+            setExecutionBridgeOpen((v) => !v);
+          }}
+        >
+          <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase text-tos-muted">
+            Limit
+          </span>
+          <span className="font-mono">{pendingOrderPrice != null ? pendingOrderPrice.toFixed(priceDigitsForSymbol(data.brokerSymbol)) : "--"}</span>
+        </button>
+        <button
+          type="button"
+          className={`flex min-w-0 flex-1 items-center justify-between px-2.5 text-left ${
+            pendingOrderSide === "buy" ? "bg-cyan-500/95 text-white" : "bg-white/[0.035] text-tos-muted"
+          }`}
+          onClick={() => {
+            setPendingOrderSide("buy");
+            setPendingOrderVisible(true);
+            setExecutionBridgeOpen(true);
+          }}
+        >
+          <span className="text-[10px] font-semibold uppercase">Buy</span>
+          <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
+        </button>
+      </div>
+
+      {executionBridgeOpen ? (
+        <ChartExecutionBridge
+          symbol={data.symbol}
+          brokerSymbol={data.brokerSymbol}
+          timeframeLabel={tfLabel}
+          lastPrice={livePrice}
+          digits={priceDigitsForSymbol(data.brokerSymbol)}
+          defaultSide={pendingOrderSide}
+          defaultOrderType="limit"
+          entryPrice={pendingOrderPrice}
+          onClose={() => setExecutionBridgeOpen(false)}
+        />
+      ) : null}
 
       {snapshotMessage ? (
         <p className="mt-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-tos-muted">
@@ -1265,18 +1429,6 @@ export function ChartScreen({ data, initialAction }: Props) {
             })}
           </ul>
         </GlassPanel>
-      ) : null}
-
-      {/* Execution bridge — review-only, default off */}
-      {executionBridgeOpen ? (
-        <ChartExecutionBridge
-          symbol={data.symbol}
-          brokerSymbol={data.brokerSymbol}
-          timeframeLabel={tfLabel}
-          lastPrice={livePrice}
-          digits={priceDigitsForSymbol(data.brokerSymbol)}
-          onClose={() => setExecutionBridgeOpen(false)}
-        />
       ) : null}
 
       {/* Quick actions (compact) */}

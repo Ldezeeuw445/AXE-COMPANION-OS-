@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Activity, Lock, ShieldAlert, X } from "lucide-react";
 
 type Props = {
@@ -10,6 +10,9 @@ type Props = {
   timeframeLabel: string;
   lastPrice: number | null;
   digits: number;
+  defaultSide?: "buy" | "sell";
+  defaultOrderType?: "market" | "limit" | "stop";
+  entryPrice?: number | null;
   onClose: () => void;
 };
 
@@ -33,17 +36,33 @@ export function ChartExecutionBridge({
   timeframeLabel,
   lastPrice,
   digits,
+  defaultSide = "buy",
+  defaultOrderType = "market",
+  entryPrice,
   onClose,
 }: Props) {
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [orderType, setOrderType] = useState<"market" | "limit" | "stop">("market");
+  const [side, setSide] = useState<"buy" | "sell">(defaultSide);
+  const [orderType, setOrderType] = useState<"market" | "limit" | "stop">(defaultOrderType);
   const [volume, setVolume] = useState<string>("0.10");
-  const [entry, setEntry] = useState<string>(lastPrice ? lastPrice.toFixed(digits) : "");
+  const [entry, setEntry] = useState<string>((entryPrice ?? lastPrice) ? (entryPrice ?? lastPrice)?.toFixed(digits) ?? "" : "");
   const [stopLoss, setStopLoss] = useState<string>("");
   const [takeProfit, setTakeProfit] = useState<string>("");
   const [risk, setRisk] = useState<string>("0.5");
   const [acknowledged, setAcknowledged] = useState<boolean>(false);
   const [approvalOpen, setApprovalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    setSide(defaultSide);
+  }, [defaultSide]);
+
+  useEffect(() => {
+    setOrderType(defaultOrderType);
+  }, [defaultOrderType]);
+
+  useEffect(() => {
+    const next = entryPrice ?? lastPrice;
+    if (next != null && Number.isFinite(next)) setEntry(next.toFixed(digits));
+  }, [digits, entryPrice, lastPrice]);
 
   const planText = buildPlanText({
     symbol,
@@ -59,8 +78,8 @@ export function ChartExecutionBridge({
   });
 
   return (
-    <section className="relative mt-3 overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-xl">
-      <header className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-2">
+    <section className="-mx-4 relative overflow-hidden border-b border-white/[0.08] bg-[#05070A] md:mx-0 md:border-x">
+      <header className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-1.5">
         <div className="flex items-center gap-2">
           <Activity className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
@@ -80,19 +99,19 @@ export function ChartExecutionBridge({
         </button>
       </header>
 
-      <div className="space-y-3 px-3 py-3">
-        <p className="rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-200/90">
+      <div className="space-y-2 px-3 py-2.5">
+        <p className="rounded border border-amber-400/15 bg-amber-400/[0.04] px-2.5 py-1.5 text-[10.5px] leading-relaxed text-amber-200/90">
           AXE can prepare an order ticket. Broker execution is{" "}
           <span className="font-semibold">disabled by default</span>. Nothing is sent until you
           explicitly approve, and only when this app build has the execution bridge feature flag
           enabled.
         </p>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-1.5">
           <button
             type="button"
             onClick={() => setSide("buy")}
-            className={`rounded-xl border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider ${
+            className={`rounded border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${
               side === "buy"
                 ? "border-emerald-400/40 bg-emerald-400/12 text-emerald-200/95"
                 : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
@@ -103,7 +122,7 @@ export function ChartExecutionBridge({
           <button
             type="button"
             onClick={() => setSide("sell")}
-            className={`rounded-xl border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider ${
+            className={`rounded border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${
               side === "sell"
                 ? "border-rose-400/40 bg-rose-400/12 text-rose-200/95"
                 : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
@@ -113,13 +132,13 @@ export function ChartExecutionBridge({
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1.5">
           {(["market", "limit", "stop"] as const).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => setOrderType(t)}
-              className={`rounded-lg border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${
+              className={`rounded border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${
                 orderType === t
                   ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100/95"
                   : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
