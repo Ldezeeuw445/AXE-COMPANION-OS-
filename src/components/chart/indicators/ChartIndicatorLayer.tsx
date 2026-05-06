@@ -17,6 +17,8 @@ type Props = {
 
 type Size = { w: number; h: number };
 type Point = { x: number; y: number };
+type IndicatorCandle = { time: number | null; open: number; high: number; low: number; close: number };
+type StructurePivot = { index: number; time: number; price: number; kind: "high" | "low" };
 
 export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -238,24 +240,100 @@ function rsi(values: number[], period: number): Array<number | null> {
   return out;
 }
 
-function structurePivots(candles: Array<{ time: number | null; high: number; low: number }>) {
+function structurePivots(candles: IndicatorCandle[]) {
+  const visible = candles.filter((candle): candle is IndicatorCandle & { time: number } => candle.time != null).slice(-220);
+  const strength = visible.length >= 120 ? 4 : 3;
+  const minBarsBetweenSwings = strength * 2 + 2;
+  const volatility = atr(visible, 14) ?? averageRange(visible);
+  const minSwingMove = Math.max(volatility * 1.35, averageRange(visible) * 0.9);
+  const candidates: StructurePivot[] = [];
+
+  if (visible.length < strength * 2 + 8 || minSwingMove <= 0) return [];
+
+  for (let index = strength; index < visible.length - strength; index += 1) {
+    const candle = visible[index];
+    const left = visible.slice(index - strength, index);
+    const right = visible.slice(index + 1, index + strength + 1);
+    const leftHigh = Math.max(...left.map((other) => other.high));
+    const rightHigh = Math.max(...right.map((other) => other.high));
+    const leftLow = Math.min(...left.map((other) => other.low));
+    const rightLow = Math.min(...right.map((other) => other.low));
+
+    if (candle.high > leftHigh && candle.high >= rightHigh) {
+      candidates.push({ index, time: candle.time, price: candle.high, kind: "high" });
+    }
+    if (candle.low < leftLow && candle.low <= rightLow) {
+      candidates.push({ index, time: candle.time, price: candle.low, kind: "low" });
+    }
+  }
+
+  const swings = compactStructurePivots(candidates, minBarsBetweenSwings, minSwingMove);
   const pivots: Array<{ time: number; price: number; kind: "high" | "low"; label: string }> = [];
   let lastHigh: number | null = null;
   let lastLow: number | null = null;
-  for (let index = 2; index < candles.length - 2; index += 1) {
-    const candle = candles[index];
-    if (candle.time == null) continue;
-    const neighbors = [...candles.slice(index - 2, index), ...candles.slice(index + 1, index + 3)];
-    if (neighbors.every((other) => candle.high > other.high)) {
-      const label = lastHigh == null || candle.high >= lastHigh ? "HH" : "LH";
-      lastHigh = candle.high;
-      pivots.push({ time: candle.time, price: candle.high, kind: "high", label });
-    }
-    if (neighbors.every((other) => candle.low < other.low)) {
-      const label = lastLow == null || candle.low >= lastLow ? "HL" : "LL";
-      lastLow = candle.low;
-      pivots.push({ time: candle.time, price: candle.low, kind: "low", label });
+
+  for (const swing of swings) {
+    if (swing.kind === "high") {
+      const label = lastHigh == null || swing.price > lastHigh ? "HH" : "LH";
+      lastHigh = swing.price;
+      pivots.push({ time: swing.time, price: swing.price, kind: "high", label });
+    } else {
+      const label = lastLow == null || swing.price > lastLow ? "HL" : "LL";
+      lastLow = swing.price;
+      pivots.push({ time: swing.time, price: swing.price, kind: "low", label });
     }
   }
-  return pivots.slice(-18);
+
+  return pivots.slice(-10);
+}
+
+function compactStructurePivots(pivots: StructurePivot[], minBars: number, minMove: number): StructurePivot[] {
+  const out: StructurePivot[] = [];
+
+  for (const pivot of pivots) {
+    const last = out.at(-1);
+    if (!last) {
+      out.push(pivot);
+      continue;
+    }
+
+    if (pivot.kind === last.kind) {
+      const moreExtreme = pivot.kind === "high" ? pivot.price > last.price : pivot.price < last.price;
+      if (moreExtreme) out[out.length - 1] = pivot;
+      continue;
+    }
+
+    const enoughBars = pivot.index - last.index >= minBars;
+    const enoughMove = Math.abs(pivot.price - last.price) >= minMove;
+    if (!enoughBars || !enoughMove) continue;
+
+    out.push(pivot);
+  }
+
+  return out;
+}
+
+function atr(candles: Array<IndicatorCandle & { time: number }>, period: number): number | null {
+  if (candles.length <= period + 1) return null;
+  const ranges: number[] = [];
+  for (let index = 1; index < candles.length; index += 1) {
+    const candle = candles[index];
+    const previous = candles[index - 1];
+    ranges.push(
+      Math.max(
+        candle.high - candle.low,
+        Math.abs(candle.high - previous.close),
+        Math.abs(candle.low - previous.close),
+      ),
+    );
+  }
+  const recent = ranges.slice(-period);
+  if (!recent.length) return null;
+  return recent.reduce((sum, value) => sum + value, 0) / recent.length;
+}
+
+function averageRange(candles: Array<IndicatorCandle & { time: number }>): number {
+  const recent = candles.slice(-40);
+  if (!recent.length) return 0;
+  return recent.reduce((sum, candle) => sum + Math.max(0, candle.high - candle.low), 0) / recent.length;
 }
