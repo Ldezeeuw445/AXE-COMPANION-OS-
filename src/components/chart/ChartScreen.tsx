@@ -57,6 +57,7 @@ import type {
 } from "@/components/chart/annotations/types";
 import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotationLayer";
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
+import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { ChartExecutionBridge } from "@/components/chart/ChartExecutionBridge";
 
 const TICK_REACT_THROTTLE_MS = 150;
@@ -1000,6 +1001,17 @@ export function ChartScreen({ data, initialAction }: Props) {
           onPointClick={handlePointClick}
         />
 
+        <ChartIndicatorLayer
+          candles={data.candles}
+          canvasRef={canvasRef}
+          active={{
+            volume: activeToolFlags.volume,
+            rsi: activeToolFlags.rsi,
+            ma: activeToolFlags.ma,
+            structure: activeToolFlags.structure,
+          }}
+        />
+
         <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/55 px-2 py-1.5 backdrop-blur">
           <div className="flex min-w-0 items-center gap-2">
             <select
@@ -1168,24 +1180,24 @@ export function ChartScreen({ data, initialAction }: Props) {
           <RotateCcw className="h-4 w-4" aria-hidden />
         </button>
 
-        <div className="absolute bottom-2 left-1/2 z-30 flex w-[min(34rem,calc(100%-1rem))] -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/70 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+        <div className="absolute bottom-2 left-1/2 z-30 flex w-[min(24rem,calc(100%-1rem))] -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/10 bg-black/72 p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <button
             type="button"
-            className="rounded-full bg-rose-500/90 px-3 py-2 text-left font-mono text-[12px] font-bold text-white"
+            className="rounded-full bg-rose-500/90 px-2.5 py-1.5 text-left font-mono text-[10px] font-bold text-white"
             onClick={() => setExecutionBridgeOpen(true)}
           >
             SELL {lastPriceText}
           </button>
           <button
             type="button"
-            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-center text-[12px] font-semibold text-tos-text"
+            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1.5 text-center text-[10px] font-semibold text-tos-text"
             onClick={() => setExecutionBridgeOpen((v) => !v)}
           >
             Buy Limit · 0.5
           </button>
           <button
             type="button"
-            className="rounded-full bg-cyan-500/90 px-3 py-2 text-right font-mono text-[12px] font-bold text-white"
+            className="rounded-full bg-cyan-500/90 px-2.5 py-1.5 text-right font-mono text-[10px] font-bold text-white"
             onClick={() => setExecutionBridgeOpen(true)}
           >
             BUY {lastPriceText}
