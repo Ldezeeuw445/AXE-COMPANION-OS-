@@ -37,6 +37,7 @@ type Props = {
   symbol: string;
   annotations?: ChartAnnotation[];
   drawingMode?: DrawingMode;
+  navigationLocked?: boolean;
   /** Called when a chart point is tapped while in drawing mode. */
   onPointClick?: (point: AnnotationPoint) => void;
 };
@@ -56,6 +57,7 @@ export type ChartCanvasHandle = {
   coordinateToTime: (x: number) => number | null;
   /** Reset chart viewport so candles are back in view. */
   fitContent: () => void;
+  setViewportPreset: (preset: number) => void;
   /** Subscribe to viewport changes (pan, zoom, resize, data load). */
   subscribeViewport: (cb: () => void) => () => void;
 };
@@ -78,7 +80,7 @@ function buildSeriesData(candles: MetaApiCandle[]): CandlestickData[] {
 }
 
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
-  { candles, overlays, symbol, annotations = [], drawingMode = null, onPointClick },
+  { candles, overlays, symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -131,6 +133,12 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         barSpacing: 6,
       },
       autoSize: true,
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: !navigationLocked,
+        horzTouchDrag: !navigationLocked,
+        vertTouchDrag: !navigationLocked,
+      },
       handleScale: { axisPressedMouseMove: true },
     });
     chartRef.current = chart;
@@ -227,6 +235,19 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       lastBarRef.current = null;
     };
   }, [candles, symbol]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: !navigationLocked,
+        horzTouchDrag: !navigationLocked,
+        vertTouchDrag: !navigationLocked,
+      },
+    });
+  }, [navigationLocked]);
 
   // Render open-position overlays.
   useEffect(() => {
@@ -411,6 +432,21 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
           }
         }
       },
+      setViewportPreset(preset: number) {
+        const chart = chartRef.current;
+        if (!chart) return;
+        const spacing = [16, 9, 5][preset] ?? 9;
+        const rightOffset = [2, 4, 7][preset] ?? 4;
+        chart.timeScale().applyOptions({ barSpacing: spacing, rightOffset });
+        chart.timeScale().fitContent();
+        for (const cb of viewportSubscribersRef.current) {
+          try {
+            cb();
+          } catch {
+            /* ignore */
+          }
+        }
+      },
       subscribeViewport(cb: () => void) {
         viewportSubscribersRef.current.add(cb);
         return () => {
@@ -436,6 +472,9 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         className="absolute inset-0 h-full w-full"
         style={{
           cursor: drawingMode ? "crosshair" : undefined,
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
         }}
       />
 

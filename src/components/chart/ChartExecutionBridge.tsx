@@ -12,6 +12,7 @@ type Props = {
   digits: number;
   defaultSide?: "buy" | "sell";
   defaultOrderType?: "market" | "limit" | "stop";
+  defaultVolume?: string;
   entryPrice?: number | null;
   stopLossPrice?: number | null;
   takeProfitPrice?: number | null;
@@ -40,6 +41,7 @@ export function ChartExecutionBridge({
   digits,
   defaultSide = "buy",
   defaultOrderType = "market",
+  defaultVolume = "0.10",
   entryPrice,
   stopLossPrice,
   takeProfitPrice,
@@ -47,7 +49,7 @@ export function ChartExecutionBridge({
 }: Props) {
   const [side, setSide] = useState<"buy" | "sell">(defaultSide);
   const [orderType, setOrderType] = useState<"market" | "limit" | "stop">(defaultOrderType);
-  const [volume, setVolume] = useState<string>("0.10");
+  const [volume, setVolume] = useState<string>(defaultVolume);
   const [entry, setEntry] = useState<string>((entryPrice ?? lastPrice) ? (entryPrice ?? lastPrice)?.toFixed(digits) ?? "" : "");
   const [stopLoss, setStopLoss] = useState<string>("");
   const [takeProfit, setTakeProfit] = useState<string>("");
@@ -62,6 +64,10 @@ export function ChartExecutionBridge({
   useEffect(() => {
     setOrderType(defaultOrderType);
   }, [defaultOrderType]);
+
+  useEffect(() => {
+    setVolume(defaultVolume);
+  }, [defaultVolume]);
 
   useEffect(() => {
     const next = entryPrice ?? lastPrice;
@@ -90,7 +96,7 @@ export function ChartExecutionBridge({
   });
 
   return (
-    <section className="-mx-4 relative overflow-hidden border-b border-white/[0.08] bg-[#05070A] md:mx-0 md:border-x">
+    <section className="-mx-4 relative shrink-0 overflow-hidden border-b border-white/[0.08] bg-[#05070A] md:mx-0 md:border-x">
       <header className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-1.5">
         <div className="flex items-center gap-2">
           <Activity className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />

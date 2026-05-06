@@ -11,16 +11,16 @@ import {
   BookOpen,
   ChevronDown,
   ClipboardList,
-  Eraser,
+  Clock3,
   Info,
   Landmark,
+  Layers,
   LineChart,
   MessageSquare,
   RotateCcw,
   Save,
   Sparkles,
   Spline,
-  Triangle,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
@@ -65,9 +65,9 @@ const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 30_000;
 
 const CHART_SCALE_MODES = [
-  { id: "auto", label: "Auto-scale" },
-  { id: "levels", label: "Show trade levels" },
-  { id: "free", label: "Free chart movement" },
+  { id: "near", label: "Close view" },
+  { id: "mid", label: "Mid view" },
+  { id: "far", label: "Wide view" },
 ] as const;
 
 type Props = {
@@ -302,13 +302,23 @@ function TradePlanLine({
   }
 
   return (
-    <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[24]">
+    <div
+      ref={hostRef}
+      className="pointer-events-none absolute inset-0 z-[24]"
+      style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <svg
         width={size.w}
         height={size.h}
         viewBox={`0 0 ${size.w} ${size.h}`}
         className="absolute inset-0"
-        style={{ touchAction: dragging ? "none" : "manipulation" }}
+        style={{
+          touchAction: dragging ? "none" : "manipulation",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
+        }}
         onPointerMove={(event) => {
           if (!dragging) return;
           event.preventDefault();
@@ -323,7 +333,7 @@ function TradePlanLine({
         }}
         onPointerCancel={() => setDragging(false)}
       >
-        <line x1={0} x2={size.w} y1={y} y2={y} stroke={color} strokeWidth={1.5} strokeDasharray="6 4" />
+        <line x1={0} x2={size.w} y1={y} y2={y} stroke={color} strokeWidth={1} />
         <g
           style={{ pointerEvents: "auto", cursor: "ns-resize" }}
           onPointerDown={(event) => {
@@ -384,6 +394,7 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [pendingStopLossPrice, setPendingStopLossPrice] = useState<number | null>(null);
   const [pendingTakeProfitPrice, setPendingTakeProfitPrice] = useState<number | null>(null);
   const [pendingOrderVisible, setPendingOrderVisible] = useState(false);
+  const [tradeVolume] = useState("0.10");
 
   const showPendingTradePlan = useCallback(
     (side: "buy" | "sell") => {
@@ -426,6 +437,17 @@ export function ChartScreen({ data, initialAction }: Props) {
   useEffect(() => {
     setPendingOrderPrice((prev) => prev ?? data.lastPrice);
   }, [data.lastPrice]);
+
+  useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, []);
 
   const onTick = useCallback(
     ({ mid, bid, ask, time }: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => {
@@ -905,7 +927,7 @@ export function ChartScreen({ data, initialAction }: Props) {
   const resetChartView = useCallback(() => {
     const nextIndex = (scaleModeIndex + 1) % CHART_SCALE_MODES.length;
     setScaleModeIndex(nextIndex);
-    if (nextIndex !== 2) canvasRef.current?.fitContent();
+    canvasRef.current?.setViewportPreset(nextIndex);
     setSnapshotMessage(CHART_SCALE_MODES[nextIndex].label);
     setTimeout(() => setSnapshotMessage(null), 2_500);
   }, [scaleModeIndex]);
@@ -915,7 +937,6 @@ export function ChartScreen({ data, initialAction }: Props) {
   }, []);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
-    const drawDisabled = data.failure !== "ok";
     return [
       {
         id: "ask-axe",
@@ -951,59 +972,9 @@ export function ChartScreen({ data, initialAction }: Props) {
         ],
       },
       {
-        id: "drawing",
-        title: "Drawing tools",
-        items: [
-          {
-            id: "fib",
-            label: "AXE Fibonacci",
-            description: "Auto from latest swing",
-            icon: <Spline className="h-3.5 w-3.5" />,
-            disabled: drawDisabled,
-            onSelect: () => executeActionByType("draw_fibonacci", "user"),
-          },
-          {
-            id: "fib-manual",
-            label: "Manual Fibonacci",
-            description: "Tap swing high → swing low",
-            icon: <Spline className="h-3.5 w-3.5" />,
-            disabled: drawDisabled,
-            onSelect: () => startDrawing("fib_retracement"),
-          },
-          {
-            id: "trendline",
-            label: "Add trendline",
-            description: "Two-tap anchored line",
-            icon: <Triangle className="h-3.5 w-3.5" />,
-            disabled: drawDisabled,
-            onSelect: () => executeActionByType("draw_trendline", "user"),
-          },
-          {
-            id: "remove-last",
-            label: "Remove last drawing",
-            icon: <Eraser className="h-3.5 w-3.5" />,
-            disabled: annotations.length === 0,
-            onSelect: removeLastAnnotation,
-          },
-          {
-            id: "clear",
-            label: "Clear all drawings",
-            icon: <Eraser className="h-3.5 w-3.5" />,
-            disabled: annotations.length === 0,
-            onSelect: () => executeActionByType("clear_ai_drawings", "user"),
-          },
-        ],
-      },
-      {
         id: "actions",
         title: "Actions",
         items: [
-          {
-            id: "alert",
-            label: "Set price alert",
-            icon: <Bell className="h-3.5 w-3.5" />,
-            href: `/alerts?symbol=${encodeURIComponent(data.brokerSymbol)}`,
-          },
           {
             id: "journal",
             label: "Journal this setup",
@@ -1048,45 +1019,44 @@ export function ChartScreen({ data, initialAction }: Props) {
     ];
   }, [
     data.symbol,
-    data.brokerSymbol,
     tfLabel,
     overlays.length,
-    annotations.length,
     accountLabel,
     executionBridgeOpen,
-    data.failure,
-    startDrawing,
-    executeActionByType,
-    removeLastAnnotation,
     saveSnapshotToVault,
     focusDataDetails,
-    resetChartView,
   ]);
 
   // Inject the LIVE pill (center) and AXE button (right) into the global mobile top bar.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
     setCenter(
-      <div className="max-w-[min(14rem,calc(100vw-7rem))] text-center">
-        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/90">
-          {sessionCopy()} · News watch
-        </p>
-        <p className="truncate text-[9px] text-tos-dim">Next event for {data.symbol}: calendar</p>
-      </div>,
+      <button
+        type="button"
+        onClick={() => showPendingTradePlan(pendingOrderSide)}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/20 bg-white/[0.03] text-cyan-300/90"
+        aria-label="Open limit controls"
+      >
+        <Clock3 className="h-4 w-4" />
+      </button>,
     );
     setRight(
-      <div className="flex items-center justify-end">
+      <div className="flex flex-col items-end gap-1">
         <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />
+        <div className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-200/95">
+          <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
+          LIVE
+        </div>
       </div>,
     );
     return () => {
       setCenter(null);
       setRight(null);
     };
-  }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections]);
+  }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections, pendingOrderSide, showPendingTradePlan, statusPill.dot]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-[calc(100dvh-3.25rem-env(safe-area-inset-bottom))] min-h-0 flex-1 flex-col overflow-hidden md:h-auto md:overflow-visible">
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
         <div className="flex shrink-0 items-baseline gap-1.5">
@@ -1114,7 +1084,7 @@ export function ChartScreen({ data, initialAction }: Props) {
 
       {/* Drawing mode hint */}
       {drawingHint ? (
-        <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/8 px-3 py-2 text-[11px] text-cyan-100/95">
+        <div className="mt-2 hidden items-center justify-between gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/8 px-3 py-2 text-[11px] text-cyan-100/95 md:flex">
           <span>
             Drawing: <span className="font-semibold">{drawingHint}</span>
           </span>
@@ -1130,12 +1100,8 @@ export function ChartScreen({ data, initialAction }: Props) {
 
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        className="relative -mx-4 mt-0 w-auto overflow-hidden border-y border-white/[0.08] md:mx-0 md:rounded-none md:border-x"
-        style={{
-          background: CHART_THEME.background,
-          height: "min(calc(100dvh - 8.1rem), 860px)",
-          minHeight: 520,
-        }}
+        className="relative -mx-4 mt-0 min-h-0 flex-1 overflow-hidden border-y border-white/[0.08] md:mx-0 md:min-h-[520px] md:rounded-none md:border-x"
+        style={{ background: CHART_THEME.background }}
       >
         <ChartCanvas
           ref={canvasRef}
@@ -1144,6 +1110,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           symbol={data.brokerSymbol}
           annotations={annotations}
           drawingMode={drawingMode}
+          navigationLocked={pendingOrderVisible}
           onPointClick={handlePointClick}
         />
 
@@ -1155,6 +1122,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             rsi: activeToolFlags.rsi,
             ma: activeToolFlags.ma,
             structure: activeToolFlags.structure,
+            orderBlocks: activeToolFlags.orderBlocks,
           }}
         />
 
@@ -1187,41 +1155,40 @@ export function ChartScreen({ data, initialAction }: Props) {
           </>
         ) : null}
 
-        <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/55 px-2 py-1.5 backdrop-blur">
-          <div className="flex min-w-0 items-center gap-2">
-            <select
-              value={data.symbol}
-              onChange={(e) => goSymbol(e.target.value)}
-              className="min-w-0 max-w-[7.5rem] appearance-none bg-transparent font-mono text-[13px] font-bold uppercase tracking-tight text-[#1f8cff] outline-none"
-              aria-label="Symbol"
-            >
-              {data.symbolOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
-              value={data.timeframeKey}
-              onChange={(e) => goTf(e.target.value)}
-              className="appearance-none bg-transparent font-mono text-[13px] font-semibold uppercase text-tos-text outline-none"
-              aria-label="Timeframe"
-            >
-              {CHART_TF_OPTIONS.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-tos-text/90">
-              {lastPriceText}
-            </span>
-            <span
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${statusPill.className}`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
-              {statusPill.label}
-            </span>
+        <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/68 px-2 py-1.5 backdrop-blur">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <select
+                  value={data.symbol}
+                  onChange={(e) => goSymbol(e.target.value)}
+                  className="min-w-0 max-w-[7.5rem] appearance-none bg-transparent font-mono text-[13px] font-bold uppercase tracking-tight text-[#1f8cff] outline-none"
+                  aria-label="Symbol"
+                >
+                  {data.symbolOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={data.timeframeKey}
+                  onChange={(e) => goTf(e.target.value)}
+                  className="appearance-none bg-transparent font-mono text-[13px] font-semibold uppercase text-tos-text outline-none"
+                  aria-label="Timeframe"
+                >
+                  {CHART_TF_OPTIONS.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-0.5 font-mono text-[11px] text-tos-text/82">{lastPriceText}</p>
+            </div>
+            <div className="pt-0.5 text-right text-[9px] font-semibold uppercase tracking-[0.16em] text-tos-dim">
+              {sessionCopy()}
+            </div>
           </div>
         </div>
 
@@ -1229,7 +1196,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           <button
             type="button"
             onClick={() => setToolRailOpen(true)}
-            className="absolute left-0 top-14 z-30 grid h-12 w-5 place-items-center rounded-r-full border border-l-0 border-white/10 bg-black/72 text-cyan-200 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur"
+            className="absolute left-0 top-1/2 z-30 grid h-12 w-5 -translate-y-1/2 place-items-center rounded-r-full border border-l-0 border-white/10 bg-black/78 text-cyan-200 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur"
             aria-label="Open drawing toolbar"
           >
             <ChevronDown className="-rotate-90 h-4 w-4" aria-hidden />
@@ -1237,7 +1204,7 @@ export function ChartScreen({ data, initialAction }: Props) {
         ) : null}
 
         <div
-          className={`absolute left-0 top-12 z-30 flex flex-col items-center gap-1 rounded-r-full border border-l-0 border-white/10 bg-black/72 p-1 backdrop-blur transition-transform ${
+          className={`absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-r-full border border-l-0 border-white/10 bg-black/78 p-1 backdrop-blur transition-transform ${
             toolRailOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
           }`}
         >
@@ -1251,9 +1218,8 @@ export function ChartScreen({ data, initialAction }: Props) {
           </button>
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
-            { id: "alert", label: "Alert", icon: Bell, action: () => router.push(`/alerts?symbol=${encodeURIComponent(data.brokerSymbol)}`) },
-            { id: "fib", label: "Fib", icon: Spline, action: () => executeActionByType("draw_fibonacci", "user") },
-            { id: "trend", label: "Trend", icon: Triangle, action: () => executeActionByType("draw_trendline", "user") },
+            { id: "fib", label: "Auto Fib", icon: Spline, action: () => executeActionByType("draw_fibonacci", "user") },
+            { id: "orderBlocks", label: "OB", icon: Layers, action: () => toggleToolFlag("orderBlocks") },
             { id: "vol", label: "Vol", icon: BarChart3, action: () => toggleToolFlag("volume") },
             { id: "rsi", label: "RSI", icon: Activity, action: () => toggleToolFlag("rsi") },
             { id: "ma", label: "MA", icon: LineChart, action: () => toggleToolFlag("ma") },
@@ -1359,50 +1325,11 @@ export function ChartScreen({ data, initialAction }: Props) {
         <button
           type="button"
           onClick={resetChartView}
-          className="absolute right-3 top-12 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/70 text-cyan-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/45 hover:bg-cyan-400/12 active:scale-95"
+          className="absolute bottom-3 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/76 text-cyan-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/45 hover:bg-cyan-400/12 active:scale-95"
           aria-label={CHART_SCALE_MODES[scaleModeIndex].label}
           title={CHART_SCALE_MODES[scaleModeIndex].label}
         >
-          <RotateCcw className="h-4 w-4" aria-hidden />
-        </button>
-      </div>
-
-      <div className="-mx-4 flex h-11 items-stretch gap-px border-b border-white/[0.08] bg-black md:mx-0">
-        <button
-          type="button"
-          className={`flex min-w-0 flex-1 items-center justify-between px-2.5 text-left ${
-            pendingOrderSide === "sell" ? "bg-rose-500/95 text-white" : "bg-white/[0.035] text-tos-muted"
-          }`}
-          onClick={() => showPendingTradePlan("sell")}
-        >
-          <span className="text-[10px] font-semibold uppercase">Sell</span>
-          <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
-        </button>
-        <button
-          type="button"
-          className="flex min-w-[6.2rem] items-center justify-center gap-1.5 bg-black px-2 text-[11px] font-semibold text-tos-text"
-          onClick={() => {
-            if (!pendingOrderVisible) {
-              showPendingTradePlan(pendingOrderSide);
-              return;
-            }
-            setExecutionBridgeOpen((v) => !v);
-          }}
-        >
-          <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase text-tos-muted">
-            Limit
-          </span>
-          <span className="font-mono">{pendingOrderPrice != null ? pendingOrderPrice.toFixed(priceDigitsForSymbol(data.brokerSymbol)) : "--"}</span>
-        </button>
-        <button
-          type="button"
-          className={`flex min-w-0 flex-1 items-center justify-between px-2.5 text-left ${
-            pendingOrderSide === "buy" ? "bg-cyan-500/95 text-white" : "bg-white/[0.035] text-tos-muted"
-          }`}
-          onClick={() => showPendingTradePlan("buy")}
-        >
-          <span className="text-[10px] font-semibold uppercase">Buy</span>
-          <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
         </button>
       </div>
 
@@ -1415,6 +1342,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           digits={priceDigitsForSymbol(data.brokerSymbol)}
           defaultSide={pendingOrderSide}
           defaultOrderType="limit"
+          defaultVolume={tradeVolume}
           entryPrice={pendingOrderPrice}
           stopLossPrice={pendingStopLossPrice}
           takeProfitPrice={pendingTakeProfitPrice}
@@ -1422,70 +1350,116 @@ export function ChartScreen({ data, initialAction }: Props) {
         />
       ) : null}
 
+      <div className="-mx-4 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur md:mx-0">
+        <div className="flex h-14 items-stretch gap-px">
+          <button
+            type="button"
+            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left ${
+              pendingOrderSide === "sell"
+                ? "bg-gradient-to-r from-[#3A090E] via-[#7D1D28] to-[#B93147] text-white"
+                : "bg-white/[0.03] text-tos-muted"
+            }`}
+            onClick={() => showPendingTradePlan("sell")}
+          >
+            <span className="text-[10px] font-semibold uppercase">Sell</span>
+            <span className="font-mono text-[17px] font-bold leading-none">{lastPriceText}</span>
+          </button>
+          <button
+            type="button"
+            className="flex min-w-[7.5rem] flex-col items-center justify-center bg-black px-2 text-[11px] font-semibold text-tos-text"
+            onClick={() => {
+              if (!pendingOrderVisible) {
+                showPendingTradePlan(pendingOrderSide);
+                return;
+              }
+              setExecutionBridgeOpen((v) => !v);
+            }}
+          >
+            <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase text-tos-muted">
+              Limit
+            </span>
+            <span className="font-mono text-[12px]">{tradeVolume} lots</span>
+          </button>
+          <button
+            type="button"
+            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left ${
+              pendingOrderSide === "buy"
+                ? "bg-gradient-to-r from-[#0E3850] via-[#148FC3] to-[#18B6EC] text-white"
+                : "bg-white/[0.03] text-tos-muted"
+            }`}
+            onClick={() => showPendingTradePlan("buy")}
+          >
+            <span className="text-[10px] font-semibold uppercase">Buy</span>
+            <span className="font-mono text-[17px] font-bold leading-none">{lastPriceText}</span>
+          </button>
+        </div>
+      </div>
+
       {snapshotMessage ? (
         <p className="mt-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-tos-muted">
           {snapshotMessage}
         </p>
       ) : null}
 
-      {/* Position summary */}
-      {overlays.length > 0 ? (
-        <GlassPanel className="mt-3 !p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-            Open on {data.symbol}
-          </p>
-          <ul className="space-y-2">
-            {overlays.map((o) => {
-              const distSL = o.stopLoss != null && o.currentPrice != null ? Math.abs(o.currentPrice - o.stopLoss) : null;
-              const distTP = o.takeProfit != null && o.currentPrice != null ? Math.abs(o.takeProfit - o.currentPrice) : null;
-              const rr = (() => {
-                if (o.entryPrice == null || o.stopLoss == null || o.takeProfit == null) return null;
-                const risk = Math.abs(o.entryPrice - o.stopLoss);
-                if (risk <= 0) return null;
-                const reward = Math.abs(o.takeProfit - o.entryPrice);
-                return reward / risk;
-              })();
-              const profit = o.profit ?? 0;
-              const profitColor =
-                profit > 0 ? CHART_THEME.positiveText : profit < 0 ? CHART_THEME.negativeText : CHART_THEME.neutralText;
-              const digits = priceDigitsForSymbol(data.brokerSymbol);
-              return (
-                <li
-                  key={o.id}
-                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2"
-                >
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-tos-text">
-                    {o.side === "buy" ? "Long" : o.side === "sell" ? "Short" : o.side}
-                  </span>
-                  <span className="font-mono text-xs text-tos-muted">{o.volume}</span>
-                  <span className="font-mono text-xs text-tos-muted">
-                    Entry {o.entryPrice != null ? o.entryPrice.toFixed(digits) : "—"}
-                  </span>
-                  <span className="font-mono text-xs text-tos-muted">
-                    SL {o.stopLoss != null ? o.stopLoss.toFixed(digits) : "—"}
-                    {distSL != null ? ` (${distSL.toFixed(digits)})` : ""}
-                  </span>
-                  <span className="font-mono text-xs text-tos-muted">
-                    TP {o.takeProfit != null ? o.takeProfit.toFixed(digits) : "—"}
-                    {distTP != null ? ` (${distTP.toFixed(digits)})` : ""}
-                  </span>
-                  {rr != null ? <span className="font-mono text-[11px] text-tos-dim">RR {rr.toFixed(2)}</span> : null}
-                  {o.openTime ? (
-                    <span className="font-mono text-[11px] text-tos-dim">{elapsedSince(o.openTime)}</span>
-                  ) : null}
-                  <span className="ml-auto font-mono text-sm" style={{ color: profitColor }}>
-                    {profit >= 0 ? "+" : ""}
-                    {profit.toFixed(2)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </GlassPanel>
-      ) : null}
+      <div className="hidden md:block">
+        {/* Position summary */}
+        {overlays.length > 0 ? (
+          <GlassPanel className="mt-3 !p-3">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+              Open on {data.symbol}
+            </p>
+            <ul className="space-y-2">
+              {overlays.map((o) => {
+                const distSL = o.stopLoss != null && o.currentPrice != null ? Math.abs(o.currentPrice - o.stopLoss) : null;
+                const distTP = o.takeProfit != null && o.currentPrice != null ? Math.abs(o.takeProfit - o.currentPrice) : null;
+                const rr = (() => {
+                  if (o.entryPrice == null || o.stopLoss == null || o.takeProfit == null) return null;
+                  const risk = Math.abs(o.entryPrice - o.stopLoss);
+                  if (risk <= 0) return null;
+                  const reward = Math.abs(o.takeProfit - o.entryPrice);
+                  return reward / risk;
+                })();
+                const profit = o.profit ?? 0;
+                const profitColor =
+                  profit > 0 ? CHART_THEME.positiveText : profit < 0 ? CHART_THEME.negativeText : CHART_THEME.neutralText;
+                const digits = priceDigitsForSymbol(data.brokerSymbol);
+                return (
+                  <li
+                    key={o.id}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2"
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-tos-text">
+                      {o.side === "buy" ? "Long" : o.side === "sell" ? "Short" : o.side}
+                    </span>
+                    <span className="font-mono text-xs text-tos-muted">{o.volume}</span>
+                    <span className="font-mono text-xs text-tos-muted">
+                      Entry {o.entryPrice != null ? o.entryPrice.toFixed(digits) : "—"}
+                    </span>
+                    <span className="font-mono text-xs text-tos-muted">
+                      SL {o.stopLoss != null ? o.stopLoss.toFixed(digits) : "—"}
+                      {distSL != null ? ` (${distSL.toFixed(digits)})` : ""}
+                    </span>
+                    <span className="font-mono text-xs text-tos-muted">
+                      TP {o.takeProfit != null ? o.takeProfit.toFixed(digits) : "—"}
+                      {distTP != null ? ` (${distTP.toFixed(digits)})` : ""}
+                    </span>
+                    {rr != null ? <span className="font-mono text-[11px] text-tos-dim">RR {rr.toFixed(2)}</span> : null}
+                    {o.openTime ? (
+                      <span className="font-mono text-[11px] text-tos-dim">{elapsedSince(o.openTime)}</span>
+                    ) : null}
+                    <span className="ml-auto font-mono text-sm" style={{ color: profitColor }}>
+                      {profit >= 0 ? "+" : ""}
+                      {profit.toFixed(2)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </GlassPanel>
+        ) : null}
 
-      {/* Quick actions (compact) */}
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/* Quick actions (compact) */}
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Link
           href={chatQ(
             `[AXE · chart ${data.symbol} ${tfLabel}]\nExplain structure, key levels and what matters next on my broker chart. Reference my open ${data.symbol} positions if any.`,
@@ -1539,10 +1513,10 @@ export function ChartScreen({ data, initialAction }: Props) {
           <Activity className="h-4 w-4 shrink-0 text-cyan-400/85" />
           {executionBridgeOpen ? "Hide bridge" : "Execution bridge"}
         </button>
-      </div>
+        </div>
 
-      {/* Data details */}
-      <details
+        {/* Data details */}
+        <details
         ref={dataDetailsRef}
         className="group mt-3 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/25"
         open={data.failure !== "ok"}
@@ -1616,11 +1590,12 @@ export function ChartScreen({ data, initialAction }: Props) {
             </div>
           ) : null}
         </dl>
-      </details>
+        </details>
 
-      <p className="px-1 pb-2 pt-2 text-[10px] leading-relaxed text-tos-dim">
-        Same feed as your connected account. No external chart feed. Execution disabled by default.
-      </p>
+        <p className="px-1 pb-2 pt-2 text-[10px] leading-relaxed text-tos-dim">
+          Same feed as your connected account. No external chart feed. Execution disabled by default.
+        </p>
+      </div>
     </div>
   );
 }

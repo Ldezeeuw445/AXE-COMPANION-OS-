@@ -12,6 +12,7 @@ type Props = {
     rsi?: boolean;
     ma?: boolean;
     structure?: boolean;
+    orderBlocks?: boolean;
   };
 };
 
@@ -143,7 +144,7 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
       <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
-        {active.structure
+        {active.orderBlocks
           ? geometry.orderBlocks.map((box, index) => (
               <rect
                 key={`ob-${index}`}
@@ -159,7 +160,7 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
             ))
           : null}
 
-        {active.structure
+        {active.orderBlocks
           ? geometry.fairValueGaps.map((box, index) => (
               <rect
                 key={`fvg-${index}`}
