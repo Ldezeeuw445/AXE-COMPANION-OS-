@@ -236,16 +236,29 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
   }
 }
 
-function PendingOrderLine({
+function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice: number | null): number {
+  const recent = candles.slice(-80);
+  const highs = recent.map((c) => c.high).filter(Number.isFinite);
+  const lows = recent.map((c) => c.low).filter(Number.isFinite);
+  if (highs.length && lows.length) {
+    const range = Math.max(...highs) - Math.min(...lows);
+    if (Number.isFinite(range) && range > 0) return Math.max(range * 0.18, Math.abs(fallbackPrice ?? 1) * 0.001);
+  }
+  return Math.max(Math.abs(fallbackPrice ?? 1) * 0.0015, 1);
+}
+
+function TradePlanLine({
   canvasRef,
   price,
-  side,
+  label,
+  color,
   digits,
   onChange,
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
   price: number | null;
-  side: "buy" | "sell";
+  label: string;
+  color: string;
   digits: number;
   onChange: (price: number) => void;
 }) {
@@ -288,7 +301,6 @@ function PendingOrderLine({
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
-  const color = side === "buy" ? "#1f8cff" : "#ef4444";
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[24]">
       <svg
@@ -322,9 +334,10 @@ function PendingOrderLine({
             updateFromPointer(event.clientY);
           }}
         >
-          <rect x={6} y={y - 16} width={118} height={24} rx={5} fill="rgba(0,0,0,0.72)" stroke={color} />
+          <rect x={0} y={y - 18} width={size.w} height={36} fill="transparent" />
+          <rect x={6} y={y - 16} width={116} height={24} rx={4} fill="rgba(0,0,0,0.76)" stroke={color} />
           <text x={14} y={y} fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontSize={11} fontWeight={700} fill={color}>
-            {side.toUpperCase()} LIMIT
+            {label}
           </text>
           <circle cx={132} cy={y - 4} r={8} fill={color} stroke="rgba(255,255,255,0.86)" strokeWidth={1.5} />
           <rect x={size.w - 74} y={y - 15} width={68} height={24} rx={3} fill="rgba(0,0,0,0.72)" stroke={color} />
@@ -368,7 +381,28 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
   const [pendingOrderSide, setPendingOrderSide] = useState<"buy" | "sell">("buy");
   const [pendingOrderPrice, setPendingOrderPrice] = useState<number | null>(data.lastPrice);
+  const [pendingStopLossPrice, setPendingStopLossPrice] = useState<number | null>(null);
+  const [pendingTakeProfitPrice, setPendingTakeProfitPrice] = useState<number | null>(null);
   const [pendingOrderVisible, setPendingOrderVisible] = useState(false);
+
+  const showPendingTradePlan = useCallback(
+    (side: "buy" | "sell") => {
+      const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+      const distance = draggablePlanDistance(data.candles, entry);
+      setPendingOrderSide(side);
+      setPendingOrderVisible(true);
+      if (entry != null && Number.isFinite(entry)) {
+        const sideChanged = side !== pendingOrderSide;
+        setPendingOrderPrice(entry);
+        setPendingStopLossPrice((prev) => (prev != null && !sideChanged ? prev : side === "buy" ? entry - distance : entry + distance));
+        setPendingTakeProfitPrice((prev) =>
+          prev != null && !sideChanged ? prev : side === "buy" ? entry + distance * 1.6 : entry - distance * 1.6,
+        );
+      }
+      setExecutionBridgeOpen(true);
+    },
+    [data.candles, data.lastPrice, livePrice, pendingOrderPrice, pendingOrderSide],
+  );
 
   // Load saved annotations when symbol/tf changes
   useEffect(() => {
@@ -378,6 +412,9 @@ export function ChartScreen({ data, initialAction }: Props) {
       setDrawingMode(null);
       drawingPointsRef.current = [];
       setDrawingHint(null);
+      setPendingOrderVisible(false);
+      setPendingStopLossPrice(null);
+      setPendingTakeProfitPrice(null);
     });
   }, [data.symbol, data.timeframeKey]);
 
@@ -1122,13 +1159,32 @@ export function ChartScreen({ data, initialAction }: Props) {
         />
 
         {pendingOrderVisible ? (
-          <PendingOrderLine
-            canvasRef={canvasRef}
-            price={pendingOrderPrice}
-            side={pendingOrderSide}
-            digits={priceDigitsForSymbol(data.brokerSymbol)}
-            onChange={setPendingOrderPrice}
-          />
+          <>
+            <TradePlanLine
+              canvasRef={canvasRef}
+              price={pendingOrderPrice}
+              label={`${pendingOrderSide.toUpperCase()} LIMIT`}
+              color={pendingOrderSide === "buy" ? "#1f8cff" : "#ef4444"}
+              digits={priceDigitsForSymbol(data.brokerSymbol)}
+              onChange={setPendingOrderPrice}
+            />
+            <TradePlanLine
+              canvasRef={canvasRef}
+              price={pendingStopLossPrice}
+              label="SL"
+              color="#c95450"
+              digits={priceDigitsForSymbol(data.brokerSymbol)}
+              onChange={setPendingStopLossPrice}
+            />
+            <TradePlanLine
+              canvasRef={canvasRef}
+              price={pendingTakeProfitPrice}
+              label="TP"
+              color="#1f9c7b"
+              digits={priceDigitsForSymbol(data.brokerSymbol)}
+              onChange={setPendingTakeProfitPrice}
+            />
+          </>
         ) : null}
 
         <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/55 px-2 py-1.5 backdrop-blur">
@@ -1317,11 +1373,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           className={`flex min-w-0 flex-1 items-center justify-between px-2.5 text-left ${
             pendingOrderSide === "sell" ? "bg-rose-500/95 text-white" : "bg-white/[0.035] text-tos-muted"
           }`}
-          onClick={() => {
-            setPendingOrderSide("sell");
-            setPendingOrderVisible(true);
-            setExecutionBridgeOpen(true);
-          }}
+          onClick={() => showPendingTradePlan("sell")}
         >
           <span className="text-[10px] font-semibold uppercase">Sell</span>
           <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
@@ -1330,7 +1382,10 @@ export function ChartScreen({ data, initialAction }: Props) {
           type="button"
           className="flex min-w-[6.2rem] items-center justify-center gap-1.5 bg-black px-2 text-[11px] font-semibold text-tos-text"
           onClick={() => {
-            setPendingOrderVisible(true);
+            if (!pendingOrderVisible) {
+              showPendingTradePlan(pendingOrderSide);
+              return;
+            }
             setExecutionBridgeOpen((v) => !v);
           }}
         >
@@ -1344,11 +1399,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           className={`flex min-w-0 flex-1 items-center justify-between px-2.5 text-left ${
             pendingOrderSide === "buy" ? "bg-cyan-500/95 text-white" : "bg-white/[0.035] text-tos-muted"
           }`}
-          onClick={() => {
-            setPendingOrderSide("buy");
-            setPendingOrderVisible(true);
-            setExecutionBridgeOpen(true);
-          }}
+          onClick={() => showPendingTradePlan("buy")}
         >
           <span className="text-[10px] font-semibold uppercase">Buy</span>
           <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
@@ -1365,6 +1416,8 @@ export function ChartScreen({ data, initialAction }: Props) {
           defaultSide={pendingOrderSide}
           defaultOrderType="limit"
           entryPrice={pendingOrderPrice}
+          stopLossPrice={pendingStopLossPrice}
+          takeProfitPrice={pendingTakeProfitPrice}
           onClose={() => setExecutionBridgeOpen(false)}
         />
       ) : null}

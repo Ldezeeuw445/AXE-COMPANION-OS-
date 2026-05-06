@@ -13,6 +13,8 @@ type Props = {
   defaultSide?: "buy" | "sell";
   defaultOrderType?: "market" | "limit" | "stop";
   entryPrice?: number | null;
+  stopLossPrice?: number | null;
+  takeProfitPrice?: number | null;
   onClose: () => void;
 };
 
@@ -39,6 +41,8 @@ export function ChartExecutionBridge({
   defaultSide = "buy",
   defaultOrderType = "market",
   entryPrice,
+  stopLossPrice,
+  takeProfitPrice,
   onClose,
 }: Props) {
   const [side, setSide] = useState<"buy" | "sell">(defaultSide);
@@ -63,6 +67,14 @@ export function ChartExecutionBridge({
     const next = entryPrice ?? lastPrice;
     if (next != null && Number.isFinite(next)) setEntry(next.toFixed(digits));
   }, [digits, entryPrice, lastPrice]);
+
+  useEffect(() => {
+    if (stopLossPrice != null && Number.isFinite(stopLossPrice)) setStopLoss(stopLossPrice.toFixed(digits));
+  }, [digits, stopLossPrice]);
+
+  useEffect(() => {
+    if (takeProfitPrice != null && Number.isFinite(takeProfitPrice)) setTakeProfit(takeProfitPrice.toFixed(digits));
+  }, [digits, takeProfitPrice]);
 
   const planText = buildPlanText({
     symbol,
