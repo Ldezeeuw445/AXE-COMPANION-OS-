@@ -345,7 +345,15 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         };
         const last = lastBarRef.current;
         if (last && last.time === incoming.time) {
-          series.update(incoming);
+          const merged: CandlestickData = {
+            ...incoming,
+            high: Math.max(incoming.high, last.high, last.close),
+            low: Math.min(incoming.low, last.low, last.close),
+            close: last.close,
+          };
+          series.update(merged);
+          lastBarRef.current = merged;
+          return;
         } else if (!last || (incoming.time as number) > (last.time as number)) {
           series.update(incoming);
         } else {

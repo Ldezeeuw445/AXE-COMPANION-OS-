@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  BarChart3,
   Bell,
   BookOpen,
   ChevronDown,
@@ -12,6 +13,7 @@ import {
   Eraser,
   Info,
   Landmark,
+  LineChart,
   MessageSquare,
   RotateCcw,
   Save,
@@ -60,6 +62,12 @@ import { ChartExecutionBridge } from "@/components/chart/ChartExecutionBridge";
 const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 30_000;
 
+const CHART_SCALE_MODES = [
+  { id: "auto", label: "Auto-scale" },
+  { id: "levels", label: "Show trade levels" },
+  { id: "free", label: "Free chart movement" },
+] as const;
+
 type Props = {
   data: ChartPageData;
   initialAction?: string;
@@ -95,6 +103,15 @@ function elapsedSince(iso: string | null): string | null {
   if (diff < 3600) return `${Math.round(diff / 60)}m open`;
   if (diff < 86_400) return `${Math.round(diff / 3600)}h open`;
   return `${Math.round(diff / 86_400)}d open`;
+}
+
+function sessionCopy(now = new Date()): string {
+  const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const sessions: string[] = [];
+  if (utcHour >= 0 && utcHour < 8) sessions.push("Asia");
+  if (utcHour >= 7 && utcHour < 16) sessions.push("London");
+  if (utcHour >= 12 && utcHour < 21) sessions.push("NY");
+  return sessions.length ? sessions.join(" + ") : "After-hours";
 }
 
 function newAnnotationId(): string {
@@ -243,6 +260,9 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [drawingHint, setDrawingHint] = useState<string | null>(null);
   const [executionBridgeOpen, setExecutionBridgeOpen] = useState<boolean>(false);
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
+  const [scaleModeIndex, setScaleModeIndex] = useState(0);
+  const [toolRailOpen, setToolRailOpen] = useState(true);
+  const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
 
   // Load saved annotations when symbol/tf changes
   useEffect(() => {
@@ -279,7 +299,9 @@ export function ChartScreen({ data, initialAction }: Props) {
   const onCandleUpdate = useCallback(
     (candle: { time: string; open: number; high: number; low: number; close: number }) => {
       canvasRef.current?.updateLastCandle(candle);
-      if (Number.isFinite(candle.close)) setLivePrice(candle.close);
+      if (Number.isFinite(candle.close) && Date.now() - lastReactPriceAt.current > 1_500) {
+        setLivePrice(candle.close);
+      }
     },
     [],
   );
@@ -734,9 +756,15 @@ export function ChartScreen({ data, initialAction }: Props) {
   }, []);
 
   const resetChartView = useCallback(() => {
-    canvasRef.current?.fitContent();
-    setSnapshotMessage("Chart view reset.");
+    const nextIndex = (scaleModeIndex + 1) % CHART_SCALE_MODES.length;
+    setScaleModeIndex(nextIndex);
+    if (nextIndex !== 2) canvasRef.current?.fitContent();
+    setSnapshotMessage(CHART_SCALE_MODES[nextIndex].label);
     setTimeout(() => setSnapshotMessage(null), 2_500);
+  }, [scaleModeIndex]);
+
+  const toggleToolFlag = useCallback((id: string) => {
+    setActiveToolFlags((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
@@ -891,17 +919,16 @@ export function ChartScreen({ data, initialAction }: Props) {
   // Inject the LIVE pill (center) and AXE button (right) into the global mobile top bar.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    // Keep the global mobile top bar center reserved for the AXE wordmark.
-    // Chart status + AXE actions live on the right slot (stacked).
-    setCenter(null);
+    setCenter(
+      <div className="max-w-[min(14rem,calc(100vw-7rem))] text-center">
+        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/90">
+          {sessionCopy()} · News watch
+        </p>
+        <p className="truncate text-[9px] text-tos-dim">Next event for {data.symbol}: calendar</p>
+      </div>,
+    );
     setRight(
-      <div className="flex max-w-[min(16rem,calc(100vw-7rem))] flex-col items-end gap-1">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusPill.className}`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
-          {statusPill.label}
-        </span>
+      <div className="flex items-center justify-end">
         <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />
       </div>,
     );
@@ -909,7 +936,7 @@ export function ChartScreen({ data, initialAction }: Props) {
       setCenter(null);
       setRight(null);
     };
-  }, [setCenter, setRight, statusPill.className, statusPill.dot, statusPill.label, data.symbol, tfLabel, toolbarSections]);
+  }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -956,11 +983,11 @@ export function ChartScreen({ data, initialAction }: Props) {
 
       {/* Chart frame — fills most of the viewport */}
       <div
-        className="relative mt-2 w-full overflow-hidden rounded-2xl border border-white/[0.06]"
+        className="relative mt-1 w-full overflow-hidden rounded-xl border border-white/[0.06]"
         style={{
           background: CHART_THEME.background,
-          height: "min(calc(100dvh - 14rem), 720px)",
-          minHeight: 320,
+          height: "min(calc(100dvh - 8.25rem), 780px)",
+          minHeight: 520,
         }}
       >
         <ChartCanvas
@@ -972,6 +999,88 @@ export function ChartScreen({ data, initialAction }: Props) {
           drawingMode={drawingMode}
           onPointClick={handlePointClick}
         />
+
+        <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/55 px-2 py-1.5 backdrop-blur">
+          <div className="flex min-w-0 items-center gap-2">
+            <select
+              value={data.symbol}
+              onChange={(e) => goSymbol(e.target.value)}
+              className="min-w-0 max-w-[7.5rem] appearance-none bg-transparent font-mono text-[13px] font-bold uppercase tracking-tight text-[#1f8cff] outline-none"
+              aria-label="Symbol"
+            >
+              {data.symbolOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <select
+              value={data.timeframeKey}
+              onChange={(e) => goTf(e.target.value)}
+              className="appearance-none bg-transparent font-mono text-[13px] font-semibold uppercase text-tos-text outline-none"
+              aria-label="Timeframe"
+            >
+              {CHART_TF_OPTIONS.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <span className="min-w-0 flex-1 truncate font-mono text-[13px] text-tos-text/90">
+              {lastPriceText}
+            </span>
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${statusPill.className}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
+              {statusPill.label}
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={`absolute left-2 top-12 z-30 flex flex-col items-center gap-1 rounded-full border border-white/10 bg-black/55 p-1 backdrop-blur transition-all ${
+            toolRailOpen ? "translate-x-0" : "-translate-x-[2.65rem]"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setToolRailOpen((v) => !v)}
+            className="grid h-8 w-8 place-items-center rounded-full bg-white/[0.06] text-cyan-200"
+            aria-label="Toggle drawing toolbar"
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform ${toolRailOpen ? "rotate-90" : "-rotate-90"}`} />
+          </button>
+          {[
+            { id: "axe", label: "AXE", icon: MessageSquare, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
+            { id: "alert", label: "Alert", icon: Bell, action: () => router.push(`/alerts?symbol=${encodeURIComponent(data.brokerSymbol)}`) },
+            { id: "fib", label: "Fib", icon: Spline, action: () => executeActionByType("draw_fibonacci", "user") },
+            { id: "trend", label: "Trend", icon: Triangle, action: () => executeActionByType("draw_trendline", "user") },
+            { id: "vol", label: "Vol", icon: BarChart3, action: () => toggleToolFlag("volume") },
+            { id: "rsi", label: "RSI", icon: Activity, action: () => toggleToolFlag("rsi") },
+            { id: "ma", label: "MA", icon: LineChart, action: () => toggleToolFlag("ma") },
+            { id: "structure", label: "Structure", icon: Sparkles, action: () => toggleToolFlag("structure") },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = Boolean(activeToolFlags[item.id]);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.action}
+                title={item.label}
+                className={`grid h-8 w-8 place-items-center rounded-full border text-[10px] transition ${
+                  active
+                    ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100"
+                    : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                }`}
+                aria-label={item.label}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+              </button>
+            );
+          })}
+        </div>
 
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
         <div className="pointer-events-none absolute inset-0 z-[25]">
@@ -992,21 +1101,20 @@ export function ChartScreen({ data, initialAction }: Props) {
           />
         </div>
 
-        {/* In-chart price overlay (top-left) */}
-        <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[60%]">
-          <p className="font-mono text-3xl font-bold tracking-tight text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.7)] sm:text-4xl">
-            {lastPriceText}
-          </p>
-          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-cyan-200/75">
-            {tfLabel} close · MetaApi MT5
-            {accountLabel ? ` · ${accountLabel}` : ""}
-          </p>
-          {liveSummary ? (
-            <p className="mt-1.5 inline-block rounded-full border border-cyan-400/20 bg-black/55 px-2 py-0.5 text-[9.5px] uppercase tracking-wider text-cyan-100/85 backdrop-blur">
-              {liveSummary}
-            </p>
-          ) : null}
-        </div>
+        {Object.entries(activeToolFlags).some(([, active]) => active) ? (
+          <div className="pointer-events-none absolute bottom-[4.75rem] left-3 z-20 flex max-w-[70%] flex-wrap gap-1">
+            {Object.entries(activeToolFlags)
+              .filter(([, active]) => active)
+              .map(([id]) => (
+                <span
+                  key={id}
+                  className="rounded border border-cyan-400/20 bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-100/85 backdrop-blur"
+                >
+                  {id}
+                </span>
+              ))}
+          </div>
+        ) : null}
 
         {/* Failure overlay sits on top of the chart frame so layout stays stable */}
         {failureCopy ? (
@@ -1053,60 +1161,36 @@ export function ChartScreen({ data, initialAction }: Props) {
         <button
           type="button"
           onClick={resetChartView}
-          className="absolute bottom-3 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/25 bg-black/65 text-cyan-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/45 hover:bg-cyan-400/12 active:scale-95"
-          aria-label="Reset chart view"
-          title="Reset chart view"
+          className="absolute right-3 top-12 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/70 text-cyan-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/45 hover:bg-cyan-400/12 active:scale-95"
+          aria-label={CHART_SCALE_MODES[scaleModeIndex].label}
+          title={CHART_SCALE_MODES[scaleModeIndex].label}
         >
           <RotateCcw className="h-4 w-4" aria-hidden />
         </button>
-      </div>
 
-      {/* Compact selectors row under the chart */}
-      <div className="-mx-1 mt-3 flex items-center gap-1.5 overflow-x-auto px-1">
-        {CHART_TF_OPTIONS.map((t) => {
-          const active = t.key === data.timeframeKey;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => goTf(t.key)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-                active
-                  ? "bg-cyan-500/18 text-cyan-100/95 ring-1 ring-cyan-500/35"
-                  : "bg-white/[0.03] text-tos-muted hover:bg-white/[0.07]"
-              }`}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-        <span className="mx-2 hidden h-4 w-px bg-white/[0.06] sm:inline-block" aria-hidden />
-        <select
-          value={data.symbol}
-          onChange={(e) => goSymbol(e.target.value)}
-          className="shrink-0 rounded-full border border-white/10 bg-black/35 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-tos-text outline-none focus:border-cyan-500/40"
-          aria-label="Symbol"
-        >
-          {data.symbolOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        {data.accountChoices.length > 1 ? (
-          <select
-            value={accountId ?? ""}
-            onChange={(e) => goAccount(e.target.value)}
-            className="shrink-0 rounded-full border border-white/10 bg-black/35 px-3 py-1.5 text-[11px] tracking-wider text-tos-text outline-none focus:border-cyan-500/40"
-            aria-label="Account"
+        <div className="absolute bottom-2 left-1/2 z-30 flex w-[min(34rem,calc(100%-1rem))] -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/70 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <button
+            type="button"
+            className="rounded-full bg-rose-500/90 px-3 py-2 text-left font-mono text-[12px] font-bold text-white"
+            onClick={() => setExecutionBridgeOpen(true)}
           >
-            {data.accountChoices.map((a) => (
-              <option key={a.brokerAccountId} value={a.brokerAccountId}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        ) : null}
+            SELL {lastPriceText}
+          </button>
+          <button
+            type="button"
+            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-center text-[12px] font-semibold text-tos-text"
+            onClick={() => setExecutionBridgeOpen((v) => !v)}
+          >
+            Buy Limit · 0.5
+          </button>
+          <button
+            type="button"
+            className="rounded-full bg-cyan-500/90 px-3 py-2 text-right font-mono text-[12px] font-bold text-white"
+            onClick={() => setExecutionBridgeOpen(true)}
+          >
+            BUY {lastPriceText}
+          </button>
+        </div>
       </div>
 
       {snapshotMessage ? (

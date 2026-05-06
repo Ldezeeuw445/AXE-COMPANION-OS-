@@ -92,6 +92,7 @@ export function AppNavigation() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const slots = useAppTopBarSlots();
+  const isChart = pathname === "/chart" || pathname.startsWith("/chart/");
 
   const close = useCallback(() => setOpen(false), []);
   useEffect(() => {
@@ -116,11 +117,15 @@ export function AppNavigation() {
 
         {/* True center column — AXE wordmark stays visually centered regardless of injected slots */}
         <div className="pointer-events-none relative flex min-w-0 items-center justify-center">
-          <AxeWordmark />
+          {isChart ? null : <AxeWordmark />}
 
           {/* Optional page-injected center content (stacked under AXE, does not shift the wordmark) */}
           {slots.center ? (
-            <div className="pointer-events-auto absolute left-1/2 top-[calc(100%-0.15rem)] z-[41] flex -translate-x-1/2 justify-center px-1">
+            <div
+              className={`pointer-events-auto absolute left-1/2 z-[41] flex -translate-x-1/2 justify-center px-1 ${
+                isChart ? "top-1/2 -translate-y-1/2" : "top-[calc(100%-0.15rem)]"
+              }`}
+            >
               <div className="max-w-[min(18rem,calc(100vw-7rem))]">{slots.center}</div>
             </div>
           ) : null}
