@@ -60,7 +60,15 @@ export type ChartCanvasHandle = {
   setViewportPreset: (preset: number) => void;
   /** Subscribe to viewport changes (pan, zoom, resize, data load). */
   subscribeViewport: (cb: () => void) => () => void;
+  /** Width (px) the right price scale currently occupies, so panes can mirror it. */
+  getRightAxisWidth: () => number;
 };
+
+/** Default native zoom: how many of the most recent bars are visible at first paint
+ *  and what each viewport preset maps to. Matches MT5's "show recent action" feel. */
+const DEFAULT_VISIBLE_BARS = 100;
+const PRESET_VISIBLE_BARS = [60, 120, 240];
+const PRESET_RIGHT_OFFSET = [3, 5, 8];
 
 function toUtcTimestamp(iso: string): UTCTimestamp | null {
   const ms = Date.parse(iso);
@@ -163,7 +171,17 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     series.setData(data);
     lastBarRef.current = data.length ? data[data.length - 1] : null;
 
-    chart.timeScale().fitContent();
+    // MT5-style: focus on the latest ~100 bars instead of squashing the entire
+    // history. fitContent() pulls all candles into view which makes the chart
+    // unreadable on phones the moment you have a few months of H1 data.
+    if (data.length > 0) {
+      const total = data.length;
+      const visible = Math.min(DEFAULT_VISIBLE_BARS, total);
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, total - visible),
+        to: total + 4,
+      });
+    }
 
     const handleClick = (params: MouseEventParams) => {
       const mode = drawingModeRef.current;
@@ -423,8 +441,19 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       },
       fitContent() {
         const chart = chartRef.current;
-        if (!chart) return;
-        chart.timeScale().fitContent();
+        const ser = seriesRef.current;
+        if (!chart || !ser) return;
+        // Snap back to the recent window — same as the initial paint.
+        const total = ser.data().length;
+        if (total > 0) {
+          const visible = Math.min(DEFAULT_VISIBLE_BARS, total);
+          chart.timeScale().setVisibleLogicalRange({
+            from: Math.max(0, total - visible),
+            to: total + 4,
+          });
+        } else {
+          chart.timeScale().fitContent();
+        }
         for (const cb of viewportSubscribersRef.current) {
           try {
             cb();
@@ -435,11 +464,18 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       },
       setViewportPreset(preset: number) {
         const chart = chartRef.current;
-        if (!chart) return;
-        const spacing = [16, 9, 5][preset] ?? 9;
-        const rightOffset = [2, 4, 7][preset] ?? 4;
-        chart.timeScale().applyOptions({ barSpacing: spacing, rightOffset });
-        chart.timeScale().fitContent();
+        const ser = seriesRef.current;
+        if (!chart || !ser) return;
+        const total = ser.data().length;
+        const visible = PRESET_VISIBLE_BARS[preset] ?? DEFAULT_VISIBLE_BARS;
+        const rightOffset = PRESET_RIGHT_OFFSET[preset] ?? 4;
+        chart.timeScale().applyOptions({ rightOffset });
+        if (total > 0) {
+          chart.timeScale().setVisibleLogicalRange({
+            from: Math.max(0, total - Math.min(visible, total)),
+            to: total + rightOffset,
+          });
+        }
         for (const cb of viewportSubscribersRef.current) {
           try {
             cb();
@@ -453,6 +489,15 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         return () => {
           viewportSubscribersRef.current.delete(cb);
         };
+      },
+      getRightAxisWidth() {
+        const chart = chartRef.current;
+        if (!chart) return 0;
+        try {
+          return chart.priceScale("right").width();
+        } catch {
+          return 0;
+        }
       },
     }),
     [],

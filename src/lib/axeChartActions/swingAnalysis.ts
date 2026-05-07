@@ -59,6 +59,48 @@ export function buildFibonacciActionFromCandles(input: {
   };
 }
 
+export function buildTrendlineActionFromCandles(input: {
+  id: string;
+  source: "axe" | "user";
+  symbol: string;
+  timeframe: string;
+  accountId?: string;
+  candles: ChartActionCandle[];
+  lookback?: number;
+  strength?: number;
+}): ChartActionCommand {
+  const pair = findRecentSwingPair(input.candles, {
+    lookback: input.lookback,
+    strength: input.strength,
+  });
+
+  // Order points by time so the line draws left→right.
+  const earlier = pair.low.index <= pair.high.index ? pair.low : pair.high;
+  const later = pair.low.index <= pair.high.index ? pair.high : pair.low;
+  const direction = earlier.type === "low" ? "up" : "down";
+
+  return {
+    id: input.id,
+    type: "draw_trendline",
+    source: input.source,
+    symbol: input.symbol,
+    timeframe: input.timeframe,
+    accountId: input.accountId,
+    requiresUserAcceptance: false,
+    payload: {
+      points: [
+        { time: earlier.time, price: earlier.price },
+        { time: later.time, price: later.price },
+      ],
+      direction,
+      explanation:
+        direction === "up"
+          ? "AXE drew a trendline through the latest confirmed swing low → swing high."
+          : "AXE drew a trendline through the latest confirmed swing high → swing low.",
+    },
+  };
+}
+
 export function findRecentSwingPair(
   candles: ChartActionCandle[],
   options: { lookback?: number; strength?: number; minSeparation?: number } = {},

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import {
   Activity,
+  ArrowUpDown,
   BarChart3,
   Bell,
   BookOpen,
@@ -20,6 +21,7 @@ import {
   Save,
   Sparkles,
   Spline,
+  TrendingUp,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
@@ -27,7 +29,10 @@ import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import type { ChartOverlayRow, ChartPageData } from "@/lib/broker/loadChartPageData";
 import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
-import { buildFibonacciActionFromCandles } from "@/lib/axeChartActions/swingAnalysis";
+import {
+  buildFibonacciActionFromCandles,
+  buildTrendlineActionFromCandles,
+} from "@/lib/axeChartActions/swingAnalysis";
 import type {
   ChartActionCommand,
   ChartActionResult,
@@ -253,6 +258,7 @@ function TradePlanLine({
   color,
   digits,
   onChange,
+  dashed = false,
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
   price: number | null;
@@ -260,9 +266,12 @@ function TradePlanLine({
   color: string;
   digits: number;
   onChange: (price: number) => void;
+  /** TP/SL render dashed; entry/limit renders solid — same convention MT5 uses. */
+  dashed?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [axisWidth, setAxisWidth] = useState(0);
   const [y, setY] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -282,7 +291,10 @@ function TradePlanLine({
   useEffect(() => {
     const handle = canvasRef.current;
     if (!handle) return;
-    const compute = () => setY(price == null ? null : handle.priceToCoordinate(price));
+    const compute = () => {
+      setY(price == null ? null : handle.priceToCoordinate(price));
+      setAxisWidth(handle.getRightAxisWidth());
+    };
     compute();
     return handle.subscribeViewport(compute);
   }, [canvasRef, price]);
@@ -299,6 +311,15 @@ function TradePlanLine({
   if (price == null || y == null || size.w <= 0 || size.h <= 0) {
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
+
+  // Plot area ends where the right price axis starts. Drawing the line up to
+  // there (instead of edge-to-edge) keeps the chart legible — exactly like
+  // MT5's pending-order overlay.
+  const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
+  const labelText = label.toUpperCase();
+  const labelWidth = Math.max(46, labelText.length * 7 + 14);
+  const priceWidth = Math.max(58, axisWidth - 4);
+  const priceX = size.w - priceWidth - 2;
 
   return (
     <div
@@ -332,7 +353,18 @@ function TradePlanLine({
         }}
         onPointerCancel={() => setDragging(false)}
       >
-        <line x1={0} x2={size.w} y1={y} y2={y} stroke={color} strokeWidth={1} />
+        {/* Single thin line across the plot — solid for entry, dashed for TP/SL */}
+        <line
+          x1={labelWidth + 8}
+          x2={plotRight}
+          y1={y}
+          y2={y}
+          stroke={color}
+          strokeWidth={1}
+          strokeDasharray={dashed ? "4 4" : ""}
+        />
+
+        {/* Left side: small drag handle + label pill (MT5 style) */}
         <g
           style={{ pointerEvents: "auto", cursor: "ns-resize" }}
           onPointerDown={(event) => {
@@ -343,14 +375,52 @@ function TradePlanLine({
             updateFromPointer(event.clientY);
           }}
         >
-          <rect x={0} y={y - 18} width={size.w} height={36} fill="transparent" />
-          <rect x={6} y={y - 16} width={116} height={24} rx={4} fill="rgba(0,0,0,0.76)" stroke={color} />
-          <text x={14} y={y} fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontSize={11} fontWeight={700} fill={color}>
-            {label}
+          {/* Generous invisible hit area so finger taps land reliably */}
+          <rect x={0} y={y - 14} width={labelWidth + 16} height={28} fill="transparent" />
+          <rect
+            x={4}
+            y={y - 9}
+            width={labelWidth}
+            height={18}
+            rx={3}
+            fill="rgba(0,0,0,0.78)"
+            stroke={color}
+            strokeWidth={1}
+          />
+          <text
+            x={4 + labelWidth / 2}
+            y={y + 4}
+            textAnchor="middle"
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+            fontSize={9}
+            fontWeight={700}
+            fill={color}
+          >
+            {labelText}
           </text>
-          <circle cx={132} cy={y - 4} r={8} fill={color} stroke="rgba(255,255,255,0.86)" strokeWidth={1.5} />
-          <rect x={size.w - 74} y={y - 15} width={68} height={24} rx={3} fill="rgba(0,0,0,0.72)" stroke={color} />
-          <text x={size.w - 40} y={y + 1} textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize={12} fontWeight={700} fill={color}>
+        </g>
+
+        {/* Right side: price label that visually sits in the price-axis gutter */}
+        <g style={{ pointerEvents: "none" }}>
+          <rect
+            x={priceX}
+            y={y - 9}
+            width={priceWidth}
+            height={18}
+            rx={3}
+            fill="rgba(0,0,0,0.82)"
+            stroke={color}
+            strokeWidth={1}
+          />
+          <text
+            x={priceX + priceWidth / 2}
+            y={y + 4}
+            textAnchor="middle"
+            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+            fontSize={10}
+            fontWeight={700}
+            fill={color}
+          >
             {price.toFixed(digits)}
           </text>
         </g>
@@ -387,6 +457,14 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
+  const hasFibAnnotation = useMemo(
+    () => annotations.some((a) => a.type === "fib_retracement"),
+    [annotations],
+  );
+  const hasTrendAnnotation = useMemo(
+    () => annotations.some((a) => a.type === "trendline"),
+    [annotations],
+  );
   const [pendingOrderSide, setPendingOrderSide] = useState<"buy" | "sell">("buy");
   const [pendingOrderPrice, setPendingOrderPrice] = useState<number | null>(data.lastPrice);
   const [pendingStopLossPrice, setPendingStopLossPrice] = useState<number | null>(null);
@@ -830,7 +908,32 @@ export function ChartScreen({ data, initialAction }: Props) {
             id: newAnnotationId(),
             type,
             status: "failed",
-            message: "AXE could not find a clean recent swing. Use manual Fibonacci and tap two anchors.",
+            message: "AXE could not find a clean recent swing. Try a different timeframe.",
+          };
+          setSnapshotMessage(failed.message);
+          setTimeout(() => setSnapshotMessage(null), 4_000);
+          return failed;
+        }
+      }
+
+      if (type === "draw_trendline") {
+        try {
+          const command = buildTrendlineActionFromCandles({
+            id: newAnnotationId(),
+            source,
+            symbol: data.symbol,
+            timeframe: data.timeframeKey,
+            accountId: accountId ?? undefined,
+            candles: data.candles,
+            strength: 3,
+          });
+          return executeChartAction(command);
+        } catch {
+          const failed: ChartActionResult = {
+            id: newAnnotationId(),
+            type,
+            status: "failed",
+            message: "AXE could not find a clean recent swing for a trendline.",
           };
           setSnapshotMessage(failed.message);
           setTimeout(() => setSnapshotMessage(null), 4_000);
@@ -850,6 +953,48 @@ export function ChartScreen({ data, initialAction }: Props) {
     },
     [accountId, data.candles, data.symbol, data.timeframeKey, executeChartAction],
   );
+
+  // Tap the toolbar Fib/Trend button: if there's already an auto drawing of
+  // that type on the chart, remove it (toggle off). Otherwise, draw a new one.
+  // This matches the user's mental model: same button toggles the indicator
+  // on/off, exactly like Vol/RSI/MA.
+  const toggleAutoAnnotation = useCallback(
+    (kind: "fib_retracement" | "trendline") => {
+      const existing = annotations.filter((a) => a.type === kind);
+      if (existing.length > 0) {
+        let nextList = annotations;
+        for (const ann of existing) {
+          nextList = removeAnnotation(data.symbol, data.timeframeKey, ann.id);
+        }
+        setAnnotations(nextList);
+        return;
+      }
+      executeActionByType(kind === "fib_retracement" ? "draw_fibonacci" : "draw_trendline", "user");
+    },
+    [annotations, data.symbol, data.timeframeKey, executeActionByType],
+  );
+
+  // Flip the existing fib so the 0% level switches between top and bottom.
+  // Implementation: swap the two anchor points of every fib_retracement
+  // annotation we have. The percentage labels are derived from `points[0]`
+  // (= 0%) → `points[1]` (= 100%), so swapping flips the orientation in one
+  // tap, exactly like MT5's "invert".
+  const flipFibAnnotation = useCallback(() => {
+    const fibs = annotations.filter((a) => a.type === "fib_retracement");
+    if (fibs.length === 0) {
+      executeActionByType("draw_fibonacci", "user");
+      return;
+    }
+    const now = new Date().toISOString();
+    setAnnotations((prev) => {
+      const next = prev.map((a) => {
+        if (a.type !== "fib_retracement" || a.points.length < 2) return a;
+        return { ...a, points: [a.points[1], a.points[0]], updatedAt: now };
+      });
+      saveAnnotations(data.symbol, data.timeframeKey, next);
+      return next;
+    });
+  }, [annotations, data.symbol, data.timeframeKey, executeActionByType]);
 
   useEffect(() => {
     if (!initialAction) return;
@@ -1032,7 +1177,7 @@ export function ChartScreen({ data, initialAction }: Props) {
   return (
     <div
       className="fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
     >
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
@@ -1107,7 +1252,7 @@ export function ChartScreen({ data, initialAction }: Props) {
               canvasRef={canvasRef}
               price={pendingOrderPrice}
               label={`${pendingOrderSide.toUpperCase()} LIMIT`}
-              color={pendingOrderSide === "buy" ? "#1f8cff" : "#ef4444"}
+              color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={setPendingOrderPrice}
             />
@@ -1115,18 +1260,29 @@ export function ChartScreen({ data, initialAction }: Props) {
               canvasRef={canvasRef}
               price={pendingStopLossPrice}
               label="SL"
-              color="#c95450"
+              color="#E13947"
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={setPendingStopLossPrice}
+              dashed
             />
             <TradePlanLine
               canvasRef={canvasRef}
               price={pendingTakeProfitPrice}
               label="TP"
-              color="#1f9c7b"
+              color="#22D3EE"
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={setPendingTakeProfitPrice}
+              dashed
             />
+            <button
+              type="button"
+              onClick={() => setPendingOrderVisible(false)}
+              className="absolute right-3 top-12 z-30 inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/82 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
+              aria-label="Cancel pending order overlay"
+            >
+              <span aria-hidden>✕</span>
+              <span>Clear plan</span>
+            </button>
           </>
         ) : null}
 
@@ -1189,7 +1345,28 @@ export function ChartScreen({ data, initialAction }: Props) {
           <div className="grid grid-cols-3 gap-1.5">
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
-            { id: "fib", label: "Auto Fib", icon: Spline, active: Boolean(activeToolFlags.fib), action: () => executeActionByType("draw_fibonacci", "user") },
+            {
+              id: "fib",
+              label: "Auto Fib",
+              icon: Spline,
+              active: hasFibAnnotation,
+              action: () => toggleAutoAnnotation("fib_retracement"),
+            },
+            {
+              id: "fibFlip",
+              label: "Flip Fib",
+              icon: ArrowUpDown,
+              active: false,
+              disabled: !hasFibAnnotation,
+              action: flipFibAnnotation,
+            },
+            {
+              id: "trend",
+              label: "Auto Trend",
+              icon: TrendingUp,
+              active: hasTrendAnnotation,
+              action: () => toggleAutoAnnotation("trendline"),
+            },
             { id: "structure", label: "Structure", icon: Sparkles, active: Boolean(activeToolFlags.structure), action: () => toggleToolFlag("structure") },
             { id: "orderBlocks", label: "OB", icon: Layers, active: Boolean(activeToolFlags.orderBlocks), action: () => toggleToolFlag("orderBlocks") },
             { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
@@ -1197,16 +1374,20 @@ export function ChartScreen({ data, initialAction }: Props) {
             { id: "ma", label: "MA", icon: LineChart, active: Boolean(activeToolFlags.ma), action: () => toggleToolFlag("ma") },
           ].map((item) => {
             const Icon = item.icon;
+            const isDisabled = "disabled" in item && item.disabled;
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={item.action}
+                disabled={isDisabled}
                 title={item.label}
                 className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
-                  item.active
-                    ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100"
-                    : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                  isDisabled
+                    ? "cursor-not-allowed border-white/[0.04] bg-white/[0.02] text-tos-dim opacity-50"
+                    : item.active
+                      ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100"
+                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
                 }`}
                 aria-label={item.label}
               >
@@ -1305,7 +1486,7 @@ export function ChartScreen({ data, initialAction }: Props) {
       ) : null}
 
       <div className="mx-0 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur">
-        <div className="flex h-14 items-stretch gap-px">
+        <div className="flex h-11 items-stretch gap-px">
           <button
             type="button"
             className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left ${
@@ -1316,15 +1497,15 @@ export function ChartScreen({ data, initialAction }: Props) {
             onClick={() => showPendingTradePlan("sell")}
           >
             <span className="text-[10px] font-semibold uppercase">Sell</span>
-            <span className="font-mono text-[17px] font-bold leading-none">{lastPriceText}</span>
+            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
           </button>
           <button
             type="button"
-            className="flex min-w-[6.25rem] flex-col items-center justify-center bg-black px-2 text-[11px] font-semibold text-tos-text"
+            className="flex min-w-[5rem] flex-col items-center justify-center bg-black px-2 text-[11px] font-semibold text-tos-text"
             onClick={() => showPendingTradePlan(pendingOrderSide)}
           >
             <span className="text-[8px] font-bold uppercase tracking-[0.22em] text-tos-dim">Lots</span>
-            <span className="mt-0.5 font-mono text-[13px] font-semibold">{tradeVolume}</span>
+            <span className="mt-0.5 font-mono text-[12px] font-semibold">{tradeVolume}</span>
           </button>
           <button
             type="button"
@@ -1336,7 +1517,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             onClick={() => showPendingTradePlan("buy")}
           >
             <span className="text-[10px] font-semibold uppercase">Buy</span>
-            <span className="font-mono text-[17px] font-bold leading-none">{lastPriceText}</span>
+            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
           </button>
         </div>
       </div>
