@@ -436,13 +436,32 @@ export function ChartScreen({ data, initialAction }: Props) {
   }, [data.lastPrice]);
 
   useEffect(() => {
-    const prevBodyOverflow = document.body.style.overflow;
-    const prevHtmlOverflow = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
+    // Lock both <html> and <body> to the viewport so the chart screen can't
+    // be pulled past the top/bottom of the device. Setting position:fixed on
+    // <body> is the only reliable way to stop iOS Safari rubber-band scroll.
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      htmlHeight: html.style.height,
+      bodyOverflow: body.style.overflow,
+      bodyHeight: body.style.height,
+      bodyPosition: body.style.position,
+      bodyWidth: body.style.width,
+    };
+    html.style.overflow = "hidden";
+    html.style.height = "100dvh";
+    body.style.overflow = "hidden";
+    body.style.height = "100dvh";
+    body.style.position = "fixed";
+    body.style.width = "100%";
     return () => {
-      document.body.style.overflow = prevBodyOverflow;
-      document.documentElement.style.overflow = prevHtmlOverflow;
+      html.style.overflow = prev.htmlOverflow;
+      html.style.height = prev.htmlHeight;
+      body.style.overflow = prev.bodyOverflow;
+      body.style.height = prev.bodyHeight;
+      body.style.position = prev.bodyPosition;
+      body.style.width = prev.bodyWidth;
     };
   }, []);
 
@@ -1011,7 +1030,10 @@ export function ChartScreen({ data, initialAction }: Props) {
   }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections]);
 
   return (
-    <div className="flex h-[calc(100dvh-3.25rem-env(safe-area-inset-bottom))] min-h-0 flex-1 flex-col overflow-hidden overscroll-none md:h-auto md:overflow-visible">
+    <div
+      className="fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
         <div className="flex shrink-0 items-baseline gap-1.5">
@@ -1055,7 +1077,7 @@ export function ChartScreen({ data, initialAction }: Props) {
 
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        className="relative -mx-4 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] md:mx-0 md:min-h-[420px] md:rounded-none md:border-x"
+        className="relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] md:min-h-[420px] md:rounded-none md:border-x"
         style={{ background: CHART_THEME.background }}
       >
         <ChartCanvas
@@ -1272,17 +1294,17 @@ export function ChartScreen({ data, initialAction }: Props) {
           never bleed into the volume/RSI area and vice versa. They share the
           main chart's time scale via canvasRef.timeToCoordinate(...). */}
       {activeToolFlags.volume ? (
-        <div className="-mx-4 shrink-0 md:mx-0" style={{ height: "108px" }}>
+        <div className="mx-0 shrink-0" style={{ height: "108px" }}>
           <IndicatorPane mode="volume" candles={data.candles} canvasRef={canvasRef} />
         </div>
       ) : null}
       {activeToolFlags.rsi ? (
-        <div className="-mx-4 shrink-0 md:mx-0" style={{ height: "120px" }}>
+        <div className="mx-0 shrink-0" style={{ height: "120px" }}>
           <IndicatorPane mode="rsi" candles={data.candles} canvasRef={canvasRef} />
         </div>
       ) : null}
 
-      <div className="-mx-4 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur md:mx-0">
+      <div className="mx-0 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur">
         <div className="flex h-14 items-stretch gap-px">
           <button
             type="button"
