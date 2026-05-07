@@ -11,7 +11,6 @@ import {
   BookOpen,
   ChevronDown,
   ClipboardList,
-  Clock3,
   Info,
   Landmark,
   Layers,
@@ -59,7 +58,6 @@ import type {
 import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotationLayer";
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
-import { ChartExecutionBridge } from "@/components/chart/ChartExecutionBridge";
 
 const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 30_000;
@@ -384,7 +382,6 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [drawingMode, setDrawingMode] = useState<DrawingMode>(null);
   const drawingPointsRef = useRef<AnnotationPoint[]>([]);
   const [drawingHint, setDrawingHint] = useState<string | null>(null);
-  const [executionBridgeOpen, setExecutionBridgeOpen] = useState<boolean>(false);
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
@@ -410,7 +407,6 @@ export function ChartScreen({ data, initialAction }: Props) {
           prev != null && !sideChanged ? prev : side === "buy" ? entry + distance * 1.6 : entry - distance * 1.6,
         );
       }
-      setExecutionBridgeOpen(true);
     },
     [data.candles, data.lastPrice, livePrice, pendingOrderPrice, pendingOrderSide],
   );
@@ -988,14 +984,6 @@ export function ChartScreen({ data, initialAction }: Props) {
             icon: <Save className="h-3.5 w-3.5" />,
             onSelect: () => void saveSnapshotToVault(),
           },
-          {
-            id: "exec-bridge",
-            label: executionBridgeOpen ? "Hide execution bridge" : "Show execution bridge",
-            description: "Review-only by default. Execution stays off.",
-            icon: <Activity className="h-3.5 w-3.5" />,
-            hint: executionBridgeOpen ? "open" : "off",
-            onSelect: () => setExecutionBridgeOpen((v) => !v),
-          },
         ],
       },
       {
@@ -1022,41 +1010,27 @@ export function ChartScreen({ data, initialAction }: Props) {
     tfLabel,
     overlays.length,
     accountLabel,
-    executionBridgeOpen,
     saveSnapshotToVault,
     focusDataDetails,
   ]);
 
-  // Inject the LIVE pill (center) and AXE button (right) into the global mobile top bar.
+  // Keep the global mobile top bar clean: menu left, AXE context/logo action right.
+  // Chart-specific controls live in the left middle rail so the logo toolbar can remain
+  // the same app-level surface instead of being replaced by chart UI.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    setCenter(
-      <button
-        type="button"
-        onClick={() => showPendingTradePlan(pendingOrderSide)}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/20 bg-white/[0.03] text-cyan-300/90"
-        aria-label="Open limit controls"
-      >
-        <Clock3 className="h-4 w-4" />
-      </button>,
-    );
+    setCenter(null);
     setRight(
-      <div className="flex flex-col items-end gap-1">
-        <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />
-        <div className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-200/95">
-          <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
-          LIVE
-        </div>
-      </div>,
+      <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />,
     );
     return () => {
       setCenter(null);
       setRight(null);
     };
-  }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections, pendingOrderSide, showPendingTradePlan, statusPill.dot]);
+  }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections]);
 
   return (
-    <div className="flex h-[calc(100dvh-3.25rem-env(safe-area-inset-bottom))] min-h-0 flex-1 flex-col overflow-hidden md:h-auto md:overflow-visible">
+    <div className="flex h-[calc(100dvh-3.25rem-env(safe-area-inset-bottom))] min-h-0 flex-1 touch-none flex-col overflow-hidden overscroll-none md:h-auto md:touch-auto md:overflow-visible">
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
         <div className="flex shrink-0 items-baseline gap-1.5">
@@ -1192,58 +1166,64 @@ export function ChartScreen({ data, initialAction }: Props) {
           </div>
         </div>
 
-        {!toolRailOpen ? (
-          <button
-            type="button"
-            onClick={() => setToolRailOpen(true)}
-            className="absolute left-0 top-1/2 z-30 grid h-12 w-5 -translate-y-1/2 place-items-center rounded-r-full border border-l-0 border-white/10 bg-black/78 text-cyan-200 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur"
-            aria-label="Open drawing toolbar"
-          >
-            <ChevronDown className="-rotate-90 h-4 w-4" aria-hidden />
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => setToolRailOpen((v) => !v)}
+          className={`absolute left-0 top-1/2 z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+            toolRailOpen
+              ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.2)]"
+              : "border-cyan-400/18 bg-black/78 text-cyan-200"
+          }`}
+          aria-label="Toggle chart toolbar"
+        >
+          <span className="h-8 w-1 rounded-full bg-current opacity-80" aria-hidden />
+        </button>
 
         <div
-          className={`absolute left-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-r-full border border-l-0 border-white/10 bg-black/78 p-1 backdrop-blur transition-transform ${
-            toolRailOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
+          className={`absolute left-0 top-1/2 z-30 w-[13.75rem] -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+            toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
         >
-          <button
-            type="button"
-            onClick={() => setToolRailOpen((v) => !v)}
-            className="grid h-8 w-8 place-items-center rounded-full bg-white/[0.06] text-cyan-200"
-            aria-label="Toggle drawing toolbar"
-          >
-            <ChevronDown className={`h-4 w-4 transition-transform ${toolRailOpen ? "rotate-90" : "-rotate-90"}`} />
-          </button>
+          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-100/85">Chart tools</div>
+          <div className="grid grid-cols-3 gap-1.5">
           {[
-            { id: "axe", label: "AXE", icon: MessageSquare, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
-            { id: "fib", label: "Auto Fib", icon: Spline, action: () => executeActionByType("draw_fibonacci", "user") },
-            { id: "orderBlocks", label: "OB", icon: Layers, action: () => toggleToolFlag("orderBlocks") },
-            { id: "vol", label: "Vol", icon: BarChart3, action: () => toggleToolFlag("volume") },
-            { id: "rsi", label: "RSI", icon: Activity, action: () => toggleToolFlag("rsi") },
-            { id: "ma", label: "MA", icon: LineChart, action: () => toggleToolFlag("ma") },
-            { id: "structure", label: "Structure", icon: Sparkles, action: () => toggleToolFlag("structure") },
+            { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
+            { id: "fibDraw", label: "Fib", icon: Spline, active: drawingMode === "fib_retracement", action: () => startDrawing("fib_retracement") },
+            { id: "trendDraw", label: "Trend", icon: LineChart, active: drawingMode === "trendline", action: () => startDrawing("trendline") },
+            { id: "fib", label: "Auto Fib", icon: Spline, active: Boolean(activeToolFlags.fib), action: () => executeActionByType("draw_fibonacci", "user") },
+            { id: "orderBlocks", label: "OB", icon: Layers, active: Boolean(activeToolFlags.orderBlocks), action: () => toggleToolFlag("orderBlocks") },
+            { id: "structure", label: "Structure", icon: Sparkles, active: Boolean(activeToolFlags.structure), action: () => toggleToolFlag("structure") },
+            { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
+            { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
+            { id: "ma", label: "MA", icon: LineChart, active: Boolean(activeToolFlags.ma), action: () => toggleToolFlag("ma") },
           ].map((item) => {
             const Icon = item.icon;
-            const active = Boolean(activeToolFlags[item.id]);
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={item.action}
                 title={item.label}
-                className={`grid h-8 w-8 place-items-center rounded-full border text-[10px] transition ${
-                  active
+                className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                  item.active
                     ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100"
                     : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
                 }`}
                 aria-label={item.label}
               >
                 <Icon className="h-4 w-4" aria-hidden />
+                <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
               </button>
             );
           })}
+          </div>
+          <button
+            type="button"
+            onClick={cancelDrawing}
+            className="mt-2 w-full rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted hover:text-cyan-100"
+          >
+            Select / cancel
+          </button>
         </div>
 
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
@@ -1333,23 +1313,6 @@ export function ChartScreen({ data, initialAction }: Props) {
         </button>
       </div>
 
-      {executionBridgeOpen ? (
-        <ChartExecutionBridge
-          symbol={data.symbol}
-          brokerSymbol={data.brokerSymbol}
-          timeframeLabel={tfLabel}
-          lastPrice={livePrice}
-          digits={priceDigitsForSymbol(data.brokerSymbol)}
-          defaultSide={pendingOrderSide}
-          defaultOrderType="limit"
-          defaultVolume={tradeVolume}
-          entryPrice={pendingOrderPrice}
-          stopLossPrice={pendingStopLossPrice}
-          takeProfitPrice={pendingTakeProfitPrice}
-          onClose={() => setExecutionBridgeOpen(false)}
-        />
-      ) : null}
-
       <div className="-mx-4 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur md:mx-0">
         <div className="flex h-14 items-stretch gap-px">
           <button
@@ -1366,19 +1329,11 @@ export function ChartScreen({ data, initialAction }: Props) {
           </button>
           <button
             type="button"
-            className="flex min-w-[7.5rem] flex-col items-center justify-center bg-black px-2 text-[11px] font-semibold text-tos-text"
-            onClick={() => {
-              if (!pendingOrderVisible) {
-                showPendingTradePlan(pendingOrderSide);
-                return;
-              }
-              setExecutionBridgeOpen((v) => !v);
-            }}
+            className="flex min-w-[6.25rem] flex-col items-center justify-center bg-black px-2 text-[11px] font-semibold text-tos-text"
+            onClick={() => showPendingTradePlan(pendingOrderSide)}
           >
-            <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase text-tos-muted">
-              Limit
-            </span>
-            <span className="font-mono text-[12px]">{tradeVolume} lots</span>
+            <span className="text-[8px] font-bold uppercase tracking-[0.22em] text-tos-dim">Lots</span>
+            <span className="mt-0.5 font-mono text-[13px] font-semibold">{tradeVolume}</span>
           </button>
           <button
             type="button"
@@ -1501,18 +1456,6 @@ export function ChartScreen({ data, initialAction }: Props) {
           <Sparkles className="h-4 w-4 shrink-0 text-cyan-400/85" />
           Trade plan
         </Link>
-        <button
-          type="button"
-          onClick={() => setExecutionBridgeOpen((v) => !v)}
-          className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[11px] font-medium transition-colors ${
-            executionBridgeOpen
-              ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-100/95"
-              : "border-white/10 bg-white/[0.03] text-tos-muted hover:border-cyan-500/30 hover:text-tos-text"
-          }`}
-        >
-          <Activity className="h-4 w-4 shrink-0 text-cyan-400/85" />
-          {executionBridgeOpen ? "Hide bridge" : "Execution bridge"}
-        </button>
         </div>
 
         {/* Data details */}
