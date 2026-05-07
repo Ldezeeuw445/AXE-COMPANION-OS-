@@ -573,12 +573,6 @@ export function ChartScreen({ data, initialAction }: Props) {
     },
     [router, accountId, data.symbol],
   );
-  const goAccount = useCallback(
-    (id: string) => {
-      router.push(buildHref(id, data.symbol, data.timeframeKey));
-    },
-    [router, data.symbol, data.timeframeKey],
-  );
 
   const lastPriceText = useMemo(
     () => formatBrokerPrice(data.brokerSymbol, livePrice),
@@ -586,11 +580,6 @@ export function ChartScreen({ data, initialAction }: Props) {
   );
   const failureCopy = failureCardCopy(data.failure);
   const accountLabel = data.account?.label ?? null;
-
-  const liveSummary =
-    livePositionsCount === 0
-      ? null
-      : `${livePositionsCount} open${livePositionsCount === 1 ? "" : "s"} · ${overlays.length} on ${data.symbol}`;
 
   // Drawing tools ─ tap-to-place workflow
   const startDrawing = useCallback((mode: Exclude<DrawingMode, null>) => {
@@ -639,15 +628,6 @@ export function ChartScreen({ data, initialAction }: Props) {
     },
     [drawingMode, data.symbol, data.timeframeKey],
   );
-
-  const removeLastAnnotation = useCallback(() => {
-    setAnnotations((prev) => {
-      if (prev.length === 0) return prev;
-      const next = prev.slice(0, -1);
-      saveAnnotations(data.symbol, data.timeframeKey, next);
-      return next;
-    });
-  }, [data.symbol, data.timeframeKey]);
 
   const updateAnnotation = useCallback(
     (updated: ChartAnnotation) => {
