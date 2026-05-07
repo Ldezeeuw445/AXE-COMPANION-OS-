@@ -111,6 +111,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         fontSize: 11,
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue'",
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: CHART_THEME.grid, style: LineStyle.Solid },
