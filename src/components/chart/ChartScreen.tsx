@@ -58,6 +58,7 @@ import type {
 import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotationLayer";
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
+import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
 
 const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 30_000;
@@ -1010,7 +1011,7 @@ export function ChartScreen({ data, initialAction }: Props) {
   }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections]);
 
   return (
-    <div className="flex h-[calc(100dvh-3.25rem-env(safe-area-inset-bottom))] min-h-0 flex-1 touch-none flex-col overflow-hidden overscroll-none md:h-auto md:touch-auto md:overflow-visible">
+    <div className="flex h-[calc(100dvh-3.25rem-env(safe-area-inset-bottom))] min-h-0 flex-1 flex-col overflow-hidden overscroll-none md:h-auto md:overflow-visible">
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
         <div className="flex shrink-0 items-baseline gap-1.5">
@@ -1054,7 +1055,7 @@ export function ChartScreen({ data, initialAction }: Props) {
 
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        className="relative -mx-4 mt-0 min-h-0 flex-1 overflow-hidden border-y border-white/[0.08] md:mx-0 md:min-h-[520px] md:rounded-none md:border-x"
+        className="relative -mx-4 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] md:mx-0 md:min-h-[420px] md:rounded-none md:border-x"
         style={{ background: CHART_THEME.background }}
       >
         <ChartCanvas
@@ -1072,8 +1073,6 @@ export function ChartScreen({ data, initialAction }: Props) {
           candles={data.candles}
           canvasRef={canvasRef}
           active={{
-            volume: activeToolFlags.volume,
-            rsi: activeToolFlags.rsi,
             ma: activeToolFlags.ma,
             structure: activeToolFlags.structure,
             orderBlocks: activeToolFlags.orderBlocks,
@@ -1168,11 +1167,9 @@ export function ChartScreen({ data, initialAction }: Props) {
           <div className="grid grid-cols-3 gap-1.5">
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
-            { id: "fibDraw", label: "Fib", icon: Spline, active: drawingMode === "fib_retracement", action: () => startDrawing("fib_retracement") },
-            { id: "trendDraw", label: "Trend", icon: LineChart, active: drawingMode === "trendline", action: () => startDrawing("trendline") },
             { id: "fib", label: "Auto Fib", icon: Spline, active: Boolean(activeToolFlags.fib), action: () => executeActionByType("draw_fibonacci", "user") },
-            { id: "orderBlocks", label: "OB", icon: Layers, active: Boolean(activeToolFlags.orderBlocks), action: () => toggleToolFlag("orderBlocks") },
             { id: "structure", label: "Structure", icon: Sparkles, active: Boolean(activeToolFlags.structure), action: () => toggleToolFlag("structure") },
+            { id: "orderBlocks", label: "OB", icon: Layers, active: Boolean(activeToolFlags.orderBlocks), action: () => toggleToolFlag("orderBlocks") },
             { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
             { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
             { id: "ma", label: "MA", icon: LineChart, active: Boolean(activeToolFlags.ma), action: () => toggleToolFlag("ma") },
@@ -1197,13 +1194,6 @@ export function ChartScreen({ data, initialAction }: Props) {
             );
           })}
           </div>
-          <button
-            type="button"
-            onClick={cancelDrawing}
-            className="mt-2 w-full rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted hover:text-cyan-100"
-          >
-            Select / cancel
-          </button>
         </div>
 
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
@@ -1224,21 +1214,6 @@ export function ChartScreen({ data, initialAction }: Props) {
             onRemove={removeAnnotationById}
           />
         </div>
-
-        {Object.entries(activeToolFlags).some(([, active]) => active) ? (
-          <div className="pointer-events-none absolute bottom-[4.75rem] left-3 z-20 flex max-w-[70%] flex-wrap gap-1">
-            {Object.entries(activeToolFlags)
-              .filter(([, active]) => active)
-              .map(([id]) => (
-                <span
-                  key={id}
-                  className="rounded border border-cyan-400/20 bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-100/85 backdrop-blur"
-                >
-                  {id}
-                </span>
-              ))}
-          </div>
-        ) : null}
 
         {/* Failure overlay sits on top of the chart frame so layout stays stable */}
         {failureCopy ? (
@@ -1293,13 +1268,27 @@ export function ChartScreen({ data, initialAction }: Props) {
         </button>
       </div>
 
+      {/* Indicator panes: each one is its own bounded box, so the chart can
+          never bleed into the volume/RSI area and vice versa. They share the
+          main chart's time scale via canvasRef.timeToCoordinate(...). */}
+      {activeToolFlags.volume ? (
+        <div className="-mx-4 shrink-0 md:mx-0" style={{ height: "108px" }}>
+          <IndicatorPane mode="volume" candles={data.candles} canvasRef={canvasRef} />
+        </div>
+      ) : null}
+      {activeToolFlags.rsi ? (
+        <div className="-mx-4 shrink-0 md:mx-0" style={{ height: "120px" }}>
+          <IndicatorPane mode="rsi" candles={data.candles} canvasRef={canvasRef} />
+        </div>
+      ) : null}
+
       <div className="-mx-4 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur md:mx-0">
         <div className="flex h-14 items-stretch gap-px">
           <button
             type="button"
             className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left ${
               pendingOrderSide === "sell"
-                ? "bg-gradient-to-r from-[#3A090E] via-[#7D1D28] to-[#B93147] text-white"
+                ? "bg-gradient-to-r from-[#330610] via-[#8B1923] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.25)]"
                 : "bg-white/[0.03] text-tos-muted"
             }`}
             onClick={() => showPendingTradePlan("sell")}
@@ -1319,7 +1308,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             type="button"
             className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left ${
               pendingOrderSide === "buy"
-                ? "bg-gradient-to-r from-[#0E3850] via-[#148FC3] to-[#18B6EC] text-white"
+                ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(34,211,238,0.25)]"
                 : "bg-white/[0.03] text-tos-muted"
             }`}
             onClick={() => showPendingTradePlan("buy")}

@@ -8,8 +8,6 @@ type Props = {
   candles: MetaApiCandle[];
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
   active: {
-    volume?: boolean;
-    rsi?: boolean;
     ma?: boolean;
     structure?: boolean;
     orderBlocks?: boolean;
@@ -55,17 +53,12 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
     if (!handle || size.w <= 0 || size.h <= 0) {
       return {
         maPath: "",
-        volumeBars: [],
-        rsiPath: "",
-        rsiTop: 48,
-        rsiHeight: 96,
         structureLabels: [],
         structureLines: [],
         orderBlocks: [],
         fairValueGaps: [],
         swingFailures: [],
         equilibriumLine: null as { y: number } | null,
-        latestRsi: null as number | null,
       };
     }
 
@@ -91,55 +84,18 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
       })
       .filter(Boolean) as Point[];
 
-    const ranges = visible.map((candle) => Math.max(0, candle.high - candle.low));
-    const maxRange = Math.max(...ranges, 1);
-    const volumeBase = size.h - 74;
-    const volumeHeight = Math.max(42, size.h * 0.12);
-    const volumeBars = visible
-      .map((candle, index) => {
-        if (candle.time == null) return null;
-        const x = handle.timeToCoordinate(candle.time);
-        if (x == null) return null;
-        const h = Math.max(2, (ranges[index] / maxRange) * volumeHeight);
-        return {
-          x,
-          y: volumeBase - h,
-          h,
-          color: candle.close >= candle.open ? "rgba(45,212,191,0.70)" : "rgba(239,68,68,0.72)",
-        };
-      })
-      .filter(Boolean) as Array<{ x: number; y: number; h: number; color: string }>;
-
-    const rsiValues = rsi(visible.map((candle) => candle.close), 14);
-    const rsiTop = Math.max(48, size.h - 150);
-    const rsiHeight = 96;
-    const rsiPoints: Point[] = visible
-      .map((candle, index) => {
-        const value = rsiValues[index];
-        if (value == null || candle.time == null) return null;
-        const x = handle.timeToCoordinate(candle.time);
-        if (x == null) return null;
-        return { x, y: rsiTop + (1 - value / 100) * rsiHeight };
-      })
-      .filter(Boolean) as Point[];
-
     const structureOverlay = buildStructureOverlay(visible, handle);
 
     return {
       maPath: toPath(maPoints),
-      volumeBars,
-      rsiPath: toPath(rsiPoints),
-      rsiTop,
-      rsiHeight,
       structureLabels: structureOverlay.labels,
       structureLines: structureOverlay.lines,
       orderBlocks: structureOverlay.orderBlocks,
       fairValueGaps: structureOverlay.fairValueGaps,
       swingFailures: structureOverlay.swingFailures,
       equilibriumLine: structureOverlay.equilibriumLine,
-      latestRsi: rsiValues.filter((value): value is number => value != null).at(-1) ?? null,
     };
-  }, [active, candles, canvasRef, size.h, size.w, version]);
+  }, [candles, canvasRef, size.h, size.w, version]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
@@ -263,39 +219,6 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
             ))
           : null}
 
-        {active.volume
-          ? geometry.volumeBars.map((bar, index) => (
-              <rect key={index} x={bar.x - 2} y={bar.y} width={4} height={bar.h} rx={1} fill={bar.color} />
-            ))
-          : null}
-
-        {active.rsi ? (
-          <g>
-            <rect
-              x={0}
-              y={geometry.rsiTop}
-              width={size.w}
-              height={geometry.rsiHeight}
-              fill="rgba(0,0,0,0.34)"
-              stroke="rgba(255,255,255,0.08)"
-            />
-            {[25, 50, 75].map((level) => (
-              <line
-                key={level}
-                x1={0}
-                x2={size.w}
-                y1={geometry.rsiTop + (1 - level / 100) * geometry.rsiHeight}
-                y2={geometry.rsiTop + (1 - level / 100) * geometry.rsiHeight}
-                stroke="rgba(255,255,255,0.18)"
-                strokeDasharray="5 5"
-              />
-            ))}
-            <path d={geometry.rsiPath} fill="none" stroke="rgba(59,130,246,0.95)" strokeWidth={2} />
-            <text x={8} y={geometry.rsiTop + 16} fontFamily="ui-monospace, monospace" fontSize="12" fill="rgba(232,238,246,0.86)">
-              RSI(14) {geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}
-            </text>
-          </g>
-        ) : null}
       </svg>
     </div>
   );
@@ -316,24 +239,6 @@ function sma(values: number[], period: number): Array<number | null> {
     const slice = values.slice(index + 1 - period, index + 1);
     return slice.reduce((sum, value) => sum + value, 0) / period;
   });
-}
-
-function rsi(values: number[], period: number): Array<number | null> {
-  const out: Array<number | null> = Array(values.length).fill(null);
-  if (values.length <= period) return out;
-  for (let index = period; index < values.length; index += 1) {
-    let gains = 0;
-    let losses = 0;
-    for (let cursor = index - period + 1; cursor <= index; cursor += 1) {
-      const change = values[cursor] - values[cursor - 1];
-      if (change >= 0) gains += change;
-      else losses += Math.abs(change);
-    }
-    const averageGain = gains / period;
-    const averageLoss = losses / period;
-    out[index] = averageLoss === 0 ? 100 : 100 - 100 / (1 + averageGain / averageLoss);
-  }
-  return out;
 }
 
 function structurePivots(candles: IndicatorCandle[]) {
@@ -497,7 +402,7 @@ function buildStructureOverlay(
       lastLoIdx = null;
     }
 
-    if (previous && displacementThreshold > 0 && Math.abs(candle.close - candle.open) > displacementThreshold * 1.5) {
+    if (previous && displacementThreshold > 0 && Math.abs(candle.close - candle.open) > displacementThreshold * 0.9) {
       const top = Math.max(previous.open, previous.close);
       const bottom = Math.min(previous.open, previous.close);
       const x = handle.timeToCoordinate(previous.time);
@@ -511,8 +416,8 @@ function buildStructureOverlay(
             y: Math.min(topY, bottomY),
             width: Math.max(6, x2 - x),
             height: Math.max(2, Math.abs(bottomY - topY)),
-            stroke: "rgba(8,153,129,0.24)",
-            fill: "rgba(8,153,129,0.10)",
+            stroke: "rgba(45,212,191,0.65)",
+            fill: "rgba(45,212,191,0.18)",
           });
         } else if (candle.close < candle.open && previous.close > previous.open) {
           orderBlocks.push({
@@ -520,8 +425,8 @@ function buildStructureOverlay(
             y: Math.min(topY, bottomY),
             width: Math.max(6, x2 - x),
             height: Math.max(2, Math.abs(bottomY - topY)),
-            stroke: "rgba(242,54,69,0.24)",
-            fill: "rgba(242,54,69,0.10)",
+            stroke: "rgba(239,68,68,0.65)",
+            fill: "rgba(239,68,68,0.18)",
           });
         }
       }
