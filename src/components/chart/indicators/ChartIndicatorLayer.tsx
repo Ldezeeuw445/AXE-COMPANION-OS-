@@ -11,6 +11,14 @@ type Props = {
     ma?: boolean;
     structure?: boolean;
     orderBlocks?: boolean;
+    /** Auto Fair Value Gap zones (bullish + bearish, latest 8). */
+    fvg?: boolean;
+    /** Inverse FVG: gaps that have been broken/inverted by later price. */
+    ifvg?: boolean;
+    /** Previous Day High — horizontal line drawn across the entire chart. */
+    pdh?: boolean;
+    /** Previous Day Low — horizontal line drawn across the entire chart. */
+    pdl?: boolean;
   };
 };
 
@@ -57,6 +65,9 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
         structureLines: [],
         orderBlocks: [],
         fairValueGaps: [],
+        inverseFairValueGaps: [],
+        previousDayHigh: null as { y: number; price: number } | null,
+        previousDayLow: null as { y: number; price: number } | null,
         swingFailures: [],
         equilibriumLine: null as { y: number } | null,
       };
@@ -66,6 +77,7 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
       .map((candle) => ({
         ...candle,
         time: toTime(candle.time),
+        open: Number(candle.open),
         close: Number(candle.close),
         high: Number(candle.high),
         low: Number(candle.low),
@@ -85,6 +97,11 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
       .filter(Boolean) as Point[];
 
     const structureOverlay = buildStructureOverlay(visible, handle);
+    const inverseFairValueGaps = buildInverseFvgs(visible as Array<IndicatorCandle & { time: number }>, handle, size.w);
+    const { high: previousDayHigh, low: previousDayLow } = buildPreviousDayLevels(
+      visible as Array<IndicatorCandle & { time: number }>,
+      handle,
+    );
 
     return {
       maPath: toPath(maPoints),
@@ -92,6 +109,9 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
       structureLines: structureOverlay.lines,
       orderBlocks: structureOverlay.orderBlocks,
       fairValueGaps: structureOverlay.fairValueGaps,
+      inverseFairValueGaps,
+      previousDayHigh,
+      previousDayLow,
       swingFailures: structureOverlay.swingFailures,
       equilibriumLine: structureOverlay.equilibriumLine,
     };
@@ -116,7 +136,7 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
             ))
           : null}
 
-        {active.orderBlocks
+        {active.fvg
           ? geometry.fairValueGaps.map((box, index) => (
               <rect
                 key={`fvg-${index}`}
@@ -131,6 +151,91 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
               />
             ))
           : null}
+
+        {active.ifvg
+          ? geometry.inverseFairValueGaps.map((box, index) => (
+              <g key={`ifvg-${index}`}>
+                <rect
+                  x={box.x}
+                  y={box.y}
+                  width={box.width}
+                  height={box.height}
+                  fill={box.fill}
+                  stroke={box.stroke}
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  rx={2}
+                />
+                <text
+                  x={box.x + 4}
+                  y={box.y + 10}
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                  fontSize="9"
+                  fontWeight="700"
+                  fill={box.stroke}
+                  stroke="rgba(0,0,0,0.78)"
+                  strokeWidth="2.5"
+                  paintOrder="stroke"
+                >
+                  iFVG
+                </text>
+              </g>
+            ))
+          : null}
+
+        {active.pdh && geometry.previousDayHigh ? (
+          <g>
+            <line
+              x1={0}
+              x2={size.w}
+              y1={geometry.previousDayHigh.y}
+              y2={geometry.previousDayHigh.y}
+              stroke="rgba(34,211,238,0.7)"
+              strokeWidth={1.2}
+              strokeDasharray="6 4"
+            />
+            <text
+              x={6}
+              y={geometry.previousDayHigh.y - 4}
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize="10"
+              fontWeight="700"
+              fill="rgba(34,211,238,0.95)"
+              stroke="rgba(0,0,0,0.78)"
+              strokeWidth="2.8"
+              paintOrder="stroke"
+            >
+              PDH
+            </text>
+          </g>
+        ) : null}
+
+        {active.pdl && geometry.previousDayLow ? (
+          <g>
+            <line
+              x1={0}
+              x2={size.w}
+              y1={geometry.previousDayLow.y}
+              y2={geometry.previousDayLow.y}
+              stroke="rgba(244,63,94,0.7)"
+              strokeWidth={1.2}
+              strokeDasharray="6 4"
+            />
+            <text
+              x={6}
+              y={geometry.previousDayLow.y + 12}
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize="10"
+              fontWeight="700"
+              fill="rgba(244,63,94,0.95)"
+              stroke="rgba(0,0,0,0.78)"
+              strokeWidth="2.8"
+              paintOrder="stroke"
+            >
+              PDL
+            </text>
+          </g>
+        ) : null}
 
         {active.structure && geometry.equilibriumLine ? (
           <line
@@ -544,4 +649,138 @@ function averageRange(candles: Array<IndicatorCandle & { time: number }>): numbe
   const recent = candles.slice(-40);
   if (!recent.length) return 0;
   return recent.reduce((sum, candle) => sum + Math.max(0, candle.high - candle.low), 0) / recent.length;
+}
+
+/**
+ * Build inverse fair-value gaps. An IFVG is a 3-bar FVG that has since been
+ * fully invaded by a later candle's close — i.e. the imbalance was
+ * "reclaimed" and now flips polarity. We render the original FVG range with
+ * a dashed border so the trader can see where the inversion happened.
+ */
+function buildInverseFvgs(
+  candles: Array<IndicatorCandle & { time: number }>,
+  handle: ChartCanvasHandle,
+  chartWidth: number,
+): StructureBox[] {
+  const out: StructureBox[] = [];
+  if (candles.length < 4) return out;
+
+  for (let i = 2; i < candles.length; i += 1) {
+    const a = candles[i - 2];
+    const c = candles[i];
+
+    // Bullish FVG (gap up): c.low > a.high. Inverted when a later candle
+    // closes back BELOW a.high (the bottom of the gap).
+    if (c.low > a.high) {
+      const gapTop = c.low;
+      const gapBot = a.high;
+      let invertedAt: number | null = null;
+      for (let k = i + 1; k < candles.length; k += 1) {
+        if (candles[k].close < gapBot) {
+          invertedAt = candles[k].time;
+          break;
+        }
+      }
+      if (invertedAt != null) {
+        const x1 = handle.timeToCoordinate(a.time);
+        const x2 = handle.timeToCoordinate(invertedAt);
+        const yTop = handle.priceToCoordinate(gapTop);
+        const yBot = handle.priceToCoordinate(gapBot);
+        if (x1 != null && yTop != null && yBot != null) {
+          const right = x2 ?? chartWidth;
+          out.push({
+            x: x1,
+            y: Math.min(yTop, yBot),
+            width: Math.max(8, right - x1),
+            height: Math.max(2, Math.abs(yBot - yTop)),
+            stroke: "rgba(244,63,94,0.85)",
+            fill: "rgba(244,63,94,0.10)",
+          });
+        }
+      }
+    }
+
+    // Bearish FVG (gap down): c.high < a.low. Inverted when a later candle
+    // closes back ABOVE a.low (the top of the gap).
+    if (c.high < a.low) {
+      const gapTop = a.low;
+      const gapBot = c.high;
+      let invertedAt: number | null = null;
+      for (let k = i + 1; k < candles.length; k += 1) {
+        if (candles[k].close > gapTop) {
+          invertedAt = candles[k].time;
+          break;
+        }
+      }
+      if (invertedAt != null) {
+        const x1 = handle.timeToCoordinate(a.time);
+        const x2 = handle.timeToCoordinate(invertedAt);
+        const yTop = handle.priceToCoordinate(gapTop);
+        const yBot = handle.priceToCoordinate(gapBot);
+        if (x1 != null && yTop != null && yBot != null) {
+          const right = x2 ?? chartWidth;
+          out.push({
+            x: x1,
+            y: Math.min(yTop, yBot),
+            width: Math.max(8, right - x1),
+            height: Math.max(2, Math.abs(yBot - yTop)),
+            stroke: "rgba(34,211,238,0.85)",
+            fill: "rgba(34,211,238,0.10)",
+          });
+        }
+      }
+    }
+  }
+
+  return out.slice(-8);
+}
+
+/**
+ * Compute previous trading day's high/low. We bucket candles by UTC date and
+ * pick the bucket immediately before the current one. This works for any
+ * timeframe: on D1 it's literally yesterday's bar; on intraday timeframes
+ * it's the high/low of all bars from the previous UTC day.
+ */
+function buildPreviousDayLevels(
+  candles: Array<IndicatorCandle & { time: number }>,
+  handle: ChartCanvasHandle,
+): {
+  high: { y: number; price: number } | null;
+  low: { y: number; price: number } | null;
+} {
+  if (candles.length === 0) return { high: null, low: null };
+
+  const buckets = new Map<string, { high: number; low: number }>();
+  const order: string[] = [];
+  for (const candle of candles) {
+    const key = utcDateKey(candle.time);
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.high = Math.max(existing.high, candle.high);
+      existing.low = Math.min(existing.low, candle.low);
+    } else {
+      buckets.set(key, { high: candle.high, low: candle.low });
+      order.push(key);
+    }
+  }
+
+  if (order.length < 2) return { high: null, low: null };
+
+  // Penultimate bucket = previous day.
+  const previousKey = order[order.length - 2];
+  const previous = buckets.get(previousKey);
+  if (!previous) return { high: null, low: null };
+
+  const yHigh = handle.priceToCoordinate(previous.high);
+  const yLow = handle.priceToCoordinate(previous.low);
+
+  return {
+    high: yHigh == null ? null : { y: yHigh, price: previous.high },
+    low: yLow == null ? null : { y: yLow, price: previous.low },
+  };
+}
+
+function utcDateKey(unixSeconds: number): string {
+  const d = new Date(unixSeconds * 1000);
+  return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
 }

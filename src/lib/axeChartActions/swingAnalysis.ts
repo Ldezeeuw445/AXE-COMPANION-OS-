@@ -69,15 +69,16 @@ export function buildTrendlineActionFromCandles(input: {
   lookback?: number;
   strength?: number;
 }): ChartActionCommand {
-  const pair = findRecentSwingPair(input.candles, {
+  // A proper "right" trendline connects two swings of the SAME type:
+  //  - two ascending swing LOWS  → rising support trendline (uptrend)
+  //  - two descending swing HIGHS → falling resistance trendline (downtrend)
+  // We pick whichever pair is more recent / clean so the user sees a line
+  // that visually matches the dominant move instead of a diagonal between a
+  // high and a low (which "randomly" cuts across price action).
+  const trend = findRecentSameTypeSwingPair(input.candles, {
     lookback: input.lookback,
     strength: input.strength,
   });
-
-  // Order points by time so the line draws left→right.
-  const earlier = pair.low.index <= pair.high.index ? pair.low : pair.high;
-  const later = pair.low.index <= pair.high.index ? pair.high : pair.low;
-  const direction = earlier.type === "low" ? "up" : "down";
 
   return {
     id: input.id,
@@ -89,16 +90,91 @@ export function buildTrendlineActionFromCandles(input: {
     requiresUserAcceptance: false,
     payload: {
       points: [
-        { time: earlier.time, price: earlier.price },
-        { time: later.time, price: later.price },
+        { time: trend.earlier.time, price: trend.earlier.price },
+        { time: trend.later.time, price: trend.later.price },
       ],
-      direction,
+      direction: trend.direction,
       explanation:
-        direction === "up"
-          ? "AXE drew a trendline through the latest confirmed swing low → swing high."
-          : "AXE drew a trendline through the latest confirmed swing high → swing low.",
+        trend.direction === "up"
+          ? "AXE drew a rising trendline through the two most recent swing lows."
+          : "AXE drew a falling trendline through the two most recent swing highs.",
     },
   };
+}
+
+/**
+ * Find two swings of the SAME type (both lows or both highs) in the recent
+ * candles, choosing the pair that produces the cleanest trendline. We
+ * compute pivots, then favour:
+ *   • two swing lows that are ascending (uptrend support) — when the latest
+ *     swing low is higher than the previous one,
+ *   • or two swing highs that are descending (downtrend resistance) — when
+ *     the latest swing high is lower than the previous one,
+ * whichever happened more recently.
+ *
+ * If no clean pair is available we fall back to "first significant low → most
+ * recent low" so the line still represents the dominant move instead of a
+ * random diagonal.
+ */
+export function findRecentSameTypeSwingPair(
+  candles: ChartActionCandle[],
+  options: { lookback?: number; strength?: number } = {},
+): { earlier: SwingAnchor; later: SwingAnchor; direction: "up" | "down" } {
+  const strength = options.strength ?? 3;
+  const visible = normalizeCandles(candles).slice(-(options.lookback ?? 200));
+  if (visible.length < strength * 2 + 4) {
+    throw new Error("Not enough candles for trendline detection.");
+  }
+
+  const pivots: SwingAnchor[] = [];
+  for (let index = strength; index < visible.length - strength; index += 1) {
+    const candle = visible[index];
+    const neighbors = [
+      ...visible.slice(index - strength, index),
+      ...visible.slice(index + 1, index + strength + 1),
+    ];
+    if (neighbors.every((other) => candle.high > other.high)) {
+      pivots.push({ type: "high", index, time: candle.time, price: candle.high });
+    }
+    if (neighbors.every((other) => candle.low < other.low)) {
+      pivots.push({ type: "low", index, time: candle.time, price: candle.low });
+    }
+  }
+
+  const lows = pivots.filter((p) => p.type === "low");
+  const highs = pivots.filter((p) => p.type === "high");
+
+  // Prefer the most-recent ascending pair of lows OR descending pair of highs.
+  const lastLow = lows.at(-1);
+  const prevLow = lows.length >= 2 ? lows[lows.length - 2] : null;
+  const lastHigh = highs.at(-1);
+  const prevHigh = highs.length >= 2 ? highs[highs.length - 2] : null;
+
+  const upPair =
+    prevLow && lastLow && lastLow.price > prevLow.price && lastLow.index > prevLow.index
+      ? { earlier: prevLow, later: lastLow, direction: "up" as const }
+      : null;
+  const downPair =
+    prevHigh && lastHigh && lastHigh.price < prevHigh.price && lastHigh.index > prevHigh.index
+      ? { earlier: prevHigh, later: lastHigh, direction: "down" as const }
+      : null;
+
+  if (upPair && downPair) {
+    return upPair.later.index >= downPair.later.index ? upPair : downPair;
+  }
+  if (upPair) return upPair;
+  if (downPair) return downPair;
+
+  // Fallback: pick whichever same-type pair we have, even if it isn't a clean
+  // ascending/descending line — still better than a high↔low diagonal.
+  if (lows.length >= 2) return { earlier: lows[0], later: lows.at(-1)!, direction: "up" as const };
+  if (highs.length >= 2) return { earlier: highs[0], later: highs.at(-1)!, direction: "down" as const };
+
+  // No pivots at all — synthesise from absolute extremes.
+  const fallback = fallbackRange(visible);
+  const earlier = fallback.low.index <= fallback.high.index ? fallback.low : fallback.high;
+  const later = fallback.low.index <= fallback.high.index ? fallback.high : fallback.low;
+  return { earlier, later, direction: earlier.type === "low" ? "up" : "down" };
 }
 
 export function findRecentSwingPair(

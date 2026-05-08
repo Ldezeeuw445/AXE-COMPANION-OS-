@@ -29,8 +29,44 @@ export function TrendlineAnnotationLayer({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [geoms, setGeoms] = useState<TrendGeom[]>([]);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Auto-Fib-style activation: when an auto-trendline is created the user can
+  // tap one of its handles to start dragging. Tapping anywhere else on the
+  // chart deselects → handles disappear and the line locks.
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    // Newly added trendlines auto-activate so the dots are visible right
+    // after drawing. If multiple exist we activate the most recent one.
+    const lastTrend = annotations.filter((a) => a.type === "trendline").at(-1);
+    return lastTrend?.id ?? null;
+  });
+  const lastSeenIdsRef = useRef<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
+
+  // Auto-activate the latest trendline when a new one is added (so handles
+  // appear on first draw, just like Auto Fib).
+  useEffect(() => {
+    const ids = new Set(annotations.filter((a) => a.type === "trendline").map((a) => a.id));
+    let newest: string | null = null;
+    for (const id of ids) {
+      if (!lastSeenIdsRef.current.has(id)) newest = id;
+    }
+    lastSeenIdsRef.current = ids;
+    if (newest) setActiveId(newest);
+  }, [annotations]);
+
+  // Tap outside the trendline layer (e.g. on the chart) deselects → handles
+  // disappear and the line "locks". Mirrors the Fib layer's behaviour.
+  useEffect(() => {
+    if (!activeId) return;
+    function deselectWhenChartIsTapped(event: PointerEvent) {
+      const host = hostRef.current;
+      const target = event.target;
+      if (!host || !(target instanceof Node)) return;
+      if (host.contains(target)) return;
+      setActiveId(null);
+    }
+    window.addEventListener("pointerdown", deselectWhenChartIsTapped, true);
+    return () => window.removeEventListener("pointerdown", deselectWhenChartIsTapped, true);
+  }, [activeId]);
 
   const dragRef = useRef<{
     annotationId: string;
@@ -159,30 +195,51 @@ export function TrendlineAnnotationLayer({
                 pointerEvents="none"
               />
 
-              <g style={{ pointerEvents: "auto" }}>
-                <circle
-                  cx={g.ax}
-                  cy={g.ay}
-                  r={isActive ? 8 : 6.5}
-                  fill="rgba(34,211,238,0.95)"
-                  stroke="rgba(255,255,255,0.85)"
-                  strokeWidth={1.5}
-                  onPointerDown={(e) => startDrag(e, g.id, 0)}
-                  style={{ cursor: "grab" }}
-                />
-                <circle
-                  cx={g.bx}
-                  cy={g.by}
-                  r={isActive ? 8 : 6.5}
-                  fill="rgba(34,211,238,0.95)"
-                  stroke="rgba(255,255,255,0.85)"
-                  strokeWidth={1.5}
-                  onPointerDown={(e) => startDrag(e, g.id, 1)}
-                  style={{ cursor: "grab" }}
-                />
-              </g>
+              {/* Handles only render when the line is "active" — first draw
+                  auto-activates so dots appear, tapping the chart locks it. */}
+              {isActive ? (
+                <g style={{ pointerEvents: "auto" }}>
+                  <circle
+                    cx={g.ax}
+                    cy={g.ay}
+                    r={8}
+                    fill="rgba(34,211,238,0.95)"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth={1.5}
+                    onPointerDown={(e) => startDrag(e, g.id, 0)}
+                    style={{ cursor: "grab" }}
+                  />
+                  <circle
+                    cx={g.bx}
+                    cy={g.by}
+                    r={8}
+                    fill="rgba(34,211,238,0.95)"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth={1.5}
+                    onPointerDown={(e) => startDrag(e, g.id, 1)}
+                    style={{ cursor: "grab" }}
+                  />
+                </g>
+              ) : null}
 
-              {onRemove ? (
+              {/* Invisible hit-line so the user can re-select the trendline
+                  by tapping it after it has been locked. */}
+              <line
+                x1={g.ax}
+                y1={g.ay}
+                x2={g.bx}
+                y2={g.by}
+                stroke="transparent"
+                strokeWidth={18}
+                pointerEvents="stroke"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  setActiveId(g.id);
+                }}
+                style={{ cursor: "pointer" }}
+              />
+
+              {onRemove && isActive ? (
                 <g
                   style={{ pointerEvents: "auto", cursor: "pointer" }}
                   onPointerDown={(e) => {

@@ -8,16 +8,25 @@ import {
   Activity,
   ArrowUpDown,
   BarChart3,
+  Bell,
   BookOpen,
+  ChevronDown,
   ClipboardList,
+  Crosshair,
+  GitBranch,
   Landmark,
   Layers,
   LineChart,
   MessageSquare,
+  Maximize2,
+  Plus,
+  Minus,
   RotateCcw,
   Save,
+  Settings2,
   Sparkles,
   Spline,
+  Square,
   TrendingUp,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -61,6 +70,7 @@ import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotation
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
+import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
 
 const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 30_000;
@@ -556,7 +566,12 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [pendingStopLossPrice, setPendingStopLossPrice] = useState<number | null>(null);
   const [pendingTakeProfitPrice, setPendingTakeProfitPrice] = useState<number | null>(null);
   const [pendingOrderVisible, setPendingOrderVisible] = useState(false);
-  const [tradeVolume] = useState("0.10");
+  const [tradeVolume, setTradeVolume] = useState("0.10");
+  const [pendingOrderType, setPendingOrderType] = useState<"market" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop">("market");
+  const [orderTypeMenuOpen, setOrderTypeMenuOpen] = useState(false);
+  const [lotMenuOpen, setLotMenuOpen] = useState(false);
+  const [deviationPoints, setDeviationPoints] = useState(10);
+  const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
 
   const showPendingTradePlan = useCallback(
     (side: "buy" | "sell") => {
@@ -629,12 +644,74 @@ export function ChartScreen({ data, initialAction }: Props) {
     };
   }, []);
 
+  // Live mirror of the last candle so the indicator panes (RSI/Volume) can
+  // tick in lockstep with the candle stream instead of staying frozen on the
+  // server-rendered snapshot. We seed it from data.candles so the very first
+  // tick already has somewhere to land.
+  const [liveLastCandle, setLiveLastCandle] = useState<{
+    time: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    tickVolume?: number;
+    volume?: number;
+  } | null>(() => {
+    const last = data.candles[data.candles.length - 1];
+    return last ? { ...last } : null;
+  });
+
+  // When data.candles changes (symbol/tf navigation), reseed the live mirror
+  // from the new history so we don't bleed the previous symbol's state.
+  useEffect(() => {
+    const last = data.candles[data.candles.length - 1];
+    setLiveLastCandle(last ? { ...last } : null);
+  }, [data.candles]);
+
+  // Merge the live last candle into the historical array. RSI/Volume read
+  // this so they reflect every tick that comes in.
+  const liveCandles = useMemo(() => {
+    if (!liveLastCandle || data.candles.length === 0) return data.candles;
+    const lastIdx = data.candles.length - 1;
+    const lastTime = data.candles[lastIdx]?.time;
+    if (lastTime === liveLastCandle.time) {
+      const merged = data.candles.slice(0, lastIdx);
+      merged.push({ ...data.candles[lastIdx], ...liveLastCandle });
+      return merged;
+    }
+    // Newer candle — append.
+    return [...data.candles, liveLastCandle];
+  }, [data.candles, liveLastCandle]);
+
+  // Standalone in-app alert evaluator. Runs whether or not TradingOS is
+  // online. The chart's live tick stream is the source of truth.
+  const { evaluate: evaluateAlerts } = useAlertEvaluator({
+    enabled: liveEnabled,
+    symbol: data.symbol,
+    cooldownSeconds: 60,
+    onFire: (event) => {
+      setFiredAlert(event);
+      setSnapshotMessage(`Alert · ${event.message}`);
+      setTimeout(() => setSnapshotMessage(null), 4_500);
+    },
+  });
+
   const onTick = useCallback(
     ({ mid, bid, ask, time }: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => {
       if (mid == null || !Number.isFinite(mid)) return;
       lastBidRef.current = bid;
       lastAskRef.current = ask;
       canvasRef.current?.applyTick(mid);
+      // Update the mirrored last candle's close so RSI/Volume see live data.
+      setLiveLastCandle((prev) => {
+        if (!prev) return prev;
+        const high = Math.max(prev.high, mid);
+        const low = Math.min(prev.low, mid);
+        const tickVolume = (prev.tickVolume ?? 0) + 1;
+        return { ...prev, close: mid, high, low, tickVolume };
+      });
+      // Evaluate alerts every tick — cheap, and the hook handles cooldown.
+      evaluateAlerts(mid);
       const now = Date.now();
       if (now - lastReactPriceAt.current >= TICK_REACT_THROTTLE_MS) {
         lastReactPriceAt.current = now;
@@ -642,12 +719,23 @@ export function ChartScreen({ data, initialAction }: Props) {
         setLastTickAt(time ?? new Date().toISOString());
       }
     },
-    [],
+    [evaluateAlerts],
   );
 
   const onCandleUpdate = useCallback(
-    (candle: { time: string; open: number; high: number; low: number; close: number }) => {
+    (candle: { time: string; open: number; high: number; low: number; close: number; tickVolume?: number; volume?: number }) => {
       canvasRef.current?.updateLastCandle(candle);
+      // Mirror to React state so the indicator panes recompute on each
+      // candle update — guarantees RSI / Volume tick live with the chart.
+      setLiveLastCandle({
+        time: candle.time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        tickVolume: candle.tickVolume,
+        volume: candle.volume,
+      });
       if (Number.isFinite(candle.close) && Date.now() - lastReactPriceAt.current > 1_500) {
         setLivePrice(candle.close);
       }
@@ -1313,12 +1401,16 @@ export function ChartScreen({ data, initialAction }: Props) {
         />
 
         <ChartIndicatorLayer
-          candles={data.candles}
+          candles={liveCandles}
           canvasRef={canvasRef}
           active={{
             ma: activeToolFlags.ma,
             structure: activeToolFlags.structure,
             orderBlocks: activeToolFlags.orderBlocks,
+            fvg: activeToolFlags.fvg,
+            ifvg: activeToolFlags.ifvg,
+            pdh: activeToolFlags.pdh,
+            pdl: activeToolFlags.pdl,
           }}
         />
 
@@ -1445,6 +1537,10 @@ export function ChartScreen({ data, initialAction }: Props) {
             },
             { id: "structure", label: "Structure", icon: Sparkles, active: Boolean(activeToolFlags.structure), action: () => toggleToolFlag("structure") },
             { id: "orderBlocks", label: "OB", icon: Layers, active: Boolean(activeToolFlags.orderBlocks), action: () => toggleToolFlag("orderBlocks") },
+            { id: "fvg", label: "FVG", icon: Square, active: Boolean(activeToolFlags.fvg), action: () => toggleToolFlag("fvg") },
+            { id: "ifvg", label: "iFVG", icon: GitBranch, active: Boolean(activeToolFlags.ifvg), action: () => toggleToolFlag("ifvg") },
+            { id: "pdh", label: "PDH", icon: Maximize2, active: Boolean(activeToolFlags.pdh), action: () => toggleToolFlag("pdh") },
+            { id: "pdl", label: "PDL", icon: Maximize2, active: Boolean(activeToolFlags.pdl), action: () => toggleToolFlag("pdl") },
             { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
             { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
             { id: "ma", label: "MA", icon: LineChart, active: Boolean(activeToolFlags.ma), action: () => toggleToolFlag("ma") },
@@ -1546,6 +1642,30 @@ export function ChartScreen({ data, initialAction }: Props) {
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
         </button>
 
+        {/* MT5-style upper-right action pair: indicators (open toolbar) +
+            chart settings (cycles through scale presets). Sits inside the
+            chart frame so it never moves the page. */}
+        <div className="pointer-events-none absolute right-2 top-12 z-30 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setToolRailOpen((v) => !v)}
+            className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
+            aria-label="Indicators"
+            title="Indicators"
+          >
+            <Crosshair className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={resetChartView}
+            className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
+            aria-label="Chart settings"
+            title="Chart settings / view"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
         {/* Floating toast: lives INSIDE the chart frame so it can never push the
             indicator panes or the execution bar around. pointer-events:none so
             it doesn't steal chart pan/zoom. */}
@@ -1573,7 +1693,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           maxHeight={260}
           ariaLabel="Resize volume pane"
         >
-          <IndicatorPane mode="volume" candles={data.candles} canvasRef={canvasRef} />
+          <IndicatorPane mode="volume" candles={liveCandles} canvasRef={canvasRef} />
         </ResizablePane>
       ) : null}
       {activeToolFlags.rsi ? (
@@ -1584,7 +1704,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           maxHeight={280}
           ariaLabel="Resize RSI pane"
         >
-          <IndicatorPane mode="rsi" candles={data.candles} canvasRef={canvasRef} />
+          <IndicatorPane mode="rsi" candles={liveCandles} canvasRef={canvasRef} />
         </ResizablePane>
       ) : null}
 
@@ -1595,6 +1715,7 @@ export function ChartScreen({ data, initialAction }: Props) {
         className="mx-0 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
+        {/* Top row: SELL · Lots · BUY (MT5-style price tickets) */}
         <div className="flex h-11 items-stretch gap-px">
           <button
             type="button"
@@ -1611,7 +1732,8 @@ export function ChartScreen({ data, initialAction }: Props) {
           <button
             type="button"
             className="flex min-w-[5rem] flex-col items-center justify-center bg-black px-2 text-[11px] font-semibold text-tos-text"
-            onClick={() => showPendingTradePlan(pendingOrderSide)}
+            onClick={() => setLotMenuOpen((v) => !v)}
+            aria-label="Choose lot size"
           >
             <span className="text-[8px] font-bold uppercase tracking-[0.22em] text-tos-dim">Lots</span>
             <span className="mt-0.5 font-mono text-[12px] font-semibold">{tradeVolume}</span>
@@ -1629,8 +1751,244 @@ export function ChartScreen({ data, initialAction }: Props) {
             <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
           </button>
         </div>
+
+        {/* Second row: order type · SL/TP · Deviation · expand (MT5 layout). */}
+        <div className="flex h-9 items-stretch gap-px border-t border-white/[0.05] bg-black/96">
+          <button
+            type="button"
+            onClick={() => setOrderTypeMenuOpen((v) => !v)}
+            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-3 text-left text-[11px] font-semibold text-tos-text"
+          >
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/12 text-cyan-200">
+              <ChevronDown className="h-3 w-3" />
+            </span>
+            <span className="truncate uppercase tracking-wide text-tos-text">
+              {orderTypeLabel(pendingOrderType)}
+            </span>
+            <span className="ml-auto font-mono text-[11px] text-tos-muted">
+              {tradeVolume}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+              if (entry == null || !Number.isFinite(entry)) return;
+              const distance = draggablePlanDistance(data.candles, entry);
+              setPendingStopLossPrice(pendingOrderSide === "buy" ? entry - distance : entry + distance);
+              setPendingOrderVisible(true);
+            }}
+            className={`flex min-w-[2.75rem] items-center justify-center gap-1 px-2 text-[10px] font-bold uppercase tracking-wider ${
+              pendingStopLossPrice != null
+                ? "border border-rose-500/60 bg-rose-500/15 text-rose-200/95"
+                : "text-rose-300/85 hover:bg-rose-500/8"
+            }`}
+            aria-label="Set stop loss"
+          >
+            SL
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+              if (entry == null || !Number.isFinite(entry)) return;
+              const distance = draggablePlanDistance(data.candles, entry);
+              setPendingTakeProfitPrice(pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6);
+              setPendingOrderVisible(true);
+            }}
+            className={`flex min-w-[2.75rem] items-center justify-center gap-1 px-2 text-[10px] font-bold uppercase tracking-wider ${
+              pendingTakeProfitPrice != null
+                ? "border border-emerald-400/60 bg-emerald-400/15 text-emerald-200/95"
+                : "text-emerald-300/85 hover:bg-emerald-400/8"
+            }`}
+            aria-label="Set take profit"
+          >
+            TP
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeviationPoints((v) => (v >= 100 ? 1 : v + 5))}
+            className="flex min-w-[3.4rem] items-center justify-center gap-1 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
+            aria-label="Cycle slippage / deviation"
+            title="Slippage / Deviation in points"
+          >
+            <span>DEV</span>
+            <span className="font-mono text-[10px] text-tos-text">{deviationPoints}</span>
+          </button>
+        </div>
       </div>
+
+      {/* Order-type chooser popover */}
+      {orderTypeMenuOpen ? (
+        <div
+          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#080c12]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-tos-dim">Execution type</p>
+            <button
+              type="button"
+              onClick={() => setOrderTypeMenuOpen(false)}
+              className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-tos-muted"
+            >
+              Close
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {([
+              { id: "market", label: "Market execution" },
+              { id: "buy_limit", label: "Buy Limit" },
+              { id: "sell_limit", label: "Sell Limit" },
+              { id: "buy_stop", label: "Buy Stop" },
+              { id: "sell_stop", label: "Sell Stop" },
+            ] as const).map((opt) => {
+              const isActive = pendingOrderType === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    setPendingOrderType(opt.id);
+                    if (opt.id !== "market") {
+                      const sideForType = opt.id.startsWith("buy") ? "buy" : "sell";
+                      showPendingTradePlan(sideForType);
+                    } else {
+                      setPendingOrderVisible(false);
+                    }
+                    setOrderTypeMenuOpen(false);
+                  }}
+                  className={`rounded-xl border px-3 py-2 text-left text-[12px] font-semibold ${
+                    isActive
+                      ? "border-cyan-300/45 bg-cyan-400/12 text-cyan-100"
+                      : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
+            Pending types draw a movable plan line on the chart — drag the SL/TP/limit to fine-tune, then
+            tap BUY or SELL to send the ticket via the actions queue.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Lot quick picker — same UX as MT5 mobile */}
+      {lotMenuOpen ? (
+        <div
+          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#080c12]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-tos-dim">Lots</p>
+            <button
+              type="button"
+              onClick={() => setLotMenuOpen(false)}
+              className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-tos-muted"
+            >
+              Close
+            </button>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2].map((v) => {
+              const txt = v < 1 ? v.toFixed(2) : v.toFixed(1).replace(/\.0$/, "");
+              const isActive = parseFloat(tradeVolume) === v;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => {
+                    setTradeVolume(txt);
+                    setLotMenuOpen(false);
+                  }}
+                  className={`rounded-lg border px-2 py-2 text-center font-mono text-[12px] font-bold ${
+                    isActive
+                      ? "border-cyan-300/45 bg-cyan-400/12 text-cyan-100"
+                      : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {txt}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {[0.01, 0.1, 1].map((step) => (
+              <button
+                key={step}
+                type="button"
+                onClick={() => {
+                  const cur = parseFloat(tradeVolume) || 0;
+                  const next = Math.max(0.01, +(cur + step).toFixed(2));
+                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(1).replace(/\.0$/, ""));
+                }}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2 py-1.5 text-[11px] font-bold text-cyan-200/95"
+              >
+                <Plus className="h-3 w-3" />
+                {step}
+              </button>
+            ))}
+          </div>
+          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+            {[0.01, 0.1, 1].map((step) => (
+              <button
+                key={`m-${step}`}
+                type="button"
+                onClick={() => {
+                  const cur = parseFloat(tradeVolume) || 0;
+                  const next = Math.max(0.01, +(cur - step).toFixed(2));
+                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(1).replace(/\.0$/, ""));
+                }}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-[11px] font-bold text-tos-muted"
+              >
+                <Minus className="h-3 w-3" />
+                {step}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Standalone alert fired toast */}
+      {firedAlert ? (
+        <div
+          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-cyan-300/45 bg-[#04161b]/95 px-3 py-2 text-[11px] text-cyan-100 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          role="status"
+        >
+          <Bell className="h-4 w-4 text-cyan-300" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold">Alert · {firedAlert.message}</p>
+            <p className="text-[10px] text-cyan-200/70">
+              {firedAlert.pushed ? "Push delivered" : "Delivered in-app"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiredAlert(null)}
+            className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-tos-muted"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
 
     </div>
   );
+}
+
+function orderTypeLabel(t: "market" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop"): string {
+  switch (t) {
+    case "market":
+      return "Market";
+    case "buy_limit":
+      return "Buy Limit";
+    case "sell_limit":
+      return "Sell Limit";
+    case "buy_stop":
+      return "Buy Stop";
+    case "sell_stop":
+      return "Sell Stop";
+  }
 }

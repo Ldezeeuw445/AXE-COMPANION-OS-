@@ -40,31 +40,35 @@ function badgeVariantForType(type: string): "price" | "news" | "risk" | "warm" |
 }
 
 function deliveryPill(status: PushStatus | null): { label: string; className: string; dot: string } {
+  // AXE Companion alerts are evaluated in-app: the chart screen watches live
+  // ticks and trips alerts even when web-push is unavailable. So the default
+  // "delivery" status is in-app-on-this-device, and push (if configured) is
+  // an additional channel — never a hard requirement.
   if (!status) {
     return {
-      label: "Delivery unknown",
-      className: "border-white/12 bg-white/[0.04] text-tos-muted",
-      dot: "bg-white/30",
+      label: "Delivery: in-app",
+      className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
+      dot: "bg-cyan-300/85",
     };
   }
-  if (!status.vapidConfigured) {
+  if (status.vapidConfigured && status.hasSubscription) {
     return {
-      label: "Push not configured",
-      className: "border-amber-500/30 bg-amber-500/10 text-amber-200/95",
-      dot: "bg-amber-300/85",
+      label: "Delivery: push + in-app",
+      className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95",
+      dot: "bg-emerald-300/85",
     };
   }
-  if (!status.hasSubscription) {
+  if (status.vapidConfigured) {
     return {
-      label: "Push off (no device)",
-      className: "border-white/12 bg-white/[0.04] text-tos-muted",
-      dot: "bg-white/30",
+      label: "Delivery: in-app (enable push)",
+      className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
+      dot: "bg-cyan-300/85",
     };
   }
   return {
-    label: "Push ready",
-    className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95",
-    dot: "bg-emerald-300/85",
+    label: "Delivery: in-app",
+    className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
+    dot: "bg-cyan-300/85",
   };
 }
 
@@ -326,12 +330,14 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
         </GlassPanel>
       ) : null}
 
-      {/* Heads-up if the deployment hasn't wired VAPID yet. We still let the
-          user create alert rules — they'll fire as soon as VAPID is set. */}
+      {/* In-app delivery is always live: the chart watches live ticks and
+          fires the alert locally. Web-push is optional / additive. */}
       {push && !push.vapidConfigured ? (
         <GlassPanel className="p-3 text-[11px] text-tos-muted">
-          Push delivery isn&apos;t configured on this deployment yet — alert rules below still save and will start
-          delivering as soon as VAPID keys are added on Vercel.
+          <span className="font-semibold text-cyan-200/95">In-app alerts are live.</span>{" "}
+          Open <Link href="/chart" className="text-cyan-400 hover:underline">Chart</Link> to evaluate
+          price alerts on the active symbol. Push notifications are an extra channel — add VAPID
+          keys on Vercel to also send them when the app is closed.
         </GlassPanel>
       ) : null}
 
@@ -339,7 +345,10 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tos-dim">Create alert</p>
           <p className="text-[11px] text-tos-muted">
-            Delivery: <span className="font-semibold text-tos-text">{push?.hasSubscription && push?.vapidConfigured ? "push" : "in-app"}</span>
+            Delivery:{" "}
+            <span className="font-semibold text-tos-text">
+              {push?.hasSubscription && push?.vapidConfigured ? "push + in-app" : "in-app"}
+            </span>
           </p>
         </div>
 
@@ -494,7 +503,9 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       )}
 
       <p className="text-center text-[10px] leading-relaxed text-tos-dim">
-        Alerts are saved to Supabase. Actual push delivery requires a subscribed device and an upstream trigger (TradingOS → `POST /api/push/alert`).
+        Alerts evaluate live inside AXE Companion when the chart is open — push is an optional
+        extra channel. TradingOS can also fire push via{" "}
+        <code className="text-tos-muted">POST /api/push/alert</code> when both apps are online.
       </p>
     </div>
   );
