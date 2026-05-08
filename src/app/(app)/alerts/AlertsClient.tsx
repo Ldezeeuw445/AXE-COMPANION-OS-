@@ -7,6 +7,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { PushPermission } from "@/components/push/PushPermission";
 
 type AlertRow = {
   id: string;
@@ -311,6 +312,27 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             clear
           </Link>
         </p>
+      ) : null}
+
+      {/* Push enablement — surfaced inline on this page so users don't need to
+          dig into Settings. Only renders when push is actually configured on
+          the deployment AND the user hasn't subscribed yet. */}
+      {push?.vapidConfigured && !push.hasSubscription ? (
+        <GlassPanel className="p-4" glow="cyan">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+            Enable notifications on this device
+          </p>
+          <PushPermission />
+        </GlassPanel>
+      ) : null}
+
+      {/* Heads-up if the deployment hasn't wired VAPID yet. We still let the
+          user create alert rules — they'll fire as soon as VAPID is set. */}
+      {push && !push.vapidConfigured ? (
+        <GlassPanel className="p-3 text-[11px] text-tos-muted">
+          Push delivery isn&apos;t configured on this deployment yet — alert rules below still save and will start
+          delivering as soon as VAPID keys are added on Vercel.
+        </GlassPanel>
       ) : null}
 
       <GlassPanel className="p-4" glow="cyan">

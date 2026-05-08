@@ -83,16 +83,19 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
-  const newsProviderLabel =
-    ctx.providers.find((p) => p.id === "fmp")?.state === "live"
-      ? "FMP Ultimate"
-      : ctx.providers.find((p) => p.id === "perigon")?.state === "live"
-        ? "Perigon"
-        : ctx.providers.find((p) => p.id === "finnhub")?.state === "live"
-          ? "Finnhub"
-          : ctx.providers.find((p) => p.id === "eodhd")?.state === "live"
-            ? "EODHD"
-            : null;
+  // The provider label is derived from whatever actually returned items —
+  // that's the most honest signal for the user. Falls back to Google News
+  // (the no-key RSS source we use when no keyed provider is configured).
+  const newsProviderLabel = (() => {
+    if (ctx.news.length === 0) return null;
+    const usedId = ctx.news[0]?.provider;
+    if (usedId === "fmp") return "FMP Ultimate";
+    if (usedId === "perigon") return "Perigon";
+    if (usedId === "finnhub") return "Finnhub";
+    if (usedId === "eodhd") return "EODHD";
+    if (usedId === "demo") return "Google News";
+    return null;
+  })();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
@@ -216,7 +219,8 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            Add FMP / Perigon / Finnhub / EODHD keys to surface relevant headlines for your symbols.
+            No headlines came back for {symbol} just now. Add FMP / Perigon / Finnhub / EODHD keys for symbol-tagged
+            premium feeds — Google News is used as a free fallback.
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">

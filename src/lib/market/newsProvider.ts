@@ -218,9 +218,86 @@ async function fetchEodhdNews(opts: FetchOpts): Promise<NewsItem[]> {
   }
 }
 
+// ── Google News RSS (no-key fallback) ──────────────────────────────────────
+// Public RSS endpoint, no API key required. We use it as a graceful fallback
+// when none of the keyed providers above are configured / return data, so
+// fresh deployments always have *something* to show on the Market page.
+async function fetchGoogleNews(opts: FetchOpts): Promise<NewsItem[]> {
+  const briefing = briefingForSymbol(opts.symbol);
+  const queryTerms = dedupeSymbols([opts.symbol, ...briefing.keywords]).slice(0, 4);
+  const query = queryTerms.length ? queryTerms.join(" OR ") : opts.symbol;
+
+  const params = new URLSearchParams({
+    q: query,
+    hl: "en-US",
+    gl: "US",
+    ceid: "US:en",
+  });
+
+  try {
+    const res = await fetch(`https://news.google.com/rss/search?${params.toString()}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: ["news:gnews", `news:${opts.symbol}`] },
+      headers: { "User-Agent": "Mozilla/5.0 AXE/1.0 (+axecompanion.com)" },
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    return parseRssToItems(xml).slice(0, opts.limit ?? 12);
+  } catch {
+    return [];
+  }
+}
+
+/** Tiny RSS parser — Google News returns clean RSS 2.0, no need for a lib. */
+function parseRssToItems(xml: string): NewsItem[] {
+  const items: NewsItem[] = [];
+  const itemRegex = /<item[\s\S]*?<\/item>/g;
+  const matches = xml.match(itemRegex) ?? [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const block = matches[i];
+    const title = decodeXml(stripCdata(matchTag(block, "title")));
+    const link = stripCdata(matchTag(block, "link"));
+    const description = decodeXml(stripCdata(matchTag(block, "description")));
+    const pubDate = matchTag(block, "pubDate");
+    const sourceTag = block.match(/<source[^>]*>([\s\S]*?)<\/source>/);
+    const source = sourceTag ? decodeXml(stripCdata(sourceTag[1])) : "Google News";
+    if (!title || !link) continue;
+    items.push({
+      id: makeId("demo", `${pubDate ?? ""}-${title}`.slice(0, 80), link),
+      title: title.replace(/\s*-\s*[^-]*$/, ""),
+      summary: description ? description.replace(/<[^>]+>/g, "").slice(0, 240) : null,
+      url: link,
+      source,
+      publishedAt: safeIso(pubDate || null),
+      provider: "demo",
+      imageUrl: null,
+    });
+  }
+  return items;
+}
+
+function matchTag(block: string, tag: string): string {
+  const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
+  return m ? m[1].trim() : "";
+}
+
+function stripCdata(value: string): string {
+  return value.replace(/^<!\[CDATA\[/, "").replace(/\]\]>$/, "").trim();
+}
+
+function decodeXml(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
 /**
- * Returns news from the first configured provider that returns items.
- * Order: FMP Ultimate → Perigon → Finnhub → EODHD. Empty array if none configured / all empty.
+ * Returns news from the first provider that returns items.
+ * Order: FMP Ultimate → Perigon → Finnhub → EODHD → Google News (no-key fallback).
+ * Always returns something on a healthy deployment, even before keyed providers are wired.
  */
 export async function loadNews(opts: FetchOpts): Promise<NewsItem[]> {
   const providers: Array<() => Promise<NewsItem[]>> = [
@@ -228,6 +305,7 @@ export async function loadNews(opts: FetchOpts): Promise<NewsItem[]> {
     () => fetchPerigonNews(opts),
     () => fetchFinnhubNews(opts),
     () => fetchEodhdNews(opts),
+    () => fetchGoogleNews(opts),
   ];
   for (const provider of providers) {
     const items = await provider();

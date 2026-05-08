@@ -1291,7 +1291,6 @@ export function ChartScreen({ data, initialAction }: Props) {
   return (
     <div
       className="fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
-      style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
     >
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
@@ -1626,18 +1625,24 @@ export function ChartScreen({ data, initialAction }: Props) {
         </ResizablePane>
       ) : null}
 
-      <div className="mx-0 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur">
+      {/* Execution bar — flush to the device bottom. Safe-area inset is
+          applied INSIDE the bar so the colored gradients reach the very edge
+          of the screen on iPhone (no black gap below the rounded corner). */}
+      <div
+        className="mx-0 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         <div className="flex h-11 items-stretch gap-px">
           <button
             type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left ${
+            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left transition-shadow ${
               pendingOrderSide === "sell"
-                ? "bg-gradient-to-r from-[#330610] via-[#8B1923] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.25)]"
-                : "bg-white/[0.03] text-tos-muted"
+                ? "bg-gradient-to-r from-[#3A0710] via-[#9C1A26] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.32)]"
+                : "bg-gradient-to-r from-[#1A0408] via-[#4A0C13] to-[#7A1722] text-white/85"
             }`}
             onClick={() => showPendingTradePlan("sell")}
           >
-            <span className="text-[10px] font-semibold uppercase">Sell</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Sell</span>
             <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
           </button>
           <button
@@ -1650,14 +1655,14 @@ export function ChartScreen({ data, initialAction }: Props) {
           </button>
           <button
             type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left ${
+            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left transition-shadow ${
               pendingOrderSide === "buy"
-                ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(34,211,238,0.25)]"
-                : "bg-white/[0.03] text-tos-muted"
+                ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(34,211,238,0.32)]"
+                : "bg-gradient-to-r from-[#03252A] via-[#0A5662] to-[#11808D] text-white/85"
             }`}
             onClick={() => showPendingTradePlan("buy")}
           >
-            <span className="text-[10px] font-semibold uppercase">Buy</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Buy</span>
             <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
           </button>
         </div>
