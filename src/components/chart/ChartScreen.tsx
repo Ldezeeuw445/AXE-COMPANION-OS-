@@ -8,11 +8,8 @@ import {
   Activity,
   ArrowUpDown,
   BarChart3,
-  Bell,
   BookOpen,
-  ChevronDown,
   ClipboardList,
-  Info,
   Landmark,
   Layers,
   LineChart,
@@ -91,24 +88,6 @@ function buildHref(account: string | null, symbol: string, tf: string): string {
   params.set("symbol", symbol);
   params.set("tf", tf);
   return `/chart?${params.toString()}`;
-}
-
-function formatBrokerTime(iso: string | null): string {
-  if (!iso) return "—";
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return iso;
-  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-function elapsedSince(iso: string | null): string | null {
-  if (!iso) return null;
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return null;
-  const diff = Math.max(0, Date.now() - ms) / 1000;
-  if (diff < 60) return `${Math.round(diff)}s open`;
-  if (diff < 3600) return `${Math.round(diff / 60)}m open`;
-  if (diff < 86_400) return `${Math.round(diff / 3600)}h open`;
-  return `${Math.round(diff / 86_400)}d open`;
 }
 
 function sessionCopy(now = new Date()): string {
@@ -509,8 +488,6 @@ export function ChartScreen({ data, initialAction }: Props) {
   const lastReactPriceAt = useRef<number>(0);
   const lastBidRef = useRef<number | null>(null);
   const lastAskRef = useRef<number | null>(null);
-  const dataDetailsRef = useRef<HTMLDetailsElement | null>(null);
-
   const isVisible = usePageVisible();
   const liveEnabled = data.failure === "ok" && Boolean(accountId) && isVisible;
 
@@ -1172,13 +1149,6 @@ export function ChartScreen({ data, initialAction }: Props) {
     }
   }, [accountId, data, livePrice, lastTickAt, livePositionsCount, overlays, liveStatus]);
 
-  const focusDataDetails = useCallback(() => {
-    const el = dataDetailsRef.current;
-    if (!el) return;
-    el.open = true;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-
   const resetChartView = useCallback(() => {
     const nextIndex = (scaleModeIndex + 1) % CHART_SCALE_MODES.length;
     setScaleModeIndex(nextIndex);
@@ -1255,12 +1225,6 @@ export function ChartScreen({ data, initialAction }: Props) {
             icon: <Landmark className="h-3.5 w-3.5" />,
             href: "/accounts",
           },
-          {
-            id: "diagnostics",
-            label: "Open data details",
-            icon: <Info className="h-3.5 w-3.5" />,
-            onSelect: focusDataDetails,
-          },
         ],
       },
     ];
@@ -1270,7 +1234,6 @@ export function ChartScreen({ data, initialAction }: Props) {
     overlays.length,
     accountLabel,
     saveSnapshotToVault,
-    focusDataDetails,
   ]);
 
   // Keep the global mobile top bar clean: menu left, AXE context/logo action right.
@@ -1668,189 +1631,6 @@ export function ChartScreen({ data, initialAction }: Props) {
         </div>
       </div>
 
-      <div className="hidden md:block">
-        {/* Position summary */}
-        {overlays.length > 0 ? (
-          <GlassPanel className="mt-3 !p-3">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-              Open on {data.symbol}
-            </p>
-            <ul className="space-y-2">
-              {overlays.map((o) => {
-                const distSL = o.stopLoss != null && o.currentPrice != null ? Math.abs(o.currentPrice - o.stopLoss) : null;
-                const distTP = o.takeProfit != null && o.currentPrice != null ? Math.abs(o.takeProfit - o.currentPrice) : null;
-                const rr = (() => {
-                  if (o.entryPrice == null || o.stopLoss == null || o.takeProfit == null) return null;
-                  const risk = Math.abs(o.entryPrice - o.stopLoss);
-                  if (risk <= 0) return null;
-                  const reward = Math.abs(o.takeProfit - o.entryPrice);
-                  return reward / risk;
-                })();
-                const profit = o.profit ?? 0;
-                const profitColor =
-                  profit > 0 ? CHART_THEME.positiveText : profit < 0 ? CHART_THEME.negativeText : CHART_THEME.neutralText;
-                const digits = priceDigitsForSymbol(data.brokerSymbol);
-                return (
-                  <li
-                    key={o.id}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2"
-                  >
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-tos-text">
-                      {o.side === "buy" ? "Long" : o.side === "sell" ? "Short" : o.side}
-                    </span>
-                    <span className="font-mono text-xs text-tos-muted">{o.volume}</span>
-                    <span className="font-mono text-xs text-tos-muted">
-                      Entry {o.entryPrice != null ? o.entryPrice.toFixed(digits) : "—"}
-                    </span>
-                    <span className="font-mono text-xs text-tos-muted">
-                      SL {o.stopLoss != null ? o.stopLoss.toFixed(digits) : "—"}
-                      {distSL != null ? ` (${distSL.toFixed(digits)})` : ""}
-                    </span>
-                    <span className="font-mono text-xs text-tos-muted">
-                      TP {o.takeProfit != null ? o.takeProfit.toFixed(digits) : "—"}
-                      {distTP != null ? ` (${distTP.toFixed(digits)})` : ""}
-                    </span>
-                    {rr != null ? <span className="font-mono text-[11px] text-tos-dim">RR {rr.toFixed(2)}</span> : null}
-                    {o.openTime ? (
-                      <span className="font-mono text-[11px] text-tos-dim">{elapsedSince(o.openTime)}</span>
-                    ) : null}
-                    <span className="ml-auto font-mono text-sm" style={{ color: profitColor }}>
-                      {profit >= 0 ? "+" : ""}
-                      {profit.toFixed(2)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </GlassPanel>
-        ) : null}
-
-        {/* Quick actions (compact) */}
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Link
-          href={chatQ(
-            `[AXE · chart ${data.symbol} ${tfLabel}]\nExplain structure, key levels and what matters next on my broker chart. Reference my open ${data.symbol} positions if any.`,
-          )}
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] font-medium text-tos-muted transition-colors hover:border-cyan-500/30 hover:text-tos-text"
-        >
-          <MessageSquare className="h-4 w-4 shrink-0 text-cyan-400/85" />
-          Ask AXE about this chart
-        </Link>
-        <Link
-          href={chatQ(
-            `[AXE · risk]\nRisk-check my open MT5 positions${overlays.length ? ` on ${data.symbol}` : ""} — distance to SL/TP, RR and what needs attention.`,
-          )}
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] font-medium text-tos-muted transition-colors hover:border-cyan-500/30 hover:text-tos-text"
-        >
-          <ClipboardList className="h-4 w-4 shrink-0 text-cyan-400/85" />
-          Risk check
-        </Link>
-        <Link
-          href={`/alerts?symbol=${encodeURIComponent(data.brokerSymbol)}`}
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] font-medium text-tos-muted transition-colors hover:border-cyan-500/30 hover:text-tos-text"
-        >
-          <Bell className="h-4 w-4 shrink-0 text-cyan-400/85" />
-          Set alert
-        </Link>
-        <Link
-          href="/journal"
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] font-medium text-tos-muted transition-colors hover:border-cyan-500/30 hover:text-tos-text"
-        >
-          <BookOpen className="h-4 w-4 shrink-0 text-cyan-400/85" />
-          Journal
-        </Link>
-        <Link
-          href={chatQ(
-            `[AXE · plan]\nDraft a trade plan (intent only — execution disabled) for ${data.symbol} on ${tfLabel}: bias, entry zone, invalidation, take-profit, conviction and what evidence I want before pulling the trigger.`,
-          )}
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] font-medium text-tos-muted transition-colors hover:border-cyan-500/30 hover:text-tos-text"
-        >
-          <Sparkles className="h-4 w-4 shrink-0 text-cyan-400/85" />
-          Trade plan
-        </Link>
-        </div>
-
-        {/* Data details */}
-        <details
-        ref={dataDetailsRef}
-        className="group mt-3 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/25"
-        open={data.failure !== "ok"}
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-muted [&::-webkit-details-marker]:hidden">
-          Data details
-          <ChevronDown className="h-4 w-4 shrink-0 text-tos-dim transition-transform group-open:rotate-180" aria-hidden />
-        </summary>
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 border-t border-white/[0.05] px-4 py-3 text-[11px] sm:grid-cols-2">
-          <div>
-            <dt className="text-tos-dim">Account</dt>
-            <dd className="text-tos-text">{accountLabel ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Provider</dt>
-            <dd className="text-tos-text">{data.source}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Broker server</dt>
-            <dd className="text-tos-text">{data.account?.mt5Server ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Display symbol</dt>
-            <dd className="font-mono text-tos-text">{data.symbol}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Broker symbol</dt>
-            <dd className="font-mono text-tos-text">{data.brokerSymbol}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Timeframe</dt>
-            <dd className="font-mono text-tos-text">
-              {tfLabel} ({data.metaApiTimeframe})
-            </dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Candles loaded</dt>
-            <dd className="font-mono text-tos-text">{data.candles.length}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Last candle</dt>
-            <dd className="text-tos-text">{formatBrokerTime(data.lastCandleTime)}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Last live tick</dt>
-            <dd className="text-tos-text">{lastTickAt ? formatBrokerTime(lastTickAt) : "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Open positions</dt>
-            <dd className="font-mono text-tos-text">{livePositionsCount}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Live stream</dt>
-            <dd className="text-tos-text">
-              {statusPill.label}
-              {liveTransport !== "off" ? ` · ${liveTransport.toUpperCase()}` : ""}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Annotations</dt>
-            <dd className="font-mono text-tos-text">{annotations.length}</dd>
-          </div>
-          <div>
-            <dt className="text-tos-dim">Attempted symbols</dt>
-            <dd className="font-mono text-tos-text">{data.attemptedSymbols.join(", ") || "—"}</dd>
-          </div>
-          {data.dataError ? (
-            <div className="sm:col-span-2">
-              <dt className="text-tos-dim">Reason</dt>
-              <dd className="text-tos-text">{data.dataError}</dd>
-            </div>
-          ) : null}
-        </dl>
-        </details>
-
-        <p className="px-1 pb-2 pt-2 text-[10px] leading-relaxed text-tos-dim">
-          Same feed as your connected account. No external chart feed. Execution disabled by default.
-        </p>
-      </div>
     </div>
   );
 }
