@@ -1,5 +1,5 @@
 import "server-only";
-import { getFinnhubKey, getFmpKey } from "@/lib/market/providerStatus";
+import { getFinnhubKey } from "@/lib/market/providerStatus";
 import type { EconomicEvent } from "@/lib/market/marketTypes";
 
 const REVALIDATE_SECONDS = 60 * 30; // 30 min
@@ -65,51 +65,6 @@ async function fetchFinnhubCalendar(daysAhead: number): Promise<EconomicEvent[]>
   }
 }
 
-// ── FMP `/economic_calendar` (fallback) ────────────────────────────────────
-type FmpCalendarEvent = {
-  date?: string;
-  country?: string;
-  event?: string;
-  currency?: string;
-  previous?: number | string | null;
-  estimate?: number | string | null;
-  actual?: number | string | null;
-  impact?: string;
-  unit?: string;
-};
-
-async function fetchFmpCalendar(daysAhead: number): Promise<EconomicEvent[]> {
-  const apiKey = getFmpKey();
-  if (!apiKey) return [];
-  const { from, to } = rangeIso(daysAhead);
-  const params = new URLSearchParams({ from, to, apikey: apiKey });
-  try {
-    const res = await fetch(`https://financialmodelingprep.com/api/v3/economic_calendar?${params.toString()}`, {
-      next: { revalidate: REVALIDATE_SECONDS, tags: ["calendar:fmp"] },
-    });
-    if (!res.ok) return [];
-    const arr = (await res.json()) as FmpCalendarEvent[];
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((e, i) => ({
-        id: `fmp:${e.country ?? ""}:${e.event ?? ""}:${e.date ?? i}`,
-        title: e.event ?? "Economic event",
-        country: e.country ?? null,
-        currency: e.currency ?? null,
-        startsAt: e.date ? new Date(e.date).toISOString() : new Date().toISOString(),
-        impact: mapImpact(e.impact),
-        actual: e.actual ?? null,
-        forecast: e.estimate ?? null,
-        previous: e.previous ?? null,
-        unit: e.unit ?? null,
-        provider: "fmp" as const,
-      }))
-      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
-  } catch {
-    return [];
-  }
-}
-
 function guessCurrency(country: string): string | null {
   const c = country.toUpperCase();
   if (c === "US" || c === "USA" || c === "UNITED STATES") return "USD";
@@ -124,17 +79,14 @@ function guessCurrency(country: string): string | null {
   return null;
 }
 
-/** Returns upcoming high-impact-first events; provider chosen automatically. */
+/** Returns upcoming high-impact-first events; Finnhub-only after FMP was deprecated. */
 export async function loadEconomicCalendar(opts: {
   symbol: string;
   daysAhead?: number;
   limit?: number;
 }): Promise<EconomicEvent[]> {
   const days = Math.max(1, Math.min(14, opts.daysAhead ?? 5));
-  const events =
-    (await fetchFinnhubCalendar(days)).length > 0
-      ? await fetchFinnhubCalendar(days)
-      : await fetchFmpCalendar(days);
+  const events = await fetchFinnhubCalendar(days);
 
   const briefingCurrency = currencyForSymbol(opts.symbol);
   // Bias to user's relevant currency, then everything else, prioritise high impact.

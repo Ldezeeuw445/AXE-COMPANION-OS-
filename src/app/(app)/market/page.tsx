@@ -89,10 +89,10 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const newsProviderLabel = (() => {
     if (ctx.news.length === 0) return null;
     const usedId = ctx.news[0]?.provider;
-    if (usedId === "fmp") return "FMP Ultimate";
     if (usedId === "perigon") return "Perigon";
     if (usedId === "finnhub") return "Finnhub";
     if (usedId === "eodhd") return "EODHD";
+    if (usedId === "unusualWhales") return "Unusual Whales";
     if (usedId === "demo") return "Google News";
     return null;
   })();
@@ -195,7 +195,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            Configure FINNHUB_API_KEY (recommended) or FMP_API_KEY to load economic events with impact ratings.
+            Configure FINNHUB_API_KEY to load economic events with impact ratings.
           </p>
         )}
       </GlassPanel>
@@ -219,8 +219,8 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            No headlines came back for {symbol} just now. Add FMP / Perigon / Finnhub / EODHD keys for symbol-tagged
-            premium feeds — Google News is used as a free fallback.
+            No headlines came back for {symbol} just now. Add Perigon / Finnhub / EODHD keys for symbol-tagged premium
+            feeds — Google News is used as a free fallback.
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">

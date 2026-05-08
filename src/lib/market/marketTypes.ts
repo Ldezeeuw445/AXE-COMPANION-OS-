@@ -2,10 +2,10 @@
 
 export type ProviderId =
   | "fred"
-  | "fmp"
   | "perigon"
   | "finnhub"
   | "eodhd"
+  | "unusualWhales"
   | "demo";
 
 export type ProviderState = "live" | "missing_config" | "demo" | "error";

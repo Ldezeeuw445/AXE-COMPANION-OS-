@@ -696,6 +696,54 @@ export function buildAxeMessagesFromContext(
     parts.push(`\n${label}\n${newsLines.join("\n")}`);
   }
 
+  // 6b. Smart-money intel (Unusual Whales) — symbol-anchored, top rows only.
+  if (context.intel_summary) {
+    const intel = context.intel_summary;
+    const intelLines: string[] = [];
+    if (intel.tideBias && intel.netCallPremium != null && intel.netPutPremium != null) {
+      const callM = (intel.netCallPremium / 1e6).toFixed(1);
+      const putM = (intel.netPutPremium / 1e6).toFixed(1);
+      intelLines.push(
+        `MARKET TIDE: ${intel.tideBias.toUpperCase()} (net call $${callM}M vs net put $${putM}M)`,
+      );
+    }
+    if (intel.topInsiders.length > 0) {
+      intelLines.push(
+        "INSIDER (Form 4): " +
+          intel.topInsiders
+            .map((r) => `${r.ticker} ${r.type} ${r.insider} $${(r.value / 1e6).toFixed(2)}M (${r.date})`)
+            .join(" | "),
+      );
+    }
+    if (intel.topCongress.length > 0) {
+      intelLines.push(
+        "CONGRESS: " +
+          intel.topCongress
+            .map((r) => `${r.ticker} ${r.direction} ${r.politician} ${r.size} (${r.date})`)
+            .join(" | "),
+      );
+    }
+    if (intel.topDarkPool.length > 0) {
+      intelLines.push(
+        "DARK POOL: " +
+          intel.topDarkPool
+            .map((r) => `${r.symbol} ${r.size.toLocaleString()} @ $${r.price.toFixed(2)} = $${(r.notional / 1e6).toFixed(2)}M`)
+            .join(" | "),
+      );
+    }
+    if (intel.topOptions.length > 0) {
+      intelLines.push(
+        "OPTIONS FLOW: " +
+          intel.topOptions
+            .map((r) => `${r.symbol} ${r.side} ${r.strike} ${r.exp} $${(r.premium / 1e6).toFixed(2)}M`)
+            .join(" | "),
+      );
+    }
+    if (intelLines.length > 0) {
+      parts.push(`\nSMART MONEY (Unusual Whales — refreshed ${intel.generatedAt.slice(11, 16)} UTC)\n${intelLines.join("\n")}`);
+    }
+  }
+
   // 7. Recent alerts
   if (recentAlerts.length > 0) {
     const alertLines = recentAlerts

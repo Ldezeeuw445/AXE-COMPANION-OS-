@@ -100,6 +100,54 @@ export type CompanionJournalEntry = {
   created_at: string;
 };
 
+/**
+ * Compact smart-money intel snapshot fed by Unusual Whales via the
+ * Supabase intel-proxy. Kept minimal so it can ride inside the AXE
+ * desk context without blowing up the prompt.
+ */
+export type IntelSummary = {
+  /** ISO timestamp of when this snapshot was assembled. */
+  generatedAt: string;
+  /** Bias from market tide: "bullish" | "bearish" | "neutral". */
+  tideBias: "bullish" | "bearish" | "neutral" | null;
+  /** Net call premium in USD (positive = bullish flow). */
+  netCallPremium: number | null;
+  /** Net put premium in USD (negative typical when puts dominate). */
+  netPutPremium: number | null;
+  /** Top-3 insider transactions (ticker, name, side, value). */
+  topInsiders: Array<{
+    ticker: string;
+    insider: string;
+    type: "BUY" | "SELL";
+    value: number;
+    date: string;
+  }>;
+  /** Top-3 congressional disclosures. */
+  topCongress: Array<{
+    politician: string;
+    chamber: string;
+    ticker: string;
+    direction: "BUY" | "SELL";
+    size: string;
+    date: string;
+  }>;
+  /** Top-3 dark pool prints by notional. */
+  topDarkPool: Array<{
+    symbol: string;
+    notional: number;
+    size: number;
+    price: number;
+  }>;
+  /** Top-3 unusual options flow alerts by premium. */
+  topOptions: Array<{
+    symbol: string;
+    side: "CALL" | "PUT";
+    strike: number;
+    exp: string;
+    premium: number;
+  }>;
+};
+
 export type TradingOSContext = {
   symbol: string | null;
   timeframe: string | null;
@@ -120,4 +168,6 @@ export type TradingOSContext = {
   companion_broker_trades: CompanionBrokerTrade[];
   companion_trade_labels: CompanionTradeLabel[];
   companion_journal_entries: CompanionJournalEntry[];
+  /** Compact UnusualWhales smart-money snapshot for the active symbol (top rows only). */
+  intel_summary: IntelSummary | null;
 };

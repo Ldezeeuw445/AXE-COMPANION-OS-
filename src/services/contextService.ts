@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   TradingOSContext,
   FilteredNewsEvent,
+  IntelSummary,
   OpenCommitment,
   Mt5AccountSnapshot,
   Mt5Position,
@@ -24,6 +25,7 @@ import type {
 } from "@/types/context";
 import type { WatchlistEntry, TerminalAlert, TerminalExecution } from "@/services/axeService";
 import { fetchEconomicCalendar } from "@/services/marketDataService";
+import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 
 // ─── Symbol → relevant news currencies ──────────────────────────────────────
 
@@ -340,6 +342,53 @@ export async function fetchTradingOSContext(
   // (Set to null; callers inject it separately from conversation.pinnedContext.)
   const candles_summary: string | null = null;
 
+  // ── intel_summary (Unusual Whales smart-money snapshot) ──────────────────
+  // Fire-and-forget: if the proxy is silent or the env is missing we just
+  // return null and the model continues without intel context (no crash).
+  let intel_summary: IntelSummary | null = null;
+  try {
+    const intel = await loadIntelSnapshot({ symbol: symbol ?? undefined });
+    if (intel.hasLiveData) {
+      intel_summary = {
+        generatedAt: intel.generatedAt,
+        tideBias: intel.tide?.bias ?? null,
+        netCallPremium: intel.tide?.netCallPremium ?? null,
+        netPutPremium: intel.tide?.netPutPremium ?? null,
+        topInsiders: intel.insiders.slice(0, 3).map((r) => ({
+          ticker: r.ticker,
+          insider: r.insider,
+          type: r.type,
+          value: r.value,
+          date: r.date,
+        })),
+        topCongress: intel.senate.slice(0, 3).map((r) => ({
+          politician: r.politician,
+          chamber: r.chamber,
+          ticker: r.ticker,
+          direction: r.direction,
+          size: r.size,
+          date: r.date,
+        })),
+        topDarkPool: intel.darkPool.slice(0, 3).map((r) => ({
+          symbol: r.symbol,
+          notional: r.notional,
+          size: r.size,
+          price: r.price,
+        })),
+        topOptions: intel.options.slice(0, 3).map((r) => ({
+          symbol: r.symbol,
+          side: r.side,
+          strike: r.strike,
+          exp: r.exp,
+          premium: r.premium,
+        })),
+      };
+    }
+  } catch {
+    // Intel is optional — never fail the whole context just because UW is down.
+    intel_summary = null;
+  }
+
   return {
     symbol: symbol ?? null,
     timeframe: tf ?? null,
@@ -362,5 +411,6 @@ export async function fetchTradingOSContext(
     companion_broker_trades,
     companion_trade_labels,
     companion_journal_entries,
+    intel_summary,
   };
 }

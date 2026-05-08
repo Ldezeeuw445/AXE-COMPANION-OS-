@@ -13,9 +13,6 @@ function trimOrNull(v: string | undefined): string | null {
 export function getFredKey(): string | null {
   return trimOrNull(process.env.FRED_API_KEY);
 }
-export function getFmpKey(): string | null {
-  return trimOrNull(process.env.FMP_API_KEY ?? process.env.FMP_ULTIMATE_API_KEY);
-}
 export function getPerigonKey(): string | null {
   return trimOrNull(process.env.PERIGON_API_KEY);
 }
@@ -25,6 +22,9 @@ export function getFinnhubKey(): string | null {
 export function getEodhdKey(): string | null {
   return trimOrNull(process.env.EODHD_API_KEY);
 }
+export function getUnusualWhalesKey(): string | null {
+  return trimOrNull(process.env.UNUSUAL_WHALES_TOKEN ?? process.env.UNUSUAL_WHALES_API_KEY);
+}
 
 export function detectProviders(): ProviderStatus[] {
   return [
@@ -33,12 +33,6 @@ export function detectProviders(): ProviderStatus[] {
       label: "FRED",
       state: getFredKey() ? "live" : "missing_config",
       description: "Macro time series — yields, rates, CPI, employment.",
-    },
-    {
-      id: "fmp",
-      label: "FMP Ultimate",
-      state: getFmpKey() ? "live" : "missing_config",
-      description: "Symbol news, calendar, fundamentals.",
     },
     {
       id: "perigon",
@@ -57,6 +51,12 @@ export function detectProviders(): ProviderStatus[] {
       label: "EODHD",
       state: getEodhdKey() ? "live" : "missing_config",
       description: "Financial news + fundamentals (fallback).",
+    },
+    {
+      id: "unusualWhales",
+      label: "Unusual Whales",
+      state: getUnusualWhalesKey() ? "live" : "missing_config",
+      description: "Smart money: insider, congress, dark pool, options flow, tide.",
     },
   ];
 }

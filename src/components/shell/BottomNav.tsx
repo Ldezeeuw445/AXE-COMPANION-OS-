@@ -14,6 +14,7 @@ import {
   Newspaper,
   ScrollText,
   Settings,
+  Target,
   Vault,
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ const items = [
   { href: "/history", label: "History", Icon: ScrollText, accentVar: "--icon-history" },
   { href: "/journal", label: "Journal", Icon: BookOpen, accentVar: "--icon-journal" },
   { href: "/chat", label: "Chat", Icon: MessageSquare, accentVar: "--icon-chat" },
+  { href: "/intel", label: "Intel", Icon: Target, accentVar: "--icon-intel" },
   { href: "/market", label: "News", Icon: Newspaper, accentVar: "--icon-news" },
   { href: "/alerts", label: "Alerts", Icon: Bell, accentVar: "--icon-alerts" },
   { href: "/vault", label: "Vault", Icon: Vault, accentVar: "--icon-vault" },

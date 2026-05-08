@@ -2,7 +2,6 @@ import "server-only";
 import {
   getEodhdKey,
   getFinnhubKey,
-  getFmpKey,
   getPerigonKey,
 } from "@/lib/market/providerStatus";
 import type { NewsItem, ProviderId } from "@/lib/market/marketTypes";
@@ -28,52 +27,6 @@ function safeIso(input: string | number | null | undefined): string {
   }
   const d = new Date(input);
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-}
-
-// ── FMP Ultimate ────────────────────────────────────────────────────────────
-type FmpStockNews = {
-  symbol?: string;
-  publishedDate?: string;
-  title?: string;
-  text?: string;
-  site?: string;
-  url?: string;
-  image?: string;
-};
-
-async function fetchFmpNews(opts: FetchOpts): Promise<NewsItem[]> {
-  const apiKey = getFmpKey();
-  if (!apiKey) return [];
-  const briefing = briefingForSymbol(opts.symbol);
-  const symbols = dedupeSymbols([opts.symbol, ...opts.watchlist, ...briefing.providerSymbols]).join(",");
-
-  // Use the v3 stock_news endpoint — works for symbols (incl. forex/crypto formats supported on FMP).
-  const params = new URLSearchParams({
-    tickers: symbols,
-    limit: String(opts.limit ?? 12),
-    apikey: apiKey,
-  });
-  try {
-    const res = await fetch(`https://financialmodelingprep.com/api/v3/stock_news?${params.toString()}`, {
-      next: { revalidate: REVALIDATE_SECONDS, tags: ["news:fmp", `news:${opts.symbol}`] },
-    });
-    if (!res.ok) return [];
-    const arr = (await res.json()) as FmpStockNews[];
-    if (!Array.isArray(arr)) return [];
-    return arr.slice(0, opts.limit ?? 12).map((n, i) => ({
-      id: makeId("fmp", `${n.symbol ?? ""}-${n.publishedDate ?? i}`, n.url ?? `${i}`),
-      title: n.title ?? "Untitled",
-      summary: n.text ? n.text.slice(0, 320) : null,
-      url: n.url ?? "",
-      source: n.site ?? "FMP",
-      publishedAt: safeIso(n.publishedDate),
-      provider: "fmp",
-      symbols: n.symbol ? [n.symbol] : undefined,
-      imageUrl: n.image ?? null,
-    }));
-  } catch {
-    return [];
-  }
 }
 
 // ── Perigon ────────────────────────────────────────────────────────────────
@@ -296,12 +249,12 @@ function decodeXml(value: string): string {
 
 /**
  * Returns news from the first provider that returns items.
- * Order: FMP Ultimate → Perigon → Finnhub → EODHD → Google News (no-key fallback).
- * Always returns something on a healthy deployment, even before keyed providers are wired.
+ * Order: Perigon → Finnhub → EODHD → Google News (no-key fallback).
+ * FMP was removed — its keys repeatedly returned empty/forbidden on the user's
+ * plan and Unusual Whales now covers smart-money signal on the Intel page.
  */
 export async function loadNews(opts: FetchOpts): Promise<NewsItem[]> {
   const providers: Array<() => Promise<NewsItem[]>> = [
-    () => fetchFmpNews(opts),
     () => fetchPerigonNews(opts),
     () => fetchFinnhubNews(opts),
     () => fetchEodhdNews(opts),
