@@ -321,6 +321,11 @@ export type MetaApiCandle = {
   high: number;
   low: number;
   close: number;
+  /** MT5 tick volume for the candle, when MetaApi returns it. */
+  tickVolume?: number;
+  /** Some MetaApi/broker responses expose volume under this field. */
+  volume?: number;
+  spread?: number;
 };
 
 /** OHLC from MT5 terminal via MetaApi market-data host (not the trade REST host). */
@@ -351,5 +356,8 @@ export async function clientGetHistoricalCandles(
     high: Number(c.high) || 0,
     low: Number(c.low) || 0,
     close: Number(c.close) || 0,
+    tickVolume: c.tickVolume != null ? Number(c.tickVolume) : undefined,
+    volume: c.volume != null ? Number(c.volume) : undefined,
+    spread: c.spread != null ? Number(c.spread) : undefined,
   }));
 }

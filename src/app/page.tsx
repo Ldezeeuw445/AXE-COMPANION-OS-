@@ -106,6 +106,119 @@ const FAQ = [
   },
 ];
 
+function MarketingNativePhoneMock() {
+  const candles = [
+    { x: 26, y: 158, h: 40, up: true },
+    { x: 44, y: 144, h: 62, up: false },
+    { x: 62, y: 132, h: 52, up: true },
+    { x: 80, y: 121, h: 46, up: true },
+    { x: 98, y: 110, h: 58, up: false },
+    { x: 116, y: 125, h: 38, up: true },
+    { x: 134, y: 113, h: 44, up: true },
+    { x: 152, y: 98, h: 66, up: true },
+    { x: 170, y: 108, h: 54, up: false },
+    { x: 188, y: 132, h: 42, up: false },
+  ];
+  const volume = [24, 40, 35, 56, 48, 31, 52, 61, 44, 22];
+
+  return (
+    <div className="relative h-[560px] w-[280px] overflow-hidden rounded-[28px] bg-[#05070A] text-white">
+      <div className="flex h-10 items-center justify-between border-b border-white/[0.06] bg-black px-4 text-[11px] font-semibold">
+        <span>09:41</span>
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-8 py-1 text-[8px] text-white/30">AXE</span>
+        <span className="text-white/60">5G 87</span>
+      </div>
+
+      <div className="flex h-[52px] items-center justify-between border-b border-cyan-300/[0.08] bg-[#05070A]/95 px-3">
+        <div className="grid h-8 w-8 place-items-center rounded-xl border border-cyan-300/20 bg-cyan-400/[0.06] text-cyan-200">
+          ☰
+        </div>
+        <div className="grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/20 bg-black shadow-[0_0_20px_rgba(34,211,238,0.14)]">
+          <Image src="/axe-icon.png" alt="" width={26} height={26} className="h-6 w-6 object-contain" />
+        </div>
+      </div>
+
+      <div className="relative h-[318px] overflow-hidden border-b border-white/[0.07] bg-[#05070A]">
+        <div className="absolute left-2 top-2 z-10 font-mono text-[12px] font-bold text-[#1f8cff]">
+          XAUUSD <span className="ml-1 text-white">H1</span>
+          <div className="mt-1 text-[10px] font-medium text-white/46">4708.60</div>
+        </div>
+        <div
+          className="absolute inset-0 opacity-90"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(110,170,200,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(110,170,200,0.045) 1px, transparent 1px)",
+            backgroundSize: "54px 46px",
+          }}
+        />
+        <svg className="absolute inset-0" width="280" height="318" viewBox="0 0 280 318" aria-hidden>
+          {[5300, 5200, 5100, 5000, 4900, 4800, 4700].map((price, i) => (
+            <text key={price} x="232" y={62 + i * 35} fill="rgba(208,220,234,0.72)" fontSize="10" fontFamily="monospace">
+              {price}.00
+            </text>
+          ))}
+          <path d="M20 228 C56 164, 82 238, 116 166 S176 104, 216 156" fill="none" stroke="rgba(92,142,255,0.8)" strokeWidth="1.4" />
+          <line x1="0" x2="224" y1="190" y2="190" stroke="rgba(220,228,238,0.28)" strokeDasharray="2 3" />
+          <rect x="218" y="181" width="58" height="18" rx="3" fill="rgba(185,197,213,0.9)" />
+          <text x="247" y="194" textAnchor="middle" fill="#071018" fontSize="10" fontWeight="700" fontFamily="monospace">
+            4708.60
+          </text>
+          {candles.map((candle) => {
+            const color = candle.up ? "#1F9C7B" : "#C95450";
+            return (
+              <g key={candle.x}>
+                <line x1={candle.x + 4} x2={candle.x + 4} y1={candle.y - 16} y2={candle.y + candle.h + 16} stroke={color} strokeOpacity="0.75" />
+                <rect x={candle.x} y={candle.y} width="8" height={candle.h} rx="1.5" fill={color} />
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="relative h-[70px] border-b border-white/[0.06] bg-black/55">
+        <span className="absolute left-2 top-1 text-[8px] font-bold uppercase tracking-[0.22em] text-cyan-100/80">Volumes 1.4K</span>
+        <svg className="absolute inset-0" width="280" height="70" viewBox="0 0 280 70" aria-hidden>
+          <text x="232" y="21" fill="rgba(168,180,196,0.7)" fontSize="9" fontFamily="monospace">1.4K</text>
+          <text x="232" y="62" fill="rgba(168,180,196,0.7)" fontSize="9" fontFamily="monospace">0</text>
+          {volume.map((height, i) => (
+            <rect key={i} x={16 + i * 18} y={64 - height} width="6" height={height} rx="1" fill={i % 3 === 1 ? "#C95450" : "#1F9C7B"} />
+          ))}
+        </svg>
+      </div>
+
+      <div className="relative h-[78px] border-b border-white/[0.06] bg-black/55">
+        <span className="absolute left-2 top-1 text-[8px] font-bold uppercase tracking-[0.22em] text-cyan-100/80">RSI(14) 53.99</span>
+        <svg className="absolute inset-0" width="280" height="78" viewBox="0 0 280 78" aria-hidden>
+          {[75, 50, 25].map((_, i) => (
+            <line key={i} x1="0" x2="224" y1={18 + i * 22} y2={18 + i * 22} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 4" />
+          ))}
+          {[100, 75, 50, 25, 0].map((level, i) => (
+            <text key={level} x="232" y={12 + i * 15} fill="rgba(168,180,196,0.7)" fontSize="9" fontFamily="monospace">
+              {level}.00
+            </text>
+          ))}
+          <path d="M8 42 L35 35 L58 45 L82 28 L108 38 L132 34 L156 46 L182 50 L206 43" fill="none" stroke="#22D3EE" strokeWidth="1.5" />
+        </svg>
+      </div>
+
+      <div className="absolute inset-x-0 bottom-0 flex h-11 items-stretch border-t border-white/[0.08] bg-black">
+        <div className="flex flex-1 items-center justify-between bg-gradient-to-r from-[#330610] via-[#8B1923] to-[#E13947] px-3 text-left">
+          <span className="text-[9px] font-semibold uppercase">Sell</span>
+          <span className="font-mono text-[15px] font-bold">4708.60</span>
+        </div>
+        <div className="flex w-20 flex-col items-center justify-center bg-black text-[10px]">
+          <span className="text-[7px] uppercase tracking-[0.2em] text-white/35">Lots</span>
+          <span className="font-mono">0.10</span>
+        </div>
+        <div className="flex flex-1 items-center justify-between bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] px-3 text-left">
+          <span className="text-[9px] font-semibold uppercase">Buy</span>
+          <span className="font-mono text-[15px] font-bold">4708.60</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HomeLandingPage() {
   const row = [...TICKER, ...TICKER];
 
@@ -258,14 +371,7 @@ export default function HomeLandingPage() {
               }}
             >
               <div className="pointer-events-none absolute left-1/2 top-2 z-10 h-6 w-[88px] -translate-x-1/2 rounded-b-[14px] border-b border-white/[0.07] bg-[#0a0b10]" />
-              <Image
-                src="/marketing/marketing-chat.png"
-                alt="AXE Companion chat"
-                width={280}
-                height={560}
-                className="block w-[min(100%,260px)] rounded-[28px] sm:w-[280px]"
-                priority
-              />
+              <MarketingNativePhoneMock />
             </div>
             <div
               className="pointer-events-none absolute -bottom-6 left-1/2 h-20 w-[65%] max-w-[300px] -translate-x-1/2 rounded-full opacity-60"

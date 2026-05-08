@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { RefObject } from "react";
 import {
   Activity,
@@ -497,6 +497,9 @@ export function ChartScreen({ data, initialAction }: Props) {
   const router = useRouter();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
+  const [isRoutePending, startRouteTransition] = useTransition();
+  const [pendingTfKey, setPendingTfKey] = useState<string | null>(null);
+  const isTimeframePending = isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey);
 
   const [livePrice, setLivePrice] = useState<number | null>(data.lastPrice);
   const [lastTickAt, setLastTickAt] = useState<string | null>(null);
@@ -510,6 +513,17 @@ export function ChartScreen({ data, initialAction }: Props) {
 
   const isVisible = usePageVisible();
   const liveEnabled = data.failure === "ok" && Boolean(accountId) && isVisible;
+
+  useEffect(() => {
+    setPendingTfKey(null);
+  }, [data.timeframeKey]);
+
+  useEffect(() => {
+    for (const option of CHART_TF_OPTIONS) {
+      if (option.key === data.timeframeKey) continue;
+      router.prefetch(buildHref(accountId, data.symbol, option.key));
+    }
+  }, [accountId, data.symbol, data.timeframeKey, router]);
 
   // Annotations
   const [annotations, setAnnotations] = useState<ChartAnnotation[]>([]);
@@ -756,15 +770,20 @@ export function ChartScreen({ data, initialAction }: Props) {
 
   const goSymbol = useCallback(
     (sym: string) => {
-      router.push(buildHref(accountId, sym, data.timeframeKey));
+      startRouteTransition(() => {
+        router.push(buildHref(accountId, sym, data.timeframeKey));
+      });
     },
-    [router, accountId, data.timeframeKey],
+    [router, accountId, data.timeframeKey, startRouteTransition],
   );
   const goTf = useCallback(
     (key: string) => {
-      router.push(buildHref(accountId, data.symbol, key));
+      setPendingTfKey(key);
+      startRouteTransition(() => {
+        router.push(buildHref(accountId, data.symbol, key));
+      });
     },
-    [router, accountId, data.symbol],
+    [router, accountId, data.symbol, startRouteTransition],
   );
 
   const lastPriceText = useMemo(
@@ -1398,7 +1417,7 @@ export function ChartScreen({ data, initialAction }: Props) {
                   ))}
                 </select>
                 <select
-                  value={data.timeframeKey}
+                  value={pendingTfKey ?? data.timeframeKey}
                   onChange={(e) => goTf(e.target.value)}
                   className="appearance-none bg-transparent font-mono text-[13px] font-semibold uppercase text-tos-text outline-none"
                   aria-label="Timeframe"
@@ -1571,6 +1590,12 @@ export function ChartScreen({ data, initialAction }: Props) {
         {snapshotMessage ? (
           <div className="pointer-events-none absolute bottom-3 left-3 z-30 max-w-[68%] rounded-lg border border-white/10 bg-black/76 px-2.5 py-1 text-[11px] font-medium text-tos-muted shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
             {snapshotMessage}
+          </div>
+        ) : null}
+
+        {isTimeframePending ? (
+          <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-cyan-300/20 bg-black/78 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/85 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+            Loading {CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}
           </div>
         ) : null}
       </div>

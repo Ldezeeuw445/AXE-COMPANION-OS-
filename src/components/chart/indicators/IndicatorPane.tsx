@@ -64,6 +64,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
       return {
         volumeBars: [] as VolumeBar[],
         volumeMax: 0,
+        volumeSource: "volume" as "volume" | "range",
         rsiPath: "",
         latestRsi: null as number | null,
       };
@@ -77,6 +78,8 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
         close: Number(candle.close),
         high: Number(candle.high),
         low: Number(candle.low),
+        tickVolume: candle.tickVolume != null ? Number(candle.tickVolume) : null,
+        volume: candle.volume != null ? Number(candle.volume) : null,
       }))
       .filter((candle): candle is IndicatorCandle => candle.time != null)
       .filter((candle) =>
@@ -84,8 +87,18 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
       );
 
     if (mode === "volume") {
-      const ranges = visible.map((candle) => Math.max(0, candle.high - candle.low));
-      const maxRange = Math.max(...ranges, 1);
+      const volumes = visible.map((candle) => {
+        const raw = candle.tickVolume ?? candle.volume ?? 0;
+        return Number.isFinite(raw) ? Math.max(0, Number(raw)) : 0;
+      });
+      const hasRealVolume = volumes.some((value) => value > 0);
+      // MetaApi normally returns MT5 tickVolume. If a broker/account response
+      // omits it, keep the pane useful by falling back to candle range, but
+      // only when every real volume value is missing/zero.
+      const values = hasRealVolume
+        ? volumes
+        : visible.map((candle) => Math.max(0, candle.high - candle.low));
+      const maxVolume = Math.max(...values, 1);
       const top = 18;
       const bottom = 6;
       const usable = Math.max(8, size.h - top - bottom);
@@ -94,7 +107,8 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
         const candle = visible[i];
         const x = handle.timeToCoordinate(candle.time);
         if (x == null || x < 0 || x > plotWidth) continue;
-        const h = Math.max(2, (ranges[i] / maxRange) * usable);
+        const value = values[i] ?? 0;
+        const h = value <= 0 ? 0 : Math.max(1, (value / maxVolume) * usable);
         volumeBars.push({
           x,
           y: size.h - bottom - h,
@@ -105,7 +119,13 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
               : "rgba(239,68,68,0.78)",
         });
       }
-      return { volumeBars, volumeMax: maxRange, rsiPath: "", latestRsi: null };
+      return {
+        volumeBars,
+        volumeMax: maxVolume,
+        volumeSource: hasRealVolume ? "volume" : "range",
+        rsiPath: "",
+        latestRsi: null,
+      };
     }
 
     const rsiValues = rsi(
@@ -126,6 +146,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
     return {
       volumeBars: [],
       volumeMax: 0,
+      volumeSource: "volume",
       rsiPath: toPath(rsiPoints),
       latestRsi: rsiValues.filter((value): value is number => value != null).at(-1) ?? null,
     };
@@ -159,7 +180,9 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
       <span className="pointer-events-none absolute left-2 top-1 text-[9px] font-bold uppercase tracking-[0.22em] text-cyan-100/85">
         {mode === "rsi"
           ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
-          : `Volumes ${geometry.volumeMax > 1000 ? formatThousands(geometry.volumeMax) : geometry.volumeMax.toFixed(0)}`}
+          : `${geometry.volumeSource === "volume" ? "Volumes" : "Range"} ${
+              geometry.volumeMax > 1000 ? formatThousands(geometry.volumeMax) : geometry.volumeMax.toFixed(0)
+            }`}
       </span>
 
       {size.w > 0 ? (
@@ -250,6 +273,8 @@ type IndicatorCandle = {
   close: number;
   high: number;
   low: number;
+  tickVolume: number | null;
+  volume: number | null;
 };
 
 function toTime(raw: string): number | null {
