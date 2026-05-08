@@ -19,6 +19,7 @@ import {
   LineChart,
   MessageSquare,
   Maximize2,
+  MoveHorizontal,
   Plus,
   Minus,
   RotateCcw,
@@ -70,6 +71,7 @@ import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotation
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
+import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
 
 const TICK_REACT_THROTTLE_MS = 150;
@@ -568,6 +570,17 @@ export function ChartScreen({ data, initialAction }: Props) {
     () => annotations.some((a) => a.type === "trendline"),
     [annotations],
   );
+  // MT5-style "future projection" cursor — shared between the indicator
+  // layer (extends iFVG/OB/FVG forward) and the fib/trendline annotation
+  // layers (project lines past the last candle). Stored in pixel space
+  // for the active chart frame.
+  const [futureProjectionX, setFutureProjectionX] = useState<number | null>(null);
+  const [futureCursorEnabled, setFutureCursorEnabled] = useState(true);
+  const futureCursorStorageKey = useMemo(
+    () => `axe.chart.futureCursor.${data.symbol}.${data.timeframeKey}`,
+    [data.symbol, data.timeframeKey],
+  );
+
   const [pendingOrderSide, setPendingOrderSide] = useState<"buy" | "sell">("buy");
   const [pendingOrderPrice, setPendingOrderPrice] = useState<number | null>(data.lastPrice);
   const [pendingStopLossPrice, setPendingStopLossPrice] = useState<number | null>(null);
@@ -673,6 +686,19 @@ export function ChartScreen({ data, initialAction }: Props) {
   useEffect(() => {
     const last = data.candles[data.candles.length - 1];
     setLiveLastCandle(last ? { ...last } : null);
+  }, [data.candles]);
+
+  // Recent candle TIMES (unix seconds) used by FutureProjectionCursor to
+  // measure pixel-per-bar reliably. Recomputed when the candle stream
+  // changes so live appended bars are reflected immediately.
+  const recentCandleTimes = useMemo<number[]>(() => {
+    const times: number[] = [];
+    const slice = data.candles.slice(-16);
+    for (const candle of slice) {
+      const ms = Date.parse(candle.time);
+      if (!Number.isNaN(ms)) times.push(Math.floor(ms / 1000));
+    }
+    return times;
   }, [data.candles]);
 
   // Merge the live last candle into the historical array. RSI/Volume read
@@ -959,6 +985,10 @@ export function ChartScreen({ data, initialAction }: Props) {
           }
 
           const now = new Date().toISOString();
+          const payloadSettings =
+            cmd.payload.settings && typeof cmd.payload.settings === "object"
+              ? (cmd.payload.settings as Record<string, unknown>)
+              : null;
           const annotation: ChartAnnotation = {
             id: cmd.id,
             accountId: cmd.accountId ?? null,
@@ -969,6 +999,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             settings: {
               source: cmd.source,
               explanation: typeof cmd.payload.explanation === "string" ? cmd.payload.explanation : undefined,
+              ...(payloadSettings ?? {}),
             },
             createdAt: now,
             updatedAt: now,
@@ -987,6 +1018,10 @@ export function ChartScreen({ data, initialAction }: Props) {
           const points = Array.isArray(cmd.payload.points) ? cmd.payload.points : [];
           if (points.length >= 2) {
             const now = new Date().toISOString();
+            const payloadSettings =
+              cmd.payload.settings && typeof cmd.payload.settings === "object"
+                ? (cmd.payload.settings as Record<string, unknown>)
+                : null;
             const annotation: ChartAnnotation = {
               id: cmd.id,
               accountId: cmd.accountId ?? null,
@@ -994,7 +1029,7 @@ export function ChartScreen({ data, initialAction }: Props) {
               timeframe: cmd.timeframe,
               type: "trendline",
               points: points.slice(0, 2) as AnnotationPoint[],
-              settings: { source: cmd.source },
+              settings: { source: cmd.source, ...(payloadSettings ?? {}) },
               createdAt: now,
               updatedAt: now,
             };
@@ -1432,6 +1467,7 @@ export function ChartScreen({ data, initialAction }: Props) {
         <ChartIndicatorLayer
           candles={liveCandles}
           canvasRef={canvasRef}
+          futureProjectionX={futureProjectionX}
           active={{
             ma: activeToolFlags.ma,
             structure: activeToolFlags.structure,
@@ -1441,6 +1477,18 @@ export function ChartScreen({ data, initialAction }: Props) {
             pdh: activeToolFlags.pdh,
             pdl: activeToolFlags.pdl,
           }}
+        />
+
+        {/* Draggable future-projection vertical cursor — anchors how far
+            the iFVG/FVG/OB/Fib extensions reach to the right of the last
+            candle. Hidden until the user toggles it on; remembers offset
+            per (symbol, timeframe). */}
+        <FutureProjectionCursor
+          canvasRef={canvasRef}
+          recentCandleTimes={recentCandleTimes}
+          storageKey={futureCursorStorageKey}
+          enabled={futureCursorEnabled}
+          onChange={setFutureProjectionX}
         />
 
         {pendingOrderVisible ? (
@@ -1573,6 +1621,16 @@ export function ChartScreen({ data, initialAction }: Props) {
             { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
             { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
             { id: "ma", label: "MA", icon: LineChart, active: Boolean(activeToolFlags.ma), action: () => toggleToolFlag("ma") },
+            // Future projection cursor — toggleable so traders who don't
+            // need it can keep the chart frame totally clean. Persisted
+            // per-symbol/timeframe via the cursor's own storage key.
+            {
+              id: "futureCursor",
+              label: "Project",
+              icon: MoveHorizontal,
+              active: futureCursorEnabled,
+              action: () => setFutureCursorEnabled((v) => !v),
+            },
           ].map((item) => {
             const Icon = item.icon;
             const isDisabled = "disabled" in item && item.disabled;
@@ -1608,6 +1666,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             digits={priceDigitsForSymbol(data.brokerSymbol)}
             onUpdate={updateAnnotation}
             onRemove={removeAnnotationById}
+            futureProjectionX={futureProjectionX}
           />
 
           {/* Interactive Trendline layer — draggable endpoints */}
@@ -1616,6 +1675,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             canvasRef={canvasRef}
             onUpdate={updateAnnotation}
             onRemove={removeAnnotationById}
+            futureProjectionX={futureProjectionX}
           />
         </div>
 

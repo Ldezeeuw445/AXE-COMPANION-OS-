@@ -105,21 +105,23 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         sections={toolbarSections}
         center={livePill}
       />
+      {/* The mobile top bar already carries the Live/Idle pill (center slot
+          via AxeTopBarInjector). On desktop we keep the AXE toolbar here but
+          DON'T re-render the pill — that produced two side-by-side LIVE pills
+          on phones, which looked redundant. */}
       <ScreenHeader
         title="Market context"
         subtitle={`Filtered by ${symbol}${ctx.symbols.length > 1 ? ` + ${ctx.symbols.length - 1} watch` : ""} — macro, news and calendar.`}
         left={<Globe2 className="h-6 w-6 text-cyan-400/85" aria-hidden />}
         right={
-          <div className="flex items-center gap-2">
+          <span className="hidden md:inline-flex items-center gap-2">
             {livePill}
-            <span className="hidden md:inline-flex">
-              <AxeContextToolbar
-                title="Market"
-                subtitle={`${symbol} context`}
-                sections={toolbarSections}
-              />
-            </span>
-          </div>
+            <AxeContextToolbar
+              title="Market"
+              subtitle={`${symbol} context`}
+              sections={toolbarSections}
+            />
+          </span>
         }
       />
 

@@ -9,6 +9,13 @@ type Props = {
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
   onUpdate: (annotation: ChartAnnotation) => void;
   onRemove?: (annotationId: string) => void;
+  /**
+   * Pixel X position of the future-projection cursor (chart-frame coords).
+   * When supplied, trendlines with `settings.extendRight` extrapolate to
+   * this X so the user can see where price would meet the line in the
+   * future. Falls back to the right edge of the SVG when null.
+   */
+  futureProjectionX?: number | null;
 };
 
 type TrendGeom = {
@@ -17,6 +24,10 @@ type TrendGeom = {
   ay: number;
   bx: number;
   by: number;
+  /** Extrapolated line tip when extendRight=true; same as bx/by otherwise. */
+  rx: number;
+  ry: number;
+  extend: boolean;
 };
 
 export function TrendlineAnnotationLayer({
@@ -24,6 +35,7 @@ export function TrendlineAnnotationLayer({
   canvasRef,
   onUpdate,
   onRemove,
+  futureProjectionX = null,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -93,12 +105,14 @@ export function TrendlineAnnotationLayer({
 
     function compute() {
       const h = canvasRef.current;
+      const host = hostRef.current;
       if (!h) {
         setGeoms([]);
         return;
       }
       const lines = annotations.filter((a) => a.type === "trendline" && a.points.length >= 2);
       const next: TrendGeom[] = [];
+      const hostWidth = host?.getBoundingClientRect().width ?? 0;
       for (const ann of lines) {
         const a = ann.points[0];
         const b = ann.points[1];
@@ -107,7 +121,28 @@ export function TrendlineAnnotationLayer({
         const yA = h.priceToCoordinate(a.price);
         const yB = h.priceToCoordinate(b.price);
         if (xA == null || xB == null || yA == null || yB == null) continue;
-        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB });
+
+        // Honour `settings.extendRight`: project the slope forward so the
+        // line keeps going past the second swing all the way to the chart's
+        // right edge (or to the future-projection cursor when supplied).
+        // Without this the auto-trendline visually "stops" between the two
+        // swings — way too short for trade planning.
+        const extend = Boolean(
+          ann.settings && (ann.settings as Record<string, unknown>).extendRight,
+        );
+        let rx = xB;
+        let ry = yB;
+        if (extend) {
+          const targetX = futureProjectionX != null && futureProjectionX > xB
+            ? futureProjectionX
+            : Math.max(hostWidth - 4, xB);
+          if (Math.abs(xB - xA) > 0.0001) {
+            const slope = (yB - yA) / (xB - xA);
+            rx = targetX;
+            ry = yB + slope * (targetX - xB);
+          }
+        }
+        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB, rx, ry, extend });
       }
       setGeoms(next);
     }
@@ -115,7 +150,7 @@ export function TrendlineAnnotationLayer({
     compute();
     const unsubscribe = handle.subscribeViewport(compute);
     return unsubscribe;
-  }, [annotations, canvasRef]);
+  }, [annotations, canvasRef, futureProjectionX]);
 
   function startDrag(e: React.PointerEvent<SVGCircleElement>, annotationId: string, handleIdx: 0 | 1) {
     e.stopPropagation();
@@ -184,6 +219,7 @@ export function TrendlineAnnotationLayer({
           const my = (g.ay + g.by) / 2;
           return (
             <g key={g.id}>
+              {/* Solid segment between the two anchor swings */}
               <line
                 x1={g.ax}
                 y1={g.ay}
@@ -194,6 +230,23 @@ export function TrendlineAnnotationLayer({
                 strokeLinecap="round"
                 pointerEvents="none"
               />
+
+              {/* Right-side projection: keeps the slope but at slightly
+                  reduced opacity, so the future ray reads as "guide" rather
+                  than confirmed history. */}
+              {g.extend ? (
+                <line
+                  x1={g.bx}
+                  y1={g.by}
+                  x2={g.rx}
+                  y2={g.ry}
+                  stroke={isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)"}
+                  strokeWidth={isActive ? 1.8 : 1.5}
+                  strokeLinecap="round"
+                  strokeDasharray="2 4"
+                  pointerEvents="none"
+                />
+              ) : null}
 
               {/* Handles only render when the line is "active" — first draw
                   auto-activates so dots appear, tapping the chart locks it. */}
@@ -223,12 +276,13 @@ export function TrendlineAnnotationLayer({
               ) : null}
 
               {/* Invisible hit-line so the user can re-select the trendline
-                  by tapping it after it has been locked. */}
+                  by tapping it after it has been locked. Hit area covers the
+                  extension as well so the projection ray is also tappable. */}
               <line
                 x1={g.ax}
                 y1={g.ay}
-                x2={g.bx}
-                y2={g.by}
+                x2={g.rx}
+                y2={g.ry}
                 stroke="transparent"
                 strokeWidth={18}
                 pointerEvents="stroke"

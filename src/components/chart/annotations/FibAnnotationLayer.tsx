@@ -19,6 +19,13 @@ type Props = {
   onUpdate: (annotation: ChartAnnotation) => void;
   /** Remove a single annotation. */
   onRemove?: (annotationId: string) => void;
+  /**
+   * Pixel X position of the future-projection cursor (chart-frame coords).
+   * When provided, fib retracements with `settings.extendRight` extend
+   * their lines all the way to this X — so the trader can see the
+   * intersection between the next candle and a level.
+   */
+  futureProjectionX?: number | null;
 };
 
 type FibLineGeom = {
@@ -31,6 +38,8 @@ type FibGeom = {
   id: string;
   startX: number;
   endX: number;
+  /** Right-most X for level lines and price labels (= endX or projection). */
+  rightX: number;
   /** y at level=0 (anchor). */
   anchorY: number;
   /** y at level=1 (swing). */
@@ -38,6 +47,7 @@ type FibGeom = {
   anchorPrice: number;
   swingPrice: number;
   lines: FibLineGeom[];
+  extend: boolean;
 };
 
 /**
@@ -56,6 +66,7 @@ export function FibAnnotationLayer({
   digits,
   onUpdate,
   onRemove,
+  futureProjectionX = null,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -93,12 +104,14 @@ export function FibAnnotationLayer({
 
     function compute() {
       const h = canvasRef.current;
+      const host = hostRef.current;
       if (!h) {
         setGeoms([]);
         return;
       }
       const fibs = annotations.filter((a) => a.type === "fib_retracement" && a.points.length >= 2);
       const next: FibGeom[] = [];
+      const hostWidth = host?.getBoundingClientRect().width ?? 0;
       for (const ann of fibs) {
         const a = ann.points[0];
         const b = ann.points[1];
@@ -117,15 +130,31 @@ export function FibAnnotationLayer({
           const y = anchorY + (swingY - anchorY) * lvl;
           return { level: lvl, y, price };
         });
+        const extend = Boolean(
+          ann.settings && (ann.settings as Record<string, unknown>).extendRight,
+        );
+        // Stretch level lines past the swing so the user can see exactly
+        // where price will cross each retracement. Without this the auto
+        // fib looks like a static box stuck in the middle of the chart.
+        const rightX = extend
+          ? Math.max(
+              endX,
+              futureProjectionX != null && futureProjectionX > endX
+                ? futureProjectionX
+                : Math.max(hostWidth - 4, endX),
+            )
+          : endX;
         next.push({
           id: ann.id,
           startX,
           endX,
+          rightX,
           anchorY,
           swingY,
           anchorPrice: a.price,
           swingPrice: b.price,
           lines,
+          extend,
         });
       }
       setGeoms(next);
@@ -134,7 +163,7 @@ export function FibAnnotationLayer({
     compute();
     const unsubscribe = handle.subscribeViewport(compute);
     return unsubscribe;
-  }, [annotations, canvasRef]);
+  }, [annotations, canvasRef, futureProjectionX]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -256,9 +285,13 @@ export function FibAnnotationLayer({
         {geoms.map((g) => {
           const isActive = activeId === g.id;
           const labelLeftX = Math.max(8, g.startX - 6);
-          const labelRightX = Math.min(containerSize.w - 8, g.endX + 6);
+          const labelRightX = Math.min(containerSize.w - 8, g.rightX + 6);
           const removeX = Math.max(8, g.startX - 30);
           const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
+          // The "trade range" rectangle stays bound to the original anchor
+          // ↔ swing region — only the level lines extend right so the
+          // visual leg matches the swing measured, while price guidance
+          // projects forward.
           return (
             <g key={g.id}>
               {/* Translucent fill between 0 and 1 to mark the trade range */}
@@ -297,6 +330,7 @@ export function FibAnnotationLayer({
                       onPointerDown={(e) => startDrag(e, g.id, "body")}
                       style={{ cursor: "move", touchAction: "none" }}
                     />
+                    {/* Solid segment within the swing range */}
                     <line
                       x1={g.startX}
                       x2={g.endX}
@@ -307,6 +341,21 @@ export function FibAnnotationLayer({
                       strokeDasharray={isOuter ? "" : "4 3"}
                       pointerEvents="none"
                     />
+                    {/* Right projection — softer/dashed so the future ray
+                        reads as guidance, not confirmed history. */}
+                    {g.extend && g.rightX > g.endX ? (
+                      <line
+                        x1={g.endX}
+                        x2={g.rightX}
+                        y1={ln.y}
+                        y2={ln.y}
+                        stroke={stroke}
+                        strokeWidth={isOuter || isMid ? 0.9 : 0.7}
+                        strokeDasharray="2 4"
+                        opacity={0.7}
+                        pointerEvents="none"
+                      />
+                    ) : null}
                     {/* Percentage label — left side */}
                     <text
                       x={labelLeftX}
@@ -320,7 +369,7 @@ export function FibAnnotationLayer({
                     >
                       {(ln.level * 100).toFixed(1).replace(".", ",")}%
                     </text>
-                    {/* Price label — right side */}
+                    {/* Price label — right side, anchored on rightX */}
                     <text
                       x={labelRightX}
                       y={ln.y - 3}

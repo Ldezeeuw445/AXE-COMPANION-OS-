@@ -39,7 +39,16 @@ function badgeVariantForType(type: string): "price" | "news" | "risk" | "warm" |
   return "neutral";
 }
 
-function deliveryPill(status: PushStatus | null): { label: string; className: string; dot: string } {
+type DeliveryDescriptor = {
+  /** Long form for desktop / inline display. */
+  label: string;
+  /** Short form for the mobile top-bar (must fit beside AXE wordmark). */
+  short: string;
+  className: string;
+  dot: string;
+};
+
+function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
   // AXE Companion alerts are evaluated in-app: the chart screen watches live
   // ticks and trips alerts even when web-push is unavailable. So the default
   // "delivery" status is in-app-on-this-device, and push (if configured) is
@@ -47,6 +56,7 @@ function deliveryPill(status: PushStatus | null): { label: string; className: st
   if (!status) {
     return {
       label: "Delivery: in-app",
+      short: "Live",
       className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
       dot: "bg-cyan-300/85",
     };
@@ -54,19 +64,22 @@ function deliveryPill(status: PushStatus | null): { label: string; className: st
   if (status.vapidConfigured && status.hasSubscription) {
     return {
       label: "Delivery: push + in-app",
+      short: "Push",
       className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95",
       dot: "bg-emerald-300/85",
     };
   }
   if (status.vapidConfigured) {
     return {
-      label: "Delivery: in-app (enable push)",
+      label: "Delivery: in-app · enable push",
+      short: "Live",
       className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
       dot: "bg-cyan-300/85",
     };
   }
   return {
     label: "Delivery: in-app",
+    short: "Live",
     className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
     dot: "bg-cyan-300/85",
   };
@@ -269,12 +282,17 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
 
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
+    // Compact pill for the mobile top bar — the long "Delivery: in-app" string
+    // overlapped the AXE wordmark on iPhone widths, so we show just the dot +
+    // a short status label here. The full label still appears on desktop and
+    // inline next to the "Create alert" form below.
     setCenter(
       <span
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${delivery.className}`}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-[3px] text-[10px] font-semibold uppercase tracking-wider ${delivery.className}`}
+        title={delivery.label}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${delivery.dot}`} aria-hidden />
-        {delivery.label}
+        {delivery.short}
       </span>,
     );
     setRight(
@@ -288,7 +306,16 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       setCenter(null);
       setRight(null);
     };
-  }, [setCenter, setRight, delivery.className, delivery.dot, delivery.label, focusSymbol, toolbarSections]);
+  }, [
+    setCenter,
+    setRight,
+    delivery.className,
+    delivery.dot,
+    delivery.label,
+    delivery.short,
+    focusSymbol,
+    toolbarSections,
+  ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">

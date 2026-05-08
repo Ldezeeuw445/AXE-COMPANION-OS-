@@ -5,11 +5,30 @@ import type {
 
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
+/** URL-key → seconds-per-bar so we can aggregate higher timeframes. */
+const TF_SECONDS: Record<string, number> = {
+  m1: 60,
+  m5: 300,
+  m15: 900,
+  m30: 1800,
+  h1: 3600,
+  h4: 14400,
+  d1: 86400,
+};
+
 type SwingAnchor = {
   type: "high" | "low";
   index: number;
   time: number;
   price: number;
+};
+
+type NormCandle = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 };
 
 export function buildFibonacciActionFromCandles(input: {
@@ -22,13 +41,20 @@ export function buildFibonacciActionFromCandles(input: {
   lookback?: number;
   strength?: number;
 }): ChartActionCommand {
-  const pair = findRecentSwingPair(input.candles, {
+  // Auto-Fib should anchor on the LATEST trend leg of the active timeframe:
+  //   • bullish trend → 0% on the most recent HH, 100% on the HL preceding it
+  //     so the retracement levels show the pullback inside the impulse,
+  //   • bearish trend → 0% on the most recent LL, 100% on the LH preceding it.
+  // This matches what MT5 traders draw by hand and avoids the "fib in the
+  // middle of the chart" we saw on H1.
+  const trend = findLatestTrendLegOnActiveTf(input.candles, {
     lookback: input.lookback,
     strength: input.strength,
   });
-  const anchorA = pair.low.index <= pair.high.index ? pair.low : pair.high;
-  const anchorB = pair.low.index <= pair.high.index ? pair.high : pair.low;
-  const direction = anchorA.type === "low" && anchorB.type === "high" ? "up" : "down";
+
+  const direction = trend.direction;
+  const anchorA = direction === "up" ? trend.swing : trend.retrace; // 0%
+  const anchorB = direction === "up" ? trend.retrace : trend.swing; // 100%
   const high = Math.max(anchorA.price, anchorB.price);
   const low = Math.min(anchorA.price, anchorB.price);
   const range = high - low;
@@ -47,14 +73,18 @@ export function buildFibonacciActionFromCandles(input: {
         { time: anchorB.time, price: anchorB.price },
       ],
       direction,
+      // The annotation layer reads these so the lines/labels project past
+      // the last candle (matches MT5's "right ray" behaviour) — handy for
+      // seeing exactly when price will hit each retracement.
+      settings: { extendRight: true, source: input.source },
       levels: FIB_LEVELS.map((level) => ({
         level,
         price: Number((direction === "up" ? high - range * level : low + range * level).toFixed(8)),
       })),
       explanation:
         direction === "up"
-          ? "AXE mapped Fibonacci over the latest confirmed swing up."
-          : "AXE mapped Fibonacci over the latest confirmed swing down.",
+          ? "AXE mapped Fibonacci over the latest HL → HH leg."
+          : "AXE mapped Fibonacci over the latest LH → LL leg.",
     },
   };
 }
@@ -69,13 +99,14 @@ export function buildTrendlineActionFromCandles(input: {
   lookback?: number;
   strength?: number;
 }): ChartActionCommand {
-  // A proper "right" trendline connects two swings of the SAME type:
-  //  - two ascending swing LOWS  → rising support trendline (uptrend)
-  //  - two descending swing HIGHS → falling resistance trendline (downtrend)
-  // We pick whichever pair is more recent / clean so the user sees a line
-  // that visually matches the dominant move instead of a diagonal between a
-  // high and a low (which "randomly" cuts across price action).
-  const trend = findRecentSameTypeSwingPair(input.candles, {
+  // We aggregate the active-TF candles up to a higher timeframe before
+  // detecting swings. The user wants the line to reflect the dominant
+  // trend "from the 4H/D1 candles", not noise from M5/M15. Daily gives us
+  // the cleanest line; if we don't have enough D1 candles in the loaded
+  // window we drop down to H4. The line then renders across every
+  // timeframe (extendRight), so a trader switching from D1 → H1 keeps the
+  // same trendline projected forward.
+  const trend = findHigherTfTrendline(input.candles, input.timeframe, {
     lookback: input.lookback,
     strength: input.strength,
   });
@@ -94,44 +125,108 @@ export function buildTrendlineActionFromCandles(input: {
         { time: trend.later.time, price: trend.later.price },
       ],
       direction: trend.direction,
+      // Render the line all the way to the right edge of the chart.
+      // The annotation layer reads `extendRight` from settings.
+      settings: { extendRight: true, source: input.source, sourceTimeframe: trend.sourceTf },
       explanation:
         trend.direction === "up"
-          ? "AXE drew a rising trendline through the two most recent swing lows."
-          : "AXE drew a falling trendline through the two most recent swing highs.",
+          ? `AXE drew a rising ${trend.sourceTf.toUpperCase()} trendline through the two most recent swing lows.`
+          : `AXE drew a falling ${trend.sourceTf.toUpperCase()} trendline through the two most recent swing highs.`,
     },
   };
 }
 
 /**
- * Find two swings of the SAME type (both lows or both highs) in the recent
- * candles, choosing the pair that produces the cleanest trendline. We
- * compute pivots, then favour:
- *   • two swing lows that are ascending (uptrend support) — when the latest
- *     swing low is higher than the previous one,
- *   • or two swing highs that are descending (downtrend resistance) — when
- *     the latest swing high is lower than the previous one,
- * whichever happened more recently.
- *
- * If no clean pair is available we fall back to "first significant low → most
- * recent low" so the line still represents the dominant move instead of a
- * random diagonal.
+ * Bucket candles into windows of `targetSeconds` and emit OHLC bars per
+ * bucket. Used to look at 4H or D1 swings while the chart is rendering an
+ * intraday timeframe.
  */
-export function findRecentSameTypeSwingPair(
+function aggregateToHigherTf(candles: NormCandle[], targetSeconds: number): NormCandle[] {
+  if (candles.length === 0 || targetSeconds <= 0) return [];
+  const buckets = new Map<number, NormCandle[]>();
+  for (const candle of candles) {
+    const bucketStart = Math.floor(candle.time / targetSeconds) * targetSeconds;
+    const arr = buckets.get(bucketStart);
+    if (arr) arr.push(candle);
+    else buckets.set(bucketStart, [candle]);
+  }
+  const keys = Array.from(buckets.keys()).sort((a, b) => a - b);
+  return keys.map((key) => {
+    const group = buckets.get(key)!;
+    const sorted = [...group].sort((a, b) => a.time - b.time);
+    return {
+      time: key,
+      open: sorted[0].open,
+      high: Math.max(...sorted.map((c) => c.high)),
+      low: Math.min(...sorted.map((c) => c.low)),
+      close: sorted[sorted.length - 1].close,
+    };
+  });
+}
+
+/**
+ * Trendline detection that promotes to a higher timeframe before scanning
+ * for swings. Tries D1 first, then H4, then falls back to the active TF
+ * with same-type swing detection (rising lows or falling highs).
+ */
+function findHigherTfTrendline(
   candles: ChartActionCandle[],
+  activeTimeframe: string,
   options: { lookback?: number; strength?: number } = {},
-): { earlier: SwingAnchor; later: SwingAnchor; direction: "up" | "down" } {
-  const strength = options.strength ?? 3;
-  const visible = normalizeCandles(candles).slice(-(options.lookback ?? 200));
-  if (visible.length < strength * 2 + 4) {
-    throw new Error("Not enough candles for trendline detection.");
+): { earlier: SwingAnchor; later: SwingAnchor; direction: "up" | "down"; sourceTf: string } {
+  const normalized = normalizeCandles(candles);
+  const activeSec = TF_SECONDS[activeTimeframe.toLowerCase()] ?? 3600;
+
+  // Try a couple of higher timeframes in order — accept the first one that
+  // gives us a usable same-type swing pair. The minimum viable size is 12
+  // bars; below that swings can't be detected reliably.
+  const ladder: Array<{ key: string; seconds: number }> = [];
+  if (activeSec < TF_SECONDS.d1) ladder.push({ key: "d1", seconds: TF_SECONDS.d1 });
+  if (activeSec < TF_SECONDS.h4) ladder.push({ key: "h4", seconds: TF_SECONDS.h4 });
+  ladder.push({ key: activeTimeframe.toLowerCase(), seconds: activeSec });
+
+  for (const step of ladder) {
+    const series = step.seconds === activeSec
+      ? normalized
+      : aggregateToHigherTf(normalized, step.seconds);
+    if (series.length < 12) continue;
+    const pair = pickSameTypePair(series, options.strength ?? 3);
+    if (pair) return { ...pair, sourceTf: step.key };
   }
 
+  // Final fallback: synthesise a line from absolute extremes so the user at
+  // least sees something meaningful instead of an error toast.
+  const fallback = fallbackRangeFromNorm(normalized);
+  const earlier: SwingAnchor =
+    fallback.low.index <= fallback.high.index ? fallback.low : fallback.high;
+  const later: SwingAnchor =
+    fallback.low.index <= fallback.high.index ? fallback.high : fallback.low;
+  return {
+    earlier,
+    later,
+    direction: earlier.type === "low" ? "up" : "down",
+    sourceTf: activeTimeframe,
+  };
+}
+
+/**
+ * On a (possibly aggregated) candle series, find the most recent pair of
+ * same-type swings that visually represents the trend. Prefers ascending
+ * lows (uptrend) or descending highs (downtrend); falls back to the
+ * earliest→latest same-type pair if no clean monotonic pair exists.
+ */
+function pickSameTypePair(
+  series: NormCandle[],
+  strength: number,
+): { earlier: SwingAnchor; later: SwingAnchor; direction: "up" | "down" } | null {
+  if (series.length < strength * 2 + 4) return null;
+
   const pivots: SwingAnchor[] = [];
-  for (let index = strength; index < visible.length - strength; index += 1) {
-    const candle = visible[index];
+  for (let index = strength; index < series.length - strength; index += 1) {
+    const candle = series[index];
     const neighbors = [
-      ...visible.slice(index - strength, index),
-      ...visible.slice(index + 1, index + strength + 1),
+      ...series.slice(index - strength, index),
+      ...series.slice(index + 1, index + strength + 1),
     ];
     if (neighbors.every((other) => candle.high > other.high)) {
       pivots.push({ type: "high", index, time: candle.time, price: candle.high });
@@ -144,7 +239,6 @@ export function findRecentSameTypeSwingPair(
   const lows = pivots.filter((p) => p.type === "low");
   const highs = pivots.filter((p) => p.type === "high");
 
-  // Prefer the most-recent ascending pair of lows OR descending pair of highs.
   const lastLow = lows.at(-1);
   const prevLow = lows.length >= 2 ? lows[lows.length - 2] : null;
   const lastHigh = highs.at(-1);
@@ -165,18 +259,101 @@ export function findRecentSameTypeSwingPair(
   if (upPair) return upPair;
   if (downPair) return downPair;
 
-  // Fallback: pick whichever same-type pair we have, even if it isn't a clean
-  // ascending/descending line — still better than a high↔low diagonal.
   if (lows.length >= 2) return { earlier: lows[0], later: lows.at(-1)!, direction: "up" as const };
   if (highs.length >= 2) return { earlier: highs[0], later: highs.at(-1)!, direction: "down" as const };
 
-  // No pivots at all — synthesise from absolute extremes.
-  const fallback = fallbackRange(visible);
-  const earlier = fallback.low.index <= fallback.high.index ? fallback.low : fallback.high;
-  const later = fallback.low.index <= fallback.high.index ? fallback.high : fallback.low;
-  return { earlier, later, direction: earlier.type === "low" ? "up" : "down" };
+  return null;
 }
 
+/**
+ * Find the latest "trend leg" on the active timeframe. We look at the last
+ * two same-type swings: if the last two highs are ascending we're in an
+ * uptrend → leg = HL → HH; if descending → downtrend → leg = LH → LL.
+ * The retracement is anchored on the opposite-type swing immediately
+ * preceding the dominant swing.
+ */
+export function findLatestTrendLegOnActiveTf(
+  candles: ChartActionCandle[],
+  options: { lookback?: number; strength?: number } = {},
+): { swing: SwingAnchor; retrace: SwingAnchor; direction: "up" | "down" } {
+  const strength = options.strength ?? 3;
+  const visible = normalizeCandles(candles).slice(-(options.lookback ?? 220));
+  if (visible.length < strength * 2 + 4) {
+    throw new Error("Not enough candles to detect a trend leg.");
+  }
+
+  const pivots: SwingAnchor[] = [];
+  for (let index = strength; index < visible.length - strength; index += 1) {
+    const candle = visible[index];
+    const neighbors = [
+      ...visible.slice(index - strength, index),
+      ...visible.slice(index + 1, index + strength + 1),
+    ];
+    if (neighbors.every((other) => candle.high > other.high)) {
+      pivots.push({ type: "high", index, time: candle.time, price: candle.high });
+    }
+    if (neighbors.every((other) => candle.low < other.low)) {
+      pivots.push({ type: "low", index, time: candle.time, price: candle.low });
+    }
+  }
+
+  const highs = pivots.filter((p) => p.type === "high");
+  const lows = pivots.filter((p) => p.type === "low");
+
+  const lastHigh = highs.at(-1);
+  const prevHigh = highs.length >= 2 ? highs[highs.length - 2] : null;
+  const lastLow = lows.at(-1);
+  const prevLow = lows.length >= 2 ? lows[lows.length - 2] : null;
+
+  // Decide direction by which "structure leg" is most recent. If the latest
+  // pivot is a high AND that high is greater than the previous high → HH
+  // confirmed → uptrend. If latest pivot is a low AND lower than previous low
+  // → LL confirmed → downtrend.
+  const latestPivot = pivots.at(-1);
+
+  const upTrend =
+    lastHigh && prevHigh && lastHigh.price > prevHigh.price && latestPivot?.type === "high";
+  const downTrend =
+    lastLow && prevLow && lastLow.price < prevLow.price && latestPivot?.type === "low";
+
+  if (upTrend && lastHigh) {
+    // HL = the most recent low between prevHigh and lastHigh.
+    const hl = lows
+      .filter((l) => prevHigh && l.index > prevHigh.index && l.index < lastHigh.index)
+      .at(-1) ?? lows.at(-2) ?? lows.at(-1);
+    if (hl) return { swing: lastHigh, retrace: hl, direction: "up" };
+  }
+
+  if (downTrend && lastLow) {
+    const lh = highs
+      .filter((h) => prevLow && h.index > prevLow.index && h.index < lastLow.index)
+      .at(-1) ?? highs.at(-2) ?? highs.at(-1);
+    if (lh) return { swing: lastLow, retrace: lh, direction: "down" };
+  }
+
+  // Fallback: when neither HH nor LL pattern is fresh, fall back to the
+  // most recent confirmed leg (high → low or low → high) by alternating
+  // pivots from the tail.
+  for (let i = pivots.length - 1; i >= 1; i -= 1) {
+    const a = pivots[i - 1];
+    const b = pivots[i];
+    if (a.type === b.type) continue;
+    if (b.type === "high") return { swing: b, retrace: a, direction: "up" };
+    return { swing: b, retrace: a, direction: "down" };
+  }
+
+  // Absolute extremes fallback.
+  const fallback = fallbackRangeFromNorm(visible);
+  const isUp = fallback.high.index >= fallback.low.index;
+  return isUp
+    ? { swing: fallback.high, retrace: fallback.low, direction: "up" }
+    : { swing: fallback.low, retrace: fallback.high, direction: "down" };
+}
+
+/**
+ * Backwards-compat helper used by older callers. Returns one low + one high
+ * (most recent confirmed pair).
+ */
 export function findRecentSwingPair(
   candles: ChartActionCandle[],
   options: { lookback?: number; strength?: number; minSeparation?: number } = {},
@@ -219,10 +396,20 @@ export function findRecentSwingPair(
     }
   }
 
-  return fallbackRange(visible);
+  const fallback = fallbackRangeFromNorm(visible);
+  return { low: fallback.low, high: fallback.high };
 }
 
-function normalizeCandles(candles: ChartActionCandle[]) {
+/** Older callers reach for this name — kept as a thin alias. */
+export function findRecentSameTypeSwingPair(
+  candles: ChartActionCandle[],
+  options: { lookback?: number; strength?: number } = {},
+): { earlier: SwingAnchor; later: SwingAnchor; direction: "up" | "down" } {
+  const result = findHigherTfTrendline(candles, "h1", options);
+  return { earlier: result.earlier, later: result.later, direction: result.direction };
+}
+
+function normalizeCandles(candles: ChartActionCandle[]): NormCandle[] {
   return candles
     .map((candle) => ({
       time: normalizeTime(candle.time),
@@ -233,16 +420,10 @@ function normalizeCandles(candles: ChartActionCandle[]) {
     }))
     .filter((candle) => candle.time != null)
     .filter((candle) => [candle.open, candle.high, candle.low, candle.close].every(Number.isFinite))
-    .sort((a, b) => Number(a.time) - Number(b.time)) as Array<{
-      time: number;
-      open: number;
-      high: number;
-      low: number;
-      close: number;
-    }>;
+    .sort((a, b) => Number(a.time) - Number(b.time)) as NormCandle[];
 }
 
-function fallbackRange(candles: ReturnType<typeof normalizeCandles>): { low: SwingAnchor; high: SwingAnchor } {
+function fallbackRangeFromNorm(candles: NormCandle[]): { low: SwingAnchor; high: SwingAnchor } {
   let low: SwingAnchor = { type: "low", index: 0, time: candles[0].time, price: candles[0].low };
   let high: SwingAnchor = { type: "high", index: 0, time: candles[0].time, price: candles[0].high };
   candles.forEach((candle, index) => {

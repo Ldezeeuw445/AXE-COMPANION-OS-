@@ -11,7 +11,7 @@ type Props = {
     ma?: boolean;
     structure?: boolean;
     orderBlocks?: boolean;
-    /** Auto Fair Value Gap zones (bullish + bearish, latest 8). */
+    /** Auto Fair Value Gap zones (bullish + bearish, latest only). */
     fvg?: boolean;
     /** Inverse FVG: gaps that have been broken/inverted by later price. */
     ifvg?: boolean;
@@ -20,18 +20,64 @@ type Props = {
     /** Previous Day Low — horizontal line drawn across the entire chart. */
     pdl?: boolean;
   };
+  /**
+   * Future-projection cursor X (chart-frame coords). When provided, the
+   * iFVG / FVG / OB extensions stretch right to this X so the user can see
+   * exactly when the next candles will hit the zone.
+   */
+  futureProjectionX?: number | null;
 };
 
 type Size = { w: number; h: number };
 type Point = { x: number; y: number };
-type IndicatorCandle = { time: number | null; open: number; high: number; low: number; close: number };
+type IndicatorCandle = {
+  time: number | null;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  tickVolume: number | null;
+  volume: number | null;
+};
 type StructurePivot = { index: number; time: number; price: number; kind: "high" | "low" };
 type StructureLabel = { x: number; y: number; label: string; kind: "high" | "low" };
 type StructureLine = { x1: number; x2: number; y: number; label: string; bullish: boolean; continuation: boolean };
-type StructureBox = { x: number; y: number; width: number; height: number; stroke: string; fill: string };
+/**
+ * A "zone" is a horizontal band rendered on the chart (OB, FVG, iFVG).
+ * Both the price-domain and pixel-domain are kept so we can compute
+ * derived geometry like midlines or volume profiles cleanly.
+ */
+type Zone = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Pixel X of the projected right edge (≥ x + width). Used for extensions. */
+  extendX: number;
+  /** Original detected end X (kept dashed for iFVG so the user sees the source). */
+  detectionEndX: number;
+  midY: number;
+  stroke: string;
+  fill: string;
+  /** True when the inner fill should bleed past detectionEndX without a stroke. */
+  extend: boolean;
+  /** True when this zone was reclaimed/mitigated and should fade out instead. */
+  mitigated: boolean;
+  /** Volume profile bars to render on the left edge (only OB has these). */
+  volumeProfile?: VolumeProfileBar[];
+};
+type VolumeProfileBar = { y: number; height: number; widthFraction: number };
 type StructureArrow = { x: number; y: number; label: string; bullish: boolean };
 
-export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
+/**
+ * Extra pixel breathing room past the most recent candle for iFVG / OB
+ * extensions when the future-projection cursor isn't set. Matches the
+ * trader's "5 bars in front" mental model — sized via the loaded series'
+ * average spacing instead of a hard-coded number of pixels.
+ */
+const MIN_FUTURE_BARS = 5;
+
+export function ChartIndicatorLayer({ candles, canvasRef, active, futureProjectionX = null }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [version, setVersion] = useState(0);
@@ -61,14 +107,14 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
     if (!handle || size.w <= 0 || size.h <= 0) {
       return {
         maPath: "",
-        structureLabels: [],
-        structureLines: [],
-        orderBlocks: [],
-        fairValueGaps: [],
-        inverseFairValueGaps: [],
+        structureLabels: [] as StructureLabel[],
+        structureLines: [] as StructureLine[],
+        orderBlocks: [] as Zone[],
+        fairValueGaps: [] as Zone[],
+        inverseFairValueGaps: [] as Zone[],
         previousDayHigh: null as { y: number; price: number } | null,
         previousDayLow: null as { y: number; price: number } | null,
-        swingFailures: [],
+        swingFailures: [] as StructureArrow[],
         equilibriumLine: null as { y: number } | null,
       };
     }
@@ -81,9 +127,19 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
         close: Number(candle.close),
         high: Number(candle.high),
         low: Number(candle.low),
+        tickVolume: candle.tickVolume != null ? Number(candle.tickVolume) : null,
+        volume: candle.volume != null ? Number(candle.volume) : null,
       }))
       .filter((candle) => candle.time != null)
       .filter((candle) => [candle.close, candle.high, candle.low].every(Number.isFinite));
+
+    const visibleWithTime = visible as Array<IndicatorCandle & { time: number }>;
+    const futureExtensionX = computeFutureExtensionX(
+      visibleWithTime,
+      handle,
+      size.w,
+      futureProjectionX,
+    );
 
     const ma = sma(visible.map((candle) => candle.close), 20);
     const maPoints: Point[] = visible
@@ -96,10 +152,10 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
       })
       .filter(Boolean) as Point[];
 
-    const structureOverlay = buildStructureOverlay(visible, handle);
-    const inverseFairValueGaps = buildInverseFvgs(visible as Array<IndicatorCandle & { time: number }>, handle, size.w);
+    const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX);
+    const inverseFairValueGaps = buildInverseFvgs(visibleWithTime, handle, size.w, futureExtensionX);
     const { high: previousDayHigh, low: previousDayLow } = buildPreviousDayLevels(
-      visible as Array<IndicatorCandle & { time: number }>,
+      visibleWithTime,
       handle,
     );
 
@@ -115,71 +171,26 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
       swingFailures: structureOverlay.swingFailures,
       equilibriumLine: structureOverlay.equilibriumLine,
     };
-  }, [candles, canvasRef, size.h, size.w, version]);
+  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
       <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
         {active.orderBlocks
-          ? geometry.orderBlocks.map((box, index) => (
-              <rect
-                key={`ob-${index}`}
-                x={box.x}
-                y={box.y}
-                width={box.width}
-                height={box.height}
-                fill={box.fill}
-                stroke={box.stroke}
-                strokeWidth={1}
-                rx={3}
-              />
+          ? geometry.orderBlocks.map((zone, index) => (
+              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" />
             ))
           : null}
 
         {active.fvg
-          ? geometry.fairValueGaps.map((box, index) => (
-              <rect
-                key={`fvg-${index}`}
-                x={box.x}
-                y={box.y}
-                width={box.width}
-                height={box.height}
-                fill={box.fill}
-                stroke={box.stroke}
-                strokeWidth={1}
-                rx={2}
-              />
+          ? geometry.fairValueGaps.map((zone, index) => (
+              <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" />
             ))
           : null}
 
         {active.ifvg
-          ? geometry.inverseFairValueGaps.map((box, index) => (
-              <g key={`ifvg-${index}`}>
-                <rect
-                  x={box.x}
-                  y={box.y}
-                  width={box.width}
-                  height={box.height}
-                  fill={box.fill}
-                  stroke={box.stroke}
-                  strokeWidth={1}
-                  strokeDasharray="3 3"
-                  rx={2}
-                />
-                <text
-                  x={box.x + 4}
-                  y={box.y + 10}
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="9"
-                  fontWeight="700"
-                  fill={box.stroke}
-                  stroke="rgba(0,0,0,0.78)"
-                  strokeWidth="2.5"
-                  paintOrder="stroke"
-                >
-                  iFVG
-                </text>
-              </g>
+          ? geometry.inverseFairValueGaps.map((zone, index) => (
+              <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" />
             ))
           : null}
 
@@ -329,6 +340,99 @@ export function ChartIndicatorLayer({ candles, canvasRef, active }: Props) {
   );
 }
 
+/**
+ * Single-zone renderer used by OB / FVG / iFVG. Variants only change the
+ * stroke style (iFVG keeps a dashed border on the detected portion;
+ * OB/FVG are solid). Every variant gets a 50% midline so traders can
+ * eyeball the equilibrium of the zone.
+ */
+function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg" }) {
+  const labelText = variant === "ifvg" ? "iFVG" : variant === "fvg" ? "FVG" : "OB";
+  const fadeFactor = zone.mitigated ? 0.45 : 1;
+  const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
+  const detectionEndX = zone.x + detectionWidth;
+  // The "extension" segment (right of the detected zone) gets a softer fill
+  // and NO border — that matches the user's mental model: the dashed/solid
+  // border anchors where the imbalance lives, the colour bleed shows where
+  // it might still matter going forward.
+  const extensionStartX = detectionEndX;
+  const extensionWidth = Math.max(0, zone.extendX - extensionStartX);
+  return (
+    <g opacity={fadeFactor}>
+      {/* Detected zone — solid for OB/FVG, dashed for iFVG (the user asked
+          to keep the "dot line" exactly where the inversion happened). */}
+      <rect
+        x={zone.x}
+        y={zone.y}
+        width={Math.max(2, detectionWidth)}
+        height={zone.height}
+        fill={zone.fill}
+        stroke={zone.stroke}
+        strokeWidth={1}
+        strokeDasharray={variant === "ifvg" ? "3 3" : undefined}
+        rx={variant === "ob" ? 3 : 2}
+      />
+      {/* Extension fill — same colour family but a touch more saturated so
+          it still reads on a dark chart, no stroke. Only renders when
+          the zone isn't mitigated AND we have meaningful extra width. */}
+      {zone.extend && extensionWidth > 1 ? (
+        <rect
+          x={extensionStartX}
+          y={zone.y}
+          width={extensionWidth}
+          height={zone.height}
+          fill={zone.fill}
+          opacity={0.85}
+          rx={0}
+        />
+      ) : null}
+      {/* Volumetric profile (OB only) — lightweight horizontal bars on the
+          left edge, scaled so the most-traded price level is widest. */}
+      {variant === "ob" && zone.volumeProfile && zone.volumeProfile.length > 0 ? (
+        <g>
+          {zone.volumeProfile.map((bar, index) => (
+            <rect
+              key={index}
+              x={zone.x}
+              y={bar.y}
+              width={Math.max(2, detectionWidth * bar.widthFraction * 0.55)}
+              height={Math.max(1, bar.height)}
+              fill={zone.stroke}
+              opacity={0.42}
+            />
+          ))}
+        </g>
+      ) : null}
+      {/* 50% midline — visible enough to read but never dominant. */}
+      <line
+        x1={zone.x}
+        x2={zone.extendX}
+        y1={zone.midY}
+        y2={zone.midY}
+        stroke={zone.stroke}
+        strokeWidth={0.85}
+        strokeDasharray="4 3"
+        opacity={0.85}
+      />
+      {variant === "ifvg" ? (
+        <text
+          x={zone.x + 4}
+          y={zone.y + 10}
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+          fontSize="9"
+          fontWeight="700"
+          fill={zone.stroke}
+          stroke="rgba(0,0,0,0.78)"
+          strokeWidth="2.5"
+          paintOrder="stroke"
+        >
+          {labelText}
+        </text>
+      ) : null}
+    </g>
+  );
+}
+
 function toTime(raw: string): number | null {
   const ms = Date.parse(raw);
   return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
@@ -344,6 +448,46 @@ function sma(values: number[], period: number): Array<number | null> {
     const slice = values.slice(index + 1 - period, index + 1);
     return slice.reduce((sum, value) => sum + value, 0) / period;
   });
+}
+
+/**
+ * Compute the X position the iFVG / OB extensions should reach. Defaults
+ * to "5 bars past the last candle" using the average pixel-per-bar spacing
+ * inferred from the last few candles. When a user-controlled
+ * future-projection cursor exists we let it win as long as it's further
+ * right than the default.
+ */
+function computeFutureExtensionX(
+  candles: Array<IndicatorCandle & { time: number }>,
+  handle: ChartCanvasHandle,
+  chartWidth: number,
+  futureProjectionX: number | null,
+): number {
+  if (candles.length === 0) return chartWidth - 4;
+  const lastTime = candles[candles.length - 1].time;
+  const lastX = handle.timeToCoordinate(lastTime);
+  if (lastX == null) return chartWidth - 4;
+
+  // Estimate bar pixel width from the last few candles. Robust against
+  // weekend gaps because we use the median of the sampled deltas.
+  const sample: number[] = [];
+  for (let i = Math.max(1, candles.length - 12); i < candles.length; i += 1) {
+    const here = handle.timeToCoordinate(candles[i].time);
+    const before = handle.timeToCoordinate(candles[i - 1].time);
+    if (here != null && before != null) {
+      const delta = here - before;
+      if (Number.isFinite(delta) && delta > 0) sample.push(delta);
+    }
+  }
+  const median = sample.length === 0 ? 8 : sample.sort((a, b) => a - b)[Math.floor(sample.length / 2)];
+  const minTarget = lastX + median * MIN_FUTURE_BARS;
+  // Cap at the right edge of the chart so we never overflow into the price
+  // axis gutter.
+  const cap = Math.max(0, chartWidth - 4);
+  if (futureProjectionX != null && futureProjectionX > minTarget && futureProjectionX <= cap) {
+    return futureProjectionX;
+  }
+  return Math.min(cap, Math.max(minTarget, lastX + median));
 }
 
 function structurePivots(candles: IndicatorCandle[]) {
@@ -396,11 +540,12 @@ function structurePivots(candles: IndicatorCandle[]) {
 function buildStructureOverlay(
   candles: IndicatorCandle[],
   handle: ChartCanvasHandle,
+  futureExtensionX: number,
 ): {
   labels: StructureLabel[];
   lines: StructureLine[];
-  orderBlocks: StructureBox[];
-  fairValueGaps: StructureBox[];
+  orderBlocks: Zone[];
+  fairValueGaps: Zone[];
   swingFailures: StructureArrow[];
   equilibriumLine: { y: number } | null;
 } {
@@ -447,8 +592,8 @@ function buildStructureOverlay(
 
   const lines: StructureLine[] = [];
   const swingFailures: StructureArrow[] = [];
-  const orderBlocks: StructureBox[] = [];
-  const fairValueGaps: StructureBox[] = [];
+  const orderBlocks: Zone[] = [];
+  const fairValueGaps: Zone[] = [];
   let lastHi: number | null = null;
   let lastHiIdx: number | null = null;
   let lastLo: number | null = null;
@@ -515,23 +660,45 @@ function buildStructureOverlay(
       const topY = handle.priceToCoordinate(top);
       const bottomY = handle.priceToCoordinate(bottom);
       if (x != null && x2 != null && topY != null && bottomY != null && Math.abs(bottomY - topY) > 1) {
-        if (candle.close > candle.open && previous.close < previous.open) {
+        const isBullishOb = candle.close > candle.open && previous.close < previous.open;
+        const isBearishOb = candle.close < candle.open && previous.close > previous.open;
+        if (isBullishOb || isBearishOb) {
+          // Walk forward and check whether the OB has been mitigated:
+          // bullish OB is mitigated when a later candle closes BELOW its
+          // bottom; bearish OB when a later closes ABOVE its top.
+          let mitigated = false;
+          for (let k = index + 1; k < visible.length; k += 1) {
+            if (isBullishOb && visible[k].close < bottom) {
+              mitigated = true;
+              break;
+            }
+            if (isBearishOb && visible[k].close > top) {
+              mitigated = true;
+              break;
+            }
+          }
+
+          const detectionEndX = x2;
+          const baseWidth = Math.max(6, x2 - x);
+          // Profile is built across all candles whose price range overlaps
+          // the OB band — we simply allocate tickVolume proportional to
+          // that overlap. Result is honest: nothing we don't have data
+          // for, no synthetic numbers.
+          const profile = mitigated ? undefined : buildVolumeProfile(visible, top, bottom, topY, bottomY);
+
           orderBlocks.push({
             x,
             y: Math.min(topY, bottomY),
-            width: Math.max(6, x2 - x),
+            width: baseWidth,
             height: Math.max(2, Math.abs(bottomY - topY)),
-            stroke: "rgba(45,212,191,0.65)",
-            fill: "rgba(45,212,191,0.18)",
-          });
-        } else if (candle.close < candle.open && previous.close > previous.open) {
-          orderBlocks.push({
-            x,
-            y: Math.min(topY, bottomY),
-            width: Math.max(6, x2 - x),
-            height: Math.max(2, Math.abs(bottomY - topY)),
-            stroke: "rgba(239,68,68,0.65)",
-            fill: "rgba(239,68,68,0.18)",
+            extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+            detectionEndX,
+            midY: (topY + bottomY) / 2,
+            stroke: isBullishOb ? "rgba(45,212,191,0.65)" : "rgba(239,68,68,0.65)",
+            fill: isBullishOb ? "rgba(45,212,191,0.18)" : "rgba(239,68,68,0.18)",
+            extend: !mitigated,
+            mitigated,
+            volumeProfile: profile,
           });
         }
       }
@@ -546,26 +713,54 @@ function buildStructureOverlay(
           const topY = handle.priceToCoordinate(candle.low);
           const bottomY = handle.priceToCoordinate(twoBack.high);
           if (topY != null && bottomY != null && Math.abs(bottomY - topY) > 1) {
+            // Bullish FVG mitigated when a later candle closes back BELOW
+            // its bottom (the gap got filled).
+            let mitigated = false;
+            for (let k = index + 1; k < visible.length; k += 1) {
+              if (visible[k].close < twoBack.high) {
+                mitigated = true;
+                break;
+              }
+            }
+            const detectionEndX = x2;
             fairValueGaps.push({
               x,
               y: Math.min(topY, bottomY),
               width: Math.max(4, x2 - x),
               height: Math.max(2, Math.abs(bottomY - topY)),
+              detectionEndX,
+              extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+              midY: (topY + bottomY) / 2,
               stroke: "rgba(8,153,129,0.34)",
               fill: "rgba(8,153,129,0.06)",
+              extend: !mitigated,
+              mitigated,
             });
           }
         } else if (candle.high < twoBack.low) {
           const topY = handle.priceToCoordinate(twoBack.low);
           const bottomY = handle.priceToCoordinate(candle.high);
           if (topY != null && bottomY != null && Math.abs(bottomY - topY) > 1) {
+            let mitigated = false;
+            for (let k = index + 1; k < visible.length; k += 1) {
+              if (visible[k].close > twoBack.low) {
+                mitigated = true;
+                break;
+              }
+            }
+            const detectionEndX = x2;
             fairValueGaps.push({
               x,
               y: Math.min(topY, bottomY),
               width: Math.max(4, x2 - x),
               height: Math.max(2, Math.abs(bottomY - topY)),
+              detectionEndX,
+              extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+              midY: (topY + bottomY) / 2,
               stroke: "rgba(242,54,69,0.34)",
               fill: "rgba(242,54,69,0.06)",
+              extend: !mitigated,
+              mitigated,
             });
           }
         }
@@ -594,8 +789,7 @@ function buildStructureOverlay(
     labels,
     lines: lines.slice(-8),
     orderBlocks: orderBlocks.slice(-6),
-    // Only render the most recent FVG so the chart stays readable on mobile —
-    // older gaps tend to be mitigated and add noise more than information.
+    // Show the most recent FVG only — older gaps are noise on mobile.
     fairValueGaps: fairValueGaps.slice(-1),
     swingFailures: swingFailures.slice(-6),
     equilibriumLine: equilibriumY == null ? null : { y: equilibriumY },
@@ -654,17 +848,84 @@ function averageRange(candles: Array<IndicatorCandle & { time: number }>): numbe
 }
 
 /**
- * Build inverse fair-value gaps. An IFVG is a 3-bar FVG that has since been
- * fully invaded by a later candle's close — i.e. the imbalance was
- * "reclaimed" and now flips polarity. We render the original FVG range with
- * a dashed border so the trader can see where the inversion happened.
+ * Build a horizontal volume profile bound to a single OB band. We bin
+ * volume by price level using each candle's tickVolume (or volume) and
+ * the overlap between the candle's [low, high] and the OB's [bottom,
+ * top]. Only candles that traded inside the band contribute. Returns the
+ * profile in pixel coordinates so the caller just renders rects.
+ */
+function buildVolumeProfile(
+  candles: Array<IndicatorCandle & { time: number }>,
+  bandTop: number,
+  bandBottom: number,
+  bandTopY: number,
+  bandBottomY: number,
+): VolumeProfileBar[] {
+  const top = Math.max(bandTop, bandBottom);
+  const bottom = Math.min(bandTop, bandBottom);
+  if (top <= bottom) return [];
+
+  const numBins = 8;
+  const bins = new Array(numBins).fill(0) as number[];
+  for (const c of candles) {
+    const overlapTop = Math.min(top, c.high);
+    const overlapBot = Math.max(bottom, c.low);
+    if (overlapTop <= overlapBot) continue;
+    const candleSpan = c.high - c.low;
+    if (candleSpan <= 0) continue;
+    const candleVol = (c.tickVolume ?? c.volume ?? 0) > 0 ? Number(c.tickVolume ?? c.volume ?? 0) : 0;
+    if (candleVol <= 0) continue;
+    const overlapFraction = (overlapTop - overlapBot) / candleSpan;
+    const allocated = candleVol * overlapFraction;
+    const binSize = (top - bottom) / numBins;
+    // Distribute the allocated volume across the bins covered by the
+    // overlap range. This is a uniform price distribution within the
+    // candle — honest given we don't have intra-bar tick data.
+    const overlapSpan = overlapTop - overlapBot;
+    if (overlapSpan <= 0 || binSize <= 0) continue;
+    for (let i = 0; i < numBins; i += 1) {
+      const binTop = top - i * binSize;
+      const binBot = top - (i + 1) * binSize;
+      const localTop = Math.min(binTop, overlapTop);
+      const localBot = Math.max(binBot, overlapBot);
+      if (localTop <= localBot) continue;
+      const portion = (localTop - localBot) / overlapSpan;
+      bins[i] += allocated * portion;
+    }
+  }
+
+  const maxBin = Math.max(...bins, 0);
+  if (maxBin <= 0) return [];
+
+  // bandTopY corresponds to `top`, bandBottomY to `bottom`. Map each bin
+  // (top-down) into its pixel slot.
+  const totalY = bandBottomY - bandTopY;
+  const slot = totalY / numBins;
+  return bins.map((value, index) => ({
+    y: bandTopY + index * slot,
+    height: Math.max(1, slot - 1),
+    widthFraction: maxBin === 0 ? 0 : Math.max(0, value / maxBin),
+  }));
+}
+
+/**
+ * Build inverse fair-value gaps. An IFVG is a 3-bar FVG that has since
+ * been fully invaded by a later candle's close — i.e. the imbalance was
+ * "reclaimed" and now flips polarity.
+ *
+ * Render rules:
+ *  • Detected portion (gap → inversion candle) keeps the dashed border.
+ *  • If still useful (no second mitigation), the inner colour bleeds
+ *    forward to the future-extension X with no border.
+ *  • A 50% midline is drawn so the trader can read the inflection.
  */
 function buildInverseFvgs(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
   chartWidth: number,
-): StructureBox[] {
-  const out: StructureBox[] = [];
+  futureExtensionX: number,
+): Zone[] {
+  const out: Zone[] = [];
   if (candles.length < 4) return out;
 
   for (let i = 2; i < candles.length; i += 1) {
@@ -672,78 +933,106 @@ function buildInverseFvgs(
     const c = candles[i];
 
     // Bullish FVG (gap up): c.low > a.high. Inverted when a later candle
-    // closes back BELOW a.high (the bottom of the gap).
+    // closes back BELOW a.high (the bottom of the gap). After inversion
+    // the zone behaves like resistance until price closes BACK above the
+    // gap top → "second mitigation" / fully consumed.
     if (c.low > a.high) {
       const gapTop = c.low;
       const gapBot = a.high;
       let invertedAt: number | null = null;
+      let invertedIdx: number | null = null;
       for (let k = i + 1; k < candles.length; k += 1) {
         if (candles[k].close < gapBot) {
           invertedAt = candles[k].time;
+          invertedIdx = k;
           break;
         }
       }
-      if (invertedAt != null) {
+      if (invertedAt != null && invertedIdx != null) {
+        let secondMitigation = false;
+        for (let k = invertedIdx + 1; k < candles.length; k += 1) {
+          if (candles[k].close > gapTop) {
+            secondMitigation = true;
+            break;
+          }
+        }
         const x1 = handle.timeToCoordinate(a.time);
         const x2 = handle.timeToCoordinate(invertedAt);
         const yTop = handle.priceToCoordinate(gapTop);
         const yBot = handle.priceToCoordinate(gapBot);
         if (x1 != null && yTop != null && yBot != null) {
-          const right = x2 ?? chartWidth;
+          const detectionEndX = x2 ?? chartWidth - 4;
           out.push({
             x: x1,
             y: Math.min(yTop, yBot),
-            width: Math.max(8, right - x1),
+            width: Math.max(8, detectionEndX - x1),
             height: Math.max(2, Math.abs(yBot - yTop)),
+            detectionEndX,
+            extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+            midY: (yTop + yBot) / 2,
             stroke: "rgba(244,63,94,0.85)",
             fill: "rgba(244,63,94,0.10)",
+            extend: !secondMitigation,
+            mitigated: secondMitigation,
           });
         }
       }
     }
 
-    // Bearish FVG (gap down): c.high < a.low. Inverted when a later candle
-    // closes back ABOVE a.low (the top of the gap).
+    // Bearish FVG (gap down): c.high < a.low. Inverted when a later
+    // candle closes back ABOVE a.low.
     if (c.high < a.low) {
       const gapTop = a.low;
       const gapBot = c.high;
       let invertedAt: number | null = null;
+      let invertedIdx: number | null = null;
       for (let k = i + 1; k < candles.length; k += 1) {
         if (candles[k].close > gapTop) {
           invertedAt = candles[k].time;
+          invertedIdx = k;
           break;
         }
       }
-      if (invertedAt != null) {
+      if (invertedAt != null && invertedIdx != null) {
+        let secondMitigation = false;
+        for (let k = invertedIdx + 1; k < candles.length; k += 1) {
+          if (candles[k].close < gapBot) {
+            secondMitigation = true;
+            break;
+          }
+        }
         const x1 = handle.timeToCoordinate(a.time);
         const x2 = handle.timeToCoordinate(invertedAt);
         const yTop = handle.priceToCoordinate(gapTop);
         const yBot = handle.priceToCoordinate(gapBot);
         if (x1 != null && yTop != null && yBot != null) {
-          const right = x2 ?? chartWidth;
+          const detectionEndX = x2 ?? chartWidth - 4;
           out.push({
             x: x1,
             y: Math.min(yTop, yBot),
-            width: Math.max(8, right - x1),
+            width: Math.max(8, detectionEndX - x1),
             height: Math.max(2, Math.abs(yBot - yTop)),
+            detectionEndX,
+            extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+            midY: (yTop + yBot) / 2,
             stroke: "rgba(34,211,238,0.85)",
             fill: "rgba(34,211,238,0.10)",
+            extend: !secondMitigation,
+            mitigated: secondMitigation,
           });
         }
       }
     }
   }
 
-  // Only the latest inversion per timeframe — multiple iFVGs visible at once
-  // is noisy and the most recent inversion is the actionable one.
+  // Only the latest inversion per timeframe — multiple iFVGs at once is
+  // noisy and the most recent inversion is the actionable one.
   return out.slice(-1);
 }
 
 /**
  * Compute previous trading day's high/low. We bucket candles by UTC date and
- * pick the bucket immediately before the current one. This works for any
- * timeframe: on D1 it's literally yesterday's bar; on intraday timeframes
- * it's the high/low of all bars from the previous UTC day.
+ * pick the bucket immediately before the current one.
  */
 function buildPreviousDayLevels(
   candles: Array<IndicatorCandle & { time: number }>,
@@ -770,7 +1059,6 @@ function buildPreviousDayLevels(
 
   if (order.length < 2) return { high: null, low: null };
 
-  // Penultimate bucket = previous day.
   const previousKey = order[order.length - 2];
   const previous = buckets.get(previousKey);
   if (!previous) return { high: null, low: null };
