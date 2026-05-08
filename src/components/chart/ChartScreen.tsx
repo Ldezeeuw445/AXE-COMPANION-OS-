@@ -134,6 +134,13 @@ function statusPillCopy(
       dot: "bg-amber-300/85",
     };
   }
+  if (providerStatus === "demo") {
+    return {
+      label: "Demo",
+      className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95",
+      dot: "bg-cyan-300/80",
+    };
+  }
   if (live === "live_stream") {
     return {
       label: transport === "ws" ? "Live stream" : "Live",
@@ -499,7 +506,7 @@ export function ChartScreen({ data, initialAction }: Props) {
   const lastBidRef = useRef<number | null>(null);
   const lastAskRef = useRef<number | null>(null);
   const isVisible = usePageVisible();
-  const liveEnabled = data.failure === "ok" && Boolean(accountId) && isVisible;
+  const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
 
   useEffect(() => {
     setPendingTfKey(null);
@@ -1709,15 +1716,16 @@ export function ChartScreen({ data, initialAction }: Props) {
       {/* Execution bar — flush to the device bottom. Safe-area inset is
           applied INSIDE the bar so the colored gradients reach the very edge
           of the screen on iPhone (no black gap below the rounded corner). */}
-      <div
-        className="mx-0 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
+      <div className="mx-2 mb-2 shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.12] bg-white/[0.055] p-1.5 shadow-[0_-18px_52px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.10)] backdrop-blur-2xl">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.16),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]" />
+          <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+          <div className="relative z-10">
         {/* Top row: SELL · Lots · BUY (MT5-style price tickets) */}
-        <div className="flex h-11 items-stretch gap-px">
+        <div className="flex h-11 items-stretch gap-1">
           <button
             type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left transition-shadow ${
+            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
               pendingOrderSide === "sell"
                 ? "bg-gradient-to-r from-[#3A0710] via-[#9C1A26] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.32)]"
                 : "bg-gradient-to-r from-[#1A0408] via-[#4A0C13] to-[#7A1722] text-white/85"
@@ -1729,7 +1737,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           </button>
           <button
             type="button"
-            className="flex min-w-[5rem] flex-col items-center justify-center bg-black px-2 text-[11px] font-semibold text-tos-text"
+            className="flex min-w-[5rem] flex-col items-center justify-center rounded-[1.15rem] border border-white/[0.08] bg-black/55 px-2 text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
             onClick={() => setLotMenuOpen((v) => !v)}
             aria-label="Choose lot size"
           >
@@ -1738,7 +1746,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           </button>
           <button
             type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between px-3 text-left transition-shadow ${
+            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
               pendingOrderSide === "buy"
                 ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(34,211,238,0.32)]"
                 : "bg-gradient-to-r from-[#03252A] via-[#0A5662] to-[#11808D] text-white/85"
@@ -1751,11 +1759,11 @@ export function ChartScreen({ data, initialAction }: Props) {
         </div>
 
         {/* Second row: order type · SL/TP · Deviation · expand (MT5 layout). */}
-        <div className="flex h-9 items-stretch gap-px border-t border-white/[0.05] bg-black/96">
+        <div className="mt-1 flex h-9 items-stretch gap-1">
           <button
             type="button"
             onClick={() => setOrderTypeMenuOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-3 text-left text-[11px] font-semibold text-tos-text"
+            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-black/50 px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
           >
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/12 text-cyan-200">
               <ChevronDown className="h-3 w-3" />
@@ -1776,10 +1784,10 @@ export function ChartScreen({ data, initialAction }: Props) {
               setPendingStopLossPrice(pendingOrderSide === "buy" ? entry - distance : entry + distance);
               setPendingOrderVisible(true);
             }}
-            className={`flex min-w-[2.75rem] items-center justify-center gap-1 px-2 text-[10px] font-bold uppercase tracking-wider ${
+            className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
               pendingStopLossPrice != null
                 ? "border border-rose-500/60 bg-rose-500/15 text-rose-200/95"
-                : "text-rose-300/85 hover:bg-rose-500/8"
+                : "border border-white/[0.08] bg-black/45 text-rose-300/85 hover:bg-rose-500/8"
             }`}
             aria-label="Set stop loss"
           >
@@ -1794,10 +1802,10 @@ export function ChartScreen({ data, initialAction }: Props) {
               setPendingTakeProfitPrice(pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6);
               setPendingOrderVisible(true);
             }}
-            className={`flex min-w-[2.75rem] items-center justify-center gap-1 px-2 text-[10px] font-bold uppercase tracking-wider ${
+            className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
               pendingTakeProfitPrice != null
                 ? "border border-emerald-400/60 bg-emerald-400/15 text-emerald-200/95"
-                : "text-emerald-300/85 hover:bg-emerald-400/8"
+                : "border border-white/[0.08] bg-black/45 text-emerald-300/85 hover:bg-emerald-400/8"
             }`}
             aria-label="Set take profit"
           >
@@ -1806,13 +1814,15 @@ export function ChartScreen({ data, initialAction }: Props) {
           <button
             type="button"
             onClick={() => setDeviationPoints((v) => (v >= 100 ? 1 : v + 5))}
-            className="flex min-w-[3.4rem] items-center justify-center gap-1 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
+            className="flex min-w-[3.4rem] items-center justify-center gap-1 rounded-[1.05rem] border border-white/[0.08] bg-black/45 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
             aria-label="Cycle slippage / deviation"
             title="Slippage / Deviation in points"
           >
             <span>DEV</span>
             <span className="font-mono text-[10px] text-tos-text">{deviationPoints}</span>
           </button>
+        </div>
+          </div>
         </div>
       </div>
 

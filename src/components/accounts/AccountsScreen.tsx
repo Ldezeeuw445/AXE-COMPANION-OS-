@@ -20,6 +20,7 @@ import { Mt5CloudConnectForm } from "@/components/accounts/Mt5CloudConnectForm";
 import { Mt5CloudAccountActions } from "@/components/accounts/Mt5CloudAccountActions";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { accountMethodLabel, friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
+import { isDemoAccount } from "@/lib/broker/demoAccount";
 
 type Props = {
   initialAccounts: BrokerAccountRow[];
@@ -38,7 +39,8 @@ function formatDate(iso: string) {
   }
 }
 
-function connectionKind(a: BrokerAccountRow): "cloud" | "cloud_off" | "token" {
+function connectionKind(a: BrokerAccountRow): "demo" | "cloud" | "cloud_off" | "token" {
+  if (isDemoAccount(a)) return "demo";
   if (a.connection_method === "cloud_mt5" && a.external_connection_id) return "cloud";
   if (a.connection_method === "cloud_mt5_disconnected" || (a.connection_method === "cloud_mt5" && !a.external_connection_id))
     return "cloud_off";
@@ -200,7 +202,9 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
                             Active
                           </span>
                         ) : null}
-                        <Badge variant={kind === "cloud" ? "long" : "neutral"}>{method}</Badge>
+                        <Badge variant={kind === "cloud" || kind === "demo" ? "long" : "neutral"}>
+                          {kind === "demo" ? "Demo" : method}
+                        </Badge>
                         <Badge variant={statusBadgeVariant(a.provider_status ?? a.status)}>{syncLabel}</Badge>
                       </div>
                       <p className="mt-2 font-mono text-[11px] text-tos-dim">
@@ -215,12 +219,14 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
                       <p className="mt-1 text-[10px] text-tos-dim/70">Added {formatDate(a.created_at)}</p>
                       {active ? (
                         <p className="mt-2 text-[11px] leading-relaxed text-cyan-200/75">
-                          Used for chat, journal, chart and alerts.
+                          {kind === "demo"
+                            ? "Virtual paper account. Used for chart practice and demo execution only."
+                            : "Used for chat, journal, chart and alerts."}
                         </p>
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[9.5rem] sm:items-end">
-                      {kind === "cloud" ? (
+                      {kind === "cloud" || kind === "demo" ? (
                         <Link
                           href={`/chart?account=${encodeURIComponent(a.id)}&symbol=XAUUSD&tf=h1`}
                           className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18"

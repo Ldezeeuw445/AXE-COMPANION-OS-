@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { ensureActiveDemoWhenEmpty } from "@/lib/broker/demoAccount";
 
 export type BrokerAccountRow = {
   id: string;
@@ -68,9 +69,17 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
   }
 
   const prefsErr = prefsRes.error?.message;
+  const accounts = (accsRes.data ?? []) as BrokerAccountRow[];
+  const seeded = await ensureActiveDemoWhenEmpty(
+    supabase,
+    user.id,
+    prefsRes.data?.active_account_id ?? null,
+    accounts,
+  );
+
   return {
-    accounts: (accsRes.data ?? []) as BrokerAccountRow[],
-    activeAccountId: prefsRes.data?.active_account_id ?? null,
+    accounts: seeded.accounts,
+    activeAccountId: seeded.activeAccountId,
     error: prefsErr ?? null,
   };
 }

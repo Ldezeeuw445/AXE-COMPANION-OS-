@@ -8,6 +8,12 @@ import {
   type MetaApiCandle,
 } from "@/lib/mt5/metaApiClient";
 import { metaApiTimeframeFromKey, normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
+import {
+  DEMO_EXTERNAL_ID,
+  ensureDemoAccount,
+  generateDemoCandles,
+  isDemoAccount,
+} from "@/lib/broker/demoAccount";
 import { resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
@@ -33,6 +39,7 @@ export type AccountSummary = {
   label: string;
   mt5Server: string | null;
   active: boolean;
+  connectionMethod?: string | null;
 };
 
 export type ChartFailureKind =
@@ -70,8 +77,8 @@ export type ChartPageData = {
   accountChoices: AccountSummary[];
   /** ISO of the last candle close time (broker time). */
   lastCandleTime: string | null;
-  /** "MetaApi MT5" — keeps copy honest. */
-  source: "MetaApi MT5";
+  /** Keeps copy honest: either real broker data or AXE's built-in paper feed. */
+  source: "MetaApi MT5" | "AXE Demo";
 };
 
 function mapSide(t: string | undefined): string {
@@ -180,35 +187,97 @@ export async function loadChartPageData(
       .maybeSingle(),
     supabase
       .from("user_broker_accounts")
-      .select("id,label,connection_method,external_connection_id,mt5_server,provider_status,metadata")
+      .select("id,label,provider,connection_method,external_connection_id,mt5_server,provider_status,metadata")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
     listWatchlistItems(),
   ]);
 
-  const cloudAccounts: AccountSummary[] = (accountsRows ?? [])
+  const rawAccounts: Array<{
+    id: string;
+    label: string | null;
+    provider: string | null;
+    connection_method: string | null;
+    external_connection_id: string | null;
+    mt5_server: string | null;
+    provider_status: string | null;
+    metadata: Record<string, unknown> | null;
+  }> = [...((accountsRows ?? []) as Array<{
+    id: string;
+    label: string | null;
+    provider: string | null;
+    connection_method: string | null;
+    external_connection_id: string | null;
+    mt5_server: string | null;
+    provider_status: string | null;
+    metadata: Record<string, unknown> | null;
+  }>)];
+  const demo = await ensureDemoAccount(supabase, user.id);
+  if (demo && !rawAccounts.some((a) => a.id === demo.id)) rawAccounts.unshift({
+    id: demo.id,
+    label: demo.label,
+    provider: demo.provider,
+    connection_method: demo.connection_method ?? null,
+    external_connection_id: demo.external_connection_id ?? null,
+    mt5_server: demo.mt5_server,
+    provider_status: demo.provider_status ?? null,
+    metadata: demo.metadata ?? null,
+  });
+
+  const accountChoices: AccountSummary[] = rawAccounts
     .filter(
       (r) =>
-        r.connection_method === "cloud_mt5" &&
-        typeof r.external_connection_id === "string" &&
-        r.external_connection_id.length > 0,
+        isDemoAccount(r) ||
+        (r.connection_method === "cloud_mt5" &&
+          typeof r.external_connection_id === "string" &&
+          r.external_connection_id.length > 0),
     )
     .map((r) => ({
       brokerAccountId: r.id as string,
-      metaApiAccountId: r.external_connection_id as string,
-      label: (r.label as string) ?? "MT5 Account",
+      metaApiAccountId: isDemoAccount(r) ? DEMO_EXTERNAL_ID : (r.external_connection_id as string),
+      label: (r.label as string) ?? (isDemoAccount(r) ? "AXE Demo Account" : "MT5 Account"),
       mt5Server: (r.mt5_server as string) ?? null,
       active: prefs?.active_account_id === r.id,
+      connectionMethod: (r.connection_method as string) ?? null,
     }));
 
   const requestedAccountId = (accountParam ?? "").trim();
   const account =
-    cloudAccounts.find((a) => a.brokerAccountId === requestedAccountId) ??
-    cloudAccounts.find((a) => a.active) ??
-    cloudAccounts[0] ??
+    accountChoices.find((a) => a.brokerAccountId === requestedAccountId) ??
+    accountChoices.find((a) => a.active) ??
+    accountChoices[0] ??
     null;
 
   const watchSyms = watchlistRows.map((w) => w.symbol.trim().toUpperCase()).filter(Boolean);
+  const isDemo = account?.connectionMethod === "demo_paper";
+
+  if (isDemo && account) {
+    const requested = normalizeSymbol(symbolParam) || watchSyms[0] || DEFAULT_SYMBOL;
+    const candles = generateDemoCandles(requested, timeframeKey, 500);
+    const last = candles.at(-1)?.close ?? null;
+    const lastTime = candles.at(-1)?.time ?? null;
+    return {
+      symbol: requested,
+      brokerSymbol: requested,
+      timeframeKey,
+      metaApiTimeframe,
+      candles,
+      positionsOnSymbol: [],
+      positionsOnSymbolCount: 0,
+      totalPositions: 0,
+      lastPrice: last,
+      providerStatus: "demo",
+      failure: "ok",
+      dataError: null,
+      hint: "AXE Demo is a virtual paper account. No broker order is sent.",
+      symbolOptions: Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms])).sort(),
+      attemptedSymbols: [requested],
+      account,
+      accountChoices,
+      lastCandleTime: lastTime,
+      source: "AXE Demo",
+    };
+  }
 
   if (!getMetaApiToken()) {
     const requested = normalizeSymbol(symbolParam) || DEFAULT_SYMBOL;
@@ -222,7 +291,7 @@ export async function loadChartPageData(
       "Chart data is not available because MetaApi is not configured for this deployment.",
     );
     out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms])).sort();
-    out.accountChoices = cloudAccounts;
+    out.accountChoices = accountChoices;
     return out;
   }
 
@@ -238,7 +307,7 @@ export async function loadChartPageData(
       "No MetaApi MT5 account is connected yet.",
     );
     out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms])).sort();
-    out.accountChoices = cloudAccounts;
+    out.accountChoices = accountChoices;
     return out;
   }
 
@@ -251,7 +320,7 @@ export async function loadChartPageData(
   }
 
   const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);
-  const accountRaw = (accountsRows ?? []).find((r) => r.id === account.brokerAccountId);
+  const accountRaw = rawAccounts.find((r) => r.id === account.brokerAccountId);
   const accountMetadata = (accountRaw?.metadata ?? {}) as { symbol_map?: Record<string, string> };
   const symbolMap = accountMetadata.symbol_map ?? {};
   const knownFromMetadata = Object.values(symbolMap).filter((s): s is string => typeof s === "string" && s.length > 0);
@@ -320,7 +389,7 @@ export async function loadChartPageData(
         symbolOptions,
         attemptedSymbols: resolution.attempted,
         account,
-        accountChoices: cloudAccounts,
+        accountChoices,
         lastCandleTime: null,
         source: "MetaApi MT5",
       };
@@ -343,7 +412,7 @@ export async function loadChartPageData(
       symbolOptions,
       attemptedSymbols: resolution.attempted,
       account,
-      accountChoices: cloudAccounts,
+      accountChoices,
       lastCandleTime: lastTime,
       source: "MetaApi MT5",
     };
@@ -380,7 +449,7 @@ export async function loadChartPageData(
       symbolOptions,
       attemptedSymbols: resolution.attempted,
       account,
-      accountChoices: cloudAccounts,
+      accountChoices,
       lastCandleTime: null,
       source: "MetaApi MT5",
     };
