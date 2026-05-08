@@ -1324,12 +1324,34 @@ export function ChartScreen({ data, initialAction }: Props) {
     saveSnapshotToVault,
   ]);
 
-  // Keep the global mobile top bar clean: menu left, AXE context/logo action right.
-  // Chart-specific controls live in the left middle rail so the logo toolbar can remain
-  // the same app-level surface instead of being replaced by chart UI.
+  // Mobile top bar: menu left, the indicator + chart-settings pair sits in the
+  // center (mirrors the MT5 layout the trader asked for), AXE context/logo
+  // action stays on the right. Chart-specific controls keep their left middle
+  // rail so the logo toolbar can remain the same app-level surface.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    setCenter(null);
+    setCenter(
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setToolRailOpen((v) => !v)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
+          aria-label="Indicators"
+          title="Indicators"
+        >
+          <Crosshair className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={resetChartView}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
+          aria-label="Chart settings"
+          title="Chart settings / view"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      </div>,
+    );
     setRight(
       <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />,
     );
@@ -1337,7 +1359,7 @@ export function ChartScreen({ data, initialAction }: Props) {
       setCenter(null);
       setRight(null);
     };
-  }, [setCenter, setRight, data.symbol, tfLabel, toolbarSections]);
+  }, [setCenter, setRight, setToolRailOpen, resetChartView, data.symbol, tfLabel, toolbarSections]);
 
   return (
     <div
@@ -1641,30 +1663,6 @@ export function ChartScreen({ data, initialAction }: Props) {
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
         </button>
-
-        {/* MT5-style upper-right action pair: indicators (open toolbar) +
-            chart settings (cycles through scale presets). Sits inside the
-            chart frame so it never moves the page. */}
-        <div className="pointer-events-none absolute right-2 top-12 z-30 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setToolRailOpen((v) => !v)}
-            className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
-            aria-label="Indicators"
-            title="Indicators"
-          >
-            <Crosshair className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={resetChartView}
-            className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
-            aria-label="Chart settings"
-            title="Chart settings / view"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
 
         {/* Floating toast: lives INSIDE the chart frame so it can never push the
             indicator panes or the execution bar around. pointer-events:none so

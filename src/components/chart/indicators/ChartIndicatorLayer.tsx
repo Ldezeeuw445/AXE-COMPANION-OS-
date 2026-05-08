@@ -594,7 +594,9 @@ function buildStructureOverlay(
     labels,
     lines: lines.slice(-8),
     orderBlocks: orderBlocks.slice(-6),
-    fairValueGaps: fairValueGaps.slice(-8),
+    // Only render the most recent FVG so the chart stays readable on mobile —
+    // older gaps tend to be mitigated and add noise more than information.
+    fairValueGaps: fairValueGaps.slice(-1),
     swingFailures: swingFailures.slice(-6),
     equilibriumLine: equilibriumY == null ? null : { y: equilibriumY },
   };
@@ -732,7 +734,9 @@ function buildInverseFvgs(
     }
   }
 
-  return out.slice(-8);
+  // Only the latest inversion per timeframe — multiple iFVGs visible at once
+  // is noisy and the most recent inversion is the actionable one.
+  return out.slice(-1);
 }
 
 /**
