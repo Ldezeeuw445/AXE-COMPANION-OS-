@@ -22,6 +22,8 @@ import {
   formatEconomicCalendar,
 } from "@/services/marketDataService";
 import { fetchTradingOSContext } from "@/services/contextService";
+import { loadNews } from "@/lib/market/newsProvider";
+import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
 import { tryConsumeChatQuota } from "@/lib/chatQuota";
 import type { ChatMessage, ConversationSummary } from "@/types/domain";
@@ -313,6 +315,195 @@ export async function sendChatMessage(
       return computePdhPdl(tc.args);
     } else if (tc.tool === "calculate_trendline") {
       return computeTrendline(tc.args);
+
+    } else if (tc.tool === "get_news_headlines") {
+      const limit = Math.max(1, Math.min(15, Number(tc.args.limit ?? 8)));
+      const requested = (tc.args.symbol ?? symbol ?? "").toString().toUpperCase().trim();
+      if (!requested) return "No symbol provided and no active pair on this session.";
+      try {
+        const items = await loadNews({ symbol: requested, watchlist: [], limit });
+        if (!items.length) {
+          return `No headlines available for ${requested}. Either no provider is configured (Perigon / Finnhub / EODHD) or the upstream returned nothing in the last few hours.`;
+        }
+        const lines = items.slice(0, limit).map((n) => {
+          const when = (() => {
+            const d = new Date(n.publishedAt);
+            return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(11, 16) + "Z";
+          })();
+          const src = n.source ? ` (${n.source})` : "";
+          return `${when}  ${n.title}${src}`;
+        });
+        return `HEADLINES for ${requested} (top ${lines.length})\n${lines.join("\n")}`;
+      } catch (e) {
+        return `News fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`;
+      }
+
+    } else if (tc.tool === "get_smart_money_intel") {
+      try {
+        const focus = (tc.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
+        const intel = await loadIntelSnapshot({ symbol: focus });
+        if (!intel.hasLiveData) {
+          return "Smart-money intel unavailable. Either Unusual Whales is not configured or all upstream rows are empty right now.";
+        }
+        const lines: string[] = [];
+        if (intel.tide) {
+          const callM = (intel.tide.netCallPremium / 1e6).toFixed(1);
+          const putM = (intel.tide.netPutPremium / 1e6).toFixed(1);
+          lines.push(`MARKET TIDE: ${intel.tide.bias.toUpperCase()} (calls $${callM}M / puts $${putM}M)`);
+        }
+        if (intel.insiders.length > 0) {
+          lines.push(
+            "INSIDER (Form 4): " +
+              intel.insiders
+                .slice(0, 3)
+                .map((r) => `${r.ticker} ${r.type} ${r.insider} $${(r.value / 1e6).toFixed(2)}M (${r.date})`)
+                .join(" | "),
+          );
+        }
+        if (intel.senate.length > 0) {
+          lines.push(
+            "CONGRESS: " +
+              intel.senate
+                .slice(0, 3)
+                .map((r) => `${r.ticker} ${r.direction} ${r.politician} ${r.size} (${r.date})`)
+                .join(" | "),
+          );
+        }
+        if (intel.darkPool.length > 0) {
+          lines.push(
+            "DARK POOL: " +
+              intel.darkPool
+                .slice(0, 3)
+                .map((r) => `${r.symbol} ${r.size.toLocaleString()} @ $${r.price.toFixed(2)} = $${(r.notional / 1e6).toFixed(2)}M`)
+                .join(" | "),
+          );
+        }
+        if (intel.options.length > 0) {
+          lines.push(
+            "OPTIONS FLOW: " +
+              intel.options
+                .slice(0, 3)
+                .map((r) => `${r.symbol} ${r.side} ${r.strike} ${r.exp} $${(r.premium / 1e6).toFixed(2)}M`)
+                .join(" | "),
+          );
+        }
+        return lines.length > 0 ? lines.join("\n") : "Smart-money intel returned no rows.";
+      } catch (e) {
+        return `Intel fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`;
+      }
+
+    } else if (tc.tool === "list_alerts") {
+      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
+      const includePaused = tc.args.include_paused !== false;
+      let q = supabase
+        .from("user_alerts")
+        .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (sym) q = q.eq("symbol", sym);
+      if (!includePaused) q = q.eq("status", "active");
+      const { data, error } = await q;
+      if (error) return `Could not load alerts: ${error.message}`;
+      if (!data || data.length === 0) {
+        return sym ? `No alerts on ${sym}.` : "No alerts saved yet.";
+      }
+      const lines = data.map((a) => {
+        const cond =
+          a.condition && a.threshold != null
+            ? `${a.condition} ${a.threshold}`
+            : a.keyword
+              ? `keyword "${a.keyword}"`
+              : "";
+        const status = a.status === "active" ? "ACTIVE" : a.status?.toUpperCase() ?? "?";
+        const fired = a.triggered_at ? `  fired ${a.triggered_at.slice(0, 16).replace("T", " ")}Z` : "";
+        return `${a.id}  [${status}] ${a.symbol ?? "—"} ${a.type} ${cond}${fired}`;
+      });
+      return `ALERTS (${data.length})\n${lines.join("\n")}`;
+
+    } else if (tc.tool === "update_alert") {
+      const { alert_id, action } = tc.args;
+      if (!alert_id) return "alert_id is required.";
+      if (action === "delete") {
+        const { error } = await supabase.from("user_alerts").delete().eq("id", alert_id).eq("user_id", user.id);
+        return error ? `Delete failed: ${error.message}` : "Alert deleted.";
+      }
+      const nextStatus = action === "pause" ? "paused" : "active";
+      const { error } = await supabase
+        .from("user_alerts")
+        .update({ status: nextStatus })
+        .eq("id", alert_id)
+        .eq("user_id", user.id);
+      if (error) return `Update failed: ${error.message}`;
+      return action === "pause" ? "Alert paused." : "Alert resumed.";
+
+    } else if (tc.tool === "read_journal") {
+      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
+      const days = Math.max(1, Math.min(90, Number(tc.args.days ?? 7)));
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const journalQ = supabase
+        .from("companion_journal_entries")
+        .select("symbol,notes,created_at")
+        .eq("user_id", user.id)
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      const tradesQ = supabase
+        .from("broker_trades")
+        .select("id,symbol,side,volume,pnl,close_time")
+        .eq("user_id", user.id)
+        .not("close_time", "is", null)
+        .gte("close_time", since)
+        .order("close_time", { ascending: false })
+        .limit(30);
+      const [journalRes, tradesRes] = await Promise.all([journalQ, tradesQ]);
+      const entries = (journalRes.data ?? []) as { symbol: string; notes: string; created_at: string }[];
+      const trades = (tradesRes.data ?? []) as {
+        id: string;
+        symbol: string;
+        side: string;
+        volume: number;
+        pnl: number;
+        close_time: string | null;
+      }[];
+      const filteredEntries = sym ? entries.filter((e) => (e.symbol ?? "").toUpperCase() === sym) : entries;
+      const filteredTrades = sym ? trades.filter((t) => (t.symbol ?? "").toUpperCase() === sym) : trades;
+      const out: string[] = [];
+      if (filteredTrades.length > 0) {
+        out.push(`CLOSED TRADES (last ${days}d, top ${Math.min(filteredTrades.length, 10)})`);
+        out.push(
+          ...filteredTrades.slice(0, 10).map((t) => {
+            const when = t.close_time?.slice(0, 16).replace("T", " ") ?? "—";
+            const pnl = Number(t.pnl ?? 0);
+            const pnlStr = pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2);
+            return `${when}Z  ${t.symbol} ${t.side} ${t.volume}lot  P&L:${pnlStr}`;
+          }),
+        );
+      }
+      if (filteredEntries.length > 0) {
+        out.push(`\nJOURNAL ENTRIES (last ${days}d, top ${Math.min(filteredEntries.length, 10)})`);
+        out.push(
+          ...filteredEntries.slice(0, 10).map((e) => {
+            const when = e.created_at?.slice(0, 16).replace("T", " ") ?? "—";
+            const note = (e.notes ?? "").trim().slice(0, 240);
+            return `${when}Z  ${e.symbol}: ${note}`;
+          }),
+        );
+      }
+      if (out.length === 0) {
+        return `No journal entries or closed trades found in the last ${days}d${sym ? ` for ${sym}` : ""}.`;
+      }
+      return out.join("\n");
+
+    } else if (tc.tool === "navigate_to") {
+      const { page } = tc.args;
+      const params: string[] = [];
+      if (tc.args.symbol) params.push(`symbol=${encodeURIComponent(tc.args.symbol.toUpperCase())}`);
+      if (tc.args.timeframe) params.push(`tf=${encodeURIComponent(tc.args.timeframe.toUpperCase())}`);
+      const href = `/${page}${params.length ? `?${params.join("&")}` : ""}`;
+      const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
+      // The chat UI parses [[link:...]] markers and renders them as buttons.
+      return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
     }
     return "Unknown tool.";
   }

@@ -39,36 +39,76 @@ JPY events (BOJ, Tokyo CPI, unemployment): primary driver of USDJPY and XAUUSD (
 CAD/AUD/NZD (oil inventory, employment, RBA/BOC): moves their respective USD pairs, has secondary effect on commodity correlations.
 FOMC + NFP + CPI = Big 3. All positions squared before the print unless the setup is HTF and conviction is max.
 
-TOOLS — YOU CALL THESE AUTOMATICALLY AND IN PARALLEL WHEN NEEDED
-You can call multiple tools simultaneously in a single response. Do this whenever the task requires more than one piece of data.
+APP SURFACE — YOU KNOW EVERY ROOM IN THIS HOUSE
+The trader is using AXE Companion. These are the pages they can open and what each one does:
+- /chart — the live chart. Indicators on tap: Auto FVG, Auto iFVG, Auto Trendline, Auto Fibonacci, Order Blocks, Market Structure, MAs, RSI, Volume, PDH, PDL. Toolbar: timeframe (M1–D1), execution bar (Market / Buy Limit / Sell Limit / Buy Stop / Sell Stop, SL, TP, Deviation, lot picker presets), drag-to-set TP/SL/LIMIT lines, manual fib/trendline drawing too if they want. Top-right has indicator + chart-settings shortcuts.
+- /alerts — standalone in-app alert manager. Price alerts (above/below threshold) work even without push notifications; if VAPID is configured the alert also pushes. Alerts evaluate on every live tick.
+- /positions — open MT5 positions with distance to SL/TP, R:R, floating P/L.
+- /history — closed trades (broker truth).
+- /journal — trader-written entries + label tags per trade.
+- /intel — Unusual Whales smart money: insiders, congress, dark pool, options flow, market tide.
+- /watchlist — symbols the trader actively tracks.
+- /market — wider macro & news feed (Perigon, Finnhub, EODHD, FRED).
+- /actions — quick AXE workflows tile board (this is one of them).
+- /accounts — connect/select MT5 cloud account (live + demo).
+- /vault — saved AXE replies + chart snapshots.
+- /cockpit — daily prep brief (rules, plan, focus).
+- /settings — preferences, push subscriptions, account.
+- /chat — you, this conversation.
 
-Live Price: call get_live_price whenever the trader asks what price is doing, before any setup analysis, or when live data would add precision. You get current price, day high, day low, and previous close.
-Economic Calendar: call get_economic_calendar when the trader asks about news, the calendar, what's coming up, or whether it's safe to trade. Filter by currency when the trader specifies a pair. Always flag which events are Big 3.
-Fibonacci: whenever a swing high/low is given or implied, call calculate_fibonacci. If no range is given, call get_live_price first and use the day high and day low as the range. Lead with 0.5 and 0.618 as primary entry zones.
-Order Blocks: call analyze_orderblock when the trader mentions an OB, candle zone, or demand/supply area. Combine with live price and fib if available.
-PDH/PDL: call analyze_pdh_pdl when the trader provides or asks about previous day/week levels. Pass current_price from get_live_price automatically if you have it. Always flag which side has liquidity.
-Trendlines: call calculate_trendline when two pivot points are given. State slope direction and next 3–5 projected values.
+YOUR CAPABILITIES — EVERYTHING THE TRADER CAN DO, YOU CAN HELP WITH
+You have these tools. Call them aggressively, in parallel, and chain them. If a tool gives you the answer, say so — do not pretend you "can't" do something the tools clearly cover.
 
-Notes: call save_note when the trader says "save a note", "remember that", "note this", or implies they want something stored. Tag it correctly. Saved notes appear in your memory next session automatically.
-Charts: when the trader attaches a chart image, describe what you see — identify the instrument if possible, read the price action (structure, OBs, FVGs visible, trend), and give an opinion. Then proceed with any analysis they requested.
-AXE Companion chart actions: the app can route drawing requests to the chart for Fibonacci, trendline, and clear drawings. Never say you cannot draw on the chart. If the trader asks you to draw/put/make a Fibonacci or trendline on the chart, answer briefly that you will send it to the chart action layer and that the drawing stays adjustable. Do not pretend a live order was placed.
-Commitments: call track_commitment whenever you say "I'll monitor that", "I'll follow up", "I'll let you know if price does X", or make any promise to track, watch, or return to a topic. This creates a permanent record. Open commitments are shown at the top of every session — you are expected to address them proactively. When a commitment is done, say so clearly and it will be resolved.
+DATA FETCH (call automatically when relevant — do not wait to be asked):
+- get_live_price — current price + day high/low/close. Use before any setup or level discussion.
+- get_economic_calendar — scheduled prints (NFP/CPI/FOMC). Filter by currency. Flag Big 3.
+- get_news_headlines — actual headlines for a symbol/pair from Perigon → Finnhub → EODHD. Use for "what's the news on X", "why is it moving", risk-on/off questions.
+- get_smart_money_intel — Unusual Whales tide, insiders, congress, dark pool, options flow.
 
-COMMITMENT RULES — NON-NEGOTIABLE
-When you make a promise → call track_commitment immediately. No exceptions.
-When open commitments are shown in context → mention the most relevant one naturally at session start. Do not wait to be asked.
-When a commitment is resolved → say "done, closing that out" so the trader knows you followed through.
+ANALYSIS (compute on the spot, no apologies):
+- calculate_fibonacci — retrace + extension. Default to day high/low if no range given.
+- analyze_orderblock — 50% optimal entry, invalidation, premium/discount.
+- analyze_pdh_pdl — bias direction, liquidity side, entry/SL/TP relative to PDH/PDL.
+- calculate_trendline — slope + projected values from two pivots.
+
+ALERTS / MEMORY / NAV (act, don't suggest):
+- create_alert — add a price/news/risk/system alert. The /alerts evaluator handles it; works without push.
+- list_alerts — read what's already saved before creating duplicates.
+- update_alert — pause / resume / delete by id (call list_alerts first if you don't have it).
+- save_note — store an observation/rule/level. Persists across sessions.
+- track_commitment — non-negotiable when you promise to monitor, follow up, or come back to a topic.
+- read_journal — pull recent journal entries + closed trades for review/coaching.
+- navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
+
+CHART DRAWING — YOU SEND IT, THE CHART DRAWS IT
+The /chart page listens for AXE actions. If the trader asks you to put a Fibonacci, trendline, or PDH/PDL line on the chart, run the matching analysis tool and answer briefly that the drawing has been routed to the chart layer and stays adjustable. Do not pretend an order was placed.
+
+COMMITMENTS — NON-NEGOTIABLE
+- Promise to monitor / follow up / come back? → call track_commitment immediately. No exceptions.
+- Open commitments shown in context → address the most relevant one naturally at session start.
+- Resolved? → say "done, closing that out" so the trader knows you followed through.
+
+HONESTY MANDATE — READ THIS TWICE
+1. Never claim you "can't" do something covered by your tools or the app pages above. If a tool exists, use it. If a page exists, link to it with navigate_to.
+2. Never claim you did something you didn't actually do. If a tool failed, say it failed and what the error was. If a value is missing, say it's missing.
+3. Never invent data — prices, alerts, positions, P&L, headlines. If you didn't fetch it or it's not in context, say "I don't have that yet, fetching" and call the tool, or ask once.
+4. Never say "consult a financial advisor" or hedge with disclaimer language. Speak with conviction.
+5. If something in the trader's setup, plan, or execution can be improved, say so plainly. If it's already good, say "it's good" and move on. You are not a yes-man, but you are also not a critic for the sake of it.
+6. The trader prefers honest "yes I just did it" / "no it didn't work, here's why" over polished excuses. Match that.
 
 CHAINED TOOL WORKFLOWS — DO THESE AUTOMATICALLY
-Alert at a Fib level (e.g. "set alert at 0.5 fib on XAUUSD"): call get_live_price("XAUUSD") and calculate_fibonacci in parallel using the day high/low as the range, then call create_alert with the exact computed price level.
-Alert at PDH/PDL: call analyze_pdh_pdl to confirm the level, then call create_alert with the exact level and a description of why it matters.
-Full setup analysis: call get_live_price + get_economic_calendar in parallel to start, then use results to call calculate_fibonacci and analyze_orderblock if relevant. Give the full picture in one reply.
-Never skip these tools — they are how you show your work. Present results naturally in your reply, not as raw data dumps.
+- Alert at a Fib level: get_live_price + calculate_fibonacci in parallel, then create_alert with the exact level. Confirm with the trader if you guessed the range.
+- Alert at PDH/PDL: analyze_pdh_pdl, then create_alert.
+- Full setup brief: get_live_price + get_economic_calendar + get_news_headlines in parallel, then calculate_fibonacci / analyze_orderblock as needed, then a tight verdict.
+- "Show me / open / take me to X": run the data tool if useful, then navigate_to with a button.
+- "What alerts do I have on X / pause my X alert": list_alerts → update_alert.
+- "Review my week / find my mistake": read_journal → coaching response, suggest one specific rule, optionally save_note + track_commitment.
 
 FORMAT
 - Plain text. No markdown headers or bullet walls unless the trader asks for a structured breakdown.
 - Under 100 words for quick questions. Detailed when a full setup breakdown is requested.
-- If listing levels, use a compact format: "2318 OB | 2334 FVG | 2350 BSL" — not a table.`;
+- If listing levels, use a compact format: "2318 OB | 2334 FVG | 2350 BSL" — not a table.
+- When you emit a navigation link, write it inline like: "Pulled it up on the chart [[link:/chart?symbol=XAUUSD&tf=H1|Open chart]]" — the UI turns the marker into a button.`;
 
 /** Appended with retrieved knowledge — keeps AXE grounded vs generic signal-speak. */
 export const AXE_KNOWLEDGE_GUARDRAILS = `AXE KNOWLEDGE LAYER — RESPONSE RULES
@@ -280,6 +320,161 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "get_news_headlines",
+      description:
+        "Fetch the latest market headlines for the trader's active pair (or any symbol). Use this when the trader asks 'what's the news', 'why is it moving', 'any headlines on X', or before any setup discussion that depends on current sentiment. Returns top recent articles with source, headline, and timestamp. Different from get_economic_calendar (which is scheduled prints).",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol: {
+            type: "string",
+            description:
+              "Symbol/instrument to focus on, e.g. XAUUSD, EURUSD, SPY, AAPL. Omit to use the active pair.",
+          },
+          limit: {
+            type: "number",
+            description: "Max number of headlines to return (default 8, max 15).",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_smart_money_intel",
+      description:
+        "Fetch the latest Unusual Whales smart-money snapshot — market tide bias (net call/put premium), top insider buys/sells, congressional disclosures, dark-pool prints, and unusual options flow. Call this when the trader asks about flow, smart money, whales, dark pool, options flow, congress trades, or 'who's buying'. Returns null/empty if Unusual Whales is not configured.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol: {
+            type: "string",
+            description: "Optional ticker to focus on (e.g. SPY, AAPL). Omit for general flow.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_alerts",
+      description:
+        "List the trader's existing AXE Companion alerts (price, news, condition). Use this when the trader asks 'what alerts do I have', 'show my alerts', 'is there an alert on X', or before drafting a new one (so you don't create duplicates). Returns active + paused alerts with their thresholds and last-triggered time.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol: {
+            type: "string",
+            description: "Optional symbol filter, e.g. XAUUSD.",
+          },
+          include_paused: {
+            type: "boolean",
+            description: "If true, include paused alerts in the result. Default true.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_alert",
+      description:
+        "Pause, resume, or delete an existing alert. Use when the trader says 'pause my XAUUSD alert', 'turn off the EURUSD 1.10 alert', 'delete that alert', 'reactivate my gold alert'. Always confirm the alert exists by calling list_alerts first if you don't already have the id from context.",
+      parameters: {
+        type: "object",
+        properties: {
+          alert_id: {
+            type: "string",
+            description:
+              "The alert id to operate on. Get it from list_alerts. Required.",
+          },
+          action: {
+            type: "string",
+            enum: ["pause", "resume", "delete"],
+            description: "What to do with the alert.",
+          },
+        },
+        required: ["alert_id", "action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_journal",
+      description:
+        "Read the trader's most recent journal entries and labelled trades. Use when they ask 'review my trades', 'what did I do this week', 'find my biggest mistake', 'show my last entries'. Combines companion journal notes with closed broker trades when available.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol: {
+            type: "string",
+            description: "Optional symbol filter.",
+          },
+          days: {
+            type: "number",
+            description: "Lookback window in days (default 7, max 90).",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "navigate_to",
+      description:
+        "Surface a deep-link button to a specific app page so the trader can jump there with one tap. Use when you want to send them somewhere (e.g. 'open the chart on XAUUSD H1', 'go to your alerts', 'pull up the intel page'). Don't pretend to navigate yourself — call this and the UI will render a button.",
+      parameters: {
+        type: "object",
+        properties: {
+          page: {
+            type: "string",
+            enum: [
+              "chart",
+              "alerts",
+              "positions",
+              "history",
+              "journal",
+              "intel",
+              "watchlist",
+              "market",
+              "actions",
+              "settings",
+              "accounts",
+              "vault",
+              "cockpit",
+              "chat",
+            ],
+            description: "Which app page to link to.",
+          },
+          symbol: {
+            type: "string",
+            description: "Optional symbol — only meaningful for chart/watchlist/market.",
+          },
+          timeframe: {
+            type: "string",
+            description: "Optional timeframe like M1/M5/M15/M30/H1/H4/D1 — only for chart.",
+          },
+          label: {
+            type: "string",
+            description: "Optional button label override; defaults to the page name.",
+          },
+        },
+        required: ["page"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "track_commitment",
       description:
         "Create a tracked commitment — call this immediately whenever you promise to monitor something, follow up on a level, alert on a condition, check back on a topic, or say 'I'll keep an eye on that'. Creates a permanent record reviewed at every session start.",
@@ -347,6 +542,31 @@ export type LivePriceArgs = { symbol: string };
 export type EconomicCalendarArgs = { currency?: string; impact?: "High" | "Medium" | "Low" };
 export type SaveNoteArgs = { content: string; tag?: string };
 export type TrackCommitmentArgs = { description: string; symbol?: string };
+export type GetNewsHeadlinesArgs = { symbol?: string; limit?: number };
+export type GetSmartMoneyIntelArgs = { symbol?: string };
+export type ListAlertsArgs = { symbol?: string; include_paused?: boolean };
+export type UpdateAlertArgs = { alert_id: string; action: "pause" | "resume" | "delete" };
+export type ReadJournalArgs = { symbol?: string; days?: number };
+export type NavigateToArgs = {
+  page:
+    | "chart"
+    | "alerts"
+    | "positions"
+    | "history"
+    | "journal"
+    | "intel"
+    | "watchlist"
+    | "market"
+    | "actions"
+    | "settings"
+    | "accounts"
+    | "vault"
+    | "cockpit"
+    | "chat";
+  symbol?: string;
+  timeframe?: string;
+  label?: string;
+};
 
 export type AxeToolCall =
   | { id: string; tool: "create_alert"; args: CreateAlertArgs }
@@ -357,7 +577,13 @@ export type AxeToolCall =
   | { id: string; tool: "analyze_orderblock"; args: OrderBlockArgs }
   | { id: string; tool: "analyze_pdh_pdl"; args: PdhPdlArgs }
   | { id: string; tool: "calculate_trendline"; args: TrendlineArgs }
-  | { id: string; tool: "track_commitment"; args: TrackCommitmentArgs };
+  | { id: string; tool: "track_commitment"; args: TrackCommitmentArgs }
+  | { id: string; tool: "get_news_headlines"; args: GetNewsHeadlinesArgs }
+  | { id: string; tool: "get_smart_money_intel"; args: GetSmartMoneyIntelArgs }
+  | { id: string; tool: "list_alerts"; args: ListAlertsArgs }
+  | { id: string; tool: "update_alert"; args: UpdateAlertArgs }
+  | { id: string; tool: "read_journal"; args: ReadJournalArgs }
+  | { id: string; tool: "navigate_to"; args: NavigateToArgs };
 
 export function computeFibonacci(args: FibonacciArgs): string {
   const { swing_high, swing_low, symbol, direction } = args;
@@ -963,6 +1189,12 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
   "analyze_pdh_pdl",
   "calculate_trendline",
   "track_commitment",
+  "get_news_headlines",
+  "get_smart_money_intel",
+  "list_alerts",
+  "update_alert",
+  "read_journal",
+  "navigate_to",
 ]);
 
 export async function callAxe(

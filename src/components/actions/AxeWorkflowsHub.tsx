@@ -39,6 +39,10 @@ type WorkflowCategory = {
 
 type Props = {
   hasActiveAccount: boolean;
+  /** Any headline news provider configured (Perigon / Finnhub / EODHD). */
+  hasNews?: boolean;
+  /** FRED — or any news provider — configured for macro context. */
+  hasMacro?: boolean;
 };
 
 function chatQ(text: string): string {
@@ -61,8 +65,10 @@ const STATUS_CLASS: Record<WorkflowStatus, string> = {
   soon: "border-white/12 text-tos-dim bg-white/[0.03]",
 };
 
-export function AxeWorkflowsHub({ hasActiveAccount }: Props) {
+export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = false }: Props) {
   const acctState: WorkflowStatus = hasActiveAccount ? "ready" : "needs_account";
+  const newsState: WorkflowStatus = hasNews ? "ready" : "needs_news";
+  const macroState: WorkflowStatus = hasMacro ? "ready" : "needs_macro";
 
   const categories: WorkflowCategory[] = [
     {
@@ -78,7 +84,7 @@ export function AxeWorkflowsHub({ hasActiveAccount }: Props) {
           href: chatQ(
             "[AXE · market]\nUsing my active pair and watchlist, what high-impact news prints are next? Mention CPI/NFP/FOMC and what they mean for my exposure.",
           ),
-          status: "needs_news",
+          status: newsState,
         },
         {
           id: "macro-risk",
@@ -88,7 +94,7 @@ export function AxeWorkflowsHub({ hasActiveAccount }: Props) {
           href: chatQ(
             "[AXE · macro]\nWalk me through today's macro risk: rates, yields, DXY proxy and gold/USD axis. Anchor it on my active pair.",
           ),
-          status: "needs_macro",
+          status: macroState,
         },
         {
           id: "xau-bias",
@@ -108,7 +114,7 @@ export function AxeWorkflowsHub({ hasActiveAccount }: Props) {
           href: chatQ(
             "[AXE · sentiment]\nSummarize current market sentiment (risk-on / risk-off) for my watchlist. Keep it tight: 5 lines.",
           ),
-          status: "needs_news",
+          status: newsState,
         },
       ],
     },
@@ -252,7 +258,7 @@ export function AxeWorkflowsHub({ hasActiveAccount }: Props) {
           href: chatQ(
             "[AXE · alert · news]\nDraft an alert rule for the next high-impact news event affecting my active pair. I'll save it to /alerts.",
           ),
-          status: "needs_news",
+          status: newsState,
         },
         {
           id: "loss-alert",

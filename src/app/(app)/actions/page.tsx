@@ -9,6 +9,12 @@ import {
   listSetupReviews,
 } from "@/services/actionsService";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  getEodhdKey,
+  getFinnhubKey,
+  getFredKey,
+  getPerigonKey,
+} from "@/lib/market/providerStatus";
 
 async function detectActiveCloudAccount(): Promise<boolean> {
   const supabase = await createServerSupabaseClient();
@@ -34,6 +40,13 @@ export default async function ActionsPage() {
     detectActiveCloudAccount(),
   ]);
 
+  // Headlines / curated news come from Perigon, Finnhub, EODHD. Macro time
+  // series (rates, yields, CPI prints) come from FRED. Whichever set is
+  // configured flips the "Needs news / Needs macro" gates on the workflow
+  // tiles so traders aren't stuck behind cosmetic badges.
+  const hasNews = Boolean(getPerigonKey() || getFinnhubKey() || getEodhdKey());
+  const hasMacro = Boolean(getFredKey()) || hasNews;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-6">
       <ScreenHeader
@@ -41,7 +54,7 @@ export default async function ActionsPage() {
         subtitle="One-tap AXE workflows. Execution stays disabled by default."
       />
 
-      <AxeWorkflowsHub hasActiveAccount={hasActiveAccount} />
+      <AxeWorkflowsHub hasActiveAccount={hasActiveAccount} hasNews={hasNews} hasMacro={hasMacro} />
 
       {/* Existing review pipelines moved into a folded section so the hub owns the page */}
       <details className="group mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/25">

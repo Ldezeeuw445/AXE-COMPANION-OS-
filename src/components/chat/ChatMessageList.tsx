@@ -1,11 +1,45 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ArrowDown, Bookmark, Check } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUpRight, Bookmark, Check } from "lucide-react";
 import type { ChatMessage } from "@/types/domain";
 import { ActionCard } from "@/components/chat/ActionCard";
 import { TtsButton } from "@/components/chat/TtsButton";
 import { formatTimeHm } from "@/lib/formatDate";
+
+/**
+ * Renders an AXE message body with inline navigation buttons.
+ *
+ * AXE's `navigate_to` tool emits `[[link:/path|Label]]` markers in its replies.
+ * Everything outside the markers stays as plain pre-wrapped text; markers
+ * become tappable cyan buttons that route inside the app via next/link.
+ */
+function renderMessageBody(content: string): ReactNode {
+  if (!content || !content.includes("[[link:")) return content;
+  const parts: ReactNode[] = [];
+  const re = /\[\[link:([^|\]]+)\|([^\]]+)\]\]/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content))) {
+    if (match.index > cursor) parts.push(content.slice(cursor, match.index));
+    const href = match[1].trim();
+    const label = match[2].trim();
+    parts.push(
+      <Link
+        key={`${match.index}-${href}`}
+        href={href}
+        className="mx-0.5 inline-flex items-center gap-1 rounded-full border border-cyan-400/35 bg-cyan-400/10 px-2.5 py-0.5 align-baseline text-[11.5px] font-semibold text-cyan-200/95 hover:border-cyan-400/60 hover:bg-cyan-400/15"
+      >
+        {label}
+        <ArrowUpRight className="h-3 w-3" aria-hidden />
+      </Link>,
+    );
+    cursor = re.lastIndex;
+  }
+  if (cursor < content.length) parts.push(content.slice(cursor));
+  return parts;
+}
 
 type ChatMessageListProps = {
   messages: ChatMessage[];
@@ -98,7 +132,9 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
                   : "tos-bubble-assistant text-tos-text"
               }`}
             >
-              <p className="whitespace-pre-wrap">{m.content}</p>
+              <p className="whitespace-pre-wrap">
+                {m.role === "assistant" ? renderMessageBody(m.content) : m.content}
+              </p>
               {m.actionCard ? <ActionCard card={m.actionCard} /> : null}
             </div>
 
