@@ -251,6 +251,70 @@ function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice:
   return Math.max(Math.abs(fallbackPrice ?? 1) * 0.0015, 1);
 }
 
+/**
+ * MT5-style resizable pane wrapper. Renders a thin grab-handle along the top
+ * edge of the pane; dragging it up grows the pane (and shrinks the chart
+ * above), dragging it down shrinks it. Pointer capture keeps the drag glued
+ * to the finger even when it leaves the handle area.
+ */
+function ResizablePane({
+  height,
+  onResize,
+  minHeight,
+  maxHeight,
+  children,
+  ariaLabel,
+}: {
+  height: number;
+  onResize: (next: number) => void;
+  minHeight: number;
+  maxHeight: number;
+  children: React.ReactNode;
+  ariaLabel: string;
+}) {
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null);
+
+  return (
+    <div className="relative shrink-0" style={{ height }}>
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={ariaLabel}
+        className="absolute inset-x-0 -top-1 z-30 flex h-3 cursor-ns-resize items-center justify-center"
+        style={{ touchAction: "none" }}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current = { startY: event.clientY, startH: height };
+        }}
+        onPointerMove={(event) => {
+          const drag = dragRef.current;
+          if (!drag) return;
+          const delta = drag.startY - event.clientY; // up = grow
+          const next = Math.min(maxHeight, Math.max(minHeight, drag.startH + delta));
+          onResize(next);
+        }}
+        onPointerUp={(event) => {
+          if (!dragRef.current) return;
+          dragRef.current = null;
+          try {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          } catch {
+            /* noop */
+          }
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+        }}
+      >
+        <span className="h-0.5 w-10 rounded-full bg-white/20" aria-hidden />
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function TradePlanLine({
   canvasRef,
   price,
@@ -457,6 +521,37 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
+
+  // MT5-style resizable indicator panes. Defaults match what we previously
+  // hard-coded; users can drag the divider on top of each pane to taste.
+  const [paneHeights, setPaneHeights] = useState<{ volume: number; rsi: number }>({
+    volume: 108,
+    rsi: 120,
+  });
+
+  // Hydrate pane heights from localStorage once on mount.
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem("axe.chart.paneHeight.volume") ?? "");
+      const r = Number(localStorage.getItem("axe.chart.paneHeight.rsi") ?? "");
+      setPaneHeights((prev) => ({
+        volume: Number.isFinite(v) && v >= 70 ? v : prev.volume,
+        rsi: Number.isFinite(r) && r >= 70 ? r : prev.rsi,
+      }));
+    } catch {
+      /* localStorage may be blocked — fall back to defaults */
+    }
+  }, []);
+
+  const setPaneHeight = useCallback((mode: "volume" | "rsi", next: number) => {
+    setPaneHeights((prev) => ({ ...prev, [mode]: next }));
+    try {
+      localStorage.setItem(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
+    } catch {
+      /* ignore — best-effort persistence */
+    }
+  }, []);
+
   const hasFibAnnotation = useMemo(
     () => annotations.some((a) => a.type === "fib_retracement"),
     [annotations],
@@ -1469,20 +1564,41 @@ export function ChartScreen({ data, initialAction }: Props) {
         >
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
         </button>
+
+        {/* Floating toast: lives INSIDE the chart frame so it can never push the
+            indicator panes or the execution bar around. pointer-events:none so
+            it doesn't steal chart pan/zoom. */}
+        {snapshotMessage ? (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-30 max-w-[68%] rounded-lg border border-white/10 bg-black/76 px-2.5 py-1 text-[11px] font-medium text-tos-muted shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+            {snapshotMessage}
+          </div>
+        ) : null}
       </div>
 
       {/* Indicator panes: each one is its own bounded box, so the chart can
           never bleed into the volume/RSI area and vice versa. They share the
           main chart's time scale via canvasRef.timeToCoordinate(...). */}
       {activeToolFlags.volume ? (
-        <div className="mx-0 shrink-0" style={{ height: "108px" }}>
+        <ResizablePane
+          height={paneHeights.volume}
+          onResize={(next) => setPaneHeight("volume", next)}
+          minHeight={70}
+          maxHeight={260}
+          ariaLabel="Resize volume pane"
+        >
           <IndicatorPane mode="volume" candles={data.candles} canvasRef={canvasRef} />
-        </div>
+        </ResizablePane>
       ) : null}
       {activeToolFlags.rsi ? (
-        <div className="mx-0 shrink-0" style={{ height: "120px" }}>
+        <ResizablePane
+          height={paneHeights.rsi}
+          onResize={(next) => setPaneHeight("rsi", next)}
+          minHeight={70}
+          maxHeight={280}
+          ariaLabel="Resize RSI pane"
+        >
           <IndicatorPane mode="rsi" candles={data.candles} canvasRef={canvasRef} />
-        </div>
+        </ResizablePane>
       ) : null}
 
       <div className="mx-0 shrink-0 border-t border-white/[0.08] bg-black/96 backdrop-blur">
@@ -1521,12 +1637,6 @@ export function ChartScreen({ data, initialAction }: Props) {
           </button>
         </div>
       </div>
-
-      {snapshotMessage ? (
-        <p className="mt-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-tos-muted">
-          {snapshotMessage}
-        </p>
-      ) : null}
 
       <div className="hidden md:block">
         {/* Position summary */}
