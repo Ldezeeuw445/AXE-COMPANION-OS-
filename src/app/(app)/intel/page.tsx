@@ -24,20 +24,28 @@ export default async function IntelPage({ searchParams }: PageProps) {
   const symbol = requestedSymbol || watchlist[0]?.toUpperCase() || DEFAULT_SYMBOL;
 
   const intel = await loadIntelSnapshot({ symbol });
+  const isStale = intel.cache.state === "stale";
+  const cacheLabel =
+    intel.cache.state === "stale"
+      ? "Cached"
+      : intel.hasLiveData
+        ? "Live"
+        : "Warming";
 
   const livePill = (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
         intel.hasLiveData
           ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
-          : "border-white/12 bg-white/[0.04] text-tos-dim"
+          : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200/90"
       }`}
+      title={intel.cache.message}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${intel.hasLiveData ? "bg-cyan-300" : "bg-white/30"}`}
+        className={`h-1.5 w-1.5 rounded-full ${intel.hasLiveData ? "bg-cyan-300" : "bg-amber-300/80"}`}
         aria-hidden
       />
-      {intel.hasLiveData ? "Live" : "Idle"}
+      {cacheLabel}
     </span>
   );
 
@@ -112,6 +120,15 @@ export default async function IntelPage({ searchParams }: PageProps) {
 
       <ProviderBadges providers={intel.providers} />
 
+      {intel.cache.message ? (
+        <GlassPanel className="p-3">
+          <p className="text-xs leading-relaxed text-tos-muted">
+            {intel.cache.message}
+            {intel.cache.ageSeconds != null ? ` Last cached ${formatAge(intel.cache.ageSeconds)} ago.` : ""}
+          </p>
+        </GlassPanel>
+      ) : null}
+
       {/* MARKET TIDE */}
       <GlassPanel className="p-4" glow="cyan">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -122,7 +139,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             </h2>
           </div>
           <span className="text-[10px] text-tos-dim">
-            {intel.tide ? "Unusual Whales · live" : "Awaiting feed"}
+            {intel.tide ? `Unusual Whales · ${isStale ? "cached" : "live"}` : "Feed warming"}
           </span>
         </div>
         {intel.tide ? (
@@ -151,7 +168,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
           </div>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            Configure UNUSUAL_WHALES_TOKEN in Supabase Edge Functions to unlock the broad market call/put tide.
+            Market tide has not cached a usable row yet. AXE will retry quietly without exposing provider rate-limit errors.
           </p>
         )}
       </GlassPanel>
@@ -350,8 +367,8 @@ export default async function IntelPage({ searchParams }: PageProps) {
       </div>
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
-        Intel feeds are powered by Unusual Whales via the Supabase intel-proxy. Nothing here is fabricated — feeds report
-        their own state and surface as “off” when the upstream provider is silent or returning no rows.
+        Intel feeds are powered by Unusual Whales via the Supabase intel-proxy. AXE serializes requests and reuses cached
+        snapshots so one app session cannot burn the weekly plan with repeated refreshes. Nothing here is fabricated.
       </p>
     </div>
   );
@@ -418,4 +435,13 @@ function formatMoneyM(value: number): string {
 
 function formatMoneyShort(value: number): string {
   return formatMoneyM(value);
+}
+
+function formatAge(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 60) return "less than a minute";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
 }

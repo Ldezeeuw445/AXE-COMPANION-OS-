@@ -1,7 +1,9 @@
 import "server-only";
 import { getSupabaseKey } from "@/lib/env";
 
-const REVALIDATE_SECONDS = 60; // Intel feeds are slow-moving; 60s is plenty.
+const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
+const SNAPSHOT_FRESH_MS = 15 * 60 * 1000;
+const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
 
 export type IntelProviderState = "live" | "off" | "error";
 
@@ -75,6 +77,11 @@ export type IntelSnapshot = {
   tide: MarketTide | null;
   providers: IntelProviderStatus[];
   hasLiveData: boolean;
+  cache: {
+    state: "fresh" | "stale" | "empty";
+    ageSeconds: number | null;
+    message?: string;
+  };
 };
 
 type IntelAction =
@@ -85,6 +92,21 @@ type IntelAction =
   | "marketTide";
 
 type IntelEnvelope<T> = { ok: true; data: T } | { ok: false; error: string };
+
+type IntelSnapshotCacheEntry = {
+  snapshot: IntelSnapshot;
+  savedAt: number;
+};
+
+const intelSnapshotCache = globalThis as typeof globalThis & {
+  __axeIntelSnapshotCache?: Map<string, IntelSnapshotCacheEntry>;
+  __axeIntelSnapshotInflight?: Map<string, Promise<IntelSnapshot>>;
+};
+
+const snapshotCache = intelSnapshotCache.__axeIntelSnapshotCache ?? new Map<string, IntelSnapshotCacheEntry>();
+const snapshotInflight = intelSnapshotCache.__axeIntelSnapshotInflight ?? new Map<string, Promise<IntelSnapshot>>();
+intelSnapshotCache.__axeIntelSnapshotCache = snapshotCache;
+intelSnapshotCache.__axeIntelSnapshotInflight = snapshotInflight;
 
 async function callIntelProxy<T>(
   action: IntelAction,
@@ -102,8 +124,9 @@ async function callIntelProxy<T>(
         apikey: key,
       },
       body: JSON.stringify({ action, ...args }),
-      // Edge function is rate-limited and the data is slow-moving — tag so the
-      // companion can opportunistically reuse one fetch across renders.
+      // Edge function is rate-limited and the data is slow-moving. Keep each
+      // action cached for long enough that page reloads and chat context refreshes
+      // don't hammer a paid provider account.
       next: { revalidate: REVALIDATE_SECONDS, tags: [`intel:${action}`] },
     });
     if (!res.ok) {
@@ -126,34 +149,76 @@ function toStatus(
   err?: string,
 ): IntelProviderStatus {
   if (ok) return { id, label, state: "live", description };
+  if (err) {
+    return {
+      id,
+      label,
+      state: "error",
+      description: `${description} — temporarily unavailable; using cached data when available`,
+    };
+  }
   return {
     id,
     label,
-    state: err ? "error" : "off",
-    description: err ? `${description} — ${err}` : `${description} — no data yet`,
+    state: "off",
+    description: `${description} — no cached rows yet`,
   };
 }
 
 export async function loadIntelSnapshot(opts?: {
   symbol?: string;
 }): Promise<IntelSnapshot> {
+  const cacheKey = (opts?.symbol ?? "market").toUpperCase();
+  const cached = snapshotCache.get(cacheKey);
+  if (cached && Date.now() - cached.savedAt < SNAPSHOT_FRESH_MS) {
+    return markCache(cached.snapshot, "fresh", cached.savedAt);
+  }
+
+  const inflight = snapshotInflight.get(cacheKey);
+  if (inflight) return inflight;
+
+  const promise = fetchIntelSnapshot(opts, cached);
+  snapshotInflight.set(cacheKey, promise);
+  try {
+    return await promise;
+  } finally {
+    snapshotInflight.delete(cacheKey);
+  }
+}
+
+async function fetchIntelSnapshot(
+  opts: { symbol?: string } | undefined,
+  cached?: IntelSnapshotCacheEntry,
+): Promise<IntelSnapshot> {
   const args: Record<string, unknown> = opts?.symbol
     ? { symbol: opts.symbol.toUpperCase() }
     : {};
 
-  const [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes] = await Promise.all([
-    callIntelProxy<InsiderTrade[]>("insiderTrades", args),
-    callIntelProxy<SenateTrade[]>("senateTrades", {}),
-    callIntelProxy<DarkPoolPrint[]>("darkPoolPrints", args),
-    callIntelProxy<UnusualOption[]>("unusualOptions", args),
-    callIntelProxy<MarketTide | null>("marketTide", {}),
-  ]);
+  // The Unusual Whales plan only allows a small number of concurrent requests.
+  // Serial calls are intentional: one page render must never create a provider
+  // concurrency burst that takes the whole intel page down.
+  const insiderRes = await callIntelProxy<InsiderTrade[]>("insiderTrades", args);
+  const senateRes = await callIntelProxy<SenateTrade[]>("senateTrades", {});
+  const darkPoolRes = await callIntelProxy<DarkPoolPrint[]>("darkPoolPrints", args);
+  const optionsRes = await callIntelProxy<UnusualOption[]>("unusualOptions", args);
+  const tideRes = await callIntelProxy<MarketTide | null>("marketTide", {});
 
   const insiders = insiderRes.ok && Array.isArray(insiderRes.data) ? insiderRes.data : [];
   const senate = senateRes.ok && Array.isArray(senateRes.data) ? senateRes.data : [];
   const darkPool = darkPoolRes.ok && Array.isArray(darkPoolRes.data) ? darkPoolRes.data : [];
   const options = optionsRes.ok && Array.isArray(optionsRes.data) ? optionsRes.data : [];
   const tide = tideRes.ok && tideRes.data ? tideRes.data : null;
+  const hadError = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes].some((r) => !r.ok);
+  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide);
+
+  if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
+    return markCache(
+      cached.snapshot,
+      "stale",
+      cached.savedAt,
+      "Provider is cooling down or rate-limited. Showing the last cached intel snapshot.",
+    );
+  }
 
   const providers: IntelProviderStatus[] = [
     toStatus(
@@ -193,9 +258,7 @@ export async function loadIntelSnapshot(opts?: {
     ),
   ];
 
-  const hasLiveData = providers.some((p) => p.state === "live");
-
-  return {
+  const snapshot: IntelSnapshot = {
     generatedAt: new Date().toISOString(),
     insiders,
     senate,
@@ -204,5 +267,35 @@ export async function loadIntelSnapshot(opts?: {
     tide,
     providers,
     hasLiveData,
+    cache: {
+      state: hasLiveData ? "fresh" : "empty",
+      ageSeconds: null,
+      message: hasLiveData ? undefined : "No cached intel rows yet. The feed will retry without exposing provider errors.",
+    },
+  };
+
+  if (hasLiveData) {
+    snapshotCache.set((opts?.symbol ?? "market").toUpperCase(), {
+      snapshot,
+      savedAt: Date.now(),
+    });
+  }
+
+  return snapshot;
+}
+
+function markCache(
+  snapshot: IntelSnapshot,
+  state: IntelSnapshot["cache"]["state"],
+  savedAt: number,
+  message?: string,
+): IntelSnapshot {
+  return {
+    ...snapshot,
+    cache: {
+      state,
+      ageSeconds: Math.max(0, Math.round((Date.now() - savedAt) / 1000)),
+      message,
+    },
   };
 }
