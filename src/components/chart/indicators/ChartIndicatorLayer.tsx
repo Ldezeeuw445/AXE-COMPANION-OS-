@@ -426,33 +426,51 @@ export function ChartIndicatorLayer({
             cleanly with a fixed level from yesterday's H + L. */}
 
         {active.structure
-          ? geometry.structureLines.map((item, index) => (
-              <g key={`line-${item.label}-${index}`}>
-                <line
-                  x1={item.x1}
-                  x2={item.x2}
-                  y1={item.y}
-                  y2={item.y}
-                  stroke={item.bullish ? "rgba(8,153,129,0.92)" : "rgba(242,54,69,0.92)"}
-                  strokeWidth={item.continuation ? 1.35 : 2}
-                  strokeDasharray={item.continuation ? "6 5" : undefined}
-                />
-                <text
-                  x={item.x2}
-                  y={item.y - 6}
-                  textAnchor="end"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
-                  paintOrder="stroke"
-                >
-                  {item.label}
-                </text>
-              </g>
-            ))
+          ? geometry.structureLines.map((item, index) => {
+              const lineColor = item.bullish ? "rgba(40,214,183,0.92)" : "rgba(248,113,113,0.9)";
+              const chipFill = item.bullish ? "rgba(17,94,89,0.52)" : "rgba(127,29,29,0.52)";
+              const chipStroke = item.bullish ? "rgba(45,212,191,0.72)" : "rgba(248,113,113,0.72)";
+              const chipWidth = item.label.length * 6.1 + 12;
+              const chipHeight = 13;
+              const chipX = Math.max(4, item.x2 - chipWidth);
+              const chipY = item.y - chipHeight - 3;
+              return (
+                <g key={`line-${item.label}-${index}`}>
+                  <line
+                    x1={item.x1}
+                    x2={item.x2}
+                    y1={item.y}
+                    y2={item.y}
+                    stroke={lineColor}
+                    strokeWidth={item.continuation ? 1.1 : 1.35}
+                    strokeDasharray={item.continuation ? "4 4" : "3 3"}
+                    strokeLinecap="round"
+                  />
+                  <rect
+                    x={chipX}
+                    y={chipY}
+                    width={chipWidth}
+                    height={chipHeight}
+                    rx={3}
+                    fill={chipFill}
+                    stroke={chipStroke}
+                    strokeWidth={0.8}
+                  />
+                  <text
+                    x={chipX + chipWidth / 2}
+                    y={chipY + 9}
+                    textAnchor="middle"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    fontSize="8.6"
+                    fontWeight="700"
+                    fill={item.bullish ? "rgba(153,246,228,0.96)" : "rgba(254,202,202,0.96)"}
+                    letterSpacing="0.3"
+                  >
+                    {item.label}
+                  </text>
+                </g>
+              );
+            })
           : null}
 
         {active.ma && geometry.maPath ? (
@@ -467,11 +485,11 @@ export function ChartIndicatorLayer({
                   y={item.y}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
+                  fontSize="9"
                   fontWeight="700"
-                  fill={item.kind === "high" ? "rgba(34,211,238,0.92)" : "rgba(45,212,191,0.92)"}
-                  stroke="rgba(0,0,0,0.75)"
-                  strokeWidth="3"
+                  fill={item.kind === "high" ? "rgba(103,232,249,0.9)" : "rgba(94,234,212,0.9)"}
+                  stroke="rgba(2,6,23,0.72)"
+                  strokeWidth="2.4"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -488,11 +506,11 @@ export function ChartIndicatorLayer({
                   y={item.y}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
+                  fontSize="9"
                   fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
+                  fill={item.bullish ? "rgba(94,234,212,0.92)" : "rgba(252,165,165,0.92)"}
+                  stroke="rgba(2,6,23,0.72)"
+                  strokeWidth="2.4"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -555,8 +573,16 @@ function VolumetricRightRailLabel({
   const sideLabel = buyersWin
     ? `B ${Math.round(v.buyerPercent)}%`
     : `S ${Math.round(v.sellerPercent)}%`;
-  const sideColor = buyersWin ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
-  const baseColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
+  const sideColor = buyersWin ? "rgba(167,243,208,0.96)" : "rgba(254,202,202,0.96)";
+  const baseColor = zone.direction === "up" ? "rgba(153,246,228,0.96)" : "rgba(254,202,202,0.96)";
+  const volChipFill = zone.direction === "up" ? "rgba(15,118,110,0.28)" : "rgba(127,29,29,0.28)";
+  const sideChipFill = buyersWin ? "rgba(15,118,110,0.2)" : "rgba(127,29,29,0.2)";
+  const volChipStroke = zone.direction === "up" ? "rgba(45,212,191,0.48)" : "rgba(248,113,113,0.48)";
+  const sideChipStroke = buyersWin ? "rgba(45,212,191,0.38)" : "rgba(248,113,113,0.38)";
+  const volChipWidth = Math.max(52, volLabel.length * 5.6 + 10);
+  const sideChipWidth = Math.max(40, sideLabel.length * 5.4 + 10);
+  const volChipX = railX - volChipWidth;
+  const sideChipX = railX - sideChipWidth;
 
   // Two stacked text rows: volume label above the OB midline, dominance
   // label below — both right-anchored on the shared rail.
@@ -569,9 +595,19 @@ function VolumetricRightRailLabel({
         y1={zone.midY}
         y2={zone.midY}
         stroke={zone.stroke}
-        strokeWidth={0.85}
-        strokeDasharray="3 4"
-        opacity={0.85}
+        strokeWidth={0.9}
+        strokeDasharray="2 4"
+        opacity={0.82}
+      />
+      <rect
+        x={volChipX}
+        y={zone.midY - 10}
+        width={volChipWidth}
+        height={12}
+        rx={3}
+        fill={volChipFill}
+        stroke={volChipStroke}
+        strokeWidth={0.7}
       />
       <text
         x={railX}
@@ -581,12 +617,22 @@ function VolumetricRightRailLabel({
         fontSize="9.5"
         fontWeight={700}
         fill={baseColor}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.6"
+        stroke="rgba(0,0,0,0.4)"
+        strokeWidth="1.4"
         paintOrder="stroke"
       >
         {volLabel}
       </text>
+      <rect
+        x={sideChipX}
+        y={zone.midY + 2}
+        width={sideChipWidth}
+        height={11}
+        rx={3}
+        fill={sideChipFill}
+        stroke={sideChipStroke}
+        strokeWidth={0.7}
+      />
       <text
         x={railX}
         y={zone.midY + 11}
@@ -595,8 +641,8 @@ function VolumetricRightRailLabel({
         fontSize="9"
         fontWeight={700}
         fill={sideColor}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.6"
+        stroke="rgba(0,0,0,0.4)"
+        strokeWidth="1.2"
         paintOrder="stroke"
       >
         {sideLabel}
@@ -617,8 +663,8 @@ function VolumetricSplitFill({ zone }: { zone: Zone }) {
   if (!v || v.totalVolume <= 0) return null;
   const sellerHeight = zone.height * (v.sellerPercent / 100);
   const buyerHeight = zone.height - sellerHeight;
-  const buyerFill = "rgba(45,212,191,0.18)";
-  const sellerFill = "rgba(244,63,94,0.18)";
+  const buyerFill = "rgba(45,212,191,0.16)";
+  const sellerFill = "rgba(244,63,94,0.16)";
   return (
     <g pointerEvents="none">
       {sellerHeight > 0 ? (
@@ -645,9 +691,9 @@ function VolumetricSplitFill({ zone }: { zone: Zone }) {
         x2={zone.detectionEndX}
         y1={zone.y + sellerHeight}
         y2={zone.y + sellerHeight}
-        stroke="rgba(255,255,255,0.55)"
-        strokeWidth={0.7}
-        strokeDasharray="2 2"
+        stroke="rgba(226,232,240,0.42)"
+        strokeWidth={0.6}
+        strokeDasharray="1.5 2.5"
       />
     </g>
   );
@@ -678,6 +724,13 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   // OB → LuxAlgo "Volumetric" layout: filled band + horizontal volume
   // split + dashed top/bottom rays extending right.
   if (variant === "ob") {
+    const edgeTint =
+      zone.direction === "up" ? "rgba(45,212,191,0.5)" : "rgba(248,113,113,0.5)";
+    const topBandFill =
+      zone.direction === "up" ? "rgba(45,212,191,0.24)" : "rgba(248,113,113,0.2)";
+    const bottomBandFill =
+      zone.direction === "up" ? "rgba(20,184,166,0.22)" : "rgba(239,68,68,0.22)";
+    const edgeBandHeight = Math.min(4, Math.max(1.2, zone.height * 0.22));
     return (
       <g opacity={fadeFactor}>
         {/* Solid detected zone — base fill */}
@@ -687,9 +740,26 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           width={Math.max(2, detectionWidth)}
           height={zone.height}
           fill={zone.fill}
-          stroke={zone.stroke}
-          strokeWidth={1}
-          rx={3}
+          stroke={edgeTint}
+          strokeWidth={0.95}
+          rx={2}
+        />
+        {/* Premium edge accents (Lux-inspired): stronger top + bottom rails. */}
+        <rect
+          x={zone.x}
+          y={zone.y}
+          width={Math.max(2, detectionWidth)}
+          height={edgeBandHeight}
+          fill={topBandFill}
+          rx={1}
+        />
+        <rect
+          x={zone.x}
+          y={zone.y + zone.height - edgeBandHeight}
+          width={Math.max(2, detectionWidth)}
+          height={edgeBandHeight}
+          fill={bottomBandFill}
+          rx={1}
         />
         {/* Volumetric horizontal split (green buyer % bottom / red seller % top) */}
         {zone.volumetric && zone.volumetric.totalVolume > 0 ? (
@@ -703,9 +773,9 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             x2={zone.extendX}
             y1={zone.y}
             y2={zone.y}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
+            stroke={edgeTint}
+            strokeWidth={0.95}
+            strokeDasharray="3 4"
             opacity={0.95}
           />
         ) : null}
@@ -716,9 +786,9 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             x2={zone.extendX}
             y1={zone.y + zone.height}
             y2={zone.y + zone.height}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
+            stroke={edgeTint}
+            strokeWidth={0.95}
+            strokeDasharray="3 4"
             opacity={0.95}
           />
         ) : null}
@@ -736,8 +806,8 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         height={zone.height}
         fill={zone.fill}
         stroke={zone.stroke}
-        strokeWidth={1}
-        strokeDasharray={variant === "ifvg" ? "3 3" : undefined}
+        strokeWidth={0.9}
+        strokeDasharray={variant === "ifvg" ? "2 3" : undefined}
         rx={2}
       />
       {zone.extend && extensionWidth > 1 ? (
@@ -747,7 +817,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           width={extensionWidth}
           height={zone.height}
           fill={zone.fill}
-          opacity={0.85}
+          opacity={0.74}
           rx={0}
         />
       ) : null}
@@ -757,9 +827,9 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         y1={zone.midY}
         y2={zone.midY}
         stroke={zone.stroke}
-        strokeWidth={0.85}
-        strokeDasharray="4 3"
-        opacity={0.85}
+        strokeWidth={0.75}
+        strokeDasharray="2 4"
+        opacity={0.8}
       />
       {variant === "ifvg" ? (
         <text
@@ -968,7 +1038,7 @@ function buildStructureOverlay(
           x1,
           x2,
           y,
-          label: isBull ? "BOS" : "MSS",
+          label: isBull ? "BOS" : "CHoCH",
           bullish: true,
           continuation: isBull,
         });
@@ -987,7 +1057,7 @@ function buildStructureOverlay(
           x1,
           x2,
           y,
-          label: isBull ? "MSS" : "BOS",
+          label: isBull ? "CHoCH" : "BOS",
           bullish: false,
           continuation: !isBull,
         });
