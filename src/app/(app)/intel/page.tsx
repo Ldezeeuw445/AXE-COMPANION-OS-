@@ -4,6 +4,7 @@ import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { loadIntelSnapshot, type IntelProviderStatus } from "@/lib/intel/intelClient";
 
@@ -92,13 +93,25 @@ export default async function IntelPage({ searchParams }: PageProps) {
     },
   ];
 
+  const liveProviderCount = intel.providers.filter((p) => p.state === "live").length;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
+      {/* Mobile top bar: AXE wordmark + pulse is the single live
+          indicator now — see `AxeWordmarkLive`. We pass our provider
+          counts and freshness through `LiveStatusReporter`. The
+          provider grid below is the detail view. */}
       <AxeTopBarInjector
         title="Intel"
         subtitle={`${symbol} smart-money flow`}
         sections={toolbarSections}
-        center={livePill}
+      />
+      <LiveStatusReporter
+        liveCount={liveProviderCount}
+        totalCount={intel.providers.length}
+        freshestAgeSec={intel.cache.ageSeconds ?? null}
+        label="Intel"
+        allLiveOverride={intel.hasLiveData && !isStale ? true : intel.hasLiveData ? false : null}
       />
       <ScreenHeader
         title="Intel"

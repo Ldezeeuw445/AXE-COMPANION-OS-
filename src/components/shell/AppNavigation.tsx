@@ -23,7 +23,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
-import { AxeWordmark } from "@/components/brand/AxeWordmark";
+import { AxeWordmarkLive } from "@/components/brand/AxeWordmarkLive";
 
 type NavItem = {
   href: string;
@@ -117,9 +117,15 @@ export function AppNavigation() {
           </button>
         </div>
 
-        {/* True center column — AXE wordmark stays visually centered regardless of injected slots */}
+        {/* True center column — AXE wordmark + live pulse stay visually
+            centred regardless of injected slots. The pulse to the LEFT
+            of the wordmark is the only "is this page actually live?"
+            indicator for the whole app. Pages push their state via
+            `setLiveStatus` from `@/lib/liveStatusBus`. Chart page is
+            opted out of the wordmark — it has its own dedicated controls
+            in this slot (depth, news, settings, indicators). */}
         <div className="pointer-events-none relative flex min-w-0 items-center justify-center">
-          {isChart ? null : <AxeWordmark />}
+          {isChart ? null : <AxeWordmarkLive />}
 
           {/* Optional page-injected center content (stacked under AXE, does not shift the wordmark) */}
           {slots.center ? (

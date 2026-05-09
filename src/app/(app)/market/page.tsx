@@ -5,6 +5,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import type {
@@ -97,18 +98,25 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
     return null;
   })();
 
+  const liveProviderCount = ctx.providers.filter((p) => p.state === "live").length;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
+      {/* Mobile top bar: the AXE wordmark in the centre carries the
+          single live indicator now, fed by `LiveStatusReporter` below.
+          We deliberately no longer inject a "LIVE" pill in the centre
+          slot — that duplicated the dot pulsing next to AXE. */}
       <AxeTopBarInjector
         title="Market"
         subtitle={`${symbol} context`}
         sections={toolbarSections}
-        center={livePill}
       />
-      {/* The mobile top bar already carries the Live/Idle pill (center slot
-          via AxeTopBarInjector). On desktop we keep the AXE toolbar here but
-          DON'T re-render the pill — that produced two side-by-side LIVE pills
-          on phones, which looked redundant. */}
+      <LiveStatusReporter
+        liveCount={liveProviderCount}
+        totalCount={ctx.providers.length}
+        label="Market"
+        allLiveOverride={ctx.hasLiveData ? true : false}
+      />
       <ScreenHeader
         title="Market context"
         subtitle={`Filtered by ${symbol}${ctx.symbols.length > 1 ? ` + ${ctx.symbols.length - 1} watch` : ""} — macro, news and calendar.`}

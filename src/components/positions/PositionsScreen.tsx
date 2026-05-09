@@ -5,6 +5,7 @@ import { Layers } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
 type Props = {
@@ -15,8 +16,27 @@ type Props = {
 };
 
 export function PositionsScreen({ positions, providerStatus, error, hint }: Props) {
+  // Honest live mapping for the AXE pulse:
+  //  • "connected" → green pulse (MetaApi is delivering)
+  //  • "failed"    → amber (provider configured but failing)
+  //  • anything else (provider_not_configured / no active account) → no opinion
+  const allLiveOverride: boolean | null =
+    providerStatus === "connected"
+      ? true
+      : providerStatus === "failed"
+        ? false
+        : null;
+  const totalCount = providerStatus ? 1 : 0;
+  const liveCount = providerStatus === "connected" ? 1 : 0;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
+      <LiveStatusReporter
+        liveCount={liveCount}
+        totalCount={totalCount}
+        label="MetaApi positions"
+        allLiveOverride={allLiveOverride}
+      />
       <ScreenHeader
         title="Positions"
         subtitle="Open positions from your connected MetaApi MT5 account — same symbols and prices as the broker terminal."

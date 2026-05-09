@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { PushPermission } from "@/components/push/PushPermission";
+import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
 
 type AlertRow = {
   id: string;
@@ -282,19 +283,11 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
 
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    // Compact pill for the mobile top bar — the long "Delivery: in-app" string
-    // overlapped the AXE wordmark on iPhone widths, so we show just the dot +
-    // a short status label here. The full label still appears on desktop and
-    // inline next to the "Create alert" form below.
-    setCenter(
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-[3px] text-[10px] font-semibold uppercase tracking-wider ${delivery.className}`}
-        title={delivery.label}
-      >
-        <span className={`h-1.5 w-1.5 rounded-full ${delivery.dot}`} aria-hidden />
-        {delivery.short}
-      </span>,
-    );
+    // Mobile top bar: only the AXE wordmark + pulse now lives in the
+    // centre. The delivery status moved into the AXE pulse + inline
+    // "Push notifications" panel below. Keeping the center slot clear
+    // matches the chart-page-excluded layout the user asked for.
+    setCenter(null);
     setRight(
       <AxeContextToolbar
         title="Alerts"
@@ -306,16 +299,27 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       setCenter(null);
       setRight(null);
     };
-  }, [
-    setCenter,
-    setRight,
-    delivery.className,
-    delivery.dot,
-    delivery.label,
-    delivery.short,
-    focusSymbol,
-    toolbarSections,
-  ]);
+  }, [setCenter, setRight, focusSymbol, toolbarSections]);
+
+  // Push the delivery state into the global AXE-pulse bus.
+  // "live" means the alerts engine is reachable and at least one
+  // delivery channel (in-app or push) is wired up.
+  useEffect(() => {
+    const inAppLive = !error;
+    const pushLive = push?.vapidConfigured === true && push?.hasSubscription === true;
+    const channelsLive = (inAppLive ? 1 : 0) + (pushLive ? 1 : 0);
+    const totalChannels = 1 + (push?.vapidConfigured ? 1 : 0);
+    setLiveStatus({
+      allLive: inAppLive ? true : false,
+      liveCount: channelsLive,
+      totalCount: totalChannels,
+      freshestAgeSec: null,
+      label: `Alerts · ${delivery.short}`,
+    });
+    return () => {
+      clearLiveStatus();
+    };
+  }, [error, push?.vapidConfigured, push?.hasSubscription, delivery.short]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
