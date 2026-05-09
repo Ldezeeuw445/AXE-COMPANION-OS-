@@ -8,6 +8,13 @@ import {
   type ChartAnnotation,
 } from "@/components/chart/annotations/types";
 
+/**
+ * Single right-rail offset. Every chart label (fib %, PDH, PDL, PDQ)
+ * anchors at `hostWidth - RIGHT_RAIL_OFFSET` so they line up vertically
+ * with no overlap. Wide enough to clear the price-axis gutter.
+ */
+const RIGHT_RAIL_OFFSET = 8;
+
 type Props = {
   /** All annotations; the layer only renders fib_retracement entries. */
   annotations: ChartAnnotation[];
@@ -164,31 +171,21 @@ export function FibAnnotationLayer({
         const extend = Boolean(settings.extendRight);
         const style: "levels" | "premium_discount" =
           settings.style === "premium_discount" ? "premium_discount" : "levels";
-        const rightEdgeTimeRaw = settings.rightEdgeTime;
-        const rightEdgeTime =
-          typeof rightEdgeTimeRaw === "number" && Number.isFinite(rightEdgeTimeRaw)
-            ? rightEdgeTimeRaw
-            : null;
-        // Auto-Fib: clamp the right edge to candle[-N] (per-TF offset) so
-        // the live candle never sits inside the fib's price band. When
-        // the user drags the fib manually, `rightEdgeTime` is left in
-        // place and we use the swing's time as the right edge — drag
-        // works freely with NO clamping (per UX spec).
+        // Right-edge behaviour (TradingView / MT5 native): the fib LINES
+        // extend forward past the live candle and stop just before the
+        // right-rail labels. Anchor detection (in swingAnalysis) skips
+        // the trailing N candles so 0% / 100% never read the unfinished
+        // wick — but the lines themselves project forward so the trader
+        // can see exactly when price will hit each level. Capped at
+        // `hostWidth - RIGHT_RAIL_OFFSET` so PDH / PDL / PDQ / fib-%
+        // labels share one clean right rail with no overlap.
         let rightX = endX;
         if (extend) {
-          if (rightEdgeTime != null) {
-            const tfEdgeX = h.timeToCoordinate(rightEdgeTime);
-            rightX = tfEdgeX != null && tfEdgeX > startX ? tfEdgeX : endX;
-          } else {
-            // Manually-drawn fib — keep historic behaviour: extend to the
-            // future-projection cursor or chart edge.
-            rightX = Math.max(
-              endX,
-              futureProjectionX != null && futureProjectionX > endX
-                ? futureProjectionX
-                : Math.max(hostWidth - 4, endX),
-            );
-          }
+          const projectionEdge =
+            futureProjectionX != null && futureProjectionX > endX
+              ? Math.min(futureProjectionX, hostWidth - RIGHT_RAIL_OFFSET)
+              : hostWidth - RIGHT_RAIL_OFFSET;
+          rightX = Math.max(endX, projectionEdge);
         }
         next.push({
           id: ann.id,
@@ -335,12 +332,12 @@ export function FibAnnotationLayer({
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;
-          // Anchor both percentage and price labels at the right edge of
-          // the chart frame so they never sit on top of historical
-          // candles. Price is the right-most (mono, brighter); the
-          // percentage sits just to its left (UI font, dimmed). Same row.
-          // Mirrors MT5's right-rail behaviour.
-          const priceLabelRightX = Math.min(containerSize.w - 4, g.rightX + 6);
+          // Anchor every right-side label at the same right-rail X so
+          // the fib %, fib price, PDH, PDL and PDQ all line up — no
+          // overlap, no labels falling off-screen. Price is the
+          // right-most (mono, brighter); the percentage sits to its
+          // left (UI font, dimmed). MT5 native behaviour.
+          const priceLabelRightX = containerSize.w - RIGHT_RAIL_OFFSET;
           // Reserve ~58px for the price text so the % can slot in just
           // to its left without overlap. Works for FX (5 digits),
           // metals (3 digits) and indices (1-2 digits).
@@ -359,72 +356,103 @@ export function FibAnnotationLayer({
           const eqLine = g.lines.find((ln) => ln.level === 0.5);
           const anchorLine = g.lines.find((ln) => ln.level === 0);
           const swingExtreme = g.lines.find((ln) => ln.level === 1);
+          // Premium = top 25% of the range (extreme high / supply).
+          // Discount = bottom 25% of the range (extreme low / demand).
+          // We render only those small "extreme" bands, not the full
+          // halves — much less visible than OB / FVG / iFVG which sit
+          // on top, exactly per spec.
+          const pdBandPct = 0.25;
+          const topY = anchorLine && swingExtreme ? Math.min(anchorLine.y, swingExtreme.y) : 0;
+          const botY = anchorLine && swingExtreme ? Math.max(anchorLine.y, swingExtreme.y) : 0;
+          const totalH = Math.max(0, botY - topY);
+          const bandH = Math.max(2, totalH * pdBandPct);
+          // Premium fill / stroke — very faint red.
+          const premiumFill = "rgba(244,63,94,0.045)";
+          const premiumStroke = "rgba(244,63,94,0.30)";
+          // Discount fill / stroke — very faint emerald.
+          const discountFill = "rgba(45,212,191,0.05)";
+          const discountStroke = "rgba(45,212,191,0.30)";
           return (
             <g key={g.id}>
-              {/* Premium / Discount tint bands. Premium = the half above
-                  equilibrium, discount = below. We tint very lightly so
-                  the candles still read clearly. */}
-              {g.style === "premium_discount" && eqLine && anchorLine && swingExtreme ? (
+              {/* Premium / Discount EXTREME bands. Top 25% of the range
+                  is supply (premium), bottom 25% is demand (discount).
+                  Anything in between stays clean — this layer sits
+                  underneath OB / FVG / iFVG and is intentionally vague
+                  so the active SMC zones above remain dominant. */}
+              {g.style === "premium_discount" && anchorLine && swingExtreme && totalH > 0 ? (
                 <g pointerEvents="none">
+                  {/* Top extreme band (always premium / supply) */}
                   <rect
                     x={g.startX}
-                    y={Math.min(anchorLine.y, eqLine.y)}
+                    y={topY}
                     width={Math.max(2, g.rightX - g.startX)}
-                    height={Math.max(2, Math.abs(eqLine.y - anchorLine.y))}
-                    fill={
-                      anchorLine.y < eqLine.y
-                        ? "rgba(244,63,94,0.075)"
-                        : "rgba(45,212,191,0.085)"
-                    }
+                    height={bandH}
+                    fill={premiumFill}
+                    stroke={premiumStroke}
+                    strokeWidth={0.6}
+                    strokeDasharray="3 3"
                   />
+                  {/* Bottom extreme band (always discount / demand) */}
                   <rect
                     x={g.startX}
-                    y={Math.min(eqLine.y, swingExtreme.y)}
+                    y={botY - bandH}
                     width={Math.max(2, g.rightX - g.startX)}
-                    height={Math.max(2, Math.abs(swingExtreme.y - eqLine.y))}
-                    fill={
-                      anchorLine.y < eqLine.y
-                        ? "rgba(45,212,191,0.085)"
-                        : "rgba(244,63,94,0.075)"
-                    }
+                    height={bandH}
+                    fill={discountFill}
+                    stroke={discountStroke}
+                    strokeWidth={0.6}
+                    strokeDasharray="3 3"
                   />
-                  {/* Premium / Discount labels at the right edge */}
+                  {/* PREMIUM label — right rail, mid of top band */}
                   <text
-                    x={g.rightX - 6}
-                    y={(Math.min(anchorLine.y, eqLine.y) + Math.max(anchorLine.y, eqLine.y)) / 2 + 3}
+                    x={containerSize.w - RIGHT_RAIL_OFFSET}
+                    y={topY + bandH / 2 + 3}
                     textAnchor="end"
                     fontFamily="ui-sans-serif, system-ui, -apple-system"
                     fontSize="9"
                     fontWeight={700}
-                    fill={
-                      anchorLine.y < eqLine.y
-                        ? "rgba(252,165,165,0.92)"
-                        : "rgba(167,243,208,0.92)"
-                    }
+                    letterSpacing="0.5"
+                    fill="rgba(252,165,165,0.85)"
                     stroke="rgba(0,0,0,0.55)"
                     strokeWidth="2"
                     paintOrder="stroke"
                   >
-                    {anchorLine.y < eqLine.y ? "PREMIUM" : "DISCOUNT"}
+                    PREMIUM
                   </text>
+                  {/* DISCOUNT label — right rail, mid of bottom band */}
                   <text
-                    x={g.rightX - 6}
-                    y={(Math.min(eqLine.y, swingExtreme.y) + Math.max(eqLine.y, swingExtreme.y)) / 2 + 3}
+                    x={containerSize.w - RIGHT_RAIL_OFFSET}
+                    y={botY - bandH / 2 + 3}
                     textAnchor="end"
                     fontFamily="ui-sans-serif, system-ui, -apple-system"
                     fontSize="9"
                     fontWeight={700}
-                    fill={
-                      anchorLine.y < eqLine.y
-                        ? "rgba(167,243,208,0.92)"
-                        : "rgba(252,165,165,0.92)"
-                    }
+                    letterSpacing="0.5"
+                    fill="rgba(167,243,208,0.85)"
                     stroke="rgba(0,0,0,0.55)"
                     strokeWidth="2"
                     paintOrder="stroke"
                   >
-                    {anchorLine.y < eqLine.y ? "DISCOUNT" : "PREMIUM"}
+                    DISCOUNT
                   </text>
+                  {/* EQ label */}
+                  {eqLine ? (
+                    <text
+                      x={containerSize.w - RIGHT_RAIL_OFFSET}
+                      y={eqLine.y - 2}
+                      textAnchor="end"
+                      fontFamily="ui-sans-serif, system-ui, -apple-system"
+                      fontSize="8.5"
+                      fontWeight={600}
+                      letterSpacing="0.4"
+                      fill="rgba(148,163,184,0.85)"
+                      stroke="rgba(0,0,0,0.55)"
+                      strokeWidth="2"
+                      paintOrder="stroke"
+                    >
+                      EQ
+                    </text>
+                  ) : null}
                 </g>
               ) : null}
 

@@ -4,6 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 
+/**
+ * Shared right-rail offset. Every chart label that lives on the right
+ * (PDH, PDL, PDQ, OB volume, fib %, fib price, Premium / Discount) sits
+ * at `containerWidth - RIGHT_RAIL_OFFSET` so the entire right column
+ * lines up vertically with no overlap. Mirrors `RIGHT_RAIL_OFFSET` in
+ * `FibAnnotationLayer.tsx`.
+ */
+const RIGHT_RAIL_OFFSET = 8;
+
 type Props = {
   candles: MetaApiCandle[];
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
@@ -174,6 +183,7 @@ export function ChartIndicatorLayer({
         previousDayEq: null as { y: number; price: number } | null,
         swingPointLevels: [] as SwingPointLevel[],
         swingFailures: [] as StructureArrow[],
+        totalChartVolume: 0,
       };
     }
 
@@ -215,6 +225,14 @@ export function ChartIndicatorLayer({
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
       buildPreviousDayLevels(visibleWithTime, handle);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
+    // Total tickVolume across the visible window — used as the
+    // denominator for OB volume-percent labels ("1.082K (13%)").
+    // Considers the last 200 bars to keep the % responsive on long
+    // history charts. Falls back to plain `volume` when tickVolume
+    // isn't reported.
+    const totalChartVolume = visibleWithTime
+      .slice(-200)
+      .reduce((sum, c) => sum + (Number(c.tickVolume ?? c.volume ?? 0) || 0), 0);
 
     return {
       maPath: toPath(maPoints),
@@ -246,6 +264,7 @@ export function ChartIndicatorLayer({
       previousDayEq,
       swingPointLevels,
       swingFailures: structureOverlay.swingFailures,
+      totalChartVolume,
     };
   }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount]);
 
@@ -254,7 +273,14 @@ export function ChartIndicatorLayer({
       <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
         {active.orderBlocks
           ? geometry.orderBlocks.map((zone, index) => (
-              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" />
+              <g key={`ob-${index}`}>
+                <ZoneBox zone={zone} variant="ob" />
+                <VolumetricRightRailLabel
+                  zone={zone}
+                  containerWidth={size.w}
+                  totalChartVolume={geometry.totalChartVolume}
+                />
+              </g>
             ))
           : null}
 
@@ -272,20 +298,22 @@ export function ChartIndicatorLayer({
 
         {/* Previous Day High / Low / Equilibrium — all rendered as thin
             SOLID lines (no dots, no dashes) per UX spec. The label sits
-            just to the LEFT of the right-rail price gutter so it never
-            falls off-screen on narrow phones. */}
+            on the SHARED right rail (RIGHT_RAIL_OFFSET = 8px from edge,
+            matches the fib %, fib price and Premium/Discount labels)
+            so the entire right-side label column lines up vertically
+            with no overlap. */}
         {active.pdh && geometry.previousDayHigh ? (
           <g>
             <line
               x1={0}
-              x2={size.w}
+              x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayHigh.y}
               y2={geometry.previousDayHigh.y}
               stroke="rgba(34,211,238,0.78)"
               strokeWidth={1}
             />
             <text
-              x={size.w - 8}
+              x={size.w - RIGHT_RAIL_OFFSET}
               y={geometry.previousDayHigh.y - 4}
               textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -305,14 +333,14 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={0}
-              x2={size.w}
+              x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayLow.y}
               y2={geometry.previousDayLow.y}
               stroke="rgba(244,63,94,0.78)"
               strokeWidth={1}
             />
             <text
-              x={size.w - 8}
+              x={size.w - RIGHT_RAIL_OFFSET}
               y={geometry.previousDayLow.y + 12}
               textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -332,14 +360,14 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={0}
-              x2={size.w}
+              x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayEq.y}
               y2={geometry.previousDayEq.y}
               stroke="rgba(96,165,250,0.72)"
               strokeWidth={1}
             />
             <text
-              x={size.w - 8}
+              x={size.w - RIGHT_RAIL_OFFSET}
               y={geometry.previousDayEq.y - 4}
               textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -479,124 +507,228 @@ export function ChartIndicatorLayer({
 }
 
 /**
- * LuxAlgo-style "Volumetric Order Blocks" split bar — buyer share on
- * the bottom (green), seller share on top (red). Width is bounded by
- * the OB band so it always stays inside the zone. Renders a dominance
- * label ("B 62%" / "S 58%") on whichever side wins, so the trader
- * never has to guess which way the order block is leaning.
- *
- * The values are 100% honest: they come straight from the candle
- * tickVolume distributed across the band (see buildVolumetricBreakdown).
+ * Format a raw tick-volume number into a compact human label.
+ * 1234   → "1.23K"
+ * 11_234 → "11.2K"
+ * 1.2M   → "1.20M"
  */
-function VolumetricBar({ zone, detectionWidth }: { zone: Zone; detectionWidth: number }) {
+function formatVolume(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 10_000) return `${(n / 1000).toFixed(1)}K`;
+  if (n >= 1000) return `${(n / 1000).toFixed(2)}K`;
+  return `${Math.round(n)}`;
+}
+
+/**
+ * LuxAlgo-style volumetric label rendered on the SHARED right rail of
+ * the chart. Shows total OB volume, % of recent chart volume and the
+ * buyer/seller dominance — exactly the layout in the user's reference
+ * photo ("1.082K (13%)") with a dashed line drawn from the OB out to
+ * the label so the trader can trace which OB it belongs to.
+ *
+ * Values are 100% honest — they come straight from the candle tickVolume
+ * inside the OB band (see buildVolumetricBreakdown).
+ */
+function VolumetricRightRailLabel({
+  zone,
+  containerWidth,
+  totalChartVolume,
+}: {
+  zone: Zone;
+  containerWidth: number;
+  totalChartVolume: number;
+}) {
   const v = zone.volumetric;
-  if (!v) return null;
+  if (!v || v.totalVolume <= 0) return null;
 
-  // The bar sits flush with the LEFT edge of the OB so it never gets
-  // clipped by the right-side label rail. Width is capped at 18% of the
-  // detection width with a hard min/max (12–34px) so it works on phones
-  // and desktop alike. Height = OB band height minus a small inset.
-  const inset = 2;
-  const barWidth = Math.max(12, Math.min(34, detectionWidth * 0.18));
-  const barX = zone.x + 2;
-  const barY = zone.y + inset;
-  const barHeight = Math.max(8, zone.height - inset * 2);
+  // Don't draw labels on incredibly thin OBs (< 12 px height) — they'd
+  // overlap stacked OBs and turn into noise.
+  if (zone.height < 12) return null;
 
-  const sellerHeight = barHeight * (v.sellerPercent / 100);
-  const buyerHeight = barHeight - sellerHeight;
-  const buyerColor = "rgba(45,212,191,0.78)";
-  const sellerColor = "rgba(244,63,94,0.78)";
-
-  // Pick which side wins for the label. Tie defaults to buyers ("B 50%")
-  // — matches the visual convention.
+  const railX = containerWidth - RIGHT_RAIL_OFFSET;
+  // Volume + percent of recent chart volume, e.g. "1.08K (13%)".
+  const volPctOfChart =
+    totalChartVolume > 0 ? Math.max(0, Math.round((v.totalVolume / totalChartVolume) * 100)) : 0;
+  const volLabel = `${formatVolume(v.totalVolume)} (${volPctOfChart}%)`;
   const buyersWin = v.buyerPercent >= v.sellerPercent;
-  const labelText = buyersWin
+  const sideLabel = buyersWin
     ? `B ${Math.round(v.buyerPercent)}%`
     : `S ${Math.round(v.sellerPercent)}%`;
-  const labelColor = buyersWin ? "rgba(167,243,208,0.96)" : "rgba(252,165,165,0.96)";
-  const labelX = barX + barWidth + 4;
-  const labelY = zone.midY + 3;
-  const showLabel = barHeight >= 14; // hide on very thin OBs to avoid clutter
+  const sideColor = buyersWin ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
+  const baseColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
 
+  // Two stacked text rows: volume label above the OB midline, dominance
+  // label below — both right-anchored on the shared rail.
   return (
     <g pointerEvents="none">
-      {/* Background frame */}
-      <rect
-        x={barX}
-        y={barY}
-        width={barWidth}
-        height={barHeight}
-        fill="rgba(0,0,0,0.35)"
-        stroke="rgba(255,255,255,0.12)"
-        strokeWidth={0.6}
-        rx={1.5}
-      />
-      {/* Sellers (red, top half) */}
-      <rect
-        x={barX}
-        y={barY}
-        width={barWidth}
-        height={Math.max(0, sellerHeight)}
-        fill={sellerColor}
-      />
-      {/* Buyers (green, bottom half) */}
-      <rect
-        x={barX}
-        y={barY + sellerHeight}
-        width={barWidth}
-        height={Math.max(0, buyerHeight)}
-        fill={buyerColor}
-      />
-      {/* 50/50 reference midline so deviations from balance are obvious */}
+      {/* Dashed extension line from the OB right edge to the label. */}
       <line
-        x1={barX}
-        x2={barX + barWidth}
-        y1={barY + barHeight / 2}
-        y2={barY + barHeight / 2}
-        stroke="rgba(255,255,255,0.55)"
-        strokeWidth={0.7}
-        strokeDasharray="2 2"
+        x1={zone.detectionEndX}
+        x2={railX - 4}
+        y1={zone.midY}
+        y2={zone.midY}
+        stroke={zone.stroke}
+        strokeWidth={0.85}
+        strokeDasharray="3 4"
+        opacity={0.85}
       />
-      {showLabel ? (
-        <text
-          x={labelX}
-          y={labelY}
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9.5"
-          fontWeight="700"
-          fill={labelColor}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.8"
-          paintOrder="stroke"
-        >
-          {labelText}
-        </text>
-      ) : null}
+      <text
+        x={railX}
+        y={zone.midY - 2}
+        textAnchor="end"
+        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+        fontSize="9.5"
+        fontWeight={700}
+        fill={baseColor}
+        stroke="rgba(0,0,0,0.78)"
+        strokeWidth="2.6"
+        paintOrder="stroke"
+      >
+        {volLabel}
+      </text>
+      <text
+        x={railX}
+        y={zone.midY + 11}
+        textAnchor="end"
+        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+        fontSize="9"
+        fontWeight={700}
+        fill={sideColor}
+        stroke="rgba(0,0,0,0.78)"
+        strokeWidth="2.6"
+        paintOrder="stroke"
+      >
+        {sideLabel}
+      </text>
     </g>
   );
 }
 
 /**
- * Single-zone renderer used by OB / FVG / iFVG. Variants only change the
- * stroke style (iFVG keeps a dashed border on the detected portion;
- * OB/FVG are solid). Every variant gets a 50% midline so traders can
- * eyeball the equilibrium of the zone.
+ * Volumetric split fill — the OB band is split horizontally into a
+ * green sub-block (buyer share, on the bottom) and a red sub-block
+ * (seller share, on the top). Heights are proportional to actual
+ * tickVolume from candles inside the band, so a 70/30 buyer-dominant
+ * OB looks visually 70/30 — exactly the LuxAlgo reference.
+ */
+function VolumetricSplitFill({ zone }: { zone: Zone }) {
+  const v = zone.volumetric;
+  if (!v || v.totalVolume <= 0) return null;
+  const sellerHeight = zone.height * (v.sellerPercent / 100);
+  const buyerHeight = zone.height - sellerHeight;
+  const buyerFill = "rgba(45,212,191,0.18)";
+  const sellerFill = "rgba(244,63,94,0.18)";
+  return (
+    <g pointerEvents="none">
+      {sellerHeight > 0 ? (
+        <rect
+          x={zone.x}
+          y={zone.y}
+          width={Math.max(2, zone.detectionEndX - zone.x)}
+          height={sellerHeight}
+          fill={sellerFill}
+        />
+      ) : null}
+      {buyerHeight > 0 ? (
+        <rect
+          x={zone.x}
+          y={zone.y + sellerHeight}
+          width={Math.max(2, zone.detectionEndX - zone.x)}
+          height={buyerHeight}
+          fill={buyerFill}
+        />
+      ) : null}
+      {/* Equilibrium split line where buyer:seller balance sits */}
+      <line
+        x1={zone.x}
+        x2={zone.detectionEndX}
+        y1={zone.y + sellerHeight}
+        y2={zone.y + sellerHeight}
+        stroke="rgba(255,255,255,0.55)"
+        strokeWidth={0.7}
+        strokeDasharray="2 2"
+      />
+    </g>
+  );
+}
+
+/**
+ * Single-zone renderer used by OB / FVG / iFVG.
+ *
+ * - OB: solid filled band at the detected zone, with an optional inner
+ *   horizontal split fill (green buyer share at bottom, red seller share
+ *   at top) sized by real tickVolume. Top + bottom edges extend right
+ *   as DASHED rays — exactly the LuxAlgo "Volumetric Order Blocks"
+ *   layout in the user's reference photo. Volume + dominance labels
+ *   are rendered separately on the shared right rail by
+ *   `VolumetricRightRailLabel`.
+ * - FVG: solid filled rect, soft fill bleed forward.
+ * - iFVG: dashed border so the inversion source is visible, fill bleeds
+ *   forward to show forward relevance.
  */
 function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg" }) {
   const labelText = variant === "ifvg" ? "iFVG" : variant === "fvg" ? "FVG" : "OB";
   const fadeFactor = zone.mitigated ? 0.45 : 1;
   const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
   const detectionEndX = zone.x + detectionWidth;
-  // The "extension" segment (right of the detected zone) gets a softer fill
-  // and NO border — that matches the user's mental model: the dashed/solid
-  // border anchors where the imbalance lives, the colour bleed shows where
-  // it might still matter going forward.
   const extensionStartX = detectionEndX;
   const extensionWidth = Math.max(0, zone.extendX - extensionStartX);
+
+  // OB → LuxAlgo "Volumetric" layout: filled band + horizontal volume
+  // split + dashed top/bottom rays extending right.
+  if (variant === "ob") {
+    return (
+      <g opacity={fadeFactor}>
+        {/* Solid detected zone — base fill */}
+        <rect
+          x={zone.x}
+          y={zone.y}
+          width={Math.max(2, detectionWidth)}
+          height={zone.height}
+          fill={zone.fill}
+          stroke={zone.stroke}
+          strokeWidth={1}
+          rx={3}
+        />
+        {/* Volumetric horizontal split (green buyer % bottom / red seller % top) */}
+        {zone.volumetric && zone.volumetric.totalVolume > 0 ? (
+          <VolumetricSplitFill zone={zone} />
+        ) : null}
+        {/* DASHED top edge ray, extending right past the detection zone.
+            Mirrors the LuxAlgo "1.082K (13%)" reference photo. */}
+        {zone.extend && extensionWidth > 1 ? (
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y}
+            y2={zone.y}
+            stroke={zone.stroke}
+            strokeWidth={1}
+            strokeDasharray="5 4"
+            opacity={0.95}
+          />
+        ) : null}
+        {/* DASHED bottom edge ray */}
+        {zone.extend && extensionWidth > 1 ? (
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y + zone.height}
+            y2={zone.y + zone.height}
+            stroke={zone.stroke}
+            strokeWidth={1}
+            strokeDasharray="5 4"
+            opacity={0.95}
+          />
+        ) : null}
+      </g>
+    );
+  }
+
+  // FVG / iFVG keep the soft "filled corridor" treatment.
   return (
     <g opacity={fadeFactor}>
-      {/* Detected zone — solid for OB/FVG, dashed for iFVG (the user asked
-          to keep the "dot line" exactly where the inversion happened). */}
       <rect
         x={zone.x}
         y={zone.y}
@@ -606,11 +738,8 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         stroke={zone.stroke}
         strokeWidth={1}
         strokeDasharray={variant === "ifvg" ? "3 3" : undefined}
-        rx={variant === "ob" ? 3 : 2}
+        rx={2}
       />
-      {/* Extension fill — same colour family but a touch more saturated so
-          it still reads on a dark chart, no stroke. Only renders when
-          the zone isn't mitigated AND we have meaningful extra width. */}
       {zone.extend && extensionWidth > 1 ? (
         <rect
           x={extensionStartX}
@@ -622,35 +751,6 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           rx={0}
         />
       ) : null}
-      {/* Volumetric profile (OB only) — lightweight horizontal bars on the
-          left edge, scaled so the most-traded price level is widest. */}
-      {variant === "ob" && zone.volumeProfile && zone.volumeProfile.length > 0 ? (
-        <g>
-          {zone.volumeProfile.map((bar, index) => (
-            <rect
-              key={index}
-              x={zone.x}
-              y={bar.y}
-              width={Math.max(2, detectionWidth * bar.widthFraction * 0.55)}
-              height={Math.max(1, bar.height)}
-              fill={zone.stroke}
-              opacity={0.42}
-            />
-          ))}
-        </g>
-      ) : null}
-      {/* LuxAlgo-style buyer/seller dominance bar (OB only). Sits on the
-          left of the zone and reads at a glance:
-            • Top half = sellers (red), height ∝ seller % of total volume
-            • Bottom half = buyers (green), height ∝ buyer %
-          A thin midline anchors 50/50 so deviations are obvious. The
-          dominant side carries the percentage label. Lets the trader
-          spot "buyers had the upper hand → bullish reaction more
-          likely" vs "sellers controlled → tap-and-fail risk". */}
-      {variant === "ob" && zone.volumetric && zone.volumetric.totalVolume > 0 ? (
-        <VolumetricBar zone={zone} detectionWidth={detectionWidth} />
-      ) : null}
-      {/* 50% midline — visible enough to read but never dominant. */}
       <line
         x1={zone.x}
         x2={zone.extendX}
