@@ -284,8 +284,16 @@ export function FibAnnotationLayer({
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;
-          const labelLeftX = Math.max(8, g.startX - 6);
-          const labelRightX = Math.min(containerSize.w - 8, g.rightX + 6);
+          // Anchor both percentage and price labels at the right edge of
+          // the chart frame so they never sit on top of historical
+          // candles. Price is the right-most (mono, brighter); the
+          // percentage sits just to its left (UI font, dimmed). Same row.
+          // Mirrors MT5's right-rail behaviour.
+          const priceLabelRightX = Math.min(containerSize.w - 4, g.rightX + 6);
+          // Reserve ~58px for the price text so the % can slot in just
+          // to its left without overlap. Works for FX (5 digits),
+          // metals (3 digits) and indices (1-2 digits).
+          const pctLabelRightX = priceLabelRightX - 60;
           const removeX = Math.max(8, g.startX - 30);
           const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
           // The "trade range" rectangle stays bound to the original anchor
@@ -356,28 +364,31 @@ export function FibAnnotationLayer({
                         pointerEvents="none"
                       />
                     ) : null}
-                    {/* Percentage label — left side */}
+                    {/* Combined % + price label, both right-anchored on
+                        the right rail. % uses a UI font / dimmed; price
+                        uses mono / bright. Same row, ~6px gap. Stays
+                        clear of historical candles regardless of where
+                        the swing leg sits. */}
                     <text
-                      x={labelLeftX}
+                      x={pctLabelRightX}
                       y={ln.y - 3}
                       textAnchor="end"
                       fontFamily="ui-sans-serif, system-ui, -apple-system"
                       fontSize="10"
                       fontWeight={isMid ? 600 : 500}
-                      fill={isMid ? "rgba(244,191,99,0.95)" : "rgba(232,238,246,0.78)"}
+                      fill={isMid ? "rgba(244,191,99,0.85)" : "rgba(232,238,246,0.62)"}
                       pointerEvents="none"
                     >
                       {(ln.level * 100).toFixed(1).replace(".", ",")}%
                     </text>
-                    {/* Price label — right side, anchored on rightX */}
                     <text
-                      x={labelRightX}
+                      x={priceLabelRightX}
                       y={ln.y - 3}
-                      textAnchor="start"
+                      textAnchor="end"
                       fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                       fontSize="10"
                       fontWeight={isMid ? 600 : 500}
-                      fill={isMid ? "rgba(244,191,99,0.95)" : "rgba(232,238,246,0.78)"}
+                      fill={isMid ? "rgba(244,191,99,0.95)" : "rgba(232,238,246,0.82)"}
                       pointerEvents="none"
                     >
                       {ln.price.toFixed(digits)}

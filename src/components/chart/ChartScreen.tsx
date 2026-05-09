@@ -535,10 +535,22 @@ export function ChartScreen({ data, initialAction }: Props) {
   // bearish; user can pick 2 or 3 each side via the small picker that
   // appears when OB is active. Persisted per device.
   const [orderBlockCount, setOrderBlockCount] = useState<1 | 2 | 3>(1);
+  // Same idea for iFVGs. Default 1 each side; picker appears when iFVG
+  // is active.
+  const [inverseFvgCount, setInverseFvgCount] = useState<1 | 2 | 3>(1);
+  // Auto-Fib source mode: "auto" (most recent good leg), "swing" (forces
+  // market-structure HH/HL or LH/LL), or "pd" (previous day's range).
+  // Picker appears in the toolbar when there's an active Fib annotation.
+  type FibMode = "auto" | "swing" | "pd";
+  const [fibMode, setFibMode] = useState<FibMode>("auto");
   useEffect(() => {
     try {
       const raw = Number(localStorage.getItem("axe.chart.obCount") ?? "");
       if (raw === 1 || raw === 2 || raw === 3) setOrderBlockCount(raw);
+      const rawIfvg = Number(localStorage.getItem("axe.chart.ifvgCount") ?? "");
+      if (rawIfvg === 1 || rawIfvg === 2 || rawIfvg === 3) setInverseFvgCount(rawIfvg);
+      const rawFib = localStorage.getItem("axe.chart.fibMode");
+      if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd") setFibMode(rawFib);
     } catch {
       /* localStorage may be blocked */
     }
@@ -547,6 +559,25 @@ export function ChartScreen({ data, initialAction }: Props) {
     setOrderBlockCount(next);
     try {
       localStorage.setItem("axe.chart.obCount", String(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const updateInverseFvgCount = useCallback((next: 1 | 2 | 3) => {
+    setInverseFvgCount(next);
+    try {
+      localStorage.setItem("axe.chart.ifvgCount", String(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  // Persist + apply on change. The actual "rebuild the fib annotation
+  // when the mode changes while a Fib is active" hook lives further down,
+  // because it needs `executeActionByType` and `annotations` in scope.
+  const updateFibMode = useCallback((next: FibMode) => {
+    setFibMode(next);
+    try {
+      localStorage.setItem("axe.chart.fibMode", next);
     } catch {
       /* ignore */
     }
@@ -1142,6 +1173,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             accountId: accountId ?? undefined,
             candles: data.candles,
             strength: 3,
+            mode: fibMode,
           });
           return executeChartAction(command);
         } catch {
@@ -1192,8 +1224,36 @@ export function ChartScreen({ data, initialAction }: Props) {
         payload: {},
       });
     },
-    [accountId, data.candles, data.symbol, data.timeframeKey, executeChartAction],
+    [accountId, data.candles, data.symbol, data.timeframeKey, executeChartAction, fibMode],
   );
+
+  // Rebuild auto-Fib whenever the user changes the source mode while a
+  // Fib annotation is on the chart. Without this the picker would only
+  // affect the *next* fib drawn — bad UX, since the user expects the
+  // existing one to update immediately.
+  const previousFibModeRef = useRef<FibMode>(fibMode);
+  useEffect(() => {
+    if (previousFibModeRef.current === fibMode) return;
+    previousFibModeRef.current = fibMode;
+    const hasFib = annotations.some(
+      (a) => a.type === "fib_retracement" && (a.settings as Record<string, unknown> | undefined)?.source === "user",
+    );
+    if (!hasFib) return;
+    // Remove all user-source fib annotations, then redraw with the new
+    // mode. We rely on `toggleAutoAnnotation` semantics — but call the
+    // builder directly so we don't double-toggle.
+    const fibs = annotations.filter((a) => a.type === "fib_retracement");
+    let nextList = annotations;
+    for (const ann of fibs) {
+      nextList = removeAnnotation(data.symbol, data.timeframeKey, ann.id);
+    }
+    setAnnotations(nextList);
+    // Defer to the next tick so the remove settles before we draw the
+    // replacement.
+    setTimeout(() => {
+      executeActionByType("draw_fibonacci", "user");
+    }, 0);
+  }, [fibMode, annotations, data.symbol, data.timeframeKey, executeActionByType]);
 
   // Tap the toolbar Fib/Trend button: if there's already an auto drawing of
   // that type on the chart, remove it (toggle off). Otherwise, draw a new one.
@@ -1489,6 +1549,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           canvasRef={canvasRef}
           futureProjectionX={futureProjectionX}
           orderBlockCount={orderBlockCount}
+          inverseFvgCount={inverseFvgCount}
           active={{
             ma: activeToolFlags.ma,
             structure: activeToolFlags.structure,
@@ -1702,6 +1763,76 @@ export function ChartScreen({ data, initialAction }: Props) {
                       aria-pressed={isActive}
                     >
                       {value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* iFVG count picker — same UX as OB. Only visible while iFVG
+              is on. Useful iFVGs (no second mitigation) extend forward
+              to the future-projection cursor; reclaimed ones stop at
+              the inversion candle. */}
+          {activeToolFlags.ifvg ? (
+            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                iFVG · per side
+              </span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3].map((value) => {
+                  const isActive = inverseFvgCount === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => updateInverseFvgCount(value as 1 | 2 | 3)}
+                      className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
+                        isActive
+                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                      }`}
+                      aria-label={`Show ${value} iFVG${value === 1 ? "" : "s"} per direction`}
+                      aria-pressed={isActive}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Auto-Fib source picker — appears whenever a Fib annotation
+              is on the chart. "Auto" picks the latest good leg, "Swing"
+              forces market-structure (HH/HL or LH/LL), "Day" maps the
+              fib across yesterday's PDH ↔ PDL range. */}
+          {hasFibAnnotation ? (
+            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                Fib · source
+              </span>
+              <div className="flex items-center gap-1">
+                {([
+                  { value: "auto", label: "Auto" },
+                  { value: "swing", label: "HH/HL" },
+                  { value: "pd", label: "Day" },
+                ] as Array<{ value: FibMode; label: string }>).map((opt) => {
+                  const isActive = fibMode === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => updateFibMode(opt.value)}
+                      className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
+                        isActive
+                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                      }`}
+                      aria-label={`Fib source ${opt.label}`}
+                      aria-pressed={isActive}
+                    >
+                      {opt.label}
                     </button>
                   );
                 })}

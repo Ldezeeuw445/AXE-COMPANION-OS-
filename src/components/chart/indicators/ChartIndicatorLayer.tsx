@@ -27,6 +27,11 @@ type Props = {
    */
   orderBlockCount?: 1 | 2 | 3;
   /**
+   * Same idea for iFVGs: how many of the most recent up + down inverse
+   * FVGs to render. Default 1 each side; picker allows 2 or 3.
+   */
+  inverseFvgCount?: 1 | 2 | 3;
+  /**
    * Future-projection cursor X (chart-frame coords). When provided, the
    * iFVG / FVG / OB extensions stretch right to this X so the user can see
    * exactly when the next candles will hit the zone.
@@ -95,6 +100,7 @@ export function ChartIndicatorLayer({
   canvasRef,
   active,
   orderBlockCount = 1,
+  inverseFvgCount = 1,
   futureProjectionX = null,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -185,18 +191,23 @@ export function ChartIndicatorLayer({
       // Filter to the latest `orderBlockCount` per direction (default 1
       // bullish + 1 bearish). The picker on the toolbar lets the user
       // bump this to 2 or 3 each side when wider context is wanted.
-      orderBlocks: pickLatestOrderBlocksPerDirection(
+      orderBlocks: pickLatestZonesPerDirection(
         structureOverlay.orderBlocks,
         orderBlockCount,
       ),
       fairValueGaps: structureOverlay.fairValueGaps,
-      inverseFairValueGaps,
+      // Same per-direction picker for iFVGs: latest N up + N down.
+      // Default 1 each side keeps the chart calm.
+      inverseFairValueGaps: pickLatestZonesPerDirection(
+        inverseFairValueGaps,
+        inverseFvgCount,
+      ),
       previousDayHigh,
       previousDayLow,
       swingFailures: structureOverlay.swingFailures,
       equilibriumLine: structureOverlay.equilibriumLine,
     };
-  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount]);
+  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
@@ -827,11 +838,12 @@ function buildStructureOverlay(
 }
 
 /**
- * Keep only the latest N order blocks per direction (1, 2 or 3 each side).
- * Walks chronological OB list from newest backwards so the most recent
- * blocks of each polarity survive even when one side dominates.
+ * Keep only the latest N zones per direction (1, 2 or 3 each side).
+ * Walks chronological zone list from newest backwards so the most recent
+ * blocks of each polarity survive even when one side dominates. Used
+ * for both order blocks and inverse FVGs (same UX semantics).
  */
-function pickLatestOrderBlocksPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
+function pickLatestZonesPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
   if (!zones.length) return zones;
   let upRemaining = n;
   let downRemaining = n;
@@ -1085,9 +1097,11 @@ function buildInverseFvgs(
     }
   }
 
-  // Only the latest inversion per timeframe — multiple iFVGs at once is
-  // noisy and the most recent inversion is the actionable one.
-  return out.slice(-1);
+  // Return all detected iFVGs; the consumer applies the per-direction
+  // count picker (latest N up + N down). Each zone already has the
+  // correct extend / mitigated flags so unmitigated ones bleed forward
+  // and reclaimed ones stop at detectionEndX.
+  return out;
 }
 
 /**

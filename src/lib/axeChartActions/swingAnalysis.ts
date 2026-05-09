@@ -31,6 +31,14 @@ type NormCandle = {
   close: number;
 };
 
+/**
+ * Source the auto-Fib anchors from. The picker in the chart toolbar
+ * exposes these — `auto` is the default and matches the historic
+ * behaviour, `swing` forces market-structure swings (HH/HL or LH/LL),
+ * `pd` uses yesterday's day-range (PDH ↔ PDL).
+ */
+export type FibSourceMode = "auto" | "swing" | "pd";
+
 export function buildFibonacciActionFromCandles(input: {
   id: string;
   source: "axe" | "user";
@@ -40,21 +48,46 @@ export function buildFibonacciActionFromCandles(input: {
   candles: ChartActionCandle[];
   lookback?: number;
   strength?: number;
+  /** Default `auto`. */
+  mode?: FibSourceMode;
 }): ChartActionCommand {
-  // Auto-Fib should anchor on the LATEST trend leg of the active timeframe:
-  //   • bullish trend → 0% on the most recent HH, 100% on the HL preceding it
-  //     so the retracement levels show the pullback inside the impulse,
-  //   • bearish trend → 0% on the most recent LL, 100% on the LH preceding it.
-  // This matches what MT5 traders draw by hand and avoids the "fib in the
-  // middle of the chart" we saw on H1.
-  const trend = findLatestTrendLegOnActiveTf(input.candles, {
-    lookback: input.lookback,
-    strength: input.strength,
-  });
+  const mode: FibSourceMode = input.mode ?? "auto";
 
-  const direction = trend.direction;
-  const anchorA = direction === "up" ? trend.swing : trend.retrace; // 0%
-  const anchorB = direction === "up" ? trend.retrace : trend.swing; // 100%
+  // Pick anchor points based on mode:
+  //   auto  → most recent confirmed trend leg on the active TF (HH/HL or LH/LL)
+  //   swing → same as auto today (kept distinct so the UI label is clear and
+  //           future iterations can diverge if needed)
+  //   pd    → previous day's high & low; direction = up if PDH > PDL after
+  //           PDL (price ramped) else down. Lets traders fib the daily range.
+  let anchorA: SwingAnchor;
+  let anchorB: SwingAnchor;
+  let direction: "up" | "down";
+  let explanation: string;
+
+  if (mode === "pd") {
+    const pd = findPreviousDayRange(input.candles);
+    direction = pd.direction;
+    anchorA = direction === "up" ? pd.high : pd.low;
+    anchorB = direction === "up" ? pd.low : pd.high;
+    explanation =
+      direction === "up"
+        ? "AXE mapped Fibonacci across yesterday's range (PDL → PDH)."
+        : "AXE mapped Fibonacci across yesterday's range (PDH → PDL).";
+  } else {
+    // auto + swing share the same detection — both honour market structure
+    const trend = findLatestTrendLegOnActiveTf(input.candles, {
+      lookback: input.lookback,
+      strength: input.strength,
+    });
+    direction = trend.direction;
+    anchorA = direction === "up" ? trend.swing : trend.retrace; // 0%
+    anchorB = direction === "up" ? trend.retrace : trend.swing; // 100%
+    explanation =
+      direction === "up"
+        ? "AXE mapped Fibonacci over the latest HL → HH leg."
+        : "AXE mapped Fibonacci over the latest LH → LL leg.";
+  }
+
   const high = Math.max(anchorA.price, anchorB.price);
   const low = Math.min(anchorA.price, anchorB.price);
   const range = high - low;
@@ -76,15 +109,12 @@ export function buildFibonacciActionFromCandles(input: {
       // The annotation layer reads these so the lines/labels project past
       // the last candle (matches MT5's "right ray" behaviour) — handy for
       // seeing exactly when price will hit each retracement.
-      settings: { extendRight: true, source: input.source },
+      settings: { extendRight: true, source: input.source, mode },
       levels: FIB_LEVELS.map((level) => ({
         level,
         price: Number((direction === "up" ? high - range * level : low + range * level).toFixed(8)),
       })),
-      explanation:
-        direction === "up"
-          ? "AXE mapped Fibonacci over the latest HL → HH leg."
-          : "AXE mapped Fibonacci over the latest LH → LL leg.",
+      explanation,
     },
   };
 }
@@ -407,6 +437,75 @@ export function findRecentSameTypeSwingPair(
 ): { earlier: SwingAnchor; later: SwingAnchor; direction: "up" | "down" } {
   const result = findHigherTfTrendline(candles, "h1", options);
   return { earlier: result.earlier, later: result.later, direction: result.direction };
+}
+
+/**
+ * Compute yesterday's day-range from intraday candles. Buckets candles by
+ * UTC date, picks the bucket immediately before the most recent one, and
+ * returns the high & low (with their candle times). Direction is "up" if
+ * the day made its high after the low (price climbed), "down" otherwise.
+ *
+ * Used by the Fib `pd` source mode so the user can fib yesterday's range
+ * without dragging.
+ */
+function findPreviousDayRange(
+  candles: ChartActionCandle[],
+): { high: SwingAnchor; low: SwingAnchor; direction: "up" | "down" } {
+  const normalized = normalizeCandles(candles);
+  if (normalized.length === 0) {
+    throw new Error("No candles to compute previous day range.");
+  }
+
+  type DayKey = string;
+  const buckets = new Map<DayKey, NormCandle[]>();
+  for (const candle of normalized) {
+    const date = new Date(candle.time * 1000);
+    const key = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
+    const arr = buckets.get(key);
+    if (arr) arr.push(candle);
+    else buckets.set(key, [candle]);
+  }
+
+  const orderedKeys = Array.from(buckets.keys()).sort((a, b) => {
+    const ax = buckets.get(a)![0].time;
+    const bx = buckets.get(b)![0].time;
+    return ax - bx;
+  });
+
+  // Pick the bucket immediately before the most recent one. If there's only
+  // a single day in the loaded window, fall back to that day's range so the
+  // user still sees something meaningful.
+  const targetKey = orderedKeys.length >= 2 ? orderedKeys[orderedKeys.length - 2] : orderedKeys[0];
+  const day = buckets.get(targetKey)!;
+  if (day.length === 0) {
+    throw new Error("Previous day bucket is empty.");
+  }
+
+  let highCandle = day[0];
+  let lowCandle = day[0];
+  for (const c of day) {
+    if (c.high > highCandle.high) highCandle = c;
+    if (c.low < lowCandle.low) lowCandle = c;
+  }
+
+  const high: SwingAnchor = {
+    type: "high",
+    index: -1,
+    time: highCandle.time,
+    price: highCandle.high,
+  };
+  const low: SwingAnchor = {
+    type: "low",
+    index: -1,
+    time: lowCandle.time,
+    price: lowCandle.low,
+  };
+
+  // Direction: up if the high came after the low (price climbed through the
+  // day), down otherwise. We use the actual candle timestamps so the
+  // Fibonacci levels orient sensibly (0% on the most recent extreme).
+  const direction: "up" | "down" = high.time >= low.time ? "up" : "down";
+  return { high, low, direction };
 }
 
 function normalizeCandles(candles: ChartActionCandle[]): NormCandle[] {
