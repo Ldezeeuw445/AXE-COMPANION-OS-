@@ -13,6 +13,7 @@ import { PinnedContextEditor } from "@/components/settings/PinnedContextEditor";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
+import { LiveTradingPanel } from "@/components/settings/LiveTradingPanel";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 
@@ -153,6 +154,12 @@ export default async function SettingsPage() {
           <PushPermission />
         </div>
       </GlassPanel>
+
+      {/* Live trading — sits between push and Trading OS callout. Off by default;
+          enabling requires a 3-checkbox + typed-phrase disclaimer per device. */}
+      <div className="mb-4">
+        <LiveTradingPanel />
+      </div>
 
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}
       <GlassPanel glow="cyan" className="mb-4 p-4">

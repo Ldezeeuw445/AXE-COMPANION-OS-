@@ -76,6 +76,13 @@ import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
 import { ChartOrderBookDrawer } from "@/components/chart/ChartOrderBookDrawer";
 import { ChartNewsDrawer } from "@/components/chart/ChartNewsDrawer";
+import {
+  ChartOrderConfirm,
+  type OrderConfirmInput,
+  type OrderConfirmStatus,
+} from "@/components/chart/ChartOrderConfirm";
+import { useDemoPositions } from "@/components/chart/useDemoPositions";
+import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
 
 const TICK_REACT_THROTTLE_MS = 150;
@@ -676,6 +683,30 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [deviationPoints, setDeviationPoints] = useState(10);
   const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
 
+  // Order send wiring — demo fills locally, live opens a confirm modal that
+  // POSTs to /api/mt5/order. The flag is per-device (see liveTradingFlag).
+  const liveTrading = useLiveTradingFlag();
+  const isDemoAccount = data.account?.connectionMethod === "demo_paper";
+  const demoBook = useDemoPositions(
+    data.account?.brokerAccountId ?? null,
+    data.symbol,
+    livePrice,
+  );
+  const [orderConfirmInput, setOrderConfirmInput] = useState<OrderConfirmInput | null>(null);
+  const [orderConfirmStatus, setOrderConfirmStatus] = useState<OrderConfirmStatus>({ kind: "idle" });
+  const [tradeToast, setTradeToast] = useState<{
+    kind: "demo" | "live" | "info" | "error";
+    title: string;
+    body?: string;
+  } | null>(null);
+
+  // Auto-clear toast after 4s.
+  useEffect(() => {
+    if (!tradeToast) return;
+    const id = setTimeout(() => setTradeToast(null), 4_000);
+    return () => clearTimeout(id);
+  }, [tradeToast]);
+
   const showPendingTradePlan = useCallback(
     (side: "buy" | "sell") => {
       const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
@@ -693,6 +724,173 @@ export function ChartScreen({ data, initialAction }: Props) {
     },
     [data.candles, data.lastPrice, livePrice, pendingOrderPrice, pendingOrderSide],
   );
+
+  const tradeVolumeNum = useMemo(() => {
+    const n = Number.parseFloat(tradeVolume);
+    return Number.isFinite(n) && n > 0 ? n : 0.1;
+  }, [tradeVolume]);
+
+  /**
+   * The "Send" pill on the pending plan overlay funnels through this. Branches:
+   *   - Demo account → instant virtual fill (no broker contact).
+   *   - Live account, flag off → toast + soft CTA pointing to /settings.
+   *   - Live account, flag on → open ChartOrderConfirm; modal posts to API.
+   */
+  const handleSendCurrentPlan = useCallback(() => {
+    const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice ?? null;
+    if (entry == null || !Number.isFinite(entry)) {
+      setTradeToast({
+        kind: "error",
+        title: "No live price yet",
+        body: "Wait for the next tick before sending an order.",
+      });
+      return;
+    }
+    if (tradeVolumeNum <= 0) {
+      setTradeToast({ kind: "error", title: "Pick a volume" });
+      return;
+    }
+
+    if (isDemoAccount) {
+      const opened = demoBook.open({
+        symbol: data.symbol,
+        side: pendingOrderSide,
+        volume: tradeVolumeNum,
+        entryPrice: entry,
+        stopLoss: pendingStopLossPrice,
+        takeProfit: pendingTakeProfitPrice,
+      });
+      if (opened) {
+        setPendingOrderVisible(false);
+        setTradeToast({
+          kind: "demo",
+          title: `Demo ${pendingOrderSide.toUpperCase()} ${data.symbol} filled`,
+          body: `${tradeVolumeNum.toFixed(2)} lots @ ${entry.toFixed(priceDigitsForSymbol(data.brokerSymbol))}. Virtual position only — no broker order sent.`,
+        });
+      } else {
+        setTradeToast({
+          kind: "error",
+          title: "Couldn't open demo position",
+          body: "Try reloading the chart.",
+        });
+      }
+      return;
+    }
+
+    // Live MT5 account path
+    if (!liveTrading.enabled) {
+      setTradeToast({
+        kind: "info",
+        title: "Live trading is OFF on this device",
+        body: "Open Settings → Live trading to activate. Demo Account paper trading still works.",
+      });
+      return;
+    }
+
+    if (!liveTrading.armed) {
+      setTradeToast({
+        kind: "info",
+        title: "Re-arm to send live orders",
+        body: "Open Settings → Live trading and tap “Arm for 30m”.",
+      });
+      return;
+    }
+
+    setOrderConfirmStatus({ kind: "idle" });
+    setOrderConfirmInput({
+      symbol: data.symbol,
+      brokerSymbol: data.brokerSymbol,
+      side: pendingOrderSide,
+      orderType: pendingOrderType,
+      volume: tradeVolumeNum,
+      digits: priceDigitsForSymbol(data.brokerSymbol),
+      openPrice: pendingOrderType === "market" ? null : entry,
+      livePrice,
+      stopLoss: pendingStopLossPrice,
+      takeProfit: pendingTakeProfitPrice,
+      slippagePoints: deviationPoints,
+      accountLabel: data.account?.label ?? "MT5 Account",
+    });
+  }, [
+    data.account?.brokerAccountId,
+    data.account?.label,
+    data.brokerSymbol,
+    data.lastPrice,
+    data.symbol,
+    demoBook,
+    deviationPoints,
+    isDemoAccount,
+    liveTrading.armed,
+    liveTrading.enabled,
+    livePrice,
+    pendingOrderPrice,
+    pendingOrderSide,
+    pendingOrderType,
+    pendingStopLossPrice,
+    pendingTakeProfitPrice,
+    tradeVolumeNum,
+  ]);
+
+  const sendLiveConfirmedOrder = useCallback(async () => {
+    if (!orderConfirmInput || !data.account?.brokerAccountId) return;
+    setOrderConfirmStatus({ kind: "sending" });
+    try {
+      const res = await fetch("/api/mt5/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brokerAccountId: data.account.brokerAccountId,
+          symbol: orderConfirmInput.brokerSymbol,
+          side: orderConfirmInput.side,
+          orderType: orderConfirmInput.orderType,
+          volume: orderConfirmInput.volume,
+          openPrice: orderConfirmInput.openPrice,
+          stopLoss: orderConfirmInput.stopLoss,
+          takeProfit: orderConfirmInput.takeProfit,
+          slippage: orderConfirmInput.slippagePoints,
+          comment: "AXE",
+        }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+        stringCode?: string;
+        orderId?: string;
+        positionId?: string;
+        code?: string;
+      };
+      if (res.ok && payload.ok) {
+        setOrderConfirmStatus({
+          kind: "ok",
+          message: `${orderConfirmInput.side.toUpperCase()} sent — ${payload.stringCode ?? "TRADE_RETCODE_DONE"}${
+            payload.positionId ? ` · position ${payload.positionId}` : ""
+          }.`,
+        });
+        setPendingOrderVisible(false);
+        setTimeout(() => {
+          setOrderConfirmInput(null);
+          setOrderConfirmStatus({ kind: "idle" });
+          setTradeToast({
+            kind: "live",
+            title: `${orderConfirmInput.side.toUpperCase()} ${orderConfirmInput.symbol} sent`,
+            body: `${orderConfirmInput.volume.toFixed(2)} lots — broker accepted the order.`,
+          });
+        }, 1_200);
+      } else {
+        setOrderConfirmStatus({
+          kind: "error",
+          message:
+            payload.message ??
+            (res.status >= 500 ? "Broker is unreachable. No order sent." : "Order rejected by the broker."),
+        });
+      }
+    } catch (err) {
+      setOrderConfirmStatus({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Network error — no order sent.",
+      });
+    }
+  }, [data.account?.brokerAccountId, orderConfirmInput]);
 
   // Load saved annotations when symbol/tf changes
   useEffect(() => {
@@ -1685,6 +1883,23 @@ export function ChartScreen({ data, initialAction }: Props) {
               <span aria-hidden>✕</span>
               <span>Clear plan</span>
             </button>
+            {/* Send pill — sole entry point for actually opening a position.
+                Demo: virtual fill. Live: ChartOrderConfirm. */}
+            <button
+              type="button"
+              onClick={handleSendCurrentPlan}
+              className={`absolute right-3 top-[5.25rem] z-30 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wider shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur transition ${
+                pendingOrderSide === "buy"
+                  ? "border border-cyan-300/60 bg-cyan-400/22 text-cyan-50 hover:bg-cyan-400/30"
+                  : "border border-rose-300/60 bg-rose-400/22 text-rose-50 hover:bg-rose-400/30"
+              }`}
+              aria-label={`Send ${pendingOrderSide.toUpperCase()} ${
+                isDemoAccount ? "(demo virtual fill)" : "(live order)"
+              }`}
+            >
+              {pendingOrderSide === "buy" ? "▲" : "▼"}{" "}
+              {isDemoAccount ? "Send · DEMO" : liveTrading.enabled ? "Send · LIVE" : "Live OFF"}
+            </button>
           </>
         ) : null}
 
@@ -2356,6 +2571,88 @@ export function ChartScreen({ data, initialAction }: Props) {
           </button>
         </div>
       ) : null}
+
+      {/* Trade toast — demo / live confirm + soft errors */}
+      {tradeToast ? (
+        <div
+          className={`pointer-events-auto absolute left-1/2 bottom-[8.5rem] z-[60] flex max-w-[88%] -translate-x-1/2 items-start gap-2 rounded-xl border px-3 py-2 text-[11px] shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur ${
+            tradeToast.kind === "demo"
+              ? "border-cyan-300/40 bg-cyan-400/10 text-cyan-100"
+              : tradeToast.kind === "live"
+                ? "border-cyan-200/55 bg-cyan-300/14 text-cyan-50"
+                : tradeToast.kind === "error"
+                  ? "border-rose-400/45 bg-rose-400/12 text-rose-100"
+                  : "border-amber-400/35 bg-amber-400/8 text-amber-100"
+          }`}
+          role="status"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">{tradeToast.title}</p>
+            {tradeToast.body ? (
+              <p className="mt-0.5 text-[10.5px] opacity-85">{tradeToast.body}</p>
+            ) : null}
+          </div>
+          {tradeToast.kind === "info" ? (
+            <Link
+              href="/settings"
+              className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold"
+              onClick={() => setTradeToast(null)}
+            >
+              Settings
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setTradeToast(null)}
+            className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold opacity-90"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {/* Demo positions chip — visible only on demo, only when there's
+          something to track. Tap → close all (paper). */}
+      {isDemoAccount && demoBook.forSymbol.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => {
+            // Close most-recent demo position to keep the gesture simple.
+            const newest = demoBook.forSymbol[0];
+            if (newest) demoBook.close(newest.id);
+          }}
+          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-300/40 bg-[#04161b]/92 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-cyan-300/12"
+          aria-label="Close most recent demo position"
+        >
+          <span className="rounded-full bg-cyan-400/25 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-cyan-50">
+            DEMO
+          </span>
+          <span>
+            {demoBook.forSymbol.length} open ·{" "}
+            <span
+              className={`font-mono ${
+                demoBook.pnlOnSymbol >= 0 ? "text-cyan-200" : "text-rose-300"
+              }`}
+            >
+              {demoBook.pnlOnSymbol >= 0 ? "+" : ""}
+              {demoBook.pnlOnSymbol.toFixed(2)} $
+            </span>
+          </span>
+          <span className="text-[9px] text-cyan-200/70">tap to close</span>
+        </button>
+      ) : null}
+
+      {/* Final-confirm modal for live broker orders */}
+      <ChartOrderConfirm
+        open={orderConfirmInput != null}
+        input={orderConfirmInput}
+        status={orderConfirmStatus}
+        onCancel={() => {
+          setOrderConfirmInput(null);
+          setOrderConfirmStatus({ kind: "idle" });
+        }}
+        onConfirm={sendLiveConfirmedOrder}
+      />
 
     </div>
   );

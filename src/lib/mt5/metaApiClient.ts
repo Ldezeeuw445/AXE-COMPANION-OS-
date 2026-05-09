@@ -328,6 +328,115 @@ export type MetaApiCandle = {
   spread?: number;
 };
 
+// ────────────────────────────────────────────────────────────────────────────
+//   TRADE
+// ────────────────────────────────────────────────────────────────────────────
+
+export type MetaApiOrderType =
+  | "ORDER_TYPE_BUY"
+  | "ORDER_TYPE_SELL"
+  | "ORDER_TYPE_BUY_LIMIT"
+  | "ORDER_TYPE_SELL_LIMIT"
+  | "ORDER_TYPE_BUY_STOP"
+  | "ORDER_TYPE_SELL_STOP";
+
+export type PlaceOrderInput = {
+  accountId: string;
+  symbol: string;
+  /** MetaApi action types — straight from MT5 terminology. */
+  actionType: MetaApiOrderType;
+  /** Lots, e.g. 0.10. */
+  volume: number;
+  /** Required for any *_LIMIT / *_STOP order. Ignored for market BUY/SELL. */
+  openPrice?: number | null;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+  /** Slippage in points (deviation in MT5). */
+  slippage?: number | null;
+  /** Optional MT5 magic number — used by the EA to tag AXE-originated orders. */
+  magic?: number | null;
+  /** Free-form comment, max ~31 chars (MT5 limit). */
+  comment?: string | null;
+};
+
+export type PlaceOrderResult = {
+  /** "TRADE_RETCODE_DONE" / "DONE_PARTIAL" mean successful in MT5 land. */
+  stringCode?: string;
+  numericCode?: number;
+  message?: string;
+  orderId?: string;
+  positionId?: string;
+  raw: Record<string, unknown>;
+};
+
+/**
+ * POST a single trade action to MetaApi's `/users/current/accounts/{id}/trade`.
+ *
+ * This is the only path real broker orders flow through. Live execution is
+ * additionally gated client-side via the live-trading flag and the chart's
+ * final-confirm modal, and server-side via the Supabase auth + ownership
+ * check in /api/mt5/order.
+ */
+export async function clientPlaceOrder(input: PlaceOrderInput): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl();
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body: Record<string, unknown> = {
+    actionType: input.actionType,
+    symbol: input.symbol,
+    volume: input.volume,
+  };
+  if (input.openPrice != null && Number.isFinite(input.openPrice)) {
+    body.openPrice = input.openPrice;
+  }
+  if (input.stopLoss != null && Number.isFinite(input.stopLoss)) {
+    body.stopLoss = input.stopLoss;
+  }
+  if (input.takeProfit != null && Number.isFinite(input.takeProfit)) {
+    body.takeProfit = input.takeProfit;
+  }
+  if (input.slippage != null && Number.isFinite(input.slippage)) {
+    body.slippage = input.slippage;
+  }
+  if (input.magic != null && Number.isFinite(input.magic)) {
+    body.magic = input.magic;
+  }
+  if (input.comment) {
+    body.comment = String(input.comment).slice(0, 31);
+  }
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Trade failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//   MARKET DATA
+// ────────────────────────────────────────────────────────────────────────────
+
 /** OHLC from MT5 terminal via MetaApi market-data host (not the trade REST host). */
 export async function clientGetHistoricalCandles(
   accountId: string,
