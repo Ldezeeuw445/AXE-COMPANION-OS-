@@ -551,10 +551,16 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // Same idea for iFVGs. Default 1 each side; picker appears when iFVG
   // is active.
   const [inverseFvgCount, setInverseFvgCount] = useState<1 | 2 | 3>(1);
-  // Auto-Fib source mode: "auto" (most recent good leg), "swing" (forces
-  // market-structure HH/HL or LH/LL), or "pd" (previous day's range).
-  // Picker appears in the toolbar when there's an active Fib annotation.
-  type FibMode = "auto" | "swing" | "pd";
+  // FVG count picker — mirrors OB / iFVG so the chart feels consistent.
+  const [fvgCount, setFvgCount] = useState<1 | 2 | 3>(1);
+  // Project count: how many of each indicator extend forward when the
+  // future-projection cursor is on. 1 = only the latest each side.
+  const [projectionCount, setProjectionCount] = useState<1 | 2 | 3>(1);
+  // Auto-Fib source mode: "auto" (most recent good leg), "swing" (latest
+  // SH/SL pair from the swing-dot detection), "pd" (previous day's range,
+  // PDH↔PDL), or "pd_band" which renders the same fib as Premium /
+  // Discount banding instead of all 8 levels.
+  type FibMode = "auto" | "swing" | "pd" | "pd_band";
   const [fibMode, setFibMode] = useState<FibMode>("auto");
   const [fibSwingOffset, setFibSwingOffset] = useState<0 | 1 | 2 | 3>(0);
   useEffect(() => {
@@ -563,8 +569,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       if (raw === 1 || raw === 2 || raw === 3) setOrderBlockCount(raw);
       const rawIfvg = Number(localStorage.getItem("axe.chart.ifvgCount") ?? "");
       if (rawIfvg === 1 || rawIfvg === 2 || rawIfvg === 3) setInverseFvgCount(rawIfvg);
+      const rawFvg = Number(localStorage.getItem("axe.chart.fvgCount") ?? "");
+      if (rawFvg === 1 || rawFvg === 2 || rawFvg === 3) setFvgCount(rawFvg);
+      const rawProj = Number(localStorage.getItem("axe.chart.projectionCount") ?? "");
+      if (rawProj === 1 || rawProj === 2 || rawProj === 3) setProjectionCount(rawProj);
       const rawFib = localStorage.getItem("axe.chart.fibMode");
-      if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd") setFibMode(rawFib);
+      if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd" || rawFib === "pd_band") {
+        setFibMode(rawFib);
+      }
       const rawFibSwing = Number(localStorage.getItem("axe.chart.fibSwingOffset") ?? "");
       if (rawFibSwing === 0 || rawFibSwing === 1 || rawFibSwing === 2 || rawFibSwing === 3) {
         setFibSwingOffset(rawFibSwing);
@@ -585,6 +597,22 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setInverseFvgCount(next);
     try {
       localStorage.setItem("axe.chart.ifvgCount", String(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const updateFvgCount = useCallback((next: 1 | 2 | 3) => {
+    setFvgCount(next);
+    try {
+      localStorage.setItem("axe.chart.fvgCount", String(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const updateProjectionCount = useCallback((next: 1 | 2 | 3) => {
+    setProjectionCount(next);
+    try {
+      localStorage.setItem("axe.chart.projectionCount", String(next));
     } catch {
       /* ignore */
     }
@@ -1399,6 +1427,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     (type: ChartActionCommand["type"], source: "axe" | "user" = "axe"): ChartActionResult => {
       if (type === "draw_fibonacci") {
         try {
+          // pd_band shares the geometry of pd (previous-day range) but
+          // tags the annotation with `style: "premium_discount"` so the
+          // FibAnnotationLayer renders it as a clean two-zone band
+          // instead of all eight levels.
+          const builderMode = fibMode === "pd_band" ? "pd" : fibMode;
           const command = buildFibonacciActionFromCandles({
             id: newAnnotationId(),
             source,
@@ -1407,9 +1440,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             accountId: accountId ?? undefined,
             candles: data.candles,
             strength: 3,
-            mode: fibMode,
-            swingOffset: fibMode === "swing" ? fibSwingOffset : 0,
+            mode: builderMode,
+            swingOffset: builderMode === "swing" ? fibSwingOffset : 0,
           });
+          if (fibMode === "pd_band") {
+            const existingSettings =
+              (command.payload.settings as Record<string, unknown> | undefined) ?? {};
+            command.payload.settings = {
+              ...existingSettings,
+              style: "premium_discount",
+            };
+          }
           return executeChartAction(command);
         } catch {
           const failed: ChartActionResult = {
@@ -1826,6 +1867,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           futureProjectionX={futureProjectionX}
           orderBlockCount={orderBlockCount}
           inverseFvgCount={inverseFvgCount}
+          fvgCount={fvgCount}
+          projectionCount={projectionCount}
           active={{
             ma: activeToolFlags.ma,
             structure: activeToolFlags.structure,
@@ -1834,6 +1877,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             ifvg: activeToolFlags.ifvg,
             pdh: activeToolFlags.pdh,
             pdl: activeToolFlags.pdl,
+            pdq: activeToolFlags.pdq,
             swingPoints: activeToolFlags.swingPoints,
           }}
         />
@@ -1994,6 +2038,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             { id: "ifvg", label: "iFVG", icon: GitBranch, active: Boolean(activeToolFlags.ifvg), action: () => toggleToolFlag("ifvg") },
             { id: "pdh", label: "PDH", icon: Maximize2, active: Boolean(activeToolFlags.pdh), action: () => toggleToolFlag("pdh") },
             { id: "pdl", label: "PDL", icon: Maximize2, active: Boolean(activeToolFlags.pdl), action: () => toggleToolFlag("pdl") },
+            { id: "pdq", label: "PDQ", icon: Maximize2, active: Boolean(activeToolFlags.pdq), action: () => toggleToolFlag("pdq") },
             { id: "swingPoints", label: "Swings", icon: GitBranch, active: Boolean(activeToolFlags.swingPoints), action: () => toggleToolFlag("swingPoints") },
             { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
             { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
@@ -2065,6 +2110,37 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </div>
           ) : null}
 
+          {/* FVG count picker — mirrors OB / iFVG. Latest N bullish + N
+              bearish unmitigated gaps. Only visible while FVG is on. */}
+          {activeToolFlags.fvg ? (
+            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                FVG · per side
+              </span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3].map((value) => {
+                  const isActive = fvgCount === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => updateFvgCount(value as 1 | 2 | 3)}
+                      className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
+                        isActive
+                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                      }`}
+                      aria-label={`Show ${value} FVG${value === 1 ? "" : "s"} per direction`}
+                      aria-pressed={isActive}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           {/* iFVG count picker — same UX as OB. Only visible while iFVG
               is on. Useful iFVGs (no second mitigation) extend forward
               to the future-projection cursor; reclaimed ones stop at
@@ -2098,10 +2174,44 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </div>
           ) : null}
 
+          {/* Projection count picker — visible when "Project" mode is on.
+              Controls how many of each indicator (OB / FVG / iFVG)
+              extend forward to the projection cursor. 1 = only the
+              latest, 2 / 3 = latest two / three. */}
+          {futureCursorEnabled ? (
+            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                Project · per side
+              </span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3].map((value) => {
+                  const isActive = projectionCount === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => updateProjectionCount(value as 1 | 2 | 3)}
+                      className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
+                        isActive
+                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                      }`}
+                      aria-label={`Project ${value} indicator${value === 1 ? "" : "s"} per direction`}
+                      aria-pressed={isActive}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
           {/* Auto-Fib source picker — appears whenever a Fib annotation
               is on the chart. "Auto" picks the latest good leg, "Swing"
               forces market-structure (HH/HL or LH/LL), "Day" maps the
-              fib across yesterday's PDH ↔ PDL range. */}
+              fib across yesterday's PDH ↔ PDL range, "P/D" flips the
+              same fib into Premium / Discount banding. */}
           {hasFibAnnotation ? (
             <>
               <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
@@ -2113,6 +2223,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     { value: "auto", label: "Auto" },
                     { value: "swing", label: "Swing" },
                     { value: "pd", label: "Day" },
+                    { value: "pd_band", label: "P/D" },
                   ] as Array<{ value: FibMode; label: string }>).map((opt) => {
                     const isActive = fibMode === opt.value;
                     return (

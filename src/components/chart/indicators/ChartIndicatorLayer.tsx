@@ -11,14 +11,16 @@ type Props = {
     ma?: boolean;
     structure?: boolean;
     orderBlocks?: boolean;
-    /** Auto Fair Value Gap zones (bullish + bearish, latest only). */
+    /** Auto Fair Value Gap zones (bullish + bearish, latest N per side). */
     fvg?: boolean;
     /** Inverse FVG: gaps that have been broken/inverted by later price. */
     ifvg?: boolean;
-    /** Previous Day High — horizontal line drawn across the entire chart. */
+    /** Previous Day High — thin horizontal line. */
     pdh?: boolean;
-    /** Previous Day Low — horizontal line drawn across the entire chart. */
+    /** Previous Day Low — thin horizontal line. */
     pdl?: boolean;
+    /** Previous Day Equilibrium — midpoint of yesterday's H+L. */
+    pdq?: boolean;
     /** Compact swing high/low levels used as Fib anchor references. */
     swingPoints?: boolean;
   };
@@ -28,17 +30,24 @@ type Props = {
    * via the toolbar picker when they want a wider context.
    */
   orderBlockCount?: 1 | 2 | 3;
-  /**
-   * Same idea for iFVGs: how many of the most recent up + down inverse
-   * FVGs to render. Default 1 each side; picker allows 2 or 3.
-   */
+  /** Same idea for iFVGs: how many of the most recent up + down inverse FVGs. */
   inverseFvgCount?: 1 | 2 | 3;
+  /** Latest N bullish + N bearish raw FVGs. Default 1. */
+  fvgCount?: 1 | 2 | 3;
   /**
    * Future-projection cursor X (chart-frame coords). When provided, the
    * iFVG / FVG / OB extensions stretch right to this X so the user can see
    * exactly when the next candles will hit the zone.
    */
   futureProjectionX?: number | null;
+  /**
+   * How many of each indicator (OB / FVG / iFVG) get the right-side
+   * extension when the projection cursor is on. 1 = only the latest of
+   * each side, 2 / 3 = the latest two / three. Defaults to 1 (cleanest).
+   * When the cursor is OFF, every visible zone still gets a soft 4-bar
+   * extension (the previous default), independent of this setting.
+   */
+  projectionCount?: 1 | 2 | 3;
 };
 
 type Size = { w: number; h: number };
@@ -86,9 +95,27 @@ type Zone = {
   mitigated: boolean;
   /** Volume profile bars to render on the left edge (only OB has these). */
   volumeProfile?: VolumeProfileBar[];
+  /** Buyer / seller volume split inside the zone (OB only). */
+  volumetric?: VolumetricBreakdown;
 };
 type VolumeProfileBar = { y: number; height: number; widthFraction: number };
 type StructureArrow = { x: number; y: number; label: string; bullish: boolean };
+
+/**
+ * Volumetric breakdown attached to each Order Block. Buyer = total
+ * tickVolume traded by green-body candles overlapping the OB band,
+ * Seller = total tickVolume from red-body candles. The render layer
+ * uses these to draw a small split bar inside the OB, LuxAlgo-style:
+ * green = buyer share, red = seller share. Lets the trader see at a
+ * glance whether buyers or sellers had the upper hand inside the zone.
+ */
+type VolumetricBreakdown = {
+  buyerVolume: number;
+  sellerVolume: number;
+  totalVolume: number;
+  buyerPercent: number;
+  sellerPercent: number;
+};
 
 /**
  * Extra pixel breathing room past the most recent candle for iFVG / OB
@@ -104,6 +131,8 @@ export function ChartIndicatorLayer({
   active,
   orderBlockCount = 1,
   inverseFvgCount = 1,
+  fvgCount = 1,
+  projectionCount = 1,
   futureProjectionX = null,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -142,9 +171,9 @@ export function ChartIndicatorLayer({
         inverseFairValueGaps: [] as Zone[],
         previousDayHigh: null as { y: number; price: number } | null,
         previousDayLow: null as { y: number; price: number } | null,
+        previousDayEq: null as { y: number; price: number } | null,
         swingPointLevels: [] as SwingPointLevel[],
         swingFailures: [] as StructureArrow[],
-        equilibriumLine: null as { y: number } | null,
       };
     }
 
@@ -183,10 +212,8 @@ export function ChartIndicatorLayer({
 
     const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX);
     const inverseFairValueGaps = buildInverseFvgs(visibleWithTime, handle, size.w, futureExtensionX);
-    const { high: previousDayHigh, low: previousDayLow } = buildPreviousDayLevels(
-      visibleWithTime,
-      handle,
-    );
+    const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
+      buildPreviousDayLevels(visibleWithTime, handle);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
 
     return {
@@ -196,24 +223,31 @@ export function ChartIndicatorLayer({
       // Filter to the latest `orderBlockCount` per direction (default 1
       // bullish + 1 bearish). The picker on the toolbar lets the user
       // bump this to 2 or 3 each side when wider context is wanted.
-      orderBlocks: pickLatestZonesPerDirection(
-        structureOverlay.orderBlocks,
-        orderBlockCount,
+      // After filtering, applyProjectionFilter downgrades the `extend`
+      // flag on any zone past the projectionCount window — so a user
+      // can show 3 OBs but only project the latest 1.
+      orderBlocks: applyProjectionFilter(
+        pickLatestZonesPerDirection(structureOverlay.orderBlocks, orderBlockCount),
+        projectionCount,
       ),
-      fairValueGaps: structureOverlay.fairValueGaps,
+      // Same per-direction picker for FVGs (latest N bullish + N bearish).
+      fairValueGaps: applyProjectionFilter(
+        pickLatestZonesPerDirection(structureOverlay.fairValueGaps, fvgCount),
+        projectionCount,
+      ),
       // Same per-direction picker for iFVGs: latest N up + N down.
       // Default 1 each side keeps the chart calm.
-      inverseFairValueGaps: pickLatestZonesPerDirection(
-        inverseFairValueGaps,
-        inverseFvgCount,
+      inverseFairValueGaps: applyProjectionFilter(
+        pickLatestZonesPerDirection(inverseFairValueGaps, inverseFvgCount),
+        projectionCount,
       ),
       previousDayHigh,
       previousDayLow,
+      previousDayEq,
       swingPointLevels,
       swingFailures: structureOverlay.swingFailures,
-      equilibriumLine: structureOverlay.equilibriumLine,
     };
-  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount]);
+  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
@@ -236,6 +270,10 @@ export function ChartIndicatorLayer({
             ))
           : null}
 
+        {/* Previous Day High / Low / Equilibrium — all rendered as thin
+            SOLID lines (no dots, no dashes) per UX spec. The label sits
+            just to the LEFT of the right-rail price gutter so it never
+            falls off-screen on narrow phones. */}
         {active.pdh && geometry.previousDayHigh ? (
           <g>
             <line
@@ -243,19 +281,19 @@ export function ChartIndicatorLayer({
               x2={size.w}
               y1={geometry.previousDayHigh.y}
               y2={geometry.previousDayHigh.y}
-              stroke="rgba(34,211,238,0.7)"
-              strokeWidth={1.2}
-              strokeDasharray="6 4"
+              stroke="rgba(34,211,238,0.78)"
+              strokeWidth={1}
             />
             <text
-              x={6}
+              x={size.w - 8}
               y={geometry.previousDayHigh.y - 4}
+              textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize="10"
+              fontSize="9.5"
               fontWeight="700"
-              fill="rgba(34,211,238,0.95)"
+              fill="rgba(125,235,255,0.96)"
               stroke="rgba(0,0,0,0.78)"
-              strokeWidth="2.8"
+              strokeWidth="2.6"
               paintOrder="stroke"
             >
               PDH
@@ -270,22 +308,49 @@ export function ChartIndicatorLayer({
               x2={size.w}
               y1={geometry.previousDayLow.y}
               y2={geometry.previousDayLow.y}
-              stroke="rgba(244,63,94,0.7)"
-              strokeWidth={1.2}
-              strokeDasharray="6 4"
+              stroke="rgba(244,63,94,0.78)"
+              strokeWidth={1}
             />
             <text
-              x={6}
+              x={size.w - 8}
               y={geometry.previousDayLow.y + 12}
+              textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize="10"
+              fontSize="9.5"
               fontWeight="700"
-              fill="rgba(244,63,94,0.95)"
+              fill="rgba(252,165,165,0.98)"
               stroke="rgba(0,0,0,0.78)"
-              strokeWidth="2.8"
+              strokeWidth="2.6"
               paintOrder="stroke"
             >
               PDL
+            </text>
+          </g>
+        ) : null}
+
+        {active.pdq && geometry.previousDayEq ? (
+          <g>
+            <line
+              x1={0}
+              x2={size.w}
+              y1={geometry.previousDayEq.y}
+              y2={geometry.previousDayEq.y}
+              stroke="rgba(96,165,250,0.72)"
+              strokeWidth={1}
+            />
+            <text
+              x={size.w - 8}
+              y={geometry.previousDayEq.y - 4}
+              textAnchor="end"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize="9.5"
+              fontWeight="700"
+              fill="rgba(186,212,255,0.96)"
+              stroke="rgba(0,0,0,0.78)"
+              strokeWidth="2.6"
+              paintOrder="stroke"
+            >
+              PDQ
             </text>
           </g>
         ) : null}
@@ -327,16 +392,10 @@ export function ChartIndicatorLayer({
             })
           : null}
 
-        {active.structure && geometry.equilibriumLine ? (
-          <line
-            x1={0}
-            x2={size.w}
-            y1={geometry.equilibriumLine.y}
-            y2={geometry.equilibriumLine.y}
-            stroke="rgba(91,156,246,0.48)"
-            strokeDasharray="8 5"
-          />
-        ) : null}
+        {/* The legacy blue-dotted "rolling 50-bar mid-range" line was
+            removed: it was a noisy proxy for "current-day equilibrium"
+            and the dedicated PDQ indicator now expresses the same idea
+            cleanly with a fixed level from yesterday's H + L. */}
 
         {active.structure
           ? geometry.structureLines.map((item, index) => (
@@ -420,6 +479,104 @@ export function ChartIndicatorLayer({
 }
 
 /**
+ * LuxAlgo-style "Volumetric Order Blocks" split bar — buyer share on
+ * the bottom (green), seller share on top (red). Width is bounded by
+ * the OB band so it always stays inside the zone. Renders a dominance
+ * label ("B 62%" / "S 58%") on whichever side wins, so the trader
+ * never has to guess which way the order block is leaning.
+ *
+ * The values are 100% honest: they come straight from the candle
+ * tickVolume distributed across the band (see buildVolumetricBreakdown).
+ */
+function VolumetricBar({ zone, detectionWidth }: { zone: Zone; detectionWidth: number }) {
+  const v = zone.volumetric;
+  if (!v) return null;
+
+  // The bar sits flush with the LEFT edge of the OB so it never gets
+  // clipped by the right-side label rail. Width is capped at 18% of the
+  // detection width with a hard min/max (12–34px) so it works on phones
+  // and desktop alike. Height = OB band height minus a small inset.
+  const inset = 2;
+  const barWidth = Math.max(12, Math.min(34, detectionWidth * 0.18));
+  const barX = zone.x + 2;
+  const barY = zone.y + inset;
+  const barHeight = Math.max(8, zone.height - inset * 2);
+
+  const sellerHeight = barHeight * (v.sellerPercent / 100);
+  const buyerHeight = barHeight - sellerHeight;
+  const buyerColor = "rgba(45,212,191,0.78)";
+  const sellerColor = "rgba(244,63,94,0.78)";
+
+  // Pick which side wins for the label. Tie defaults to buyers ("B 50%")
+  // — matches the visual convention.
+  const buyersWin = v.buyerPercent >= v.sellerPercent;
+  const labelText = buyersWin
+    ? `B ${Math.round(v.buyerPercent)}%`
+    : `S ${Math.round(v.sellerPercent)}%`;
+  const labelColor = buyersWin ? "rgba(167,243,208,0.96)" : "rgba(252,165,165,0.96)";
+  const labelX = barX + barWidth + 4;
+  const labelY = zone.midY + 3;
+  const showLabel = barHeight >= 14; // hide on very thin OBs to avoid clutter
+
+  return (
+    <g pointerEvents="none">
+      {/* Background frame */}
+      <rect
+        x={barX}
+        y={barY}
+        width={barWidth}
+        height={barHeight}
+        fill="rgba(0,0,0,0.35)"
+        stroke="rgba(255,255,255,0.12)"
+        strokeWidth={0.6}
+        rx={1.5}
+      />
+      {/* Sellers (red, top half) */}
+      <rect
+        x={barX}
+        y={barY}
+        width={barWidth}
+        height={Math.max(0, sellerHeight)}
+        fill={sellerColor}
+      />
+      {/* Buyers (green, bottom half) */}
+      <rect
+        x={barX}
+        y={barY + sellerHeight}
+        width={barWidth}
+        height={Math.max(0, buyerHeight)}
+        fill={buyerColor}
+      />
+      {/* 50/50 reference midline so deviations from balance are obvious */}
+      <line
+        x1={barX}
+        x2={barX + barWidth}
+        y1={barY + barHeight / 2}
+        y2={barY + barHeight / 2}
+        stroke="rgba(255,255,255,0.55)"
+        strokeWidth={0.7}
+        strokeDasharray="2 2"
+      />
+      {showLabel ? (
+        <text
+          x={labelX}
+          y={labelY}
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+          fontSize="9.5"
+          fontWeight="700"
+          fill={labelColor}
+          stroke="rgba(0,0,0,0.78)"
+          strokeWidth="2.8"
+          paintOrder="stroke"
+        >
+          {labelText}
+        </text>
+      ) : null}
+    </g>
+  );
+}
+
+/**
  * Single-zone renderer used by OB / FVG / iFVG. Variants only change the
  * stroke style (iFVG keeps a dashed border on the detected portion;
  * OB/FVG are solid). Every variant gets a 50% midline so traders can
@@ -481,6 +638,17 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             />
           ))}
         </g>
+      ) : null}
+      {/* LuxAlgo-style buyer/seller dominance bar (OB only). Sits on the
+          left of the zone and reads at a glance:
+            • Top half = sellers (red), height ∝ seller % of total volume
+            • Bottom half = buyers (green), height ∝ buyer %
+          A thin midline anchors 50/50 so deviations are obvious. The
+          dominant side carries the percentage label. Lets the trader
+          spot "buyers had the upper hand → bullish reaction more
+          likely" vs "sellers controlled → tap-and-fail risk". */}
+      {variant === "ob" && zone.volumetric && zone.volumetric.totalVolume > 0 ? (
+        <VolumetricBar zone={zone} detectionWidth={detectionWidth} />
       ) : null}
       {/* 50% midline — visible enough to read but never dominant. */}
       <line
@@ -626,7 +794,6 @@ function buildStructureOverlay(
   orderBlocks: Zone[];
   fairValueGaps: Zone[];
   swingFailures: StructureArrow[];
-  equilibriumLine: { y: number } | null;
 } {
   const visible = candles.filter((candle): candle is IndicatorCandle & { time: number } => candle.time != null).slice(-220);
   if (visible.length < 12) {
@@ -636,7 +803,6 @@ function buildStructureOverlay(
       orderBlocks: [],
       fairValueGaps: [],
       swingFailures: [],
-      equilibriumLine: null,
     };
   }
 
@@ -759,11 +925,13 @@ function buildStructureOverlay(
 
           const detectionEndX = x2;
           const baseWidth = Math.max(6, x2 - x);
-          // Profile is built across all candles whose price range overlaps
-          // the OB band — we simply allocate tickVolume proportional to
-          // that overlap. Result is honest: nothing we don't have data
-          // for, no synthetic numbers.
+          // Volumetric breakdown is built from REAL tickVolume on green
+          // vs red candles whose range overlaps the OB band. Volume
+          // profile bars on the left edge are kept for shape; the
+          // split-bar (`volumetric`) gives the LuxAlgo-style buyer/seller
+          // dominance read at a glance.
           const profile = mitigated ? undefined : buildVolumeProfile(visible, top, bottom, topY, bottomY);
+          const volumetric = mitigated ? undefined : buildVolumetricBreakdown(visible, top, bottom);
 
           orderBlocks.push({
             x,
@@ -779,6 +947,7 @@ function buildStructureOverlay(
             extend: !mitigated,
             mitigated,
             volumeProfile: profile,
+            volumetric,
           });
         }
       }
@@ -811,8 +980,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(8,153,129,0.34)",
-              fill: "rgba(8,153,129,0.06)",
+              stroke: "rgba(45,212,191,0.78)",
+              fill: "rgba(45,212,191,0.18)",
               direction: "up",
               extend: !mitigated,
               mitigated,
@@ -838,8 +1007,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(242,54,69,0.34)",
-              fill: "rgba(242,54,69,0.06)",
+              stroke: "rgba(244,63,94,0.78)",
+              fill: "rgba(244,63,94,0.16)",
               direction: "down",
               extend: !mitigated,
               mitigated,
@@ -861,23 +1030,48 @@ function buildStructureOverlay(
     }
   }
 
-  const range = visible.slice(-50);
-  const highest = Math.max(...range.map((candle) => candle.high));
-  const lowest = Math.min(...range.map((candle) => candle.low));
-  const midpoint = (highest + lowest) / 2;
-  const equilibriumY = handle.priceToCoordinate(midpoint);
-
   return {
     labels,
     lines: lines.slice(-8),
     // Keep up to 20 raw OBs so the render-time per-direction filter has
     // enough source data when one side dominates the most recent bars.
     orderBlocks: orderBlocks.slice(-20),
-    // Show the most recent FVG only — older gaps are noise on mobile.
-    fairValueGaps: fairValueGaps.slice(-1),
+    // Same idea for FVGs: keep up to 16 so the per-direction picker can
+    // show the latest 1 / 2 / 3 bullish + bearish without running out.
+    fairValueGaps: fairValueGaps.slice(-16),
     swingFailures: swingFailures.slice(-6),
-    equilibriumLine: equilibriumY == null ? null : { y: equilibriumY },
   };
+}
+
+/**
+ * Downgrade the `extend` flag on zones past the projectionCount window.
+ * The intent: user shows 3 OBs but only wants the latest 1 to extend
+ * forward. Older zones still render at their detected position with
+ * their detection-end as the right edge — they just don't bleed past
+ * it. Walks the input newest-first per direction so the most recent
+ * blocks always project, never the older ones.
+ */
+function applyProjectionFilter(zones: Zone[], n: 1 | 2 | 3): Zone[] {
+  if (!zones.length) return zones;
+  let upRemaining = n;
+  let downRemaining = n;
+  const reverseProcessed: Zone[] = [];
+  for (let index = zones.length - 1; index >= 0; index -= 1) {
+    const zone = zones[index];
+    let projects = false;
+    if (zone.direction === "up" && upRemaining > 0) {
+      projects = true;
+      upRemaining -= 1;
+    } else if (zone.direction === "down" && downRemaining > 0) {
+      projects = true;
+      downRemaining -= 1;
+    }
+    reverseProcessed.push({
+      ...zone,
+      extend: zone.extend && projects,
+    });
+  }
+  return reverseProcessed.reverse();
 }
 
 /**
@@ -1059,6 +1253,63 @@ function buildVolumeProfile(
 }
 
 /**
+ * Honest LuxAlgo-style volumetric breakdown for an OB band.
+ *
+ *  buyerVolume  = Σ tickVolume for green-body candles (close > open)
+ *                 weighted by the fraction of the candle's range that
+ *                 overlaps the OB band.
+ *  sellerVolume = same, for red-body candles (close < open).
+ *
+ * Doji candles (close == open) split 50/50 since neither side took
+ * the bar. We deliberately use tickVolume (or volume) as-is rather
+ * than synthesising values — if MetaApi doesn't ship volume for a
+ * symbol the breakdown returns zeros and the renderer hides the bar.
+ */
+function buildVolumetricBreakdown(
+  candles: Array<IndicatorCandle & { time: number }>,
+  bandTop: number,
+  bandBottom: number,
+): VolumetricBreakdown | undefined {
+  const top = Math.max(bandTop, bandBottom);
+  const bottom = Math.min(bandTop, bandBottom);
+  if (top <= bottom) return undefined;
+
+  let buyerVolume = 0;
+  let sellerVolume = 0;
+  for (const c of candles) {
+    const overlapTop = Math.min(top, c.high);
+    const overlapBot = Math.max(bottom, c.low);
+    if (overlapTop <= overlapBot) continue;
+    const candleSpan = c.high - c.low;
+    if (candleSpan <= 0) continue;
+    const candleVol = (c.tickVolume ?? c.volume ?? 0) > 0 ? Number(c.tickVolume ?? c.volume ?? 0) : 0;
+    if (candleVol <= 0) continue;
+    const overlapFraction = (overlapTop - overlapBot) / candleSpan;
+    const allocated = candleVol * overlapFraction;
+    if (c.close > c.open) {
+      buyerVolume += allocated;
+    } else if (c.close < c.open) {
+      sellerVolume += allocated;
+    } else {
+      // Doji — split allocated volume evenly so the math still adds up.
+      buyerVolume += allocated * 0.5;
+      sellerVolume += allocated * 0.5;
+    }
+  }
+
+  const totalVolume = buyerVolume + sellerVolume;
+  if (totalVolume <= 0) return undefined;
+
+  return {
+    buyerVolume,
+    sellerVolume,
+    totalVolume,
+    buyerPercent: (buyerVolume / totalVolume) * 100,
+    sellerPercent: (sellerVolume / totalVolume) * 100,
+  };
+}
+
+/**
  * Build inverse fair-value gaps. An IFVG is a 3-bar FVG that has since
  * been fully invaded by a later candle's close — i.e. the imbalance was
  * "reclaimed" and now flips polarity.
@@ -1120,8 +1371,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(244,63,94,0.85)",
-            fill: "rgba(244,63,94,0.10)",
+            stroke: "rgba(244,63,94,0.92)",
+            fill: "rgba(244,63,94,0.20)",
             // Inverted bullish FVG flips polarity → behaves like bearish
             // resistance going forward. Tag accordingly so the OB count
             // filter still has correct semantics if reused later.
@@ -1169,8 +1420,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(34,211,238,0.85)",
-            fill: "rgba(34,211,238,0.10)",
+            stroke: "rgba(34,211,238,0.92)",
+            fill: "rgba(34,211,238,0.20)",
             // Inverted bearish FVG → flips to bullish support. Tag as up.
             direction: "up",
             extend: !secondMitigation,
@@ -1198,8 +1449,9 @@ function buildPreviousDayLevels(
 ): {
   high: { y: number; price: number } | null;
   low: { y: number; price: number } | null;
+  eq: { y: number; price: number } | null;
 } {
-  if (candles.length === 0) return { high: null, low: null };
+  if (candles.length === 0) return { high: null, low: null, eq: null };
 
   const buckets = new Map<string, { high: number; low: number }>();
   const order: string[] = [];
@@ -1215,18 +1467,24 @@ function buildPreviousDayLevels(
     }
   }
 
-  if (order.length < 2) return { high: null, low: null };
+  if (order.length < 2) return { high: null, low: null, eq: null };
 
   const previousKey = order[order.length - 2];
   const previous = buckets.get(previousKey);
-  if (!previous) return { high: null, low: null };
+  if (!previous) return { high: null, low: null, eq: null };
 
   const yHigh = handle.priceToCoordinate(previous.high);
   const yLow = handle.priceToCoordinate(previous.low);
+  // Previous Day Equilibrium = midpoint of yesterday's H + L. Stable
+  // level since it's locked once yesterday closes — the trader can use
+  // it as a "fair price for yesterday's session" reference today.
+  const eqPrice = (previous.high + previous.low) / 2;
+  const yEq = handle.priceToCoordinate(eqPrice);
 
   return {
     high: yHigh == null ? null : { y: yHigh, price: previous.high },
     low: yLow == null ? null : { y: yLow, price: previous.low },
+    eq: yEq == null ? null : { y: yEq, price: eqPrice },
   };
 }
 

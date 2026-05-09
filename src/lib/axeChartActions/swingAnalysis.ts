@@ -39,6 +39,30 @@ type NormCandle = {
  */
 export type FibSourceMode = "auto" | "swing" | "pd";
 
+/**
+ * Per-timeframe right-edge offset. The auto-Fib's lines stop N candles
+ * BEFORE the current candle, so the live candle never sits inside the
+ * Fib zone (cluttering small mobile screens). Faster timeframes need a
+ * larger offset because new candles form quickly and the fib would
+ * always feel like it's "chasing" the live price.
+ *
+ *  m1 / m5 / m15  → 5 candles back
+ *  m30 / h1       → 3 candles back
+ *  h4 / d1        → 2 candles back
+ *  w1 / mn1       → 1 candle back
+ *
+ * The 0% / 100% anchors are also picked from the data PRIOR to this
+ * offset so the fib never reads the in-progress candle's high/low.
+ */
+export function fibTimeframeOffset(timeframeKey: string): number {
+  const k = (timeframeKey ?? "").toLowerCase();
+  if (k === "m1" || k === "m5" || k === "m15") return 5;
+  if (k === "m30" || k === "h1") return 3;
+  if (k === "h4" || k === "d1") return 2;
+  // Anything else (w1, mn1, unknown) → 1 candle back.
+  return 1;
+}
+
 export function buildFibonacciActionFromCandles(input: {
   id: string;
   source: "axe" | "user";
@@ -52,13 +76,40 @@ export function buildFibonacciActionFromCandles(input: {
   mode?: FibSourceMode;
   /** For swing mode: 0 = latest leg, 1 = one leg back, etc. */
   swingOffset?: number;
+  /** Override the per-TF right-edge offset (defaults to fibTimeframeOffset). */
+  endOffsetBars?: number;
 }): ChartActionCommand {
   const mode: FibSourceMode = input.mode ?? "auto";
+  const endOffsetBars =
+    input.endOffsetBars != null
+      ? Math.max(0, Math.floor(input.endOffsetBars))
+      : fibTimeframeOffset(input.timeframe);
+
+  // Trim the trailing N candles so the Fib never reads the in-progress
+  // candle's wick. We keep at least 30 candles available so swing
+  // detection still has enough history to work with.
+  const trimmed =
+    endOffsetBars > 0 && input.candles.length > endOffsetBars + 30
+      ? input.candles.slice(0, input.candles.length - endOffsetBars)
+      : input.candles;
+
+  // The visible right edge (where the fib lines stop). When we have a
+  // valid trimmed candle list, this is the time of the last kept
+  // candle — i.e. candle[-N] of the original series. Falls back to the
+  // last candle when we don't have enough history yet.
+  const rightEdgeCandle =
+    endOffsetBars > 0 && input.candles.length > endOffsetBars + 1
+      ? input.candles[input.candles.length - 1 - endOffsetBars]
+      : input.candles[input.candles.length - 1];
+  const rightEdgeTime =
+    rightEdgeCandle != null ? Number(normalizeTime(rightEdgeCandle.time)) : null;
 
   // Pick anchor points based on mode:
   //   auto  → most recent confirmed trend leg on the active TF (HH/HL or LH/LL)
-  //   swing → same as auto today (kept distinct so the UI label is clear and
-  //           future iterations can diverge if needed)
+  //   swing → uses the actual detected swing dots: most recent swing high
+  //           paired with most recent swing low. Switching `swingOffset`
+  //           steps backwards through the swing pairs, extending the
+  //           fib range without ever projecting beyond the current candle.
   //   pd    → previous day's high & low; direction = up if PDH > PDL after
   //           PDL (price ramped) else down. Lets traders fib the daily range.
   let anchorA: SwingAnchor;
@@ -75,12 +126,30 @@ export function buildFibonacciActionFromCandles(input: {
       direction === "up"
         ? "AXE mapped Fibonacci across yesterday's range (PDL → PDH)."
         : "AXE mapped Fibonacci across yesterday's range (PDH → PDL).";
+  } else if (mode === "swing") {
+    // Use the detected swing dots — same algorithm as the "Swings"
+    // indicator. Default = latest SH ↔ SL pair. Switching the offset
+    // walks back to older swings, which automatically widens the fib's
+    // price range. Combined with the trailing offset above, the right
+    // edge still stays N candles behind the current candle.
+    const swingPair = findSwingDotPair(trimmed, {
+      lookback: input.lookback,
+      strength: input.strength ?? 5,
+      swingOffset: input.swingOffset ?? 0,
+    });
+    direction = swingPair.direction;
+    anchorA = direction === "up" ? swingPair.swing : swingPair.retrace;
+    anchorB = direction === "up" ? swingPair.retrace : swingPair.swing;
+    explanation =
+      direction === "up"
+        ? "AXE mapped Fibonacci across the most recent swing low → swing high."
+        : "AXE mapped Fibonacci across the most recent swing high → swing low.";
   } else {
-    // auto + swing share the same detection — both honour market structure
-    const trend = findLatestTrendLegOnActiveTf(input.candles, {
+    // Auto mode = most recent confirmed structure leg on the active TF.
+    const trend = findLatestTrendLegOnActiveTf(trimmed, {
       lookback: input.lookback,
       strength: input.strength,
-      swingOffset: mode === "swing" ? input.swingOffset ?? 0 : 0,
+      swingOffset: 0,
     });
     direction = trend.direction;
     anchorA = direction === "up" ? trend.swing : trend.retrace; // 0%
@@ -109,10 +178,19 @@ export function buildFibonacciActionFromCandles(input: {
         { time: anchorB.time, price: anchorB.price },
       ],
       direction,
-      // The annotation layer reads these so the lines/labels project past
-      // the last candle (matches MT5's "right ray" behaviour) — handy for
-      // seeing exactly when price will hit each retracement.
-      settings: { extendRight: true, source: input.source, mode, swingOffset: input.swingOffset ?? 0 },
+      // `extendRight` means the layer extends the lines to `rightEdgeTime`
+      // instead of just stopping at the swing point. `rightEdgeTime` is
+      // candle[-N] so the fib never overlaps the live candle. The layer
+      // also reads `mode` + `swingOffset` for live re-rebuild when the
+      // user changes them.
+      settings: {
+        extendRight: true,
+        source: input.source,
+        mode,
+        swingOffset: input.swingOffset ?? 0,
+        endOffsetBars,
+        rightEdgeTime,
+      },
       levels: FIB_LEVELS.map((level) => ({
         level,
         price: Number((direction === "up" ? high - range * level : low + range * level).toFixed(8)),
@@ -120,6 +198,68 @@ export function buildFibonacciActionFromCandles(input: {
       explanation,
     },
   };
+}
+
+/**
+ * Find a swing-high / swing-low pair from the SAME swing-dot detection
+ * the "Swings" overlay uses. Returns the most recent SH paired with
+ * the most recent SL by default; positive `swingOffset` walks backward
+ * through the pivot list and ALWAYS picks the older swing on the
+ * relevant side, so the fib's price range monotonically grows.
+ */
+function findSwingDotPair(
+  candles: ChartActionCandle[],
+  options: { lookback?: number; strength?: number; swingOffset?: number },
+): { swing: SwingAnchor; retrace: SwingAnchor; direction: "up" | "down" } {
+  const strength = options.strength ?? 5;
+  const swingOffset = Math.max(0, Math.floor(options.swingOffset ?? 0));
+  const visible = normalizeCandles(candles).slice(-(options.lookback ?? 220));
+  if (visible.length < strength * 2 + 4) {
+    throw new Error("Not enough candles to detect swing dots.");
+  }
+
+  // Same pivot detection as buildSwingPointLevels in the indicator
+  // layer — keeps the auto-fib anchored on the exact dots the user sees.
+  const pivots: SwingAnchor[] = [];
+  for (let index = strength; index < visible.length - strength; index += 1) {
+    const candle = visible[index];
+    const neighbors = [
+      ...visible.slice(index - strength, index),
+      ...visible.slice(index + 1, index + strength + 1),
+    ];
+    if (neighbors.every((other) => candle.high > other.high)) {
+      pivots.push({ type: "high", index, time: candle.time, price: candle.high });
+    }
+    if (neighbors.every((other) => candle.low < other.low)) {
+      pivots.push({ type: "low", index, time: candle.time, price: candle.low });
+    }
+  }
+
+  if (pivots.length < 2) {
+    const fb = fallbackRangeFromNorm(visible);
+    return { swing: fb.high, retrace: fb.low, direction: "up" };
+  }
+
+  const highs = pivots.filter((p) => p.type === "high");
+  const lows = pivots.filter((p) => p.type === "low");
+  if (highs.length === 0 || lows.length === 0) {
+    const fb = fallbackRangeFromNorm(visible);
+    return { swing: fb.high, retrace: fb.low, direction: "up" };
+  }
+
+  // Pick the most recent SH and SL, then step backwards by `swingOffset`
+  // on the side that would EXTEND the range (i.e. the older swing).
+  const highIdx = Math.max(0, highs.length - 1 - swingOffset);
+  const lowIdx = Math.max(0, lows.length - 1 - swingOffset);
+  const sh = highs[highIdx];
+  const sl = lows[lowIdx];
+
+  // Direction: which extreme is more recent (by time) → that's the
+  // "swing" anchor (= 0%). The other becomes the retrace (= 100%).
+  const isUp = sh.time >= sl.time;
+  return isUp
+    ? { swing: sh, retrace: sl, direction: "up" }
+    : { swing: sl, retrace: sh, direction: "down" };
 }
 
 export function buildTrendlineActionFromCandles(input: {

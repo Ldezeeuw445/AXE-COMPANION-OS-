@@ -44,10 +44,18 @@ type FibGeom = {
   anchorY: number;
   /** y at level=1 (swing). */
   swingY: number;
+  /** Pixel position of point[0] (handle 0). */
+  pointAX: number;
+  pointAY: number;
+  /** Pixel position of point[1] (handle 1). */
+  pointBX: number;
+  pointBY: number;
   anchorPrice: number;
   swingPrice: number;
   lines: FibLineGeom[];
   extend: boolean;
+  /** Render style: standard fib levels OR premium/discount banding. */
+  style: "levels" | "premium_discount";
 };
 
 function fibLevelStyle(level: number): { stroke: string; label: string; width: number } {
@@ -152,20 +160,36 @@ export function FibAnnotationLayer({
           const y = anchorY + (swingY - anchorY) * lvl;
           return { level: lvl, y, price };
         });
-        const extend = Boolean(
-          ann.settings && (ann.settings as Record<string, unknown>).extendRight,
-        );
-        // Stretch level lines past the swing so the user can see exactly
-        // where price will cross each retracement. Without this the auto
-        // fib looks like a static box stuck in the middle of the chart.
-        const rightX = extend
-          ? Math.max(
+        const settings = (ann.settings ?? {}) as Record<string, unknown>;
+        const extend = Boolean(settings.extendRight);
+        const style: "levels" | "premium_discount" =
+          settings.style === "premium_discount" ? "premium_discount" : "levels";
+        const rightEdgeTimeRaw = settings.rightEdgeTime;
+        const rightEdgeTime =
+          typeof rightEdgeTimeRaw === "number" && Number.isFinite(rightEdgeTimeRaw)
+            ? rightEdgeTimeRaw
+            : null;
+        // Auto-Fib: clamp the right edge to candle[-N] (per-TF offset) so
+        // the live candle never sits inside the fib's price band. When
+        // the user drags the fib manually, `rightEdgeTime` is left in
+        // place and we use the swing's time as the right edge — drag
+        // works freely with NO clamping (per UX spec).
+        let rightX = endX;
+        if (extend) {
+          if (rightEdgeTime != null) {
+            const tfEdgeX = h.timeToCoordinate(rightEdgeTime);
+            rightX = tfEdgeX != null && tfEdgeX > startX ? tfEdgeX : endX;
+          } else {
+            // Manually-drawn fib — keep historic behaviour: extend to the
+            // future-projection cursor or chart edge.
+            rightX = Math.max(
               endX,
               futureProjectionX != null && futureProjectionX > endX
                 ? futureProjectionX
                 : Math.max(hostWidth - 4, endX),
-            )
-          : endX;
+            );
+          }
+        }
         next.push({
           id: ann.id,
           startX,
@@ -173,10 +197,15 @@ export function FibAnnotationLayer({
           rightX,
           anchorY,
           swingY,
+          pointAX: xA,
+          pointAY: yA,
+          pointBX: xB,
+          pointBY: yB,
           anchorPrice: a.price,
           swingPrice: b.price,
           lines,
           extend,
+          style,
         });
       }
       setGeoms(next);
@@ -318,10 +347,89 @@ export function FibAnnotationLayer({
           const pctLabelRightX = priceLabelRightX - 60;
           const removeX = Math.max(8, g.startX - 30);
           const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
+          // In premium/discount mode we only render 0%, 50% and 100% +
+          // a faint zone tint. The trader sees one clean structural
+          // half (premium) and one clean half (discount) — same anchors
+          // as the standard fib so price levels still tag, just visually
+          // less busy.
+          const visibleLines =
+            g.style === "premium_discount"
+              ? g.lines.filter((ln) => ln.level === 0 || ln.level === 0.5 || ln.level === 1)
+              : g.lines;
+          const eqLine = g.lines.find((ln) => ln.level === 0.5);
+          const anchorLine = g.lines.find((ln) => ln.level === 0);
+          const swingExtreme = g.lines.find((ln) => ln.level === 1);
           return (
             <g key={g.id}>
+              {/* Premium / Discount tint bands. Premium = the half above
+                  equilibrium, discount = below. We tint very lightly so
+                  the candles still read clearly. */}
+              {g.style === "premium_discount" && eqLine && anchorLine && swingExtreme ? (
+                <g pointerEvents="none">
+                  <rect
+                    x={g.startX}
+                    y={Math.min(anchorLine.y, eqLine.y)}
+                    width={Math.max(2, g.rightX - g.startX)}
+                    height={Math.max(2, Math.abs(eqLine.y - anchorLine.y))}
+                    fill={
+                      anchorLine.y < eqLine.y
+                        ? "rgba(244,63,94,0.075)"
+                        : "rgba(45,212,191,0.085)"
+                    }
+                  />
+                  <rect
+                    x={g.startX}
+                    y={Math.min(eqLine.y, swingExtreme.y)}
+                    width={Math.max(2, g.rightX - g.startX)}
+                    height={Math.max(2, Math.abs(swingExtreme.y - eqLine.y))}
+                    fill={
+                      anchorLine.y < eqLine.y
+                        ? "rgba(45,212,191,0.085)"
+                        : "rgba(244,63,94,0.075)"
+                    }
+                  />
+                  {/* Premium / Discount labels at the right edge */}
+                  <text
+                    x={g.rightX - 6}
+                    y={(Math.min(anchorLine.y, eqLine.y) + Math.max(anchorLine.y, eqLine.y)) / 2 + 3}
+                    textAnchor="end"
+                    fontFamily="ui-sans-serif, system-ui, -apple-system"
+                    fontSize="9"
+                    fontWeight={700}
+                    fill={
+                      anchorLine.y < eqLine.y
+                        ? "rgba(252,165,165,0.92)"
+                        : "rgba(167,243,208,0.92)"
+                    }
+                    stroke="rgba(0,0,0,0.55)"
+                    strokeWidth="2"
+                    paintOrder="stroke"
+                  >
+                    {anchorLine.y < eqLine.y ? "PREMIUM" : "DISCOUNT"}
+                  </text>
+                  <text
+                    x={g.rightX - 6}
+                    y={(Math.min(eqLine.y, swingExtreme.y) + Math.max(eqLine.y, swingExtreme.y)) / 2 + 3}
+                    textAnchor="end"
+                    fontFamily="ui-sans-serif, system-ui, -apple-system"
+                    fontSize="9"
+                    fontWeight={700}
+                    fill={
+                      anchorLine.y < eqLine.y
+                        ? "rgba(167,243,208,0.92)"
+                        : "rgba(252,165,165,0.92)"
+                    }
+                    stroke="rgba(0,0,0,0.55)"
+                    strokeWidth="2"
+                    paintOrder="stroke"
+                  >
+                    {anchorLine.y < eqLine.y ? "DISCOUNT" : "PREMIUM"}
+                  </text>
+                </g>
+              ) : null}
+
               {/* Fib level lines */}
-              {g.lines.map((ln) => {
+              {visibleLines.map((ln) => {
                 const isFocus = ln.level === 0.5 || ln.level === 0.618 || ln.level === 0.65;
                 const style = fibLevelStyle(ln.level);
                 return (
@@ -381,42 +489,34 @@ export function FibAnnotationLayer({
                 );
               })}
 
-              {/* Two draggable handles — pointer-events auto so they catch input */}
+              {/* Two draggable handles — rendered at the ACTUAL point[0]
+                  and point[1] coordinates (not at startX/endX). This is
+                  the fix for the "dragging one handle starts moving the
+                  whole fib" bug: the visual handle and the drag index
+                  stay glued to the same logical point even when dragging
+                  past the other point swaps the time order. The user
+                  can extend the fib in either direction freely with no
+                  clamping. */}
               {isActive ? (
                 <g style={{ pointerEvents: "auto" }}>
                   <circle
-                    cx={g.startX}
-                    cy={g.anchorY}
+                    cx={g.pointAX}
+                    cy={g.pointAY}
                     r={9}
                     fill="rgba(34,211,238,0.95)"
                     stroke="rgba(255,255,255,0.85)"
                     strokeWidth={1.5}
-                    onPointerDown={(e) => {
-                      // Determine which annotation point this handle represents.
-                      const ann = annotations.find((a) => a.id === g.id);
-                      if (!ann) return;
-                      const a = ann.points[0];
-                      const b = ann.points[1];
-                      const useFirst = a.time <= b.time;
-                      startDrag(e, g.id, useFirst ? 0 : 1);
-                    }}
+                    onPointerDown={(e) => startDrag(e, g.id, 0)}
                     style={{ cursor: "grab", touchAction: "none" }}
                   />
                   <circle
-                    cx={g.endX}
-                    cy={g.swingY}
+                    cx={g.pointBX}
+                    cy={g.pointBY}
                     r={9}
                     fill="rgba(34,211,238,0.95)"
                     stroke="rgba(255,255,255,0.85)"
                     strokeWidth={1.5}
-                    onPointerDown={(e) => {
-                      const ann = annotations.find((a) => a.id === g.id);
-                      if (!ann) return;
-                      const a = ann.points[0];
-                      const b = ann.points[1];
-                      const useFirst = a.time <= b.time;
-                      startDrag(e, g.id, useFirst ? 1 : 0);
-                    }}
+                    onPointerDown={(e) => startDrag(e, g.id, 1)}
                     style={{ cursor: "grab", touchAction: "none" }}
                   />
                 </g>
