@@ -43,7 +43,12 @@ export async function ensureDemoAccount(
     .eq("connection_method", DEMO_CONNECTION_METHOD)
     .maybeSingle();
 
-  if (existingErr) return null;
+  if (existingErr) {
+    // Surface DB issues to Vercel logs — silent failure is what masked the
+    // CHECK-constraint regression that hid demo accounts from every user.
+    console.warn("[demoAccount] lookup failed", existingErr.message ?? existingErr);
+    return null;
+  }
   if (existing) return existing as DemoAccountRow;
 
   const now = new Date().toISOString();
@@ -74,7 +79,15 @@ export async function ensureDemoAccount(
     )
     .single();
 
-  if (createErr) return null;
+  if (createErr) {
+    console.warn("[demoAccount] insert failed", {
+      code: createErr.code,
+      message: createErr.message,
+      details: createErr.details,
+      hint: createErr.hint,
+    });
+    return null;
+  }
   return created as DemoAccountRow;
 }
 
