@@ -115,8 +115,8 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
           h,
           color:
             candle.close >= candle.open
-              ? "rgba(45,212,191,0.78)"
-              : "rgba(239,68,68,0.78)",
+              ? "rgba(8,153,129,0.85)"
+              : "rgba(242,54,69,0.85)",
         });
       }
       return {
@@ -172,17 +172,23 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
           ];
         })();
 
+  const rsiOverbought = top + (1 - 70 / 100) * usable;
+  const rsiOversold = top + (1 - 30 / 100) * usable;
+
   return (
     <div
       ref={hostRef}
-      className="relative h-full w-full overflow-hidden border-t border-white/[0.06] bg-black/55"
+      className="relative h-full w-full overflow-hidden bg-[#05070A]"
+      style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
     >
-      <span className="pointer-events-none absolute left-2 top-1 text-[9px] font-bold uppercase tracking-[0.22em] text-cyan-100/85">
+      {/* Premium header label */}
+      <span
+        className="pointer-events-none absolute left-2.5 top-1.5 font-sans text-[9px] font-semibold uppercase tracking-[0.14em]"
+        style={{ color: "rgba(180,195,220,0.75)", fontFamily: "'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif" }}
+      >
         {mode === "rsi"
-          ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
-          : `${geometry.volumeSource === "volume" ? "Volumes" : "Range"} ${
-              geometry.volumeMax > 1000 ? formatThousands(geometry.volumeMax) : geometry.volumeMax.toFixed(0)
-            }`}
+          ? `RSI · 14 ${geometry.latestRsi != null ? `  ${geometry.latestRsi.toFixed(2)}` : ""}`
+          : `${geometry.volumeSource === "volume" ? "Vol" : "Range"}`}
       </span>
 
       {size.w > 0 ? (
@@ -192,18 +198,43 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
           viewBox={`0 0 ${size.w} ${size.h}`}
           className="absolute inset-0"
         >
-          {/* Vertical separator between plot and axis gutter (subtle) */}
+          <defs>
+            {/* RSI gradient fill under the line */}
+            <linearGradient id="rsi-area-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(8,153,129,0.20)" />
+              <stop offset="100%" stopColor="rgba(8,153,129,0)" />
+            </linearGradient>
+            {/* Volume bar gradient */}
+            <linearGradient id="vol-bull-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(8,153,129,0.85)" />
+              <stop offset="100%" stopColor="rgba(8,153,129,0.35)" />
+            </linearGradient>
+            <linearGradient id="vol-bear-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(242,54,69,0.85)" />
+              <stop offset="100%" stopColor="rgba(242,54,69,0.35)" />
+            </linearGradient>
+          </defs>
+
           <line
             x1={plotWidth}
             x2={plotWidth}
             y1={0}
             y2={size.h}
-            stroke="rgba(255,255,255,0.04)"
+            stroke="rgba(255,255,255,0.03)"
             strokeWidth={1}
           />
 
-          {mode === "rsi"
-            ? [25, 50, 75].map((level) => {
+          {mode === "rsi" ? (
+            <>
+              {/* Overbought / oversold bands */}
+              <rect
+                x={0}
+                y={rsiOverbought}
+                width={plotWidth}
+                height={Math.max(0, rsiOversold - rsiOverbought)}
+                fill="rgba(255,255,255,0.02)"
+              />
+              {[30, 50, 70].map((level) => {
                 const y = top + (1 - level / 100) * usable;
                 return (
                   <line
@@ -212,50 +243,55 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
                     x2={plotWidth}
                     y1={y}
                     y2={y}
-                    stroke={
-                      level === 50
-                        ? "rgba(255,255,255,0.16)"
-                        : "rgba(255,255,255,0.08)"
-                    }
-                    strokeDasharray="4 4"
+                    stroke={level === 50 ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)"}
+                    strokeDasharray="3 5"
+                  />
+                );
+              })}
+            </>
+          ) : null}
+
+          {mode === "volume"
+            ? geometry.volumeBars.map((bar, index) => {
+                const isBull = bar.color.includes("45,212,191") || bar.color.includes("8,153,129");
+                return (
+                  <rect
+                    key={index}
+                    x={bar.x - 2.5}
+                    y={bar.y}
+                    width={5}
+                    height={bar.h}
+                    rx={0.5}
+                    fill={isBull ? "url(#vol-bull-grad)" : "url(#vol-bear-grad)"}
+                    opacity={0.9}
                   />
                 );
               })
             : null}
 
-          {mode === "volume"
-            ? geometry.volumeBars.map((bar, index) => (
-                <rect
-                  key={index}
-                  x={bar.x - 2}
-                  y={bar.y}
-                  width={4}
-                  height={bar.h}
-                  rx={1}
-                  fill={bar.color}
-                />
-              ))
-            : null}
-
           {mode === "rsi" && geometry.rsiPath ? (
-            <path
-              d={geometry.rsiPath}
-              fill="none"
-              stroke="rgba(34,211,238,0.95)"
-              strokeWidth={1.6}
-            />
+            <>
+              <path
+                d={geometry.rsiPath}
+                fill="none"
+                stroke="rgba(8,153,129,0.85)"
+                strokeWidth={1.3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </>
           ) : null}
 
-          {/* Right-axis labels — MT5 style numbers in the gutter */}
           {axisLabels.map((label, idx) => (
             <text
               key={idx}
               x={plotWidth + 6}
               y={label.y + 3}
               textAnchor="start"
-              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize="10"
-              fill={label.emphasis ? "rgba(232,238,246,0.85)" : "rgba(168,180,196,0.7)"}
+              fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+              fontSize="9"
+              fontWeight="500"
+              fill={label.emphasis ? "rgba(210,220,235,0.75)" : "rgba(140,155,175,0.55)"}
             >
               {label.text}
             </text>

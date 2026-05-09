@@ -1,33 +1,29 @@
 /**
- * Premium dark trader-grade palette for the AXE chart.
+ * Premium dark palette for the AXE chart — LuxAlgo Price Action grade.
  *
- * Inspiration: Trading OS landing dark UI + matte broker terminal.
- * Bull/bear stay readable on phones without becoming candy-bright.
+ * Bull/bear mirror the TradingView LuxAlgo emerald/crimson that traders
+ * recognise instantly. Backgrounds are pure near-black for maximum
+ * contrast on zones and structure labels.
  */
 export const CHART_THEME = {
-  /** Base color of the chart frame — sits on top of the woven app background. */
-  background: "#070C13",
-  /** Chart canvas itself stays solid/flat so it feels like a native trading terminal. */
-  chartCanvasBackground: "#05070A",
-  textColor: "rgba(208,220,234,0.92)",
-  grid: "rgba(110,170,200,0.05)",
-  crosshair: "rgba(140,200,220,0.48)",
-  borderColor: "rgba(110,170,200,0.10)",
-  // Bull: muted dark emerald-teal — luxe, niet candy.
-  bull: "#1F9C7B",
-  // Bear: warm coral red — deeper than candy pink, brighter than rust.
-  bear: "#C95450",
-  bullWick: "rgba(31,156,123,0.95)",
-  bearWick: "rgba(201,84,80,0.95)",
-  entryLine: "rgba(110,178,252,0.7)",
-  stopLine: "rgba(201,84,80,0.7)",
-  takeLine: "rgba(31,156,123,0.7)",
-  pendingLine: "rgba(110,178,252,0.45)",
-  alertLine: "rgba(244,191,99,0.6)",
-  positiveText: "rgba(31,156,123,0.95)",
-  negativeText: "rgba(201,84,80,0.95)",
-  neutralText: "rgba(168,180,196,0.95)",
-  cyanAccent: "rgba(33,212,216,0.85)",
-  /** Thin edge only; avoid a floating/3D card feel on the chart tab. */
-  frameGlow: "0 0 0 1px rgba(255,255,255,0.04) inset",
+  background: "#06090E",
+  chartCanvasBackground: "#04060A",
+  textColor: "rgba(195,208,228,0.88)",
+  grid: "rgba(100,140,180,0.035)",
+  crosshair: "rgba(160,195,225,0.35)",
+  borderColor: "rgba(100,140,180,0.06)",
+  bull: "#089981",
+  bear: "#F23645",
+  bullWick: "rgba(8,153,129,0.92)",
+  bearWick: "rgba(242,54,69,0.92)",
+  entryLine: "rgba(100,165,245,0.65)",
+  stopLine: "rgba(242,54,69,0.65)",
+  takeLine: "rgba(8,153,129,0.65)",
+  pendingLine: "rgba(100,165,245,0.35)",
+  alertLine: "rgba(234,179,82,0.55)",
+  positiveText: "rgba(8,153,129,0.95)",
+  negativeText: "rgba(242,54,69,0.95)",
+  neutralText: "rgba(155,170,190,0.92)",
+  cyanAccent: "rgba(8,153,129,0.80)",
+  frameGlow: "0 0 0 1px rgba(255,255,255,0.03) inset",
 } as const;

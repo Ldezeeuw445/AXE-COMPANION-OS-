@@ -268,14 +268,52 @@ export function ChartIndicatorLayer({
     };
   }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount]);
 
+  const defsId = "lux-indicator-defs";
+
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
       <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
+        <defs>
+          {/* Gradient fills for premium zone rendering */}
+          <linearGradient id={`${defsId}-ob-bull`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(8,153,129,0.28)" />
+            <stop offset="100%" stopColor="rgba(8,153,129,0.06)" />
+          </linearGradient>
+          <linearGradient id={`${defsId}-ob-bear`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(242,54,69,0.28)" />
+            <stop offset="100%" stopColor="rgba(242,54,69,0.06)" />
+          </linearGradient>
+          <linearGradient id={`${defsId}-fvg-bull`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(8,153,129,0.22)" />
+            <stop offset="100%" stopColor="rgba(8,153,129,0.04)" />
+          </linearGradient>
+          <linearGradient id={`${defsId}-fvg-bear`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(242,54,69,0.22)" />
+            <stop offset="100%" stopColor="rgba(242,54,69,0.04)" />
+          </linearGradient>
+          <linearGradient id={`${defsId}-ifvg-bull`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(8,153,129,0.18)" />
+            <stop offset="100%" stopColor="rgba(8,153,129,0.03)" />
+          </linearGradient>
+          <linearGradient id={`${defsId}-ifvg-bear`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="rgba(242,54,69,0.18)" />
+            <stop offset="100%" stopColor="rgba(242,54,69,0.03)" />
+          </linearGradient>
+          {/* Glow filter for structure labels */}
+          <filter id={`${defsId}-glow`} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
         {active.orderBlocks
           ? geometry.orderBlocks.map((zone, index) => (
               <g key={`ob-${index}`}>
-                <ZoneBox zone={zone} variant="ob" />
-                <VolumetricRightRailLabel
+                <PremiumZoneBox zone={zone} variant="ob" defsId={defsId} />
+                <PremiumVolumetricLabel
                   zone={zone}
                   containerWidth={size.w}
                   totalChartVolume={geometry.totalChartVolume}
@@ -286,108 +324,57 @@ export function ChartIndicatorLayer({
 
         {active.fvg
           ? geometry.fairValueGaps.map((zone, index) => (
-              <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" />
+              <PremiumZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" defsId={defsId} />
             ))
           : null}
 
         {active.ifvg
           ? geometry.inverseFairValueGaps.map((zone, index) => (
-              <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" />
+              <PremiumZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" defsId={defsId} />
             ))
           : null}
 
-        {/* Previous Day High / Low / Equilibrium — all rendered as thin
-            SOLID lines (no dots, no dashes) per UX spec. The label sits
-            on the SHARED right rail (RIGHT_RAIL_OFFSET = 8px from edge,
-            matches the fib %, fib price and Premium/Discount labels)
-            so the entire right-side label column lines up vertically
-            with no overlap. */}
+        {/* Previous Day High / Low / Equilibrium — LuxAlgo PWH/PWL style
+            with dotted lines + right-rail pill badges. */}
         {active.pdh && geometry.previousDayHigh ? (
-          <g>
-            <line
-              x1={0}
-              x2={size.w - RIGHT_RAIL_OFFSET}
-              y1={geometry.previousDayHigh.y}
-              y2={geometry.previousDayHigh.y}
-              stroke="rgba(34,211,238,0.78)"
-              strokeWidth={1}
-            />
-            <text
-              x={size.w - RIGHT_RAIL_OFFSET}
-              y={geometry.previousDayHigh.y - 4}
-              textAnchor="end"
-              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize="9.5"
-              fontWeight="700"
-              fill="rgba(125,235,255,0.96)"
-              stroke="rgba(0,0,0,0.78)"
-              strokeWidth="2.6"
-              paintOrder="stroke"
-            >
-              PDH
-            </text>
-          </g>
+          <PremiumLevelLine
+            y={geometry.previousDayHigh.y}
+            label="PDH"
+            color="rgba(8,153,129,0.9)"
+            labelColor="rgba(8,153,129,1)"
+            pillBg="rgba(8,153,129,0.15)"
+            containerWidth={size.w}
+          />
         ) : null}
 
         {active.pdl && geometry.previousDayLow ? (
-          <g>
-            <line
-              x1={0}
-              x2={size.w - RIGHT_RAIL_OFFSET}
-              y1={geometry.previousDayLow.y}
-              y2={geometry.previousDayLow.y}
-              stroke="rgba(244,63,94,0.78)"
-              strokeWidth={1}
-            />
-            <text
-              x={size.w - RIGHT_RAIL_OFFSET}
-              y={geometry.previousDayLow.y + 12}
-              textAnchor="end"
-              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize="9.5"
-              fontWeight="700"
-              fill="rgba(252,165,165,0.98)"
-              stroke="rgba(0,0,0,0.78)"
-              strokeWidth="2.6"
-              paintOrder="stroke"
-            >
-              PDL
-            </text>
-          </g>
+          <PremiumLevelLine
+            y={geometry.previousDayLow.y}
+            label="PDL"
+            color="rgba(242,54,69,0.9)"
+            labelColor="rgba(242,54,69,1)"
+            pillBg="rgba(242,54,69,0.15)"
+            containerWidth={size.w}
+          />
         ) : null}
 
         {active.pdq && geometry.previousDayEq ? (
-          <g>
-            <line
-              x1={0}
-              x2={size.w - RIGHT_RAIL_OFFSET}
-              y1={geometry.previousDayEq.y}
-              y2={geometry.previousDayEq.y}
-              stroke="rgba(96,165,250,0.72)"
-              strokeWidth={1}
-            />
-            <text
-              x={size.w - RIGHT_RAIL_OFFSET}
-              y={geometry.previousDayEq.y - 4}
-              textAnchor="end"
-              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize="9.5"
-              fontWeight="700"
-              fill="rgba(186,212,255,0.96)"
-              stroke="rgba(0,0,0,0.78)"
-              strokeWidth="2.6"
-              paintOrder="stroke"
-            >
-              PDQ
-            </text>
-          </g>
+          <PremiumLevelLine
+            y={geometry.previousDayEq.y}
+            label="PDQ"
+            color="rgba(120,150,200,0.7)"
+            labelColor="rgba(160,185,230,0.95)"
+            pillBg="rgba(120,150,200,0.12)"
+            containerWidth={size.w}
+          />
         ) : null}
 
         {active.swingPoints
           ? geometry.swingPointLevels.map((level, index) => {
               const isHigh = level.kind === "high";
-              const stroke = isHigh ? "rgba(244,63,94,0.68)" : "rgba(45,212,191,0.68)";
-              const fill = isHigh ? "rgba(244,63,94,0.95)" : "rgba(45,212,191,0.95)";
+              const lineColor = isHigh ? "rgba(242,54,69,0.45)" : "rgba(8,153,129,0.45)";
+              const dotColor = isHigh ? "rgba(242,54,69,0.9)" : "rgba(8,153,129,0.9)";
+              const labelColor = isHigh ? "rgba(242,54,69,1)" : "rgba(8,153,129,1)";
               return (
                 <g key={`swing-${level.kind}-${index}`}>
                   <line
@@ -395,22 +382,24 @@ export function ChartIndicatorLayer({
                     x2={level.x2}
                     y1={level.y}
                     y2={level.y}
-                    stroke={stroke}
-                    strokeWidth={1.15}
-                    strokeDasharray="2 5"
+                    stroke={lineColor}
+                    strokeWidth={0.8}
+                    strokeDasharray="3 6"
                     strokeLinecap="round"
                   />
-                  <circle cx={level.x1} cy={level.y} r={2.5} fill={fill} opacity={0.88} />
+                  <circle cx={level.x1} cy={level.y} r={2} fill={dotColor} />
+                  <circle cx={level.x1} cy={level.y} r={4} fill="none" stroke={dotColor} strokeWidth={0.5} opacity={0.5} />
                   <text
-                    x={Math.max(6, level.x1 - 3)}
-                    y={level.y + (isHigh ? -7 : 13)}
+                    x={Math.max(6, level.x1 - 4)}
+                    y={level.y + (isHigh ? -8 : 14)}
                     textAnchor="end"
-                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                    fontSize="9"
-                    fontWeight="700"
-                    fill={fill}
-                    stroke="rgba(0,0,0,0.74)"
-                    strokeWidth="2.2"
+                    fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+                    fontSize="8.5"
+                    fontWeight="600"
+                    letterSpacing="0.04em"
+                    fill={labelColor}
+                    stroke="rgba(0,0,0,0.85)"
+                    strokeWidth="2.4"
                     paintOrder="stroke"
                   >
                     {level.label}
@@ -420,84 +409,25 @@ export function ChartIndicatorLayer({
             })
           : null}
 
-        {/* The legacy blue-dotted "rolling 50-bar mid-range" line was
-            removed: it was a noisy proxy for "current-day equilibrium"
-            and the dedicated PDQ indicator now expresses the same idea
-            cleanly with a fixed level from yesterday's H + L. */}
-
         {active.structure
           ? geometry.structureLines.map((item, index) => (
-              <g key={`line-${item.label}-${index}`}>
-                <line
-                  x1={item.x1}
-                  x2={item.x2}
-                  y1={item.y}
-                  y2={item.y}
-                  stroke={item.bullish ? "rgba(8,153,129,0.92)" : "rgba(242,54,69,0.92)"}
-                  strokeWidth={item.continuation ? 1.35 : 2}
-                  strokeDasharray={item.continuation ? "6 5" : undefined}
-                />
-                <text
-                  x={item.x2}
-                  y={item.y - 6}
-                  textAnchor="end"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
-                  paintOrder="stroke"
-                >
-                  {item.label}
-                </text>
-              </g>
+              <PremiumStructureLine key={`line-${item.label}-${index}`} item={item} defsId={defsId} />
             ))
           : null}
 
         {active.ma && geometry.maPath ? (
-          <path d={geometry.maPath} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth={1.7} />
+          <path d={geometry.maPath} fill="none" stroke="rgba(96,165,250,0.72)" strokeWidth={1.3} strokeLinecap="round" />
         ) : null}
 
         {active.structure
           ? geometry.structureLabels.map((item, index) => (
-              <g key={`${item.label}-${index}`}>
-                <text
-                  x={item.x}
-                  y={item.y}
-                  textAnchor="middle"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.kind === "high" ? "rgba(34,211,238,0.92)" : "rgba(45,212,191,0.92)"}
-                  stroke="rgba(0,0,0,0.75)"
-                  strokeWidth="3"
-                  paintOrder="stroke"
-                >
-                  {item.label}
-                </text>
-              </g>
+              <PremiumSwingLabel key={`${item.label}-${index}`} item={item} />
             ))
           : null}
 
         {active.structure
           ? geometry.swingFailures.map((item, index) => (
-              <g key={`sfp-${index}`}>
-                <text
-                  x={item.x}
-                  y={item.y}
-                  textAnchor="middle"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
-                  paintOrder="stroke"
-                >
-                  {item.label}
-                </text>
-              </g>
+              <PremiumSfpMarker key={`sfp-${index}`} item={item} />
             ))
           : null}
 
@@ -521,16 +451,10 @@ function formatVolume(n: number): string {
 }
 
 /**
- * LuxAlgo-style volumetric label rendered on the SHARED right rail of
- * the chart. Shows total OB volume, % of recent chart volume and the
- * buyer/seller dominance — exactly the layout in the user's reference
- * photo ("1.082K (13%)") with a dashed line drawn from the OB out to
- * the label so the trader can trace which OB it belongs to.
- *
- * Values are 100% honest — they come straight from the candle tickVolume
- * inside the OB band (see buildVolumetricBreakdown).
+ * Premium volumetric label — frosted pill badge on the right rail.
+ * Shows volume + % of chart + buyer/seller split in a refined layout.
  */
-function VolumetricRightRailLabel({
+function PremiumVolumetricLabel({
   zone,
   containerWidth,
   totalChartVolume,
@@ -541,192 +465,196 @@ function VolumetricRightRailLabel({
 }) {
   const v = zone.volumetric;
   if (!v || v.totalVolume <= 0) return null;
-
-  // Don't draw labels on incredibly thin OBs (< 12 px height) — they'd
-  // overlap stacked OBs and turn into noise.
-  if (zone.height < 12) return null;
+  if (zone.height < 14) return null;
 
   const railX = containerWidth - RIGHT_RAIL_OFFSET;
-  // Volume + percent of recent chart volume, e.g. "1.08K (13%)".
   const volPctOfChart =
-    totalChartVolume > 0 ? Math.max(0, Math.round((v.totalVolume / totalChartVolume) * 100)) : 0;
-  const volLabel = `${formatVolume(v.totalVolume)} (${volPctOfChart}%)`;
-  const buyersWin = v.buyerPercent >= v.sellerPercent;
-  const sideLabel = buyersWin
-    ? `B ${Math.round(v.buyerPercent)}%`
-    : `S ${Math.round(v.sellerPercent)}%`;
-  const sideColor = buyersWin ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
-  const baseColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
+    totalChartVolume > 0
+      ? Math.max(0, (v.totalVolume / totalChartVolume) * 100)
+      : 0;
+  const volLabel = `${formatVolume(v.totalVolume)} (${volPctOfChart.toFixed(2)}%)`;
+  const isBull = zone.direction === "up";
+  const baseColor = isBull ? "rgba(8,153,129,0.95)" : "rgba(242,54,69,0.95)";
+  const pillBg = isBull ? "rgba(8,153,129,0.12)" : "rgba(242,54,69,0.12)";
+  const pillW = volLabel.length * 5.8 + 16;
+  const pillH = 18;
 
-  // Two stacked text rows: volume label above the OB midline, dominance
-  // label below — both right-anchored on the shared rail.
   return (
     <g pointerEvents="none">
-      {/* Dashed extension line from the OB right edge to the label. */}
       <line
         x1={zone.detectionEndX}
-        x2={railX - 4}
+        x2={railX - pillW - 4}
         y1={zone.midY}
         y2={zone.midY}
-        stroke={zone.stroke}
-        strokeWidth={0.85}
-        strokeDasharray="3 4"
-        opacity={0.85}
+        stroke={baseColor}
+        strokeWidth={0.6}
+        strokeDasharray="2 4"
+        opacity={0.6}
+      />
+      <rect
+        x={railX - pillW}
+        y={zone.midY - pillH / 2}
+        width={pillW}
+        height={pillH}
+        rx={3}
+        fill={pillBg}
+        stroke={baseColor}
+        strokeWidth={0.5}
+        opacity={0.9}
       />
       <text
-        x={railX}
-        y={zone.midY - 2}
-        textAnchor="end"
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-        fontSize="9.5"
-        fontWeight={700}
+        x={railX - pillW / 2}
+        y={zone.midY + 3.5}
+        textAnchor="middle"
+        fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+        fontSize="9"
+        fontWeight="600"
+        letterSpacing="0.03em"
         fill={baseColor}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.6"
-        paintOrder="stroke"
       >
         {volLabel}
       </text>
-      <text
-        x={railX}
-        y={zone.midY + 11}
-        textAnchor="end"
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-        fontSize="9"
-        fontWeight={700}
-        fill={sideColor}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.6"
-        paintOrder="stroke"
-      >
-        {sideLabel}
-      </text>
     </g>
   );
 }
 
 /**
- * Volumetric split fill — the OB band is split horizontally into a
- * green sub-block (buyer share, on the bottom) and a red sub-block
- * (seller share, on the top). Heights are proportional to actual
- * tickVolume from candles inside the band, so a 70/30 buyer-dominant
- * OB looks visually 70/30 — exactly the LuxAlgo reference.
+ * Premium volumetric split — refined with subtle opacity and a thin
+ * equilibrium line.
  */
-function VolumetricSplitFill({ zone }: { zone: Zone }) {
+function PremiumVolumetricSplit({ zone }: { zone: Zone }) {
   const v = zone.volumetric;
   if (!v || v.totalVolume <= 0) return null;
-  const sellerHeight = zone.height * (v.sellerPercent / 100);
-  const buyerHeight = zone.height - sellerHeight;
-  const buyerFill = "rgba(45,212,191,0.18)";
-  const sellerFill = "rgba(244,63,94,0.18)";
+  const sellerH = zone.height * (v.sellerPercent / 100);
+  const buyerH = zone.height - sellerH;
+  const w = Math.max(2, zone.detectionEndX - zone.x);
   return (
     <g pointerEvents="none">
-      {sellerHeight > 0 ? (
-        <rect
-          x={zone.x}
-          y={zone.y}
-          width={Math.max(2, zone.detectionEndX - zone.x)}
-          height={sellerHeight}
-          fill={sellerFill}
-        />
+      {sellerH > 0 ? (
+        <rect x={zone.x} y={zone.y} width={w} height={sellerH} fill="rgba(242,54,69,0.14)" />
       ) : null}
-      {buyerHeight > 0 ? (
-        <rect
-          x={zone.x}
-          y={zone.y + sellerHeight}
-          width={Math.max(2, zone.detectionEndX - zone.x)}
-          height={buyerHeight}
-          fill={buyerFill}
-        />
+      {buyerH > 0 ? (
+        <rect x={zone.x} y={zone.y + sellerH} width={w} height={buyerH} fill="rgba(8,153,129,0.14)" />
       ) : null}
-      {/* Equilibrium split line where buyer:seller balance sits */}
       <line
         x1={zone.x}
         x2={zone.detectionEndX}
-        y1={zone.y + sellerHeight}
-        y2={zone.y + sellerHeight}
-        stroke="rgba(255,255,255,0.55)"
-        strokeWidth={0.7}
-        strokeDasharray="2 2"
+        y1={zone.y + sellerH}
+        y2={zone.y + sellerH}
+        stroke="rgba(255,255,255,0.25)"
+        strokeWidth={0.5}
+        strokeDasharray="1.5 2.5"
       />
     </g>
   );
 }
 
 /**
- * Single-zone renderer used by OB / FVG / iFVG.
+ * Premium zone renderer — LuxAlgo Price Action Concepts style.
  *
- * - OB: solid filled band at the detected zone, with an optional inner
- *   horizontal split fill (green buyer share at bottom, red seller share
- *   at top) sized by real tickVolume. Top + bottom edges extend right
- *   as DASHED rays — exactly the LuxAlgo "Volumetric Order Blocks"
- *   layout in the user's reference photo. Volume + dominance labels
- *   are rendered separately on the shared right rail by
- *   `VolumetricRightRailLabel`.
- * - FVG: solid filled rect, soft fill bleed forward.
- * - iFVG: dashed border so the inversion source is visible, fill bleeds
- *   forward to show forward relevance.
+ * Key differences from the basic version:
+ * - Gradient fills that fade rightward (solid → transparent)
+ * - No rounded corners — sharp edges like LuxAlgo
+ * - Thinner, more refined border strokes
+ * - Top/bottom extension lines with subtle opacity
+ * - Midline dashes are finer
+ * - Zone labels use pill badges
  */
-function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg" }) {
-  const labelText = variant === "ifvg" ? "iFVG" : variant === "fvg" ? "FVG" : "OB";
-  const fadeFactor = zone.mitigated ? 0.45 : 1;
+function PremiumZoneBox({
+  zone,
+  variant,
+  defsId,
+}: {
+  zone: Zone;
+  variant: "ob" | "fvg" | "ifvg";
+  defsId: string;
+}) {
+  const fadeFactor = zone.mitigated ? 0.35 : 1;
   const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
   const detectionEndX = zone.x + detectionWidth;
   const extensionStartX = detectionEndX;
   const extensionWidth = Math.max(0, zone.extendX - extensionStartX);
+  const isBull = zone.direction === "up";
+  const edgeColor = isBull ? "rgba(8,153,129,0.55)" : "rgba(242,54,69,0.55)";
+  const edgeColorStrong = isBull ? "rgba(8,153,129,0.75)" : "rgba(242,54,69,0.75)";
 
-  // OB → LuxAlgo "Volumetric" layout: filled band + horizontal volume
-  // split + dashed top/bottom rays extending right.
+  const gradientId =
+    variant === "ob"
+      ? isBull ? `${defsId}-ob-bull` : `${defsId}-ob-bear`
+      : variant === "fvg"
+        ? isBull ? `${defsId}-fvg-bull` : `${defsId}-fvg-bear`
+        : isBull ? `${defsId}-ifvg-bull` : `${defsId}-ifvg-bear`;
+
   if (variant === "ob") {
     return (
       <g opacity={fadeFactor}>
-        {/* Solid detected zone — base fill */}
         <rect
           x={zone.x}
           y={zone.y}
           width={Math.max(2, detectionWidth)}
           height={zone.height}
-          fill={zone.fill}
-          stroke={zone.stroke}
-          strokeWidth={1}
-          rx={3}
+          fill={`url(#${gradientId})`}
         />
-        {/* Volumetric horizontal split (green buyer % bottom / red seller % top) */}
+        {/* Left edge accent bar — LuxAlgo style */}
+        <line
+          x1={zone.x}
+          x2={zone.x}
+          y1={zone.y}
+          y2={zone.y + zone.height}
+          stroke={edgeColorStrong}
+          strokeWidth={2}
+        />
+        {/* Top edge */}
+        <line
+          x1={zone.x}
+          x2={detectionEndX}
+          y1={zone.y}
+          y2={zone.y}
+          stroke={edgeColor}
+          strokeWidth={0.6}
+        />
+        {/* Bottom edge */}
+        <line
+          x1={zone.x}
+          x2={detectionEndX}
+          y1={zone.y + zone.height}
+          y2={zone.y + zone.height}
+          stroke={edgeColor}
+          strokeWidth={0.6}
+        />
         {zone.volumetric && zone.volumetric.totalVolume > 0 ? (
-          <VolumetricSplitFill zone={zone} />
+          <PremiumVolumetricSplit zone={zone} />
         ) : null}
-        {/* DASHED top edge ray, extending right past the detection zone.
-            Mirrors the LuxAlgo "1.082K (13%)" reference photo. */}
         {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y}
-            y2={zone.y}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.95}
-          />
-        ) : null}
-        {/* DASHED bottom edge ray */}
-        {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y + zone.height}
-            y2={zone.y + zone.height}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.95}
-          />
+          <>
+            <line
+              x1={extensionStartX}
+              x2={zone.extendX}
+              y1={zone.y}
+              y2={zone.y}
+              stroke={edgeColor}
+              strokeWidth={0.6}
+              strokeDasharray="4 5"
+            />
+            <line
+              x1={extensionStartX}
+              x2={zone.extendX}
+              y1={zone.y + zone.height}
+              y2={zone.y + zone.height}
+              stroke={edgeColor}
+              strokeWidth={0.6}
+              strokeDasharray="4 5"
+            />
+          </>
         ) : null}
       </g>
     );
   }
 
-  // FVG / iFVG keep the soft "filled corridor" treatment.
+  const labelText = variant === "ifvg" ? "iFVG" : "FVG";
+  const labelBg = isBull ? "rgba(8,153,129,0.18)" : "rgba(242,54,69,0.18)";
+  const labelFill = isBull ? "rgba(8,153,129,0.95)" : "rgba(242,54,69,0.95)";
+
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -734,48 +662,269 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         y={zone.y}
         width={Math.max(2, detectionWidth)}
         height={zone.height}
-        fill={zone.fill}
-        stroke={zone.stroke}
-        strokeWidth={1}
-        strokeDasharray={variant === "ifvg" ? "3 3" : undefined}
-        rx={2}
+        fill={`url(#${gradientId})`}
       />
+      {/* Left accent bar */}
+      <line
+        x1={zone.x}
+        x2={zone.x}
+        y1={zone.y}
+        y2={zone.y + zone.height}
+        stroke={edgeColorStrong}
+        strokeWidth={variant === "ifvg" ? 1.5 : 1.8}
+        strokeDasharray={variant === "ifvg" ? "3 3" : undefined}
+      />
+      {/* Extension fill (faded) */}
       {zone.extend && extensionWidth > 1 ? (
         <rect
           x={extensionStartX}
           y={zone.y}
           width={extensionWidth}
           height={zone.height}
-          fill={zone.fill}
-          opacity={0.85}
-          rx={0}
+          fill={isBull ? "rgba(8,153,129,0.06)" : "rgba(242,54,69,0.06)"}
         />
       ) : null}
+      {/* Midline */}
       <line
         x1={zone.x}
         x2={zone.extendX}
         y1={zone.midY}
         y2={zone.midY}
-        stroke={zone.stroke}
-        strokeWidth={0.85}
-        strokeDasharray="4 3"
-        opacity={0.85}
+        stroke={edgeColor}
+        strokeWidth={0.5}
+        strokeDasharray="2 4"
       />
-      {variant === "ifvg" ? (
-        <text
-          x={zone.x + 4}
-          y={zone.y + 10}
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight="700"
-          fill={zone.stroke}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.5"
-          paintOrder="stroke"
-        >
-          {labelText}
-        </text>
+      {/* Top/bottom extension lines */}
+      {zone.extend && extensionWidth > 1 ? (
+        <>
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y}
+            y2={zone.y}
+            stroke={edgeColor}
+            strokeWidth={0.5}
+            strokeDasharray="3 5"
+          />
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y + zone.height}
+            y2={zone.y + zone.height}
+            stroke={edgeColor}
+            strokeWidth={0.5}
+            strokeDasharray="3 5"
+          />
+        </>
       ) : null}
+      {/* Label pill badge */}
+      {zone.height >= 14 ? (
+        <g>
+          <rect
+            x={zone.x + 4}
+            y={zone.y + 3}
+            width={labelText.length * 6 + 8}
+            height={14}
+            rx={2}
+            fill={labelBg}
+            stroke={edgeColor}
+            strokeWidth={0.4}
+          />
+          <text
+            x={zone.x + 4 + (labelText.length * 6 + 8) / 2}
+            y={zone.y + 13}
+            textAnchor="middle"
+            fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+            fontSize="8"
+            fontWeight="600"
+            letterSpacing="0.06em"
+            fill={labelFill}
+          >
+            {labelText}
+          </text>
+        </g>
+      ) : null}
+    </g>
+  );
+}
+
+/**
+ * Premium level line — PDH/PDL/PDQ rendered with a right-rail pill badge,
+ * matching LuxAlgo PWH/PWL visual language.
+ */
+function PremiumLevelLine({
+  y,
+  label,
+  color,
+  labelColor,
+  pillBg,
+  containerWidth,
+}: {
+  y: number;
+  label: string;
+  color: string;
+  labelColor: string;
+  pillBg: string;
+  containerWidth: number;
+}) {
+  const railX = containerWidth - RIGHT_RAIL_OFFSET;
+  const pillW = label.length * 7 + 12;
+  const pillH = 16;
+  return (
+    <g>
+      <line
+        x1={0}
+        x2={railX - pillW - 6}
+        y1={y}
+        y2={y}
+        stroke={color}
+        strokeWidth={0.7}
+        strokeDasharray="6 4"
+        strokeLinecap="round"
+      />
+      <rect
+        x={railX - pillW}
+        y={y - pillH / 2}
+        width={pillW}
+        height={pillH}
+        rx={3}
+        fill={pillBg}
+        stroke={color}
+        strokeWidth={0.5}
+      />
+      <text
+        x={railX - pillW / 2}
+        y={y + 3.5}
+        textAnchor="middle"
+        fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+        fontSize="9"
+        fontWeight="700"
+        letterSpacing="0.08em"
+        fill={labelColor}
+      >
+        {label}
+      </text>
+    </g>
+  );
+}
+
+/**
+ * Premium structure line with label badge — BOS uses a dashed line,
+ * CHoCH+/MSS uses a solid line. Both get a small colored pill label
+ * at the endpoint, matching LuxAlgo Price Action Concepts exactly.
+ */
+function PremiumStructureLine({
+  item,
+  defsId,
+}: {
+  item: StructureLine;
+  defsId: string;
+}) {
+  const bullColor = "rgba(8,153,129,0.9)";
+  const bearColor = "rgba(242,54,69,0.9)";
+  const lineColor = item.bullish ? bullColor : bearColor;
+  const labelBg = item.bullish ? "rgba(8,153,129,0.15)" : "rgba(242,54,69,0.15)";
+  const labelText = item.continuation ? "BOS" : "CHoCH+";
+  const pillW = labelText.length * 6.5 + 10;
+  const pillH = 15;
+  const labelX = item.x1 + (item.x2 - item.x1) / 2;
+
+  return (
+    <g>
+      <line
+        x1={item.x1}
+        x2={item.x2}
+        y1={item.y}
+        y2={item.y}
+        stroke={lineColor}
+        strokeWidth={item.continuation ? 0.8 : 1.2}
+        strokeDasharray={item.continuation ? "5 5" : "3 3"}
+      />
+      {/* Label pill at the midpoint of the line */}
+      <rect
+        x={labelX - pillW / 2}
+        y={item.y - pillH - 3}
+        width={pillW}
+        height={pillH}
+        rx={2.5}
+        fill={labelBg}
+        stroke={lineColor}
+        strokeWidth={0.5}
+      />
+      <text
+        x={labelX}
+        y={item.y - pillH / 2 + 1}
+        textAnchor="middle"
+        fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+        fontSize="8.5"
+        fontWeight="600"
+        letterSpacing="0.04em"
+        fill={lineColor}
+      >
+        {labelText}
+      </text>
+    </g>
+  );
+}
+
+/**
+ * Premium swing label (HH/HL/LH/LL) — small refined text positioned
+ * above highs and below lows, using the LuxAlgo color scheme.
+ */
+function PremiumSwingLabel({ item }: { item: StructureLabel }) {
+  const isHigh = item.kind === "high";
+  const fill = isHigh ? "rgba(8,153,129,0.92)" : "rgba(242,54,69,0.92)";
+  return (
+    <text
+      x={item.x}
+      y={item.y}
+      textAnchor="middle"
+      fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+      fontSize="9"
+      fontWeight="600"
+      letterSpacing="0.03em"
+      fill={fill}
+      stroke="rgba(0,0,0,0.8)"
+      strokeWidth="2.5"
+      paintOrder="stroke"
+    >
+      {item.label}
+    </text>
+  );
+}
+
+/**
+ * Premium SFP marker — subtle diamond shape instead of raw text.
+ */
+function PremiumSfpMarker({ item }: { item: StructureArrow }) {
+  const fill = item.bullish ? "rgba(8,153,129,0.95)" : "rgba(242,54,69,0.95)";
+  const bg = item.bullish ? "rgba(8,153,129,0.15)" : "rgba(242,54,69,0.15)";
+  const pillW = 28;
+  const pillH = 14;
+  return (
+    <g>
+      <rect
+        x={item.x - pillW / 2}
+        y={item.y - pillH / 2}
+        width={pillW}
+        height={pillH}
+        rx={2}
+        fill={bg}
+        stroke={fill}
+        strokeWidth={0.5}
+      />
+      <text
+        x={item.x}
+        y={item.y + 3.5}
+        textAnchor="middle"
+        fontFamily="'Inter', 'SF Pro Text', -apple-system, system-ui, sans-serif"
+        fontSize="8"
+        fontWeight="700"
+        letterSpacing="0.08em"
+        fill={fill}
+      >
+        SFP
+      </text>
     </g>
   );
 }
@@ -1041,8 +1190,8 @@ function buildStructureOverlay(
             extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
             detectionEndX,
             midY: (topY + bottomY) / 2,
-            stroke: isBullishOb ? "rgba(45,212,191,0.65)" : "rgba(239,68,68,0.65)",
-            fill: isBullishOb ? "rgba(45,212,191,0.18)" : "rgba(239,68,68,0.18)",
+            stroke: isBullishOb ? "rgba(8,153,129,0.65)" : "rgba(242,54,69,0.65)",
+            fill: isBullishOb ? "rgba(8,153,129,0.18)" : "rgba(242,54,69,0.18)",
             direction: isBullishOb ? "up" : "down",
             extend: !mitigated,
             mitigated,
@@ -1080,8 +1229,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(45,212,191,0.78)",
-              fill: "rgba(45,212,191,0.18)",
+              stroke: "rgba(8,153,129,0.78)",
+              fill: "rgba(8,153,129,0.18)",
               direction: "up",
               extend: !mitigated,
               mitigated,
@@ -1107,8 +1256,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(244,63,94,0.78)",
-              fill: "rgba(244,63,94,0.16)",
+              stroke: "rgba(242,54,69,0.78)",
+              fill: "rgba(242,54,69,0.16)",
               direction: "down",
               extend: !mitigated,
               mitigated,
@@ -1471,11 +1620,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(244,63,94,0.92)",
-            fill: "rgba(244,63,94,0.20)",
-            // Inverted bullish FVG flips polarity → behaves like bearish
-            // resistance going forward. Tag accordingly so the OB count
-            // filter still has correct semantics if reused later.
+            stroke: "rgba(242,54,69,0.85)",
+            fill: "rgba(242,54,69,0.16)",
             direction: "down",
             extend: !secondMitigation,
             mitigated: secondMitigation,
@@ -1520,9 +1666,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(34,211,238,0.92)",
-            fill: "rgba(34,211,238,0.20)",
-            // Inverted bearish FVG → flips to bullish support. Tag as up.
+            stroke: "rgba(8,153,129,0.85)",
+            fill: "rgba(8,153,129,0.16)",
             direction: "up",
             extend: !secondMitigation,
             mitigated: secondMitigation,
