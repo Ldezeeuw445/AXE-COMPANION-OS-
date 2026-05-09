@@ -7,6 +7,7 @@ import type { RefObject } from "react";
 import {
   Activity,
   ArrowUpDown,
+  BarChart2,
   BarChart3,
   Bell,
   BookOpen,
@@ -20,6 +21,7 @@ import {
   MessageSquare,
   Maximize2,
   MoveHorizontal,
+  Newspaper,
   Plus,
   Minus,
   RotateCcw,
@@ -72,6 +74,8 @@ import { TrendlineAnnotationLayer } from "@/components/chart/annotations/Trendli
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
+import { ChartOrderBookDrawer } from "@/components/chart/ChartOrderBookDrawer";
+import { ChartNewsDrawer } from "@/components/chart/ChartNewsDrawer";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
 
 const TICK_REACT_THROTTLE_MS = 150;
@@ -543,6 +547,7 @@ export function ChartScreen({ data, initialAction }: Props) {
   // Picker appears in the toolbar when there's an active Fib annotation.
   type FibMode = "auto" | "swing" | "pd";
   const [fibMode, setFibMode] = useState<FibMode>("auto");
+  const [fibSwingOffset, setFibSwingOffset] = useState<0 | 1 | 2 | 3>(0);
   useEffect(() => {
     try {
       const raw = Number(localStorage.getItem("axe.chart.obCount") ?? "");
@@ -551,6 +556,10 @@ export function ChartScreen({ data, initialAction }: Props) {
       if (rawIfvg === 1 || rawIfvg === 2 || rawIfvg === 3) setInverseFvgCount(rawIfvg);
       const rawFib = localStorage.getItem("axe.chart.fibMode");
       if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd") setFibMode(rawFib);
+      const rawFibSwing = Number(localStorage.getItem("axe.chart.fibSwingOffset") ?? "");
+      if (rawFibSwing === 0 || rawFibSwing === 1 || rawFibSwing === 2 || rawFibSwing === 3) {
+        setFibSwingOffset(rawFibSwing);
+      }
     } catch {
       /* localStorage may be blocked */
     }
@@ -578,6 +587,14 @@ export function ChartScreen({ data, initialAction }: Props) {
     setFibMode(next);
     try {
       localStorage.setItem("axe.chart.fibMode", next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const updateFibSwingOffset = useCallback((next: 0 | 1 | 2 | 3) => {
+    setFibSwingOffset(next);
+    try {
+      localStorage.setItem("axe.chart.fibSwingOffset", String(next));
     } catch {
       /* ignore */
     }
@@ -631,6 +648,21 @@ export function ChartScreen({ data, initialAction }: Props) {
     () => `axe.chart.futureCursor.${data.symbol}.${data.timeframeKey}`,
     [data.symbol, data.timeframeKey],
   );
+
+  // Slide-out drawers — order book and news/intel both open from the
+  // chart's left edge so the chart frame itself never repaints when the
+  // user toggles them. Only one drawer is shown at a time so the chart
+  // remains usable behind the dim layer.
+  const [orderBookOpen, setOrderBookOpen] = useState(false);
+  const [newsOpen, setNewsOpen] = useState(false);
+  const openOrderBook = useCallback(() => {
+    setNewsOpen(false);
+    setOrderBookOpen(true);
+  }, []);
+  const openNews = useCallback(() => {
+    setOrderBookOpen(false);
+    setNewsOpen(true);
+  }, []);
 
   const [pendingOrderSide, setPendingOrderSide] = useState<"buy" | "sell">("buy");
   const [pendingOrderPrice, setPendingOrderPrice] = useState<number | null>(data.lastPrice);
@@ -1174,6 +1206,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             candles: data.candles,
             strength: 3,
             mode: fibMode,
+            swingOffset: fibMode === "swing" ? fibSwingOffset : 0,
           });
           return executeChartAction(command);
         } catch {
@@ -1224,17 +1257,21 @@ export function ChartScreen({ data, initialAction }: Props) {
         payload: {},
       });
     },
-    [accountId, data.candles, data.symbol, data.timeframeKey, executeChartAction, fibMode],
+    [accountId, data.candles, data.symbol, data.timeframeKey, executeChartAction, fibMode, fibSwingOffset],
   );
 
   // Rebuild auto-Fib whenever the user changes the source mode while a
   // Fib annotation is on the chart. Without this the picker would only
   // affect the *next* fib drawn — bad UX, since the user expects the
   // existing one to update immediately.
-  const previousFibModeRef = useRef<FibMode>(fibMode);
+  const previousFibSourceRef = useRef<{ mode: FibMode; swingOffset: 0 | 1 | 2 | 3 }>({
+    mode: fibMode,
+    swingOffset: fibSwingOffset,
+  });
   useEffect(() => {
-    if (previousFibModeRef.current === fibMode) return;
-    previousFibModeRef.current = fibMode;
+    const previous = previousFibSourceRef.current;
+    if (previous.mode === fibMode && previous.swingOffset === fibSwingOffset) return;
+    previousFibSourceRef.current = { mode: fibMode, swingOffset: fibSwingOffset };
     const hasFib = annotations.some(
       (a) => a.type === "fib_retracement" && (a.settings as Record<string, unknown> | undefined)?.source === "user",
     );
@@ -1253,7 +1290,7 @@ export function ChartScreen({ data, initialAction }: Props) {
     setTimeout(() => {
       executeActionByType("draw_fibonacci", "user");
     }, 0);
-  }, [fibMode, annotations, data.symbol, data.timeframeKey, executeActionByType]);
+  }, [fibMode, fibSwingOffset, annotations, data.symbol, data.timeframeKey, executeActionByType]);
 
   // Tap the toolbar Fib/Trend button: if there's already an auto drawing of
   // that type on the chart, remove it (toggle off). Otherwise, draw a new one.
@@ -1446,18 +1483,43 @@ export function ChartScreen({ data, initialAction }: Props) {
     saveSnapshotToVault,
   ]);
 
-  // Mobile top bar: menu left, the indicator + chart-settings pair sits in the
-  // center (mirrors the MT5 layout the trader asked for), AXE context/logo
-  // action stays on the right. Chart-specific controls keep their left middle
-  // rail so the logo toolbar can remain the same app-level surface.
+  // Mobile top bar: menu left, the four chart shortcuts (Depth, News,
+  // Indicators, Settings) sit in the center, AXE context/logo action
+  // stays on the right. Order Book + News slide out from the left edge
+  // so the trader can glance at depth or headlines without ever leaving
+  // the chart screen.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
+    const baseBtn =
+      "inline-flex h-8 w-8 items-center justify-center rounded-full border bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95";
+    const idle = "border-cyan-400/30";
+    const active = "border-cyan-300/60 bg-cyan-400/14 text-cyan-100";
     setCenter(
       <div className="flex items-center gap-1.5">
         <button
           type="button"
+          onClick={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+          className={`${baseBtn} ${orderBookOpen ? active : idle}`}
+          aria-label="Market depth"
+          title="Market depth"
+          aria-pressed={orderBookOpen}
+        >
+          <BarChart2 className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => (newsOpen ? setNewsOpen(false) : openNews())}
+          className={`${baseBtn} ${newsOpen ? active : idle}`}
+          aria-label="News and intel"
+          title="News & intel"
+          aria-pressed={newsOpen}
+        >
+          <Newspaper className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
+          className={`${baseBtn} ${idle}`}
           aria-label="Indicators"
           title="Indicators"
         >
@@ -1466,7 +1528,7 @@ export function ChartScreen({ data, initialAction }: Props) {
         <button
           type="button"
           onClick={resetChartView}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-cyan-400/30 bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95"
+          className={`${baseBtn} ${idle}`}
           aria-label="Chart settings"
           title="Chart settings / view"
         >
@@ -1481,7 +1543,19 @@ export function ChartScreen({ data, initialAction }: Props) {
       setCenter(null);
       setRight(null);
     };
-  }, [setCenter, setRight, setToolRailOpen, resetChartView, data.symbol, tfLabel, toolbarSections]);
+  }, [
+    setCenter,
+    setRight,
+    setToolRailOpen,
+    resetChartView,
+    data.symbol,
+    tfLabel,
+    toolbarSections,
+    orderBookOpen,
+    newsOpen,
+    openOrderBook,
+    openNews,
+  ]);
 
   return (
     <div
@@ -1558,6 +1632,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             ifvg: activeToolFlags.ifvg,
             pdh: activeToolFlags.pdh,
             pdl: activeToolFlags.pdl,
+            swingPoints: activeToolFlags.swingPoints,
           }}
         />
 
@@ -1700,6 +1775,7 @@ export function ChartScreen({ data, initialAction }: Props) {
             { id: "ifvg", label: "iFVG", icon: GitBranch, active: Boolean(activeToolFlags.ifvg), action: () => toggleToolFlag("ifvg") },
             { id: "pdh", label: "PDH", icon: Maximize2, active: Boolean(activeToolFlags.pdh), action: () => toggleToolFlag("pdh") },
             { id: "pdl", label: "PDL", icon: Maximize2, active: Boolean(activeToolFlags.pdl), action: () => toggleToolFlag("pdl") },
+            { id: "swingPoints", label: "Swings", icon: GitBranch, active: Boolean(activeToolFlags.swingPoints), action: () => toggleToolFlag("swingPoints") },
             { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
             { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
             { id: "ma", label: "MA", icon: LineChart, active: Boolean(activeToolFlags.ma), action: () => toggleToolFlag("ma") },
@@ -1808,36 +1884,72 @@ export function ChartScreen({ data, initialAction }: Props) {
               forces market-structure (HH/HL or LH/LL), "Day" maps the
               fib across yesterday's PDH ↔ PDL range. */}
           {hasFibAnnotation ? (
-            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
-                Fib · source
-              </span>
-              <div className="flex items-center gap-1">
-                {([
-                  { value: "auto", label: "Auto" },
-                  { value: "swing", label: "HH/HL" },
-                  { value: "pd", label: "Day" },
-                ] as Array<{ value: FibMode; label: string }>).map((opt) => {
-                  const isActive = fibMode === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => updateFibMode(opt.value)}
-                      className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
-                        isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
-                      }`}
-                      aria-label={`Fib source ${opt.label}`}
-                      aria-pressed={isActive}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
+            <>
+              <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                  Fib · source
+                </span>
+                <div className="flex items-center gap-1">
+                  {([
+                    { value: "auto", label: "Auto" },
+                    { value: "swing", label: "Swing" },
+                    { value: "pd", label: "Day" },
+                  ] as Array<{ value: FibMode; label: string }>).map((opt) => {
+                    const isActive = fibMode === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => updateFibMode(opt.value)}
+                        className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
+                          isActive
+                            ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                            : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                        }`}
+                        aria-label={`Fib source ${opt.label}`}
+                        aria-pressed={isActive}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+
+              {fibMode === "swing" ? (
+                <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                    Swing leg
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {([
+                      { value: 0, label: "0" },
+                      { value: 1, label: "-1" },
+                      { value: 2, label: "-2" },
+                      { value: 3, label: "-3" },
+                    ] as Array<{ value: 0 | 1 | 2 | 3; label: string }>).map((opt) => {
+                      const isActive = fibSwingOffset === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => updateFibSwingOffset(opt.value)}
+                          className={`grid h-6 min-w-[1.8rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
+                            isActive
+                              ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                              : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          }`}
+                          aria-label={`Use swing leg ${opt.label}`}
+                          aria-pressed={isActive}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </>
           ) : null}
           </div>
         </div>
@@ -2202,6 +2314,25 @@ export function ChartScreen({ data, initialAction }: Props) {
           </div>
         </div>
       ) : null}
+
+      {/* Slide-out drawers: anchored to the top of the chart frame so the
+          chart canvas itself never reflows when the trader toggles them.
+          Both panels close each other so only one is visible at a time. */}
+      <ChartOrderBookDrawer
+        open={orderBookOpen}
+        onClose={() => setOrderBookOpen(false)}
+        symbol={data.symbol}
+        digits={priceDigitsForSymbol(data.brokerSymbol)}
+        livePrice={livePrice}
+        bid={lastBidRef.current}
+        ask={lastAskRef.current}
+      />
+
+      <ChartNewsDrawer
+        open={newsOpen}
+        onClose={() => setNewsOpen(false)}
+        symbol={data.symbol}
+      />
 
       {/* Standalone alert fired toast */}
       {firedAlert ? (

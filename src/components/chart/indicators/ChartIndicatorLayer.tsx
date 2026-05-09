@@ -19,6 +19,8 @@ type Props = {
     pdh?: boolean;
     /** Previous Day Low — horizontal line drawn across the entire chart. */
     pdl?: boolean;
+    /** Compact swing high/low levels used as Fib anchor references. */
+    swingPoints?: boolean;
   };
   /**
    * How many of the most recent bullish + bearish order blocks to render.
@@ -53,6 +55,7 @@ type IndicatorCandle = {
 type StructurePivot = { index: number; time: number; price: number; kind: "high" | "low" };
 type StructureLabel = { x: number; y: number; label: string; kind: "high" | "low" };
 type StructureLine = { x1: number; x2: number; y: number; label: string; bullish: boolean; continuation: boolean };
+type SwingPointLevel = { x1: number; x2: number; y: number; kind: "high" | "low"; label: string };
 /**
  * A "zone" is a horizontal band rendered on the chart (OB, FVG, iFVG).
  * Both the price-domain and pixel-domain are kept so we can compute
@@ -139,6 +142,7 @@ export function ChartIndicatorLayer({
         inverseFairValueGaps: [] as Zone[],
         previousDayHigh: null as { y: number; price: number } | null,
         previousDayLow: null as { y: number; price: number } | null,
+        swingPointLevels: [] as SwingPointLevel[],
         swingFailures: [] as StructureArrow[],
         equilibriumLine: null as { y: number } | null,
       };
@@ -183,6 +187,7 @@ export function ChartIndicatorLayer({
       visibleWithTime,
       handle,
     );
+    const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
 
     return {
       maPath: toPath(maPoints),
@@ -204,6 +209,7 @@ export function ChartIndicatorLayer({
       ),
       previousDayHigh,
       previousDayLow,
+      swingPointLevels,
       swingFailures: structureOverlay.swingFailures,
       equilibriumLine: structureOverlay.equilibriumLine,
     };
@@ -283,6 +289,43 @@ export function ChartIndicatorLayer({
             </text>
           </g>
         ) : null}
+
+        {active.swingPoints
+          ? geometry.swingPointLevels.map((level, index) => {
+              const isHigh = level.kind === "high";
+              const stroke = isHigh ? "rgba(244,63,94,0.68)" : "rgba(45,212,191,0.68)";
+              const fill = isHigh ? "rgba(244,63,94,0.95)" : "rgba(45,212,191,0.95)";
+              return (
+                <g key={`swing-${level.kind}-${index}`}>
+                  <line
+                    x1={level.x1}
+                    x2={level.x2}
+                    y1={level.y}
+                    y2={level.y}
+                    stroke={stroke}
+                    strokeWidth={1.15}
+                    strokeDasharray="2 5"
+                    strokeLinecap="round"
+                  />
+                  <circle cx={level.x1} cy={level.y} r={2.5} fill={fill} opacity={0.88} />
+                  <text
+                    x={Math.max(6, level.x1 - 3)}
+                    y={level.y + (isHigh ? -7 : 13)}
+                    textAnchor="end"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    fontSize="9"
+                    fontWeight="700"
+                    fill={fill}
+                    stroke="rgba(0,0,0,0.74)"
+                    strokeWidth="2.2"
+                    paintOrder="stroke"
+                  >
+                    {level.label}
+                  </text>
+                </g>
+              );
+            })
+          : null}
 
         {active.structure && geometry.equilibriumLine ? (
           <line
@@ -860,6 +903,47 @@ function pickLatestZonesPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
     if (upRemaining === 0 && downRemaining === 0) break;
   }
   return reverseKept.reverse();
+}
+
+function buildSwingPointLevels(
+  candles: Array<IndicatorCandle & { time: number }>,
+  handle: ChartCanvasHandle,
+  futureExtensionX: number,
+): SwingPointLevel[] {
+  const strength = 5;
+  if (candles.length < strength * 2 + 4) return [];
+
+  const pivots: StructurePivot[] = [];
+  for (let index = strength; index < candles.length - strength; index += 1) {
+    const candle = candles[index];
+    const neighbors = [
+      ...candles.slice(index - strength, index),
+      ...candles.slice(index + 1, index + strength + 1),
+    ];
+    if (neighbors.every((other) => candle.high > other.high)) {
+      pivots.push({ index, time: candle.time, price: candle.high, kind: "high" });
+    }
+    if (neighbors.every((other) => candle.low < other.low)) {
+      pivots.push({ index, time: candle.time, price: candle.low, kind: "low" });
+    }
+  }
+
+  const compacted = compactStructurePivots(pivots, 4, averageRange(candles) * 0.65);
+  return compacted
+    .slice(-4)
+    .map((pivot) => {
+      const x = handle.timeToCoordinate(pivot.time);
+      const y = handle.priceToCoordinate(pivot.price);
+      if (x == null || y == null) return null;
+      return {
+        x1: x,
+        x2: Math.max(x + 10, futureExtensionX),
+        y,
+        kind: pivot.kind,
+        label: pivot.kind === "high" ? "SH" : "SL",
+      };
+    })
+    .filter(Boolean) as SwingPointLevel[];
 }
 
 function compactStructurePivots(pivots: StructurePivot[], minBars: number, minMove: number): StructurePivot[] {

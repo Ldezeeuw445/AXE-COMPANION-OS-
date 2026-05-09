@@ -3,6 +3,7 @@
 export type ProviderId =
   | "fred"
   | "perigon"
+  | "polygon"
   | "finnhub"
   | "eodhd"
   | "unusualWhales"

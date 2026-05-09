@@ -50,10 +50,32 @@ type FibGeom = {
   extend: boolean;
 };
 
+function fibLevelStyle(level: number): { stroke: string; label: string; width: number } {
+  if (level === 0.5) {
+    return {
+      stroke: "rgba(59,130,246,0.9)",
+      label: "rgba(96,165,250,0.95)",
+      width: 1.15,
+    };
+  }
+  if (level === 0.618 || level === 0.65) {
+    return {
+      stroke: "rgba(244,191,99,0.9)",
+      label: "rgba(244,191,99,0.96)",
+      width: 1.15,
+    };
+  }
+  return {
+    stroke: "rgba(45,212,191,0.62)",
+    label: "rgba(125,238,226,0.82)",
+    width: level === 0 || level === 1 ? 1.05 : 0.95,
+  };
+}
+
 /**
  * Interactive Fibonacci retracement layer that mirrors broker apps:
- * - 7 horizontal levels (0, 23.6, 38.2, 50, 61.8, 78.6, 100)
- * - percentage labels on the LEFT, price labels on the RIGHT
+ * - dotted horizontal levels only (no filled background)
+ * - percentage + price labels on the RIGHT rail
  * - two draggable corner handles (anchor + swing) — drag, resize, flip
  *
  * Renders as an absolutely-positioned SVG over the chart frame. The layer
@@ -296,40 +318,17 @@ export function FibAnnotationLayer({
           const pctLabelRightX = priceLabelRightX - 60;
           const removeX = Math.max(8, g.startX - 30);
           const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
-          // The "trade range" rectangle stays bound to the original anchor
-          // ↔ swing region — only the level lines extend right so the
-          // visual leg matches the swing measured, while price guidance
-          // projects forward.
           return (
             <g key={g.id}>
-              {/* Translucent fill between 0 and 1 to mark the trade range */}
-              <rect
-                x={g.startX}
-                y={Math.min(g.anchorY, g.swingY)}
-                width={Math.max(2, g.endX - g.startX)}
-                height={Math.abs(g.swingY - g.anchorY)}
-                fill={isActive ? "rgba(34,211,238,0.08)" : "rgba(244,191,99,0.06)"}
-                stroke={isActive ? "rgba(34,211,238,0.22)" : "transparent"}
-                strokeWidth={1}
-                pointerEvents="all"
-                onPointerDown={(e) => startDrag(e, g.id, "body")}
-                style={{ cursor: "move", touchAction: "none" }}
-              />
-
               {/* Fib level lines */}
               {g.lines.map((ln) => {
-                const isOuter = ln.level === 0 || ln.level === 1;
-                const isMid = ln.level === 0.5 || ln.level === 0.618;
-                const stroke = isOuter
-                  ? "rgba(220,228,238,0.55)"
-                  : isMid
-                    ? "rgba(244,191,99,0.85)"
-                    : "rgba(244,191,99,0.55)";
+                const isFocus = ln.level === 0.5 || ln.level === 0.618 || ln.level === 0.65;
+                const style = fibLevelStyle(ln.level);
                 return (
                   <g key={ln.level}>
                     <line
                       x1={g.startX}
-                      x2={g.endX}
+                      x2={g.rightX}
                       y1={ln.y}
                       y2={ln.y}
                       stroke="transparent"
@@ -338,32 +337,17 @@ export function FibAnnotationLayer({
                       onPointerDown={(e) => startDrag(e, g.id, "body")}
                       style={{ cursor: "move", touchAction: "none" }}
                     />
-                    {/* Solid segment within the swing range */}
                     <line
                       x1={g.startX}
-                      x2={g.endX}
+                      x2={g.rightX}
                       y1={ln.y}
                       y2={ln.y}
-                      stroke={stroke}
-                      strokeWidth={isOuter || isMid ? 1.1 : 0.9}
-                      strokeDasharray={isOuter ? "" : "4 3"}
+                      stroke={style.stroke}
+                      strokeWidth={style.width}
+                      strokeDasharray="2 5"
+                      strokeLinecap="round"
                       pointerEvents="none"
                     />
-                    {/* Right projection — softer/dashed so the future ray
-                        reads as guidance, not confirmed history. */}
-                    {g.extend && g.rightX > g.endX ? (
-                      <line
-                        x1={g.endX}
-                        x2={g.rightX}
-                        y1={ln.y}
-                        y2={ln.y}
-                        stroke={stroke}
-                        strokeWidth={isOuter || isMid ? 0.9 : 0.7}
-                        strokeDasharray="2 4"
-                        opacity={0.7}
-                        pointerEvents="none"
-                      />
-                    ) : null}
                     {/* Combined % + price label, both right-anchored on
                         the right rail. % uses a UI font / dimmed; price
                         uses mono / bright. Same row, ~6px gap. Stays
@@ -375,8 +359,8 @@ export function FibAnnotationLayer({
                       textAnchor="end"
                       fontFamily="ui-sans-serif, system-ui, -apple-system"
                       fontSize="10"
-                      fontWeight={isMid ? 600 : 500}
-                      fill={isMid ? "rgba(244,191,99,0.85)" : "rgba(232,238,246,0.62)"}
+                      fontWeight={isFocus ? 650 : 500}
+                      fill={style.label}
                       pointerEvents="none"
                     >
                       {(ln.level * 100).toFixed(1).replace(".", ",")}%
@@ -387,8 +371,8 @@ export function FibAnnotationLayer({
                       textAnchor="end"
                       fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                       fontSize="10"
-                      fontWeight={isMid ? 600 : 500}
-                      fill={isMid ? "rgba(244,191,99,0.95)" : "rgba(232,238,246,0.82)"}
+                      fontWeight={isFocus ? 650 : 500}
+                      fill={style.label}
                       pointerEvents="none"
                     >
                       {ln.price.toFixed(digits)}
@@ -396,18 +380,6 @@ export function FibAnnotationLayer({
                   </g>
                 );
               })}
-
-              {/* Connector line between the two endpoints */}
-              <line
-                x1={g.startX}
-                x2={g.endX}
-                y1={g.anchorY}
-                y2={g.swingY}
-                stroke="rgba(110,178,252,0.45)"
-                strokeWidth={1}
-                strokeDasharray="2 3"
-                pointerEvents="none"
-              />
 
               {/* Two draggable handles — pointer-events auto so they catch input */}
               {isActive ? (

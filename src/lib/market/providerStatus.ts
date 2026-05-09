@@ -16,6 +16,11 @@ export function getFredKey(): string | null {
 export function getPerigonKey(): string | null {
   return trimOrNull(process.env.PERIGON_API_KEY);
 }
+export function getPolygonKey(): string | null {
+  // Accept either name — the user already has POLYGON_API_KEY in some envs
+  // and POLYGON_KEY in others (matches Polygon SDK conventions).
+  return trimOrNull(process.env.POLYGON_API_KEY ?? process.env.POLYGON_KEY);
+}
 export function getFinnhubKey(): string | null {
   return trimOrNull(process.env.FINNHUB_API_KEY);
 }
@@ -39,6 +44,12 @@ export function detectProviders(): ProviderStatus[] {
       label: "Perigon",
       state: getPerigonKey() ? "live" : "missing_config",
       description: "Curated news with topics, entities and sentiment.",
+    },
+    {
+      id: "polygon",
+      label: "Polygon",
+      state: getPolygonKey() ? "live" : "missing_config",
+      description: "Polygon.io reference news — equities, crypto, FX context.",
     },
     {
       id: "finnhub",

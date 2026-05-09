@@ -3,7 +3,7 @@ import type {
   ChartActionCommand,
 } from "@/lib/axeChartActions/chartActionTypes";
 
-const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.65, 0.786, 1] as const;
 
 /** URL-key → seconds-per-bar so we can aggregate higher timeframes. */
 const TF_SECONDS: Record<string, number> = {
@@ -50,6 +50,8 @@ export function buildFibonacciActionFromCandles(input: {
   strength?: number;
   /** Default `auto`. */
   mode?: FibSourceMode;
+  /** For swing mode: 0 = latest leg, 1 = one leg back, etc. */
+  swingOffset?: number;
 }): ChartActionCommand {
   const mode: FibSourceMode = input.mode ?? "auto";
 
@@ -78,6 +80,7 @@ export function buildFibonacciActionFromCandles(input: {
     const trend = findLatestTrendLegOnActiveTf(input.candles, {
       lookback: input.lookback,
       strength: input.strength,
+      swingOffset: mode === "swing" ? input.swingOffset ?? 0 : 0,
     });
     direction = trend.direction;
     anchorA = direction === "up" ? trend.swing : trend.retrace; // 0%
@@ -109,7 +112,7 @@ export function buildFibonacciActionFromCandles(input: {
       // The annotation layer reads these so the lines/labels project past
       // the last candle (matches MT5's "right ray" behaviour) — handy for
       // seeing exactly when price will hit each retracement.
-      settings: { extendRight: true, source: input.source, mode },
+      settings: { extendRight: true, source: input.source, mode, swingOffset: input.swingOffset ?? 0 },
       levels: FIB_LEVELS.map((level) => ({
         level,
         price: Number((direction === "up" ? high - range * level : low + range * level).toFixed(8)),
@@ -304,9 +307,10 @@ function pickSameTypePair(
  */
 export function findLatestTrendLegOnActiveTf(
   candles: ChartActionCandle[],
-  options: { lookback?: number; strength?: number } = {},
+  options: { lookback?: number; strength?: number; swingOffset?: number } = {},
 ): { swing: SwingAnchor; retrace: SwingAnchor; direction: "up" | "down" } {
   const strength = options.strength ?? 3;
+  const swingOffset = Math.max(0, Math.floor(options.swingOffset ?? 0));
   const visible = normalizeCandles(candles).slice(-(options.lookback ?? 220));
   if (visible.length < strength * 2 + 4) {
     throw new Error("Not enough candles to detect a trend leg.");
@@ -329,6 +333,26 @@ export function findLatestTrendLegOnActiveTf(
 
   const highs = pivots.filter((p) => p.type === "high");
   const lows = pivots.filter((p) => p.type === "low");
+
+  // If the user asks for an older swing leg, use the Nth most recent
+  // alternating pivot pair. This powers the Fib source picker:
+  // latest / -1 / -2 / -3 without manual dragging.
+  if (swingOffset > 0) {
+    const alternatingLegs: Array<{ swing: SwingAnchor; retrace: SwingAnchor; direction: "up" | "down" }> = [];
+    for (let i = pivots.length - 1; i >= 1; i -= 1) {
+      const a = pivots[i - 1];
+      const b = pivots[i];
+      if (a.type === b.type) continue;
+      alternatingLegs.push({
+        swing: b,
+        retrace: a,
+        direction: b.type === "high" ? "up" : "down",
+      });
+      if (alternatingLegs.length >= 4) break;
+    }
+    const selected = alternatingLegs[Math.min(swingOffset, alternatingLegs.length - 1)];
+    if (selected) return selected;
+  }
 
   const lastHigh = highs.at(-1);
   const prevHigh = highs.length >= 2 ? highs[highs.length - 2] : null;

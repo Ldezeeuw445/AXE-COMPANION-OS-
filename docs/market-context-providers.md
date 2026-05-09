@@ -10,10 +10,11 @@ Each provider is independent and gracefully degrades when its key is missing
 | Layer | Primary | Fallback chain | Env var |
 |---|---|---|---|
 | Macro snapshot (yields, rates, CPI, USD index, VIX) | **FRED** | — | `FRED_API_KEY` |
-| Symbol news (FX/crypto/index) | **FMP Ultimate** | Perigon → Finnhub → EODHD | `FMP_API_KEY` (or `FMP_ULTIMATE_API_KEY`) |
+| Symbol news (paid, equities + crypto + FX context) | **Polygon.io** | Perigon → Finnhub → EODHD → Google News | `POLYGON_API_KEY` |
 | Topical news / sentiment | **Perigon** | covered above | `PERIGON_API_KEY` |
-| Economic calendar (high-impact events) | **Finnhub** | FMP | `FINNHUB_API_KEY` |
+| Economic calendar (high-impact events) | **Finnhub** | — | `FINNHUB_API_KEY` |
 | News fallback | **EODHD** | — | `EODHD_API_KEY` |
+| Smart-money intel | **Unusual Whales** | — | `UNUSUAL_WHALES_TOKEN` |
 
 The router picks the first provider that returns content. Providers report
 their state via `detectProviders()` so the UI shows honest "off" badges.
@@ -28,8 +29,8 @@ vercel env add FRED_API_KEY production
 vercel env add FRED_API_KEY preview
 
 # News (pick what you have)
-vercel env add FMP_API_KEY production       # or FMP_ULTIMATE_API_KEY
-vercel env add PERIGON_API_KEY production
+vercel env add POLYGON_API_KEY production    # paid feed, primary
+vercel env add PERIGON_API_KEY production    # free tier, secondary
 vercel env add FINNHUB_API_KEY production
 vercel env add EODHD_API_KEY production
 # repeat for `preview` for preview deploys

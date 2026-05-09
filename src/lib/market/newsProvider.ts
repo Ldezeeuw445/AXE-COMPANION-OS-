@@ -3,6 +3,7 @@ import {
   getEodhdKey,
   getFinnhubKey,
   getPerigonKey,
+  getPolygonKey,
 } from "@/lib/market/providerStatus";
 import type { NewsItem, ProviderId } from "@/lib/market/marketTypes";
 import { briefingForSymbol, dedupeSymbols } from "@/lib/market/symbolContext";
@@ -86,6 +87,105 @@ async function fetchPerigonNews(opts: FetchOpts): Promise<NewsItem[]> {
   } catch {
     return [];
   }
+}
+
+// ── Polygon.io ─────────────────────────────────────────────────────────────
+// Polygon's `/v2/reference/news` endpoint returns curated articles with
+// publisher metadata, sentiment-style descriptions and ticker tags. The
+// user pays for this so we surface it as the primary feed when present —
+// 5-min Next cache + per-symbol tags keeps credit usage bounded even
+// when several panes ask for the same symbol.
+type PolygonArticle = {
+  id?: string;
+  title?: string;
+  description?: string;
+  article_url?: string;
+  published_utc?: string;
+  publisher?: { name?: string; homepage_url?: string };
+  tickers?: string[];
+  image_url?: string;
+};
+
+/** Map our display symbol to a Polygon-friendly ticker query for news. */
+function polygonTickerForSymbol(symbol: string): string | null {
+  const upper = symbol.toUpperCase();
+  // Crypto pairs use the `X:` prefix (e.g. X:BTCUSD).
+  if (/^(BTC|ETH|SOL|XRP|DOGE|LTC|BCH|ADA|AVAX)USD$/.test(upper)) {
+    return `X:${upper}`;
+  }
+  // Forex pairs use `C:` prefix (e.g. C:EURUSD).
+  if (/^[A-Z]{3}[A-Z]{3}$/.test(upper) && !upper.startsWith("XAU") && !upper.startsWith("XAG")) {
+    return `C:${upper}`;
+  }
+  // Indices map to their main ETF proxy so we still get news.
+  if (upper === "NAS100" || upper === "US100") return "QQQ";
+  if (upper === "SPX500" || upper === "US500") return "SPY";
+  if (upper === "US30") return "DIA";
+  if (upper === "GER40") return "EWG";
+  if (upper === "WTI") return "USO";
+  if (upper === "XAUUSD") return "GLD";
+  if (upper === "XAGUSD") return "SLV";
+  return null;
+}
+
+async function fetchPolygonNews(opts: FetchOpts): Promise<NewsItem[]> {
+  const apiKey = getPolygonKey();
+  if (!apiKey) return [];
+
+  const ticker = polygonTickerForSymbol(opts.symbol);
+  const limit = String(opts.limit ?? 12);
+  // First pass: with ticker filter (best signal for that symbol).
+  // If the symbol can't be mapped we fall back to general latest news,
+  // which still adds value as macro context.
+  const params = new URLSearchParams({
+    apiKey,
+    limit,
+    order: "desc",
+    sort: "published_utc",
+  });
+  if (ticker) params.set("ticker", ticker);
+
+  try {
+    const res = await fetch(`https://api.polygon.io/v2/reference/news?${params.toString()}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: ["news:polygon", `news:${opts.symbol}`] },
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { results?: PolygonArticle[] };
+    const arr = body.results ?? [];
+    if (arr.length === 0 && ticker) {
+      // Retry without ticker filter so the user sees recent macro news
+      // instead of a blank pane when Polygon doesn't index that symbol.
+      const fallback = new URLSearchParams({
+        apiKey,
+        limit,
+        order: "desc",
+        sort: "published_utc",
+      });
+      const res2 = await fetch(`https://api.polygon.io/v2/reference/news?${fallback.toString()}`, {
+        next: { revalidate: REVALIDATE_SECONDS, tags: ["news:polygon"] },
+      });
+      if (!res2.ok) return [];
+      const body2 = (await res2.json()) as { results?: PolygonArticle[] };
+      return mapPolygonArticles(body2.results ?? [], opts.limit ?? 12);
+    }
+    return mapPolygonArticles(arr, opts.limit ?? 12);
+  } catch {
+    return [];
+  }
+}
+
+function mapPolygonArticles(arr: PolygonArticle[], limit: number): NewsItem[] {
+  return arr.slice(0, limit).map((n, i) => ({
+    id: makeId("polygon", n.id ?? `${n.article_url ?? i}`, n.article_url ?? `${i}`),
+    title: n.title ?? "Untitled",
+    summary: n.description ?? null,
+    url: n.article_url ?? "",
+    source: n.publisher?.name ?? "Polygon",
+    publishedAt: safeIso(n.published_utc),
+    provider: "polygon",
+    symbols: n.tickers,
+    imageUrl: n.image_url ?? null,
+  }));
 }
 
 // ── Finnhub ────────────────────────────────────────────────────────────────
@@ -249,12 +349,15 @@ function decodeXml(value: string): string {
 
 /**
  * Returns news from the first provider that returns items.
- * Order: Perigon → Finnhub → EODHD → Google News (no-key fallback).
- * FMP was removed — its keys repeatedly returned empty/forbidden on the user's
+ * Order: Polygon (paid) → Perigon → Finnhub → EODHD → Google News fallback.
+ * Each request is cached for 5 minutes per symbol, so repeated panel opens
+ * during the same session never hit the upstream API again. FMP was
+ * removed — its keys repeatedly returned empty/forbidden on the user's
  * plan and Unusual Whales now covers smart-money signal on the Intel page.
  */
 export async function loadNews(opts: FetchOpts): Promise<NewsItem[]> {
   const providers: Array<() => Promise<NewsItem[]>> = [
+    () => fetchPolygonNews(opts),
     () => fetchPerigonNews(opts),
     () => fetchFinnhubNews(opts),
     () => fetchEodhdNews(opts),
