@@ -21,6 +21,12 @@ type Props = {
     pdl?: boolean;
   };
   /**
+   * How many of the most recent bullish + bearish order blocks to render.
+   * Defaults to 1 of each (cleanest), but the user can bump this to 2 or 3
+   * via the toolbar picker when they want a wider context.
+   */
+  orderBlockCount?: 1 | 2 | 3;
+  /**
    * Future-projection cursor X (chart-frame coords). When provided, the
    * iFVG / FVG / OB extensions stretch right to this X so the user can see
    * exactly when the next candles will hit the zone.
@@ -59,6 +65,13 @@ type Zone = {
   midY: number;
   stroke: string;
   fill: string;
+  /**
+   * "up" = bullish-OB / bullish-FVG-gap-up,
+   * "down" = bearish-OB / bearish-FVG-gap-down.
+   * Used by the OB count filter so we keep the latest N per direction
+   * instead of just the latest N regardless of side.
+   */
+  direction: "up" | "down";
   /** True when the inner fill should bleed past detectionEndX without a stroke. */
   extend: boolean;
   /** True when this zone was reclaimed/mitigated and should fade out instead. */
@@ -77,7 +90,13 @@ type StructureArrow = { x: number; y: number; label: string; bullish: boolean };
  */
 const MIN_FUTURE_BARS = 5;
 
-export function ChartIndicatorLayer({ candles, canvasRef, active, futureProjectionX = null }: Props) {
+export function ChartIndicatorLayer({
+  candles,
+  canvasRef,
+  active,
+  orderBlockCount = 1,
+  futureProjectionX = null,
+}: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [version, setVersion] = useState(0);
@@ -163,7 +182,13 @@ export function ChartIndicatorLayer({ candles, canvasRef, active, futureProjecti
       maPath: toPath(maPoints),
       structureLabels: structureOverlay.labels,
       structureLines: structureOverlay.lines,
-      orderBlocks: structureOverlay.orderBlocks,
+      // Filter to the latest `orderBlockCount` per direction (default 1
+      // bullish + 1 bearish). The picker on the toolbar lets the user
+      // bump this to 2 or 3 each side when wider context is wanted.
+      orderBlocks: pickLatestOrderBlocksPerDirection(
+        structureOverlay.orderBlocks,
+        orderBlockCount,
+      ),
       fairValueGaps: structureOverlay.fairValueGaps,
       inverseFairValueGaps,
       previousDayHigh,
@@ -171,7 +196,7 @@ export function ChartIndicatorLayer({ candles, canvasRef, active, futureProjecti
       swingFailures: structureOverlay.swingFailures,
       equilibriumLine: structureOverlay.equilibriumLine,
     };
-  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX]);
+  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
@@ -696,6 +721,7 @@ function buildStructureOverlay(
             midY: (topY + bottomY) / 2,
             stroke: isBullishOb ? "rgba(45,212,191,0.65)" : "rgba(239,68,68,0.65)",
             fill: isBullishOb ? "rgba(45,212,191,0.18)" : "rgba(239,68,68,0.18)",
+            direction: isBullishOb ? "up" : "down",
             extend: !mitigated,
             mitigated,
             volumeProfile: profile,
@@ -733,6 +759,7 @@ function buildStructureOverlay(
               midY: (topY + bottomY) / 2,
               stroke: "rgba(8,153,129,0.34)",
               fill: "rgba(8,153,129,0.06)",
+              direction: "up",
               extend: !mitigated,
               mitigated,
             });
@@ -759,6 +786,7 @@ function buildStructureOverlay(
               midY: (topY + bottomY) / 2,
               stroke: "rgba(242,54,69,0.34)",
               fill: "rgba(242,54,69,0.06)",
+              direction: "down",
               extend: !mitigated,
               mitigated,
             });
@@ -788,12 +816,38 @@ function buildStructureOverlay(
   return {
     labels,
     lines: lines.slice(-8),
-    orderBlocks: orderBlocks.slice(-6),
+    // Keep up to 20 raw OBs so the render-time per-direction filter has
+    // enough source data when one side dominates the most recent bars.
+    orderBlocks: orderBlocks.slice(-20),
     // Show the most recent FVG only — older gaps are noise on mobile.
     fairValueGaps: fairValueGaps.slice(-1),
     swingFailures: swingFailures.slice(-6),
     equilibriumLine: equilibriumY == null ? null : { y: equilibriumY },
   };
+}
+
+/**
+ * Keep only the latest N order blocks per direction (1, 2 or 3 each side).
+ * Walks chronological OB list from newest backwards so the most recent
+ * blocks of each polarity survive even when one side dominates.
+ */
+function pickLatestOrderBlocksPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
+  if (!zones.length) return zones;
+  let upRemaining = n;
+  let downRemaining = n;
+  const reverseKept: Zone[] = [];
+  for (let index = zones.length - 1; index >= 0; index -= 1) {
+    const zone = zones[index];
+    if (zone.direction === "up" && upRemaining > 0) {
+      reverseKept.push(zone);
+      upRemaining -= 1;
+    } else if (zone.direction === "down" && downRemaining > 0) {
+      reverseKept.push(zone);
+      downRemaining -= 1;
+    }
+    if (upRemaining === 0 && downRemaining === 0) break;
+  }
+  return reverseKept.reverse();
 }
 
 function compactStructurePivots(pivots: StructurePivot[], minBars: number, minMove: number): StructurePivot[] {
@@ -972,6 +1026,10 @@ function buildInverseFvgs(
             midY: (yTop + yBot) / 2,
             stroke: "rgba(244,63,94,0.85)",
             fill: "rgba(244,63,94,0.10)",
+            // Inverted bullish FVG flips polarity → behaves like bearish
+            // resistance going forward. Tag accordingly so the OB count
+            // filter still has correct semantics if reused later.
+            direction: "down",
             extend: !secondMitigation,
             mitigated: secondMitigation,
           });
@@ -1017,6 +1075,8 @@ function buildInverseFvgs(
             midY: (yTop + yBot) / 2,
             stroke: "rgba(34,211,238,0.85)",
             fill: "rgba(34,211,238,0.10)",
+            // Inverted bearish FVG → flips to bullish support. Tag as up.
+            direction: "up",
             extend: !secondMitigation,
             mitigated: secondMitigation,
           });

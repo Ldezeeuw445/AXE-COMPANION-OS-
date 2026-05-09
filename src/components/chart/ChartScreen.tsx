@@ -531,6 +531,26 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
+  // How many order blocks to render per direction. Default 1 bullish + 1
+  // bearish; user can pick 2 or 3 each side via the small picker that
+  // appears when OB is active. Persisted per device.
+  const [orderBlockCount, setOrderBlockCount] = useState<1 | 2 | 3>(1);
+  useEffect(() => {
+    try {
+      const raw = Number(localStorage.getItem("axe.chart.obCount") ?? "");
+      if (raw === 1 || raw === 2 || raw === 3) setOrderBlockCount(raw);
+    } catch {
+      /* localStorage may be blocked */
+    }
+  }, []);
+  const updateOrderBlockCount = useCallback((next: 1 | 2 | 3) => {
+    setOrderBlockCount(next);
+    try {
+      localStorage.setItem("axe.chart.obCount", String(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // MT5-style resizable indicator panes. Defaults match what we previously
   // hard-coded; users can drag the divider on top of each pane to taste.
@@ -1468,6 +1488,7 @@ export function ChartScreen({ data, initialAction }: Props) {
           candles={liveCandles}
           canvasRef={canvasRef}
           futureProjectionX={futureProjectionX}
+          orderBlockCount={orderBlockCount}
           active={{
             ma: activeToolFlags.ma,
             structure: activeToolFlags.structure,
@@ -1655,6 +1676,38 @@ export function ChartScreen({ data, initialAction }: Props) {
               </button>
             );
           })}
+
+          {/* OB count picker — only visible while the OB indicator is on.
+              Lets the user choose how many bullish + bearish blocks to
+              show (1 each = cleanest, up to 3 each for context). */}
+          {activeToolFlags.orderBlocks ? (
+            <div className="col-span-3 mt-1 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                OB · per side
+              </span>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3].map((value) => {
+                  const isActive = orderBlockCount === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => updateOrderBlockCount(value as 1 | 2 | 3)}
+                      className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
+                        isActive
+                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                      }`}
+                      aria-label={`Show ${value} order block${value === 1 ? "" : "s"} per direction`}
+                      aria-pressed={isActive}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           </div>
         </div>
 
