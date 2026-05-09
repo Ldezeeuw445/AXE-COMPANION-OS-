@@ -2,228 +2,180 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  Activity,
   BarChart2,
   Brain,
   ChevronRight,
+  CircuitBoard,
+  Compass,
   Layout,
   LineChart,
+  Newspaper,
   Radio,
   Shield,
   Smartphone,
+  Sparkles,
   Target,
+  Wand2,
   Zap,
 } from "lucide-react";
+import { LandingHeroPhone } from "@/components/marketing/LandingHeroPhone";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
 import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 
 export const metadata: Metadata = {
-  title: "AXE Companion — your trading copilot",
+  title: "AXE Companion — chart, intel and execution in one tap",
   description:
-    "Standalone AI trading assistant: chat, accounts, journal, and memory on one Supabase spine. Trading OS is the upcoming premium terminal — AXE Companion is the brain; Trading OS is the terminal.",
+    "AXE Companion is the trader phone OS: live MT5 chart with auto-Fib/structure/OB/FVG, market depth drawer, cached multi-source news, smart-money intel, and one-tap execution — all on the same Supabase brain Trading OS uses.",
 };
 
 const TICKER = [
-  { s: "XAUUSD", p: "3,342.12", up: true, c: "+0.42%" },
-  { s: "EURUSD", p: "1.0842", up: false, c: "-0.08%" },
+  { s: "XAUUSD", p: "4,708.60", up: true, c: "+0.42%" },
+  { s: "EURUSD", p: "1.0842", up: false, c: "−0.08%" },
   { s: "GBPJPY", p: "196.42", up: true, c: "+0.15%" },
+  { s: "NAS100", p: "20,842.1", up: true, c: "+0.22%" },
+  { s: "BTCUSD", p: "98,420", up: false, c: "−0.31%" },
+  { s: "US30", p: "44,506", up: true, c: "+0.18%" },
   { s: "US500", p: "5,842.1", up: true, c: "+0.22%" },
-  { s: "BTCUSD", p: "98,420", up: false, c: "-0.31%" },
+  { s: "USOIL", p: "73.42", up: false, c: "−0.45%" },
+  { s: "USDJPY", p: "151.84", up: true, c: "+0.11%" },
 ];
 
 const LANDING_FEATURES = [
   {
-    title: "Broker trade history",
-    desc: "Closed trades sync into your private ledger with idempotent upserts — no double-counting when the bridge retries.",
-    Icon: BarChart2,
-    color: "text-emerald-400",
-  },
-  {
-    title: "MT5 bridge (Phase 1)",
-    desc: "Per-account link token, revocable later. Ingest only — no execution from AXE in v1.",
-    Icon: Radio,
-    color: "text-sky-400",
-  },
-  {
-    title: "Multi-account",
-    desc: "Funded, demo, live, multiple brokers — pick an active account and keep analytics scoped to it.",
-    Icon: Target,
-    color: "text-amber-400",
-  },
-  {
-    title: "AXE memory & context",
-    desc: "Pair-aware notes and recall so follow-ups stay grounded in what you actually did in the market.",
-    Icon: Brain,
-    color: "text-violet-400",
-  },
-  {
-    title: "Five-tap journal labels",
-    desc: "A+ setup through rule break — fast enough to use every session without writing essays.",
-    Icon: Zap,
-    color: "text-red-400",
-  },
-  {
-    title: "Analytics that match the book",
-    desc: "Win rate, profit factor, P&L, and calendar views driven from the same broker rows you journal.",
+    title: "Live chart, premium toolset",
+    desc: "MT5 ticks, Lightweight Charts engine, and a calm dark canvas. Auto-Fib (Auto / Swing / Day source), Auto-Trend, swing points, BOS/CHoCH, MA stack — built to feel native, not noisy.",
     Icon: LineChart,
-    color: "text-cyan-400",
+    color: "text-cyan-300",
   },
   {
-    title: "Trading OS terminal path",
-    desc: "Ship AXE standalone first. Trading OS — our upcoming premium trading terminal — plugs into the same accounts, journal, and AXE intelligence when you want the full desk.",
-    Icon: Layout,
-    color: "text-indigo-400",
+    title: "Order Blocks, FVG, iFVG that extend",
+    desc: "Volumetric order blocks, fair-value gaps, and inverse FVGs that keep extending until they're mitigated. Pick 1, 2, or 3 per side — same per-direction filter for OB and iFVG, no clutter.",
+    Icon: CircuitBoard,
+    color: "text-teal-300",
   },
   {
-    title: "RLS + Supabase",
-    desc: "Accounts, trades, and labels are scoped per user in Postgres — not mixed across workspaces.",
+    title: "Market depth drawer",
+    desc: "Slide out depth from the top bar. Real L1 bid/ask from your broker plus a deterministic synthetic ladder, with spread, mid, uptick / downtick — honest about which level is real and which is estimated.",
+    Icon: BarChart2,
+    color: "text-cyan-300",
+  },
+  {
+    title: "News & intel, cached to save credits",
+    desc: "Polygon, Perigon, Finnhub, EODHD, FRED — with smart 5-minute caching so a quiet hour doesn't burn your provider quota. Smart-money intel via Unusual Whales sits one tap away.",
+    Icon: Newspaper,
+    color: "text-cyan-300",
+  },
+  {
+    title: "One-tap execution dock",
+    desc: "Market, buy / sell limit, SL, TP, deviation — locked to the bottom of the chart with safe-area padding. Cyan / rose gradients, MT5-style lot picker, big activation banner before live orders fly.",
+    Icon: Zap,
+    color: "text-cyan-200",
+  },
+  {
+    title: "Demo trading on live ticks",
+    desc: "Virtual paper account inside AXE, free and instant. Same fills, slippage and PnL math against live prices — perfect for trying setups before pointing it at a funded account.",
+    Icon: Activity,
+    color: "text-emerald-300",
+  },
+  {
+    title: "AXE — copilot that knows the app",
+    desc: "Chat that can read your chart, your accounts, your journal, news and intel. It explains structure, suggests journal labels, and answers honestly when there's nothing to say.",
+    Icon: Brain,
+    color: "text-cyan-300",
+  },
+  {
+    title: "Five-tap journal that writes itself",
+    desc: "Trades land from MT5, you tap one of five outcomes, AXE pins context. Win rate, profit factor, calendar — all driven from the same broker rows, never a guess.",
+    Icon: Sparkles,
+    color: "text-teal-300",
+  },
+  {
+    title: "Multi-account, multi-broker, RLS-safe",
+    desc: "Funded, demo, live across brokers — one active account at a time, analytics scoped per account. Supabase Row-Level Security keeps every workspace isolated.",
     Icon: Shield,
-    color: "text-teal-400",
+    color: "text-cyan-200",
   },
 ];
+
+const SCREEN_TABS = [
+  {
+    id: "chart",
+    label: "Chart",
+    body: "Auto-Fib with source picker, swing dots, OB / FVG / iFVG that extend until mitigated. Drag the future-line to project levels past the live candle.",
+    icon: LineChart,
+  },
+  {
+    id: "depth",
+    label: "Depth",
+    body: "Live broker bid / ask anchored at L1; surrounding ladder is synthetic and labelled as such. Spread + mid update tick-by-tick.",
+    icon: BarChart2,
+  },
+  {
+    id: "news",
+    label: "News",
+    body: "Multi-source feed with paid providers first (Polygon → Perigon → Finnhub → EODHD). Cached 5 min so a quiet hour doesn't burn credits.",
+    icon: Newspaper,
+  },
+  {
+    id: "exec",
+    label: "Execute",
+    body: "Market, buy / sell limit, SL, TP, deviation — all from a single dock. Big activation banner with disclaimers before any live order goes out.",
+    icon: Zap,
+  },
+  {
+    id: "axe",
+    label: "AXE",
+    body: "Chat that has your chart, journal, intel and account context pinned. Honest when uncertain, opinionated when it shouldn't be silent.",
+    icon: Brain,
+  },
+] as const;
 
 const FAQ = [
   {
-    q: "Where do I paste the link token?",
-    a: "Not inside this app. Put it in your MT5 Expert Advisor or bridge script that POSTs trades and snapshots to the Supabase Edge function. After the first successful post, trades and live stats flow automatically — see Accounts right after you create a token.",
+    q: "Is this a real chart with live data, or just a marketing illustration?",
+    a: "It's the real chart engine. AXE Companion ships Lightweight Charts wired to MT5 ticks, with auto-Fib (Auto / Swing / Day), auto-trend, OB / FVG / iFVG, PDH / PDL, swing points, BOS/CHoCH, and a market-depth drawer over the live spread. The phone in the hero cycles through the actual screens — same components, same palette.",
+  },
+  {
+    q: "Can I really execute trades from AXE, or is it analytics only?",
+    a: "Both. By default new accounts get a free virtual demo wired to live prices for paper trading. Activating live execution requires the master-password account and a one-time disclaimer banner — after that, the BUY / SELL dock sends real orders to MT5 (market, buy / sell limit, SL, TP, deviation).",
+  },
+  {
+    q: "Where do I paste the MT5 link token?",
+    a: "Not inside this app. Put it in your MT5 Expert Advisor or bridge that POSTs trades and snapshots to the Supabase Edge function. After the first successful post, trades, equity and live stats flow automatically — see Accounts right after you create a token.",
   },
   {
     q: "Do I need Trading OS on desktop?",
-    a: "No to get started: chat, alerts, accounts, journal, and memory work standalone. Trading OS is our upcoming premium terminal (charts, intelligence, alerts, execution desk). With the same Supabase login, one account and one memory carry across both when it launches.",
+    a: "No to get started — chart, depth, news, intel, alerts, journal, accounts, and AXE all work standalone in the phone OS. Trading OS is the upcoming desktop terminal and shares the same Supabase login. One account, one memory, one trading brain across both.",
+  },
+  {
+    q: "How does news caching keep my provider bills sane?",
+    a: "Every news call is keyed by symbol + provider and cached for 5 minutes. Polygon is tried first (paid feed, deepest coverage), then Perigon → Finnhub → EODHD. A quiet hour costs you a single round of cached calls instead of N×providers per page-view.",
   },
   {
     q: "Is this an App Store app?",
-    a: "You can install the site as a PWA on your home screen (Safari / Chrome) — no App Store required for the core flow.",
-  },
-  {
-    q: "What is Trading OS, and how does it relate to AXE?",
-    a: "Trading OS is our upcoming premium trading terminal — live charts, market intelligence, alerts, execution workspace, watchlists, and multi-source data, with AXE embedded as the intelligence layer. AXE Companion ships first as a standalone assistant. Same Supabase user, auth, broker accounts, trades, journal, notes, and AXE memory — not a separate data island.",
-  },
-  {
-    q: "Do I need a News tab in AXE Companion to get market or news context in chat?",
-    a: "No. A News tab is a terminal screen, not the source of truth. AXE can use the same shared engine and Supabase-backed context when you ask about markets or headlines — even without a dedicated News page in the mobile UI.",
+    a: "Install the site as a PWA on your home screen (Safari / Chrome) — no App Store required for the core flow. The hero shows what that PWA looks like.",
   },
 ];
 
-function MarketingNativePhoneMock() {
-  const candles = [
-    { x: 26, y: 158, h: 40, up: true },
-    { x: 44, y: 144, h: 62, up: false },
-    { x: 62, y: 132, h: 52, up: true },
-    { x: 80, y: 121, h: 46, up: true },
-    { x: 98, y: 110, h: 58, up: false },
-    { x: 116, y: 125, h: 38, up: true },
-    { x: 134, y: 113, h: 44, up: true },
-    { x: 152, y: 98, h: 66, up: true },
-    { x: 170, y: 108, h: 54, up: false },
-    { x: 188, y: 132, h: 42, up: false },
-  ];
-  const volume = [24, 40, 35, 56, 48, 31, 52, 61, 44, 22];
-
-  return (
-    <div className="relative h-[560px] w-[280px] overflow-hidden rounded-[28px] bg-[#05070A] text-white">
-      <div className="flex h-10 items-center justify-between border-b border-white/[0.06] bg-black px-4 text-[11px] font-semibold">
-        <span>09:41</span>
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-8 py-1 text-[8px] text-white/30">AXE</span>
-        <span className="text-white/60">5G 87</span>
-      </div>
-
-      <div className="flex h-[52px] items-center justify-between border-b border-cyan-300/[0.08] bg-[#05070A]/95 px-3">
-        <div className="grid h-8 w-8 place-items-center rounded-xl border border-cyan-300/20 bg-cyan-400/[0.06] text-cyan-200">
-          ☰
-        </div>
-        <div className="grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/20 bg-black shadow-[0_0_20px_rgba(34,211,238,0.14)]">
-          <Image src="/axe-icon.png" alt="" width={26} height={26} className="h-6 w-6 object-contain" />
-        </div>
-      </div>
-
-      <div className="relative h-[318px] overflow-hidden border-b border-white/[0.07] bg-[#05070A]">
-        <div className="absolute left-2 top-2 z-10 font-mono text-[12px] font-bold text-[#1f8cff]">
-          XAUUSD <span className="ml-1 text-white">H1</span>
-          <div className="mt-1 text-[10px] font-medium text-white/46">4708.60</div>
-        </div>
-        <div
-          className="absolute inset-0 opacity-90"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(110,170,200,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(110,170,200,0.045) 1px, transparent 1px)",
-            backgroundSize: "54px 46px",
-          }}
-        />
-        <svg className="absolute inset-0" width="280" height="318" viewBox="0 0 280 318" aria-hidden>
-          {[5300, 5200, 5100, 5000, 4900, 4800, 4700].map((price, i) => (
-            <text key={price} x="232" y={62 + i * 35} fill="rgba(208,220,234,0.72)" fontSize="10" fontFamily="monospace">
-              {price}.00
-            </text>
-          ))}
-          <path d="M20 228 C56 164, 82 238, 116 166 S176 104, 216 156" fill="none" stroke="rgba(92,142,255,0.8)" strokeWidth="1.4" />
-          <line x1="0" x2="224" y1="190" y2="190" stroke="rgba(220,228,238,0.28)" strokeDasharray="2 3" />
-          <rect x="218" y="181" width="58" height="18" rx="3" fill="rgba(185,197,213,0.9)" />
-          <text x="247" y="194" textAnchor="middle" fill="#071018" fontSize="10" fontWeight="700" fontFamily="monospace">
-            4708.60
-          </text>
-          {candles.map((candle) => {
-            const color = candle.up ? "#1F9C7B" : "#C95450";
-            return (
-              <g key={candle.x}>
-                <line x1={candle.x + 4} x2={candle.x + 4} y1={candle.y - 16} y2={candle.y + candle.h + 16} stroke={color} strokeOpacity="0.75" />
-                <rect x={candle.x} y={candle.y} width="8" height={candle.h} rx="1.5" fill={color} />
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-
-      <div className="relative h-[70px] border-b border-white/[0.06] bg-black/55">
-        <span className="absolute left-2 top-1 text-[8px] font-bold uppercase tracking-[0.22em] text-cyan-100/80">Volumes 1.4K</span>
-        <svg className="absolute inset-0" width="280" height="70" viewBox="0 0 280 70" aria-hidden>
-          <text x="232" y="21" fill="rgba(168,180,196,0.7)" fontSize="9" fontFamily="monospace">1.4K</text>
-          <text x="232" y="62" fill="rgba(168,180,196,0.7)" fontSize="9" fontFamily="monospace">0</text>
-          {volume.map((height, i) => (
-            <rect key={i} x={16 + i * 18} y={64 - height} width="6" height={height} rx="1" fill={i % 3 === 1 ? "#C95450" : "#1F9C7B"} />
-          ))}
-        </svg>
-      </div>
-
-      <div className="relative h-[78px] border-b border-white/[0.06] bg-black/55">
-        <span className="absolute left-2 top-1 text-[8px] font-bold uppercase tracking-[0.22em] text-cyan-100/80">RSI(14) 53.99</span>
-        <svg className="absolute inset-0" width="280" height="78" viewBox="0 0 280 78" aria-hidden>
-          {[75, 50, 25].map((_, i) => (
-            <line key={i} x1="0" x2="224" y1={18 + i * 22} y2={18 + i * 22} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 4" />
-          ))}
-          {[100, 75, 50, 25, 0].map((level, i) => (
-            <text key={level} x="232" y={12 + i * 15} fill="rgba(168,180,196,0.7)" fontSize="9" fontFamily="monospace">
-              {level}.00
-            </text>
-          ))}
-          <path d="M8 42 L35 35 L58 45 L82 28 L108 38 L132 34 L156 46 L182 50 L206 43" fill="none" stroke="#22D3EE" strokeWidth="1.5" />
-        </svg>
-      </div>
-
-      <div className="absolute inset-x-0 bottom-0 flex h-11 items-stretch border-t border-white/[0.08] bg-black">
-        <div className="flex flex-1 items-center justify-between bg-gradient-to-r from-[#330610] via-[#8B1923] to-[#E13947] px-3 text-left">
-          <span className="text-[9px] font-semibold uppercase">Sell</span>
-          <span className="font-mono text-[15px] font-bold">4708.60</span>
-        </div>
-        <div className="flex w-20 flex-col items-center justify-center bg-black text-[10px]">
-          <span className="text-[7px] uppercase tracking-[0.2em] text-white/35">Lots</span>
-          <span className="font-mono">0.10</span>
-        </div>
-        <div className="flex flex-1 items-center justify-between bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] px-3 text-left">
-          <span className="text-[9px] font-semibold uppercase">Buy</span>
-          <span className="font-mono text-[15px] font-bold">4708.60</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function HomeLandingPage() {
-  const row = [...TICKER, ...TICKER];
+  const tickerRow = [...TICKER, ...TICKER];
 
   return (
-    <div className="axe-landing-matte-bg relative min-h-dvh text-tos-text">
+    <div className="axe-landing-matte-bg relative min-h-dvh overflow-hidden text-tos-text">
+      {/* ─── ambient aurora behind the whole page ─── */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[820px]"
+        style={{
+          background:
+            "radial-gradient(900px circle at 22% 18%, rgba(34,211,238,0.10), transparent 55%), radial-gradient(900px circle at 80% 8%, rgba(46,196,182,0.08), transparent 55%), radial-gradient(800px circle at 50% 60%, rgba(34,211,238,0.05), transparent 65%)",
+        }}
+      />
+
+      {/* ─── header ─── */}
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#050508]/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
           <Link href="/" className="flex items-center gap-2">
@@ -241,9 +193,9 @@ export default function HomeLandingPage() {
           <div className="flex items-center gap-2">
             <a
               href="#waitlist"
-              className="hidden rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/50 hover:text-white/80 md:inline"
+              className="hidden rounded-full border border-cyan-400/15 bg-cyan-400/[0.03] px-3 py-1.5 text-xs font-medium text-cyan-200/80 transition hover:border-cyan-400/30 hover:text-cyan-100 md:inline"
             >
-              Trading OS — coming soon
+              Trading OS — terminal in private beta
             </a>
             <Link
               href="/login"
@@ -253,24 +205,28 @@ export default function HomeLandingPage() {
             </Link>
             <Link
               href="/login"
-              className="rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-black hover:bg-emerald-400"
+              className="axe-landing-cta inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-3.5 py-1.5 text-xs font-semibold text-[#04161B] shadow-[0_8px_22px_-8px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"
             >
               Get started
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
             </Link>
           </div>
         </div>
       </header>
 
-      <div className="border-b border-white/[0.04] bg-white/[0.015] py-2">
+      {/* ─── live ticker ─── */}
+      <div className="relative z-10 border-b border-white/[0.05] bg-white/[0.012] py-2">
         <div className="mx-auto max-w-[1400px] overflow-hidden px-4">
           <div className="flex w-max animate-axe-landing-marquee gap-0">
-            {row.map((t, i) => (
+            {tickerRow.map((t, i) => (
               <div key={i} className="flex items-center gap-3 whitespace-nowrap px-4">
-                <span className="font-mono text-[11px] font-semibold text-tos-text">{t.s}</span>
+                <span className="font-mono text-[11px] font-semibold tracking-tight text-tos-text">
+                  {t.s}
+                </span>
                 <span className="font-mono text-[11px] text-tos-muted">{t.p}</span>
                 <span
                   className={`flex items-center gap-0.5 font-mono text-[11px] font-semibold ${
-                    t.up ? "text-emerald-400" : "text-red-400"
+                    t.up ? "text-cyan-300/95" : "text-rose-300/95"
                   }`}
                 >
                   {t.c}
@@ -281,136 +237,177 @@ export default function HomeLandingPage() {
         </div>
       </div>
 
+      {/* ─── HERO ─── */}
       <section
         className="relative overflow-hidden"
-        style={{
-          minHeight: "min(100svh, 900px)",
-        }}
+        style={{ minHeight: "min(100svh, 920px)" }}
       >
         <div
           className="pointer-events-none absolute inset-0 z-[1]"
           style={{
             background:
-              "linear-gradient(180deg, rgba(5,5,8,0.2) 0%, rgba(5,5,8,0.06) 45%, rgba(5,5,8,0.02) 100%)",
+              "linear-gradient(180deg, rgba(5,5,8,0.18) 0%, rgba(5,5,8,0.04) 45%, rgba(5,5,8,0.02) 100%)",
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-10 md:pt-14 lg:grid-cols-[1fr_0.92fr] lg:gap-10">
+        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-12 md:pt-16 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
           <div>
             <div
               className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium"
               style={{
-                background: "linear-gradient(135deg, rgba(34,197,94,0.18) 0%, rgba(16,185,129,0.08) 100%)",
-                border: "1px solid rgba(34,197,94,0.32)",
-                boxShadow: "0 0 22px rgba(34,197,94,0.1)",
+                background:
+                  "linear-gradient(135deg, rgba(34,211,238,0.18) 0%, rgba(46,196,182,0.08) 100%)",
+                border: "1px solid rgba(34,211,238,0.32)",
+                boxShadow: "0 0 22px rgba(34,211,238,0.10)",
               }}
             >
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-300" />
               </span>
-              <span className="text-emerald-300/95">AXE Companion</span>
+              <span className="text-cyan-200/95">AXE Companion · live on MT5</span>
             </div>
 
-            <h1 className="mt-7 max-w-[560px] text-4xl font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.15rem]">
-              Your trades, your journal,
+            <h1 className="mt-7 max-w-[600px] text-[2.6rem] font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.35rem]">
+              The trader&apos;s phone.
               <br />
-              <span className="axe-landing-heading-shimmer">your intelligence.</span>
+              <span className="axe-landing-heading-shimmer">
+                Chart. Depth. News. Execute.
+              </span>
             </h1>
 
-            <p className="mt-5 max-w-[520px] text-sm leading-relaxed text-white/55 sm:text-base">
-              AXE connects broker history, quick journal labels, and private memory into one workspace — powered by the
-              same Supabase account and shared engine layer as{" "}
-              <span className="text-white/80">Trading OS</span>, our upcoming premium trading terminal (live charts,
-              intelligence, alerts, execution desk).
+            <p className="mt-5 max-w-[560px] text-[15px] leading-relaxed text-white/60 sm:text-base">
+              AXE Companion is what an MT5 native phone app should feel like — calm dark canvas, auto-Fib /
+              structure / OB / FVG that actually extend, a real depth ladder anchored on your broker&apos;s
+              bid / ask, multi-source news cached to save credits, and a one-tap execution dock that talks
+              straight to your account.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
                 href="/login"
-                className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-6 text-sm font-semibold text-black shadow-lg shadow-emerald-900/25 hover:bg-emerald-400"
+                className="axe-landing-cta inline-flex h-12 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-7 text-sm font-semibold text-[#04161B] shadow-[0_18px_44px_-14px_rgba(34,211,238,0.65)] transition hover:from-cyan-300 hover:to-teal-300"
               >
-                Log in or create account
-                <ChevronRight className="ml-1 h-4 w-4" aria-hidden />
+                Open AXE on web or PWA
+                <ChevronRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link
                 href="/welcome"
-                className="inline-flex h-11 items-center justify-center rounded-full border border-white/14 bg-white/[0.04] px-5 text-sm font-medium text-white/85 hover:bg-white/[0.08]"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/[0.04] px-5 text-sm font-medium text-cyan-100/90 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.08]"
               >
-                <Smartphone className="mr-2 h-4 w-4 text-cyan-400/90" aria-hidden />
-                Phone (PWA)
+                <Smartphone className="h-4 w-4 text-cyan-300/90" aria-hidden />
+                Install as PWA
               </Link>
               <Link
                 href="/chat"
-                className="text-center text-xs text-white/40 hover:text-white/65 sm:text-left"
+                className="text-center text-xs text-white/40 transition hover:text-white/65 sm:text-left"
               >
-                Already signed in? → Open chat
+                Already signed in? → Open AXE
               </Link>
             </div>
 
-            <div className="mt-10 flex flex-wrap gap-2">
-              {["XAU/USD", "EUR/USD", "NAS100", "BTC/USD", "US30", "GBP/USD", "USD/JPY", "WTI", "SPX500"].map(
-                (sym) => (
-                  <span
-                    key={sym}
-                    className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-white/65"
-                  >
-                    {sym}
-                  </span>
-                ),
-              )}
+            <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.18em] text-white/45">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
+                MT5 ticks
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
+                Polygon · Perigon · Finnhub
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
+                Unusual Whales
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
+                Supabase RLS
+              </span>
+            </div>
+
+            <div className="mt-7 flex flex-wrap gap-1.5">
+              {[
+                "XAU/USD",
+                "EUR/USD",
+                "NAS100",
+                "BTC/USD",
+                "US30",
+                "GBP/USD",
+                "USD/JPY",
+                "WTI",
+                "SPX500",
+              ].map((sym) => (
+                <span
+                  key={sym}
+                  className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-white/65 transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.06] hover:text-cyan-100"
+                >
+                  {sym}
+                </span>
+              ))}
             </div>
           </div>
 
+          {/* Interactive phone */}
           <div className="relative flex w-full justify-center lg:justify-end">
-            <div
-              className="marketing-tilt relative rounded-[36px] border border-white/10 bg-gradient-to-b from-[#12141c] to-[#07080c] p-2 shadow-2xl"
-              style={{
-                boxShadow:
-                  "0 40px 120px rgba(0,0,0,0.55), 0 10px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)",
-              }}
-            >
-              <div className="pointer-events-none absolute left-1/2 top-2 z-10 h-6 w-[88px] -translate-x-1/2 rounded-b-[14px] border-b border-white/[0.07] bg-[#0a0b10]" />
-              <MarketingNativePhoneMock />
-            </div>
-            <div
-              className="pointer-events-none absolute -bottom-6 left-1/2 h-20 w-[65%] max-w-[300px] -translate-x-1/2 rounded-full opacity-60"
-              style={{
-                background: "radial-gradient(ellipse at center, rgba(16,185,129,0.2), transparent 72%)",
-                filter: "blur(20px)",
-              }}
-            />
+            <LandingHeroPhone />
           </div>
         </div>
       </section>
 
-      <section className="border-t border-white/[0.04] px-5 py-10">
-        <p className="mx-auto max-w-3xl text-center text-sm italic leading-relaxed text-white/40">
-          &ldquo;Built for traders who want clarity without another noisy dashboard. AXE focuses on what happened in
-          your account, why it mattered, and what to watch next. When Trading OS launches, the same memory and context
-          carry into the full terminal experience — for now, AXE Companion is the brain you use first.&rdquo;
+      {/* ─── strip: what cycles in the hero ─── */}
+      <section className="relative z-10 border-y border-white/[0.04] bg-white/[0.012] px-5 py-7">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-3 md:grid-cols-5">
+          {SCREEN_TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <div key={tab.id} className="flex items-start gap-2 rounded-xl px-2 py-1.5">
+                <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-cyan-400/22 bg-cyan-400/[0.06]">
+                  <Icon className="h-3.5 w-3.5 text-cyan-200" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/85">
+                    {tab.label}
+                  </p>
+                  <p className="mt-0.5 text-[11.5px] leading-snug text-tos-muted">{tab.body}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ─── quote ─── */}
+      <section className="relative z-10 px-5 py-10">
+        <p className="mx-auto max-w-3xl text-center text-sm italic leading-relaxed text-white/45 md:text-base">
+          &ldquo;The same calm dark canvas as Trading OS, the same execution model as MT5, the same brain that
+          journals what you actually did. AXE Companion is the phone-first half of one trading workspace —
+          not another second-screen dashboard.&rdquo;
         </p>
       </section>
 
-      <section className="border-t border-white/[0.04] px-5 py-16 md:py-24">
+      {/* ─── features ─── */}
+      <section className="relative z-10 border-t border-white/[0.04] px-5 py-16 md:py-24">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-tos-muted">
-            <Zap className="h-3 w-3 text-emerald-400" aria-hidden />
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/[0.04] px-2.5 py-1 text-[11px] font-medium text-cyan-200/95">
+            <Wand2 className="h-3 w-3 text-cyan-300" aria-hidden />
             Built for real accounts
           </div>
           <h2 className="mb-3 text-3xl font-bold tracking-tight text-white md:text-4xl">
-            Journal that writes itself.
+            Native trader feel, calmly.
             <br />
-            <span className="axe-landing-heading-shimmer">Insights you can trust.</span>
+            <span className="axe-landing-heading-shimmer">
+              Every tool you reach for is one tap away.
+            </span>
           </h2>
-          <p className="mb-12 max-w-xl text-sm text-tos-muted md:text-base">
-            Trades land from MT5 via a secure ingest token. You tag outcomes in one tap. Analytics and memory stay tied
-            to the account you select.
+          <p className="mb-12 max-w-2xl text-sm text-tos-muted md:text-base">
+            Each tile below is something AXE actually does today — not a roadmap. We chose Lightweight Charts
+            for the same reason MT5 traders trust their terminal: a steady canvas, real ticks, indicators that
+            mean what they say.
           </p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {LANDING_FEATURES.map(({ title, desc, Icon, color }) => (
-              <div key={title} className="axe-landing-card p-6">
+              <div key={title} className="axe-landing-card-glow p-6">
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
                   <Icon className={`h-5 w-5 ${color}`} aria-hidden />
                 </div>
@@ -420,43 +417,50 @@ export default function HomeLandingPage() {
             ))}
           </div>
 
-          <div className="mx-auto mt-12 max-w-4xl rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.06] p-8 md:p-10">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-100/95">
-              Trading OS terminal — coming soon
+          {/* Trading OS callout */}
+          <div className="mx-auto mt-14 max-w-4xl rounded-2xl border border-cyan-400/22 bg-cyan-400/[0.05] p-8 md:p-10">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-100/95">
+                <Layout className="h-3 w-3 text-cyan-300" aria-hidden />
+                Trading OS — desktop terminal
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/55">
+                Private beta
+              </span>
             </div>
-            <h3 className="text-xl font-bold text-white md:text-2xl">
-              Standalone companion today.{" "}
-              <span className="axe-landing-heading-shimmer">Full trading terminal tomorrow.</span>
+            <h3 className="mt-4 text-xl font-bold text-white md:text-2xl">
+              The same brain on the desk you trade from.{" "}
+              <span className="axe-landing-heading-shimmer">One workspace.</span>
             </h3>
-            <p className="mt-4 text-sm leading-relaxed text-white/60 md:text-base">
-              AXE Companion works as a standalone AI trading assistant now — chat, accounts, journal, notes, and memory
-              on one Supabase spine. Trading OS is the upcoming premium terminal that brings AXE into live charts, market
-              intelligence, alerts, execution workflows, and a full multi-source desk. One account, one memory, one
-              trading brain across both.
+            <p className="mt-4 text-sm leading-relaxed text-white/65 md:text-base">
+              AXE Companion is the phone-first OS — chart, depth, news, intel, execution, journal, AXE — and
+              it&apos;s standalone today. Trading OS is the desktop terminal that lights up the same Supabase
+              account on a multi-monitor desk: live charts, multi-source intelligence, alerts, execution
+              workflows, watchlists. One login. One memory. One trading brain on phone and on desk.
             </p>
-            <p className="mt-4 text-sm font-semibold text-white/90">
-              AXE Companion is the brain. Trading OS is the terminal.
+            <p className="mt-4 text-sm font-semibold text-cyan-100/95">
+              AXE Companion is the brain in your pocket. Trading OS is the desk it plugs into.
             </p>
           </div>
 
-          <div className="relative mt-8 overflow-hidden rounded-2xl border border-emerald-500/18 bg-gradient-to-r from-emerald-500/[0.05] via-emerald-500/[0.02] to-transparent p-6 md:p-8">
-            <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-emerald-500/[0.04] blur-[72px]" />
+          <div className="relative mt-8 overflow-hidden rounded-2xl border border-cyan-400/15 bg-gradient-to-r from-cyan-400/[0.04] via-cyan-400/[0.015] to-transparent p-6 md:p-8">
+            <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-cyan-400/[0.05] blur-[72px]" />
             <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start gap-3">
-                <BarChart2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-400/85" aria-hidden />
+                <Radio className="mt-0.5 h-6 w-6 shrink-0 text-cyan-300/85" aria-hidden />
                 <div>
-                  <h3 className="text-base font-semibold text-white">MT5 link — safe and revocable</h3>
+                  <h3 className="text-base font-semibold text-white">MT5 link — safe, revocable, hashed</h3>
                   <p className="mt-1 max-w-2xl text-sm text-tos-muted">
-                    Recommended: in-app cloud MT5 (read-only analytics) from Accounts when available. Advanced: create a
-                    link token under Accounts and paste it into your EA or bridge that POSTs to{" "}
-                    <code className="rounded bg-black/40 px-1 text-[10px] text-tos-text">axe-mt5-ingest</code> — only a
-                    hash is stored server-side.
+                    Recommended path: in-app cloud MT5 connection from{" "}
+                    <span className="text-tos-text">Accounts</span>. Advanced: create a per-account link
+                    token and paste it into your EA / bridge — only a hash is stored server-side, you can
+                    revoke any time.
                   </p>
                 </div>
               </div>
               <Link
                 href="/login"
-                className="shrink-0 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-center text-xs font-medium text-white hover:bg-white/10"
+                className="shrink-0 rounded-full border border-cyan-300/25 bg-cyan-300/[0.06] px-4 py-2 text-center text-xs font-medium text-cyan-100/95 transition hover:border-cyan-300/45 hover:bg-cyan-300/[0.10]"
               >
                 Open Accounts after login
               </Link>
@@ -465,40 +469,53 @@ export default function HomeLandingPage() {
         </div>
       </section>
 
-      <section className="border-t border-white/[0.04] px-5 py-14 md:py-20">
+      {/* ─── pricing ─── */}
+      <section className="relative z-10 border-t border-white/[0.04] px-5 py-14 md:py-20">
         <div className="mx-auto max-w-5xl">
           <h2 className="mb-3 text-center text-3xl font-bold text-white md:text-4xl">Simple pricing</h2>
           <p className="mx-auto mb-10 max-w-2xl text-center text-sm text-tos-muted">
-            AXE launches with early access. Public tiers will ship with billing — join the waitlist for AXE and updates
-            on Trading OS, our upcoming premium trading terminal.
+            AXE launches with early access. The free tier is the full UX — Pro just lifts the chat ceiling
+            and unlocks the higher-end provider mix when we wire billing in-app.
           </p>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="axe-landing-card p-8">
-              <h3 className="text-xs font-medium uppercase tracking-widest text-tos-dim">Free</h3>
+            <div className="axe-landing-card-glow p-8">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-medium uppercase tracking-widest text-tos-dim">Free</h3>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/65">
+                  Always
+                </span>
+              </div>
               <p className="mt-2 text-3xl font-semibold text-white">€0</p>
               <ul className="mt-4 space-y-2 text-sm text-tos-muted">
-                <li>Full product UX</li>
-                <li>20 chat sends per day (UTC midnight reset)</li>
+                <li>Full chart, depth, news, intel, execution UX</li>
+                <li>Demo account on live ticks — paper-trade instantly</li>
+                <li>20 AXE chat sends per day (UTC midnight reset)</li>
                 <li>Same Supabase spine as Trading OS when you use both</li>
               </ul>
               <Link
                 href="/login"
-                className="mt-6 inline-flex h-10 items-center justify-center rounded-full border border-white/12 px-5 text-xs font-medium text-white hover:bg-white/[0.06]"
+                className="mt-6 inline-flex h-10 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] px-5 text-xs font-medium text-white transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.06] hover:text-cyan-100"
               >
                 Start free
               </Link>
             </div>
-            <div className="axe-landing-card border-emerald-500/20 p-8 ring-1 ring-emerald-500/15">
-              <h3 className="text-xs font-medium uppercase tracking-widest text-emerald-400/90">Pro</h3>
+            <div className="axe-landing-card-glow p-8 ring-1 ring-cyan-400/25">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-medium uppercase tracking-widest text-cyan-200/90">Pro</h3>
+                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-cyan-200/95">
+                  Recommended
+                </span>
+              </div>
               <p className="mt-2 text-3xl font-semibold text-white">~€19/mo</p>
               <ul className="mt-4 space-y-2 text-sm text-tos-muted">
-                <li>Unlimited sends (reasonable fair use)</li>
-                <li>Same features as Free</li>
-                <li>Billed via Stripe when checkout is configured in-app</li>
+                <li>Unlimited AXE sends (reasonable fair use)</li>
+                <li>Higher-priority Polygon news refresh</li>
+                <li>Live execution unlocked behind master-password</li>
+                <li>Billed via Stripe when in-app checkout lights up</li>
               </ul>
               <Link
                 href="/login"
-                className="mt-6 inline-flex h-10 items-center justify-center rounded-full bg-emerald-500 px-5 text-xs font-semibold text-black hover:bg-emerald-400"
+                className="axe-landing-cta mt-6 inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-5 text-xs font-semibold text-[#04161B] shadow-[0_10px_30px_-10px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"
               >
                 Get started
               </Link>
@@ -509,7 +526,7 @@ export default function HomeLandingPage() {
             {LEGAL_COPY.tradingShort} {LEGAL_COPY.pricing}
           </p>
 
-          <div className="mx-auto mt-14 max-w-2xl">
+          <div className="mx-auto mt-14 max-w-2xl" id="waitlist">
             <LandingWaitlist />
           </div>
 
@@ -520,38 +537,57 @@ export default function HomeLandingPage() {
         </div>
       </section>
 
-      <section className="border-t border-white/[0.04] px-5 py-14 md:py-20">
+      {/* ─── FAQ ─── */}
+      <section className="relative z-10 border-t border-white/[0.04] px-5 py-14 md:py-20">
         <div className="mx-auto max-w-3xl">
-          <h2 className="mb-8 text-center text-2xl font-bold text-white md:text-3xl">FAQ</h2>
+          <div className="mb-8 flex items-center justify-center gap-2">
+            <Compass className="h-5 w-5 text-cyan-300/85" aria-hidden />
+            <h2 className="text-center text-2xl font-bold text-white md:text-3xl">FAQ</h2>
+          </div>
           <div className="space-y-2">
             {FAQ.map((item) => (
-              <details key={item.q} className="axe-landing-card group px-4 py-1 open:bg-white/[0.04]">
+              <details
+                key={item.q}
+                className="axe-landing-card-glow group px-5 py-1 open:bg-white/[0.04]"
+              >
                 <summary className="cursor-pointer list-none py-3 text-sm font-medium text-white/90 marker:content-none [&::-webkit-details-marker]:hidden">
-                  <span className="group-open:text-emerald-400/95">{item.q}</span>
+                  <span className="group-open:text-cyan-300/95">{item.q}</span>
                 </summary>
-                <p className="border-t border-white/[0.06] pb-3 pt-2 text-sm leading-relaxed text-tos-muted">{item.a}</p>
+                <p className="border-t border-white/[0.06] pb-3 pt-2 text-sm leading-relaxed text-tos-muted">
+                  {item.a}
+                </p>
               </details>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-t border-white/[0.04] px-5 py-12">
-        <div className="axe-landing-card mx-auto max-w-3xl p-8 text-center">
-          <p className="text-sm font-medium text-white">Trading OS is coming soon</p>
-          <p className="mt-2 text-xs text-tos-muted">
-            A premium trading terminal powered by the same AXE intelligence layer — same account when you use both.
+      {/* ─── final CTA ─── */}
+      <section className="relative z-10 border-t border-white/[0.04] px-5 py-14">
+        <div className="axe-landing-card-glow mx-auto max-w-3xl p-10 text-center">
+          <div className="mx-auto mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/22 bg-cyan-400/[0.06] px-3 py-1 text-[11px] font-medium text-cyan-100/95">
+            <Target className="h-3 w-3 text-cyan-300" aria-hidden />
+            Ready to trade
+          </div>
+          <p className="text-lg font-semibold text-white md:text-xl">
+            Open AXE on the phone you actually trade on.
           </p>
-          <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:justify-center">
+          <p className="mt-2 max-w-xl text-sm text-tos-muted">
+            Free to start. Demo account spins up instantly on live ticks. Connect MT5 when you&apos;re ready
+            to go live — same Supabase login carries over to Trading OS on desktop the moment it leaves
+            private beta.
+          </p>
+          <div className="mt-7 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:justify-center">
             <Link
               href="/login"
-              className="inline-flex h-11 items-center justify-center rounded-full bg-emerald-500 px-8 text-sm font-semibold text-black hover:bg-emerald-400"
+              className="axe-landing-cta inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-8 text-sm font-semibold text-[#04161B] shadow-[0_18px_44px_-14px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"
             >
               Get started
+              <ChevronRight className="h-4 w-4" aria-hidden />
             </Link>
             <Link
               href="/welcome"
-              className="inline-flex h-11 items-center justify-center rounded-full border border-white/15 px-8 text-sm font-medium text-white/85 hover:bg-white/[0.06]"
+              className="inline-flex h-11 items-center justify-center rounded-full border border-cyan-300/22 bg-cyan-300/[0.04] px-8 text-sm font-medium text-cyan-100/90 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.08]"
             >
               PWA install
             </Link>
@@ -559,11 +595,15 @@ export default function HomeLandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-white/[0.04] px-5 py-8 text-center text-[11px] text-tos-dim">
+      {/* ─── footer ─── */}
+      <footer className="relative z-10 border-t border-white/[0.04] px-5 py-8 text-center text-[11px] text-tos-dim">
         <p>AXE Companion OS · not financial advice · trade responsibly</p>
         <p className="mt-2 text-tos-muted">
-          Trading OS — upcoming premium terminal · same Supabase spine ·{" "}
-          <a href="#waitlist" className="text-cyan-400/80 underline-offset-2 hover:underline">
+          Trading OS — desktop terminal in private beta · same Supabase spine ·{" "}
+          <a
+            href="#waitlist"
+            className="text-cyan-300/85 underline-offset-2 transition hover:text-cyan-200 hover:underline"
+          >
             Join the Trading OS waitlist
           </a>
         </p>
