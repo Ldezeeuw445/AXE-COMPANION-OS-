@@ -114,9 +114,18 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialEnabled]);
 
-  // Tick once a minute so the armed window auto-expires in the UI.
+  // `nowMs` is what makes `armed` reactive — incrementing it in an interval
+  // causes the derived `armed` value below to recompute without us having
+  // to call Date.now() during render (which trips React 19 purity rules).
+  const [nowMs, setNowMs] = useState<number>(() => 0);
+
+  // Tick once a minute so the armed window auto-expires in the UI. We also
+  // refresh nowMs so the derived `armed` reflects expiry in real time.
   useEffect(() => {
+    setNowMs(Date.now());
+    setArmedUntilMs(readArmedUntil());
     const id = setInterval(() => {
+      setNowMs(Date.now());
       setArmedUntilMs(readArmedUntil());
     }, 60_000);
     return () => clearInterval(id);
@@ -126,7 +135,10 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onStorage = (event: StorageEvent) => {
-      if (event.key === ARMED_UNTIL_KEY) setArmedUntilMs(readArmedUntil());
+      if (event.key === ARMED_UNTIL_KEY) {
+        setArmedUntilMs(readArmedUntil());
+        setNowMs(Date.now());
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -156,6 +168,7 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
     const next = Date.now() + ARM_WINDOW_MS;
     writeArmedUntil(next);
     setArmedUntilMs(next);
+    setNowMs(Date.now());
   }, [enabled]);
 
   const disarm = useCallback(() => {
@@ -163,7 +176,10 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
     setArmedUntilMs(0);
   }, []);
 
-  const armed = enabled && armedUntilMs > Date.now();
+  // Derived from state (not Date.now() during render) so React's purity
+  // rule stays clean. nowMs ticks every minute via the interval above and
+  // refreshes whenever we arm/disarm or storage events fire.
+  const armed = enabled && armedUntilMs > nowMs;
 
   return { enabled, armed, armedUntilMs, pending, enable, disable, arm, disarm };
 }

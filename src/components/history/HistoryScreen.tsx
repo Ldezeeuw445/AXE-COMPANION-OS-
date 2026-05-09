@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useTransition } from "react";
+import { useEffect, useMemo, useTransition } from "react";
 import { ScrollText, Landmark } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
-import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
+import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
 import type {
   BrokerTradeRow,
   HistoryPageData,
@@ -119,6 +119,20 @@ export function HistoryScreen({
     selectedAccountId &&
     activeAccountId &&
     selectedAccountId === activeAccountId;
+
+  // Trade history is "live" when Supabase delivered the broker_trades
+  // payload — even an empty payload counts as a live, authenticated
+  // round-trip. Errors flip the pulse to amber; otherwise green.
+  useEffect(() => {
+    setLiveStatus({
+      allLive: loadError ? false : true,
+      liveCount: loadError ? 0 : 1,
+      totalCount: 1,
+      freshestAgeSec: null,
+      label: `History · ${trades.length} trades`,
+    });
+    return () => clearLiveStatus();
+  }, [loadError, trades.length]);
 
   function buildHistoryUrl(next: {
     account?: string | null;

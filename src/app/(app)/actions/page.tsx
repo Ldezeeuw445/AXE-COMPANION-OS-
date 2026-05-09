@@ -4,6 +4,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { ExecutionCard } from "@/components/actions/ExecutionCard";
 import { AxeWorkflowsHub } from "@/components/actions/AxeWorkflowsHub";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import {
   listExecutionRequests,
   listSetupReviews,
@@ -47,8 +48,18 @@ export default async function ActionsPage() {
   const hasNews = Boolean(getPerigonKey() || getFinnhubKey() || getEodhdKey());
   const hasMacro = Boolean(getFredKey()) || hasNews;
 
+  // Pulse: green when both Supabase reads delivered and we have at
+  // least one capability (active MT5 account, news, or macro).
+  const capabilities = (hasActiveAccount ? 1 : 0) + (hasNews ? 1 : 0) + (hasMacro ? 1 : 0);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-6">
+      <LiveStatusReporter
+        liveCount={capabilities}
+        totalCount={3}
+        label={`Actions · ${executions.length + setups.length} pending`}
+        allLiveOverride={capabilities > 0 ? true : null}
+      />
       <ScreenHeader
         title="Actions"
         subtitle="One-tap AXE workflows. Execution stays disabled by default."

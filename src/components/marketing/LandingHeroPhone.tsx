@@ -849,7 +849,7 @@ function AxeFrame({ seed }: { seed: number }) {
       </div>
 
       <div className="mt-3 flex flex-col gap-2">
-        <Bubble role="user">What's structure on XAU H1 right now?</Bubble>
+        <Bubble role="user">{`What's structure on XAU H1 right now?`}</Bubble>
         {showSecond ? (
           <Bubble role="axe">
             HH/HL intact — last impulse from 4682 → 4710 holds. 4698–4702 is the pull-back zone (50% Fib).

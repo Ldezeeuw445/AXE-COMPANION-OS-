@@ -8,6 +8,7 @@ import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButto
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { Badge } from "@/components/ui/Badge";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { getCockpitDashboard } from "@/services/cockpitService";
 
 export default async function CockpitPage() {
@@ -16,6 +17,12 @@ export default async function CockpitPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 pb-2">
+      <LiveStatusReporter
+        liveCount={hasSnapshot ? 1 : 0}
+        totalCount={1}
+        label={hasSnapshot ? "Cockpit · snapshot live" : "Cockpit · awaiting snapshot"}
+        allLiveOverride={hasSnapshot ? true : null}
+      />
       <ScreenHeader
         title="Assistant cockpit"
         subtitle="How your private assistant is evolving with you"

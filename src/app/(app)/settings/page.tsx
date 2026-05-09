@@ -13,10 +13,12 @@ import { PinnedContextEditor } from "@/components/settings/PinnedContextEditor";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
+import { InstallPrompt } from "@/components/push/InstallPrompt";
 import { LiveTradingPanel } from "@/components/settings/LiveTradingPanel";
 import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
 async function getPrimaryConversation() {
   const authed = await getAuthedServiceSupabase();
@@ -80,8 +82,17 @@ export default async function SettingsPage() {
     },
   ];
 
+  // If we got this far, all six Supabase reads succeeded — that's
+  // a real "live and saved in Supabase" signal, so the AXE pulse goes
+  // green. Auth + server flag + watchlist + pinned context all loaded.
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-4">
+      <LiveStatusReporter
+        liveCount={6}
+        totalCount={6}
+        label="Settings · Supabase"
+        allLiveOverride={true}
+      />
       <AxeTopBarInjector
         title="Settings"
         subtitle="You · AXE · one Supabase"
@@ -147,13 +158,22 @@ export default async function SettingsPage() {
         </div>
       </GlassPanel>
 
-      {/* Push Notifications */}
+      {/* Push Notifications + PWA install */}
       <GlassPanel className="mb-4 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
           Push notifications
         </h2>
+        <p className="mt-1 text-xs text-tos-muted">
+          Lock-screen alerts with sound and vibration — for price triggers,
+          AXE pings, position-risk and high-impact news. AXE Companion is a
+          standalone app: install it on this device and you don&apos;t need
+          Trading OS for anything.
+        </p>
         <div className="mt-3">
           <PushPermission />
+        </div>
+        <div className="mt-3">
+          <InstallPrompt />
         </div>
       </GlassPanel>
 

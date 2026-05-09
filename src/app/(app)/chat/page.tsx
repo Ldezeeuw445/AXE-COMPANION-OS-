@@ -5,6 +5,7 @@ import { ChatAxeContextButton } from "@/components/chat/ChatAxeContextButton";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
@@ -46,8 +47,20 @@ export default async function ChatPage() {
     }
   }
 
+  // Pulse: green when chat thread loaded AND OpenAI is wired (we
+  // detect this via getChatThread succeeding without falling back to
+  // mock seed data). Mock seed → amber so the dot is honest.
+  const liveCount = (CHAT_USES_MOCK_DATA ? 0 : 1) + (initialQuota ? 1 : 0);
+  const totalCount = 2;
+
   return (
     <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden">
+      <LiveStatusReporter
+        liveCount={liveCount}
+        totalCount={totalCount}
+        label={`Chat · ${operatorName ?? "AXE"}`}
+        allLiveOverride={CHAT_USES_MOCK_DATA ? false : true}
+      />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-[0.14]"

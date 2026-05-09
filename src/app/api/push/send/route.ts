@@ -23,14 +23,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "VAPID not configured" }, { status: 500 });
   }
 
-  let body: { userId?: string; title?: string; body?: string; url?: string; tag?: string };
+  let body: {
+    userId?: string;
+    title?: string;
+    body?: string;
+    url?: string;
+    tag?: string;
+    severity?: "info" | "alert" | "risk" | "high" | "low";
+    requireInteraction?: boolean;
+    silent?: boolean;
+    image?: string;
+    actions?: { action: string; title: string; icon?: string }[];
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { userId, title, body: msgBody, url, tag } = body;
+  const { userId, title, body: msgBody, url, tag, severity, requireInteraction, silent, image, actions } = body;
   if (!userId || !title) {
     return NextResponse.json({ error: "Missing userId or title" }, { status: 400 });
   }
@@ -58,6 +69,11 @@ export async function POST(req: NextRequest) {
     body: msgBody ?? "",
     url: url ?? "/chat",
     tag: tag ?? "axe-notification",
+    severity: severity ?? "alert",
+    requireInteraction: requireInteraction ?? severity === "risk",
+    silent: silent ?? false,
+    image,
+    actions,
   });
 
   const results = await Promise.allSettled(

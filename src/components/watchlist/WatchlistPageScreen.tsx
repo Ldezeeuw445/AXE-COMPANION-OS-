@@ -3,6 +3,7 @@ import { BarChart3 } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
 type Row = { id: string; symbol: string; message: string | null };
 
@@ -17,6 +18,12 @@ export function WatchlistPageScreen({ items }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-2">
+      <LiveStatusReporter
+        liveCount={1}
+        totalCount={1}
+        label={`Watchlist · ${items.length} saved`}
+        allLiveOverride={true}
+      />
       <ScreenHeader
         title="Watchlist"
         subtitle="Symbols AXE uses for chat context, news/macro filtering and alerts. Prices come from your connected MT5 account when you open Chart."

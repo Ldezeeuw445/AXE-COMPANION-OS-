@@ -7,6 +7,7 @@ import { Landmark, Copy, Check, ChevronDown, LineChart } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
 import {
   createBrokerAccountAction,
@@ -103,8 +104,18 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
   const ingestUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/axe-mt5-ingest` : "";
 
+  // The pulse is honest here: green when Supabase delivered the
+  // account list (regardless of how many accounts there are — even
+  // zero is a successful round-trip). Amber when we got a load error
+  // back from the server.
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 pb-6">
+      <LiveStatusReporter
+        liveCount={loadError ? 0 : 1}
+        totalCount={1}
+        label={`Accounts · ${initialAccounts.length} connected`}
+        allLiveOverride={loadError ? false : true}
+      />
       <ScreenHeader
         title="Accounts"
         subtitle="Connect your real MT5 account in under a minute — AXE stays read-first; execution stays off by default."

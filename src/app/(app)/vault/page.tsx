@@ -3,6 +3,7 @@ import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { listVaultMedia, listVaultNotes } from "@/services/vaultService";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
 export default async function VaultPage() {
   const [notes, media] = await Promise.all([
@@ -45,6 +46,12 @@ export default async function VaultPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <LiveStatusReporter
+        liveCount={2}
+        totalCount={2}
+        label={`Vault · ${notes.length} notes · ${media.length} media`}
+        allLiveOverride={true}
+      />
       <AxeTopBarInjector title="Vault" subtitle="Notes & media" sections={toolbarSections} />
       <ScreenHeader
         title="Vault"

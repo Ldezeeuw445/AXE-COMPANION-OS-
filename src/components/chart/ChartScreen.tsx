@@ -835,14 +835,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   ]);
 
   const sendLiveConfirmedOrder = useCallback(async () => {
-    if (!orderConfirmInput || !data.account?.brokerAccountId) return;
+    const brokerAccountId = data.account?.brokerAccountId;
+    if (!orderConfirmInput || !brokerAccountId) return;
     setOrderConfirmStatus({ kind: "sending" });
     try {
       const res = await fetch("/api/mt5/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          brokerAccountId: data.account.brokerAccountId,
+          brokerAccountId,
           symbol: orderConfirmInput.brokerSymbol,
           side: orderConfirmInput.side,
           orderType: orderConfirmInput.orderType,

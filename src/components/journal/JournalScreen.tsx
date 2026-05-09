@@ -8,6 +8,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
 import type { JournalEntryRow, TradeHighlight } from "@/lib/journal/loadJournalPageData";
 import type { JournalAnalytics } from "@/lib/journal/computeJournalAnalytics";
 import { TradeJournalLabelForm } from "@/components/journal/TradeJournalLabelForm";
@@ -85,17 +86,30 @@ export function JournalScreen({
 
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    setCenter(
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-tos-muted">
-        Journal
-      </span>,
-    );
+    // Top bar centre stays clear — AXE wordmark + pulse owns it now.
+    setCenter(null);
     setRight(<AxeContextToolbar title="Journal" subtitle={focusSymbol ? `${focusSymbol} review` : "Trades & notes"} sections={toolbarSections} />);
     return () => {
       setCenter(null);
       setRight(null);
     };
   }, [focusSymbol, setCenter, setRight, toolbarSections]);
+
+  // Pulse: green when Supabase delivered the journal payload, amber on
+  // load errors, dim if there are no entries yet (account is alive but
+  // hasn't journaled anything — silence beats fake green).
+  useEffect(() => {
+    const ok = !loadError;
+    const hasContent = entries.length > 0 || journalTrades.length > 0;
+    setLiveStatus({
+      allLive: !ok ? false : hasContent ? true : null,
+      liveCount: ok ? 1 : 0,
+      totalCount: 1,
+      freshestAgeSec: null,
+      label: `Journal · ${entries.length} notes · ${journalTrades.length} trades`,
+    });
+    return () => clearLiveStatus();
+  }, [entries.length, journalTrades.length, loadError]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">

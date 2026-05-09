@@ -6,6 +6,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import { LEGAL_COPY } from "@/lib/legal/constants";
@@ -81,8 +82,18 @@ export default async function SubscriptionsPage() {
     },
   ];
 
+  // Pulse: green when Stripe link + Supabase entitlement read both
+  // succeeded. Both are required for upgrade to actually work.
+  const upgradeReady = Boolean(supabase) && billingConfigured;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-6">
+      <LiveStatusReporter
+        liveCount={(supabase ? 1 : 0) + (billingConfigured ? 1 : 0)}
+        totalCount={2}
+        label={`Subscriptions · ${isPro ? "Pro" : "Free"}`}
+        allLiveOverride={upgradeReady ? true : false}
+      />
       <AxeTopBarInjector title="Subscriptions" subtitle={isPro ? "You’re on Pro" : "Free → Pro"} sections={toolbarSections} />
       <ScreenHeader
         left={<BrandMark />}
