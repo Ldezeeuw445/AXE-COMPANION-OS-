@@ -229,7 +229,7 @@ export function ChartOrderBookDrawer({
                 {symbol} · Depth
               </p>
               <p className="text-[9px] uppercase tracking-[0.2em] text-tos-dim">
-                Synthetic · live spread
+                Live spread · L2 estimated
               </p>
             </div>
           </div>
@@ -365,8 +365,11 @@ export function ChartOrderBookDrawer({
 
         {/* Footnote */}
         <div className="shrink-0 border-t border-white/[0.05] px-3 py-2 text-[9.5px] leading-relaxed text-tos-dim">
-          Inside spread mirrors live bid/ask from your broker. Surrounding levels
-          are estimated — MT5 retail does not expose real Level 2.
+          The L1 row (top bid + top ask) is the live quote from your MT5 broker
+          — same one the chart prices fills against. Surrounding levels are an
+          estimated falloff for visual context; MT5 retail accounts do not
+          expose true Level 2 depth, so use those rows as a spread-shape cue,
+          not as resting liquidity.
         </div>
       </aside>
     </>

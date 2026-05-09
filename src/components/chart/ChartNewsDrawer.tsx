@@ -112,6 +112,12 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
   const newsProviders = providers.filter(
     (p) => p.id === "polygon" || p.id === "perigon" || p.id === "finnhub" || p.id === "eodhd",
   );
+  // Which providers actually delivered fresh items in this fetch — used so
+  // the chip palette reflects "is this feed working right now" instead of
+  // "is the env var set". Last fetch lit them all up even when only one
+  // returned data, which read like a healthy 4-feed pipeline when it
+  // wasn't.
+  const deliveringProviders = new Set(news.map((n) => n.provider));
 
   return (
     <>
@@ -171,23 +177,40 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
           </div>
         </div>
 
-        {/* Provider chips */}
+        {/* Provider chips — three states:
+              fresh    → key configured AND delivered items in this fetch (cyan)
+              ready    → key configured but no items returned (dim cyan ring)
+              off      → no key configured                       (grey muted)
+        */}
         {newsProviders.length > 0 ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-white/[0.05] px-3 py-1.5">
-            {newsProviders.map((p) => (
-              <span
-                key={p.id}
-                className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
-                  p.state === "live"
-                    ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
-                    : "border-white/10 bg-white/[0.03] text-tos-dim"
-                }`}
-                title={p.description}
-              >
-                {p.label}
-                {p.state === "live" ? "" : " · off"}
-              </span>
-            ))}
+            {newsProviders.map((p) => {
+              const configured = p.state === "live";
+              const delivered = deliveringProviders.has(p.id);
+              const tone =
+                configured && delivered
+                  ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
+                  : configured
+                    ? "border-white/10 bg-white/[0.025] text-tos-muted"
+                    : "border-white/10 bg-white/[0.02] text-tos-dim";
+              const suffix = configured && delivered ? "" : configured ? " · idle" : " · off";
+              return (
+                <span
+                  key={p.id}
+                  className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${tone}`}
+                  title={
+                    configured && delivered
+                      ? `${p.label} delivered fresh items`
+                      : configured
+                        ? `${p.label} is connected but had no fresh items for ${symbol}`
+                        : p.description
+                  }
+                >
+                  {p.label}
+                  {suffix}
+                </span>
+              );
+            })}
             {generatedAt ? (
               <span className="ml-auto text-[9px] uppercase tracking-wider text-tos-dim">
                 {timeAgo(generatedAt)}

@@ -10,11 +10,33 @@ import { briefingForSymbol, dedupeSymbols } from "@/lib/market/symbolContext";
 
 const REVALIDATE_SECONDS = 60 * 5; // 5 min — news churns fast but we don't want to hammer
 
+/**
+ * Articles older than this are dropped before they ever reach the UI. We
+ * had a regression where Polygon's news endpoint on the user's tier was
+ * returning articles 600+ days old (Polygon free-ish news doesn't always
+ * honor `order=desc`). Trading on stale headlines is worse than no news,
+ * so we hard-filter on the way in and let the next provider take over if
+ * the freshest result is still too old.
+ */
+const MAX_ARTICLE_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
 type FetchOpts = {
   symbol: string;
   watchlist: string[];
   limit?: number;
 };
+
+function dropStale(items: NewsItem[]): NewsItem[] {
+  const cutoff = Date.now() - MAX_ARTICLE_AGE_MS;
+  const fresh: NewsItem[] = [];
+  for (const it of items) {
+    const ms = Date.parse(it.publishedAt);
+    if (Number.isFinite(ms) && ms >= cutoff) fresh.push(it);
+  }
+  // Newest first regardless of source order — some providers return ascending.
+  fresh.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+  return fresh;
+}
 
 function makeId(provider: ProviderId, raw: string | number, fallbackUrl: string): string {
   return `${provider}:${String(raw || fallbackUrl).slice(0, 80)}`;
@@ -134,14 +156,19 @@ async function fetchPolygonNews(opts: FetchOpts): Promise<NewsItem[]> {
 
   const ticker = polygonTickerForSymbol(opts.symbol);
   const limit = String(opts.limit ?? 12);
-  // First pass: with ticker filter (best signal for that symbol).
-  // If the symbol can't be mapped we fall back to general latest news,
-  // which still adds value as macro context.
+
+  // Demand fresh-only results from Polygon directly. Some Polygon plans
+  // ignore `order=desc` and return their oldest indexed articles first
+  // (we saw 600+ day old headlines in production with this exact symbol).
+  // `published_utc.gte` is documented for the news endpoint and works
+  // across tiers, so we always include it.
+  const sinceIso = new Date(Date.now() - MAX_ARTICLE_AGE_MS).toISOString();
   const params = new URLSearchParams({
     apiKey,
     limit,
     order: "desc",
     sort: "published_utc",
+    "published_utc.gte": sinceIso,
   });
   if (ticker) params.set("ticker", ticker);
 
@@ -160,6 +187,7 @@ async function fetchPolygonNews(opts: FetchOpts): Promise<NewsItem[]> {
         limit,
         order: "desc",
         sort: "published_utc",
+        "published_utc.gte": sinceIso,
       });
       const res2 = await fetch(`https://api.polygon.io/v2/reference/news?${fallback.toString()}`, {
         next: { revalidate: REVALIDATE_SECONDS, tags: ["news:polygon"] },
@@ -348,12 +376,18 @@ function decodeXml(value: string): string {
 }
 
 /**
- * Returns news from the first provider that returns items.
+ * Returns news from the first provider that returns FRESH items.
+ *
  * Order: Polygon (paid) → Perigon → Finnhub → EODHD → Google News fallback.
  * Each request is cached for 5 minutes per symbol, so repeated panel opens
  * during the same session never hit the upstream API again. FMP was
  * removed — its keys repeatedly returned empty/forbidden on the user's
  * plan and Unusual Whales now covers smart-money signal on the Intel page.
+ *
+ * Articles older than `MAX_ARTICLE_AGE_MS` are dropped per provider; if
+ * what's left is empty, the next provider is tried. This is what catches
+ * the case where Polygon returns a non-zero number of ancient articles —
+ * we treat that as "no news from Polygon" and move on to Perigon.
  */
 export async function loadNews(opts: FetchOpts): Promise<NewsItem[]> {
   const providers: Array<() => Promise<NewsItem[]>> = [
@@ -363,9 +397,23 @@ export async function loadNews(opts: FetchOpts): Promise<NewsItem[]> {
     () => fetchEodhdNews(opts),
     () => fetchGoogleNews(opts),
   ];
+  let bestStaleFallback: NewsItem[] = [];
   for (const provider of providers) {
     const items = await provider();
-    if (items.length > 0) return items;
+    if (items.length === 0) continue;
+    const fresh = dropStale(items);
+    if (fresh.length > 0) return fresh;
+    // Keep the freshest stale set as a last-resort fallback so the panel
+    // is never empty if every upstream is stale (e.g. weekend on a niche
+    // symbol). We pick the largest stale set; freshness sort already
+    // happened inside dropStale's sibling helper, so just store as-is.
+    if (items.length > bestStaleFallback.length) bestStaleFallback = items;
+  }
+  if (bestStaleFallback.length > 0) {
+    // Sort newest first so even the fallback isn't actively misleading.
+    return [...bestStaleFallback].sort(
+      (a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt),
+    );
   }
   return [];
 }

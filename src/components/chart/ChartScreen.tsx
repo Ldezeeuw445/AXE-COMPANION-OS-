@@ -97,6 +97,8 @@ const CHART_SCALE_MODES = [
 type Props = {
   data: ChartPageData;
   initialAction?: string;
+  /** Server-loaded live-trading enabled flag (from user_workspace_preferences). */
+  liveTradingEnabled?: boolean;
 };
 
 type DrawingMode = "fib_retracement" | "trendline" | null;
@@ -502,7 +504,7 @@ function TradePlanLine({
   );
 }
 
-export function ChartScreen({ data, initialAction }: Props) {
+export function ChartScreen({ data, initialAction, liveTradingEnabled = false }: Props) {
   const router = useRouter();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
@@ -684,8 +686,9 @@ export function ChartScreen({ data, initialAction }: Props) {
   const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
 
   // Order send wiring — demo fills locally, live opens a confirm modal that
-  // POSTs to /api/mt5/order. The flag is per-device (see liveTradingFlag).
-  const liveTrading = useLiveTradingFlag();
+  // POSTs to /api/mt5/order. `enabled` is server-persisted; armed window
+  // is per-device. See liveTradingFlag.ts for the split-storage model.
+  const liveTrading = useLiveTradingFlag(liveTradingEnabled);
   const isDemoAccount = data.account?.connectionMethod === "demo_paper";
   const demoBook = useDemoPositions(
     data.account?.brokerAccountId ?? null,

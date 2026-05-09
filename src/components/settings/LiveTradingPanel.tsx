@@ -18,8 +18,8 @@ import {
   useLiveTradingFlag,
 } from "@/lib/liveTrading/liveTradingFlag";
 
-export function LiveTradingPanel() {
-  const live = useLiveTradingFlag();
+export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }) {
+  const live = useLiveTradingFlag(initialEnabled);
   const [open, setOpen] = useState(false);
   const [riskAck, setRiskAck] = useState(false);
   const [responsibilityAck, setResponsibilityAck] = useState(false);
@@ -49,8 +49,9 @@ export function LiveTradingPanel() {
             Live trading
           </h2>
           <p className="mt-1 text-xs text-tos-muted">
-            Off by default on every device. Demo paper trading on AXE Demo Account always works
-            without this — virtual fills, simulated PnL on live ticks, no broker order is ever sent.
+            Off by default. Activation is account-wide (synced across your devices) and stays on
+            until you turn it off. Each device still starts disarmed and every BUY / SELL asks for
+            a final tap. Demo paper trading always works without this.
           </p>
         </div>
         <span
@@ -64,7 +65,7 @@ export function LiveTradingPanel() {
         </span>
       </header>
 
-      {!live.enabled ? (
+        {!live.enabled ? (
         <div className="mt-4 space-y-3">
           <div className="flex items-start gap-2 rounded-xl border border-amber-400/22 bg-amber-400/[0.05] px-3 py-2.5 text-[11.5px] leading-relaxed text-amber-200/90">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
@@ -77,10 +78,11 @@ export function LiveTradingPanel() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-rose-400/35 bg-rose-400/10 px-4 py-2 text-[11.5px] font-semibold text-rose-200/95 hover:bg-rose-400/16"
+            disabled={live.pending}
+            className="inline-flex items-center gap-2 rounded-full border border-rose-400/35 bg-rose-400/10 px-4 py-2 text-[11.5px] font-semibold text-rose-200/95 hover:bg-rose-400/16 disabled:opacity-55"
           >
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-            Activate live trading
+            {live.pending ? "Saving…" : "Activate live trading"}
           </button>
         </div>
       ) : (
@@ -88,8 +90,9 @@ export function LiveTradingPanel() {
           <div className="flex items-start gap-2 rounded-xl border border-cyan-400/22 bg-cyan-400/[0.04] px-3 py-2.5 text-[11.5px] leading-relaxed text-cyan-100/95">
             <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden />
             <p>
-              Live trading is enabled on this device. BUY / SELL on a connected MT5 account opens a
-              final 2‑tap confirm before any order leaves your phone. Demo Account stays virtual.
+              Live trading is enabled on your account. BUY / SELL on a connected MT5 account opens a
+              final 2‑tap confirm before any order leaves the app. The arming window below is
+              per‑device — each new device starts disarmed even when this stays on.
             </p>
           </div>
 
@@ -128,10 +131,11 @@ export function LiveTradingPanel() {
           <button
             type="button"
             onClick={() => setConfirmDisable(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-4 py-2 text-[11.5px] font-semibold text-tos-muted hover:bg-white/[0.08] hover:text-tos-text"
+            disabled={live.pending}
+            className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.04] px-4 py-2 text-[11.5px] font-semibold text-tos-muted hover:bg-white/[0.08] hover:text-tos-text disabled:opacity-55"
           >
             <ShieldOff className="h-3.5 w-3.5" aria-hidden />
-            Disable live trading on this device
+            {live.pending ? "Saving…" : "Disable live trading"}
           </button>
         </div>
       )}
@@ -148,9 +152,10 @@ export function LiveTradingPanel() {
           setPhrase={setPhrase}
           phraseMatches={phraseMatches}
           canEnable={canEnable}
+          pending={live.pending}
           onClose={() => setOpen(false)}
-          onEnable={() => {
-            live.enable();
+          onEnable={async () => {
+            await live.enable();
             live.arm();
             setOpen(false);
           }}
@@ -160,9 +165,10 @@ export function LiveTradingPanel() {
 
       {confirmDisable ? (
         <DisableModal
+          pending={live.pending}
           onClose={() => setConfirmDisable(false)}
-          onConfirm={() => {
-            live.disable();
+          onConfirm={async () => {
+            await live.disable();
             setConfirmDisable(false);
           }}
         />
@@ -191,6 +197,7 @@ function ActivateModal({
   setPhrase,
   phraseMatches,
   canEnable,
+  pending,
   onClose,
   onEnable,
   armWindowMin,
@@ -205,8 +212,9 @@ function ActivateModal({
   setPhrase: (s: string) => void;
   phraseMatches: boolean;
   canEnable: boolean;
+  pending: boolean;
   onClose: () => void;
-  onEnable: () => void;
+  onEnable: () => void | Promise<void>;
   armWindowMin: number;
 }) {
   return (
@@ -294,10 +302,10 @@ function ActivateModal({
           <button
             type="button"
             onClick={onEnable}
-            disabled={!canEnable}
+            disabled={!canEnable || pending}
             className="rounded-xl border border-rose-400/40 bg-rose-400/12 px-4 py-2.5 text-[12px] font-semibold text-rose-100/95 hover:bg-rose-400/18 disabled:cursor-not-allowed disabled:opacity-45"
           >
-            Enable live trading
+            {pending ? "Saving…" : "Enable live trading"}
           </button>
         </div>
       </div>
@@ -305,7 +313,15 @@ function ActivateModal({
   );
 }
 
-function DisableModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
+function DisableModal({
+  onClose,
+  onConfirm,
+  pending,
+}: {
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+  pending: boolean;
+}) {
   return (
     <div
       className="fixed inset-0 z-[100] flex items-end justify-center bg-black/72 p-4 backdrop-blur sm:items-center"
@@ -315,11 +331,11 @@ function DisableModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: 
     >
       <div className="w-full max-w-sm rounded-2xl border border-white/12 bg-[#08080C] p-5">
         <p className="text-[14px] font-semibold tracking-tight text-tos-text">
-          Disable live trading on this device?
+          Disable live trading?
         </p>
         <p className="mt-2 text-[12px] leading-relaxed text-tos-muted">
-          BUY / SELL on connected MT5 accounts will stop sending orders. Demo Account paper trading
-          continues to work. You can re-activate any time.
+          BUY / SELL on connected MT5 accounts will stop sending orders on every device using this
+          account. Demo Account paper trading continues to work. You can re-activate any time.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
@@ -332,9 +348,10 @@ function DisableModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: 
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-xl border border-rose-400/35 bg-rose-400/10 px-4 py-2 text-[12px] font-semibold text-rose-200/95 hover:bg-rose-400/15"
+            disabled={pending}
+            className="rounded-xl border border-rose-400/35 bg-rose-400/10 px-4 py-2 text-[12px] font-semibold text-rose-200/95 hover:bg-rose-400/15 disabled:opacity-55"
           >
-            Disable
+            {pending ? "Saving…" : "Disable"}
           </button>
         </div>
       </div>

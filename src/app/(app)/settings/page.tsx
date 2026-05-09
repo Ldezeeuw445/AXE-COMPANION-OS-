@@ -14,6 +14,7 @@ import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
 import { LiveTradingPanel } from "@/components/settings/LiveTradingPanel";
+import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 
@@ -36,12 +37,13 @@ async function getPrimaryConversation() {
 }
 
 export default async function SettingsPage() {
-  const [metrics, memory, conversation, watchlist, accountName] = await Promise.all([
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
     listWatchlistItems(),
     getAccountName(),
+    getLiveTradingServerState(),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -156,9 +158,11 @@ export default async function SettingsPage() {
       </GlassPanel>
 
       {/* Live trading — sits between push and Trading OS callout. Off by default;
-          enabling requires a 3-checkbox + typed-phrase disclaimer per device. */}
+          enabling requires a 3-checkbox + typed-phrase disclaimer. The
+          flag itself is account-wide (Supabase), the arming window stays
+          per-device. */}
       <div className="mb-4">
-        <LiveTradingPanel />
+        <LiveTradingPanel initialEnabled={liveTrading.enabled} />
       </div>
 
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}
