@@ -102,6 +102,8 @@ type Props = {
 };
 
 type DrawingMode = "fib_retracement" | "trendline" | null;
+type OrderTicketType = "market" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop";
+type PendingOrderTicketType = Exclude<OrderTicketType, "market">;
 
 function chatQ(text: string): string {
   return `/chat?q=${encodeURIComponent(text)}`;
@@ -768,7 +770,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [pendingTakeProfitPrice, setPendingTakeProfitPrice] = useState<number | null>(null);
   const [pendingOrderVisible, setPendingOrderVisible] = useState(false);
   const [tradeVolume, setTradeVolume] = useState("0.10");
-  const [pendingOrderType, setPendingOrderType] = useState<"market" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop">("market");
+  const [executionMode, setExecutionMode] = useState<"market" | "pending">("market");
+  const [pendingOrderType, setPendingOrderType] = useState<OrderTicketType>("market");
   const [orderTypeMenuOpen, setOrderTypeMenuOpen] = useState(false);
   const [lotMenuOpen, setLotMenuOpen] = useState(false);
   const [deviationPoints, setDeviationPoints] = useState(10);
@@ -800,10 +803,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   }, [tradeToast]);
 
   const showPendingTradePlan = useCallback(
-    (side: "buy" | "sell") => {
+    (side: "buy" | "sell", type?: PendingOrderTicketType) => {
       const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
       const distance = draggablePlanDistance(data.candles, entry);
       setPendingOrderSide(side);
+      setExecutionMode("pending");
+      setPendingOrderType(type ?? (side === "buy" ? "buy_limit" : "sell_limit"));
       setPendingOrderVisible(true);
       if (entry != null && Number.isFinite(entry)) {
         const sideChanged = side !== pendingOrderSide;
@@ -828,13 +833,24 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
    *   - Live account, flag off → toast + soft CTA pointing to /settings.
    *   - Live account, flag on → open ChartOrderConfirm; modal posts to API.
    */
-  const handleSendCurrentPlan = useCallback(() => {
-    const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice ?? null;
+  const handleSendCurrentPlan = useCallback((override?: {
+    side?: "buy" | "sell";
+    orderType?: OrderTicketType;
+    entryPrice?: number | null;
+  }) => {
+    const orderType = override?.orderType ?? pendingOrderType;
+    const side = override?.side ?? pendingOrderSide;
+    const isMarketOrder = orderType === "market";
+    const entry = isMarketOrder
+      ? (override?.entryPrice ?? livePrice ?? data.lastPrice ?? null)
+      : (override?.entryPrice ?? pendingOrderPrice ?? livePrice ?? data.lastPrice ?? null);
     if (entry == null || !Number.isFinite(entry)) {
       setTradeToast({
         kind: "error",
         title: "No live price yet",
-        body: "Wait for the next tick before sending an order.",
+        body: isMarketOrder
+          ? "Wait for the next tick before sending a market order."
+          : "Wait for the next tick before setting a pending order.",
       });
       return;
     }
@@ -846,17 +862,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     if (isDemoAccount) {
       const opened = demoBook.open({
         symbol: data.symbol,
-        side: pendingOrderSide,
+        side,
         volume: tradeVolumeNum,
         entryPrice: entry,
-        stopLoss: pendingStopLossPrice,
-        takeProfit: pendingTakeProfitPrice,
+        stopLoss: isMarketOrder ? null : pendingStopLossPrice,
+        takeProfit: isMarketOrder ? null : pendingTakeProfitPrice,
       });
       if (opened) {
         setPendingOrderVisible(false);
         setTradeToast({
           kind: "demo",
-          title: `Demo ${pendingOrderSide.toUpperCase()} ${data.symbol} filled`,
+          title: `Demo ${side.toUpperCase()} ${data.symbol} ${isMarketOrder ? "market filled" : "plan filled"}`,
           body: `${tradeVolumeNum.toFixed(2)} lots @ ${entry.toFixed(priceDigitsForSymbol(data.brokerSymbol))}. Virtual position only — no broker order sent.`,
         });
       } else {
@@ -892,14 +908,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setOrderConfirmInput({
       symbol: data.symbol,
       brokerSymbol: data.brokerSymbol,
-      side: pendingOrderSide,
-      orderType: pendingOrderType,
+      side,
+      orderType,
       volume: tradeVolumeNum,
       digits: priceDigitsForSymbol(data.brokerSymbol),
-      openPrice: pendingOrderType === "market" ? null : entry,
+      openPrice: isMarketOrder ? null : entry,
       livePrice,
-      stopLoss: pendingStopLossPrice,
-      takeProfit: pendingTakeProfitPrice,
+      stopLoss: isMarketOrder ? null : pendingStopLossPrice,
+      takeProfit: isMarketOrder ? null : pendingTakeProfitPrice,
       slippagePoints: deviationPoints,
       accountLabel: data.account?.label ?? "MT5 Account",
     });
@@ -1915,7 +1931,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           symbol={data.brokerSymbol}
           annotations={annotations}
           drawingMode={drawingMode}
-          navigationLocked={pendingOrderVisible}
+          navigationLocked={pendingOrderVisible && executionMode === "pending"}
           onPointClick={handlePointClick}
         />
 
@@ -1953,12 +1969,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           onChange={setFutureProjectionX}
         />
 
-        {pendingOrderVisible ? (
+        {pendingOrderVisible && executionMode === "pending" ? (
           <>
             <TradePlanLine
               canvasRef={canvasRef}
               price={pendingOrderPrice}
-              label={`${pendingOrderSide.toUpperCase()} LIMIT`}
+              label={orderTypeLabel(pendingOrderType)}
               color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={setPendingOrderPrice}
@@ -1983,7 +1999,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             />
             <button
               type="button"
-              onClick={() => setPendingOrderVisible(false)}
+              onClick={() => {
+                setPendingOrderVisible(false);
+                setExecutionMode("market");
+              }}
               className="absolute right-3 top-12 z-30 inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/82 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
               aria-label="Cancel pending order overlay"
             >
@@ -1994,7 +2013,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 Demo: virtual fill. Live: ChartOrderConfirm. */}
             <button
               type="button"
-              onClick={handleSendCurrentPlan}
+              onClick={() => handleSendCurrentPlan()}
               className={`absolute right-3 top-[5.25rem] z-30 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wider shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur transition ${
                 pendingOrderSide === "buy"
                   ? "border border-cyan-300/60 bg-cyan-400/22 text-cyan-50 hover:bg-cyan-400/30"
@@ -2511,18 +2530,28 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.16),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]" />
           <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
           <div className="relative z-10">
-        {/* Top row: SELL · Lots · BUY (MT5-style price tickets) */}
+        {/* Row 1: SELL · MKT / Lots / BUY · MKT. These buttons are
+            market-only now. Pending orders are sent from the separate
+            gold Set ▶ row below, so a Buy/ Sell tap can never
+            accidentally place a limit/stop. */}
         <div className="flex h-11 items-stretch gap-1">
           <button
             type="button"
             className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
-              pendingOrderSide === "sell"
+              executionMode === "market" && pendingOrderSide === "sell"
                 ? "bg-gradient-to-r from-[#3A0710] via-[#9C1A26] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.32)]"
                 : "bg-gradient-to-r from-[#1A0408] via-[#4A0C13] to-[#7A1722] text-white/85"
             }`}
-            onClick={() => showPendingTradePlan("sell")}
+            onClick={() => {
+              setPendingOrderSide("sell");
+              setExecutionMode("market");
+              setPendingOrderType("market");
+              setPendingOrderVisible(false);
+              handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
+            }}
+            aria-label="Sell market"
           >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Sell</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Sell · MKT</span>
             <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
           </button>
           <button
@@ -2537,41 +2566,77 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           <button
             type="button"
             className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
-              pendingOrderSide === "buy"
+              executionMode === "market" && pendingOrderSide === "buy"
                 ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(34,211,238,0.32)]"
                 : "bg-gradient-to-r from-[#03252A] via-[#0A5662] to-[#11808D] text-white/85"
             }`}
-            onClick={() => showPendingTradePlan("buy")}
+            onClick={() => {
+              setPendingOrderSide("buy");
+              setExecutionMode("market");
+              setPendingOrderType("market");
+              setPendingOrderVisible(false);
+              handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
+            }}
+            aria-label="Buy market"
           >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Buy</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Buy · MKT</span>
             <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
           </button>
         </div>
 
-        {/* Second row: order type · SL/TP · Deviation · expand (MT5 layout). */}
+        {/* Order-type chip row. Selecting a pending type opens the
+            dedicated pending row; selecting Market hides it. */}
         <div className="mt-1 flex h-9 items-stretch gap-1">
           <button
             type="button"
             onClick={() => setOrderTypeMenuOpen((v) => !v)}
             className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-black/50 px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+            aria-label="Choose execution type"
           >
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/12 text-cyan-200">
               <ChevronDown className="h-3 w-3" />
             </span>
             <span className="truncate uppercase tracking-wide text-tos-text">
-              {orderTypeLabel(pendingOrderType)}
+              {executionMode === "market" ? "Market execution" : orderTypeLabel(pendingOrderType)}
             </span>
             <span className="ml-auto font-mono text-[11px] text-tos-muted">
-              {tradeVolume}
+              {executionMode === "pending" && pendingOrderPrice != null
+                ? pendingOrderPrice.toFixed(priceDigitsForSymbol(data.brokerSymbol))
+                : tradeVolume}
             </span>
           </button>
+          <button
+            type="button"
+            onClick={() => setDeviationPoints((v) => (v >= 100 ? 1 : v + 5))}
+            className="flex min-w-[3.4rem] items-center justify-center gap-1 rounded-[1.05rem] border border-white/[0.08] bg-black/45 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
+            aria-label="Cycle slippage / deviation"
+            title="Slippage / Deviation in points"
+          >
+            <span>DEV</span>
+            <span className="font-mono text-[10px] text-tos-text">{deviationPoints}</span>
+          </button>
+        </div>
+
+        {/* Row 2: pending-only ticket. This is the only place pending
+            Limit/Stop orders can be submitted. */}
+        {executionMode === "pending" ? (
+        <div className="mt-1 flex h-9 items-stretch gap-1">
+          <div className={`flex min-w-[5.1rem] items-center justify-center rounded-[1.05rem] border px-2 text-[10px] font-bold uppercase tracking-wide ${
+            pendingOrderSide === "buy"
+              ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+              : "border-rose-300/35 bg-rose-400/12 text-rose-100"
+          }`}>
+            {orderTypeLabel(pendingOrderType)}
+          </div>
           <button
             type="button"
             onClick={() => {
               const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
               if (entry == null || !Number.isFinite(entry)) return;
               const distance = draggablePlanDistance(data.candles, entry);
-              setPendingStopLossPrice(pendingOrderSide === "buy" ? entry - distance : entry + distance);
+              setPendingStopLossPrice((prev) =>
+                prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
+              );
               setPendingOrderVisible(true);
             }}
             className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
@@ -2589,7 +2654,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
               if (entry == null || !Number.isFinite(entry)) return;
               const distance = draggablePlanDistance(data.candles, entry);
-              setPendingTakeProfitPrice(pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6);
+              setPendingTakeProfitPrice((prev) =>
+                prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
+              );
               setPendingOrderVisible(true);
             }}
             className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
@@ -2603,15 +2670,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </button>
           <button
             type="button"
-            onClick={() => setDeviationPoints((v) => (v >= 100 ? 1 : v + 5))}
-            className="flex min-w-[3.4rem] items-center justify-center gap-1 rounded-[1.05rem] border border-white/[0.08] bg-black/45 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
-            aria-label="Cycle slippage / deviation"
-            title="Slippage / Deviation in points"
+            onClick={() => handleSendCurrentPlan()}
+            className="flex min-w-[4.15rem] items-center justify-center rounded-[1.05rem] border border-amber-300/55 bg-amber-400/18 px-2 text-[10px] font-black uppercase tracking-wider text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.12)] hover:bg-amber-400/25"
+            aria-label={`Set pending ${orderTypeLabel(pendingOrderType)}`}
           >
-            <span>DEV</span>
-            <span className="font-mono text-[10px] text-tos-text">{deviationPoints}</span>
+            Set ▶
           </button>
         </div>
+        ) : null}
           </div>
         </div>
       </div>
@@ -2649,8 +2715,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     setPendingOrderType(opt.id);
                     if (opt.id !== "market") {
                       const sideForType = opt.id.startsWith("buy") ? "buy" : "sell";
-                      showPendingTradePlan(sideForType);
+                      showPendingTradePlan(sideForType, opt.id);
                     } else {
+                      setExecutionMode("market");
                       setPendingOrderVisible(false);
                     }
                     setOrderTypeMenuOpen(false);
@@ -2667,8 +2734,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             })}
           </div>
           <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
-            Pending types draw a movable plan line on the chart — drag the SL/TP/limit to fine-tune, then
-            tap BUY or SELL to send the ticket via the actions queue.
+            Market uses the red/cyan MKT tickets immediately. Pending types draw a movable plan line —
+            drag entry/SL/TP, then press the gold Set ▶ button.
           </p>
         </div>
       ) : null}
