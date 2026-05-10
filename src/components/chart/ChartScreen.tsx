@@ -545,6 +545,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
+  const [indicatorRailOpen, setIndicatorRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
   const [indicatorToolFlags, setIndicatorToolFlags] = useState<Record<string, boolean>>({});
   // How many order blocks to render per direction. Default 1 bullish + 1
@@ -2107,18 +2108,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-1/2 z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-[36%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             toolRailOpen
               ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.2)]"
               : "border-cyan-400/18 bg-black/78 text-cyan-200"
           }`}
-          aria-label="Toggle chart toolbar"
+          aria-label="Toggle SMC chart toolbar"
         >
           <span className="h-8 w-1 rounded-full bg-current opacity-80" aria-hidden />
         </button>
 
         <div
-          className={`absolute left-0 top-1/2 z-30 w-[13.75rem] -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-[36%] z-30 w-[13.75rem] max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
         >
@@ -2185,40 +2186,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
                 }`}
                 aria-label={item.label}
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-                <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
-              </button>
-            );
-          })}
-
-          <div className="col-span-3 mt-2 border-t border-white/[0.07] pt-2 text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-100/85">
-            Indicators
-          </div>
-          {[
-            { id: "volume", label: "VOL", icon: BarChart3 },
-            { id: "ma", label: "MA", icon: LineChart },
-            { id: "macd", label: "MACD", icon: Activity },
-            { id: "bollinger", label: "BOL", icon: BarChart2 },
-            { id: "rsi", label: "RSI", icon: Activity },
-            { id: "vwap", label: "VWAP", icon: Landmark },
-            { id: "poc", label: "POC", icon: Crosshair },
-          ].map((item) => {
-            const Icon = item.icon;
-            const active = Boolean(indicatorToolFlags[item.id]);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => toggleIndicatorFlag(item.id)}
-                title={item.label}
-                className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
-                  active
-                    ? "border-amber-300/45 bg-amber-400/16 text-amber-100"
-                    : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-amber-100"
-                }`}
-                aria-label={`Toggle ${item.label}`}
-                aria-pressed={active}
               >
                 <Icon className="h-4 w-4" aria-hidden />
                 <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
@@ -2471,6 +2438,61 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               ) : null}
             </>
           ) : null}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIndicatorRailOpen((v) => !v)}
+          className={`absolute left-0 top-[70%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+            indicatorRailOpen
+              ? "border-amber-300/45 bg-amber-400/18 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.18)]"
+              : "border-amber-400/18 bg-black/78 text-amber-200"
+          }`}
+          aria-label="Toggle indicator toolbar"
+        >
+          <span className="h-8 w-1 rounded-full bg-current opacity-80" aria-hidden />
+        </button>
+
+        <div
+          className={`absolute left-0 top-[70%] z-30 w-[13.75rem] -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+            indicatorRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
+          }`}
+        >
+          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-100/85">
+            Indicators
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { id: "volume", label: "VOL", icon: BarChart3 },
+              { id: "ma", label: "MA", icon: LineChart },
+              { id: "macd", label: "MACD", icon: Activity },
+              { id: "bollinger", label: "BOL", icon: BarChart2 },
+              { id: "rsi", label: "RSI", icon: Activity },
+              { id: "vwap", label: "VWAP", icon: Landmark },
+              { id: "poc", label: "POC", icon: Crosshair },
+            ].map((item) => {
+              const Icon = item.icon;
+              const active = Boolean(indicatorToolFlags[item.id]);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => toggleIndicatorFlag(item.id)}
+                  title={item.label}
+                  className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                    active
+                      ? "border-amber-300/45 bg-amber-400/16 text-amber-100"
+                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-amber-100"
+                  }`}
+                  aria-label={`Toggle ${item.label}`}
+                  aria-pressed={active}
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                  <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

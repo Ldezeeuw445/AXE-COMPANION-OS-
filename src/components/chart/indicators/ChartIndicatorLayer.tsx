@@ -869,48 +869,58 @@ function VolumetricRightRailLabel({
 }
 
 /**
- * Volumetric split fill — the OB band is split horizontally into a
- * green sub-block (buyer share, on the bottom) and a red sub-block
- * (seller share, on the top). Heights are proportional to actual
- * tickVolume from candles inside the band, so a 70/30 buyer-dominant
- * OB looks visually 70/30 — exactly the LuxAlgo reference.
+ * Volumetric split bar — the OB is drawn as one solid horizontal bar
+ * whose red/teal segment lengths match seller/buyer tick-volume share.
+ * Example: seller 20 / buyer 80 means the teal segment is four times
+ * longer than the red segment.
  */
 function VolumetricSplitFill({ zone }: { zone: Zone }) {
   const v = zone.volumetric;
   if (!v || v.totalVolume <= 0) return null;
-  const sellerHeight = zone.height * (v.sellerPercent / 100);
-  const buyerHeight = zone.height - sellerHeight;
-  const buyerFill = "rgba(45,212,191,0.18)";
-  const sellerFill = "rgba(244,63,94,0.18)";
+  const barWidth = Math.max(2, (zone.extend ? zone.extendX : zone.detectionEndX) - zone.x);
+  const sellerWidth = barWidth * (v.sellerPercent / 100);
+  const buyerWidth = barWidth - sellerWidth;
+  const barHeight = Math.min(8, Math.max(3, zone.height - 4));
+  const y = zone.midY - barHeight / 2;
+  const buyerFill = "rgba(45,212,191,0.64)";
+  const sellerFill = "rgba(244,63,94,0.64)";
   return (
     <g pointerEvents="none">
-      {sellerHeight > 0 ? (
+      <rect
+        x={zone.x}
+        y={y}
+        width={barWidth}
+        height={barHeight}
+        fill="rgba(2,6,23,0.62)"
+        rx={barHeight / 2}
+      />
+      {sellerWidth > 0.5 ? (
         <rect
           x={zone.x}
-          y={zone.y}
-          width={Math.max(2, zone.detectionEndX - zone.x)}
-          height={sellerHeight}
+          y={y}
+          width={sellerWidth}
+          height={barHeight}
           fill={sellerFill}
+          rx={barHeight / 2}
         />
       ) : null}
-      {buyerHeight > 0 ? (
+      {buyerWidth > 0.5 ? (
         <rect
-          x={zone.x}
-          y={zone.y + sellerHeight}
-          width={Math.max(2, zone.detectionEndX - zone.x)}
-          height={buyerHeight}
+          x={zone.x + sellerWidth}
+          y={y}
+          width={buyerWidth}
+          height={barHeight}
           fill={buyerFill}
+          rx={barHeight / 2}
         />
       ) : null}
-      {/* Equilibrium split line where buyer:seller balance sits */}
       <line
-        x1={zone.x}
-        x2={zone.detectionEndX}
-        y1={zone.y + sellerHeight}
-        y2={zone.y + sellerHeight}
+        x1={zone.x + sellerWidth}
+        x2={zone.x + sellerWidth}
+        y1={y - 1}
+        y2={y + barHeight + 1}
         stroke="rgba(255,255,255,0.55)"
         strokeWidth={0.7}
-        strokeDasharray="2 2"
       />
     </g>
   );
@@ -941,110 +951,50 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   // OB → LuxAlgo "Volumetric" layout: filled band + horizontal volume
   // split + dashed top/bottom rays extending right.
   if (variant === "ob") {
+    const obWidth = Math.max(2, (zone.extend ? zone.extendX : detectionEndX) - zone.x);
     return (
       <g opacity={fadeFactor}>
-        {/* Solid detected zone — base fill */}
+        {/* One continuous OB strip. The volumetric bar below is split by
+            buyer/seller percent across this same width, so there is no
+            short half-red/half-teal block followed by dashed leftovers. */}
         <rect
           x={zone.x}
           y={zone.y}
-          width={Math.max(2, detectionWidth)}
+          width={obWidth}
           height={zone.height}
           fill={zone.fill}
           stroke={zone.stroke}
           strokeWidth={1}
           rx={3}
         />
-        {/* Volumetric horizontal split (green buyer % bottom / red seller % top) */}
+        {/* Volumetric horizontal split (length = buyer/seller percent). */}
         {zone.volumetric && zone.volumetric.totalVolume > 0 ? (
           <VolumetricSplitFill zone={zone} />
-        ) : null}
-        {/* DASHED top edge ray, extending right past the detection zone.
-            Mirrors the LuxAlgo "1.082K (13%)" reference photo. */}
-        {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y}
-            y2={zone.y}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.95}
-          />
-        ) : null}
-        {/* DASHED bottom edge ray */}
-        {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y + zone.height}
-            y2={zone.y + zone.height}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.95}
-          />
         ) : null}
       </g>
     );
   }
 
-  // iFVG → source FVG box keeps its original size after polarity flip.
-  // Only colour changes (cyan ↔ red), then the flipped zone projects
-  // forward with dashed top / bottom rays just like Order Blocks. This
-  // keeps the visual box identical to the FVG that created it instead
-  // of stretching the detected box out to the later inversion candle.
+  // iFVG → rendered as one clean straight polarity line, not a filled
+  // FVG corridor. The color is the flipped state: support/bullish cyan
+  // or resistance/bearish red.
   if (variant === "ifvg") {
+    const lineEndX = zone.extend ? zone.extendX : detectionEndX;
     return (
       <g opacity={fadeFactor}>
-        <rect
-          x={zone.x}
-          y={zone.y}
-          width={Math.max(2, detectionWidth)}
-          height={zone.height}
-          fill={zone.fill}
-          stroke={zone.stroke}
-          strokeWidth={1}
-          strokeDasharray="3 3"
-          rx={2}
-        />
-        {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y}
-            y2={zone.y}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.95}
-          />
-        ) : null}
-        {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y + zone.height}
-            y2={zone.y + zone.height}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.95}
-          />
-        ) : null}
         <line
           x1={zone.x}
-          x2={zone.extend ? zone.extendX : detectionEndX}
+          x2={lineEndX}
           y1={zone.midY}
           y2={zone.midY}
           stroke={zone.stroke}
-          strokeWidth={0.85}
-          strokeDasharray="4 3"
-          opacity={0.85}
+          strokeWidth={2}
+          strokeLinecap="round"
+          opacity={0.95}
         />
         <text
           x={zone.x + 4}
-          y={zone.y + 10}
+          y={zone.midY - 4}
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
           fontSize="9"
           fontWeight="700"
@@ -1545,10 +1495,14 @@ type SupplyDemandGeom = {
 };
 
 /**
- * Find the most recent swing-high and swing-low using the SAME pivot
- * detection that `buildSwingPointLevels` already runs (strength=5,
+ * Find the nearest still-valid swing supply and demand using the SAME
+ * pivot detection that `buildSwingPointLevels` already runs (strength=5,
  * compactStructurePivots cleanup) so the band edges are guaranteed to
  * sit on dots the user can also see when Swings is on.
+ *
+ * Validity matters: a swing high below the current price is no longer
+ * supply, and a swing low above the current price is no longer demand.
+ * Hide the indicator instead of drawing misleading zones.
  *
  * Returns `null` when there isn't enough confirmed structure yet — the
  * caller should hide the bands rather than guess.
@@ -1574,13 +1528,22 @@ function buildSupplyDemandBands(
     }
   }
   const compacted = compactStructurePivots(pivots, 4, averageRange(candles) * 0.65);
-  // Walk backward to grab the most recent confirmed pivot of each kind.
+  const latestClose = candles[candles.length - 1]?.close;
+  if (typeof latestClose !== "number" || !Number.isFinite(latestClose)) return null;
+
+  // Walk backward to grab the most recent unbroken supply above price and
+  // demand below price. This prevents a red Supply band appearing far
+  // below live BTC after price has already broken that old swing high.
   let latestHigh: StructurePivot | null = null;
   let latestLow: StructurePivot | null = null;
   for (let i = compacted.length - 1; i >= 0; i -= 1) {
     const pivot = compacted[i];
-    if (pivot.kind === "high" && latestHigh == null) latestHigh = pivot;
-    if (pivot.kind === "low" && latestLow == null) latestLow = pivot;
+    if (pivot.kind === "high" && latestHigh == null && pivot.price > latestClose) {
+      latestHigh = pivot;
+    }
+    if (pivot.kind === "low" && latestLow == null && pivot.price < latestClose) {
+      latestLow = pivot;
+    }
     if (latestHigh && latestLow) break;
   }
   if (!latestHigh || !latestLow) return null;

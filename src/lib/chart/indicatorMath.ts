@@ -37,7 +37,7 @@ export function emaSeries(values: Array<number | null>, period: number): Array<n
   if (period <= 0) return out;
   const multiplier = 2 / (period + 1);
   let ema: number | null = null;
-  let seed: number[] = [];
+  const seed: number[] = [];
   for (let i = 0; i < values.length; i += 1) {
     const value = values[i];
     if (value == null || !Number.isFinite(value)) continue;
