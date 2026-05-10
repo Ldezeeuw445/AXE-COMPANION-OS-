@@ -546,6 +546,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
+  const [indicatorToolFlags, setIndicatorToolFlags] = useState<Record<string, boolean>>({});
   // How many order blocks to render per direction. Default 1 bullish + 1
   // bearish; user can pick 2 or 3 each side via the small picker that
   // appears when OB is active. Persisted per device.
@@ -580,6 +581,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       if (rawFvg === 1 || rawFvg === 2 || rawFvg === 3) setFvgCount(rawFvg);
       const rawProj = Number(localStorage.getItem("axe.chart.projectionCount") ?? "");
       if (rawProj === 1 || rawProj === 2 || rawProj === 3) setProjectionCount(rawProj);
+      const rawIndicatorFlags = localStorage.getItem("axe.chart.indicatorFlags");
+      if (rawIndicatorFlags) {
+        const parsed = JSON.parse(rawIndicatorFlags) as Record<string, unknown>;
+        setIndicatorToolFlags({
+          volume: Boolean(parsed.volume),
+          ma: Boolean(parsed.ma),
+          macd: Boolean(parsed.macd),
+          bollinger: Boolean(parsed.bollinger),
+          rsi: Boolean(parsed.rsi),
+          vwap: Boolean(parsed.vwap),
+          poc: Boolean(parsed.poc),
+        });
+      } else {
+        // Carry existing users forward: VOL / MA / RSI used to live in
+        // the SMC rail under activeToolFlags. New installs default to
+        // off, but if those old flags are in localStorage later this
+        // leaves room for a non-breaking migration.
+        setIndicatorToolFlags({});
+      }
       const rawFib = localStorage.getItem("axe.chart.fibMode");
       if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd" || rawFib === "sd") {
         setFibMode(rawFib);
@@ -687,9 +707,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   // MT5-style resizable indicator panes. Defaults match what we previously
   // hard-coded; users can drag the divider on top of each pane to taste.
-  const [paneHeights, setPaneHeights] = useState<{ volume: number; rsi: number }>({
+  const [paneHeights, setPaneHeights] = useState<{ volume: number; rsi: number; macd: number }>({
     volume: 108,
     rsi: 120,
+    macd: 112,
   });
 
   // Hydrate pane heights from localStorage once on mount.
@@ -697,16 +718,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     try {
       const v = Number(localStorage.getItem("axe.chart.paneHeight.volume") ?? "");
       const r = Number(localStorage.getItem("axe.chart.paneHeight.rsi") ?? "");
+      const m = Number(localStorage.getItem("axe.chart.paneHeight.macd") ?? "");
       setPaneHeights((prev) => ({
         volume: Number.isFinite(v) && v >= 70 ? v : prev.volume,
         rsi: Number.isFinite(r) && r >= 70 ? r : prev.rsi,
+        macd: Number.isFinite(m) && m >= 70 ? m : prev.macd,
       }));
     } catch {
       /* localStorage may be blocked — fall back to defaults */
     }
   }, []);
 
-  const setPaneHeight = useCallback((mode: "volume" | "rsi", next: number) => {
+  const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
     setPaneHeights((prev) => ({ ...prev, [mode]: next }));
     try {
       localStorage.setItem(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
@@ -1725,6 +1748,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setActiveToolFlags((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
+  const toggleIndicatorFlag = useCallback((id: string) => {
+    setIndicatorToolFlags((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try {
+        localStorage.setItem("axe.chart.indicatorFlags", JSON.stringify(next));
+      } catch {
+        /* localStorage may be blocked */
+      }
+      return next;
+    });
+  }, []);
+
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
     return [
       {
@@ -1944,7 +1979,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           fvgCount={fvgCount}
           projectionCount={projectionCount}
           active={{
-            ma: activeToolFlags.ma,
+            ma: indicatorToolFlags.ma,
+            bollinger: indicatorToolFlags.bollinger,
+            vwap: indicatorToolFlags.vwap,
+            poc: indicatorToolFlags.poc,
             structure: activeToolFlags.structure,
             orderBlocks: activeToolFlags.orderBlocks,
             fvg: activeToolFlags.fvg,
@@ -2119,9 +2157,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             { id: "pdq", label: "PDQ", icon: Maximize2, active: Boolean(activeToolFlags.pdq), action: () => toggleToolFlag("pdq") },
             { id: "supplyDemand", label: "S/D", icon: Layers, active: Boolean(activeToolFlags.supplyDemand), action: () => toggleToolFlag("supplyDemand") },
             { id: "swingPoints", label: "Swings", icon: GitBranch, active: Boolean(activeToolFlags.swingPoints), action: () => toggleToolFlag("swingPoints") },
-            { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
-            { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
-            { id: "ma", label: "MA", icon: LineChart, active: Boolean(activeToolFlags.ma), action: () => toggleToolFlag("ma") },
             // Future projection cursor — toggleable so traders who don't
             // need it can keep the chart frame totally clean. Persisted
             // per-symbol/timeframe via the cursor's own storage key.
@@ -2150,6 +2185,40 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
                 }`}
                 aria-label={item.label}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+                <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+              </button>
+            );
+          })}
+
+          <div className="col-span-3 mt-2 border-t border-white/[0.07] pt-2 text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-100/85">
+            Indicators
+          </div>
+          {[
+            { id: "volume", label: "VOL", icon: BarChart3 },
+            { id: "ma", label: "MA", icon: LineChart },
+            { id: "macd", label: "MACD", icon: Activity },
+            { id: "bollinger", label: "BOL", icon: BarChart2 },
+            { id: "rsi", label: "RSI", icon: Activity },
+            { id: "vwap", label: "VWAP", icon: Landmark },
+            { id: "poc", label: "POC", icon: Crosshair },
+          ].map((item) => {
+            const Icon = item.icon;
+            const active = Boolean(indicatorToolFlags[item.id]);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => toggleIndicatorFlag(item.id)}
+                title={item.label}
+                className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                  active
+                    ? "border-amber-300/45 bg-amber-400/16 text-amber-100"
+                    : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-amber-100"
+                }`}
+                aria-label={`Toggle ${item.label}`}
+                aria-pressed={active}
               >
                 <Icon className="h-4 w-4" aria-hidden />
                 <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
@@ -2499,7 +2568,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Indicator panes: each one is its own bounded box, so the chart can
           never bleed into the volume/RSI area and vice versa. They share the
           main chart's time scale via canvasRef.timeToCoordinate(...). */}
-      {activeToolFlags.volume ? (
+      {indicatorToolFlags.volume ? (
         <ResizablePane
           height={paneHeights.volume}
           onResize={(next) => setPaneHeight("volume", next)}
@@ -2510,7 +2579,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           <IndicatorPane mode="volume" candles={liveCandles} canvasRef={canvasRef} />
         </ResizablePane>
       ) : null}
-      {activeToolFlags.rsi ? (
+      {indicatorToolFlags.rsi ? (
         <ResizablePane
           height={paneHeights.rsi}
           onResize={(next) => setPaneHeight("rsi", next)}
@@ -2519,6 +2588,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           ariaLabel="Resize RSI pane"
         >
           <IndicatorPane mode="rsi" candles={liveCandles} canvasRef={canvasRef} />
+        </ResizablePane>
+      ) : null}
+      {indicatorToolFlags.macd ? (
+        <ResizablePane
+          height={paneHeights.macd}
+          onResize={(next) => setPaneHeight("macd", next)}
+          minHeight={70}
+          maxHeight={280}
+          ariaLabel="Resize MACD pane"
+        >
+          <IndicatorPane mode="macd" candles={liveCandles} canvasRef={canvasRef} />
         </ResizablePane>
       ) : null}
 

@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import {
+  bollingerBands,
+  pointOfControl,
+  sessionVwap,
+  type IndicatorMathCandle,
+} from "@/lib/chart/indicatorMath";
 
 /**
  * Shared right-rail offset. Right-rail labels (OB volume, fib %, fib
@@ -26,6 +32,9 @@ type Props = {
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
   active: {
     ma?: boolean;
+    bollinger?: boolean;
+    vwap?: boolean;
+    poc?: boolean;
     structure?: boolean;
     orderBlocks?: boolean;
     /** Auto Fair Value Gap zones (bullish + bearish, latest N per side). */
@@ -90,6 +99,7 @@ type StructurePivot = { index: number; time: number; price: number; kind: "high"
 type StructureLabel = { x: number; y: number; label: string; kind: "high" | "low" };
 type StructureLine = { x1: number; x2: number; y: number; label: string; bullish: boolean; continuation: boolean };
 type SwingPointLevel = { x1: number; x2: number; y: number; kind: "high" | "low"; label: string };
+type PointOfControlGeom = { y: number; price: number; volume: number } | null;
 /**
  * A "zone" is a horizontal band rendered on the chart (OB, FVG, iFVG).
  * Both the price-domain and pixel-domain are kept so we can compute
@@ -189,6 +199,14 @@ export function ChartIndicatorLayer({
     if (!handle || size.w <= 0 || size.h <= 0) {
       return {
         maPath: "",
+        bollingerUpperPath: "",
+        bollingerMiddlePath: "",
+        bollingerLowerPath: "",
+        bollingerFillPath: "",
+        vwapPath: "",
+        latestVwap: null as number | null,
+        latestVwapY: null as number | null,
+        poc: null as PointOfControlGeom,
         structureLabels: [] as StructureLabel[],
         structureLines: [] as StructureLine[],
         orderBlocks: [] as Zone[],
@@ -237,6 +255,47 @@ export function ChartIndicatorLayer({
       })
       .filter(Boolean) as Point[];
 
+    const mathCandles = visibleWithTime as IndicatorMathCandle[];
+    const closes = visibleWithTime.map((candle) => candle.close);
+    const bollinger = bollingerBands(closes, 20, 2);
+    const bollingerUpperPoints: Point[] = [];
+    const bollingerMiddlePoints: Point[] = [];
+    const bollingerLowerPoints: Point[] = [];
+    for (let index = 0; index < visibleWithTime.length; index += 1) {
+      const candle = visibleWithTime[index];
+      const x = handle.timeToCoordinate(candle.time);
+      if (x == null) continue;
+      const band = bollinger[index];
+      if (band?.upper != null) {
+        const y = handle.priceToCoordinate(band.upper);
+        if (y != null) bollingerUpperPoints.push({ x, y });
+      }
+      if (band?.middle != null) {
+        const y = handle.priceToCoordinate(band.middle);
+        if (y != null) bollingerMiddlePoints.push({ x, y });
+      }
+      if (band?.lower != null) {
+        const y = handle.priceToCoordinate(band.lower);
+        if (y != null) bollingerLowerPoints.push({ x, y });
+      }
+    }
+
+    const vwapValues = sessionVwap(mathCandles);
+    const vwapPoints: Point[] = [];
+    for (let index = 0; index < visibleWithTime.length; index += 1) {
+      const value = vwapValues[index];
+      if (value == null) continue;
+      const x = handle.timeToCoordinate(visibleWithTime[index].time);
+      const y = handle.priceToCoordinate(value);
+      if (x != null && y != null) vwapPoints.push({ x, y });
+    }
+    const latestVwap = vwapValues.filter((value): value is number => value != null).at(-1) ?? null;
+    const latestVwapY = latestVwap != null ? handle.priceToCoordinate(latestVwap) : null;
+    const pocRaw = pointOfControl(mathCandles, 100, 50);
+    const pocY = pocRaw ? handle.priceToCoordinate(pocRaw.price) : null;
+    const poc: PointOfControlGeom =
+      pocRaw && pocY != null ? { y: pocY, price: pocRaw.price, volume: pocRaw.volume } : null;
+
     const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX);
     const inverseFairValueGaps = buildInverseFvgs(visibleWithTime, handle, futureExtensionX);
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
@@ -254,6 +313,14 @@ export function ChartIndicatorLayer({
 
     return {
       maPath: toPath(maPoints),
+      bollingerUpperPath: toPath(bollingerUpperPoints),
+      bollingerMiddlePath: toPath(bollingerMiddlePoints),
+      bollingerLowerPath: toPath(bollingerLowerPoints),
+      bollingerFillPath: toAreaPath(bollingerUpperPoints, bollingerLowerPoints),
+      vwapPath: toPath(vwapPoints),
+      latestVwap,
+      latestVwapY,
+      poc,
       structureLabels: structureOverlay.labels,
       structureLines: structureOverlay.lines,
       // Filter to the latest `orderBlockCount` per direction (default 1
@@ -581,6 +648,69 @@ export function ChartIndicatorLayer({
 
         {active.ma && geometry.maPath ? (
           <path d={geometry.maPath} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth={1.7} />
+        ) : null}
+
+        {active.bollinger && geometry.bollingerFillPath ? (
+          <path d={geometry.bollingerFillPath} fill="rgba(34,211,238,0.055)" stroke="none" />
+        ) : null}
+        {active.bollinger && geometry.bollingerUpperPath ? (
+          <path d={geometry.bollingerUpperPath} fill="none" stroke="rgba(34,211,238,0.42)" strokeWidth={1} />
+        ) : null}
+        {active.bollinger && geometry.bollingerMiddlePath ? (
+          <path d={geometry.bollingerMiddlePath} fill="none" stroke="rgba(96,165,250,0.35)" strokeWidth={0.85} strokeDasharray="4 4" />
+        ) : null}
+        {active.bollinger && geometry.bollingerLowerPath ? (
+          <path d={geometry.bollingerLowerPath} fill="none" stroke="rgba(34,211,238,0.42)" strokeWidth={1} />
+        ) : null}
+
+        {active.vwap && geometry.vwapPath ? (
+          <g pointerEvents="none">
+            <path d={geometry.vwapPath} fill="none" stroke="rgba(250,204,21,0.88)" strokeWidth={1.35} />
+            {geometry.latestVwap != null ? (
+              <text
+                x={size.w - RIGHT_RAIL_OFFSET}
+                y={Math.max(12, Math.min(size.h - 4, (geometry.latestVwapY ?? 14) - 4))}
+                textAnchor="end"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                fontSize="9"
+                fontWeight={700}
+                fill="rgba(250,204,21,0.9)"
+                stroke="rgba(0,0,0,0.72)"
+                strokeWidth={2.4}
+                paintOrder="stroke"
+              >
+                VWAP {geometry.latestVwap.toFixed(2)}
+              </text>
+            ) : null}
+          </g>
+        ) : null}
+
+        {active.poc && geometry.poc ? (
+          <g pointerEvents="none">
+            <line
+              x1={LEFT_RAIL_OFFSET}
+              x2={size.w - RIGHT_RAIL_OFFSET}
+              y1={geometry.poc.y}
+              y2={geometry.poc.y}
+              stroke="rgba(168,85,247,0.78)"
+              strokeWidth={1}
+              strokeDasharray="6 4"
+            />
+            <text
+              x={size.w - RIGHT_RAIL_OFFSET}
+              y={geometry.poc.y - 4}
+              textAnchor="end"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize="9"
+              fontWeight={700}
+              fill="rgba(216,180,254,0.95)"
+              stroke="rgba(0,0,0,0.72)"
+              strokeWidth={2.4}
+              paintOrder="stroke"
+            >
+              POC {geometry.poc.price.toFixed(2)}
+            </text>
+          </g>
         ) : null}
 
         {active.structure
@@ -974,6 +1104,17 @@ function toTime(raw: string): number | null {
 
 function toPath(points: Point[]): string {
   return points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+}
+
+function toAreaPath(upper: Point[], lower: Point[]): string {
+  if (upper.length < 2 || lower.length < 2) return "";
+  const top = toPath(upper);
+  const bottom = lower
+    .slice()
+    .reverse()
+    .map((point) => `L${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(" ");
+  return `${top} ${bottom} Z`;
 }
 
 function sma(values: number[], period: number): Array<number | null> {

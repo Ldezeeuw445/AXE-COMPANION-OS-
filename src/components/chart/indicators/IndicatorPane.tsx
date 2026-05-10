@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { macdSeries } from "@/lib/chart/indicatorMath";
 
 /**
  * IndicatorPane renders a single technical indicator (volume or RSI) in its
@@ -12,7 +13,7 @@ import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
  * width as a reserved gutter on the right, and draw MT5-style axis labels
  * (max/zero for volume, 100/75/50/25/0 for RSI) into that gutter.
  */
-type Mode = "volume" | "rsi";
+type Mode = "volume" | "rsi" | "macd";
 
 type Props = {
   mode: Mode;
@@ -67,6 +68,10 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
         volumeSource: "volume" as "volume" | "range",
         rsiPath: "",
         latestRsi: null as number | null,
+        macdPath: "",
+        macdSignalPath: "",
+        macdBars: [] as MacdBar[],
+        latestMacd: null as number | null,
       };
     }
 
@@ -125,6 +130,50 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
         volumeSource: hasRealVolume ? "volume" : "range",
         rsiPath: "",
         latestRsi: null,
+        macdPath: "",
+        macdSignalPath: "",
+        macdBars: [],
+        latestMacd: null,
+      };
+    }
+
+    if (mode === "macd") {
+      const macd = macdSeries(visible.map((candle) => candle.close), 12, 26, 9);
+      const values = macd.flatMap((point) => [point.macd, point.signal, point.histogram]).filter((value): value is number => value != null);
+      const maxAbs = Math.max(...values.map((value) => Math.abs(value)), 1e-8);
+      const top = 18;
+      const bottom = 8;
+      const usable = Math.max(20, size.h - top - bottom);
+      const zeroY = top + usable / 2;
+      const macdPoints: Array<{ x: number; y: number }> = [];
+      const signalPoints: Array<{ x: number; y: number }> = [];
+      const macdBars: MacdBar[] = [];
+      for (let i = 0; i < visible.length; i += 1) {
+        const x = handle.timeToCoordinate(visible[i].time);
+        if (x == null || x < 0 || x > plotWidth) continue;
+        const point = macd[i];
+        if (point.histogram != null) {
+          const barHeight = Math.abs(point.histogram / maxAbs) * (usable / 2);
+          macdBars.push({
+            x,
+            y: point.histogram >= 0 ? zeroY - barHeight : zeroY,
+            h: Math.max(1, barHeight),
+            color: point.histogram >= 0 ? "rgba(45,212,191,0.72)" : "rgba(244,63,94,0.72)",
+          });
+        }
+        if (point.macd != null) macdPoints.push({ x, y: zeroY - (point.macd / maxAbs) * (usable / 2) });
+        if (point.signal != null) signalPoints.push({ x, y: zeroY - (point.signal / maxAbs) * (usable / 2) });
+      }
+      return {
+        volumeBars: [],
+        volumeMax: maxAbs,
+        volumeSource: "volume",
+        rsiPath: "",
+        latestRsi: null,
+        macdPath: toPath(macdPoints),
+        macdSignalPath: toPath(signalPoints),
+        macdBars,
+        latestMacd: macd.map((point) => point.macd).filter((value): value is number => value != null).at(-1) ?? null,
       };
     }
 
@@ -149,6 +198,10 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
       volumeSource: "volume",
       rsiPath: toPath(rsiPoints),
       latestRsi: rsiValues.filter((value): value is number => value != null).at(-1) ?? null,
+      macdPath: "",
+      macdSignalPath: "",
+      macdBars: [],
+      latestMacd: null,
     };
   }, [candles, canvasRef, mode, plotWidth, size.h, size.w, version]);
 
@@ -164,6 +217,12 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
           text: level.toFixed(2),
           emphasis: level === 50,
         }))
+      : mode === "macd"
+        ? [
+            { y: top + usable / 2, text: "0.00", emphasis: true },
+            { y: top + 5, text: geometry.volumeMax.toFixed(2) },
+            { y: size.h - bottom, text: (-geometry.volumeMax).toFixed(2) },
+          ]
       : (() => {
           const m = geometry.volumeMax;
           return [
@@ -180,6 +239,8 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
       <span className="pointer-events-none absolute left-2 top-1 text-[9px] font-bold uppercase tracking-[0.22em] text-cyan-100/85">
         {mode === "rsi"
           ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
+          : mode === "macd"
+            ? `MACD(12,26,9) ${geometry.latestMacd != null ? geometry.latestMacd.toFixed(4) : "--"}`
           : `${geometry.volumeSource === "volume" ? "Volumes" : "Range"} ${
               geometry.volumeMax > 1000 ? formatThousands(geometry.volumeMax) : geometry.volumeMax.toFixed(0)
             }`}
@@ -223,8 +284,33 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
               })
             : null}
 
+          {mode === "macd" ? (
+            <line
+              x1={0}
+              x2={plotWidth}
+              y1={top + usable / 2}
+              y2={top + usable / 2}
+              stroke="rgba(255,255,255,0.16)"
+              strokeDasharray="4 4"
+            />
+          ) : null}
+
           {mode === "volume"
             ? geometry.volumeBars.map((bar, index) => (
+                <rect
+                  key={index}
+                  x={bar.x - 2}
+                  y={bar.y}
+                  width={4}
+                  height={bar.h}
+                  rx={1}
+                  fill={bar.color}
+                />
+              ))
+            : null}
+
+          {mode === "macd"
+            ? geometry.macdBars.map((bar, index) => (
                 <rect
                   key={index}
                   x={bar.x - 2}
@@ -243,6 +329,23 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
               fill="none"
               stroke="rgba(34,211,238,0.95)"
               strokeWidth={1.6}
+            />
+          ) : null}
+
+          {mode === "macd" && geometry.macdPath ? (
+            <path
+              d={geometry.macdPath}
+              fill="none"
+              stroke="rgba(34,211,238,0.95)"
+              strokeWidth={1.4}
+            />
+          ) : null}
+          {mode === "macd" && geometry.macdSignalPath ? (
+            <path
+              d={geometry.macdSignalPath}
+              fill="none"
+              stroke="rgba(250,204,21,0.92)"
+              strokeWidth={1.15}
             />
           ) : null}
 
@@ -267,6 +370,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
 }
 
 type VolumeBar = { x: number; y: number; h: number; color: string };
+type MacdBar = VolumeBar;
 type IndicatorCandle = {
   time: number;
   open: number;
