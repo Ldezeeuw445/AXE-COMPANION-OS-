@@ -9,11 +9,28 @@ import {
 } from "@/components/chart/annotations/types";
 
 /**
- * Single right-rail offset. Every chart label (fib %, PDH, PDL, PDQ)
- * anchors at `hostWidth - RIGHT_RAIL_OFFSET` so they line up vertically
- * with no overlap. Wide enough to clear the price-axis gutter.
+ * Single right-rail offset. Every chart label that lives on the right
+ * side (fib %, fib price, OB volume, iFVG label) anchors at
+ * `hostWidth - RIGHT_RAIL_OFFSET` so they line up vertically with no
+ * overlap. Wide enough to clear the price-axis gutter.
  */
 const RIGHT_RAIL_OFFSET = 8;
+
+/**
+ * Mirror of {@link RIGHT_RAIL_OFFSET} for labels that live on the left
+ * rail (PDH / PDL / PDQ, Supply / Demand band labels). Same px value so
+ * both rails feel symmetric on a phone-sized canvas.
+ */
+const LEFT_RAIL_OFFSET = 8;
+
+/**
+ * Default left-side visual clamp for auto-fib lines. The fib's actual
+ * 0% / 100% anchors still come from real swing data; only the rendered
+ * line is clipped so the chart isn't drowned in a long historical fib
+ * that overlaps old candles. The trader can opt out per-fib by toggling
+ * `settings.extendLeft = true`.
+ */
+const LEFT_VISUAL_BARS = 3;
 
 type Props = {
   /** All annotations; the layer only renders fib_retracement entries. */
@@ -33,6 +50,20 @@ type Props = {
    * intersection between the next candle and a level.
    */
   futureProjectionX?: number | null;
+  /**
+   * UTC seconds of the most recent candle in the live stream. Used to
+   * compute the 3-bar left clamp so auto-fibs stop overlapping old price
+   * action regardless of timeframe (M5, H1, D1 — same visual width).
+   * When `null` (no candles yet), the clamp is disabled and fibs render
+   * from their original anchor.
+   */
+  lastBarTimeSec?: number | null;
+  /**
+   * UTC seconds of the bar BEFORE {@link lastBarTimeSec}. Combined with
+   * the canvas's `timeToCoordinate` it gives us live pixel-per-bar so
+   * the 3-bar clamp keeps its visual width as the user pinch-zooms.
+   */
+  prevBarTimeSec?: number | null;
 };
 
 type FibLineGeom = {
@@ -43,8 +74,21 @@ type FibLineGeom = {
 
 type FibGeom = {
   id: string;
+  /**
+   * Original (un-clamped) leftmost X of the fib's two anchor points.
+   * Kept around for the X / remove pill anchor and for the band
+   * width when {@link extendLeft} is on.
+   */
   startX: number;
   endX: number;
+  /**
+   * Effective LEFT X used for line + band rendering. Equal to
+   * {@link startX} when {@link extendLeft} is on or the clamp can't be
+   * computed; otherwise pinned to `lastBarX - LEFT_VISUAL_BARS *
+   * barWidthPx` so every fib renders ~3 bars wide regardless of where
+   * the actual swing leg sits.
+   */
+  renderedStartX: number;
   /** Right-most X for level lines and price labels (= endX or projection). */
   rightX: number;
   /** y at level=0 (anchor). */
@@ -61,6 +105,8 @@ type FibGeom = {
   swingPrice: number;
   lines: FibLineGeom[];
   extend: boolean;
+  /** True when the user has toggled "extend left" on for this fib. */
+  extendLeft: boolean;
   /** Render style: standard fib levels OR premium/discount banding. */
   style: "levels" | "premium_discount";
 };
@@ -104,6 +150,8 @@ export function FibAnnotationLayer({
   onUpdate,
   onRemove,
   futureProjectionX = null,
+  lastBarTimeSec = null,
+  prevBarTimeSec = null,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -149,6 +197,21 @@ export function FibAnnotationLayer({
       const fibs = annotations.filter((a) => a.type === "fib_retracement" && a.points.length >= 2);
       const next: FibGeom[] = [];
       const hostWidth = host?.getBoundingClientRect().width ?? 0;
+      // Derive the live "3 bars before live candle" pixel anchor once
+      // per compute pass. Both projections come from the SAME canvas so
+      // they share viewport / zoom / pan; if either fails we fall back
+      // to no-clamp (`leftClipX = null`) and every fib renders from its
+      // original anchor. That keeps Phase 1 safe on an empty stream or
+      // a freshly mounted chart.
+      let leftClipX: number | null = null;
+      if (lastBarTimeSec != null && prevBarTimeSec != null) {
+        const lastX = h.timeToCoordinate(lastBarTimeSec);
+        const prevX = h.timeToCoordinate(prevBarTimeSec);
+        if (lastX != null && prevX != null) {
+          const barWidthPx = Math.max(1, lastX - prevX);
+          leftClipX = lastX - LEFT_VISUAL_BARS * barWidthPx;
+        }
+      }
       for (const ann of fibs) {
         const a = ann.points[0];
         const b = ann.points[1];
@@ -169,8 +232,16 @@ export function FibAnnotationLayer({
         });
         const settings = (ann.settings ?? {}) as Record<string, unknown>;
         const extend = Boolean(settings.extendRight);
+        const extendLeft = Boolean(settings.extendLeft);
         const style: "levels" | "premium_discount" =
           settings.style === "premium_discount" ? "premium_discount" : "levels";
+        // Apply the LEFT clamp only when the user hasn't asked for an
+        // explicit extend-left AND we have a valid clip point. The clamp
+        // uses Math.max so a fib whose original startX already sits to
+        // the right of the clip line keeps its tighter rendering; only
+        // wider fibs get pulled in to ~3 bars from the live candle.
+        const renderedStartX =
+          extendLeft || leftClipX == null ? startX : Math.max(startX, leftClipX);
         // Right-edge behaviour (TradingView / MT5 native): the fib LINES
         // extend forward past the live candle and stop just before the
         // right-rail labels. Anchor detection (in swingAnalysis) skips
@@ -191,6 +262,7 @@ export function FibAnnotationLayer({
           id: ann.id,
           startX,
           endX,
+          renderedStartX,
           rightX,
           anchorY,
           swingY,
@@ -202,6 +274,7 @@ export function FibAnnotationLayer({
           swingPrice: b.price,
           lines,
           extend,
+          extendLeft,
           style,
         });
       }
@@ -211,7 +284,7 @@ export function FibAnnotationLayer({
     compute();
     const unsubscribe = handle.subscribeViewport(compute);
     return unsubscribe;
-  }, [annotations, canvasRef, futureProjectionX]);
+  }, [annotations, canvasRef, futureProjectionX, lastBarTimeSec, prevBarTimeSec]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -342,7 +415,11 @@ export function FibAnnotationLayer({
           // to its left without overlap. Works for FX (5 digits),
           // metals (3 digits) and indices (1-2 digits).
           const pctLabelRightX = priceLabelRightX - 60;
-          const removeX = Math.max(8, g.startX - 30);
+          // Anchor the remove pill at the visible-left edge of the fib
+          // (the clamped renderedStartX) so it doesn't sail off the
+          // canvas when the actual swing leg sits far to the left and
+          // extendLeft is off. Min 8px so it never clips the chart edge.
+          const removeX = Math.max(8, g.renderedStartX - 30);
           const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
           // In premium/discount mode we only render 0%, 50% and 100% +
           // a faint zone tint. The trader sees one clean structural
@@ -383,9 +460,9 @@ export function FibAnnotationLayer({
                 <g pointerEvents="none">
                   {/* Top extreme band (always premium / supply) */}
                   <rect
-                    x={g.startX}
+                    x={g.renderedStartX}
                     y={topY}
-                    width={Math.max(2, g.rightX - g.startX)}
+                    width={Math.max(2, g.rightX - g.renderedStartX)}
                     height={bandH}
                     fill={premiumFill}
                     stroke={premiumStroke}
@@ -394,9 +471,9 @@ export function FibAnnotationLayer({
                   />
                   {/* Bottom extreme band (always discount / demand) */}
                   <rect
-                    x={g.startX}
+                    x={g.renderedStartX}
                     y={botY - bandH}
-                    width={Math.max(2, g.rightX - g.startX)}
+                    width={Math.max(2, g.rightX - g.renderedStartX)}
                     height={bandH}
                     fill={discountFill}
                     stroke={discountStroke}
@@ -463,7 +540,7 @@ export function FibAnnotationLayer({
                 return (
                   <g key={ln.level}>
                     <line
-                      x1={g.startX}
+                      x1={g.renderedStartX}
                       x2={g.rightX}
                       y1={ln.y}
                       y2={ln.y}
@@ -474,7 +551,7 @@ export function FibAnnotationLayer({
                       style={{ cursor: "move", touchAction: "none" }}
                     />
                     <line
-                      x1={g.startX}
+                      x1={g.renderedStartX}
                       x2={g.rightX}
                       y1={ln.y}
                       y2={ln.y}

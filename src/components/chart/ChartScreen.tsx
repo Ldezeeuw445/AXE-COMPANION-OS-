@@ -637,6 +637,36 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     }
   }, []);
 
+  // Per-fib left/right extension toggles. The fib layer reads
+  // `settings.extendLeft` / `settings.extendRight` and clamps the
+  // rendered line accordingly; toggling here mutates EVERY fib on the
+  // chart in lockstep so the user has one source of truth even if the
+  // auto-fib has been re-built between toggles. Persisted via the
+  // existing annotation save path (saveAnnotations hooks inside
+  // updateAnnotation).
+  const setFibExtendOnAll = useCallback(
+    (axis: "extendLeft" | "extendRight", value: boolean) => {
+      setAnnotations((prev) => {
+        let mutated = false;
+        const next = prev.map((ann) => {
+          if (ann.type !== "fib_retracement") return ann;
+          const settings = (ann.settings ?? {}) as Record<string, unknown>;
+          if (Boolean(settings[axis]) === value) return ann;
+          mutated = true;
+          return {
+            ...ann,
+            settings: { ...settings, [axis]: value },
+            updatedAt: new Date().toISOString(),
+          };
+        });
+        if (!mutated) return prev;
+        saveAnnotations(data.symbol, data.timeframeKey, next);
+        return next;
+      });
+    },
+    [data.symbol, data.timeframeKey],
+  );
+
   // MT5-style resizable indicator panes. Defaults match what we previously
   // hard-coded; users can drag the divider on top of each pane to taste.
   const [paneHeights, setPaneHeights] = useState<{ volume: number; rsi: number }>({
@@ -671,6 +701,21 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     () => annotations.some((a) => a.type === "fib_retracement"),
     [annotations],
   );
+  // Derived state for the extend ← / extend → pills: a pill is "on" if
+  // EVERY fib annotation has that flag set. With a single auto-fib on
+  // the chart (the common case) this collapses to that fib's state; if
+  // the user has multiple fibs and mixed flags, the pill renders as
+  // "off" and toggling it sets the flag on every fib at once.
+  const allFibsExtendLeft = useMemo(() => {
+    const fibs = annotations.filter((a) => a.type === "fib_retracement");
+    if (fibs.length === 0) return false;
+    return fibs.every((a) => Boolean((a.settings ?? {} as Record<string, unknown>).extendLeft));
+  }, [annotations]);
+  const allFibsExtendRight = useMemo(() => {
+    const fibs = annotations.filter((a) => a.type === "fib_retracement");
+    if (fibs.length === 0) return false;
+    return fibs.every((a) => Boolean((a.settings ?? {} as Record<string, unknown>).extendRight));
+  }, [annotations]);
   const hasTrendAnnotation = useMemo(
     () => annotations.some((a) => a.type === "trendline"),
     [annotations],
@@ -2246,6 +2291,46 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 </div>
               </div>
 
+              {/* Per-fib extension pills. Default is left=off (3-bar
+                  visual clip in front of the live candle) + right=on
+                  (auto-fib forward projection). Trader can toggle either
+                  side independently to widen or tighten the rendered fib
+                  without touching the underlying anchors. Persisted on
+                  every fib annotation via setFibExtendOnAll. */}
+              <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+                <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                  Fib · extend
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFibExtendOnAll("extendLeft", !allFibsExtendLeft)}
+                    className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                      allFibsExtendLeft
+                        ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                    }`}
+                    aria-label="Extend fib lines left"
+                    aria-pressed={allFibsExtendLeft}
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFibExtendOnAll("extendRight", !allFibsExtendRight)}
+                    className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                      allFibsExtendRight
+                        ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
+                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                    }`}
+                    aria-label="Extend fib lines right"
+                    aria-pressed={allFibsExtendRight}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+
               {fibMode === "swing" ? (
                 <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
                   <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
@@ -2293,6 +2378,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             onUpdate={updateAnnotation}
             onRemove={removeAnnotationById}
             futureProjectionX={futureProjectionX}
+            lastBarTimeSec={recentCandleTimes[recentCandleTimes.length - 1] ?? null}
+            prevBarTimeSec={recentCandleTimes[recentCandleTimes.length - 2] ?? null}
           />
 
           {/* Interactive Trendline layer — draggable endpoints */}

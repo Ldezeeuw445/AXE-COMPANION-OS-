@@ -5,13 +5,21 @@ import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 
 /**
- * Shared right-rail offset. Every chart label that lives on the right
- * (PDH, PDL, PDQ, OB volume, fib %, fib price, Premium / Discount) sits
- * at `containerWidth - RIGHT_RAIL_OFFSET` so the entire right column
- * lines up vertically with no overlap. Mirrors `RIGHT_RAIL_OFFSET` in
- * `FibAnnotationLayer.tsx`.
+ * Shared right-rail offset. Right-rail labels (OB volume, fib %, fib
+ * price, iFVG / FVG counts) anchor at `containerWidth - RIGHT_RAIL_OFFSET`
+ * so the entire right column lines up vertically with no overlap.
+ * Mirrors `RIGHT_RAIL_OFFSET` in `FibAnnotationLayer.tsx`.
  */
 const RIGHT_RAIL_OFFSET = 8;
+
+/**
+ * Mirror of {@link RIGHT_RAIL_OFFSET} for the LEFT rail. Used for
+ * previous-day context labels (PDH / PDL / PDQ, and later the Supply /
+ * Demand band labels). Lines drawn between rails span
+ * `[LEFT_RAIL_OFFSET, containerWidth - RIGHT_RAIL_OFFSET]` so they
+ * never overlap fib percentages or price labels on the right.
+ */
+const LEFT_RAIL_OFFSET = 8;
 
 type Props = {
   candles: MetaApiCandle[];
@@ -296,16 +304,16 @@ export function ChartIndicatorLayer({
             ))
           : null}
 
-        {/* Previous Day High / Low / Equilibrium — all rendered as thin
-            SOLID lines (no dots, no dashes) per UX spec. The label sits
-            on the SHARED right rail (RIGHT_RAIL_OFFSET = 8px from edge,
-            matches the fib %, fib price and Premium/Discount labels)
-            so the entire right-side label column lines up vertically
-            with no overlap. */}
+        {/* Previous Day High / Low / Equilibrium — thin SOLID lines
+            spanning the left rail to the right rail, with their LABELS
+            pinned to the LEFT rail (`LEFT_RAIL_OFFSET`). Keeping these
+            labels on the left frees the right rail for fib %, fib
+            price, OB volume and the (future) Supply / Demand band tags
+            so the two columns never collide on small phone screens. */}
         {active.pdh && geometry.previousDayHigh ? (
           <g>
             <line
-              x1={0}
+              x1={LEFT_RAIL_OFFSET}
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayHigh.y}
               y2={geometry.previousDayHigh.y}
@@ -313,9 +321,9 @@ export function ChartIndicatorLayer({
               strokeWidth={1}
             />
             <text
-              x={size.w - RIGHT_RAIL_OFFSET}
+              x={LEFT_RAIL_OFFSET}
               y={geometry.previousDayHigh.y - 4}
-              textAnchor="end"
+              textAnchor="start"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
@@ -332,7 +340,7 @@ export function ChartIndicatorLayer({
         {active.pdl && geometry.previousDayLow ? (
           <g>
             <line
-              x1={0}
+              x1={LEFT_RAIL_OFFSET}
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayLow.y}
               y2={geometry.previousDayLow.y}
@@ -340,9 +348,9 @@ export function ChartIndicatorLayer({
               strokeWidth={1}
             />
             <text
-              x={size.w - RIGHT_RAIL_OFFSET}
+              x={LEFT_RAIL_OFFSET}
               y={geometry.previousDayLow.y + 12}
-              textAnchor="end"
+              textAnchor="start"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
@@ -359,7 +367,7 @@ export function ChartIndicatorLayer({
         {active.pdq && geometry.previousDayEq ? (
           <g>
             <line
-              x1={0}
+              x1={LEFT_RAIL_OFFSET}
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayEq.y}
               y2={geometry.previousDayEq.y}
@@ -367,9 +375,9 @@ export function ChartIndicatorLayer({
               strokeWidth={1}
             />
             <text
-              x={size.w - RIGHT_RAIL_OFFSET}
+              x={LEFT_RAIL_OFFSET}
               y={geometry.previousDayEq.y - 4}
-              textAnchor="end"
+              textAnchor="start"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
