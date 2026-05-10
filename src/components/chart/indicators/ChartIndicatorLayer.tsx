@@ -238,7 +238,7 @@ export function ChartIndicatorLayer({
       .filter(Boolean) as Point[];
 
     const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX);
-    const inverseFairValueGaps = buildInverseFvgs(visibleWithTime, handle, size.w, futureExtensionX);
+    const inverseFairValueGaps = buildInverseFvgs(visibleWithTime, handle, futureExtensionX);
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
       buildPreviousDayLevels(visibleWithTime, handle);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
@@ -859,7 +859,77 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
     );
   }
 
-  // FVG / iFVG keep the soft "filled corridor" treatment.
+  // iFVG → source FVG box keeps its original size after polarity flip.
+  // Only colour changes (cyan ↔ red), then the flipped zone projects
+  // forward with dashed top / bottom rays just like Order Blocks. This
+  // keeps the visual box identical to the FVG that created it instead
+  // of stretching the detected box out to the later inversion candle.
+  if (variant === "ifvg") {
+    return (
+      <g opacity={fadeFactor}>
+        <rect
+          x={zone.x}
+          y={zone.y}
+          width={Math.max(2, detectionWidth)}
+          height={zone.height}
+          fill={zone.fill}
+          stroke={zone.stroke}
+          strokeWidth={1}
+          strokeDasharray="3 3"
+          rx={2}
+        />
+        {zone.extend && extensionWidth > 1 ? (
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y}
+            y2={zone.y}
+            stroke={zone.stroke}
+            strokeWidth={1}
+            strokeDasharray="5 4"
+            opacity={0.95}
+          />
+        ) : null}
+        {zone.extend && extensionWidth > 1 ? (
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y + zone.height}
+            y2={zone.y + zone.height}
+            stroke={zone.stroke}
+            strokeWidth={1}
+            strokeDasharray="5 4"
+            opacity={0.95}
+          />
+        ) : null}
+        <line
+          x1={zone.x}
+          x2={zone.extend ? zone.extendX : detectionEndX}
+          y1={zone.midY}
+          y2={zone.midY}
+          stroke={zone.stroke}
+          strokeWidth={0.85}
+          strokeDasharray="4 3"
+          opacity={0.85}
+        />
+        <text
+          x={zone.x + 4}
+          y={zone.y + 10}
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+          fontSize="9"
+          fontWeight="700"
+          fill={zone.stroke}
+          stroke="rgba(0,0,0,0.78)"
+          strokeWidth="2.5"
+          paintOrder="stroke"
+        >
+          {labelText}
+        </text>
+      </g>
+    );
+  }
+
+  // FVG keeps the soft "filled corridor" treatment.
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -870,7 +940,6 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         fill={zone.fill}
         stroke={zone.stroke}
         strokeWidth={1}
-        strokeDasharray={variant === "ifvg" ? "3 3" : undefined}
         rx={2}
       />
       {zone.extend && extensionWidth > 1 ? (
@@ -894,21 +963,6 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         strokeDasharray="4 3"
         opacity={0.85}
       />
-      {variant === "ifvg" ? (
-        <text
-          x={zone.x + 4}
-          y={zone.y + 10}
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight="700"
-          fill={zone.stroke}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.5"
-          paintOrder="stroke"
-        >
-          {labelText}
-        </text>
-      ) : null}
     </g>
   );
 }
@@ -1635,15 +1689,14 @@ function buildVolumetricBreakdown(
  * "reclaimed" and now flips polarity.
  *
  * Render rules:
- *  • Detected portion (gap → inversion candle) keeps the dashed border.
- *  • If still useful (no second mitigation), the inner colour bleeds
- *    forward to the future-extension X with no border.
+ *  • Detected portion keeps the original 3-bar FVG box size.
+ *  • If still useful (no second mitigation), dashed top/bottom rays
+ *    project forward to the future-extension X.
  *  • A 50% midline is drawn so the trader can read the inflection.
  */
 function buildInverseFvgs(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
-  chartWidth: number,
   futureExtensionX: number,
 ): Zone[] {
   const out: Zone[] = [];
@@ -1678,11 +1731,11 @@ function buildInverseFvgs(
           }
         }
         const x1 = handle.timeToCoordinate(a.time);
-        const x2 = handle.timeToCoordinate(invertedAt);
+        const sourceEndX = handle.timeToCoordinate(c.time);
         const yTop = handle.priceToCoordinate(gapTop);
         const yBot = handle.priceToCoordinate(gapBot);
-        if (x1 != null && yTop != null && yBot != null) {
-          const detectionEndX = x2 ?? chartWidth - 4;
+        if (x1 != null && sourceEndX != null && yTop != null && yBot != null) {
+          const detectionEndX = sourceEndX;
           out.push({
             x: x1,
             y: Math.min(yTop, yBot),
@@ -1727,11 +1780,11 @@ function buildInverseFvgs(
           }
         }
         const x1 = handle.timeToCoordinate(a.time);
-        const x2 = handle.timeToCoordinate(invertedAt);
+        const sourceEndX = handle.timeToCoordinate(c.time);
         const yTop = handle.priceToCoordinate(gapTop);
         const yBot = handle.priceToCoordinate(gapBot);
-        if (x1 != null && yTop != null && yBot != null) {
-          const detectionEndX = x2 ?? chartWidth - 4;
+        if (x1 != null && sourceEndX != null && yTop != null && yBot != null) {
+          const detectionEndX = sourceEndX;
           out.push({
             x: x1,
             y: Math.min(yTop, yBot),
