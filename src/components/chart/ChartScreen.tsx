@@ -556,11 +556,16 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // Project count: how many of each indicator extend forward when the
   // future-projection cursor is on. 1 = only the latest each side.
   const [projectionCount, setProjectionCount] = useState<1 | 2 | 3>(1);
-  // Auto-Fib source mode: "auto" (most recent good leg), "swing" (latest
-  // SH/SL pair from the swing-dot detection), "pd" (previous day's range,
-  // PDH↔PDL), or "pd_band" which renders the same fib as Premium /
-  // Discount banding instead of all 8 levels.
-  type FibMode = "auto" | "swing" | "pd" | "pd_band";
+  // Auto-Fib source mode:
+  //   "auto"   — most recent good trend leg on the active TF (default)
+  //   "swing"  — latest SH ↔ SL pair from the swing-dot detection
+  //   "pd"     — previous day's range, PDH ↔ PDL
+  //   "sd"     — Supply / Demand: latest swing High ↔ latest swing Low,
+  //              same anchors the S/D indicator uses, so band edges and
+  //              fib 0% / 100% line up exactly. Geometrically identical
+  //              to "swing" with offset 0; kept as a separate mode so
+  //              the picker reflects intent ("anchor to S/D bands").
+  type FibMode = "auto" | "swing" | "pd" | "sd";
   const [fibMode, setFibMode] = useState<FibMode>("auto");
   const [fibSwingOffset, setFibSwingOffset] = useState<0 | 1 | 2 | 3>(0);
   useEffect(() => {
@@ -574,8 +579,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       const rawProj = Number(localStorage.getItem("axe.chart.projectionCount") ?? "");
       if (rawProj === 1 || rawProj === 2 || rawProj === 3) setProjectionCount(rawProj);
       const rawFib = localStorage.getItem("axe.chart.fibMode");
-      if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd" || rawFib === "pd_band") {
+      if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd" || rawFib === "sd") {
         setFibMode(rawFib);
+      } else if (rawFib === "pd_band") {
+        // Legacy mode replaced by the standalone S/D indicator. Migrate
+        // the saved preference forward so the next launch picks the
+        // closest equivalent (S/D fib mode) instead of resetting to
+        // "auto".
+        setFibMode("sd");
+        try {
+          localStorage.setItem("axe.chart.fibMode", "sd");
+        } catch {
+          /* ignore */
+        }
       }
       const rawFibSwing = Number(localStorage.getItem("axe.chart.fibSwingOffset") ?? "");
       if (rawFibSwing === 0 || rawFibSwing === 1 || rawFibSwing === 2 || rawFibSwing === 3) {
@@ -1472,11 +1488,16 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     (type: ChartActionCommand["type"], source: "axe" | "user" = "axe"): ChartActionResult => {
       if (type === "draw_fibonacci") {
         try {
-          // pd_band shares the geometry of pd (previous-day range) but
-          // tags the annotation with `style: "premium_discount"` so the
-          // FibAnnotationLayer renders it as a clean two-zone band
-          // instead of all eight levels.
-          const builderMode = fibMode === "pd_band" ? "pd" : fibMode;
+          // The "sd" frontend mode is geometrically identical to "swing"
+          // with offset 0 — both anchor to the latest swing High / Low.
+          // We translate it down to the swing builder so the backend
+          // FibSourceMode stays at three values (auto / swing / pd) and
+          // the annotation it emits keeps the existing settings.source
+          // semantics. The picker remembers "sd" separately so the user
+          // can flip between Swing and S/D without losing intent.
+          const builderMode = fibMode === "sd" ? "swing" : fibMode;
+          const builderSwingOffset =
+            fibMode === "swing" ? fibSwingOffset : 0;
           const command = buildFibonacciActionFromCandles({
             id: newAnnotationId(),
             source,
@@ -1486,16 +1507,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             candles: data.candles,
             strength: 3,
             mode: builderMode,
-            swingOffset: builderMode === "swing" ? fibSwingOffset : 0,
+            swingOffset: builderSwingOffset,
           });
-          if (fibMode === "pd_band") {
-            const existingSettings =
-              (command.payload.settings as Record<string, unknown> | undefined) ?? {};
-            command.payload.settings = {
-              ...existingSettings,
-              style: "premium_discount",
-            };
-          }
           return executeChartAction(command);
         } catch {
           const failed: ChartActionResult = {
@@ -1924,6 +1937,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             pdl: activeToolFlags.pdl,
             pdq: activeToolFlags.pdq,
             swingPoints: activeToolFlags.swingPoints,
+            supplyDemand: activeToolFlags.supplyDemand,
           }}
         />
 
@@ -2084,6 +2098,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             { id: "pdh", label: "PDH", icon: Maximize2, active: Boolean(activeToolFlags.pdh), action: () => toggleToolFlag("pdh") },
             { id: "pdl", label: "PDL", icon: Maximize2, active: Boolean(activeToolFlags.pdl), action: () => toggleToolFlag("pdl") },
             { id: "pdq", label: "PDQ", icon: Maximize2, active: Boolean(activeToolFlags.pdq), action: () => toggleToolFlag("pdq") },
+            { id: "supplyDemand", label: "S/D", icon: Layers, active: Boolean(activeToolFlags.supplyDemand), action: () => toggleToolFlag("supplyDemand") },
             { id: "swingPoints", label: "Swings", icon: GitBranch, active: Boolean(activeToolFlags.swingPoints), action: () => toggleToolFlag("swingPoints") },
             { id: "volume", label: "Vol", icon: BarChart3, active: Boolean(activeToolFlags.volume), action: () => toggleToolFlag("volume") },
             { id: "rsi", label: "RSI", icon: Activity, active: Boolean(activeToolFlags.rsi), action: () => toggleToolFlag("rsi") },
@@ -2255,8 +2270,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           {/* Auto-Fib source picker — appears whenever a Fib annotation
               is on the chart. "Auto" picks the latest good leg, "Swing"
               forces market-structure (HH/HL or LH/LL), "Day" maps the
-              fib across yesterday's PDH ↔ PDL range, "P/D" flips the
-              same fib into Premium / Discount banding. */}
+              fib across yesterday's PDH ↔ PDL range, "S/D" anchors the
+              fib to the same swing High / Low the standalone Supply /
+              Demand indicator uses (so band edges and fib 0% / 100%
+              snap to the same levels). */}
           {hasFibAnnotation ? (
             <>
               <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
@@ -2268,7 +2285,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     { value: "auto", label: "Auto" },
                     { value: "swing", label: "Swing" },
                     { value: "pd", label: "Day" },
-                    { value: "pd_band", label: "P/D" },
+                    { value: "sd", label: "S/D" },
                   ] as Array<{ value: FibMode; label: string }>).map((opt) => {
                     const isActive = fibMode === opt.value;
                     return (

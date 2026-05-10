@@ -40,6 +40,14 @@ type Props = {
     pdq?: boolean;
     /** Compact swing high/low levels used as Fib anchor references. */
     swingPoints?: boolean;
+    /**
+     * Supply / Demand zones derived from the latest swing High / Low
+     * on the active timeframe. Renders the top 25% of the swing range
+     * as a faint Supply band, the bottom 25% as a Demand band, plus an
+     * "EQ" midline. The fib `S/D` mode anchors itself to the same swing
+     * H/L so band edges and fib 0%/100% line up exactly.
+     */
+    supplyDemand?: boolean;
   };
   /**
    * How many of the most recent bullish + bearish order blocks to render.
@@ -191,6 +199,7 @@ export function ChartIndicatorLayer({
         previousDayEq: null as { y: number; price: number } | null,
         swingPointLevels: [] as SwingPointLevel[],
         swingFailures: [] as StructureArrow[],
+        supplyDemand: null as SupplyDemandGeom | null,
         totalChartVolume: 0,
       };
     }
@@ -233,6 +242,7 @@ export function ChartIndicatorLayer({
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
       buildPreviousDayLevels(visibleWithTime, handle);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
+    const supplyDemand = buildSupplyDemandBands(visibleWithTime, handle);
     // Total tickVolume across the visible window — used as the
     // denominator for OB volume-percent labels ("1.082K (13%)").
     // Considers the last 200 bars to keep the % responsive on long
@@ -272,6 +282,7 @@ export function ChartIndicatorLayer({
       previousDayEq,
       swingPointLevels,
       swingFailures: structureOverlay.swingFailures,
+      supplyDemand,
       totalChartVolume,
     };
   }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount]);
@@ -304,11 +315,116 @@ export function ChartIndicatorLayer({
             ))
           : null}
 
+        {/* Supply / Demand bands — top 25% of the latest swing range
+            is Supply (faint red), bottom 25% is Demand (faint emerald),
+            mid is the EQ line. All three labels sit on the LEFT rail
+            so they don't collide with fib % / price on the right.
+            Renders BEFORE PDH/PDL/PDQ in the JSX, which means it sits
+            under those lines in z-order — exactly per spec, since SD
+            is contextual background and PDH/PDL/PDQ are tactical. */}
+        {active.supplyDemand && geometry.supplyDemand ? (
+          <g pointerEvents="none">
+            {/* Supply (top 25%) band */}
+            <rect
+              x={LEFT_RAIL_OFFSET}
+              y={geometry.supplyDemand.supplyTop.y}
+              width={Math.max(0, size.w - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET)}
+              height={Math.max(
+                1,
+                geometry.supplyDemand.supplyBottom.y - geometry.supplyDemand.supplyTop.y,
+              )}
+              fill="rgba(244,63,94,0.06)"
+              stroke="rgba(244,63,94,0.34)"
+              strokeWidth={0.6}
+              strokeDasharray="3 3"
+            />
+            {/* Demand (bottom 25%) band */}
+            <rect
+              x={LEFT_RAIL_OFFSET}
+              y={geometry.supplyDemand.demandTop.y}
+              width={Math.max(0, size.w - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET)}
+              height={Math.max(
+                1,
+                geometry.supplyDemand.demandBottom.y - geometry.supplyDemand.demandTop.y,
+              )}
+              fill="rgba(45,212,191,0.06)"
+              stroke="rgba(45,212,191,0.34)"
+              strokeWidth={0.6}
+              strokeDasharray="3 3"
+            />
+            {/* EQ midline — single thin dashed line. */}
+            <line
+              x1={LEFT_RAIL_OFFSET}
+              x2={size.w - RIGHT_RAIL_OFFSET}
+              y1={geometry.supplyDemand.eq.y}
+              y2={geometry.supplyDemand.eq.y}
+              stroke="rgba(148,163,184,0.55)"
+              strokeWidth={0.85}
+              strokeDasharray="2 5"
+            />
+            {/* SUPPLY label — left rail, centered on the band. */}
+            <text
+              x={LEFT_RAIL_OFFSET}
+              y={
+                (geometry.supplyDemand.supplyTop.y + geometry.supplyDemand.supplyBottom.y) / 2 +
+                3
+              }
+              textAnchor="start"
+              fontFamily="ui-sans-serif, system-ui, -apple-system"
+              fontSize="9"
+              fontWeight={700}
+              letterSpacing="0.5"
+              fill="rgba(252,165,165,0.88)"
+              stroke="rgba(0,0,0,0.6)"
+              strokeWidth={2}
+              paintOrder="stroke"
+            >
+              SUPPLY
+            </text>
+            {/* DEMAND label */}
+            <text
+              x={LEFT_RAIL_OFFSET}
+              y={
+                (geometry.supplyDemand.demandTop.y + geometry.supplyDemand.demandBottom.y) / 2 +
+                3
+              }
+              textAnchor="start"
+              fontFamily="ui-sans-serif, system-ui, -apple-system"
+              fontSize="9"
+              fontWeight={700}
+              letterSpacing="0.5"
+              fill="rgba(167,243,208,0.88)"
+              stroke="rgba(0,0,0,0.6)"
+              strokeWidth={2}
+              paintOrder="stroke"
+            >
+              DEMAND
+            </text>
+            {/* EQ label sits 4px above the EQ line so it doesn't clip
+                the line stroke. */}
+            <text
+              x={LEFT_RAIL_OFFSET}
+              y={geometry.supplyDemand.eq.y - 3}
+              textAnchor="start"
+              fontFamily="ui-sans-serif, system-ui, -apple-system"
+              fontSize="8.5"
+              fontWeight={600}
+              letterSpacing="0.4"
+              fill="rgba(148,163,184,0.88)"
+              stroke="rgba(0,0,0,0.6)"
+              strokeWidth={2}
+              paintOrder="stroke"
+            >
+              EQ
+            </text>
+          </g>
+        ) : null}
+
         {/* Previous Day High / Low / Equilibrium — thin SOLID lines
             spanning the left rail to the right rail, with their LABELS
             pinned to the LEFT rail (`LEFT_RAIL_OFFSET`). Keeping these
             labels on the left frees the right rail for fib %, fib
-            price, OB volume and the (future) Supply / Demand band tags
+            price, OB volume and the Supply / Demand band tags above
             so the two columns never collide on small phone screens. */}
         {active.pdh && geometry.previousDayHigh ? (
           <g>
@@ -550,15 +666,24 @@ function VolumetricRightRailLabel({
   const v = zone.volumetric;
   if (!v || v.totalVolume <= 0) return null;
 
-  // Don't draw labels on incredibly thin OBs (< 12 px height) — they'd
-  // overlap stacked OBs and turn into noise.
-  if (zone.height < 12) return null;
+  // Don't draw labels on incredibly thin OBs (< 8 px height) — they'd
+  // overlap stacked OBs and turn into noise. Lowered from 12 → 8 so
+  // the label still appears on tight FX consolidations on a phone.
+  if (zone.height < 8) return null;
 
   const railX = containerWidth - RIGHT_RAIL_OFFSET;
-  // Volume + percent of recent chart volume, e.g. "1.08K (13%)".
-  const volPctOfChart =
-    totalChartVolume > 0 ? Math.max(0, Math.round((v.totalVolume / totalChartVolume) * 100)) : 0;
-  const volLabel = `${formatVolume(v.totalVolume)} (${volPctOfChart}%)`;
+  // Volume + percent of recent chart volume, e.g. "1.08K (13%)". When
+  // the broker doesn't ship tickVolume on this symbol the chart total
+  // is 0 — the % becomes meaningless, so we drop the suffix and just
+  // show the absolute OB volume rather than confidently lying with
+  // "(0%)".
+  const showPct = totalChartVolume > 0;
+  const volPctOfChart = showPct
+    ? Math.max(0, Math.round((v.totalVolume / totalChartVolume) * 100))
+    : 0;
+  const volLabel = showPct
+    ? `${formatVolume(v.totalVolume)} (${volPctOfChart}%)`
+    : formatVolume(v.totalVolume);
   const buyersWin = v.buyerPercent >= v.sellerPercent;
   const sideLabel = buyersWin
     ? `B ${Math.round(v.buyerPercent)}%`
@@ -1205,6 +1330,93 @@ function pickLatestZonesPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
     if (upRemaining === 0 && downRemaining === 0) break;
   }
   return reverseKept.reverse();
+}
+
+/**
+ * Geometry for the Supply / Demand indicator. A single SD render unit
+ * is the latest swing-high price (`supplyTop`) paired with the latest
+ * swing-low price (`demandBottom`). The two 25%-bands and the EQ line
+ * are derived from that same pair, so the fib `S/D` mode anchors to
+ * the same numbers and lines up perfectly with the band edges.
+ */
+type SupplyDemandGeom = {
+  supplyTop: { y: number; price: number };
+  /** Bottom edge of the Supply (top 25%) band. */
+  supplyBottom: { y: number; price: number };
+  /** Top edge of the Demand (bottom 25%) band. */
+  demandTop: { y: number; price: number };
+  demandBottom: { y: number; price: number };
+  eq: { y: number; price: number };
+};
+
+/**
+ * Find the most recent swing-high and swing-low using the SAME pivot
+ * detection that `buildSwingPointLevels` already runs (strength=5,
+ * compactStructurePivots cleanup) so the band edges are guaranteed to
+ * sit on dots the user can also see when Swings is on.
+ *
+ * Returns `null` when there isn't enough confirmed structure yet — the
+ * caller should hide the bands rather than guess.
+ */
+function buildSupplyDemandBands(
+  candles: Array<IndicatorCandle & { time: number }>,
+  handle: ChartCanvasHandle,
+): SupplyDemandGeom | null {
+  const strength = 5;
+  if (candles.length < strength * 2 + 4) return null;
+  const pivots: StructurePivot[] = [];
+  for (let index = strength; index < candles.length - strength; index += 1) {
+    const candle = candles[index];
+    const neighbors = [
+      ...candles.slice(index - strength, index),
+      ...candles.slice(index + 1, index + strength + 1),
+    ];
+    if (neighbors.every((other) => candle.high > other.high)) {
+      pivots.push({ index, time: candle.time, price: candle.high, kind: "high" });
+    }
+    if (neighbors.every((other) => candle.low < other.low)) {
+      pivots.push({ index, time: candle.time, price: candle.low, kind: "low" });
+    }
+  }
+  const compacted = compactStructurePivots(pivots, 4, averageRange(candles) * 0.65);
+  // Walk backward to grab the most recent confirmed pivot of each kind.
+  let latestHigh: StructurePivot | null = null;
+  let latestLow: StructurePivot | null = null;
+  for (let i = compacted.length - 1; i >= 0; i -= 1) {
+    const pivot = compacted[i];
+    if (pivot.kind === "high" && latestHigh == null) latestHigh = pivot;
+    if (pivot.kind === "low" && latestLow == null) latestLow = pivot;
+    if (latestHigh && latestLow) break;
+  }
+  if (!latestHigh || !latestLow) return null;
+  const highPrice = latestHigh.price;
+  const lowPrice = latestLow.price;
+  const range = highPrice - lowPrice;
+  if (!Number.isFinite(range) || range <= 0) return null;
+  const supplyBottomPrice = highPrice - range * 0.25;
+  const demandTopPrice = lowPrice + range * 0.25;
+  const eqPrice = (highPrice + lowPrice) / 2;
+  const supplyTopY = handle.priceToCoordinate(highPrice);
+  const supplyBottomY = handle.priceToCoordinate(supplyBottomPrice);
+  const demandTopY = handle.priceToCoordinate(demandTopPrice);
+  const demandBottomY = handle.priceToCoordinate(lowPrice);
+  const eqY = handle.priceToCoordinate(eqPrice);
+  if (
+    supplyTopY == null ||
+    supplyBottomY == null ||
+    demandTopY == null ||
+    demandBottomY == null ||
+    eqY == null
+  ) {
+    return null;
+  }
+  return {
+    supplyTop: { y: supplyTopY, price: highPrice },
+    supplyBottom: { y: supplyBottomY, price: supplyBottomPrice },
+    demandTop: { y: demandTopY, price: demandTopPrice },
+    demandBottom: { y: demandBottomY, price: lowPrice },
+    eq: { y: eqY, price: eqPrice },
+  };
 }
 
 function buildSwingPointLevels(
