@@ -158,6 +158,11 @@ export function FibAnnotationLayer({
   const [geoms, setGeoms] = useState<FibGeom[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Width of the right price-axis gutter (in px). We subtract this from
+  // `containerSize.w` so fib %, fib price and PD labels land just before
+  // the price-axis numbers, not on top of them. Updates whenever the
+  // chart viewport changes (price scale auto-resizes with new digits).
+  const [axisWidth, setAxisWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{
     annotationId: string;
@@ -181,6 +186,16 @@ export function FibAnnotationLayer({
     setContainerSize({ w: rect.width, h: rect.height });
     return () => ro.disconnect();
   }, []);
+
+  // Keep the right-axis width in sync with the chart. It can shift any
+  // time the price scale resizes (zoom / new digits / different symbol).
+  useEffect(() => {
+    const handle = canvasRef.current;
+    if (!handle) return;
+    const update = () => setAxisWidth(handle.getRightAxisWidth());
+    update();
+    return handle.subscribeViewport(update);
+  }, [canvasRef]);
 
   // Recompute pixel geometry on viewport / annotations change.
   useEffect(() => {
@@ -410,8 +425,13 @@ export function FibAnnotationLayer({
           // overlap, no labels falling off-screen. Price is the
           // right-most (mono, brighter); the percentage sits to its
           // left (UI font, dimmed). MT5 native behaviour.
-          const priceLabelRightX = containerSize.w - RIGHT_RAIL_OFFSET;
-          // Reserve ~58px for the price text so the % can slot in just
+          // Anchor on the CHART canvas, not inside the price-axis
+          // gutter. `axisWidth` is the live price-axis width (≈ 60-80px
+          // depending on digits / zoom). Subtracting it keeps every
+          // right-rail label visibly on top of candles, never on top of
+          // the numeric price scale.
+          const priceLabelRightX = containerSize.w - axisWidth - RIGHT_RAIL_OFFSET;
+          // Reserve ~60px for the price text so the % can slot in just
           // to its left without overlap. Works for FX (5 digits),
           // metals (3 digits) and indices (1-2 digits).
           const pctLabelRightX = priceLabelRightX - 60;
@@ -480,9 +500,9 @@ export function FibAnnotationLayer({
                     strokeWidth={0.6}
                     strokeDasharray="3 3"
                   />
-                  {/* PREMIUM label — right rail, mid of top band */}
+                  {/* PREMIUM label — chart canvas, mid of top band */}
                   <text
-                    x={containerSize.w - RIGHT_RAIL_OFFSET}
+                    x={priceLabelRightX}
                     y={topY + bandH / 2 + 3}
                     textAnchor="end"
                     fontFamily="ui-sans-serif, system-ui, -apple-system"
@@ -496,9 +516,9 @@ export function FibAnnotationLayer({
                   >
                     PREMIUM
                   </text>
-                  {/* DISCOUNT label — right rail, mid of bottom band */}
+                  {/* DISCOUNT label — chart canvas, mid of bottom band */}
                   <text
-                    x={containerSize.w - RIGHT_RAIL_OFFSET}
+                    x={priceLabelRightX}
                     y={botY - bandH / 2 + 3}
                     textAnchor="end"
                     fontFamily="ui-sans-serif, system-ui, -apple-system"
@@ -515,7 +535,7 @@ export function FibAnnotationLayer({
                   {/* EQ label */}
                   {eqLine ? (
                     <text
-                      x={containerSize.w - RIGHT_RAIL_OFFSET}
+                      x={priceLabelRightX}
                       y={eqLine.y - 2}
                       textAnchor="end"
                       fontFamily="ui-sans-serif, system-ui, -apple-system"

@@ -597,6 +597,17 @@ export function ChartIndicatorLayer({
               const isHigh = level.kind === "high";
               const stroke = isHigh ? "rgba(244,63,94,0.68)" : "rgba(45,212,191,0.68)";
               const fill = isHigh ? "rgba(244,63,94,0.95)" : "rgba(45,212,191,0.95)";
+              // When MARKET STRUCTURE is also on, the HH / HL / LH / LL
+              // labels sit at ~y-6 above their pivot lines. We push the
+              // swing SH / SL labels further out (-18 / +24 instead of
+              // -7 / +13) so the two layers stack cleanly, never overlap.
+              const yOffset = active.structure
+                ? isHigh
+                  ? -18
+                  : 24
+                : isHigh
+                  ? -7
+                  : 13;
               return (
                 <g key={`swing-${level.kind}-${index}`}>
                   <line
@@ -612,7 +623,7 @@ export function ChartIndicatorLayer({
                   <circle cx={level.x1} cy={level.y} r={2.5} fill={fill} opacity={0.88} />
                   <text
                     x={Math.max(6, level.x1 - 3)}
-                    y={level.y + (isHigh ? -7 : 13)}
+                    y={level.y + yOffset}
                     textAnchor="end"
                     fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                     fontSize="9"
@@ -647,9 +658,9 @@ export function ChartIndicatorLayer({
                   strokeDasharray={item.continuation ? "6 5" : undefined}
                 />
                 <text
-                  x={item.x2}
+                  x={(item.x1 + item.x2) / 2}
                   y={item.y - 6}
-                  textAnchor="end"
+                  textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                   fontSize="10"
                   fontWeight="700"
@@ -826,8 +837,12 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
   const sideLabel = buyersWin
     ? `B ${Math.round(v.buyerPercent)}%`
     : `S ${Math.round(v.sellerPercent)}%`;
-  const sideColor = buyersWin ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
-  const baseColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
+  // Both rows use the OB's own direction colour — softer, premium look.
+  // No more red/green dominance split: the volumetric inner bars already
+  // show which side is bigger.
+  const labelColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
+  const sideColor = labelColor;
+  const baseColor = labelColor;
 
   // Right edge inside the box, with 6px right-padding so text doesn't
   // sit flush against the border.
@@ -913,6 +928,8 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   if (variant === "ob") {
     const obWidth = Math.max(2, zone.extendX - zone.x);
     const obRightX = zone.x + obWidth;
+    const extensionStartX = detectionEndX;
+    const extensionWidth = Math.max(0, obRightX - extensionStartX);
     const v = zone.volumetric;
     // Inner sub-bars sit inside the SOURCE candle column. They share the
     // same base width so percentages are visually comparable.
@@ -922,18 +939,37 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
     const halfH = zone.height / 2;
     const sellerFill = "rgba(244,63,94,0.55)";
     const buyerFill = "rgba(45,212,191,0.55)";
+    // Two-tone background: the source area carries the OB's normal
+    // translucent fill, while the forward extension is more transparent
+    // so it reads as "this zone is still relevant" without competing
+    // visually with live candles to its left. Premium-but-quiet look.
+    const sourceFill = zone.direction === "up" ? "rgba(45,212,191,0.20)" : "rgba(239,68,68,0.20)";
+    const extensionFill = zone.direction === "up" ? "rgba(45,212,191,0.08)" : "rgba(239,68,68,0.08)";
     return (
       <g opacity={fadeFactor}>
         <rect
           x={zone.x}
           y={zone.y}
-          width={obWidth}
+          width={Math.max(2, detectionWidth)}
           height={zone.height}
-          fill={zone.fill}
+          fill={sourceFill}
           stroke={zone.stroke}
           strokeWidth={1}
           rx={3}
         />
+        {extensionWidth > 0 ? (
+          <rect
+            x={extensionStartX}
+            y={zone.y}
+            width={extensionWidth}
+            height={zone.height}
+            fill={extensionFill}
+            stroke={zone.stroke}
+            strokeWidth={0.85}
+            strokeOpacity={0.55}
+            rx={3}
+          />
+        ) : null}
         {v && v.totalVolume > 0 && sellerW > 0 && halfH > 1 ? (
           <rect
             x={zone.x}
@@ -962,19 +998,6 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           strokeDasharray="2 3"
           opacity={0.85}
         />
-        <text
-          x={zone.x + 4}
-          y={zone.y + 10}
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight="700"
-          fill={zone.stroke}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.4"
-          paintOrder="stroke"
-        >
-          {labelText}
-        </text>
         <ObInnerVolumeLabel zone={zone} obRightX={obRightX} />
       </g>
     );
@@ -1048,9 +1071,18 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         >
           {originalIsBull ? "▼" : "▲"}
         </text>
+        {/* Label is centred inside the LATEST (right / inverted) half
+            so when the FVG flips, the marker tracks the active state
+            the trader cares about right now. Falls back to the whole
+            zone centre when the right half is too thin to fit. */}
         <text
-          x={zone.x + 4}
-          y={zone.y + 10}
+          x={
+            rightWidth > 18
+              ? inversionX + rightWidth / 2
+              : zone.x + Math.max(leftWidth + rightWidth, 2) / 2
+          }
+          y={zone.y + zone.height / 2 + 3}
+          textAnchor="middle"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
           fontSize="9"
           fontWeight="700"
@@ -1067,8 +1099,8 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
 
   // FVG → only the dense filled block in its own colour. No forward
   // bleed, no dashed midline, nothing extending past the box. Colour
-  // is now amber/gold (set in the FVG builder) so it's visually
-  // distinct from iFVG (red/teal) and OB (red/teal).
+  // is amber/gold so FVGs are visually distinct from iFVG (teal/red)
+  // and OB (teal/red). Label is centred inside the block.
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -1082,8 +1114,9 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         rx={2}
       />
       <text
-        x={zone.x + 4}
-        y={zone.y + 10}
+        x={zone.x + Math.max(2, detectionWidth) / 2}
+        y={zone.y + zone.height / 2 + 3}
+        textAnchor="middle"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
         fontSize="9"
         fontWeight="700"
@@ -1342,7 +1375,14 @@ function buildStructureOverlay(
     if (previous && displacementThreshold > 0 && Math.abs(candle.close - candle.open) > displacementThreshold * 0.9) {
       const top = Math.max(previous.open, previous.close);
       const bottom = Math.min(previous.open, previous.close);
-      const x = handle.timeToCoordinate(previous.time);
+      // OB box sits NEXT TO the 2 candles that made it (the OB source
+      // candle + the displacement candle) instead of overlapping them.
+      // The trader still sees both real candles cleanly; the zone +
+      // its volumetric inner bars start at the candle right after the
+      // displacement. Falls back to the displacement candle's X when
+      // there is no next candle yet (live tick).
+      const sourceStartIdx = Math.min(index + 1, visible.length - 1);
+      const x = handle.timeToCoordinate(visible[sourceStartIdx].time);
       const x2 = handle.timeToCoordinate(visible[Math.min(index + 5, visible.length - 1)].time);
       const topY = handle.priceToCoordinate(top);
       const bottomY = handle.priceToCoordinate(bottom);
