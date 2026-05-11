@@ -912,51 +912,87 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   const fadeFactor = zone.mitigated ? 0.45 : 1;
   const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
   const detectionEndX = zone.x + detectionWidth;
-  const extensionStartX = detectionEndX;
-  const extensionWidth = Math.max(0, zone.extendX - extensionStartX);
 
-  // OB → LuxAlgo Price Action Concepts layout: a solid filled rect for
-  // the DETECTED zone only, then two dashed rays (top + bottom edges)
-  // extending right to the projection X. The volume "153.588K (32%)"
-  // label is drawn separately on the shared right rail by
-  // `VolumetricRightRailLabel`, so we keep this renderer minimal.
+  // OB → LuxAlgo Volumetric layout the user pointed at in the latest
+  // reference photo:
+  //   • One fully filled translucent box from origin to the projection
+  //     X (covers the whole "relevant" zone).
+  //   • Inside the source-candle column (zone.x → detectionEndX): the
+  //     OB is split horizontally into two stacked sub-bars whose
+  //     HEIGHTS are proportional to seller / buyer tickVolume share.
+  //     Seller on top (red), buyer on bottom (teal). Whichever side is
+  //     stronger visibly takes more vertical room.
+  //   • A dotted midline runs through the whole box but STOPS at the
+  //     right edge of the box (no overflow into the chart canvas).
+  //   • Small "OB" label sits inside the top-left of the box.
+  // The right-rail "153.588K (32%)" label + its dashed connector are
+  // drawn separately by `VolumetricRightRailLabel`, so this renderer
+  // only owns the in-zone visuals.
   if (variant === "ob") {
+    const obWidth = Math.max(2, (zone.extend ? zone.extendX : detectionEndX) - zone.x);
+    const obRightX = zone.x + obWidth;
+    const v = zone.volumetric;
+    const sellerH = v && v.totalVolume > 0 ? zone.height * (v.sellerPercent / 100) : 0;
+    const buyerH = v && v.totalVolume > 0 ? zone.height - sellerH : 0;
+    // Inner sub-bars sit inside the SOURCE candle width only — they're
+    // about the OB's footprint, not the projection. We use a slightly
+    // denser fill on those sub-bars so the trader's eye lands on the
+    // "core" of the OB even when the rest of the box is very faint.
+    const sellerFill = "rgba(244,63,94,0.42)";
+    const buyerFill = "rgba(45,212,191,0.42)";
     return (
       <g opacity={fadeFactor}>
         <rect
           x={zone.x}
           y={zone.y}
-          width={Math.max(2, detectionWidth)}
+          width={obWidth}
           height={zone.height}
           fill={zone.fill}
           stroke={zone.stroke}
           strokeWidth={1}
           rx={3}
         />
-        {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y}
-            y2={zone.y}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.85}
+        {v && v.totalVolume > 0 && sellerH > 0 ? (
+          <rect
+            x={zone.x}
+            y={zone.y}
+            width={Math.max(2, detectionWidth)}
+            height={sellerH}
+            fill={sellerFill}
           />
         ) : null}
-        {zone.extend && extensionWidth > 1 ? (
-          <line
-            x1={extensionStartX}
-            x2={zone.extendX}
-            y1={zone.y + zone.height}
-            y2={zone.y + zone.height}
-            stroke={zone.stroke}
-            strokeWidth={1}
-            strokeDasharray="5 4"
-            opacity={0.85}
+        {v && v.totalVolume > 0 && buyerH > 0 ? (
+          <rect
+            x={zone.x}
+            y={zone.y + sellerH}
+            width={Math.max(2, detectionWidth)}
+            height={buyerH}
+            fill={buyerFill}
           />
         ) : null}
+        <line
+          x1={zone.x}
+          x2={obRightX}
+          y1={zone.midY}
+          y2={zone.midY}
+          stroke={zone.stroke}
+          strokeWidth={1}
+          strokeDasharray="2 3"
+          opacity={0.85}
+        />
+        <text
+          x={zone.x + 4}
+          y={zone.y + 10}
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+          fontSize="9"
+          fontWeight="700"
+          fill={zone.stroke}
+          stroke="rgba(0,0,0,0.78)"
+          strokeWidth="2.4"
+          paintOrder="stroke"
+        >
+          {labelText}
+        </text>
       </g>
     );
   }
@@ -1029,11 +1065,27 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         >
           {originalIsBull ? "▼" : "▲"}
         </text>
+        <text
+          x={zone.x + 4}
+          y={zone.y + 10}
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+          fontSize="9"
+          fontWeight="700"
+          fill={zone.stroke}
+          stroke="rgba(0,0,0,0.78)"
+          strokeWidth="2.4"
+          paintOrder="stroke"
+        >
+          {labelText}
+        </text>
       </g>
     );
   }
 
-  // FVG keeps the soft "filled corridor" treatment.
+  // FVG → only the dense filled block in its own colour. No forward
+  // bleed, no dashed midline, nothing extending past the box. Colour
+  // is now amber/gold (set in the FVG builder) so it's visually
+  // distinct from iFVG (red/teal) and OB (red/teal).
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -1046,27 +1098,19 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         strokeWidth={1}
         rx={2}
       />
-      {zone.extend && extensionWidth > 1 ? (
-        <rect
-          x={extensionStartX}
-          y={zone.y}
-          width={extensionWidth}
-          height={zone.height}
-          fill={zone.fill}
-          opacity={0.85}
-          rx={0}
-        />
-      ) : null}
-      <line
-        x1={zone.x}
-        x2={zone.extendX}
-        y1={zone.midY}
-        y2={zone.midY}
-        stroke={zone.stroke}
-        strokeWidth={0.85}
-        strokeDasharray="4 3"
-        opacity={0.85}
-      />
+      <text
+        x={zone.x + 4}
+        y={zone.y + 10}
+        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+        fontSize="9"
+        fontWeight="700"
+        fill={zone.stroke}
+        stroke="rgba(0,0,0,0.78)"
+        strokeWidth="2.4"
+        paintOrder="stroke"
+      >
+        {labelText}
+      </text>
     </g>
   );
 }
@@ -1413,8 +1457,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(45,212,191,0.78)",
-              fill: "rgba(45,212,191,0.18)",
+              stroke: "rgba(250,204,21,0.95)",
+              fill: "rgba(250,204,21,0.22)",
               direction: "up",
               extend: !mitigated,
               mitigated,
@@ -1440,8 +1484,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(244,63,94,0.78)",
-              fill: "rgba(244,63,94,0.16)",
+              stroke: "rgba(217,119,6,0.95)",
+              fill: "rgba(217,119,6,0.22)",
               direction: "down",
               extend: !mitigated,
               mitigated,
