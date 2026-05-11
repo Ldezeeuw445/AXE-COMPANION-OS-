@@ -384,14 +384,7 @@ export function ChartIndicatorLayer({
       <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
         {active.orderBlocks
           ? geometry.orderBlocks.map((zone, index) => (
-              <g key={`ob-${index}`}>
-                <ZoneBox zone={zone} variant="ob" />
-                <VolumetricRightRailLabel
-                  zone={zone}
-                  containerWidth={size.w}
-                  totalChartVolume={geometry.totalChartVolume}
-                />
-              </g>
+              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" />
             ))
           : null}
 
@@ -809,36 +802,26 @@ function formatVolume(n: number): string {
  * Values are 100% honest — they come straight from the candle tickVolume
  * inside the OB band (see buildVolumetricBreakdown).
  */
-function VolumetricRightRailLabel({
-  zone,
-  containerWidth,
-  totalChartVolume,
-}: {
-  zone: Zone;
-  containerWidth: number;
-  totalChartVolume: number;
-}) {
+/**
+ * OB volume label rendered INSIDE the order block, anchored to its
+ * right edge (just before the projection X). Replaces the older
+ * `VolumetricRightRailLabel` which drew a dashed connector out to the
+ * price rail — the user explicitly asked for the label to live inside
+ * the box instead of on the rail.
+ *
+ * Two short text rows:
+ *   • Top:    "153.588K (32%)"  → absolute tickVolume + share of recent
+ *              chart volume.
+ *   • Bottom: "B 54%" / "S 67%" → dominant side + its percentage.
+ *
+ * Falls back to a single row when the OB is too thin to fit both.
+ */
+function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }) {
   const v = zone.volumetric;
   if (!v || v.totalVolume <= 0) return null;
-
-  // Don't draw labels on incredibly thin OBs (< 8 px height) — they'd
-  // overlap stacked OBs and turn into noise. Lowered from 12 → 8 so
-  // the label still appears on tight FX consolidations on a phone.
   if (zone.height < 8) return null;
 
-  const railX = containerWidth - RIGHT_RAIL_OFFSET;
-  // Volume + percent of recent chart volume, e.g. "1.08K (13%)". When
-  // the broker doesn't ship tickVolume on this symbol the chart total
-  // is 0 — the % becomes meaningless, so we drop the suffix and just
-  // show the absolute OB volume rather than confidently lying with
-  // "(0%)".
-  const showPct = totalChartVolume > 0;
-  const volPctOfChart = showPct
-    ? Math.max(0, Math.round((v.totalVolume / totalChartVolume) * 100))
-    : 0;
-  const volLabel = showPct
-    ? `${formatVolume(v.totalVolume)} (${volPctOfChart}%)`
-    : formatVolume(v.totalVolume);
+  const volLabel = formatVolume(v.totalVolume);
   const buyersWin = v.buyerPercent >= v.sellerPercent;
   const sideLabel = buyersWin
     ? `B ${Math.round(v.buyerPercent)}%`
@@ -846,24 +829,18 @@ function VolumetricRightRailLabel({
   const sideColor = buyersWin ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
   const baseColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
 
-  // Two stacked text rows: volume label above the OB midline, dominance
-  // label below — both right-anchored on the shared rail.
+  // Right edge inside the box, with 6px right-padding so text doesn't
+  // sit flush against the border.
+  const xRight = obRightX - 6;
+  const canFitTwoRows = zone.height >= 22;
+  const yTop = canFitTwoRows ? zone.midY - 2 : zone.midY + 3;
+  const yBottom = zone.midY + 11;
+
   return (
     <g pointerEvents="none">
-      {/* Dashed extension line from the OB right edge to the label. */}
-      <line
-        x1={zone.detectionEndX}
-        x2={railX - 4}
-        y1={zone.midY}
-        y2={zone.midY}
-        stroke={zone.stroke}
-        strokeWidth={0.85}
-        strokeDasharray="3 4"
-        opacity={0.85}
-      />
       <text
-        x={railX}
-        y={zone.midY - 2}
+        x={xRight}
+        y={yTop}
         textAnchor="end"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
         fontSize="9.5"
@@ -875,20 +852,22 @@ function VolumetricRightRailLabel({
       >
         {volLabel}
       </text>
-      <text
-        x={railX}
-        y={zone.midY + 11}
-        textAnchor="end"
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-        fontSize="9"
-        fontWeight={700}
-        fill={sideColor}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.6"
-        paintOrder="stroke"
-      >
-        {sideLabel}
-      </text>
+      {canFitTwoRows ? (
+        <text
+          x={xRight}
+          y={yBottom}
+          textAnchor="end"
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+          fontSize="9"
+          fontWeight={700}
+          fill={sideColor}
+          stroke="rgba(0,0,0,0.78)"
+          strokeWidth="2.6"
+          paintOrder="stroke"
+        >
+          {sideLabel}
+        </text>
+      ) : null}
     </g>
   );
 }
@@ -896,16 +875,15 @@ function VolumetricRightRailLabel({
 /**
  * Single-zone renderer used by OB / FVG / iFVG.
  *
- * - OB: solid filled band at the detected zone, with an optional inner
- *   horizontal split fill (green buyer share at bottom, red seller share
- *   at top) sized by real tickVolume. Top + bottom edges extend right
- *   as DASHED rays — exactly the LuxAlgo "Volumetric Order Blocks"
- *   layout in the user's reference photo. Volume + dominance labels
- *   are rendered separately on the shared right rail by
- *   `VolumetricRightRailLabel`.
- * - FVG: solid filled rect, soft fill bleed forward.
- * - iFVG: dashed border so the inversion source is visible, fill bleeds
- *   forward to show forward relevance.
+ * - OB: fully filled translucent zone reaching a uniform right edge
+ *   (every visible OB stops at the same X). Inside, two horizontal
+ *   sub-bars whose WIDTHS are proportional to seller vs buyer
+ *   tickVolume share — bigger side is visibly longer. Dotted midline
+ *   inside the box. Small "OB" label top-left, volume + dominance
+ *   labels INSIDE the right edge (no right-rail connector).
+ * - FVG: dense solid filled rect only — no extension, no dashed line.
+ * - iFVG: two-tone box (original colour | inverted colour) split at
+ *   the inversion candle, dashed midline, ▲/▼ trigger marker.
  */
 function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg" }) {
   const labelText = variant === "ifvg" ? "iFVG" : variant === "fvg" ? "FVG" : "OB";
@@ -913,33 +891,37 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
   const detectionEndX = zone.x + detectionWidth;
 
-  // OB → LuxAlgo Volumetric layout the user pointed at in the latest
-  // reference photo:
-  //   • One fully filled translucent box from origin to the projection
-  //     X (covers the whole "relevant" zone).
-  //   • Inside the source-candle column (zone.x → detectionEndX): the
-  //     OB is split horizontally into two stacked sub-bars whose
-  //     HEIGHTS are proportional to seller / buyer tickVolume share.
-  //     Seller on top (red), buyer on bottom (teal). Whichever side is
-  //     stronger visibly takes more vertical room.
-  //   • A dotted midline runs through the whole box but STOPS at the
-  //     right edge of the box (no overflow into the chart canvas).
-  //   • Small "OB" label sits inside the top-left of the box.
-  // The right-rail "153.588K (32%)" label + its dashed connector are
-  // drawn separately by `VolumetricRightRailLabel`, so this renderer
-  // only owns the in-zone visuals.
+  // OB → LuxAlgo Volumetric layout, refined per user feedback:
+  //   • One fully filled translucent box from origin to a UNIFORM right
+  //     edge (futureExtensionX). Every visible OB reaches the same X so
+  //     a 1/2/3 count filter only controls how many are shown, never
+  //     their length.
+  //   • Inside the source-candle column (zone.x → detectionEndX) sit
+  //     two stacked horizontal mini-bars. Each occupies half of the box
+  //     height. Their WIDTH (= length) is proportional to its side's
+  //     tickVolume share — the bigger side is visibly longer, never
+  //     equal by default.
+  //       - Top half:    red seller bar,  width = sellerPct × innerMax
+  //       - Bottom half: teal buyer bar,  width = buyerPct  × innerMax
+  //   • A dotted midline runs through the box but STOPS at the right
+  //     edge (no overflow into the price axis).
+  //   • Two small labels:
+  //       - "OB" at top-left corner.
+  //       - "vol (pct%) / B|S xx%" stacked at the RIGHT edge of the box,
+  //         inside the OB itself. The old right-rail connector + label
+  //         are gone.
   if (variant === "ob") {
-    const obWidth = Math.max(2, (zone.extend ? zone.extendX : detectionEndX) - zone.x);
+    const obWidth = Math.max(2, zone.extendX - zone.x);
     const obRightX = zone.x + obWidth;
     const v = zone.volumetric;
-    const sellerH = v && v.totalVolume > 0 ? zone.height * (v.sellerPercent / 100) : 0;
-    const buyerH = v && v.totalVolume > 0 ? zone.height - sellerH : 0;
-    // Inner sub-bars sit inside the SOURCE candle width only — they're
-    // about the OB's footprint, not the projection. We use a slightly
-    // denser fill on those sub-bars so the trader's eye lands on the
-    // "core" of the OB even when the rest of the box is very faint.
-    const sellerFill = "rgba(244,63,94,0.42)";
-    const buyerFill = "rgba(45,212,191,0.42)";
+    // Inner sub-bars sit inside the SOURCE candle column. They share the
+    // same base width so percentages are visually comparable.
+    const innerMaxW = Math.max(8, detectionWidth);
+    const sellerW = v && v.totalVolume > 0 ? innerMaxW * (v.sellerPercent / 100) : 0;
+    const buyerW = v && v.totalVolume > 0 ? innerMaxW * (v.buyerPercent / 100) : 0;
+    const halfH = zone.height / 2;
+    const sellerFill = "rgba(244,63,94,0.55)";
+    const buyerFill = "rgba(45,212,191,0.55)";
     return (
       <g opacity={fadeFactor}>
         <rect
@@ -952,21 +934,21 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           strokeWidth={1}
           rx={3}
         />
-        {v && v.totalVolume > 0 && sellerH > 0 ? (
+        {v && v.totalVolume > 0 && sellerW > 0 && halfH > 1 ? (
           <rect
             x={zone.x}
             y={zone.y}
-            width={Math.max(2, detectionWidth)}
-            height={sellerH}
+            width={Math.max(1, sellerW)}
+            height={halfH}
             fill={sellerFill}
           />
         ) : null}
-        {v && v.totalVolume > 0 && buyerH > 0 ? (
+        {v && v.totalVolume > 0 && buyerW > 0 && halfH > 1 ? (
           <rect
             x={zone.x}
-            y={zone.y + sellerH}
-            width={Math.max(2, detectionWidth)}
-            height={buyerH}
+            y={zone.y + halfH}
+            width={Math.max(1, buyerW)}
+            height={halfH}
             fill={buyerFill}
           />
         ) : null}
@@ -993,6 +975,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         >
           {labelText}
         </text>
+        <ObInnerVolumeLabel zone={zone} obRightX={obRightX} />
       </g>
     );
   }
@@ -1414,13 +1397,13 @@ function buildStructureOverlay(
             y: Math.min(topY, bottomY),
             width: baseWidth,
             height: Math.max(2, Math.abs(bottomY - topY)),
-            extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+            extendX: Math.max(detectionEndX, futureExtensionX),
             detectionEndX,
             midY: (topY + bottomY) / 2,
             stroke: isBullishOb ? "rgba(45,212,191,0.65)" : "rgba(239,68,68,0.65)",
             fill: isBullishOb ? "rgba(45,212,191,0.18)" : "rgba(239,68,68,0.18)",
             direction: isBullishOb ? "up" : "down",
-            extend: !mitigated,
+            extend: true,
             mitigated,
             volumeProfile: profile,
             volumetric,
@@ -1990,7 +1973,7 @@ function buildInverseFvgs(
             width: Math.max(8, detectionEndX - x1),
             height: Math.max(2, Math.abs(yBot - yTop)),
             detectionEndX,
-            extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+            extendX: Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
             stroke: "rgba(242,54,69,0.95)",
             fill: "rgba(242,54,69,0.22)",
@@ -1999,7 +1982,7 @@ function buildInverseFvgs(
             direction: "down",
             originalDirection: "up",
             inversionX: invX,
-            extend: !secondMitigation,
+            extend: true,
             mitigated: secondMitigation,
           });
         }
@@ -2048,7 +2031,7 @@ function buildInverseFvgs(
             width: Math.max(8, detectionEndX - x1),
             height: Math.max(2, Math.abs(yBot - yTop)),
             detectionEndX,
-            extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
+            extendX: Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
             stroke: "rgba(8,153,129,0.95)",
             fill: "rgba(8,153,129,0.22)",
@@ -2056,7 +2039,7 @@ function buildInverseFvgs(
             direction: "up",
             originalDirection: "down",
             inversionX: invX,
-            extend: !secondMitigation,
+            extend: true,
             mitigated: secondMitigation,
           });
         }
