@@ -7,6 +7,8 @@ import {
   bollingerBands,
   pointOfControl,
   sessionVwap,
+  atrSeries,
+  smaSeries,
   type IndicatorMathCandle,
 } from "@/lib/chart/indicatorMath";
 
@@ -132,6 +134,20 @@ type Zone = {
   volumeProfile?: VolumeProfileBar[];
   /** Buyer / seller volume split inside the zone (OB only). */
   volumetric?: VolumetricBreakdown;
+  /**
+   * Pixel X of the candle that inverted the source FVG (iFVG only).
+   * The renderer splits the box here: left half keeps the original FVG
+   * colour, right half is the inverted colour — matches the LuxAlgo
+   * "Inversion Fair Value Gaps" reference visual.
+   */
+  inversionX?: number;
+  /**
+   * Direction of the source FVG *before* it flipped polarity (iFVG only).
+   * "up" = bullish FVG (now inverted to bearish resistance),
+   * "down" = bearish FVG (now inverted to bullish support).
+   * Used by the renderer to colour the left half (= original FVG colour).
+   */
+  originalDirection?: "up" | "down";
 };
 type VolumeProfileBar = { y: number; height: number; widthFraction: number };
 type StructureArrow = { x: number; y: number; label: string; bullish: boolean };
@@ -297,7 +313,16 @@ export function ChartIndicatorLayer({
       pocRaw && pocY != null ? { y: pocY, price: pocRaw.price, volume: pocRaw.volume } : null;
 
     const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX);
-    const inverseFairValueGaps = buildInverseFvgs(visibleWithTime, handle, futureExtensionX);
+    // ATR(200) drives the LuxAlgo iFVG gap-size filter (default 0.25
+     // × ATR). Filters out micro-gaps that would otherwise clutter the
+     // chart with noise on calmer pairs.
+    const atrForIfvg = atrSeries(visibleWithTime as IndicatorMathCandle[], 200);
+    const inverseFairValueGaps = buildInverseFvgs(
+      visibleWithTime,
+      handle,
+      futureExtensionX,
+      atrForIfvg,
+    );
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
       buildPreviousDayLevels(visibleWithTime, handle);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
@@ -869,64 +894,6 @@ function VolumetricRightRailLabel({
 }
 
 /**
- * Volumetric split bar — the OB is drawn as one solid horizontal bar
- * whose red/teal segment lengths match seller/buyer tick-volume share.
- * Example: seller 20 / buyer 80 means the teal segment is four times
- * longer than the red segment.
- */
-function VolumetricSplitFill({ zone }: { zone: Zone }) {
-  const v = zone.volumetric;
-  if (!v || v.totalVolume <= 0) return null;
-  const barWidth = Math.max(2, (zone.extend ? zone.extendX : zone.detectionEndX) - zone.x);
-  const sellerWidth = barWidth * (v.sellerPercent / 100);
-  const buyerWidth = barWidth - sellerWidth;
-  const barHeight = Math.min(8, Math.max(3, zone.height - 4));
-  const y = zone.midY - barHeight / 2;
-  const buyerFill = "rgba(45,212,191,0.64)";
-  const sellerFill = "rgba(244,63,94,0.64)";
-  return (
-    <g pointerEvents="none">
-      <rect
-        x={zone.x}
-        y={y}
-        width={barWidth}
-        height={barHeight}
-        fill="rgba(2,6,23,0.62)"
-        rx={barHeight / 2}
-      />
-      {sellerWidth > 0.5 ? (
-        <rect
-          x={zone.x}
-          y={y}
-          width={sellerWidth}
-          height={barHeight}
-          fill={sellerFill}
-          rx={barHeight / 2}
-        />
-      ) : null}
-      {buyerWidth > 0.5 ? (
-        <rect
-          x={zone.x + sellerWidth}
-          y={y}
-          width={buyerWidth}
-          height={barHeight}
-          fill={buyerFill}
-          rx={barHeight / 2}
-        />
-      ) : null}
-      <line
-        x1={zone.x + sellerWidth}
-        x2={zone.x + sellerWidth}
-        y1={y - 1}
-        y2={y + barHeight + 1}
-        stroke="rgba(255,255,255,0.55)"
-        strokeWidth={0.7}
-      />
-    </g>
-  );
-}
-
-/**
  * Single-zone renderer used by OB / FVG / iFVG.
  *
  * - OB: solid filled band at the detected zone, with an optional inner
@@ -948,62 +915,119 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   const extensionStartX = detectionEndX;
   const extensionWidth = Math.max(0, zone.extendX - extensionStartX);
 
-  // OB → LuxAlgo "Volumetric" layout: filled band + horizontal volume
-  // split + dashed top/bottom rays extending right.
+  // OB → LuxAlgo Price Action Concepts layout: a solid filled rect for
+  // the DETECTED zone only, then two dashed rays (top + bottom edges)
+  // extending right to the projection X. The volume "153.588K (32%)"
+  // label is drawn separately on the shared right rail by
+  // `VolumetricRightRailLabel`, so we keep this renderer minimal.
   if (variant === "ob") {
-    const obWidth = Math.max(2, (zone.extend ? zone.extendX : detectionEndX) - zone.x);
     return (
       <g opacity={fadeFactor}>
-        {/* One continuous OB strip. The volumetric bar below is split by
-            buyer/seller percent across this same width, so there is no
-            short half-red/half-teal block followed by dashed leftovers. */}
         <rect
           x={zone.x}
           y={zone.y}
-          width={obWidth}
+          width={Math.max(2, detectionWidth)}
           height={zone.height}
           fill={zone.fill}
           stroke={zone.stroke}
           strokeWidth={1}
           rx={3}
         />
-        {/* Volumetric horizontal split (length = buyer/seller percent). */}
-        {zone.volumetric && zone.volumetric.totalVolume > 0 ? (
-          <VolumetricSplitFill zone={zone} />
+        {zone.extend && extensionWidth > 1 ? (
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y}
+            y2={zone.y}
+            stroke={zone.stroke}
+            strokeWidth={1}
+            strokeDasharray="5 4"
+            opacity={0.85}
+          />
+        ) : null}
+        {zone.extend && extensionWidth > 1 ? (
+          <line
+            x1={extensionStartX}
+            x2={zone.extendX}
+            y1={zone.y + zone.height}
+            y2={zone.y + zone.height}
+            stroke={zone.stroke}
+            strokeWidth={1}
+            strokeDasharray="5 4"
+            opacity={0.85}
+          />
         ) : null}
       </g>
     );
   }
 
-  // iFVG → rendered as one clean straight polarity line, not a filled
-  // FVG corridor. The color is the flipped state: support/bullish cyan
-  // or resistance/bearish red.
+  // iFVG → LuxAlgo "Inversion Fair Value Gaps" reference visual.
+  //   • Two horizontally-stacked filled boxes split at `inversionX`:
+  //       - Left  (x → inversionX): ORIGINAL FVG colour (the colour the
+  //         box had before the candle that flipped it).
+  //       - Right (inversionX → extendX): INVERTED colour (the colour
+  //         after the flip). Same colour extends through the forward
+  //         projection so the trader still sees the zone reaching into
+  //         the future where it matters.
+  //   • One dashed gray midline runs across both halves and the
+  //     projection.
+  //   • Box border is invisible — the colour split is the signal.
   if (variant === "ifvg") {
-    const lineEndX = zone.extend ? zone.extendX : detectionEndX;
+    const inversionX = Math.max(zone.x, Math.min(zone.inversionX ?? detectionEndX, zone.extendX));
+    const rightEndX = zone.extend ? zone.extendX : Math.max(inversionX, detectionEndX);
+    // The original colour is the OPPOSITE of zone.fill (which encodes the
+    // current/inverted polarity). We derive it from `originalDirection`
+    // rather than zone.fill so the colour pair stays consistent even if
+    // the fill is tweaked later.
+    const originalIsBull = zone.originalDirection === "up";
+    const originalFill = originalIsBull ? "rgba(8,153,129,0.22)" : "rgba(242,54,69,0.22)";
+    const leftWidth = Math.max(0, inversionX - zone.x);
+    const rightWidth = Math.max(0, rightEndX - inversionX);
     return (
       <g opacity={fadeFactor}>
+        {leftWidth > 0 ? (
+          <rect
+            x={zone.x}
+            y={zone.y}
+            width={leftWidth}
+            height={zone.height}
+            fill={originalFill}
+          />
+        ) : null}
+        {rightWidth > 0 ? (
+          <rect
+            x={inversionX}
+            y={zone.y}
+            width={rightWidth}
+            height={zone.height}
+            fill={zone.fill}
+          />
+        ) : null}
         <line
           x1={zone.x}
-          x2={lineEndX}
+          x2={rightEndX}
           y1={zone.midY}
           y2={zone.midY}
-          stroke={zone.stroke}
-          strokeWidth={2}
-          strokeLinecap="round"
-          opacity={0.95}
+          stroke="rgba(120,123,134,0.85)"
+          strokeWidth={0.9}
+          strokeDasharray="4 3"
         />
+        {/* Tiny trigger marker at the inversion candle so the trader
+            sees the flip moment clearly. ▲ for bullish flip (originalDir
+            = down, now support), ▼ for bearish flip. */}
         <text
-          x={zone.x + 4}
-          y={zone.midY - 4}
+          x={inversionX}
+          y={originalIsBull ? zone.y - 4 : zone.y + zone.height + 10}
+          textAnchor="middle"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
           fontSize="9"
           fontWeight="700"
           fill={zone.stroke}
           stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.5"
+          strokeWidth="2.4"
           paintOrder="stroke"
         >
-          {labelText}
+          {originalIsBull ? "▼" : "▲"}
         </text>
       </g>
     );
@@ -1223,6 +1247,19 @@ function buildStructureOverlay(
   let lastLoIdx: number | null = null;
   let isBull = true;
   const displacementThreshold = atr(visible, 14) ?? averageRange(visible);
+  // FVG ATR(200) gap filter — same idea as iFVGs but applied here so
+  // micro-gaps (< 0.25 × ATR) never get drawn.
+  const atrSeriesForFvg = atrSeries(visible as IndicatorMathCandle[], 200);
+  const FVG_GAP_MULT = 0.25;
+  // Volume gating for Order Blocks: require the OB candle's tick
+  // volume to exceed the SMA-20 of volume, so accidental displacement
+  // bars on quiet sessions don't get flagged. Falls back to "no gate"
+  // when the broker doesn't ship tick volume.
+  const volumeSeries = visible.map((c) => (c.tickVolume != null ? Number(c.tickVolume) : null));
+  const hasVolume = volumeSeries.some((v) => v != null && v > 0);
+  const volumeSma = hasVolume
+    ? smaSeries(volumeSeries.map((v) => v ?? 0), 20)
+    : Array<number | null>(visible.length).fill(null);
 
   for (let index = 0; index < visible.length; index += 1) {
     if (pivotHighs[index] != null) {
@@ -1285,7 +1322,24 @@ function buildStructureOverlay(
       if (x != null && x2 != null && topY != null && bottomY != null && Math.abs(bottomY - topY) > 1) {
         const isBullishOb = candle.close > candle.open && previous.close < previous.open;
         const isBearishOb = candle.close < candle.open && previous.close > previous.open;
-        if (isBullishOb || isBearishOb) {
+        // MSB gate: the displacement candle must actually break the
+        // most recent opposite-side pivot — that's what turns an OB
+        // candle into a "real" institutional footprint instead of a
+        // random spike. We check up to 3 bars forward so the break
+        // can confirm slightly after the engulfing.
+        const lookahead = visible.slice(index, Math.min(index + 4, visible.length));
+        const brokeStructureUp =
+          lastLo != null && lookahead.some((cc) => cc.close > top + (top - bottom) * 0.25);
+        const brokeStructureDown =
+          lastHi != null && lookahead.some((cc) => cc.close < bottom - (top - bottom) * 0.25);
+        const msbConfirmed =
+          (isBullishOb && brokeStructureUp) || (isBearishOb && brokeStructureDown);
+        // Volume gate: OB candle's tickVolume must exceed SMA-20 of
+        // volume. Skipped when the broker doesn't ship tickVolume.
+        const obVolume = candle.tickVolume != null ? Number(candle.tickVolume) : null;
+        const volumeBaseline = volumeSma[index];
+        const volumeOk = !hasVolume || (obVolume != null && volumeBaseline != null && obVolume > volumeBaseline);
+        if ((isBullishOb || isBearishOb) && msbConfirmed && volumeOk) {
           // Walk forward and check whether the OB has been mitigated:
           // bullish OB is mitigated when a later candle closes BELOW its
           // bottom; bearish OB when a later closes ABOVE its top.
@@ -1335,8 +1389,9 @@ function buildStructureOverlay(
       const twoBack = visible[index - 2];
       const x = handle.timeToCoordinate(twoBack.time);
       const x2 = handle.timeToCoordinate(candle.time);
+      const fvgGapThreshold = (atrSeriesForFvg[index] ?? 0) * FVG_GAP_MULT;
       if (x != null && x2 != null) {
-        if (candle.low > twoBack.high) {
+        if (candle.low > twoBack.high && Math.abs(candle.low - twoBack.high) > fvgGapThreshold) {
           const topY = handle.priceToCoordinate(candle.low);
           const bottomY = handle.priceToCoordinate(twoBack.high);
           if (topY != null && bottomY != null && Math.abs(bottomY - topY) > 1) {
@@ -1365,7 +1420,7 @@ function buildStructureOverlay(
               mitigated,
             });
           }
-        } else if (candle.high < twoBack.low) {
+        } else if (candle.high < twoBack.low && Math.abs(twoBack.low - candle.high) > fvgGapThreshold) {
           const topY = handle.priceToCoordinate(twoBack.low);
           const bottomY = handle.priceToCoordinate(candle.high);
           if (topY != null && bottomY != null && Math.abs(bottomY - topY) > 1) {
@@ -1478,86 +1533,116 @@ function pickLatestZonesPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
 }
 
 /**
- * Geometry for the Supply / Demand indicator. A single SD render unit
- * is the latest swing-high price (`supplyTop`) paired with the latest
- * swing-low price (`demandBottom`). The two 25%-bands and the EQ line
- * are derived from that same pair, so the fib `S/D` mode anchors to
- * the same numbers and lines up perfectly with the band edges.
+ * Geometry for the Supply / Demand indicator. Uses the ERC (Extended
+ * Range Candle) method: look for the most recent candle whose body is
+ * ≥ 1.5× the SMA-14 of bodies (the explosive "drop" or "rally" out of
+ * a base). The 1–3 base candles immediately BEFORE the ERC define the
+ * S/D zone (their combined high → low). Zone is invalidated once
+ * price has eaten more than 50% of the zone OR the candidate side is
+ * already on the wrong side of price (supply must sit above current
+ * close, demand below).
  */
 type SupplyDemandGeom = {
   supplyTop: { y: number; price: number };
-  /** Bottom edge of the Supply (top 25%) band. */
   supplyBottom: { y: number; price: number };
-  /** Top edge of the Demand (bottom 25%) band. */
   demandTop: { y: number; price: number };
   demandBottom: { y: number; price: number };
   eq: { y: number; price: number };
 };
 
+function isErcCandle(body: number, avgBody: number): boolean {
+  return avgBody > 0 && body >= 1.5 * avgBody;
+}
+
+/** Average body size over the last `period` candles. */
+function avgBodySize(candles: Array<IndicatorCandle>, fromIndex: number, period: number): number {
+  let sum = 0;
+  let count = 0;
+  for (let i = Math.max(0, fromIndex - period + 1); i <= fromIndex; i += 1) {
+    sum += Math.abs(candles[i].close - candles[i].open);
+    count += 1;
+  }
+  return count > 0 ? sum / count : 0;
+}
+
 /**
- * Find the nearest still-valid swing supply and demand using the SAME
- * pivot detection that `buildSwingPointLevels` already runs (strength=5,
- * compactStructurePivots cleanup) so the band edges are guaranteed to
- * sit on dots the user can also see when Swings is on.
- *
- * Validity matters: a swing high below the current price is no longer
- * supply, and a swing low above the current price is no longer demand.
- * Hide the indicator instead of drawing misleading zones.
- *
- * Returns `null` when there isn't enough confirmed structure yet — the
- * caller should hide the bands rather than guess.
+ * Walk backwards from the most recent confirmed candle looking for the
+ * latest unmitigated ERC of each polarity:
+ *   • Bearish ERC (close < open with explosive body) → SUPPLY zone is
+ *     the combined high/low of up-to-3 base candles immediately before
+ *     the ERC.
+ *   • Bullish ERC (close > open with explosive body) → DEMAND zone is
+ *     the same construct.
+ * A zone is invalidated if price has already penetrated > 50% of it
+ * since the ERC fired, or if the zone is on the wrong side of price.
  */
+function findErcZone(
+  candles: Array<IndicatorCandle & { time: number }>,
+  direction: "supply" | "demand",
+): { top: number; bottom: number } | null {
+  if (candles.length < 20) return null;
+  const latestClose = candles[candles.length - 1].close;
+  // Reserve the last 2 candles so the ERC is fully confirmed.
+  for (let i = candles.length - 3; i >= 4; i -= 1) {
+    const erc = candles[i];
+    const body = Math.abs(erc.close - erc.open);
+    const avg = avgBodySize(candles, i - 1, 14);
+    if (!isErcCandle(body, avg)) continue;
+    const isBearishErc = erc.close < erc.open;
+    const isBullishErc = erc.close > erc.open;
+    if (direction === "supply" && !isBearishErc) continue;
+    if (direction === "demand" && !isBullishErc) continue;
+    // Collect up to 3 contiguous base candles before the ERC whose
+    // bodies are smaller than the average — these are the "base" of
+    // accumulation/distribution.
+    const baseCandles: typeof candles = [];
+    for (let k = i - 1; k >= Math.max(0, i - 3); k -= 1) {
+      const bBody = Math.abs(candles[k].close - candles[k].open);
+      if (bBody >= 1.2 * avg) break; // base candles are quiet
+      baseCandles.unshift(candles[k]);
+    }
+    if (baseCandles.length === 0) continue;
+    const top = Math.max(...baseCandles.map((b) => b.high));
+    const bottom = Math.min(...baseCandles.map((b) => b.low));
+    const height = top - bottom;
+    if (!Number.isFinite(height) || height <= 0) continue;
+    // Wrong-side guard.
+    if (direction === "supply" && top <= latestClose) continue;
+    if (direction === "demand" && bottom >= latestClose) continue;
+    // 50% mitigation check: did any later candle penetrate past the
+    // zone midline?
+    const mid = (top + bottom) / 2;
+    let mitigated = false;
+    for (let k = i + 1; k < candles.length; k += 1) {
+      if (direction === "supply" && candles[k].low < mid) { mitigated = true; break; }
+      if (direction === "demand" && candles[k].high > mid) { mitigated = true; break; }
+    }
+    if (mitigated) continue;
+    return { top, bottom };
+  }
+  return null;
+}
+
 function buildSupplyDemandBands(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
 ): SupplyDemandGeom | null {
-  const strength = 5;
-  if (candles.length < strength * 2 + 4) return null;
-  const pivots: StructurePivot[] = [];
-  for (let index = strength; index < candles.length - strength; index += 1) {
-    const candle = candles[index];
-    const neighbors = [
-      ...candles.slice(index - strength, index),
-      ...candles.slice(index + 1, index + strength + 1),
-    ];
-    if (neighbors.every((other) => candle.high > other.high)) {
-      pivots.push({ index, time: candle.time, price: candle.high, kind: "high" });
-    }
-    if (neighbors.every((other) => candle.low < other.low)) {
-      pivots.push({ index, time: candle.time, price: candle.low, kind: "low" });
-    }
-  }
-  const compacted = compactStructurePivots(pivots, 4, averageRange(candles) * 0.65);
-  const latestClose = candles[candles.length - 1]?.close;
-  if (typeof latestClose !== "number" || !Number.isFinite(latestClose)) return null;
-
-  // Walk backward to grab the most recent unbroken supply above price and
-  // demand below price. This prevents a red Supply band appearing far
-  // below live BTC after price has already broken that old swing high.
-  let latestHigh: StructurePivot | null = null;
-  let latestLow: StructurePivot | null = null;
-  for (let i = compacted.length - 1; i >= 0; i -= 1) {
-    const pivot = compacted[i];
-    if (pivot.kind === "high" && latestHigh == null && pivot.price > latestClose) {
-      latestHigh = pivot;
-    }
-    if (pivot.kind === "low" && latestLow == null && pivot.price < latestClose) {
-      latestLow = pivot;
-    }
-    if (latestHigh && latestLow) break;
-  }
-  if (!latestHigh || !latestLow) return null;
-  const highPrice = latestHigh.price;
-  const lowPrice = latestLow.price;
-  const range = highPrice - lowPrice;
-  if (!Number.isFinite(range) || range <= 0) return null;
-  const supplyBottomPrice = highPrice - range * 0.25;
-  const demandTopPrice = lowPrice + range * 0.25;
-  const eqPrice = (highPrice + lowPrice) / 2;
-  const supplyTopY = handle.priceToCoordinate(highPrice);
-  const supplyBottomY = handle.priceToCoordinate(supplyBottomPrice);
-  const demandTopY = handle.priceToCoordinate(demandTopPrice);
-  const demandBottomY = handle.priceToCoordinate(lowPrice);
+  if (candles.length < 20) return null;
+  const supply = findErcZone(candles, "supply");
+  const demand = findErcZone(candles, "demand");
+  if (!supply || !demand) return null;
+  const highPrice = supply.top;
+  const lowPrice = demand.bottom;
+  if (!(highPrice > lowPrice)) return null;
+  // Render the ACTUAL ERC zones as the supply / demand bands (top edge
+  // = supply.top, bottom edge of supply = supply.bottom — likewise for
+  // demand). EQ is the midline between supply.bottom and demand.top
+  // (the "fair value" range traders treat as neutral).
+  const eqPrice = (supply.bottom + demand.top) / 2;
+  const supplyTopY = handle.priceToCoordinate(supply.top);
+  const supplyBottomY = handle.priceToCoordinate(supply.bottom);
+  const demandTopY = handle.priceToCoordinate(demand.top);
+  const demandBottomY = handle.priceToCoordinate(demand.bottom);
   const eqY = handle.priceToCoordinate(eqPrice);
   if (
     supplyTopY == null ||
@@ -1569,10 +1654,10 @@ function buildSupplyDemandBands(
     return null;
   }
   return {
-    supplyTop: { y: supplyTopY, price: highPrice },
-    supplyBottom: { y: supplyBottomY, price: supplyBottomPrice },
-    demandTop: { y: demandTopY, price: demandTopPrice },
-    demandBottom: { y: demandBottomY, price: lowPrice },
+    supplyTop: { y: supplyTopY, price: supply.top },
+    supplyBottom: { y: supplyBottomY, price: supply.bottom },
+    demandTop: { y: demandTopY, price: demand.top },
+    demandBottom: { y: demandBottomY, price: demand.bottom },
     eq: { y: eqY, price: eqPrice },
   };
 }
@@ -1802,21 +1887,29 @@ function buildInverseFvgs(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
   futureExtensionX: number,
+  atr: Array<number>,
 ): Zone[] {
   const out: Zone[] = [];
   if (candles.length < 4) return out;
+  // LuxAlgo's atr_multi default is 0.25. We keep the same so the
+  // filtering pressure matches the reference Pine script exactly.
+  const ATR_MULT = 0.25;
 
   for (let i = 2; i < candles.length; i += 1) {
     const a = candles[i - 2];
+    const b = candles[i - 1];
     const c = candles[i];
+    const gapThreshold = (atr[i] ?? 0) * ATR_MULT;
 
-    // Bullish FVG (gap up): c.low > a.high. Inverted when a later candle
-    // closes back BELOW a.high (the bottom of the gap). After inversion
-    // the zone behaves like resistance until price closes BACK above the
-    // gap top → "second mitigation" / fully consumed.
-    if (c.low > a.high) {
+    // Bullish FVG (gap up): low[i] > high[i-2] AND close[i-1] > high[i-2].
+    // Inverted when a later candle closes back BELOW high[i-2] (the
+    // bottom of the gap). After inversion the zone behaves like
+    // bearish resistance until price closes BACK above the gap top →
+    // "second mitigation" / fully consumed.
+    if (c.low > a.high && b.close > a.high) {
       const gapTop = c.low;
       const gapBot = a.high;
+      if (Math.abs(gapTop - gapBot) <= gapThreshold) continue;
       let invertedAt: number | null = null;
       let invertedIdx: number | null = null;
       for (let k = i + 1; k < candles.length; k += 1) {
@@ -1836,10 +1929,17 @@ function buildInverseFvgs(
         }
         const x1 = handle.timeToCoordinate(a.time);
         const sourceEndX = handle.timeToCoordinate(c.time);
+        const invX = handle.timeToCoordinate(invertedAt);
         const yTop = handle.priceToCoordinate(gapTop);
         const yBot = handle.priceToCoordinate(gapBot);
-        if (x1 != null && sourceEndX != null && yTop != null && yBot != null) {
-          const detectionEndX = sourceEndX;
+        if (
+          x1 != null &&
+          sourceEndX != null &&
+          invX != null &&
+          yTop != null &&
+          yBot != null
+        ) {
+          const detectionEndX = invX;
           out.push({
             x: x1,
             y: Math.min(yTop, yBot),
@@ -1848,12 +1948,13 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(244,63,94,0.92)",
-            fill: "rgba(244,63,94,0.20)",
+            stroke: "rgba(242,54,69,0.95)",
+            fill: "rgba(242,54,69,0.22)",
             // Inverted bullish FVG flips polarity → behaves like bearish
-            // resistance going forward. Tag accordingly so the OB count
-            // filter still has correct semantics if reused later.
+            // resistance going forward.
             direction: "down",
+            originalDirection: "up",
+            inversionX: invX,
             extend: !secondMitigation,
             mitigated: secondMitigation,
           });
@@ -1861,11 +1962,12 @@ function buildInverseFvgs(
       }
     }
 
-    // Bearish FVG (gap down): c.high < a.low. Inverted when a later
-    // candle closes back ABOVE a.low.
-    if (c.high < a.low) {
+    // Bearish FVG (gap down): high[i] < low[i-2] AND close[i-1] < low[i-2].
+    // Inverted when a later candle closes back ABOVE low[i-2].
+    if (c.high < a.low && b.close < a.low) {
       const gapTop = a.low;
       const gapBot = c.high;
+      if (Math.abs(gapTop - gapBot) <= gapThreshold) continue;
       let invertedAt: number | null = null;
       let invertedIdx: number | null = null;
       for (let k = i + 1; k < candles.length; k += 1) {
@@ -1885,10 +1987,17 @@ function buildInverseFvgs(
         }
         const x1 = handle.timeToCoordinate(a.time);
         const sourceEndX = handle.timeToCoordinate(c.time);
+        const invX = handle.timeToCoordinate(invertedAt);
         const yTop = handle.priceToCoordinate(gapTop);
         const yBot = handle.priceToCoordinate(gapBot);
-        if (x1 != null && sourceEndX != null && yTop != null && yBot != null) {
-          const detectionEndX = sourceEndX;
+        if (
+          x1 != null &&
+          sourceEndX != null &&
+          invX != null &&
+          yTop != null &&
+          yBot != null
+        ) {
+          const detectionEndX = invX;
           out.push({
             x: x1,
             y: Math.min(yTop, yBot),
@@ -1897,10 +2006,12 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: secondMitigation ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(34,211,238,0.92)",
-            fill: "rgba(34,211,238,0.20)",
-            // Inverted bearish FVG → flips to bullish support. Tag as up.
+            stroke: "rgba(8,153,129,0.95)",
+            fill: "rgba(8,153,129,0.22)",
+            // Inverted bearish FVG → flips to bullish support.
             direction: "up",
+            originalDirection: "down",
+            inversionX: invX,
             extend: !secondMitigation,
             mitigated: secondMitigation,
           });

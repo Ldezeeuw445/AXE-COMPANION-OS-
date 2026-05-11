@@ -20,6 +20,45 @@ export type MacdPoint = {
   histogram: number | null;
 };
 
+/**
+ * Wilder-smoothed Average True Range. True Range at bar i is
+ * max(high-low, |high - prevClose|, |low - prevClose|). The first
+ * `period` bars seed with a simple average; after that we use Wilder
+ * smoothing `(atr*(n-1) + tr) / n`. The early bars use a cumulative
+ * fallback so callers don't have to handle nulls before warm-up — this
+ * matches LuxAlgo's `nz(ta.atr(200), ta.cum(high-low) / (bar_index+1))`.
+ */
+export function atrSeries(candles: IndicatorMathCandle[], period: number): Array<number> {
+  const out = Array<number>(candles.length).fill(0);
+  if (candles.length === 0 || period <= 0) return out;
+  let seedSum = 0;
+  let cumSum = 0;
+  let atr: number | null = null;
+  for (let i = 0; i < candles.length; i += 1) {
+    const c = candles[i];
+    const prevClose = i > 0 ? candles[i - 1].close : c.close;
+    const tr = Math.max(
+      c.high - c.low,
+      Math.abs(c.high - prevClose),
+      Math.abs(c.low - prevClose),
+    );
+    cumSum += tr;
+    if (atr == null) {
+      seedSum += tr;
+      if (i + 1 >= period) {
+        atr = seedSum / period;
+        out[i] = atr;
+      } else {
+        out[i] = cumSum / (i + 1);
+      }
+    } else {
+      atr = (atr * (period - 1) + tr) / period;
+      out[i] = atr;
+    }
+  }
+  return out;
+}
+
 export function smaSeries(values: number[], period: number): Array<number | null> {
   const out: Array<number | null> = Array(values.length).fill(null);
   if (period <= 0) return out;
