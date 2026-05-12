@@ -26,54 +26,58 @@ export function SubprocessorsPageContent() {
               <td>Supabase</td>
               <td>Auth, database, storage, backend functions</td>
               <td>account data, app data, journal, trades, memory</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>EU (multi-region)</td>
             </tr>
             <tr>
-              <td>OpenAI or AI provider</td>
+              <td>OpenAI / AI provider</td>
               <td>AI responses and analysis</td>
               <td>prompts, context, messages, selected user data needed for responses</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>US (global)</td>
             </tr>
             <tr>
               <td>Stripe</td>
               <td>Payments and subscriptions</td>
               <td>billing data, payment metadata, customer ID</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>IE / US (global)</td>
             </tr>
             <tr>
-              <td>Vercel / hosting provider</td>
+              <td>Vercel</td>
               <td>Hosting frontend/backend</td>
               <td>logs, request data, deployment data</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>Global (edge / region-pinned)</td>
             </tr>
             <tr>
               <td>Cloudflare</td>
               <td>CDN, security, workers, realtime</td>
               <td>IP, request logs, websocket data</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>Global (edge)</td>
             </tr>
             <tr>
               <td>MetaApi / MT5 connector</td>
               <td>Broker/MT5 account sync</td>
               <td>broker metadata, trade history, account snapshots</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>London / New York / Singapore (per account)</td>
             </tr>
             <tr>
               <td>Market data providers</td>
               <td>Market/news/macro data</td>
               <td>symbols, queries, usage logs</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>US / EU (per provider)</td>
             </tr>
             <tr>
-              <td>Analytics/error monitoring</td>
+              <td>Analytics / error monitoring</td>
               <td>Diagnostics and product improvement</td>
               <td>device/log/usage data</td>
-              <td>[REGION/PLACEHOLDER]</td>
+              <td>EU / US</td>
             </tr>
           </tbody>
         </table>
       </div>
 
+      <p className="mt-4 text-sm text-tos-dim">
+        Data residency varies per provider plan. For binding region commitments and the most current
+        sub-processor list, see each provider&apos;s Data Processing Addendum.
+      </p>
       <p className="mt-4">Users will be informed of material changes where required.</p>
       <p>
         Contact:{" "}

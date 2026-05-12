@@ -19,6 +19,7 @@ import { Mt5InAppConnectionTest } from "@/components/accounts/Mt5InAppConnection
 import { Mt5LiveProofChecklist } from "@/components/accounts/Mt5LiveProofChecklist";
 import { Mt5CloudConnectForm } from "@/components/accounts/Mt5CloudConnectForm";
 import { Mt5CloudAccountActions } from "@/components/accounts/Mt5CloudAccountActions";
+import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAutoPoll";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { accountMethodLabel, friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
@@ -27,6 +28,7 @@ type Props = {
   initialAccounts: BrokerAccountRow[];
   initialActiveId: string | null;
   loadError: string | null;
+  defaultMetaApiRegion: string;
 };
 
 function formatDate(iso: string) {
@@ -58,7 +60,7 @@ function statusBadgeVariant(s: string | null | undefined): "warm" | "neutral" | 
 const detailsSummaryClass =
   "flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-tos-text outline-none [&::-webkit-details-marker]:hidden";
 
-export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: Props) {
+export function AccountsScreen({ initialAccounts, initialActiveId, loadError, defaultMetaApiRegion }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [createState, createAction] = useActionState<CreateBrokerResult | undefined, FormData>(
@@ -103,6 +105,15 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
   const empty = initialAccounts.length === 0;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
   const ingestUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/axe-mt5-ingest` : "";
+  const provisioningTargets = initialAccounts
+    .filter((a) => a.connection_method === "cloud_mt5" && a.external_connection_id)
+    .map((a) => ({ id: a.id as string, providerStatus: a.provider_status ?? null }));
+  // Demo-only state: every row is the seeded AXE Demo. Surface a soft nudge
+  // so a brand-new user understands they're on virtual data without it
+  // feeling like a sales banner.
+  const onlyDemo =
+    initialAccounts.length > 0 &&
+    initialAccounts.every((a) => isDemoAccount(a));
 
   // The pulse is honest here: green when Supabase delivered the
   // account list (regardless of how many accounts there are — even
@@ -110,6 +121,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
   // back from the server.
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 pb-6">
+      <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
         liveCount={loadError ? 0 : 1}
         totalCount={1}
@@ -124,6 +136,19 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
 
       {loadError ? (
         <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">{loadError}</p>
+      ) : null}
+
+      {onlyDemo ? (
+        <div className="rounded-2xl border border-cyan-400/15 bg-cyan-500/[0.04] px-4 py-3 text-[12px] leading-relaxed text-tos-muted">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300/80 shadow-[0_0_0_3px_rgba(34,211,238,0.18)]" aria-hidden />
+            <p className="font-medium text-tos-text">You&apos;re on AXE Demo</p>
+          </div>
+          <p className="mt-1.5 text-tos-muted">
+            Virtual $100,000 — perfect for trying the chart, AXE chat and journal. Connect your real MT5
+            account below to unlock live price, your actual positions and full trade history.
+          </p>
+        </div>
       ) : null}
 
       {/* A — Intro */}
@@ -170,7 +195,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError }: 
         </details>
 
         <div className="mt-5">
-          <Mt5CloudConnectForm />
+          <Mt5CloudConnectForm defaultRegion={defaultMetaApiRegion} />
         </div>
       </GlassPanel>
 

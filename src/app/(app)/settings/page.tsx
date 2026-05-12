@@ -189,7 +189,7 @@ export default async function SettingsPage() {
       <GlassPanel glow="cyan" className="mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[10px] font-medium uppercase tracking-widest text-cyan-300/95">
-            Trading OS terminal · coming soon
+            Trading OS terminal · in development
           </h2>
           <Badge variant="long">Same Supabase</Badge>
         </div>

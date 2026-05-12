@@ -206,11 +206,21 @@ export async function provisioningCreateMt5CloudAccount(
   throw new MetaApiRequestError("metaapi_timeout", "Provisioning still pending after retries", 0, null);
 }
 
+/**
+ * All client-side MetaApi calls below accept an optional `region` argument
+ * so we can route to the host where the account is actually deployed
+ * (see metaApiRegions.ts). Callers should pass the value stored in
+ * `user_broker_accounts.metadata.metaapiRegion`. Omitting it falls back to
+ * the legacy env-driven default — works for single-region deployments,
+ * but breaks for accounts in other regions, which is the whole reason
+ * "sommige accounts kunnen niet koppelen" used to fail.
+ */
 export async function clientGetAccountInformation(
   accountId: string,
   refreshTerminalState: boolean,
+  region?: string | null,
 ): Promise<Record<string, unknown>> {
-  const base = getMetaApiClientBaseUrl();
+  const base = getMetaApiClientBaseUrl(region);
   const q = refreshTerminalState ? "?refreshTerminalState=true" : "";
     const res = await fetchWithTimeout(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/account-information${q}`,
@@ -231,8 +241,12 @@ export async function clientGetAccountInformation(
   return (body ?? {}) as Record<string, unknown>;
 }
 
-export async function clientGetPositions(accountId: string, refreshTerminalState: boolean): Promise<unknown[]> {
-  const base = getMetaApiClientBaseUrl();
+export async function clientGetPositions(
+  accountId: string,
+  refreshTerminalState: boolean,
+  region?: string | null,
+): Promise<unknown[]> {
+  const base = getMetaApiClientBaseUrl(region);
   const q = refreshTerminalState ? "?refreshTerminalState=true" : "";
     const res = await fetchWithTimeout(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/positions${q}`,
@@ -258,8 +272,12 @@ export type MetaApiSymbolPrice = {
 };
 
 /** Lightweight latest price for a broker symbol via MetaApi client API. */
-export async function clientGetSymbolPrice(accountId: string, symbol: string): Promise<MetaApiSymbolPrice> {
-  const base = getMetaApiClientBaseUrl();
+export async function clientGetSymbolPrice(
+  accountId: string,
+  symbol: string,
+  region?: string | null,
+): Promise<MetaApiSymbolPrice> {
+  const base = getMetaApiClientBaseUrl(region);
   const sym = encodeURIComponent(symbol);
   const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/symbols/${sym}/current-price`;
   const res = await fetchWithTimeout(url, {
@@ -285,8 +303,9 @@ export async function clientGetHistoryDealsRange(
   accountId: string,
   startIso: string,
   endIso: string,
+  region?: string | null,
 ): Promise<unknown[]> {
-  const base = getMetaApiClientBaseUrl();
+  const base = getMetaApiClientBaseUrl(region);
   const s = encodeURIComponent(startIso);
   const e = encodeURIComponent(endIso);
   const all: unknown[] = [];
@@ -357,6 +376,12 @@ export type PlaceOrderInput = {
   magic?: number | null;
   /** Free-form comment, max ~31 chars (MT5 limit). */
   comment?: string | null;
+  /**
+   * MetaApi region the account is deployed in (london / new-york / singapore).
+   * Required for accounts outside the default region — otherwise the trade
+   * POST hits the wrong host and 404s with `metaapi_region_error`.
+   */
+  region?: string | null;
 };
 
 export type PlaceOrderResult = {
@@ -378,7 +403,7 @@ export type PlaceOrderResult = {
  * check in /api/mt5/order.
  */
 export async function clientPlaceOrder(input: PlaceOrderInput): Promise<PlaceOrderResult> {
-  const base = getMetaApiClientBaseUrl();
+  const base = getMetaApiClientBaseUrl(input.region);
   const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
   const body: Record<string, unknown> = {
     actionType: input.actionType,
@@ -443,8 +468,9 @@ export async function clientGetHistoricalCandles(
   symbol: string,
   timeframe: string,
   limit: number,
+  region?: string | null,
 ): Promise<MetaApiCandle[]> {
-  const base = getMetaApiMarketDataBaseUrl();
+  const base = getMetaApiMarketDataBaseUrl(region);
   const sym = encodeURIComponent(symbol);
   const tf = encodeURIComponent(timeframe);
   const lim = Math.min(Math.max(1, limit), 1000);

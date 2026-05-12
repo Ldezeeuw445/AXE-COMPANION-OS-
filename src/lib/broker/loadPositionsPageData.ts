@@ -62,7 +62,11 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
   }
 
   try {
-    const raw = (await clientGetPositions(cloud.metaApiAccountId, true)) as Record<string, unknown>[];
+    const raw = (await clientGetPositions(
+      cloud.metaApiAccountId,
+      true,
+      cloud.metaApiRegion,
+    )) as Record<string, unknown>[];
     const positions: OpenPositionRow[] = raw.map((p, i) => {
       const id = String(p.id ?? p.positionId ?? i);
       const symbol = String(p.symbol ?? "");

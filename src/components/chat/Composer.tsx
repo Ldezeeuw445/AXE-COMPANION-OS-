@@ -164,6 +164,14 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     setSending(true);
     setError(null);
+    // Tell the message list AXE is thinking so it can show a typing
+    // bubble immediately — the server round-trip can be 3-8s while AXE
+    // chains tools, and silence there feels broken.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("axe:thinking", { detail: { thinking: true } }),
+      );
+    }
     try {
       const body: Record<string, unknown> = { text: text || "(chart attached)" };
       if (image) {
@@ -203,6 +211,11 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       setError("Could not save message.");
     } finally {
       setSending(false);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("axe:thinking", { detail: { thinking: false } }),
+        );
+      }
     }
   }
 

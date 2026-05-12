@@ -31,11 +31,13 @@ export default async function SubscriptionsPage() {
   const billingConfigured = paymentLink.length > 0;
   const supabase = await createServerSupabaseClient();
   let isPro = false;
+  let userId: string | null = null;
   if (supabase) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
+      userId = user.id;
       const { data } = await supabase
         .from("axe_user_entitlements")
         .select("plan, pro_until, chat_quota_exempt")
@@ -48,6 +50,24 @@ export default async function SubscriptionsPage() {
         data?.chat_quota_exempt === true;
     }
   }
+
+  /**
+   * Attach client_reference_id so the Stripe webhook can map this checkout
+   * back to the auth.users row. Without it the webhook receives a session
+   * with no user link and entitlement upsert is skipped.
+   */
+  const checkoutHref = (() => {
+    if (!paymentLink || !userId) return paymentLink;
+    try {
+      const url = new URL(paymentLink);
+      url.searchParams.set("client_reference_id", userId);
+      return url.toString();
+    } catch {
+      // Fallback for plain string Payment Links — append manually.
+      const sep = paymentLink.includes("?") ? "&" : "?";
+      return `${paymentLink}${sep}client_reference_id=${encodeURIComponent(userId)}`;
+    }
+  })();
 
   const toolbarSections: AxeToolbarSection[] = [
     {
@@ -168,9 +188,9 @@ export default async function SubscriptionsPage() {
               </li>
             ))}
           </ul>
-          {billingConfigured ? (
+          {billingConfigured && userId ? (
             <a
-              href={paymentLink}
+              href={checkoutHref}
               target="_blank"
               rel="noopener noreferrer"
               className="tos-btn-cyan mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold"
@@ -178,6 +198,10 @@ export default async function SubscriptionsPage() {
               <Zap className="h-3.5 w-3.5" />
               Upgrade to Pro
             </a>
+          ) : billingConfigured ? (
+            <div className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/[0.05] px-3 py-2 text-[11px] text-amber-200/95">
+              Sign in first — Pro is linked to your account.
+            </div>
           ) : (
             <div className="mt-5 space-y-2">
               <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.05] px-3 py-2 text-[11px] text-amber-200/95">
