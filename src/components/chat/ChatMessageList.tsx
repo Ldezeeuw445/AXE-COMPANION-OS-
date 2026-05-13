@@ -9,6 +9,79 @@ import { TtsButton } from "@/components/chat/TtsButton";
 import { formatTimeHm } from "@/lib/formatDate";
 
 /**
+ * Suggested first prompts shown when the thread is empty. Each runs through
+ * the same /chat?q=… route the workflows hub uses, so they reach the
+ * composer pre-filled and trigger AXE's full tool stack on submit. Picked
+ * to showcase three different muscles: live price, journal review,
+ * macro-aware setup brief.
+ */
+const STARTER_PROMPTS: Array<{ q: string; label: string; hint: string }> = [
+  {
+    q: "What is XAUUSD doing right now? Bias, key levels and what would change my view.",
+    label: "Brief me on XAUUSD",
+    hint: "live price + day range + bias",
+  },
+  {
+    q: "Walk me through this week's economic calendar and how it lands on USD pairs.",
+    label: "This week's macro risk",
+    hint: "calendar + pair impact",
+  },
+  {
+    q: "Review my last 5 trades and tell me the one mistake I keep making.",
+    label: "Coach my last week",
+    hint: "journal + pattern",
+  },
+];
+
+function TypingBubble() {
+  return (
+    <article className="group flex flex-col items-start">
+      <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
+        <span className="h-1 w-1 rounded-full bg-tos-warm/70" />
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-warm/80">AXE</p>
+      </div>
+      <div className="tos-bubble-assistant text-tos-text max-w-[60%] rounded-[1.15rem] px-3.5 py-3 text-sm leading-relaxed">
+        <span className="inline-flex items-center gap-1.5" aria-label="AXE is thinking">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-tos-warm/70 [animation-delay:-0.32s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-tos-warm/70 [animation-delay:-0.16s]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-tos-warm/70" />
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-start gap-4 px-1 py-6 text-tos-muted">
+      <div>
+        <p className="text-base font-semibold text-tos-text">Welcome.</p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">
+          I&apos;m AXE — your trading advisor. I read your chart, positions, journal and the macro calendar
+          to give you sharp setups and honest reviews. Pick a starter or just type below.
+        </p>
+      </div>
+      <ul className="w-full space-y-2">
+        {STARTER_PROMPTS.map((p) => (
+          <li key={p.label}>
+            <Link
+              href={`/chat?q=${encodeURIComponent(p.q)}`}
+              className="group flex w-full items-center justify-between gap-2 rounded-xl border border-cyan-400/15 bg-cyan-500/[0.04] px-3 py-2.5 text-left text-[12.5px] text-tos-text hover:border-cyan-400/30 hover:bg-cyan-500/[0.08]"
+            >
+              <span className="flex flex-col">
+                <span className="font-medium">{p.label}</span>
+                <span className="text-[10.5px] text-tos-dim">{p.hint}</span>
+              </span>
+              <ArrowUpRight className="h-3.5 w-3.5 text-cyan-300/70 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * Renders an AXE message body with inline navigation buttons.
  *
  * AXE's `navigate_to` tool emits `[[link:/path|Label]]` markers in its replies.
@@ -52,6 +125,19 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
+  const [thinking, setThinking] = useState(false);
+
+  // Composer dispatches `axe:thinking` when a message is in flight so we can
+  // show a typing indicator immediately. Server round-trip can be 3-8s when
+  // AXE is chaining tools — silence in that window feels broken.
+  useEffect(() => {
+    function onThinking(e: Event) {
+      const ce = e as CustomEvent<{ thinking: boolean }>;
+      setThinking(Boolean(ce.detail?.thinking));
+    }
+    window.addEventListener("axe:thinking", onThinking);
+    return () => window.removeEventListener("axe:thinking", onThinking);
+  }, []);
 
   // Scroll to bottom on first mount and whenever messages change while user
   // is still parked near the bottom. Honour reading older messages otherwise.
@@ -78,6 +164,14 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     });
   }, []);
 
+  // Auto-scroll to the typing bubble when AXE starts thinking, so the
+  // animation is visible without the user having to scroll.
+  useEffect(() => {
+    if (thinking && stickToBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+    }
+  }, [thinking]);
+
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
     const distanceFromBottom = el.scrollHeight - el.clientHeight - el.scrollTop;
@@ -99,6 +193,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         onScroll={onScroll}
         className="tos-scrollbar flex flex-1 flex-col gap-5 overflow-y-auto pr-1"
       >
+        {messages.length === 0 ? <EmptyState /> : null}
         {messages.map((m) => (
           <article
             key={m.id}
@@ -156,6 +251,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
             </div>
           </article>
         ))}
+        {thinking ? <TypingBubble /> : null}
         <div ref={bottomRef} />
       </div>
 

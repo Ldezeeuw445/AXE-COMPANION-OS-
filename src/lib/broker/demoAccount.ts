@@ -121,30 +121,54 @@ export function generateDemoCandles(symbol: string, timeframeKey: string, count 
   const base = demoBasePrice(symbol);
   const seed = symbol.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const candles: MetaApiCandle[] = [];
-  let close = base;
+  const volatility = demoVolatility(symbol, timeframeKey);
+  let close = base * (1 + (seed % 17 - 8) * volatility * 0.35);
+  let drift = ((seed % 11) - 5) * volatility * 0.035;
 
   for (let index = count - 1; index >= 0; index -= 1) {
+    const ordinal = count - index;
     const t = now - index * stepMs;
-    const wave = Math.sin((count - index + seed) / 13) * base * 0.0018;
-    const drift = Math.cos((count - index + seed) / 31) * base * 0.0009;
+    const shock = seededNoise(seed + ordinal * 17) * volatility;
+    const regimeShift = seededNoise(seed + Math.floor(ordinal / 55) * 97) * volatility * 0.45;
+    const sessionImpulse = Math.sin((ordinal + seed) / 23) * volatility * 0.28;
+    drift = clamp(drift * 0.94 + regimeShift * 0.06, -volatility * 0.6, volatility * 0.6);
     const open = close;
-    close = Math.max(base * 0.65, open + wave + drift);
-    const spread = Math.max(base * 0.0004, Math.abs(close - open) * 0.45);
+    const movePct = clamp(drift + shock + sessionImpulse, -volatility * 2.8, volatility * 2.8);
+    close = clamp(open * (1 + movePct), base * 0.55, base * 1.65);
+    const body = Math.abs(close - open);
+    const wickScale = base * volatility * (0.35 + Math.abs(seededNoise(seed + ordinal * 31)));
+    const upperWick = Math.max(wickScale * 0.35, body * (0.22 + Math.abs(seededNoise(seed + ordinal * 7)) * 0.65));
+    const lowerWick = Math.max(wickScale * 0.35, body * (0.22 + Math.abs(seededNoise(seed + ordinal * 13)) * 0.65));
+    const spread = Math.max(base * volatility * 0.06, body * 0.12);
     const high = Math.max(open, close) + spread;
     const low = Math.min(open, close) - spread;
+    const tickVolume = Math.round(
+      70 +
+        Math.min(520, (body / Math.max(base * volatility, 0.000001)) * 85) +
+        Math.abs(seededNoise(seed + ordinal * 19)) * 160,
+    );
 
     candles.push({
       time: new Date(t).toISOString(),
       open: roundPrice(open, base),
-      high: roundPrice(high, base),
-      low: roundPrice(low, base),
+      high: roundPrice(high + upperWick, base),
+      low: roundPrice(low - lowerWick, base),
       close: roundPrice(close, base),
-      tickVolume: 80 + ((count - index + seed) % 180),
-      volume: 80 + ((count - index + seed) % 180),
+      tickVolume,
+      volume: tickVolume,
     });
   }
 
   return candles;
+}
+
+function seededNoise(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function timeframeMs(tf: string): number {
@@ -175,6 +199,38 @@ function demoBasePrice(symbol: string): number {
   if (s.includes("JPY")) return 155;
   if (s.includes("EUR") || s.includes("GBP")) return 1.08;
   return 100;
+}
+
+function demoVolatility(symbol: string, timeframeKey: string): number {
+  const s = symbol.toUpperCase();
+  const instrument =
+    s.includes("BTC") || s.includes("ETH")
+      ? 0.0048
+      : s.includes("XAU")
+        ? 0.0024
+        : s.includes("JPY")
+          ? 0.00125
+          : s.includes("EUR") || s.includes("GBP")
+            ? 0.00075
+            : 0.0012;
+
+  switch (timeframeKey.toLowerCase()) {
+    case "m1":
+      return instrument * 0.42;
+    case "m5":
+      return instrument * 0.62;
+    case "m15":
+      return instrument * 0.9;
+    case "m30":
+      return instrument * 1.2;
+    case "h4":
+      return instrument * 2.3;
+    case "d1":
+      return instrument * 4.2;
+    case "h1":
+    default:
+      return instrument * 1.65;
+  }
 }
 
 function roundPrice(value: number, base: number): number {

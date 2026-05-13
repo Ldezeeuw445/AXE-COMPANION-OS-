@@ -37,6 +37,12 @@ export async function updateSession(request: NextRequest) {
   if (pathEarly.startsWith("/marketing/")) {
     return NextResponse.next({ request });
   }
+  // Webhook endpoints are signed by the originating service and must not be
+  // touched by Supabase auth. Skipping the middleware here also avoids an
+  // unnecessary getUser() round-trip on every Stripe retry.
+  if (pathEarly.startsWith("/api/stripe/") || pathEarly === "/api/stripe") {
+    return NextResponse.next({ request });
+  }
 
   let supabaseResponse = NextResponse.next({ request });
 

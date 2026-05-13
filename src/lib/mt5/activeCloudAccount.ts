@@ -5,6 +5,8 @@ export type ActiveMetaApiCloud = {
   brokerAccountId: string;
   /** MetaApi trading account id */
   metaApiAccountId: string;
+  /** MetaApi region the cloud terminal lives in (london / new-york / singapore). */
+  metaApiRegion: string | null;
 };
 
 /** Active workspace account when it is a linked MetaApi cloud row. */
@@ -23,7 +25,7 @@ export async function getActiveMetaApiCloudAccount(
 
   const { data: row } = await supabase
     .from("user_broker_accounts")
-    .select("id,connection_method,external_connection_id")
+    .select("id,connection_method,external_connection_id,metadata")
     .eq("user_id", userId)
     .eq("id", activeId)
     .maybeSingle();
@@ -31,8 +33,15 @@ export async function getActiveMetaApiCloudAccount(
   if (!row?.external_connection_id) return null;
   if (row.connection_method !== "cloud_mt5") return null;
 
+  const meta =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
+
   return {
     brokerAccountId: row.id as string,
     metaApiAccountId: row.external_connection_id as string,
+    metaApiRegion: region,
   };
 }

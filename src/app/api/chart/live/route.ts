@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 
   const { data: account } = await supabase
     .from("user_broker_accounts")
-    .select("id,connection_method,external_connection_id")
+    .select("id,connection_method,external_connection_id,metadata")
     .eq("user_id", user.id)
     .eq("id", accountIdParam)
     .maybeSingle();
@@ -87,6 +87,12 @@ export async function GET(request: NextRequest) {
 
   const brokerSymbol = brokerSymbolParam || requestedDisplaySymbol;
   const metaAccountId = account.external_connection_id;
+  const accountMeta =
+    account.metadata && typeof account.metadata === "object" && !Array.isArray(account.metadata)
+      ? (account.metadata as Record<string, unknown>)
+      : {};
+  const accountRegion =
+    typeof accountMeta.metaapiRegion === "string" ? accountMeta.metaapiRegion : null;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -149,7 +155,7 @@ export async function GET(request: NextRequest) {
         if (now - lastTickAt >= TICK_INTERVAL_MS) {
           lastTickAt = now;
           try {
-            const price = await clientGetSymbolPrice(metaAccountId, brokerSymbol);
+            const price = await clientGetSymbolPrice(metaAccountId, brokerSymbol, accountRegion);
             const mid =
               price.bid != null && price.ask != null
                 ? (price.bid + price.ask) / 2
@@ -184,7 +190,13 @@ export async function GET(request: NextRequest) {
         if (now - lastCandleAt >= CANDLE_INTERVAL_MS) {
           lastCandleAt = now;
           try {
-            const candles = await clientGetHistoricalCandles(metaAccountId, brokerSymbol, tf, 2);
+            const candles = await clientGetHistoricalCandles(
+              metaAccountId,
+              brokerSymbol,
+              tf,
+              2,
+              accountRegion,
+            );
             const last = candles[candles.length - 1];
             if (last)
               send({
@@ -206,7 +218,11 @@ export async function GET(request: NextRequest) {
         if (now - lastPositionsAt >= POSITIONS_INTERVAL_MS) {
           lastPositionsAt = now;
           try {
-            const raw = (await clientGetPositions(metaAccountId, false)) as Record<string, unknown>[];
+            const raw = (await clientGetPositions(
+              metaAccountId,
+              false,
+              accountRegion,
+            )) as Record<string, unknown>[];
             const onSymbol: LivePositionPayload[] = raw
               .filter((p) => String(p.symbol ?? "") === brokerSymbol)
               .map((p, i) => ({

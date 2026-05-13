@@ -21,10 +21,14 @@ export const dynamic = "force-dynamic";
  *   4. Account ownership — the broker_account row must belong to this user.
  *   5. Demo refusal — AXE Demo Account never receives a real broker order.
  *   6. MetaApi link required — only `cloud_mt5` accounts with an external id.
- *   7. Volume cap — server-side ceiling so a UI bug can't send 100 lots.
+ *   7. Live-trading flag — user must have acknowledged risks server-side
+ *      (mirror of the UI gate; required so a direct API call from a
+ *      modified client cannot bypass the in-app disclaimer).
+ *   8. Volume cap — server-side ceiling so a UI bug can't send 100 lots.
  *
- * The client is also responsible for the live-trading flag + final-confirm
- * modal, but those are UX safeguards. This route is the security layer.
+ * The client is also responsible for the 30-min arming window and the
+ * per-order final-confirm modal, but those are UX safeguards. This route is
+ * the security layer.
  */
 
 type OrderBody = {
@@ -113,7 +117,7 @@ export async function POST(request: NextRequest) {
 
   const { data: account, error: accountErr } = await supabase
     .from("user_broker_accounts")
-    .select("id,user_id,connection_method,external_connection_id,provider")
+    .select("id,user_id,connection_method,external_connection_id,provider,metadata")
     .eq("id", brokerAccountId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -137,7 +141,40 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Server-side live-trading gate. The chart already enforces this in the UI
+  // (ChartScreen → liveTrading.enabled + armed), but the API route has to be
+  // the authoritative check — a modified client or a direct curl must not be
+  // able to place an order while the user has not accepted the live-trading
+  // risks for their workspace.
+  const { data: prefs, error: prefsErr } = await supabase
+    .from("user_workspace_preferences")
+    .select("live_trading_enabled")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (prefsErr) {
+    return errJson(500, "prefs_lookup_failed", prefsErr.message);
+  }
+  if (!prefs?.live_trading_enabled) {
+    return errJson(
+      403,
+      "live_trading_disabled",
+      "Live trading is not enabled for this workspace. Go to Settings → Live Trading and accept the risks before placing real orders.",
+    );
+  }
+
   const actionType: MetaApiOrderType = mapActionType(side, orderType);
+  // Resolve the account's MetaApi region so the trade POST hits the right
+  // host. Stored at connect time in metadata.metaapiRegion. Falls back to
+  // the env-driven default when missing (legacy accounts created before the
+  // region-aware migration).
+  const accountMeta =
+    account.metadata && typeof account.metadata === "object" && !Array.isArray(account.metadata)
+      ? (account.metadata as Record<string, unknown>)
+      : {};
+  const accountRegion =
+    typeof accountMeta.metaapiRegion === "string" ? accountMeta.metaapiRegion : null;
+
   const input: PlaceOrderInput = {
     accountId: account.external_connection_id,
     symbol: symbol.trim(),
@@ -149,6 +186,7 @@ export async function POST(request: NextRequest) {
     slippage: slippage ?? null,
     magic: 700001,
     comment: comment ?? "AXE",
+    region: accountRegion,
   };
 
   try {

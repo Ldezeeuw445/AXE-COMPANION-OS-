@@ -40,6 +40,8 @@ export type AccountSummary = {
   mt5Server: string | null;
   active: boolean;
   connectionMethod?: string | null;
+  /** MetaApi region the cloud terminal lives in — needed to hit the right host. */
+  metaApiRegion?: string | null;
 };
 
 export type ChartFailureKind =
@@ -232,14 +234,19 @@ export async function loadChartPageData(
           typeof r.external_connection_id === "string" &&
           r.external_connection_id.length > 0),
     )
-    .map((r) => ({
-      brokerAccountId: r.id as string,
-      metaApiAccountId: isDemoAccount(r) ? DEMO_EXTERNAL_ID : (r.external_connection_id as string),
-      label: (r.label as string) ?? (isDemoAccount(r) ? "AXE Demo Account" : "MT5 Account"),
-      mt5Server: (r.mt5_server as string) ?? null,
-      active: prefs?.active_account_id === r.id,
-      connectionMethod: (r.connection_method as string) ?? null,
-    }));
+    .map((r) => {
+      const meta = (r.metadata ?? {}) as Record<string, unknown>;
+      const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
+      return {
+        brokerAccountId: r.id as string,
+        metaApiAccountId: isDemoAccount(r) ? DEMO_EXTERNAL_ID : (r.external_connection_id as string),
+        label: (r.label as string) ?? (isDemoAccount(r) ? "AXE Demo Account" : "MT5 Account"),
+        mt5Server: (r.mt5_server as string) ?? null,
+        active: prefs?.active_account_id === r.id,
+        connectionMethod: (r.connection_method as string) ?? null,
+        metaApiRegion: region,
+      };
+    });
 
   const requestedAccountId = (accountParam ?? "").trim();
   const account =
@@ -313,7 +320,11 @@ export async function loadChartPageData(
 
   let allPositions: OpenPositionRow[] = [];
   try {
-    const raw = (await clientGetPositions(account.metaApiAccountId, true)) as Record<string, unknown>[];
+    const raw = (await clientGetPositions(
+      account.metaApiAccountId,
+      true,
+      account.metaApiRegion ?? null,
+    )) as Record<string, unknown>[];
     allPositions = mapPositions(raw);
   } catch {
     allPositions = [];
@@ -357,6 +368,7 @@ export async function loadChartPageData(
       resolution.brokerSymbol,
       metaApiTimeframe,
       500,
+      account.metaApiRegion ?? null,
     );
     const last = candles.length > 0 ? candles[candles.length - 1]?.close ?? null : null;
     const lastTime = candles.length > 0 ? candles[candles.length - 1]?.time ?? null : null;

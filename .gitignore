@@ -31,6 +31,7 @@
 .config/
 *.zip
 Icon?
+skills-lock.json
 
 # Replit / agent / design dumps — not needed for Vercel production
 .replit

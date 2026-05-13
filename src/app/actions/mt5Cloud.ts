@@ -20,6 +20,7 @@ import {
   provisioningDeleteAccount,
   provisioningGetAccount,
 } from "@/lib/mt5/metaApiClient";
+import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -50,6 +51,61 @@ function mapConnectionToProviderStatus(
   const s = (state ?? "").toUpperCase();
   if (s === "DEPLOYED") return "provisioned";
   return (connectionStatus ?? state ?? "unknown").toLowerCase();
+}
+
+/**
+ * Whether MetaAPI reports the account as actually live (terminal deployed and
+ * connected). Treat both DEPLOYED state and CONNECTED connection-status as
+ * "ready" — depending on broker speed one of them flips first. Anything else
+ * (UNDEPLOYED, DEPLOYING, DISCONNECTED, CREATED) means the user shouldn't see
+ * a green "connected" badge yet.
+ */
+function isProvisionedAndReady(
+  connectionStatus: string | undefined,
+  state: string | undefined,
+): boolean {
+  const c = (connectionStatus ?? "").toUpperCase();
+  const s = (state ?? "").toUpperCase();
+  return c === "CONNECTED" || s === "DEPLOYED";
+}
+
+const PROVISIONING_POLL_INTERVAL_MS = 1_500;
+const PROVISIONING_POLL_BUDGET_MS = 10_000;
+
+/**
+ * Poll MetaAPI provisioning until the account is actually deployed/connected
+ * or the budget runs out. Keeps the user from seeing a fake "connected"
+ * badge during the 30-90s gap between MetaAPI's 201 response and the broker
+ * terminal actually being live. Returns the final snapshot regardless — the
+ * caller decides whether to insert with `provisioning` or `connected`.
+ */
+async function pollUntilDeployed(metaId: string): Promise<{
+  connectionStatus?: string;
+  state?: string;
+  ready: boolean;
+}> {
+  const deadline = Date.now() + PROVISIONING_POLL_BUDGET_MS;
+  let last: { connectionStatus?: string; state?: string } = {};
+
+  while (Date.now() < deadline) {
+    try {
+      const acc = await provisioningGetAccount(metaId);
+      last = { connectionStatus: acc.connectionStatus, state: acc.state };
+      if (isProvisionedAndReady(acc.connectionStatus, acc.state)) {
+        return { ...last, ready: true };
+      }
+    } catch {
+      // Transient probe failures are normal during the first few seconds.
+      // Keep polling until the budget runs out.
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(PROVISIONING_POLL_INTERVAL_MS, remaining)),
+    );
+  }
+
+  return { ...last, ready: false };
 }
 
 export async function createCloudMt5ConnectionAction(
@@ -86,7 +142,13 @@ export async function createCloudMt5ConnectionAction(
     };
   }
 
-  const region = String(formData.get("region") ?? "").trim() || defaultRegionForProvisioning();
+  // Region must be one of the supported MetaApi clouds. The form already
+  // restricts the select to these three; this is a belt-and-braces check so
+  // a tampered request can't push the account into an unsupported region.
+  const rawRegion = String(formData.get("region") ?? "").trim();
+  const region: MetaApiRegion = (META_API_REGIONS as readonly string[]).includes(rawRegion)
+    ? (rawRegion as MetaApiRegion)
+    : (defaultRegionForProvisioning() as MetaApiRegion);
 
   let metaId: string;
   try {
@@ -103,19 +165,23 @@ export async function createCloudMt5ConnectionAction(
     return mapMetaError(e);
   }
 
-  let providerStatus = "provisioning";
-  try {
-    const acc = await provisioningGetAccount(metaId);
-    providerStatus = mapConnectionToProviderStatus(acc.connectionStatus, acc.state);
-  } catch {
-    providerStatus = "provisioning";
-  }
+  // Block briefly so the user doesn't see a green "connected" badge before
+  // the broker terminal is actually live. Most MetaAPI cloud accounts hit
+  // DEPLOYED within 5-10s; if they don't we still create the row (so the
+  // user can see it in /accounts) but with `provisioning` status, and the
+  // UI / Test action takes over polling from there.
+  const probe = await pollUntilDeployed(metaId);
+  const providerStatus = probe.ready
+    ? mapConnectionToProviderStatus(probe.connectionStatus, probe.state)
+    : "provisioning";
 
   const masked_login = maskLogin(mt5Login);
   const metadata = {
     metaapiRegion: region,
     readOnlyConfirmed: true,
     createdVia: "axe_companion_cloud_mt5",
+    provisionedReady: probe.ready,
+    provisioningProbedAt: new Date().toISOString(),
   };
 
   const { data: inserted, error } = await supabase
@@ -154,6 +220,89 @@ export async function createCloudMt5ConnectionAction(
   return { ok: true, data: { accountId: inserted.id as string } };
 }
 
+/**
+ * Lightweight status poll used by the Accounts page auto-poll while an
+ * account is provisioning. Only calls `provisioningGetAccount` (cheap,
+ * ~1-2s) so we can refresh the UI every 5s without burning MetaApi
+ * resource slots or hammering the broker terminal with full
+ * `account-information` calls. Returns the latest status so the client
+ * can stop polling once it flips to `connected`.
+ *
+ * NOTE: This is fire-and-forget from the UI's perspective — failures are
+ * swallowed (no toast spam during transient probe errors).
+ */
+export async function probeCloudMt5StatusAction(accountId: string): Promise<
+  Mt5CloudResult<{ providerStatus: string }>
+> {
+  if (!getMetaApiToken()) {
+    return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "validation", message: "Not signed in." };
+
+  const { data: row, error } = await supabase
+    .from("user_broker_accounts")
+    .select("id,external_connection_id,connection_method,provider_status,metadata,user_id")
+    .eq("id", accountId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) return { ok: false, code: "unknown", message: error.message };
+  if (!row?.external_connection_id || row.connection_method !== "cloud_mt5") {
+    return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
+  }
+
+  const extId = row.external_connection_id as string;
+  let providerStatus = (row.provider_status as string | null) ?? "unknown";
+  const currentMeta =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const hasRegion = typeof currentMeta.metaapiRegion === "string" && currentMeta.metaapiRegion.length > 0;
+
+  let acc: { connectionStatus?: string; state?: string; region?: string } | null = null;
+  try {
+    acc = await provisioningGetAccount(extId);
+    providerStatus = mapConnectionToProviderStatus(acc.connectionStatus, acc.state);
+  } catch {
+    // Transient probe failures are common during the first 60s after
+    // create — keep the previous status and let the next tick try again.
+    return { ok: true, data: { providerStatus } };
+  }
+
+  // Two reasons to write back here:
+  //  1. status flipped (provisioning → connected etc.) — UI needs it.
+  //  2. metadata.metaapiRegion is missing (legacy accounts created before
+  //     the region-aware migration). MetaApi's provisioningGetAccount
+  //     returns the deployed region, so we can backfill it without an
+  //     extra round-trip. After this poll the account routes to the
+  //     correct host on the very next chart / positions / order call.
+  const newRegion = typeof acc.region === "string" && acc.region.length > 0 ? acc.region : null;
+  const shouldBackfillRegion = !hasRegion && newRegion != null;
+  const statusChanged = providerStatus !== row.provider_status;
+
+  if (statusChanged || shouldBackfillRegion) {
+    const patch: Record<string, unknown> = {};
+    if (statusChanged) patch.provider_status = providerStatus;
+    if (shouldBackfillRegion) {
+      patch.metadata = { ...currentMeta, metaapiRegion: newRegion };
+    }
+    await supabase
+      .from("user_broker_accounts")
+      .update(patch)
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+  }
+
+  return { ok: true, data: { providerStatus } };
+}
+
 export async function testCloudMt5ConnectionAction(accountId: string): Promise<Mt5CloudResult> {
   if (!getMetaApiToken()) {
     return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
@@ -184,14 +333,25 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
     row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
       ? (row.metadata as Record<string, unknown>)
       : {};
+  const accountRegion =
+    typeof prevMetaRow.metaapiRegion === "string" ? prevMetaRow.metaapiRegion : null;
 
   try {
     const acc = await provisioningGetAccount(extId);
-    const info = await clientGetAccountInformation(extId, true);
+    // Backfill the region for legacy accounts that were created before
+    // the region-aware migration. provisioningGetAccount returns the
+    // deployed region "for free" so we just persist it here — the next
+    // chart / positions / order call will then route to the correct host
+    // instead of falling back to env-default london.
+    const resolvedRegion =
+      accountRegion ??
+      (typeof acc.region === "string" && acc.region.length > 0 ? acc.region : null);
+    const info = await clientGetAccountInformation(extId, true, resolvedRegion);
     const provider_status = mapConnectionToProviderStatus(acc.connectionStatus, acc.state);
 
     const meta = {
       ...prevMetaRow,
+      ...(resolvedRegion && !accountRegion ? { metaapiRegion: resolvedRegion } : {}),
       accountSummary: {
         balance: info.balance,
         equity: info.equity,
@@ -256,6 +416,8 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
 
   const extId = row.external_connection_id as string;
   const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
+  const accountRegion =
+    typeof prevMeta.metaapiRegion === "string" ? prevMeta.metaapiRegion : null;
 
   await supabase
     .from("user_broker_accounts")
@@ -268,11 +430,16 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
   let info: Record<string, unknown> = {};
 
   try {
-    info = await clientGetAccountInformation(extId, true);
-    positions = await clientGetPositions(extId, false);
+    info = await clientGetAccountInformation(extId, true, accountRegion);
+    positions = await clientGetPositions(extId, false, accountRegion);
     const end = new Date();
     const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
-    dealsRaw = await clientGetHistoryDealsRange(extId, start.toISOString(), end.toISOString());
+    dealsRaw = await clientGetHistoryDealsRange(
+      extId,
+      start.toISOString(),
+      end.toISOString(),
+      accountRegion,
+    );
   } catch (e) {
     await supabase
       .from("user_broker_accounts")
