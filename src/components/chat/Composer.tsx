@@ -164,10 +164,25 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     setSending(true);
     setError(null);
-    // Tell the message list AXE is thinking so it can show a typing
-    // bubble immediately — the server round-trip can be 3-8s while AXE
-    // chains tools, and silence there feels broken.
     if (typeof window !== "undefined") {
+      // Optimistic user bubble: the message list paints this immediately so
+      // the user never sends into silence. It gets cleared by the
+      // ChatMessageList when a fresh `messages` prop arrives after the
+      // server round-trip (router.refresh()).
+      const optimisticId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      window.dispatchEvent(
+        new CustomEvent("axe:user-message", {
+          detail: {
+            id: optimisticId,
+            content: text || "(chart attached)",
+            createdAt: new Date().toISOString(),
+            hasImage: Boolean(image),
+          },
+        }),
+      );
+      // Tell the message list AXE is thinking so it can show a typing
+      // bubble immediately — the server round-trip can be 3-8s while AXE
+      // chains tools, and silence there feels broken.
       window.dispatchEvent(
         new CustomEvent("axe:thinking", { detail: { thinking: true } }),
       );

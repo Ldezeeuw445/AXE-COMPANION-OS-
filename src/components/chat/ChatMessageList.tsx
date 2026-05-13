@@ -118,6 +118,13 @@ type ChatMessageListProps = {
   messages: ChatMessage[];
 };
 
+type OptimisticUserMessage = {
+  id: string;
+  content: string;
+  createdAt: string;
+  hasImage: boolean;
+};
+
 const NEAR_BOTTOM_PX = 96;
 
 export function ChatMessageList({ messages }: ChatMessageListProps) {
@@ -126,6 +133,8 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
   const [thinking, setThinking] = useState(false);
+  const [pending, setPending] = useState<OptimisticUserMessage[]>([]);
+  const lastServerCountRef = useRef(messages.length);
 
   // Composer dispatches `axe:thinking` when a message is in flight so we can
   // show a typing indicator immediately. Server round-trip can be 3-8s when
@@ -135,9 +144,36 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       const ce = e as CustomEvent<{ thinking: boolean }>;
       setThinking(Boolean(ce.detail?.thinking));
     }
+    function onUserMessage(e: Event) {
+      const ce = e as CustomEvent<OptimisticUserMessage>;
+      if (!ce.detail?.content) return;
+      setPending((prev) => [...prev, ce.detail]);
+    }
     window.addEventListener("axe:thinking", onThinking);
-    return () => window.removeEventListener("axe:thinking", onThinking);
+    window.addEventListener("axe:user-message", onUserMessage);
+    return () => {
+      window.removeEventListener("axe:thinking", onThinking);
+      window.removeEventListener("axe:user-message", onUserMessage);
+    };
   }, []);
+
+  // When the server-side messages array grows, the optimistic bubble is now
+  // duplicated by the real persisted message — clear pending. Also clears
+  // safely on server errors that still cause a router.refresh().
+  useEffect(() => {
+    if (messages.length > lastServerCountRef.current) {
+      setPending([]);
+    }
+    lastServerCountRef.current = messages.length;
+  }, [messages.length]);
+
+  // Safety net: if the server hangs (>20s), drop the optimistic bubble so
+  // we don't have a phantom message sitting forever.
+  useEffect(() => {
+    if (pending.length === 0) return;
+    const t = setTimeout(() => setPending([]), 20_000);
+    return () => clearTimeout(t);
+  }, [pending.length]);
 
   // Scroll to bottom on first mount and whenever messages change while user
   // is still parked near the bottom. Honour reading older messages otherwise.
@@ -164,13 +200,14 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     });
   }, []);
 
-  // Auto-scroll to the typing bubble when AXE starts thinking, so the
-  // animation is visible without the user having to scroll.
+  // Auto-scroll to the typing bubble when AXE starts thinking OR an
+  // optimistic user bubble is added, so the user sees their own message
+  // immediately without having to scroll.
   useEffect(() => {
-    if (thinking && stickToBottomRef.current) {
+    if ((thinking || pending.length > 0) && stickToBottomRef.current) {
       bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
     }
-  }, [thinking]);
+  }, [thinking, pending.length]);
 
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
@@ -193,7 +230,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         onScroll={onScroll}
         className="tos-scrollbar flex flex-1 flex-col gap-5 overflow-y-auto pr-1"
       >
-        {messages.length === 0 ? <EmptyState /> : null}
+        {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
         {messages.map((m) => (
           <article
             key={m.id}
@@ -248,6 +285,31 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
                   <SaveToVaultButton message={m} />
                 </>
               ) : null}
+            </div>
+          </article>
+        ))}
+        {pending.map((p) => (
+          <article key={p.id} className="group flex flex-col items-end">
+            <div className="mb-1.5 flex flex-row-reverse items-center gap-1.5 px-1.5">
+              <span className="h-1 w-1 rounded-full bg-tos-gold/70" />
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-gold/80">You said</p>
+            </div>
+            <div className="tos-bubble-user text-tos-text max-w-[92%] rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed opacity-90">
+              <p className="whitespace-pre-wrap">
+                {p.hasImage && p.content === "(chart attached)" ? (
+                  <span className="italic text-tos-muted">Chart attached…</span>
+                ) : (
+                  p.content
+                )}
+              </p>
+            </div>
+            <div className="flex flex-row-reverse items-center gap-1.5 px-1.5">
+              <time className="text-[10px] text-tos-dim" dateTime={p.createdAt}>
+                {formatTimeHm(p.createdAt)}
+              </time>
+              <span className="text-[9.5px] uppercase tracking-wider text-tos-dim/80" aria-label="sending">
+                · sending
+              </span>
             </div>
           </article>
         ))}

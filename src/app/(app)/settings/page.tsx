@@ -82,16 +82,23 @@ export default async function SettingsPage() {
     },
   ];
 
-  // If we got this far, all six Supabase reads succeeded — that's
-  // a real "live and saved in Supabase" signal, so the AXE pulse goes
-  // green. Auth + server flag + watchlist + pinned context all loaded.
+  // Honest live counter: each section reports green only if the
+  // underlying Supabase read actually returned a configured value.
+  // No `allLiveOverride` — if conversation isn't seeded yet, the
+  // pulse stays amber until the user sends a first chat message.
+  const liveSections =
+    (metrics.length > 0 ? 1 : 0) +
+    (memory.length > 0 ? 1 : 0) +
+    (conversation ? 1 : 0) +
+    (watchlist.length > 0 ? 1 : 0) +
+    (accountName ? 1 : 0) +
+    1; // liveTrading flag always loaded
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-4">
       <LiveStatusReporter
-        liveCount={6}
+        liveCount={liveSections}
         totalCount={6}
         label="Settings · Supabase"
-        allLiveOverride={true}
       />
       <AxeTopBarInjector
         title="Settings"
@@ -212,35 +219,44 @@ export default async function SettingsPage() {
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
           Assistant learning
         </h2>
-        <ul className="mt-3 space-y-2">
-          {metrics.map((m) => (
-            <li
-              key={m.metricKey}
-              className="flex items-center justify-between text-xs"
-            >
-              <span className="text-tos-muted">{m.label}</span>
-              <span className="font-mono text-tos-text">
-                {m.metricKey === "alignment_score" ||
-                m.metricKey === "approved_setup_rate"
-                  ? `${Math.round(m.value * 100)}%`
-                  : m.value}
-                {m.trend ? (
-                  <span
-                    className={
-                      m.trend === "up"
-                        ? "ml-1 text-tos-long"
-                        : m.trend === "down"
-                          ? "ml-1 text-tos-short"
-                          : "ml-1 text-tos-dim"
-                    }
-                  >
-                    {m.trend === "up" ? "↑" : m.trend === "down" ? "↓" : "→"}
-                  </span>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ul>
+        {metrics.length === 0 ? (
+          <p className="mt-3 text-xs leading-relaxed text-tos-muted">
+            AXE hasn&apos;t collected enough signal yet. Send a few chats, save trades
+            to the journal, and accept or reject AXE&apos;s setup proposals — your
+            alignment, confidence and feedback metrics will populate here within a
+            few sessions.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {metrics.map((m) => (
+              <li
+                key={m.metricKey}
+                className="flex items-center justify-between text-xs"
+              >
+                <span className="text-tos-muted">{m.label}</span>
+                <span className="font-mono text-tos-text">
+                  {m.metricKey === "alignment_score" ||
+                  m.metricKey === "approved_setup_rate"
+                    ? `${Math.round(m.value * 100)}%`
+                    : m.value}
+                  {m.trend ? (
+                    <span
+                      className={
+                        m.trend === "up"
+                          ? "ml-1 text-tos-long"
+                          : m.trend === "down"
+                            ? "ml-1 text-tos-short"
+                            : "ml-1 text-tos-dim"
+                      }
+                    >
+                      {m.trend === "up" ? "↑" : m.trend === "down" ? "↓" : "→"}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <Link
           href="/cockpit"
           className="mt-4 inline-flex text-xs font-medium text-[color:var(--icon-cockpit)] hover:underline"
