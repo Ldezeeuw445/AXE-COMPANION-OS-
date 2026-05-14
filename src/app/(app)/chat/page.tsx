@@ -59,12 +59,6 @@ export default async function ChatPage() {
         liveCount={liveCount}
         totalCount={totalCount}
         label={`Chat · ${operatorName ?? "AXE"}`}
-        allLiveOverride={CHAT_USES_MOCK_DATA ? false : true}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-[0.14]"
-        style={{ backgroundImage: "url(/marketing/marketing-chat.png)" }}
       />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         {CHAT_USES_MOCK_DATA ? (
