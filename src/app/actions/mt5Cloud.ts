@@ -71,6 +71,38 @@ function isProvisionedAndReady(
 
 const PROVISIONING_POLL_INTERVAL_MS = 1_500;
 const PROVISIONING_POLL_BUDGET_MS = 10_000;
+const PROVISIONING_PROBE_STEP_TIMEOUT_MS = 4_000;
+const TEST_PROVISIONING_TIMEOUT_MS = 20_000;
+const TEST_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
+const SYNC_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
+const SYNC_POSITIONS_TIMEOUT_MS = 35_000;
+const SYNC_HISTORY_TIMEOUT_MS = 75_000;
+const SYNC_FINAL_STATUS_TIMEOUT_MS = 10_000;
+
+class Mt5ActionTimeoutError extends Error {
+  constructor(readonly operation: string) {
+    super(`${operation}_timeout`);
+    this.name = "Mt5ActionTimeoutError";
+  }
+}
+
+async function withActionBudget<T>(
+  operation: string,
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Mt5ActionTimeoutError(operation)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /**
  * Poll MetaAPI provisioning until the account is actually deployed/connected
@@ -89,7 +121,11 @@ async function pollUntilDeployed(metaId: string): Promise<{
 
   while (Date.now() < deadline) {
     try {
-      const acc = await provisioningGetAccount(metaId);
+      const acc = await withActionBudget(
+        "provisioning_probe",
+        provisioningGetAccount(metaId),
+        PROVISIONING_PROBE_STEP_TIMEOUT_MS,
+      );
       last = { connectionStatus: acc.connectionStatus, state: acc.state };
       if (isProvisionedAndReady(acc.connectionStatus, acc.state)) {
         return { ...last, ready: true };
@@ -268,7 +304,11 @@ export async function probeCloudMt5StatusAction(accountId: string): Promise<
 
   let acc: { connectionStatus?: string; state?: string; region?: string } | null = null;
   try {
-    acc = await provisioningGetAccount(extId);
+    acc = await withActionBudget(
+      "auto_provisioning_probe",
+      provisioningGetAccount(extId),
+      PROVISIONING_PROBE_STEP_TIMEOUT_MS,
+    );
     providerStatus = mapConnectionToProviderStatus(acc.connectionStatus, acc.state);
   } catch {
     // Transient probe failures are common during the first 60s after
@@ -337,7 +377,11 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
     typeof prevMetaRow.metaapiRegion === "string" ? prevMetaRow.metaapiRegion : null;
 
   try {
-    const acc = await provisioningGetAccount(extId);
+    const acc = await withActionBudget(
+      "test_provisioning",
+      provisioningGetAccount(extId),
+      TEST_PROVISIONING_TIMEOUT_MS,
+    );
     // Backfill the region for legacy accounts that were created before
     // the region-aware migration. provisioningGetAccount returns the
     // deployed region "for free" so we just persist it here — the next
@@ -346,7 +390,11 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
     const resolvedRegion =
       accountRegion ??
       (typeof acc.region === "string" && acc.region.length > 0 ? acc.region : null);
-    const info = await clientGetAccountInformation(extId, true, resolvedRegion);
+    const info = await withActionBudget(
+      "test_account_information",
+      clientGetAccountInformation(extId, true, resolvedRegion),
+      TEST_ACCOUNT_INFO_TIMEOUT_MS,
+    );
     const provider_status = mapConnectionToProviderStatus(acc.connectionStatus, acc.state);
 
     const meta = {
@@ -430,15 +478,27 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
   let info: Record<string, unknown> = {};
 
   try {
-    info = await clientGetAccountInformation(extId, true, accountRegion);
-    positions = await clientGetPositions(extId, false, accountRegion);
+    info = await withActionBudget(
+      "sync_account_information",
+      clientGetAccountInformation(extId, true, accountRegion),
+      SYNC_ACCOUNT_INFO_TIMEOUT_MS,
+    );
+    positions = await withActionBudget(
+      "sync_positions",
+      clientGetPositions(extId, false, accountRegion),
+      SYNC_POSITIONS_TIMEOUT_MS,
+    );
     const end = new Date();
     const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
-    dealsRaw = await clientGetHistoryDealsRange(
-      extId,
-      start.toISOString(),
-      end.toISOString(),
-      accountRegion,
+    dealsRaw = await withActionBudget(
+      "sync_history_deals",
+      clientGetHistoryDealsRange(
+        extId,
+        start.toISOString(),
+        end.toISOString(),
+        accountRegion,
+      ),
+      SYNC_HISTORY_TIMEOUT_MS,
     );
   } catch (e) {
     await supabase
@@ -522,7 +582,11 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
 
   let accSnap: { connectionStatus?: string; state?: string } = {};
   try {
-    accSnap = await provisioningGetAccount(extId);
+    accSnap = await withActionBudget(
+      "sync_final_status",
+      provisioningGetAccount(extId),
+      SYNC_FINAL_STATUS_TIMEOUT_MS,
+    );
   } catch {
     /* ignore */
   }
@@ -630,6 +694,9 @@ export async function disconnectCloudMt5AccountAction(accountId: string): Promis
 }
 
 function mapMetaError(e: unknown): { ok: false; code: Mt5CloudErrorCode; message: string } {
+  if (e instanceof Mt5ActionTimeoutError) {
+    return { ok: false, code: "metaapi_timeout", message: userMessageForCode("metaapi_timeout") };
+  }
   if (e instanceof MetaApiRequestError) {
     const code = e.code;
     if (code === "unknown" && e.payload) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { probeCloudMt5StatusAction } from "@/app/actions/mt5Cloud";
 
@@ -40,6 +40,8 @@ export type ProvisioningTarget = {
  */
 export function Mt5ProvisioningAutoPoll({ targets }: { targets: ProvisioningTarget[] }) {
   const router = useRouter();
+  const [expired, setExpired] = useState(false);
+  const [manualRetrying, setManualRetrying] = useState(false);
   // 0 = "not started yet" — set on first effect run to keep render pure
   // (Date.now() is impure and tripping react-hooks/purity if called inline).
   const startedAtRef = useRef<number>(0);
@@ -52,14 +54,19 @@ export function Mt5ProvisioningAutoPoll({ targets }: { targets: ProvisioningTarg
   const transientKey = transientIds.join("|");
 
   useEffect(() => {
-    if (!transientKey) return;
+    if (!transientKey) {
+      setExpired(false);
+      return;
+    }
     startedAtRef.current = Date.now();
+    setExpired(false);
 
     let cancelled = false;
 
     const tick = async () => {
       if (cancelled) return;
       if (Date.now() - startedAtRef.current > MAX_POLL_DURATION_MS) {
+        setExpired(true);
         return;
       }
 
@@ -92,5 +99,44 @@ export function Mt5ProvisioningAutoPoll({ targets }: { targets: ProvisioningTarg
     };
   }, [transientKey, router]);
 
-  return null;
+  async function retryNow() {
+    if (!transientKey || manualRetrying) return;
+    setManualRetrying(true);
+    setExpired(false);
+    startedAtRef.current = Date.now();
+    try {
+      await Promise.allSettled(
+        transientKey
+          .split("|")
+          .filter(Boolean)
+          .map((id) => probeCloudMt5StatusAction(id)),
+      );
+      router.refresh();
+    } finally {
+      setManualRetrying(false);
+    }
+  }
+
+  if (!expired) return null;
+
+  return (
+    <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3 text-[12px] leading-relaxed text-amber-100/90">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold text-amber-50">MT5 provisioning is still pending.</p>
+          <p className="mt-1 text-amber-100/75">
+            MetaApi has not reported the terminal live after 3 minutes. AXE stopped auto-polling so the page stays responsive.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void retryNow()}
+          disabled={manualRetrying}
+          className="shrink-0 rounded-xl border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-[11px] font-semibold text-amber-50 hover:bg-amber-300/18 disabled:opacity-50"
+        >
+          {manualRetrying ? "Checking…" : "Retry status"}
+        </button>
+      </div>
+    </div>
+  );
 }

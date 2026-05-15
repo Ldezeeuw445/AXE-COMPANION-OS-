@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   disconnectCloudMt5AccountAction,
@@ -12,9 +12,49 @@ type Props = {
   accountId: string;
 };
 
+const ACTION_TIMEOUT_MS: Record<string, number> = {
+  Test: 25_000,
+  Sync: 75_000,
+  Disconnect: 25_000,
+};
+
+type ActionResult = { ok: boolean; code?: string; message?: string; data?: unknown };
+
+function timeoutResult(label: string): ActionResult {
+  return {
+    ok: false,
+    code: "client_timeout",
+    message:
+      label === "Sync"
+        ? "Sync is still running in the background. Refresh Accounts in a minute or retry if the status does not change."
+        : "The request is taking longer than expected. You can retry without leaving this screen.",
+  };
+}
+
+async function withClientTimeout(
+  label: string,
+  promise: Promise<ActionResult>,
+): Promise<{ result: ActionResult; timedOut: boolean }> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise.then((result) => ({ result, timedOut: false })),
+      new Promise<{ result: ActionResult; timedOut: boolean }>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ result: timeoutResult(label), timedOut: true }),
+          ACTION_TIMEOUT_MS[label] ?? 30_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function Mt5CloudAccountActions({ accountId }: Props) {
   const router = useRouter();
-  const [pending, start] = useTransition();
+  const runIdRef = useRef(0);
+  const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   function parseMsg(): { headline: string; detail?: string } | null {
@@ -27,52 +67,84 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
   }
 
   function run(
-    fn: (id: string) => Promise<{ ok: boolean; code?: string; message?: string; data?: unknown }>,
+    fn: (id: string) => Promise<ActionResult>,
     label: string,
   ) {
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+    setBusyLabel(label);
     setMsg(null);
-    start(() => {
-      void (async () => {
-        const r = await fn(accountId);
-        if (r.ok && label === "Sync") {
-          const d =
-            r.data && typeof r.data === "object"
-              ? (r.data as { dealsFetched?: number; dealsUpserted?: number; tradesNormalized?: number })
-              : null;
-          const detail =
-            d != null
-              ? `Fetched ${d.dealsFetched ?? 0} · Saved ${d.dealsUpserted ?? 0} closed rows` +
-                ((d.tradesNormalized ?? 0) === 0 && (d.dealsFetched ?? 0) > 0
-                  ? " · Window had open legs only."
-                  : "")
-              : "";
-          setMsg(
-            JSON.stringify({
-              headline: "Sync completed.",
-              detail: detail || undefined,
-            }),
-          );
-        } else if (r.ok) {
-          setMsg(
-            JSON.stringify({
-              headline: label === "Test" ? "Connection test passed." : "Done.",
-              detail: undefined,
-            }),
-          );
-        } else {
-          setMsg(
-            JSON.stringify({
-              headline: "Something went wrong.",
-              detail: `${r.code ?? "error"} — ${r.message ?? "Failed"}`,
-            }),
-          );
-        }
-        router.refresh();
-      })();
+    const actionPromise = fn(accountId);
+
+    void (async () => {
+      const { result: r, timedOut } = await withClientTimeout(label, actionPromise);
+      if (runIdRef.current !== runId) return;
+
+      if (timedOut) {
+        setMsg(
+          JSON.stringify({
+            headline: label === "Sync" ? "Still syncing." : "Still working.",
+            detail: r.message,
+          }),
+        );
+        setBusyLabel(null);
+        actionPromise
+          .then(() => {
+            if (runIdRef.current === runId) router.refresh();
+          })
+          .catch(() => undefined);
+        return;
+      }
+
+      if (r.ok && label === "Sync") {
+        const d =
+          r.data && typeof r.data === "object"
+            ? (r.data as { dealsFetched?: number; dealsUpserted?: number; tradesNormalized?: number })
+            : null;
+        const detail =
+          d != null
+            ? `Fetched ${d.dealsFetched ?? 0} · Saved ${d.dealsUpserted ?? 0} closed rows` +
+              ((d.tradesNormalized ?? 0) === 0 && (d.dealsFetched ?? 0) > 0
+                ? " · Window had open legs only."
+                : "")
+            : "";
+        setMsg(
+          JSON.stringify({
+            headline: "Sync completed.",
+            detail: detail || undefined,
+          }),
+        );
+      } else if (r.ok) {
+        setMsg(
+          JSON.stringify({
+            headline: label === "Test" ? "Connection test passed." : "Done.",
+            detail: undefined,
+          }),
+        );
+      } else {
+        setMsg(
+          JSON.stringify({
+            headline: "Something went wrong.",
+            detail: `${r.code ?? "error"} — ${r.message ?? "Failed"}`,
+          }),
+        );
+      }
+      router.refresh();
+      setBusyLabel(null);
+    })().catch((e) => {
+      if (runIdRef.current !== runId) return;
+      setMsg(
+        JSON.stringify({
+          headline: "Something went wrong.",
+          detail: e instanceof Error ? e.message : String(e),
+        }),
+      );
+      setBusyLabel(null);
     });
   }
 
   const feedback = parseMsg();
+  const pending = busyLabel != null;
 
   return (
     <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
@@ -83,7 +155,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           onClick={() => run(testCloudMt5ConnectionAction, "Test")}
           className="rounded-lg border border-white/15 bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-tos-text hover:bg-white/10 disabled:opacity-50"
         >
-          Test
+          {busyLabel === "Test" ? "Testing…" : "Test"}
         </button>
         <button
           type="button"
@@ -91,7 +163,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           onClick={() => run(syncCloudMt5AccountAction, "Sync")}
           className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-200/90 hover:bg-cyan-500/20 disabled:opacity-50"
         >
-          Sync
+          {busyLabel === "Sync" ? "Syncing…" : "Sync"}
         </button>
         <button
           type="button"
@@ -102,9 +174,16 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           }}
           className="rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-red-200/90 hover:bg-red-500/20 disabled:opacity-50"
         >
-          Disconnect
+          {busyLabel === "Disconnect" ? "Disconnecting…" : "Disconnect"}
         </button>
       </div>
+      {busyLabel ? (
+        <p className="text-[10px] leading-relaxed text-tos-dim">
+          {busyLabel === "Sync"
+            ? "AXE is syncing broker history. If the broker is slow, this panel will release and keep the account usable."
+            : "AXE is checking the account. This will release automatically if the provider stalls."}
+        </p>
+      ) : null}
       {feedback ? (
         <div className="text-[10px] leading-relaxed text-tos-muted">
           <p className="text-tos-text/95">{feedback.headline}</p>

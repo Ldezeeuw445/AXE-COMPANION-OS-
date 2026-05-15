@@ -87,6 +87,7 @@ import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEv
 
 const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 30_000;
+const ROUTE_PENDING_VISUAL_BUDGET_MS = 12_000;
 
 const CHART_SCALE_MODES = [
   { id: "near", label: "Close view" },
@@ -158,11 +159,18 @@ function statusPillCopy(
       dot: "bg-cyan-300/80",
     };
   }
-  if (live === "live_stream") {
+  if (live === "connected" || live === "live_stream") {
     return {
-      label: transport === "ws" ? "Live stream" : "Live",
+      label: transport === "ws" ? "Connected" : "Connected",
       className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95",
       dot: "bg-emerald-300 animate-pulse",
+    };
+  }
+  if (live === "stale") {
+    return {
+      label: "Stale",
+      className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
+      dot: "bg-amber-300/85",
     };
   }
   if (live === "delayed_polling") {
@@ -512,7 +520,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const accountId = data.account?.brokerAccountId ?? null;
   const [isRoutePending, startRouteTransition] = useTransition();
   const [pendingTfKey, setPendingTfKey] = useState<string | null>(null);
-  const isTimeframePending = isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey);
+  const [routeFallbackMessage, setRouteFallbackMessage] = useState<string | null>(null);
+  const isTimeframePending =
+    !routeFallbackMessage && (isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey));
 
   const [livePrice, setLivePrice] = useState<number | null>(data.lastPrice);
   const [lastTickAt, setLastTickAt] = useState<string | null>(null);
@@ -527,7 +537,23 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   useEffect(() => {
     setPendingTfKey(null);
+    setRouteFallbackMessage(null);
   }, [data.timeframeKey]);
+
+  useEffect(() => {
+    if (!pendingTfKey || pendingTfKey === data.timeframeKey) return;
+    const timer = setTimeout(() => {
+      setPendingTfKey(null);
+      setRouteFallbackMessage("Still refreshing. Showing the last stable chart while AXE retries.");
+    }, ROUTE_PENDING_VISUAL_BUDGET_MS);
+    return () => clearTimeout(timer);
+  }, [pendingTfKey, data.timeframeKey]);
+
+  useEffect(() => {
+    if (!routeFallbackMessage) return;
+    const timer = setTimeout(() => setRouteFallbackMessage(null), 8_000);
+    return () => clearTimeout(timer);
+  }, [routeFallbackMessage]);
 
   useEffect(() => {
     for (const option of CHART_TF_OPTIONS) {
@@ -1206,7 +1232,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setOverlays(next);
   }, []);
 
-  const { status: liveStatus, transport: liveTransport } = useLiveChart({
+  const { status: liveStatus, transport: liveTransport, reason: liveReason } = useLiveChart({
     enabled: liveEnabled,
     accountId,
     displaySymbol: data.symbol,
@@ -1219,7 +1245,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   // Periodic audit snapshot — best-effort, fails silently if migration not applied.
   useEffect(() => {
-    if (!liveEnabled || liveStatus !== "live_stream" || !accountId) return;
+    if (!liveEnabled || (liveStatus !== "connected" && liveStatus !== "live_stream") || !accountId) return;
     const post = () => {
       void fetch("/api/chart/snapshot", {
         method: "POST",
@@ -1282,6 +1308,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   const goSymbol = useCallback(
     (sym: string) => {
+      setRouteFallbackMessage(null);
       startRouteTransition(() => {
         router.push(buildHref(accountId, sym, data.timeframeKey));
       });
@@ -1291,6 +1318,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const goTf = useCallback(
     (key: string) => {
       setPendingTfKey(key);
+      setRouteFallbackMessage(null);
       startRouteTransition(() => {
         router.push(buildHref(accountId, data.symbol, key));
       });
@@ -2583,6 +2611,26 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         {isTimeframePending ? (
           <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-cyan-300/20 bg-black/78 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/85 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
             Loading {CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}
+          </div>
+        ) : null}
+        {routeFallbackMessage ? (
+          <div className="pointer-events-none absolute right-3 top-12 z-30 max-w-[18rem] rounded-xl border border-amber-300/20 bg-black/82 px-3 py-2 text-[10.5px] font-medium leading-snug text-amber-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+            {routeFallbackMessage}
+          </div>
+        ) : null}
+        {(liveStatus === "stale" || liveStatus === "offline") && data.candles.length > 0 ? (
+          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-white/10 bg-black/82 px-3 py-2 text-[10.5px] leading-snug text-tos-muted shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+            <p className="font-semibold text-tos-text/90">
+              {liveStatus === "offline" ? "Live feed offline" : "Live feed stale"}
+            </p>
+            <p className="mt-0.5">
+              Showing the last broker candles. {liveReason ?? "AXE will reconnect without blocking the chart."}
+            </p>
+          </div>
+        ) : null}
+        {data.hint && !failureCopy && liveStatus !== "stale" && liveStatus !== "offline" ? (
+          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-cyan-300/15 bg-black/76 px-3 py-2 text-[10.5px] leading-snug text-cyan-100/82 shadow-[0_10px_30px_rgba(0,0,0,0.42)] backdrop-blur">
+            {data.hint}
           </div>
         ) : null}
       </div>

@@ -17,9 +17,11 @@ export type LiveTransport = "ws" | "sse" | "off";
 export type LiveUiStatus =
   | "idle"
   | "connecting"
+  | "connected"
   | "live_stream"
   | "delayed_polling"
   | "reconnecting"
+  | "stale"
   | "offline"
   | "failed";
 
@@ -86,7 +88,18 @@ export function useLiveChart({
     let cleanupActive: (() => void) | null = null;
     let backoff = 1500;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let staleTimer: ReturnType<typeof setTimeout> | null = null;
+    let offlineTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastDataAt = Date.now();
     let upstreamStatus: ChartLiveStatus | null = null;
+    const transportRef = { current: "off" as LiveTransport };
+
+    function clearHealthTimers() {
+      if (staleTimer) clearTimeout(staleTimer);
+      if (offlineTimer) clearTimeout(offlineTimer);
+      staleTimer = null;
+      offlineTimer = null;
+    }
 
     function setUi(next: LiveUiStatus) {
       queueMicrotask(() => {
@@ -94,9 +107,62 @@ export function useLiveChart({
       });
     }
 
+    function markHealthy(next: LiveUiStatus) {
+      if (cancelled) return;
+      lastDataAt = Date.now();
+      setUi(next);
+      clearHealthTimers();
+      staleTimer = setTimeout(() => {
+        if (cancelled) return;
+        const staleForMs = Date.now() - lastDataAt;
+        if (staleForMs >= 30_000) {
+          queueMicrotask(() => {
+            if (!cancelled) setReason("No live update received for 30 seconds.");
+          });
+          setUi("stale");
+        }
+      }, 30_000);
+      offlineTimer = setTimeout(() => {
+        if (cancelled) return;
+        const offlineForMs = Date.now() - lastDataAt;
+        if (offlineForMs >= 90_000) {
+          queueMicrotask(() => {
+            if (!cancelled) setReason("Live feed has not responded for 90 seconds.");
+          });
+          setUi("offline");
+        }
+      }, 90_000);
+    }
+
+    async function fetchSessionWithTimeout(): Promise<{ token?: string | null; wsUrl?: string | null } | null> {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8_000);
+      try {
+        const res = await fetch("/api/chart/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            accountId,
+            displaySymbol,
+            brokerSymbol,
+            timeframe: timeframeKey,
+          }),
+        });
+        if (!res.ok) return null;
+        return (await res.json()) as { token?: string | null; wsUrl?: string | null };
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     function applyEvent(evt: ChartLiveEvent) {
       switch (evt.type) {
         case "ready":
+          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
           return;
         case "tick": {
           const mid = evt.price ?? evt.bid ?? evt.ask ?? null;
@@ -106,24 +172,29 @@ export function useLiveChart({
             ask: evt.ask ?? null,
             time: evt.timestamp ?? null,
           });
+          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
           return;
         }
         case "candle_update":
           handlersRef.current.onCandleUpdate?.(evt.candle);
+          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
           return;
         case "positions_update":
           handlersRef.current.onPositions?.({
             total: typeof evt.total === "number" ? evt.total : 0,
             onSymbol: Array.isArray(evt.onSymbol) ? evt.onSymbol : [],
           });
+          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
           return;
         case "live_status":
           upstreamStatus = evt.status;
-          setReason(evt.reason ?? null);
+          queueMicrotask(() => {
+            if (!cancelled) setReason(evt.reason ?? null);
+          });
           if (evt.status === "live") {
-            setUi(transportRef.current === "ws" ? "live_stream" : "delayed_polling");
+            markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
           } else if (evt.status === "delayed") {
-            setUi("delayed_polling");
+            markHealthy("stale");
           } else if (evt.status === "reconnecting") {
             setUi("reconnecting");
           } else if (evt.status === "offline") {
@@ -133,6 +204,8 @@ export function useLiveChart({
           }
           return;
         case "heartbeat":
+          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          return;
         case "error":
           return;
         default:
@@ -140,7 +213,6 @@ export function useLiveChart({
       }
     }
 
-    const transportRef = { current: "off" as LiveTransport };
     function setT(next: LiveTransport) {
       transportRef.current = next;
       queueMicrotask(() => {
@@ -150,19 +222,8 @@ export function useLiveChart({
 
     async function connectWs(): Promise<boolean> {
       try {
-        const res = await fetch("/api/chart/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            accountId,
-            displaySymbol,
-            brokerSymbol,
-            timeframe: timeframeKey,
-          }),
-        });
-        if (!res.ok) return false;
-        const j = (await res.json()) as { token?: string | null; wsUrl?: string | null };
+        const j = await fetchSessionWithTimeout();
+        if (!j) return false;
         if (!j.token || !j.wsUrl) return false;
 
         const wsBase = j.wsUrl.replace(/\/$/, "");
@@ -177,7 +238,7 @@ export function useLiveChart({
         ws.onopen = () => {
           opened = true;
           backoff = 1500;
-          setUi(upstreamStatus === "live" ? "live_stream" : "live_stream");
+          markHealthy(upstreamStatus === "live" ? "connected" : "connected");
         };
         ws.onmessage = (ev) => {
           if (!ev.data) return;
@@ -237,7 +298,7 @@ export function useLiveChart({
       es.onopen = () => {
         opened = true;
         backoff = 1500;
-        setUi("delayed_polling");
+        markHealthy("delayed_polling");
       };
       es.onmessage = (ev) => {
         if (!ev.data) return;
@@ -279,6 +340,7 @@ export function useLiveChart({
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      clearHealthTimers();
       if (cleanupActive) cleanupActive();
     };
   }, [enabled, accountId, displaySymbol, brokerSymbol, timeframeKey]);
