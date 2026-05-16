@@ -23,6 +23,7 @@ import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAu
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { accountMethodLabel, friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
+import type { Mt5DoctorOverallStatus, Mt5DoctorReport } from "@/types/mt5Doctor";
 
 type Props = {
   initialAccounts: BrokerAccountRow[];
@@ -103,6 +104,99 @@ function syncFreshness(iso: string | null | undefined): {
     detail: `Synced ${ageLabel}`,
     tone: "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/85",
     dot: "bg-amber-300/70",
+  };
+}
+
+function readLastDoctor(meta: Record<string, unknown> | null | undefined): Mt5DoctorReport | null {
+  const value = meta?.lastDoctor;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const report = value as Partial<Mt5DoctorReport>;
+  if (!report.checkedAt || !report.overallStatus || !report.headline) return null;
+  return report as Mt5DoctorReport;
+}
+
+function doctorStatusLabel(status: Mt5DoctorOverallStatus): string {
+  const labels: Record<Mt5DoctorOverallStatus, string> = {
+    connected: "Connected",
+    syncing: "Syncing",
+    reconnecting: "Reconnecting",
+    needs_attention: "Needs attention",
+    read_only: "Read-only",
+    server_issue: "Server issue",
+    credentials_issue: "Credentials issue",
+    provisioning_pending: "Provisioning pending",
+  };
+  return labels[status];
+}
+
+function compactDiagnosticStatus(a: BrokerAccountRow): {
+  label: string;
+  detail: string;
+  tone: string;
+  dot: string;
+} {
+  const doctor = readLastDoctor(a.metadata);
+  if (doctor) {
+    const status = doctor.overallStatus;
+    const critical = status === "server_issue" || status === "credentials_issue" || status === "needs_attention";
+    const warm = status === "syncing" || status === "reconnecting" || status === "provisioning_pending";
+    return {
+      label: doctorStatusLabel(status),
+      detail: doctor.summary,
+      tone: critical
+        ? "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90"
+        : warm
+          ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90"
+          : "border-cyan-400/22 bg-cyan-400/[0.07] text-cyan-100/90",
+      dot: critical ? "bg-rose-300" : warm ? "bg-amber-300" : "bg-cyan-300",
+    };
+  }
+  const provider = (a.provider_status ?? a.status ?? "").toLowerCase();
+  if (provider.includes("credential")) {
+    return {
+      label: "Credentials issue",
+      detail: "Run Doctor to confirm the failing step.",
+      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
+      dot: "bg-rose-300",
+    };
+  }
+  if (provider === "provisioning" || provider === "created" || provider === "deploying") {
+    return {
+      label: "Provisioning pending",
+      detail: "MetaAPI cloud terminal is still starting.",
+      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
+      dot: "bg-amber-300",
+    };
+  }
+  if (provider === "syncing" || provider === "connecting") {
+    return {
+      label: "Syncing",
+      detail: "Broker connection is in progress.",
+      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
+      dot: "bg-amber-300",
+    };
+  }
+  if (provider.includes("fail") || provider.includes("error") || provider === "metaapi_region_error") {
+    return {
+      label: "Needs attention",
+      detail: "Run Doctor to isolate the failed MT5 step.",
+      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
+      dot: "bg-rose-300",
+    };
+  }
+  if (provider === "connected" || provider === "provisioned") {
+    return {
+      label: "Read-only",
+      detail: "Connected for account data. Live trading remains separately gated.",
+      tone: "border-cyan-400/22 bg-cyan-400/[0.07] text-cyan-100/90",
+      dot: "bg-cyan-300",
+    };
+  }
+  return {
+    label: "Needs attention",
+    detail: "Run Doctor for a full connection read.",
+    tone: "border-white/10 bg-white/[0.03] text-tos-dim",
+    dot: "bg-white/30",
   };
 }
 
@@ -273,6 +367,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
               const method = accountMethodLabel(a.connection_method, Boolean(a.external_connection_id));
               const syncLabel = friendlyProviderStatus(a.provider_status ?? a.status);
               const freshness = syncFreshness(a.last_sync_at);
+              const diagnostic = compactDiagnosticStatus(a);
 
               return (
                 <GlassPanel
@@ -312,6 +407,18 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                           {freshness.detail}
                         </span>
                       </div>
+                      {kind === "cloud" ? (
+                        <div
+                          className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${diagnostic.tone}`}
+                          title={diagnostic.detail}
+                        >
+                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${diagnostic.dot}`} aria-hidden />
+                          {diagnostic.label}
+                          <span className="truncate border-l border-current/20 pl-1.5 font-normal normal-case tracking-normal opacity-75">
+                            {diagnostic.detail}
+                          </span>
+                        </div>
+                      ) : null}
                       <p className="mt-1 text-[10px] text-tos-dim/70">Added {formatDate(a.created_at)}</p>
                       {active ? (
                         <p className="mt-2 text-[11px] leading-relaxed text-cyan-200/75">

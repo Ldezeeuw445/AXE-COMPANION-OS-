@@ -1,5 +1,6 @@
 import type { WatchlistEntry, TerminalAlert, TerminalExecution } from "@/services/axeService";
 import type { MarketContext, ProviderStatus } from "@/lib/market/marketTypes";
+import type { Mt5DoctorOverallStatus } from "@/types/mt5Doctor";
 
 export type FilteredNewsEvent = {
   title: string;
@@ -227,6 +228,17 @@ export type AccountsContext = {
     maskedLogin: string | null;
     mt5Server: string | null;
     active: boolean;
+    mt5Doctor: {
+      checkedAt: string;
+      overallStatus: Mt5DoctorOverallStatus;
+      headline: string;
+      summary: string;
+      positionsReadable: boolean | null;
+      historyReadable: boolean | null;
+      livePricesAvailable: boolean | null;
+      tradingState: "read_only" | "live_trading_enabled";
+      knownFailureReason: string | null;
+    } | null;
   }>;
   hasCloudMt5: boolean;
   activeLabel: string | null;

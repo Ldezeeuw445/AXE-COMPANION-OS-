@@ -160,6 +160,34 @@ function syncState(ageMinutes: number | null): AccountsContext["syncFreshness"][
   return "old";
 }
 
+function normalizeDoctorContext(meta: unknown): AccountsContext["accounts"][number]["mt5Doctor"] {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return null;
+  const raw = (meta as Record<string, unknown>).lastDoctor;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const d = raw as Record<string, unknown>;
+  const steps = Array.isArray(d.steps) ? (d.steps as Array<Record<string, unknown>>) : [];
+  const stepStatus = (id: string): boolean | null => {
+    const found = steps.find((step) => step.id === id);
+    if (!found) return null;
+    if (found.status === "pass") return true;
+    if (found.status === "fail") return false;
+    return null;
+  };
+  const overallStatus = String(d.overallStatus ?? "");
+  if (!overallStatus || !d.checkedAt || !d.headline) return null;
+  return {
+    checkedAt: String(d.checkedAt),
+    overallStatus: overallStatus as NonNullable<AccountsContext["accounts"][number]["mt5Doctor"]>["overallStatus"],
+    headline: String(d.headline),
+    summary: String(d.summary ?? d.headline),
+    positionsReadable: stepStatus("positions_readable"),
+    historyReadable: stepStatus("history_readable"),
+    livePricesAvailable: stepStatus("live_prices_available"),
+    tradingState: d.liveTradingEnabled ? "live_trading_enabled" : "read_only",
+    knownFailureReason: d.knownFailureReason != null ? String(d.knownFailureReason) : null,
+  };
+}
+
 function staleState(updatedAt: string | null, status: string | null): ChartContext["staleState"] {
   const s = (status ?? "").toLowerCase();
   if (s === "offline") return "offline";
@@ -379,7 +407,7 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
   const [accountsRes, prefsRes] = await Promise.all([
     supabase
       .from("user_broker_accounts")
-      .select("id,label,provider,status,mt5_login,mt5_server,connection_method,provider_status,last_sync_at,masked_login,created_at")
+      .select("id,label,provider,status,mt5_login,mt5_server,connection_method,provider_status,last_sync_at,masked_login,metadata,created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -404,6 +432,7 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
       (r.mt5_login != null ? String(r.mt5_login) : null),
     mt5Server: (r.mt5_server as string | null | undefined) ?? null,
     active: activeAccountId === r.id,
+    mt5Doctor: normalizeDoctorContext(r.metadata),
   }));
   const active = accounts.find((a) => a.active) ?? accounts[0] ?? null;
   const ageMinutes = minutesSince(active?.lastSyncAt);
@@ -893,9 +922,15 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
   lines.push(`Active: ${ctx.symbol ?? "no symbol"} ${ctx.timeframe ? `on ${ctx.timeframe}` : ""}`.trim());
   if (ctx.accounts.activeLabel) {
     const sync = ctx.accounts.syncFreshness;
+    const activeDoctor = ctx.accounts.accounts.find((account) => account.active)?.mt5Doctor ?? null;
     lines.push(
       `Account: ${ctx.accounts.activeLabel}${ctx.accounts.activeServer ? ` @ ${ctx.accounts.activeServer}` : ""}; health ${ctx.accounts.accountHealth}; sync ${sync.state}${sync.ageMinutes != null ? ` (${sync.ageMinutes}m)` : ""}.`,
     );
+    if (activeDoctor) {
+      lines.push(
+        `MT5 doctor: ${activeDoctor.overallStatus}; ${activeDoctor.summary} Positions readable: ${activeDoctor.positionsReadable ?? "unknown"}; history readable: ${activeDoctor.historyReadable ?? "unknown"}; live prices: ${activeDoctor.livePricesAvailable ?? "unknown"}; trading ${activeDoctor.tradingState}.`,
+      );
+    }
   }
   if (ctx.accounts.openExposure.positionsCount > 0) {
     const exposure = ctx.accounts.openExposure.netBySymbol
