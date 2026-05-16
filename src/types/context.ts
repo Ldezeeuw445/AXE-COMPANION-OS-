@@ -1,4 +1,6 @@
 import type { WatchlistEntry, TerminalAlert, TerminalExecution } from "@/services/axeService";
+import type { MarketContext, ProviderStatus } from "@/lib/market/marketTypes";
+import type { IntelProviderStatus } from "@/lib/intel/intelClient";
 
 export type FilteredNewsEvent = {
   title: string;
@@ -170,4 +172,142 @@ export type TradingOSContext = {
   companion_journal_entries: CompanionJournalEntry[];
   /** Compact UnusualWhales smart-money snapshot for the active symbol (top rows only). */
   intel_summary: IntelSummary | null;
+  /** AXE Companion-native context, kept alongside legacy fields during migration. */
+  axe_context?: AxeCompanionContext;
+};
+
+export type ContextHealthState = "ready" | "partial" | "empty" | "timeout" | "error";
+
+export type ContextHealth = {
+  section:
+    | "settings"
+    | "accounts"
+    | "chart"
+    | "trades"
+    | "intel"
+    | "alerts"
+    | "market"
+    | "memory"
+    | "legacy";
+  state: ContextHealthState;
+  message?: string;
+  updatedAt?: string | null;
+};
+
+export type AxeMemoryEntry = {
+  scope: string;
+  entryKey: string | null;
+  content: string;
+};
+
+export type SettingsUserContext = {
+  profile: {
+    displayName: string | null;
+    timezone: string | null;
+  };
+  pinnedContext: string | null;
+  accountName: string | null;
+  watchlist: WatchlistEntry[];
+  push: {
+    subscribed: boolean;
+    subscriptionCount: number;
+  };
+  liveTradingEnabled: boolean;
+};
+
+export type AccountsContext = {
+  activeAccountId: string | null;
+  accounts: Array<{
+    id: string;
+    label: string;
+    provider: string;
+    status: string | null;
+    connectionMethod: string | null;
+    providerStatus: string | null;
+    lastSyncAt: string | null;
+    maskedLogin: string | null;
+    mt5Server: string | null;
+    active: boolean;
+  }>;
+  hasCloudMt5: boolean;
+  activeLabel: string | null;
+  activeServer: string | null;
+};
+
+export type ChartContext = {
+  symbol: string | null;
+  timeframe: string | null;
+  brokerSymbol: string | null;
+  accountId: string | null;
+  lastPrice: number | null;
+  lastBid: number | null;
+  lastAsk: number | null;
+  lastTickAt: string | null;
+  lastCandleAt: string | null;
+  liveStatus: string | null;
+  source: string | null;
+  updatedAt: string | null;
+  openPositionsCount: number | null;
+};
+
+export type TradesJournalContext = {
+  activeAccountId: string | null;
+  recentTrades: CompanionBrokerTrade[];
+  labels: CompanionTradeLabel[];
+  journalEntries: CompanionJournalEntry[];
+  analytics: {
+    totalTrades: number;
+    totalPnl: number;
+    wins: number;
+    losses: number;
+  };
+};
+
+export type IntelContext = {
+  symbol: string | null;
+  summary: IntelSummary | null;
+  providers: IntelProviderStatus[];
+  cache: {
+    state: "fresh" | "stale" | "empty";
+    ageSeconds: number | null;
+    message?: string;
+  };
+  hasLiveData: boolean;
+};
+
+export type AlertsContext = {
+  active: number;
+  paused: number;
+  triggered: number;
+  recent: TerminalAlert[];
+  symbolAlerts: TerminalAlert[];
+};
+
+export type MarketContextSummary = {
+  symbol: string | null;
+  summary: string | null;
+  providers: ProviderStatus[];
+  hasLiveData: boolean;
+  raw: MarketContext | null;
+};
+
+export type MemoryContext = {
+  entries: AxeMemoryEntry[];
+  openCommitments: OpenCommitment[];
+};
+
+export type AxeCompanionContext = {
+  generatedAt: string;
+  symbol: string | null;
+  timeframe: string | null;
+  settings: SettingsUserContext;
+  accounts: AccountsContext;
+  chart: ChartContext;
+  trades: TradesJournalContext;
+  intel: IntelContext;
+  alerts: AlertsContext;
+  market: MarketContextSummary;
+  memory: MemoryContext;
+  health: ContextHealth[];
+  summary: string;
 };
