@@ -161,9 +161,9 @@ function statusPillCopy(
   }
   if (live === "connected" || live === "live_stream") {
     return {
-      label: transport === "ws" ? "Connected" : "Connected",
-      className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95",
-      dot: "bg-emerald-300 animate-pulse",
+      label: transport === "ws" ? "WS live" : "Live",
+      className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95 shadow-[0_0_22px_-16px_rgba(52,211,153,0.9)]",
+      dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.75)]",
     };
   }
   if (live === "stale") {
@@ -175,7 +175,7 @@ function statusPillCopy(
   }
   if (live === "delayed_polling") {
     return {
-      label: transport === "sse" ? "Delayed polling" : "Delayed",
+      label: transport === "sse" ? "SSE fallback" : "Delayed",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85",
     };
@@ -213,6 +213,38 @@ function statusPillCopy(
     className: "border-white/12 bg-white/[0.04] text-tos-muted",
     dot: "bg-white/30",
   };
+}
+
+function formatLiveAge(iso: string | null): string | null {
+  if (!iso) return null;
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return null;
+  const seconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  return `${minutes}m ago`;
+}
+
+function sameOverlayRows(a: ChartOverlayRow[], b: ChartOverlayRow[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (
+      left.id !== right.id ||
+      left.side !== right.side ||
+      left.volume !== right.volume ||
+      left.entryPrice !== right.entryPrice ||
+      left.stopLoss !== right.stopLoss ||
+      left.takeProfit !== right.takeProfit ||
+      left.profit !== right.profit ||
+      left.currentPrice !== right.currentPrice
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function failureCardCopy(failure: ChartPageData["failure"]) {
@@ -1217,7 +1249,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   );
 
   const onPositions = useCallback(({ total, onSymbol }: { total: number; onSymbol: LivePosition[] }) => {
-    setLivePositionsCount(total);
+    setLivePositionsCount((prev) => (prev === total ? prev : total));
     const next: ChartOverlayRow[] = onSymbol.map((p) => ({
       id: p.id,
       side: p.side,
@@ -1229,10 +1261,16 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       openTime: p.openTime,
       currentPrice: p.currentPrice,
     }));
-    setOverlays(next);
+    setOverlays((prev) => (sameOverlayRows(prev, next) ? prev : next));
   }, []);
 
-  const { status: liveStatus, transport: liveTransport, reason: liveReason } = useLiveChart({
+  const {
+    status: liveStatus,
+    transport: liveTransport,
+    reason: liveReason,
+    lastUpdateAt: liveLastUpdateAt,
+    reconnectAttempt,
+  } = useLiveChart({
     enabled: liveEnabled,
     accountId,
     displaySymbol: data.symbol,
@@ -1305,6 +1343,23 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   ]);
 
   const statusPill = statusPillCopy(liveStatus, liveTransport, data.providerStatus, data.candles.length > 0);
+  const liveAge = formatLiveAge(liveLastUpdateAt);
+  const liveDetail = useMemo(() => {
+    if (data.providerStatus === "demo") return "Demo stream";
+    if (liveStatus === "connected" || liveStatus === "live_stream") {
+      return liveAge ? `Updated ${liveAge}` : liveTransport === "ws" ? "Cloudflare WebSocket" : "Live feed";
+    }
+    if (liveStatus === "delayed_polling") {
+      return liveAge ? `Poll updated ${liveAge}` : "SSE fallback active";
+    }
+    if (liveStatus === "reconnecting") {
+      return reconnectAttempt > 0 ? `Reconnect ${reconnectAttempt}` : "Reconnecting";
+    }
+    if (liveStatus === "stale") return liveAge ? `Last tick ${liveAge}` : "Waiting for next tick";
+    if (liveStatus === "offline") return liveAge ? `Last stable ${liveAge}` : "Using cached candles";
+    if (liveStatus === "connecting") return "Opening live feed";
+    return data.candles.length > 0 ? "Cached candles" : "No live feed";
+  }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveTransport, reconnectAttempt]);
 
   const goSymbol = useCallback(
     (sym: string) => {
@@ -1954,9 +2009,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </div>
         <span
           className={`mx-auto inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusPill.className}`}
+          title={liveReason ?? liveDetail}
         >
           <span className={`h-1.5 w-1.5 rounded-full ${statusPill.dot}`} aria-hidden />
           {statusPill.label}
+          <span className="hidden border-l border-current/20 pl-1.5 font-normal normal-case tracking-normal opacity-80 lg:inline">
+            {liveDetail}
+          </span>
         </span>
         <div className="flex justify-end">
           <AxeContextToolbar
@@ -2624,7 +2683,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               {liveStatus === "offline" ? "Live feed offline" : "Live feed stale"}
             </p>
             <p className="mt-0.5">
-              Showing the last broker candles. {liveReason ?? "AXE will reconnect without blocking the chart."}
+              Showing the last stable broker candles
+              {liveAge ? ` from ${liveAge}` : ""}.{" "}
+              {liveReason ?? "AXE is reconnecting without blocking the chart."}
+              {reconnectAttempt > 0 ? ` Attempt ${reconnectAttempt}.` : ""}
             </p>
           </div>
         ) : null}

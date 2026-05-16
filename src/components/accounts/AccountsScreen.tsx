@@ -57,6 +57,55 @@ function statusBadgeVariant(s: string | null | undefined): "warm" | "neutral" | 
   return "neutral";
 }
 
+function syncFreshness(iso: string | null | undefined): {
+  label: string;
+  detail: string;
+  tone: string;
+  dot: string;
+} {
+  if (!iso) {
+    return {
+      label: "No sync yet",
+      detail: "Run Sync after Test passes",
+      tone: "border-white/10 bg-white/[0.03] text-tos-dim",
+      dot: "bg-white/30",
+    };
+  }
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) {
+    return {
+      label: "Sync unknown",
+      detail: iso,
+      tone: "border-white/10 bg-white/[0.03] text-tos-dim",
+      dot: "bg-white/30",
+    };
+  }
+  const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
+  const ageLabel = minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
+  if (minutes <= 20) {
+    return {
+      label: "Fresh",
+      detail: `Synced ${ageLabel}`,
+      tone: "border-emerald-400/25 bg-emerald-400/10 text-emerald-100/90",
+      dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.6)]",
+    };
+  }
+  if (minutes <= 180) {
+    return {
+      label: "Stale soon",
+      detail: `Synced ${ageLabel}`,
+      tone: "border-amber-400/25 bg-amber-400/10 text-amber-100/90",
+      dot: "bg-amber-300/85",
+    };
+  }
+  return {
+    label: "Stale",
+    detail: `Synced ${ageLabel}`,
+    tone: "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/85",
+    dot: "bg-amber-300/70",
+  };
+}
+
 const detailsSummaryClass =
   "flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-tos-text outline-none [&::-webkit-details-marker]:hidden";
 
@@ -223,6 +272,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
               const loginDisp = a.masked_login ?? a.mt5_login ?? "—";
               const method = accountMethodLabel(a.connection_method, Boolean(a.external_connection_id));
               const syncLabel = friendlyProviderStatus(a.provider_status ?? a.status);
+              const freshness = syncFreshness(a.last_sync_at);
 
               return (
                 <GlassPanel
@@ -252,6 +302,16 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                       ) : (
                         <p className="mt-1 text-[10px] text-tos-dim/90">Last sync · —</p>
                       )}
+                      <div
+                        className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${freshness.tone}`}
+                        title={a.last_sync_at ? formatDate(a.last_sync_at) : freshness.detail}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${freshness.dot}`} aria-hidden />
+                        {freshness.label}
+                        <span className="border-l border-current/20 pl-1.5 font-normal normal-case tracking-normal opacity-75">
+                          {freshness.detail}
+                        </span>
+                      </div>
                       <p className="mt-1 text-[10px] text-tos-dim/70">Added {formatDate(a.created_at)}</p>
                       {active ? (
                         <p className="mt-2 text-[11px] leading-relaxed text-cyan-200/75">

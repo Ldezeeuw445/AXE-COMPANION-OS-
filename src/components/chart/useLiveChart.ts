@@ -68,6 +68,8 @@ export function useLiveChart({
   const [uiStatus, setUiStatus] = useState<LiveUiStatus>("idle");
   const [transport, setTransport] = useState<LiveTransport>("off");
   const [reason, setReason] = useState<string | null>(null);
+  const [lastUpdateAt, setLastUpdateAt] = useState<string | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   const handlersRef = useRef<LiveChartHandlers>({});
   useEffect(() => {
@@ -80,6 +82,8 @@ export function useLiveChart({
         setUiStatus("idle");
         setTransport("off");
         setReason(null);
+        setLastUpdateAt(null);
+        setReconnectAttempt(0);
       });
       return;
     }
@@ -91,6 +95,7 @@ export function useLiveChart({
     let staleTimer: ReturnType<typeof setTimeout> | null = null;
     let offlineTimer: ReturnType<typeof setTimeout> | null = null;
     let lastDataAt = Date.now();
+    let hasStableData = false;
     let upstreamStatus: ChartLiveStatus | null = null;
     const transportRef = { current: "off" as LiveTransport };
 
@@ -107,18 +112,27 @@ export function useLiveChart({
       });
     }
 
+    function setReasonSafe(next: string | null) {
+      queueMicrotask(() => {
+        if (!cancelled) setReason(next);
+      });
+    }
+
     function markHealthy(next: LiveUiStatus) {
       if (cancelled) return;
       lastDataAt = Date.now();
+      hasStableData = true;
+      setReasonSafe(null);
+      queueMicrotask(() => {
+        if (!cancelled) setLastUpdateAt(new Date(lastDataAt).toISOString());
+      });
       setUi(next);
       clearHealthTimers();
       staleTimer = setTimeout(() => {
         if (cancelled) return;
         const staleForMs = Date.now() - lastDataAt;
         if (staleForMs >= 30_000) {
-          queueMicrotask(() => {
-            if (!cancelled) setReason("No live update received for 30 seconds.");
-          });
+          setReasonSafe("No live update received for 30 seconds.");
           setUi("stale");
         }
       }, 30_000);
@@ -126,12 +140,29 @@ export function useLiveChart({
         if (cancelled) return;
         const offlineForMs = Date.now() - lastDataAt;
         if (offlineForMs >= 90_000) {
-          queueMicrotask(() => {
-            if (!cancelled) setReason("Live feed has not responded for 90 seconds.");
-          });
+          setReasonSafe("Live feed has not responded for 90 seconds.");
           setUi("offline");
         }
       }, 90_000);
+    }
+
+    function scheduleReconnect(kind: "ws" | "sse") {
+      if (cancelled || retryTimer) return;
+      const delay = backoff;
+      setReconnectAttempt((n) => n + 1);
+      setUi(hasStableData ? "reconnecting" : "connecting");
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        if (cancelled) return;
+        if (kind === "ws") {
+          void connectWs().then((ok) => {
+            if (!ok) void connectSse();
+          });
+        } else {
+          void connectSse();
+        }
+      }, delay);
+      backoff = Math.min(backoff * 2, 15_000);
     }
 
     async function fetchSessionWithTimeout(): Promise<{ token?: string | null; wsUrl?: string | null } | null> {
@@ -188,18 +219,19 @@ export function useLiveChart({
           return;
         case "live_status":
           upstreamStatus = evt.status;
-          queueMicrotask(() => {
-            if (!cancelled) setReason(evt.reason ?? null);
-          });
           if (evt.status === "live") {
             markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
           } else if (evt.status === "delayed") {
             markHealthy("stale");
+            setReasonSafe(evt.reason ?? "Live stream is delayed; showing the latest stable broker state.");
           } else if (evt.status === "reconnecting") {
+            setReasonSafe(evt.reason ?? "Reconnecting to live broker data.");
             setUi("reconnecting");
           } else if (evt.status === "offline") {
+            setReasonSafe(evt.reason ?? "Live broker data is offline.");
             setUi("offline");
           } else if (evt.status === "error") {
+            setReasonSafe(evt.reason ?? "Live broker data returned an error.");
             setUi("failed");
           }
           return;
@@ -231,7 +263,7 @@ export function useLiveChart({
 
         if (cancelled) return false;
         setT("ws");
-        setUi("connecting");
+        setUi(hasStableData ? "reconnecting" : "connecting");
         const ws = new WebSocket(wsUrl);
 
         let opened = false;
@@ -260,14 +292,7 @@ export function useLiveChart({
             void connectSse();
             return;
           }
-          setUi("reconnecting");
-          retryTimer = setTimeout(() => {
-            if (cancelled) return;
-            void connectWs().then((ok) => {
-              if (!ok) void connectSse();
-            });
-          }, backoff);
-          backoff = Math.min(backoff * 2, 15_000);
+          scheduleReconnect("ws");
         };
 
         cleanupActive = () => {
@@ -286,7 +311,7 @@ export function useLiveChart({
     async function connectSse() {
       if (cancelled) return;
       setT("sse");
-      setUi("connecting");
+      setUi(hasStableData ? "reconnecting" : "connecting");
       const qs = new URLSearchParams({
         account: accountId!,
         symbol: displaySymbol,
@@ -316,13 +341,12 @@ export function useLiveChart({
           /* ignore */
         }
         if (cancelled) return;
-        if (!opened) {
+        if (!opened && !hasStableData) {
           setUi("offline");
         } else {
           setUi("reconnecting");
         }
-        retryTimer = setTimeout(() => connectSse(), backoff);
-        backoff = Math.min(backoff * 2, 15_000);
+        scheduleReconnect("sse");
       };
       cleanupActive = () => {
         try {
@@ -345,5 +369,5 @@ export function useLiveChart({
     };
   }, [enabled, accountId, displaySymbol, brokerSymbol, timeframeKey]);
 
-  return { status: uiStatus, transport, reason };
+  return { status: uiStatus, transport, reason, lastUpdateAt, reconnectAttempt };
 }

@@ -178,11 +178,22 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
         </button>
       </div>
       {busyLabel ? (
-        <p className="text-[10px] leading-relaxed text-tos-dim">
-          {busyLabel === "Sync"
-            ? "AXE is syncing broker history. If the broker is slow, this panel will release and keep the account usable."
-            : "AXE is checking the account. This will release automatically if the provider stalls."}
-        </p>
+        <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.65)]" aria-hidden />
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-100/90">
+              {busyLabel === "Sync" ? "Broker sync active" : "Provider check active"}
+            </p>
+          </div>
+          <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="h-full w-1/2 animate-pulse rounded-full bg-cyan-300/45" />
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
+            {busyLabel === "Sync"
+              ? "AXE is syncing broker history. If MetaApi is slow, this panel releases and keeps the account usable."
+              : "AXE is checking the account. This will release automatically if the provider stalls."}
+          </p>
+        </div>
       ) : null}
       {feedback ? (
         <div className="text-[10px] leading-relaxed text-tos-muted">
