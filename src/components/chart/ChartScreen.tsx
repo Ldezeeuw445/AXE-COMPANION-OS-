@@ -168,7 +168,7 @@ function statusPillCopy(
   }
   if (live === "stale") {
     return {
-      label: "Stale",
+      label: "Stale feed",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85",
     };
@@ -182,14 +182,14 @@ function statusPillCopy(
   }
   if (live === "reconnecting") {
     return {
-      label: "Reconnecting",
+      label: "Recovering",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85 animate-pulse",
     };
   }
   if (live === "offline") {
     return {
-      label: "Offline",
+      label: "Cached",
       className: "border-white/12 bg-white/[0.04] text-tos-muted",
       dot: "bg-white/30",
     };
@@ -1353,10 +1353,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       return liveAge ? `Poll updated ${liveAge}` : "SSE fallback active";
     }
     if (liveStatus === "reconnecting") {
-      return reconnectAttempt > 0 ? `Reconnect ${reconnectAttempt}` : "Reconnecting";
+      return reconnectAttempt > 0 ? `Recovering feed · attempt ${reconnectAttempt}` : "Recovering feed";
     }
-    if (liveStatus === "stale") return liveAge ? `Last tick ${liveAge}` : "Waiting for next tick";
-    if (liveStatus === "offline") return liveAge ? `Last stable ${liveAge}` : "Using cached candles";
+    if (liveStatus === "stale") return liveAge ? `Last live tick ${liveAge}` : "Waiting for next broker tick";
+    if (liveStatus === "offline") return liveAge ? `Cached from ${liveAge}` : "Cached broker candles";
     if (liveStatus === "connecting") return "Opening live feed";
     return data.candles.length > 0 ? "Cached candles" : "No live feed";
   }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveTransport, reconnectAttempt]);
@@ -2680,12 +2680,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         {(liveStatus === "stale" || liveStatus === "offline") && data.candles.length > 0 ? (
           <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-white/10 bg-black/82 px-3 py-2 text-[10.5px] leading-snug text-tos-muted shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
             <p className="font-semibold text-tos-text/90">
-              {liveStatus === "offline" ? "Live feed offline" : "Live feed stale"}
+              {liveStatus === "offline" ? "Using cached broker chart" : "Recovering live broker feed"}
             </p>
             <p className="mt-0.5">
               Showing the last stable broker candles
               {liveAge ? ` from ${liveAge}` : ""}.{" "}
-              {liveReason ?? "AXE is reconnecting without blocking the chart."}
+              {liveReason ?? "AXE is keeping the chart responsive while the realtime path reconnects."}
               {reconnectAttempt > 0 ? ` Attempt ${reconnectAttempt}.` : ""}
             </p>
           </div>

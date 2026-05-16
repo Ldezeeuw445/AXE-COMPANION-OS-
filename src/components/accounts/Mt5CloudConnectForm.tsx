@@ -22,13 +22,27 @@ function isValidRegion(r: string): r is "london" | "new-york" | "singapore" {
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="tos-btn-cyan w-full rounded-2xl py-3 text-sm font-semibold disabled:opacity-50"
-    >
-      {pending ? "Connecting to MT5…" : "Connect MT5 account"}
-    </button>
+    <div className="space-y-2">
+      <button
+        type="submit"
+        disabled={pending}
+        className="tos-btn-cyan w-full rounded-2xl py-3 text-sm font-semibold disabled:opacity-50"
+      >
+        {pending ? "Starting secure MT5 connection…" : "Connect MT5 account"}
+      </button>
+      {pending ? (
+        <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2 text-[10.5px] leading-relaxed text-cyan-100/80">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.65)]" aria-hidden />
+            <span className="font-semibold uppercase tracking-wider text-cyan-100">Secure provisioning active</span>
+          </div>
+          <p className="mt-1 text-cyan-100/70">
+            AXE is asking MetaAPI to create the cloud terminal. If the broker is slow, the account still appears below
+            and continues provisioning from there.
+          </p>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -142,7 +156,22 @@ export function Mt5CloudConnectForm({ defaultRegion }: Props) {
       </div>
 
       <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-[11px] leading-relaxed text-tos-muted">
-        <p className="font-medium text-tos-text">What this connection does</p>
+        <p className="font-medium text-tos-text">What AXE needs</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/90">Login</p>
+            <p className="mt-1 text-[10px] text-tos-dim">Digits only from MT5. No email or broker portal login.</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/90">Server</p>
+            <p className="mt-1 text-[10px] text-tos-dim">Exact MT5 server string, including suffixes and dashes.</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/90">Password</p>
+            <p className="mt-1 text-[10px] text-tos-dim">Investor/read-only password for account data.</p>
+          </div>
+        </div>
+        <p className="mt-3 font-medium text-tos-text">What this connection does</p>
         <ul className="mt-1.5 space-y-1 text-[10.5px] text-tos-muted">
           <li>
             <span className="text-emerald-300/90">•</span> Streams your live chart, positions and account
@@ -173,9 +202,16 @@ export function Mt5CloudConnectForm({ defaultRegion }: Props) {
       </label>
 
       {err ? (
-        <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[11px] text-red-200/95">
-          <p className="font-medium text-red-100/95">Could not connect</p>
+        <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-3 py-3 text-[11px] text-red-200/95">
+          <p className="font-medium text-red-100/95">Connection needs attention</p>
           <p className="mt-1 text-[10.5px] leading-relaxed text-red-200/85">{err.message}</p>
+          <div className="mt-2 rounded-xl border border-red-300/15 bg-black/20 px-2.5 py-2 text-[10.5px] leading-relaxed text-red-100/85">
+            <p className="font-medium">Fast recovery path</p>
+            <p className="mt-0.5 text-red-200/80">
+              Keep the account page open, correct the highlighted field, then retry. If the row already exists below,
+              run <span className="font-semibold text-red-100">Doctor</span> to see exactly which MetaAPI step is failing.
+            </p>
+          </div>
           {errorIsServerNotFound ? (
             <div className="mt-2 rounded-md bg-red-500/10 px-2 py-1.5 text-[10.5px] leading-relaxed text-red-100/90">
               <p className="font-medium">Server name fix</p>
@@ -208,11 +244,11 @@ export function Mt5CloudConnectForm({ defaultRegion }: Props) {
       ) : null}
 
       {ok?.data?.accountId ? (
-        <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2 text-[11px] leading-relaxed text-emerald-200/95">
+        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-3 text-[11px] leading-relaxed text-emerald-200/95">
           <p className="font-medium text-emerald-100/95">Connection requested</p>
           <p className="mt-1 text-[10.5px] text-emerald-200/85">
-            Your MT5 terminal is starting up on MetaApi — this can take up to a minute on first connect. The
-            accounts list will turn green as soon as it&apos;s live.
+            Your MT5 terminal is starting up on MetaAPI. AXE will show provisioning progress below, then use
+            Test, Sync, and Doctor to confirm broker data, positions, history and live prices.
           </p>
         </div>
       ) : null}

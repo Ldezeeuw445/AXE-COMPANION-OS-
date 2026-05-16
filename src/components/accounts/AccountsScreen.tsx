@@ -200,6 +200,54 @@ function compactDiagnosticStatus(a: BrokerAccountRow): {
   };
 }
 
+function accountRuntimeHealth(accounts: BrokerAccountRow[], loadError: string | null): Array<{
+  label: string;
+  value: string;
+  tone: string;
+  dot: string;
+}> {
+  const cloudAccounts = accounts.filter((a) => connectionKind(a) === "cloud");
+  const provisioning = cloudAccounts.filter((a) =>
+    ["provisioning", "created", "deploying", "connecting", "syncing"].includes((a.provider_status ?? "").toLowerCase()),
+  ).length;
+  const needsAttention = cloudAccounts.filter((a) => {
+    const d = compactDiagnosticStatus(a).label.toLowerCase();
+    return d.includes("attention") || d.includes("issue") || d.includes("credential");
+  }).length;
+  const freshSync = cloudAccounts.filter((a) => syncFreshness(a.last_sync_at).label === "Fresh").length;
+  const cyan = "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-100/90";
+  const amber = "border-amber-400/22 bg-amber-400/[0.07] text-amber-100/90";
+  const rose = "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90";
+  const neutral = "border-white/10 bg-white/[0.035] text-tos-dim";
+
+  return [
+    {
+      label: "Supabase",
+      value: loadError ? "Degraded" : "Account truth live",
+      tone: loadError ? rose : cyan,
+      dot: loadError ? "bg-rose-300" : "bg-cyan-300",
+    },
+    {
+      label: "MetaAPI",
+      value: cloudAccounts.length ? `${cloudAccounts.length} cloud linked` : "Ready to connect",
+      tone: cloudAccounts.length ? cyan : neutral,
+      dot: cloudAccounts.length ? "bg-cyan-300" : "bg-white/30",
+    },
+    {
+      label: "Recovery",
+      value: needsAttention ? `${needsAttention} needs Doctor` : provisioning ? `${provisioning} settling` : "No blockers",
+      tone: needsAttention ? rose : provisioning ? amber : cyan,
+      dot: needsAttention ? "bg-rose-300" : provisioning ? "bg-amber-300" : "bg-cyan-300",
+    },
+    {
+      label: "Sync",
+      value: cloudAccounts.length ? `${freshSync}/${cloudAccounts.length} fresh` : "No real account yet",
+      tone: cloudAccounts.length && freshSync === 0 ? amber : cloudAccounts.length ? cyan : neutral,
+      dot: cloudAccounts.length && freshSync === 0 ? "bg-amber-300" : cloudAccounts.length ? "bg-cyan-300" : "bg-white/30",
+    },
+  ];
+}
+
 const detailsSummaryClass =
   "flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-tos-text outline-none [&::-webkit-details-marker]:hidden";
 
@@ -257,6 +305,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
   const onlyDemo =
     initialAccounts.length > 0 &&
     initialAccounts.every((a) => isDemoAccount(a));
+  const runtimeHealth = accountRuntimeHealth(initialAccounts, loadError);
 
   // The pulse is honest here: green when Supabase delivered the
   // account list (regardless of how many accounts there are — even
@@ -293,6 +342,24 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
           </p>
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Runtime health</span>
+          <span className="text-[10px] text-tos-dim">Account truth, MetaAPI cloud, sync freshness and recovery readiness.</span>
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-4">
+          {runtimeHealth.map((item) => (
+            <div key={item.label} className={`rounded-xl border px-2.5 py-2 ${item.tone}`}>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} aria-hidden />
+                <p className="text-[9px] font-semibold uppercase tracking-wider opacity-80">{item.label}</p>
+              </div>
+              <p className="mt-1 text-[10.5px] font-medium">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* A — Intro */}
       <div className="space-y-2 text-sm leading-relaxed text-tos-muted">

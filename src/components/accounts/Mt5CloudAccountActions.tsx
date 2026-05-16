@@ -90,7 +90,12 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
       if (timedOut) {
         setMsg(
           JSON.stringify({
-            headline: label === "Sync" ? "Still syncing." : "Still working.",
+            headline:
+              label === "Sync"
+                ? "Still syncing."
+                : label === "Doctor"
+                  ? "Still diagnosing."
+                  : "Still working.",
             detail: r.message,
           }),
         );
@@ -193,6 +198,11 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           {busyLabel === "Disconnect" ? "Disconnecting…" : "Disconnect"}
         </button>
       </div>
+      <p className="text-[10px] leading-relaxed text-tos-dim">
+        Recovery order: run <span className="font-medium text-tos-muted">Test</span> for credentials/server,{" "}
+        <span className="font-medium text-tos-muted">Sync</span> for account history, then{" "}
+        <span className="font-medium text-tos-muted">Doctor</span> when something still looks degraded.
+      </p>
       {busyLabel ? (
         <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2">
           <div className="flex items-center gap-2">
@@ -239,6 +249,15 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
         >
           {busyLabel === "Doctor" ? "Diagnosing…" : "Run Doctor"}
         </button>
+        {feedback?.headline === "Still syncing." || feedback?.headline === "Still diagnosing." ? (
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            className="rounded-lg border border-white/12 bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-tos-muted hover:bg-white/[0.08]"
+          >
+            Refresh status
+          </button>
+        ) : null}
       </div>
       {doctorReport ? <DoctorReportCard report={doctorReport} /> : null}
     </div>

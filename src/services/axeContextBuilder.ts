@@ -918,17 +918,22 @@ function buildCorrelations(ctx: {
 
 function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
   const lines: string[] = [];
-  lines.push(`AXE Companion context generated ${ctx.generatedAt}.`);
-  lines.push(`Active: ${ctx.symbol ?? "no symbol"} ${ctx.timeframe ? `on ${ctx.timeframe}` : ""}`.trim());
+  lines.push(`AXE Companion operating brief generated ${ctx.generatedAt}.`);
+  lines.push(`Focus: ${ctx.symbol ?? "no active symbol"}${ctx.timeframe ? ` · ${ctx.timeframe}` : ""}.`);
   if (ctx.accounts.activeLabel) {
     const sync = ctx.accounts.syncFreshness;
     const activeDoctor = ctx.accounts.accounts.find((account) => account.active)?.mt5Doctor ?? null;
     lines.push(
-      `Account: ${ctx.accounts.activeLabel}${ctx.accounts.activeServer ? ` @ ${ctx.accounts.activeServer}` : ""}; health ${ctx.accounts.accountHealth}; sync ${sync.state}${sync.ageMinutes != null ? ` (${sync.ageMinutes}m)` : ""}.`,
+      `Account health: ${ctx.accounts.activeLabel}${ctx.accounts.activeServer ? ` @ ${ctx.accounts.activeServer}` : ""}; ${ctx.accounts.accountHealth}; sync ${sync.state}${sync.ageMinutes != null ? ` (${sync.ageMinutes}m old)` : ""}.`,
     );
     if (activeDoctor) {
+      const readable = [
+        activeDoctor.positionsReadable === true ? "positions readable" : activeDoctor.positionsReadable === false ? "positions blocked" : "positions unknown",
+        activeDoctor.historyReadable === true ? "history readable" : activeDoctor.historyReadable === false ? "history blocked" : "history unknown",
+        activeDoctor.livePricesAvailable === true ? "live prices available" : activeDoctor.livePricesAvailable === false ? "live prices blocked" : "live prices unknown",
+      ].join(", ");
       lines.push(
-        `MT5 doctor: ${activeDoctor.overallStatus}; ${activeDoctor.summary} Positions readable: ${activeDoctor.positionsReadable ?? "unknown"}; history readable: ${activeDoctor.historyReadable ?? "unknown"}; live prices: ${activeDoctor.livePricesAvailable ?? "unknown"}; trading ${activeDoctor.tradingState}.`,
+        `MT5 doctor: ${activeDoctor.overallStatus}; ${readable}; trading ${activeDoctor.tradingState}; ${activeDoctor.knownFailureReason ?? activeDoctor.headline}.`,
       );
     }
   }
@@ -962,7 +967,7 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
   if (ctx.market.summary) lines.push(ctx.market.summary);
   const degraded = ctx.health.filter((h) => h.state === "timeout" || h.state === "error");
   if (degraded.length > 0) {
-    lines.push(`Degraded context: ${degraded.map((h) => `${h.section}:${h.state}`).join(", ")}.`);
+    lines.push(`Partial context: ${degraded.map((h) => `${h.section} ${h.state}`).join(", ")}. Keep answering from available sections and name stale/missing data clearly.`);
   }
   return lines.join("\n").slice(0, 4_000);
 }

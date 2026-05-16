@@ -24,5 +24,13 @@ Current launch path, without replacing existing infrastructure:
    - Reconnect attempts use one scheduled retry at a time.
    - Backoff starts at 1.5 seconds and caps at 15 seconds.
    - Existing candles remain visible while AXE reconnects.
+   - UI language should say `Recovering`, `Stale feed`, or `Cached` instead of presenting a dead-end spinner.
+
+## Provider Health Visibility
+
+- Chart status pill shows transport (`WS live`, `SSE fallback`) and last update age.
+- Accounts page summarizes Supabase account truth, MetaAPI linkage, sync freshness and recovery blockers.
+- Intel page summarizes provider/source health plus cache/stale state.
+- AXE context summary should name degraded sections as partial context, not total failure.
 
 Operational rule: do not add frontend provider keys or replace the MetaAPI/Cloudflare/SSE contracts. Stabilize adapters around these paths.
