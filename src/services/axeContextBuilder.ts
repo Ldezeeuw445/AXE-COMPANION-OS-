@@ -6,11 +6,13 @@ import type {
   AlertsContext,
   AxeCompanionContext,
   AxeMemoryEntry,
+  ChartPositionContext,
   ChartContext,
   CompanionBrokerAccount,
   CompanionBrokerTrade,
   CompanionJournalEntry,
   CompanionTradeLabel,
+  CorrelationInsight,
   ContextHealth,
   FilteredNewsEvent,
   IntelContext,
@@ -48,6 +50,10 @@ const EMPTY_ACCOUNTS: AccountsContext = {
   hasCloudMt5: false,
   activeLabel: null,
   activeServer: null,
+  accountHealth: "unknown",
+  syncFreshness: { lastSyncAt: null, ageMinutes: null, state: "missing" },
+  activeSymbols: [],
+  openExposure: { positionsCount: 0, symbols: [], netBySymbol: [] },
 };
 
 const EMPTY_CHART: ChartContext = {
@@ -64,6 +70,9 @@ const EMPTY_CHART: ChartContext = {
   source: null,
   updatedAt: null,
   openPositionsCount: null,
+  staleState: "unknown",
+  relatedOpenPositions: [],
+  recentState: null,
 };
 
 const EMPTY_TRADES: TradesJournalContext = {
@@ -72,12 +81,19 @@ const EMPTY_TRADES: TradesJournalContext = {
   labels: [],
   journalEntries: [],
   analytics: { totalTrades: 0, totalPnl: 0, wins: 0, losses: 0 },
+  labelCounts: [],
+  recurringLabels: [],
+  riskPatterns: [],
+  recentWins: [],
+  recentMistakes: [],
 };
 
 const EMPTY_INTEL: IntelContext = {
   symbol: null,
   summary: null,
   providers: [],
+  compactSummary: null,
+  providerHealth: [],
   cache: { state: "empty", ageSeconds: null },
   hasLiveData: false,
 };
@@ -100,7 +116,9 @@ const EMPTY_MARKET: MarketContextSummary = {
 
 const EMPTY_MEMORY: MemoryContext = {
   entries: [],
+  prioritizedEntries: [],
   openCommitments: [],
+  compactSummary: null,
 };
 
 type BuilderArgs = {
@@ -126,6 +144,35 @@ type LegacyContextParts = {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function minutesSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.round(ms / 60_000));
+}
+
+function syncState(ageMinutes: number | null): AccountsContext["syncFreshness"]["state"] {
+  if (ageMinutes == null) return "missing";
+  if (ageMinutes <= 15) return "fresh";
+  if (ageMinutes <= 120) return "stale";
+  return "old";
+}
+
+function staleState(updatedAt: string | null, status: string | null): ChartContext["staleState"] {
+  const s = (status ?? "").toLowerCase();
+  if (s === "offline") return "offline";
+  if (s === "stale") return "stale";
+  const age = minutesSince(updatedAt);
+  if (age == null) return "unknown";
+  if (age <= 2) return "live";
+  if (age <= 15) return "stale";
+  return "offline";
+}
+
+function compactList(items: string[], max = 6): string[] {
+  return Array.from(new Set(items.filter(Boolean))).slice(0, max);
 }
 
 function sectionHealth(
@@ -166,6 +213,40 @@ async function withAdapter<T>(
 function normalizeSymbol(symbol?: string | null): string | null {
   const s = (symbol ?? "").trim().toUpperCase();
   return s || null;
+}
+
+function normalizePosition(row: Record<string, unknown>, fallbackSymbol: string | null): ChartPositionContext {
+  const symbol = String(row.symbol ?? fallbackSymbol ?? "").toUpperCase();
+  const sideRaw = String(row.side ?? row.type ?? "").toLowerCase();
+  const side = sideRaw.includes("sell") ? "sell" : sideRaw.includes("buy") ? "buy" : sideRaw || "unknown";
+  return {
+    id: String(row.id ?? row.positionId ?? `${symbol}-${side}`),
+    symbol,
+    side,
+    volume: Number(row.volume ?? 0) || 0,
+    entryPrice: row.entryPrice != null ? Number(row.entryPrice) : row.openPrice != null ? Number(row.openPrice) : null,
+    currentPrice: row.currentPrice != null ? Number(row.currentPrice) : row.price != null ? Number(row.price) : null,
+    profit: row.profit != null ? Number(row.profit) : row.unrealizedProfit != null ? Number(row.unrealizedProfit) : null,
+    stopLoss: row.stopLoss != null ? Number(row.stopLoss) : null,
+    takeProfit: row.takeProfit != null ? Number(row.takeProfit) : null,
+  };
+}
+
+function summarizeOpenExposure(positions: ChartPositionContext[]): AccountsContext["openExposure"] {
+  const bySymbol = new Map<string, number>();
+  for (const p of positions) {
+    const signed = p.side === "sell" ? -p.volume : p.side === "buy" ? p.volume : 0;
+    bySymbol.set(p.symbol, (bySymbol.get(p.symbol) ?? 0) + signed);
+  }
+  return {
+    positionsCount: positions.length,
+    symbols: Array.from(bySymbol.keys()).sort(),
+    netBySymbol: Array.from(bySymbol.entries()).map(([symbol, netVolume]) => ({
+      symbol,
+      netVolume,
+      direction: netVolume > 0 ? "long" : netVolume < 0 ? "short" : "flat",
+    })),
+  };
 }
 
 function mapManualWatchlist(rows: Array<Record<string, unknown>>): WatchlistEntry[] {
@@ -325,6 +406,21 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
     active: activeAccountId === r.id,
   }));
   const active = accounts.find((a) => a.active) ?? accounts[0] ?? null;
+  const ageMinutes = minutesSince(active?.lastSyncAt);
+  const freshness = syncState(ageMinutes);
+  const status = (active?.providerStatus ?? active?.status ?? "").toLowerCase();
+  const accountHealth: AccountsContext["accountHealth"] =
+    !active
+      ? "not_connected"
+      : status.includes("sync")
+        ? "syncing"
+        : status.includes("fail") || status.includes("error")
+          ? "offline"
+          : freshness === "old"
+            ? "stale"
+            : status.includes("connect") || freshness === "fresh"
+              ? "connected"
+              : "unknown";
 
   return {
     activeAccountId,
@@ -332,6 +428,14 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
     hasCloudMt5: accounts.some((a) => a.connectionMethod === "cloud_mt5"),
     activeLabel: active?.label ?? null,
     activeServer: active?.mt5Server ?? null,
+    accountHealth,
+    syncFreshness: {
+      lastSyncAt: active?.lastSyncAt ?? null,
+      ageMinutes,
+      state: freshness,
+    },
+    activeSymbols: [],
+    openExposure: { positionsCount: 0, symbols: [], netBySymbol: [] },
   };
 }
 
@@ -345,7 +449,7 @@ async function buildChart(
   if (!activeAccountId) return { ...EMPTY_CHART, symbol, timeframe: tf };
   let query = supabase
     .from("chart_live_snapshots")
-    .select("account_id,display_symbol,broker_symbol,timeframe,last_price,last_bid,last_ask,last_tick_at,last_candle_at,open_positions_count,status,source,updated_at")
+    .select("account_id,display_symbol,broker_symbol,timeframe,last_price,last_bid,last_ask,last_tick_at,last_candle_at,last_candle,open_positions_count,open_positions,status,source,updated_at")
     .eq("user_id", userId)
     .eq("account_id", activeAccountId)
     .order("updated_at", { ascending: false })
@@ -357,9 +461,24 @@ async function buildChart(
   const { data } = await query;
   const row = (data?.[0] ?? null) as Record<string, unknown> | null;
   if (!row) return { ...EMPTY_CHART, symbol, timeframe: tf, accountId: activeAccountId };
+  const displaySymbol = (row.display_symbol as string | null | undefined) ?? symbol;
+  const positions = Array.isArray(row.open_positions)
+    ? (row.open_positions as Array<Record<string, unknown>>).map((p) => normalizePosition(p, displaySymbol))
+    : [];
+  const lastCandle =
+    row.last_candle && typeof row.last_candle === "object" && !Array.isArray(row.last_candle)
+      ? (row.last_candle as Record<string, unknown>)
+      : null;
+  const candleClose = lastCandle?.close != null ? Number(lastCandle.close) : null;
+  const candleTime =
+    (lastCandle?.time as string | null | undefined) ??
+    (lastCandle?.brokerTime as string | null | undefined) ??
+    null;
+  const status = (row.status as string | null | undefined) ?? null;
+  const updatedAt = (row.updated_at as string | null | undefined) ?? null;
 
   return {
-    symbol: (row.display_symbol as string | null | undefined) ?? symbol,
+    symbol: displaySymbol,
     timeframe: (row.timeframe as string | null | undefined) ?? tf,
     brokerSymbol: (row.broker_symbol as string | null | undefined) ?? null,
     accountId: (row.account_id as string | null | undefined) ?? activeAccountId,
@@ -368,10 +487,16 @@ async function buildChart(
     lastAsk: row.last_ask != null ? Number(row.last_ask) : null,
     lastTickAt: (row.last_tick_at as string | null | undefined) ?? null,
     lastCandleAt: (row.last_candle_at as string | null | undefined) ?? null,
-    liveStatus: (row.status as string | null | undefined) ?? null,
+    liveStatus: status,
     source: (row.source as string | null | undefined) ?? null,
-    updatedAt: (row.updated_at as string | null | undefined) ?? null,
+    updatedAt,
     openPositionsCount: row.open_positions_count != null ? Number(row.open_positions_count) : null,
+    staleState: staleState(updatedAt, status),
+    relatedOpenPositions: positions.filter((p) => !displaySymbol || p.symbol === displaySymbol),
+    recentState:
+      candleClose != null || candleTime
+        ? `Last candle${candleTime ? ` ${candleTime}` : ""}${candleClose != null ? ` close ${candleClose}` : ""}`
+        : null,
   };
 }
 
@@ -444,6 +569,24 @@ async function buildTrades(
     notes: String(r.notes ?? ""),
     created_at: String(r.created_at ?? ""),
   }));
+  const labelMap = new Map<string, number>();
+  for (const label of labels) {
+    const key = (label.label ?? "").trim();
+    if (!key) continue;
+    labelMap.set(key, (labelMap.get(key) ?? 0) + 1);
+  }
+  const labelCounts = Array.from(labelMap.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  const recurringLabels = labelCounts.filter((l) => l.count >= 2).map((l) => l.label);
+  const journalText = journalEntries.map((j) => j.notes.toLowerCase()).join(" ");
+  const riskPatterns = compactList([
+    journalText.match(/\bfomo\b|chase|late entry/) ? "chasing/fomo language appears in journal" : "",
+    journalText.match(/revenge|overtrade/) ? "revenge or overtrading language appears in journal" : "",
+    journalText.match(/risk|lot|size|too big/) ? "risk sizing is being mentioned repeatedly" : "",
+    recurringLabels.length > 0 ? `recurring labels: ${recurringLabels.join(", ")}` : "",
+  ]);
 
   return {
     activeAccountId,
@@ -456,6 +599,11 @@ async function buildTrades(
       wins: recentTrades.filter((t) => t.pnl > 0).length,
       losses: recentTrades.filter((t) => t.pnl < 0).length,
     },
+    labelCounts,
+    recurringLabels,
+    riskPatterns,
+    recentWins: recentTrades.filter((t) => t.pnl > 0).slice(0, 5),
+    recentMistakes: recentTrades.filter((t) => t.pnl < 0).slice(0, 5),
   };
 }
 
@@ -508,19 +656,54 @@ async function buildMemory(supabase: SupabaseClient, userId: string): Promise<Me
     entryKey: (r.entry_key as string | null | undefined) ?? null,
     content: String(r.content ?? ""),
   }));
+  const seen = new Set<string>();
+  const prioritizedEntries = entries.filter((entry) => {
+    const key = `${entry.scope}:${entry.entryKey ?? ""}:${entry.content.trim().toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 14);
+  const compactSummary =
+    prioritizedEntries.length > 0
+      ? prioritizedEntries
+          .slice(0, 8)
+          .map((m) => `${[m.scope, m.entryKey].filter(Boolean).join("/")}: ${m.content.slice(0, 140)}`)
+          .join(" | ")
+      : null;
 
   return {
     entries,
+    prioritizedEntries,
     openCommitments: (commitmentsRes.data ?? []) as OpenCommitment[],
+    compactSummary,
   };
 }
 
 async function buildIntel(symbol: string | null): Promise<IntelContext> {
   const intel = await loadIntelSnapshot({ symbol: symbol ?? undefined });
+  const summary = mapIntelSummary(intel);
+  const compact: string[] = [];
+  if (summary?.tideBias) compact.push(`tide ${summary.tideBias}`);
+  if (summary?.topDarkPool.length) {
+    compact.push(
+      `dark pool ${summary.topDarkPool
+        .map((r) => `${r.symbol} $${(r.notional / 1e6).toFixed(1)}M`)
+        .join(", ")}`,
+    );
+  }
+  if (summary?.topOptions.length) {
+    compact.push(
+      `options ${summary.topOptions
+        .map((r) => `${r.symbol} ${r.side} $${(r.premium / 1e6).toFixed(1)}M`)
+        .join(", ")}`,
+    );
+  }
   return {
     symbol,
-    summary: mapIntelSummary(intel),
+    summary,
     providers: intel.providers,
+    compactSummary: compact.length > 0 ? compact.join(" | ") : intel.cache.message ?? null,
+    providerHealth: intel.providers.map((p) => ({ id: p.id, state: p.state, label: p.label })),
     cache: intel.cache,
     hasLiveData: intel.hasLiveData,
   };
@@ -616,26 +799,131 @@ function keyLevelsFromWatchlist(watchlist: WatchlistEntry[], symbol: string | nu
   return levels;
 }
 
+function enrichAccounts(
+  accounts: AccountsContext,
+  chart: ChartContext,
+  trades: TradesJournalContext,
+  watchlist: WatchlistEntry[],
+): AccountsContext {
+  const exposure = summarizeOpenExposure(chart.relatedOpenPositions);
+  const activeSymbols = compactList([
+    ...watchlist.map((w) => w.symbol),
+    ...(chart.symbol ? [chart.symbol] : []),
+    ...trades.recentTrades.map((t) => t.symbol),
+    ...exposure.symbols,
+  ], 12);
+  return {
+    ...accounts,
+    activeSymbols,
+    openExposure: exposure,
+  };
+}
+
+function buildCorrelations(ctx: {
+  symbol: string | null;
+  chart: ChartContext;
+  accounts: AccountsContext;
+  trades: TradesJournalContext;
+  intel: IntelContext;
+  market: MarketContextSummary;
+}): CorrelationInsight[] {
+  const insights: CorrelationInsight[] = [];
+  const exposureSymbols = ctx.accounts.openExposure.symbols;
+  const marketText = [
+    ctx.market.summary ?? "",
+    ...(ctx.market.raw?.news ?? []).slice(0, 4).map((n) => n.title),
+    ...(ctx.market.raw?.events ?? []).slice(0, 4).map((e) => `${e.title} ${e.impact}`),
+  ].join(" ").toLowerCase();
+
+  for (const symbol of exposureSymbols) {
+    const root = symbol.slice(0, 3).toLowerCase();
+    const hasRelevantMarket =
+      marketText.includes(symbol.toLowerCase()) ||
+      (symbol.includes("XAU") && /gold|xau|usd|cpi|fomc|nfp|rate|yield/.test(marketText)) ||
+      (["BTC", "ETH", "SOL"].some((c) => symbol.includes(c)) && /crypto|bitcoin|ethereum|btc|eth/.test(marketText)) ||
+      (root && marketText.includes(root));
+    if (hasRelevantMarket) {
+      insights.push({
+        kind: "exposure_market",
+        severity: "watch",
+        symbol,
+        message: `Open ${symbol} exposure overlaps with current market/news context.`,
+        evidence: compactList([ctx.market.summary ?? "", `${ctx.accounts.openExposure.positionsCount} open chart positions`], 3),
+      });
+    }
+  }
+
+  const highImpact = (ctx.market.raw?.events ?? []).find((e) => e.impact === "high");
+  if (highImpact && ctx.accounts.openExposure.positionsCount > 0) {
+    insights.push({
+      kind: "event_risk",
+      severity: "risk",
+      symbol: ctx.symbol,
+      message: `High-impact event risk is present while exposure is open.`,
+      evidence: [`${highImpact.title} ${highImpact.currency ?? highImpact.country ?? ""}`.trim()],
+    });
+  }
+
+  if (ctx.intel.compactSummary && ctx.accounts.openExposure.positionsCount > 0) {
+    insights.push({
+      kind: "exposure_intel",
+      severity: ctx.intel.cache.state === "stale" ? "info" : "watch",
+      symbol: ctx.symbol,
+      message: `Open exposure should be read against current smart-money intel.`,
+      evidence: [ctx.intel.compactSummary, `intel cache ${ctx.intel.cache.state}`],
+    });
+  }
+
+  if (ctx.trades.analytics.totalPnl < 0 && ctx.trades.riskPatterns.length > 0) {
+    insights.push({
+      kind: "performance_journal",
+      severity: "risk",
+      symbol: ctx.symbol,
+      message: `Recent drawdown overlaps with recurring journal/risk patterns.`,
+      evidence: [`P/L ${ctx.trades.analytics.totalPnl.toFixed(2)}`, ...ctx.trades.riskPatterns.slice(0, 2)],
+    });
+  }
+
+  return insights.slice(0, 6);
+}
+
 function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
   const lines: string[] = [];
   lines.push(`AXE Companion context generated ${ctx.generatedAt}.`);
   lines.push(`Active: ${ctx.symbol ?? "no symbol"} ${ctx.timeframe ? `on ${ctx.timeframe}` : ""}`.trim());
   if (ctx.accounts.activeLabel) {
-    const sync = ctx.accounts.accounts.find((a) => a.active)?.lastSyncAt;
-    lines.push(`Account: ${ctx.accounts.activeLabel}${ctx.accounts.activeServer ? ` @ ${ctx.accounts.activeServer}` : ""}${sync ? `, synced ${sync}` : ""}.`);
+    const sync = ctx.accounts.syncFreshness;
+    lines.push(
+      `Account: ${ctx.accounts.activeLabel}${ctx.accounts.activeServer ? ` @ ${ctx.accounts.activeServer}` : ""}; health ${ctx.accounts.accountHealth}; sync ${sync.state}${sync.ageMinutes != null ? ` (${sync.ageMinutes}m)` : ""}.`,
+    );
+  }
+  if (ctx.accounts.openExposure.positionsCount > 0) {
+    const exposure = ctx.accounts.openExposure.netBySymbol
+      .map((e) => `${e.symbol} ${e.direction} ${Math.abs(e.netVolume)}`)
+      .join(", ");
+    lines.push(`Exposure: ${ctx.accounts.openExposure.positionsCount} open positions${exposure ? `; ${exposure}` : ""}.`);
   }
   if (ctx.chart.lastPrice != null) {
-    lines.push(`Chart: ${ctx.chart.symbol ?? ctx.symbol} last ${ctx.chart.lastPrice} (${ctx.chart.liveStatus ?? "status unknown"}).`);
+    lines.push(
+      `Chart: ${ctx.chart.symbol ?? ctx.symbol} ${ctx.chart.timeframe ?? ""} last ${ctx.chart.lastPrice}; ${ctx.chart.staleState}; ${ctx.chart.recentState ?? "no recent candle"}.`,
+    );
   }
   if (ctx.trades.recentTrades.length > 0) {
-    lines.push(`Trades: ${ctx.trades.recentTrades.length} recent, P/L ${ctx.trades.analytics.totalPnl.toFixed(2)}.`);
+    lines.push(
+      `Trades: ${ctx.trades.recentTrades.length} recent, P/L ${ctx.trades.analytics.totalPnl.toFixed(2)}, W/L ${ctx.trades.analytics.wins}/${ctx.trades.analytics.losses}.`,
+    );
+  }
+  if (ctx.trades.recurringLabels.length || ctx.trades.riskPatterns.length) {
+    lines.push(
+      `Journal patterns: ${[...ctx.trades.recurringLabels, ...ctx.trades.riskPatterns].slice(0, 5).join(" | ")}.`,
+    );
   }
   if (ctx.alerts.active || ctx.alerts.paused) {
     lines.push(`Alerts: ${ctx.alerts.active} active, ${ctx.alerts.paused} paused, ${ctx.alerts.triggered} triggered.`);
   }
-  if (ctx.intel.summary?.tideBias) {
-    lines.push(`Intel: tide ${ctx.intel.summary.tideBias}.`);
-  }
+  if (ctx.intel.compactSummary) lines.push(`Intel: ${ctx.intel.compactSummary}; cache ${ctx.intel.cache.state}.`);
+  if (ctx.memory.compactSummary) lines.push(`Memory: ${ctx.memory.compactSummary}`);
+  if (ctx.correlations.length > 0) lines.push(`Correlations: ${ctx.correlations.map((c) => c.message).join(" | ")}`);
   if (ctx.market.summary) lines.push(ctx.market.summary);
   const degraded = ctx.health.filter((h) => h.state === "timeout" || h.state === "error");
   if (degraded.length > 0) {
@@ -668,18 +956,29 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
     withAdapter("market", { ...EMPTY_MARKET, symbol }, () => buildMarket(symbol, watchlist), MARKET_TIMEOUT_MS),
   ]);
 
+  const accounts = enrichAccounts(accountsRes.value, chartRes.value, tradesRes.value, watchlist);
+  const correlations = buildCorrelations({
+    symbol,
+    chart: chartRes.value,
+    accounts,
+    trades: tradesRes.value,
+    intel: intelRes.value,
+    market: marketRes.value,
+  });
+
   const contextWithoutSummary = {
     generatedAt,
     symbol,
     timeframe,
     settings: settingsRes.value,
-    accounts: accountsRes.value,
+    accounts,
     chart: chartRes.value,
     trades: tradesRes.value,
     intel: intelRes.value,
     alerts: alertsRes.value,
     market: marketRes.value,
     memory: memoryRes.value,
+    correlations,
     health: [
       settingsRes.health,
       accountsRes.health,
@@ -719,11 +1018,24 @@ export async function buildTradingOSCompatibleContext(args: BuilderArgs): Promis
     status: a.providerStatus ?? a.status,
   }));
 
-  const userMemory = axeContext.memory.entries.map((m) => ({
-    scope: m.scope,
-    entry_key: m.entryKey,
-    content: m.content,
-  }));
+  const legacyLivePositions: Mt5Position[] =
+    legacyRes.value.livePositions.length > 0
+      ? legacyRes.value.livePositions
+      : axeContext.chart.relatedOpenPositions.map((p) => ({
+          id: p.id,
+          account_id: axeContext.accounts.activeAccountId ?? "",
+          symbol: p.symbol,
+          type: p.side === "sell" ? "SELL" : "BUY",
+          volume: p.volume,
+          open_price: p.entryPrice ?? 0,
+          current_price: p.currentPrice,
+          profit: p.profit,
+          swap: null,
+          stop_loss: p.stopLoss,
+          take_profit: p.takeProfit,
+          opened_at: null,
+          comment: "chart_live_snapshot",
+        }));
 
   return {
     symbol: axeContext.symbol,
@@ -734,12 +1046,16 @@ export async function buildTradingOSCompatibleContext(args: BuilderArgs): Promis
       recentAlerts: axeContext.alerts.recent,
       recentExecutions: legacyRes.value.recentExecutions,
     },
-    user_memory: userMemory,
+    user_memory: axeContext.memory.prioritizedEntries.map((m) => ({
+      scope: m.scope,
+      entry_key: m.entryKey,
+      content: m.content,
+    })),
     candles_summary: axeContext.settings.pinnedContext,
     key_levels: keyLevelsFromWatchlist(axeContext.settings.watchlist, axeContext.symbol),
     open_commitments: axeContext.memory.openCommitments,
     live_account: legacyRes.value.liveAccount,
-    live_positions: legacyRes.value.livePositions,
+    live_positions: legacyLivePositions,
     closed_positions: legacyRes.value.closedPositions,
     knowledge_layer: null,
     companion_accounts: companionAccounts,

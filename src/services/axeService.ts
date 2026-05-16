@@ -889,6 +889,13 @@ export function buildAxeMessagesFromContext(
     parts.push(`\nACTIVE PAIR: ${pair}   TF: ${tf}`);
   }
 
+  // 2b. Companion-native context summary. This is deliberately compact:
+  // the detailed legacy fields below still feed existing behavior, while this
+  // gives AXE the cross-tab read without bloating the prompt.
+  if (context.axe_context?.summary) {
+    parts.push(`\nAXE COMPANION OPERATING CONTEXT\n${context.axe_context.summary}`);
+  }
+
   // 3. Session brief (candles_summary / pinned_context)
   if (pinnedContext.trim()) {
     parts.push(`\nSESSION BRIEF (set by trader — treat as ground truth)\n${pinnedContext.trim()}`);

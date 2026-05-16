@@ -1,6 +1,5 @@
 import type { WatchlistEntry, TerminalAlert, TerminalExecution } from "@/services/axeService";
 import type { MarketContext, ProviderStatus } from "@/lib/market/marketTypes";
-import type { IntelProviderStatus } from "@/lib/intel/intelClient";
 
 export type FilteredNewsEvent = {
   title: string;
@@ -232,6 +231,30 @@ export type AccountsContext = {
   hasCloudMt5: boolean;
   activeLabel: string | null;
   activeServer: string | null;
+  accountHealth: "connected" | "syncing" | "stale" | "offline" | "not_connected" | "unknown";
+  syncFreshness: {
+    lastSyncAt: string | null;
+    ageMinutes: number | null;
+    state: "fresh" | "stale" | "old" | "missing";
+  };
+  activeSymbols: string[];
+  openExposure: {
+    positionsCount: number;
+    symbols: string[];
+    netBySymbol: Array<{ symbol: string; netVolume: number; direction: "long" | "short" | "flat" }>;
+  };
+};
+
+export type ChartPositionContext = {
+  id: string;
+  symbol: string;
+  side: string;
+  volume: number;
+  entryPrice: number | null;
+  currentPrice: number | null;
+  profit: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
 };
 
 export type ChartContext = {
@@ -248,6 +271,9 @@ export type ChartContext = {
   source: string | null;
   updatedAt: string | null;
   openPositionsCount: number | null;
+  staleState: "live" | "stale" | "offline" | "unknown";
+  relatedOpenPositions: ChartPositionContext[];
+  recentState: string | null;
 };
 
 export type TradesJournalContext = {
@@ -261,12 +287,24 @@ export type TradesJournalContext = {
     wins: number;
     losses: number;
   };
+  labelCounts: Array<{ label: string; count: number }>;
+  recurringLabels: string[];
+  riskPatterns: string[];
+  recentWins: CompanionBrokerTrade[];
+  recentMistakes: CompanionBrokerTrade[];
 };
 
 export type IntelContext = {
   symbol: string | null;
   summary: IntelSummary | null;
-  providers: IntelProviderStatus[];
+  providers: Array<{
+    id: string;
+    label: string;
+    state: "live" | "off" | "error";
+    description?: string;
+  }>;
+  compactSummary: string | null;
+  providerHealth: Array<{ id: string; state: string; label: string }>;
   cache: {
     state: "fresh" | "stale" | "empty";
     ageSeconds: number | null;
@@ -293,7 +331,17 @@ export type MarketContextSummary = {
 
 export type MemoryContext = {
   entries: AxeMemoryEntry[];
+  prioritizedEntries: AxeMemoryEntry[];
   openCommitments: OpenCommitment[];
+  compactSummary: string | null;
+};
+
+export type CorrelationInsight = {
+  kind: "exposure_market" | "exposure_intel" | "performance_journal" | "event_risk";
+  severity: "info" | "watch" | "risk";
+  symbol: string | null;
+  message: string;
+  evidence: string[];
 };
 
 export type AxeCompanionContext = {
@@ -308,6 +356,7 @@ export type AxeCompanionContext = {
   alerts: AlertsContext;
   market: MarketContextSummary;
   memory: MemoryContext;
+  correlations: CorrelationInsight[];
   health: ContextHealth[];
   summary: string;
 };
