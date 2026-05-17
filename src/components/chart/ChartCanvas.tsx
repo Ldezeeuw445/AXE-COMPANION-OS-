@@ -387,9 +387,9 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         if (last && last.time === incoming.time) {
           const merged: CandlestickData = {
             ...incoming,
-            high: Math.max(incoming.high, last.high, last.close),
-            low: Math.min(incoming.low, last.low, last.close),
-            close: last.close,
+            high: Math.max(incoming.high, last.high, incoming.close, last.close),
+            low: Math.min(incoming.low, last.low, incoming.close, last.close),
+            close: incoming.close,
           };
           series.update(merged);
           lastBarRef.current = merged;

@@ -28,8 +28,8 @@ export const dynamic = "force-dynamic";
  * MAX_DURATION_MS — the client auto-reconnects.
  */
 
-const TICK_INTERVAL_MS = 2_500;
-const CANDLE_INTERVAL_MS = 12_000;
+const TICK_INTERVAL_MS = 1_000;
+const CANDLE_INTERVAL_MS = 5_000;
 const POSITIONS_INTERVAL_MS = 8_000;
 const MAX_DURATION_MS = 50_000;
 const DELAYED_THRESHOLD_FAILURES = 3;

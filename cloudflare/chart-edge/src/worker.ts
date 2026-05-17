@@ -44,8 +44,8 @@ const TF_MAP: Record<string, string> = {
   d1: "1d",
 };
 
-const TICK_INTERVAL_MS = 2_500;
-const CANDLE_INTERVAL_MS = 12_000;
+const TICK_INTERVAL_MS = 1_000;
+const CANDLE_INTERVAL_MS = 5_000;
 const POSITIONS_INTERVAL_MS = 8_000;
 const DELAYED_THRESHOLD_FAILURES = 3;
 const IDLE_HARD_CLOSE_MS = 5 * 60_000;

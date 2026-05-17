@@ -1250,7 +1250,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         volume: candle.volume,
       });
       if (Number.isFinite(candle.close) && Date.now() - lastReactPriceAt.current > 1_500) {
+        lastReactPriceAt.current = Date.now();
         setLivePrice(candle.close);
+        setLastTickAt(new Date().toISOString());
       }
     },
     [],
