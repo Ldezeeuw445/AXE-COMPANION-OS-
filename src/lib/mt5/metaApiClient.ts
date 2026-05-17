@@ -129,6 +129,41 @@ export async function provisioningDeleteAccount(accountId: string): Promise<void
   throw new MetaApiRequestError(code, `Delete account failed (${res.status})`, res.status, body);
 }
 
+async function provisioningPostAccountOperation(
+  accountId: string,
+  operation: "deploy" | "redeploy" | "undeploy",
+): Promise<void> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const res = await fetchWithTimeout(
+    `${base}/users/current/accounts/${encodeURIComponent(accountId)}/${operation}`,
+    {
+      method: "POST",
+      headers: authHeadersJson(),
+      timeoutMs: 75_000,
+    },
+  );
+  if (res.status === 204) return;
+  const body = await readJson(res);
+  if (res.status === 404) {
+    throw new MetaApiRequestError("not_found", `Account ${operation} failed (${res.status})`, res.status, body);
+  }
+  const provisioningCode = classifyMetaApiProvisioningError(body);
+  throw new MetaApiRequestError(
+    provisioningCode === "unknown" ? classifyHttpStatus(res.status) : provisioningCode,
+    `Account ${operation} failed (${res.status})`,
+    res.status,
+    body,
+  );
+}
+
+export async function provisioningDeployAccount(accountId: string): Promise<void> {
+  await provisioningPostAccountOperation(accountId, "deploy");
+}
+
+export async function provisioningRedeployAccount(accountId: string): Promise<void> {
+  await provisioningPostAccountOperation(accountId, "redeploy");
+}
+
 export type CreateMt5CloudAccountInput = {
   login: string;
   password: string;

@@ -19,7 +19,9 @@ import {
   MetaApiRequestError,
   provisioningCreateMt5CloudAccount,
   provisioningDeleteAccount,
+  provisioningDeployAccount,
   provisioningGetAccount,
+  provisioningRedeployAccount,
 } from "@/lib/mt5/metaApiClient";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
 import type {
@@ -91,6 +93,9 @@ const DOCTOR_ACCOUNT_INFO_TIMEOUT_MS = 25_000;
 const DOCTOR_POSITIONS_TIMEOUT_MS = 20_000;
 const DOCTOR_HISTORY_TIMEOUT_MS = 30_000;
 const DOCTOR_PRICE_TIMEOUT_MS = 12_000;
+const RECOVERY_DEPLOY_TIMEOUT_MS = 80_000;
+const RECOVERY_PROVISIONING_POLL_BUDGET_MS = 60_000;
+const RECOVERY_SYNC_TIMEOUT_MS = 90_000;
 
 class Mt5ActionTimeoutError extends Error {
   constructor(readonly operation: string) {
@@ -148,6 +153,9 @@ function knownFailureFromStatus(status: string | null | undefined): string | nul
   if (s === "invalid_credentials" || s === "mt5_invalid_credentials") return "Credentials issue";
   if (s === "provider_not_configured") return "MetaAPI token is not configured on the server";
   if (s === "not_found") return "MetaAPI account was not found";
+  if (s === "orphaned") return "Stored MetaAPI account id is orphaned";
+  if (s === "recovering") return "MT5 recovery is in progress";
+  if (s === "recovery_failed") return "Previous MT5 recovery failed";
   if (s === "metaapi_region_error") return "MetaAPI region or client host mismatch";
   if (s === "metaapi_timeout") return "MetaAPI or broker terminal timed out";
   if (s.includes("fail") || s.includes("error")) return "Previous MT5 operation failed";
@@ -211,12 +219,15 @@ function doctorHeadline(status: Mt5DoctorOverallStatus): string {
  * terminal actually being live. Returns the final snapshot regardless — the
  * caller decides whether to insert with `provisioning` or `connected`.
  */
-async function pollUntilDeployed(metaId: string): Promise<{
+async function pollUntilDeployed(
+  metaId: string,
+  budgetMs = PROVISIONING_POLL_BUDGET_MS,
+): Promise<{
   connectionStatus?: string;
   state?: string;
   ready: boolean;
 }> {
-  const deadline = Date.now() + PROVISIONING_POLL_BUDGET_MS;
+  const deadline = Date.now() + budgetMs;
   let last: { connectionStatus?: string; state?: string } = {};
 
   while (Date.now() < deadline) {
@@ -242,6 +253,39 @@ async function pollUntilDeployed(metaId: string): Promise<{
   }
 
   return { ...last, ready: false };
+}
+
+function readMetadata(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+async function markCloudAccountOrphaned(args: {
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>;
+  accountId: string;
+  userId: string;
+  prevMeta: Record<string, unknown>;
+  extId: string;
+  reason: string;
+}): Promise<void> {
+  if (!args.supabase) return;
+  await args.supabase
+    .from("user_broker_accounts")
+    .update({
+      provider_status: "orphaned",
+      metadata: {
+        ...args.prevMeta,
+        orphanedMetaapiAccountId: args.extId,
+        lastRecovery: {
+          checkedAt: new Date().toISOString(),
+          outcome: "orphaned",
+          reason: args.reason,
+        },
+      },
+    })
+    .eq("id", args.accountId)
+    .eq("user_id", args.userId);
 }
 
 export async function createCloudMt5ConnectionAction(
@@ -735,6 +779,215 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
   return { ok: true, data: { dealsFetched, dealsUpserted, tradesNormalized } };
 }
 
+export async function recoverCloudMt5AccountAction(accountId: string): Promise<
+  Mt5CloudResult<{
+    providerStatus: string;
+    deploymentState: string | null;
+    terminalStatus: string | null;
+    syncAttempted: boolean;
+    syncOk: boolean;
+    syncMessage: string | null;
+  }>
+> {
+  if (!getMetaApiToken()) {
+    return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "validation", message: "Not signed in." };
+
+  const { data: row, error } = await supabase
+    .from("user_broker_accounts")
+    .select("id,external_connection_id,connection_method,metadata,user_id")
+    .eq("id", accountId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) return { ok: false, code: "unknown", message: error.message };
+  if (!row?.external_connection_id || row.connection_method !== "cloud_mt5") {
+    return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
+  }
+
+  const extId = row.external_connection_id as string;
+  const prevMeta = readMetadata(row.metadata);
+  const startedAt = new Date().toISOString();
+
+  await supabase
+    .from("user_broker_accounts")
+    .update({
+      provider_status: "recovering",
+      metadata: {
+        ...prevMeta,
+        lastRecovery: {
+          checkedAt: startedAt,
+          outcome: "started",
+          metaapiAccountId: extId,
+        },
+      },
+    })
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+  let operation: "deploy" | "redeploy" = "redeploy";
+  try {
+    const acc = await withActionBudget(
+      "recover_provisioning_read",
+      provisioningGetAccount(extId),
+      TEST_PROVISIONING_TIMEOUT_MS,
+    );
+    const state = (acc.state ?? "").toUpperCase();
+    const connectionStatus = (acc.connectionStatus ?? "").toUpperCase();
+    if (state === "UNDEPLOYED" || state === "CREATED") {
+      operation = "deploy";
+    } else if (state === "DEPLOYED" && connectionStatus === "CONNECTED") {
+      operation = "redeploy";
+    }
+    if (acc.region) {
+      prevMeta.metaapiRegion = acc.region;
+    }
+  } catch (e) {
+    const mapped = mapMetaError(e);
+    if (mapped.code === "not_found") {
+      await markCloudAccountOrphaned({
+        supabase,
+        accountId,
+        userId: user.id,
+        prevMeta,
+        extId,
+        reason: "MetaAPI no longer returns this account id.",
+      });
+      revalidatePath("/accounts");
+      revalidatePath("/chat");
+      return mapped;
+    }
+    await supabase
+      .from("user_broker_accounts")
+      .update({
+        provider_status: "recovery_failed",
+        metadata: {
+          ...prevMeta,
+          lastRecovery: {
+            checkedAt: new Date().toISOString(),
+            outcome: "failed",
+            metaapiAccountId: extId,
+            error: mapped.code,
+          },
+        },
+      })
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+    return mapped;
+  }
+
+  try {
+    await withActionBudget(
+      `recover_${operation}`,
+      operation === "deploy" ? provisioningDeployAccount(extId) : provisioningRedeployAccount(extId),
+      RECOVERY_DEPLOY_TIMEOUT_MS,
+    );
+  } catch (e) {
+    const mapped = mapMetaError(e);
+    if (mapped.code === "not_found") {
+      await markCloudAccountOrphaned({
+        supabase,
+        accountId,
+        userId: user.id,
+        prevMeta,
+        extId,
+        reason: "MetaAPI account disappeared during recovery.",
+      });
+    } else {
+      await supabase
+        .from("user_broker_accounts")
+        .update({
+          provider_status: "recovery_failed",
+          metadata: {
+            ...prevMeta,
+            lastRecovery: {
+              checkedAt: new Date().toISOString(),
+              outcome: "failed",
+              operation,
+              metaapiAccountId: extId,
+              error: mapped.code,
+            },
+          },
+        })
+        .eq("id", accountId)
+        .eq("user_id", user.id);
+    }
+    revalidatePath("/accounts");
+    revalidatePath("/chat");
+    return mapped;
+  }
+
+  const probe = await pollUntilDeployed(extId, RECOVERY_PROVISIONING_POLL_BUDGET_MS);
+  const providerStatus = probe.ready
+    ? mapConnectionToProviderStatus(probe.connectionStatus, probe.state)
+    : "deploying";
+
+  await supabase
+    .from("user_broker_accounts")
+    .update({
+      provider_status: providerStatus,
+      metadata: {
+        ...prevMeta,
+        lastRecovery: {
+          checkedAt: new Date().toISOString(),
+          outcome: probe.ready ? "deployed" : "deploying",
+          operation,
+          metaapiAccountId: extId,
+          state: probe.state ?? null,
+          connectionStatus: probe.connectionStatus ?? null,
+        },
+      },
+    })
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+  let syncAttempted = false;
+  let syncOk = false;
+  let syncMessage: string | null = null;
+  if (probe.ready) {
+    syncAttempted = true;
+    try {
+      const sync = await withActionBudget(
+        "recover_hard_sync",
+        syncCloudMt5AccountAction(accountId),
+        RECOVERY_SYNC_TIMEOUT_MS,
+      );
+      syncOk = sync.ok || sync.code === "sync_no_deals";
+      syncMessage = sync.ok
+        ? "Account history sync completed after recovery."
+        : sync.message;
+    } catch (e) {
+      const mapped = mapMetaError(e);
+      syncMessage = mapped.message;
+    }
+  }
+
+  revalidatePath("/accounts");
+  revalidatePath("/history");
+  revalidatePath("/journal");
+  revalidatePath("/chat");
+
+  return {
+    ok: true,
+    data: {
+      providerStatus,
+      deploymentState: probe.state ?? null,
+      terminalStatus: probe.connectionStatus ?? null,
+      syncAttempted,
+      syncOk,
+      syncMessage,
+    },
+  };
+}
+
 export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5CloudResult<Mt5DoctorReport>> {
   const checkedAt = new Date().toISOString();
   if (!getMetaApiToken()) {
@@ -848,6 +1101,17 @@ export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5Clo
     terminalStepStatus = "fail";
     steps.push(doctorStep("metaapi_account_exists", "MetaAPI account exists", "fail", provisioningError));
     steps.push(doctorStep("deployment_state", "MetaAPI deployment state", "fail", provisioningError));
+    const mapped = mapMetaError(e);
+    if (mapped.code === "not_found") {
+      await markCloudAccountOrphaned({
+        supabase,
+        accountId,
+        userId: user.id,
+        prevMeta,
+        extId,
+        reason: "Doctor could not find this MetaAPI account id.",
+      });
+    }
   }
 
   let accountInfo: Record<string, unknown> | null = null;

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   disconnectCloudMt5AccountAction,
+  recoverCloudMt5AccountAction,
   runCloudMt5DoctorAction,
   syncCloudMt5AccountAction,
   testCloudMt5ConnectionAction,
@@ -18,6 +19,7 @@ const ACTION_TIMEOUT_MS: Record<string, number> = {
   Test: 25_000,
   Sync: 75_000,
   Doctor: 60_000,
+  Recover: 105_000,
   Disconnect: 25_000,
 };
 
@@ -32,6 +34,8 @@ function timeoutResult(label: string): ActionResult {
         ? "Sync is still running in the background. Refresh Accounts in a minute or retry if the status does not change."
         : label === "Doctor"
           ? "Doctor is still waiting on MetaAPI. Retry in a minute if the account status does not change."
+        : label === "Recover"
+          ? "Recovery is still running. AXE released the screen; refresh in a minute to see the latest MetaAPI state."
         : "The request is taking longer than expected. You can retry without leaving this screen.",
   };
 }
@@ -95,6 +99,8 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
                 ? "Still syncing."
                 : label === "Doctor"
                   ? "Still diagnosing."
+                  : label === "Recover"
+                    ? "Still recovering."
                   : "Still working.",
             detail: r.message,
           }),
@@ -133,6 +139,33 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           JSON.stringify({
             headline: "Sync completed.",
             detail: detail || undefined,
+          }),
+        );
+      } else if (r.ok && label === "Recover") {
+        const d =
+          r.data && typeof r.data === "object"
+            ? (r.data as {
+                providerStatus?: string;
+                deploymentState?: string | null;
+                terminalStatus?: string | null;
+                syncAttempted?: boolean;
+                syncOk?: boolean;
+                syncMessage?: string | null;
+              })
+            : null;
+        const stateLine = d
+          ? `MetaAPI ${d.deploymentState ?? "unknown"} · terminal ${d.terminalStatus ?? "unknown"} · ${d.providerStatus ?? "unknown"}.`
+          : undefined;
+        const syncLine =
+          d?.syncAttempted === true
+            ? d.syncOk
+              ? d.syncMessage ?? "Hard sync completed after recovery."
+              : d.syncMessage ?? "Recovery ran, but sync still needs another retry."
+            : "Recovery requested deployment; run Doctor again once MetaAPI reports connected.";
+        setMsg(
+          JSON.stringify({
+            headline: "Recovery requested.",
+            detail: [stateLine, syncLine].filter(Boolean).join(" "),
           }),
         );
       } else if (r.ok) {
@@ -200,8 +233,9 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
       </div>
       <p className="text-[10px] leading-relaxed text-tos-dim">
         Recovery order: run <span className="font-medium text-tos-muted">Test</span> for credentials/server,{" "}
+        <span className="font-medium text-tos-muted">Redeploy</span> for disconnected terminals,{" "}
         <span className="font-medium text-tos-muted">Sync</span> for account history, then{" "}
-        <span className="font-medium text-tos-muted">Doctor</span> when something still looks degraded.
+        <span className="font-medium text-tos-muted">Doctor</span> to confirm the live broker state.
       </p>
       {busyLabel ? (
         <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2">
@@ -220,9 +254,11 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           </div>
           <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
             {busyLabel === "Sync"
-              ? "AXE is syncing broker history. If MetaApi is slow, this panel releases and keeps the account usable."
+                ? "AXE is syncing broker history. If MetaApi is slow, this panel releases and keeps the account usable."
               : busyLabel === "Doctor"
                 ? "AXE is checking MetaAPI deployment, broker reachability, positions, history and live price health."
+                : busyLabel === "Recover"
+                  ? "AXE is asking MetaAPI to deploy or redeploy the cloud terminal, then it will try a hard sync."
               : "AXE is checking the account. This will release automatically if the provider stalls."}
           </p>
         </div>
@@ -244,12 +280,22 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
         <button
           type="button"
           disabled={pending}
+          onClick={() => run(recoverCloudMt5AccountAction, "Recover")}
+          className="rounded-lg border border-amber-400/25 bg-amber-400/[0.08] px-2.5 py-1.5 text-[10px] font-semibold text-amber-100/90 hover:bg-amber-400/15 disabled:opacity-50"
+        >
+          {busyLabel === "Recover" ? "Recovering…" : "Redeploy"}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
           onClick={() => run(runCloudMt5DoctorAction, "Doctor")}
           className="rounded-lg border border-cyan-400/25 bg-cyan-400/[0.07] px-2.5 py-1.5 text-[10px] font-semibold text-cyan-100/90 hover:bg-cyan-400/14 disabled:opacity-50"
         >
           {busyLabel === "Doctor" ? "Diagnosing…" : "Run Doctor"}
         </button>
-        {feedback?.headline === "Still syncing." || feedback?.headline === "Still diagnosing." ? (
+        {feedback?.headline === "Still syncing." ||
+        feedback?.headline === "Still diagnosing." ||
+        feedback?.headline === "Still recovering." ? (
           <button
             type="button"
             onClick={() => router.refresh()}

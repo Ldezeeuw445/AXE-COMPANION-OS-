@@ -176,6 +176,22 @@ function compactDiagnosticStatus(a: BrokerAccountRow): {
       dot: "bg-amber-300",
     };
   }
+  if (provider === "recovering") {
+    return {
+      label: "Reconnecting",
+      detail: "AXE is redeploying the MetaAPI cloud terminal.",
+      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
+      dot: "bg-amber-300",
+    };
+  }
+  if (provider === "orphaned") {
+    return {
+      label: "Server issue",
+      detail: "Stored MetaAPI account id is stale. Redeploy will confirm; reconnect may be required.",
+      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
+      dot: "bg-rose-300",
+    };
+  }
   if (provider.includes("fail") || provider.includes("error") || provider === "metaapi_region_error") {
     return {
       label: "Needs attention",
