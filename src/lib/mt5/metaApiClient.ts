@@ -116,6 +116,52 @@ export async function provisioningGetAccount(accountId: string): Promise<MetaApi
   return (body ?? {}) as MetaApiTradingAccount;
 }
 
+export async function provisioningListAccounts(): Promise<MetaApiTradingAccount[]> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const res = await fetchWithTimeout(`${base}/users/current/accounts`, {
+    method: "GET",
+    headers: authHeadersGet(),
+    timeoutMs: 30_000,
+  });
+  const body = await readJson(res);
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(code, `Provisioning list failed (${res.status})`, res.status, body);
+  }
+  return Array.isArray(body) ? (body as MetaApiTradingAccount[]) : [];
+}
+
+function normalizeMt5Login(login: string | number | null | undefined): string {
+  return String(login ?? "").replace(/\D/g, "");
+}
+
+function normalizeMt5Server(server: string | null | undefined): string {
+  return String(server ?? "").trim().toLowerCase();
+}
+
+export function metaApiTradingAccountId(account: MetaApiTradingAccount): string | null {
+  const id = account.id ?? account._id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+export async function provisioningFindMt5CloudAccount(input: {
+  login: string;
+  server: string;
+}): Promise<MetaApiTradingAccount | null> {
+  const targetLogin = normalizeMt5Login(input.login);
+  const targetServer = normalizeMt5Server(input.server);
+  if (!targetLogin || !targetServer) return null;
+
+  const accounts = await provisioningListAccounts();
+  return (
+    accounts.find((account) => {
+      const sameLogin = normalizeMt5Login(account.login) === targetLogin;
+      const sameServer = normalizeMt5Server(account.server) === targetServer;
+      return sameLogin && sameServer && metaApiTradingAccountId(account) != null;
+    }) ?? null
+  );
+}
+
 export async function provisioningDeleteAccount(accountId: string): Promise<void> {
   const base = getMetaApiProvisioningBaseUrl();
   const res = await fetchWithTimeout(`${base}/users/current/accounts/${encodeURIComponent(accountId)}`, {
