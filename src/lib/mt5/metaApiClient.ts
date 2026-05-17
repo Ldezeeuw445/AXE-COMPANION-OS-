@@ -131,37 +131,31 @@ export async function provisioningDeleteAccount(accountId: string): Promise<void
 
 async function provisioningPostAccountOperation(
   accountId: string,
-  operation: "deploy" | "redeploy" | "undeploy",
-): Promise<void> {
+  operation: "deploy" | "redeploy",
+): Promise<MetaApiTradingAccount> {
   const base = getMetaApiProvisioningBaseUrl();
   const res = await fetchWithTimeout(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/${operation}`,
     {
       method: "POST",
       headers: authHeadersJson(),
-      timeoutMs: 75_000,
+      timeoutMs: 60_000,
     },
   );
-  if (res.status === 204) return;
   const body = await readJson(res);
-  if (res.status === 404) {
-    throw new MetaApiRequestError("not_found", `Account ${operation} failed (${res.status})`, res.status, body);
+  if (!res.ok) {
+    const code = res.status === 404 ? "not_found" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(code, `${operation} account failed (${res.status})`, res.status, body);
   }
-  const provisioningCode = classifyMetaApiProvisioningError(body);
-  throw new MetaApiRequestError(
-    provisioningCode === "unknown" ? classifyHttpStatus(res.status) : provisioningCode,
-    `Account ${operation} failed (${res.status})`,
-    res.status,
-    body,
-  );
+  return (body ?? {}) as MetaApiTradingAccount;
 }
 
-export async function provisioningDeployAccount(accountId: string): Promise<void> {
-  await provisioningPostAccountOperation(accountId, "deploy");
+export async function provisioningDeployAccount(accountId: string): Promise<MetaApiTradingAccount> {
+  return provisioningPostAccountOperation(accountId, "deploy");
 }
 
-export async function provisioningRedeployAccount(accountId: string): Promise<void> {
-  await provisioningPostAccountOperation(accountId, "redeploy");
+export async function provisioningRedeployAccount(accountId: string): Promise<MetaApiTradingAccount> {
+  return provisioningPostAccountOperation(accountId, "redeploy");
 }
 
 export type CreateMt5CloudAccountInput = {
