@@ -32,7 +32,16 @@ Adds to `user_broker_accounts`: `connection_method`, `external_connection_id`, `
 1. Set env vars on Vercel/host (never `NEXT_PUBLIC_*` for MetaApi token).
 2. Run SQL migration on Supabase.
 3. Redeploy Next.js.
-4. In **Accounts**, use **Connect MT5 (MetaApi cloud)** → **Test** → **Sync**.
+4. In **Accounts**, use **Connect MT5 (MetaApi cloud)** → **Test** → **Sync** → **Doctor** when anything looks degraded.
+
+## Launch onboarding expectations
+
+- Users must enter the numeric MT5 login, exact server name and investor/read-only password.
+- Server names are case/suffix sensitive. Copy from **MT5 → File → Login to Trade Account**.
+- First provisioning can take 30-120 seconds. During that time the Accounts page shows a provisioning banner and keeps polling.
+- `Test` is the credentials/server check.
+- `Sync` is the account-history import.
+- `Doctor` is the safe diagnostic check for MetaAPI deployment, terminal connection, broker reachability, positions, history, live price and live-trading state.
 
 ## Testing (manual)
 
@@ -40,13 +49,14 @@ Adds to `user_broker_accounts`: `connection_method`, `external_connection_id`, `
 2. Confirm provisioning completes (row appears with MetaApi id).
 3. **Test** updates `provider_status` and account summary in metadata.
 4. **Sync** pulls last 90 days of history deals; closed positions become `broker_trades` rows (`external_trade_id` = `metaapi:<positionId>`).
-5. Open **History**, **Journal** (`?trade=&account=`), **Chat** with account active.
+5. **Doctor** returns only sanitized diagnostics and stores `metadata.lastDoctor` for AXE context.
+6. Open **History**, **Journal** (`?trade=&account=`), **Chat** with account active.
 
 ## Not implemented (future)
 
 - Realtime Socket.IO terminal stream
 - MetaStats metrics
-- Order execution / trading from AXE
+- Automatic order execution without explicit user confirmation
 
 ## Verification
 

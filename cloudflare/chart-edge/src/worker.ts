@@ -49,6 +49,9 @@ const CANDLE_INTERVAL_MS = 12_000;
 const POSITIONS_INTERVAL_MS = 8_000;
 const DELAYED_THRESHOLD_FAILURES = 3;
 const IDLE_HARD_CLOSE_MS = 5 * 60_000;
+const METAAPI_TICK_TIMEOUT_MS = 4_000;
+const METAAPI_CANDLE_TIMEOUT_MS = 6_000;
+const METAAPI_POSITIONS_TIMEOUT_MS = 5_000;
 
 function isPushMode(env: Env): boolean {
   return (env.WORKER_MODE ?? "poll").toLowerCase() === "push";
@@ -65,6 +68,20 @@ function corsHeaders(env: Env, origin: string | null): Record<string, string> {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Streamer-Secret",
   };
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export default {
@@ -341,9 +358,11 @@ export class ChartLiveRoom implements DurableObject {
       this.lastTickAt = now;
       try {
         const url = `${clientBase}/users/current/accounts/${encodeURIComponent(r.metaApiAccountId)}/symbols/${encodeURIComponent(r.brokerSymbol)}/current-price`;
-        const res = await fetch(url, {
-          headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN },
-        });
+        const res = await fetchWithTimeout(
+          url,
+          { headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN } },
+          METAAPI_TICK_TIMEOUT_MS,
+        );
         if (res.ok) {
           const j = (await res.json()) as { bid?: number; ask?: number; brokerTime?: string; time?: string };
           const mid = j.bid != null && j.ask != null ? (j.bid + j.ask) / 2 : (j.bid ?? j.ask ?? null);
@@ -381,9 +400,11 @@ export class ChartLiveRoom implements DurableObject {
       this.lastCandleAt = now;
       try {
         const url = `${marketBase}/users/current/accounts/${encodeURIComponent(r.metaApiAccountId)}/historical-market-data/symbols/${encodeURIComponent(r.brokerSymbol)}/timeframes/${encodeURIComponent(r.metaApiTimeframe)}/candles?limit=2`;
-        const res = await fetch(url, {
-          headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN },
-        });
+        const res = await fetchWithTimeout(
+          url,
+          { headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN } },
+          METAAPI_CANDLE_TIMEOUT_MS,
+        );
         if (res.ok) {
           const arr = (await res.json()) as LiveCandle[];
           const candle = Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null;
@@ -410,9 +431,11 @@ export class ChartLiveRoom implements DurableObject {
       this.lastPositionsAt = now;
       try {
         const url = `${clientBase}/users/current/accounts/${encodeURIComponent(r.metaApiAccountId)}/positions`;
-        const res = await fetch(url, {
-          headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN },
-        });
+        const res = await fetchWithTimeout(
+          url,
+          { headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN } },
+          METAAPI_POSITIONS_TIMEOUT_MS,
+        );
         if (res.ok) {
           const arr = (await res.json()) as Array<Record<string, unknown>>;
           const onSymbol: LivePositionPayload[] = arr

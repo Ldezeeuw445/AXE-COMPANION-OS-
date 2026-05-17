@@ -6,7 +6,7 @@ import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
-import { loadIntelSnapshot, type IntelProviderStatus } from "@/lib/intel/intelClient";
+import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot } from "@/lib/intel/intelClient";
 
 const DEFAULT_SYMBOL = "XAUUSD";
 
@@ -131,7 +131,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
         }
       />
 
-      <ProviderBadges providers={intel.providers} />
+      <ProviderBadges providers={intel.providers} cache={intel.cache} />
 
       {intel.cache.message ? (
         <GlassPanel className="p-3">
@@ -387,28 +387,66 @@ export default async function IntelPage({ searchParams }: PageProps) {
   );
 }
 
-function ProviderBadges({ providers }: { providers: IntelProviderStatus[] }) {
+function ProviderBadges({
+  providers,
+  cache,
+}: {
+  providers: IntelProviderStatus[];
+  cache: IntelSnapshot["cache"];
+}) {
   const liveCount = providers.filter((p) => p.state === "live").length;
+  const errorCount = providers.filter((p) => p.state === "error").length;
+  const offCount = providers.filter((p) => p.state === "off").length;
+  const degraded = errorCount > 0 || cache.state === "stale";
+  const summary =
+    cache.state === "fresh"
+      ? `${liveCount}/${providers.length} live`
+      : cache.state === "stale"
+        ? `${liveCount}/${providers.length} live · cached ${cache.ageSeconds != null ? formatAge(cache.ageSeconds) : "snapshot"}`
+        : "Feed warming";
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-tos-dim">Providers</span>
-      {providers.map((p) => (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-tos-dim">Live feed health</span>
         <span
-          key={p.id}
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+            degraded
+              ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/90"
+              : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95"
+          }`}
+          title={cache.message}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${degraded ? "bg-amber-300/85" : "bg-cyan-300"}`} aria-hidden />
+          {summary}
+        </span>
+        {offCount > 0 ? <span className="text-[10px] text-tos-dim">{offCount} optional off</span> : null}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {providers.map((p) => {
+          const tone =
             p.state === "live"
               ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
-              : "border-white/12 bg-white/[0.04] text-tos-dim"
-          }`}
-          title={p.description}
-        >
-          {p.label}
-          {p.state === "live" ? "" : " · off"}
-        </span>
-      ))}
-      <span className="ml-auto text-[10px] text-tos-dim">
-        {liveCount}/{providers.length} configured
-      </span>
+              : p.state === "error"
+                ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/90"
+                : "border-white/12 bg-white/[0.04] text-tos-dim";
+          return (
+            <span
+              key={p.id}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${tone}`}
+              title={p.description}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  p.state === "live" ? "bg-cyan-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25"
+                }`}
+                aria-hidden
+              />
+              {p.label}
+              {p.state === "live" ? "" : ` · ${p.state}`}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
