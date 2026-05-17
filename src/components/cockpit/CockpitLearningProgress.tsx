@@ -7,14 +7,17 @@ type Props = {
 };
 
 export function CockpitLearningProgress({ headline, milestones }: Props) {
+  const hasMilestones = milestones.length > 0;
   return (
     <GlassPanel className="p-5">
       <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-tos-dim">
         Learning arc
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-tos-muted">{headline}</p>
+      <p className="mt-2 text-sm leading-relaxed text-tos-muted">
+        {headline || "AXE is still calibrating. Learning milestones appear after enough real sessions, journal notes, or trade history."}
+      </p>
 
-      <ol className="relative mt-6 space-y-6">
+      {hasMilestones ? <ol className="relative mt-6 space-y-6">
         <div
           className="absolute left-[0.4rem] top-2 bottom-6 w-px bg-gradient-to-b from-tos-warm/30 via-white/10 to-transparent"
           aria-hidden
@@ -51,7 +54,11 @@ export function CockpitLearningProgress({ headline, milestones }: Props) {
             </p>
           </li>
         ))}
-      </ol>
+      </ol> : (
+        <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-[12px] leading-relaxed text-tos-muted">
+          Insufficient signal depth. AXE will not show fake progress.
+        </div>
+      )}
       <p className="mt-6 border-t border-tos-border/80 pt-4 text-[11px] leading-relaxed text-tos-dim">
         The line is your evolution, not a leaderboard — slower milestones are
         where the assistant is still listening.

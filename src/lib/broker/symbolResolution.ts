@@ -8,6 +8,7 @@ const COMMON_SUFFIXES = [
   "",
   "m",
   "M",
+  ".s",
   ".r",
   ".pro",
   ".raw",
@@ -15,6 +16,11 @@ const COMMON_SUFFIXES = [
   ".m",
   ".x",
   ".a",
+  ".p",
+  ".z",
+  ".std",
+  ".micro",
+  "_pro",
   "c",
   "i",
   "_i",
@@ -25,6 +31,8 @@ const COMMON_SUFFIXES = [
   "p",
   "#",
 ];
+
+const COMMON_PREFIXES = ["", "#", ".", "m", "M", "pro.", "raw."];
 
 const SYMBOL_ALIASES: Record<string, string[]> = {
   XAUUSD: ["XAUUSD", "GOLD"],
@@ -41,6 +49,22 @@ const SYMBOL_ALIASES: Record<string, string[]> = {
   US500: ["US500", "SPX500", "SP500", "USA500", "SPX", "S&P500"],
   US30: ["US30", "DJ30", "DOW", "DJI", "WS30", "US30USD"],
   DOW: ["DOW", "US30", "DJ30", "DJI", "WS30", "US30USD"],
+};
+
+const DISPLAY_PREF_BY_ALIAS_BASE: Record<string, string> = {
+  GOLD: "XAUUSD",
+  NAS100: "NAS100",
+  US100: "US100",
+  USTEC: "NAS100",
+  NDX100: "NAS100",
+  SPX500: "SPX500",
+  SP500: "SPX500",
+  US500: "US500",
+  USA500: "US500",
+  DJ30: "US30",
+  DOW: "US30",
+  DJI: "US30",
+  WS30: "US30",
 };
 
 export type SymbolResolutionResult = {
@@ -69,6 +93,68 @@ export function displaySymbolAliases(symbol: string): string[] {
   return Array.from(new Set(direct.map((s) => s.trim().toUpperCase()).filter(Boolean)));
 }
 
+export function cleanDisplaySymbol(symbol: string | null | undefined): string {
+  const raw = (symbol ?? "").trim().toUpperCase();
+  if (!raw) return "";
+  const rawBase = baseOf(raw);
+  if (DISPLAY_PREF_BY_ALIAS_BASE[rawBase]) return DISPLAY_PREF_BY_ALIAS_BASE[rawBase];
+  for (const [display, aliases] of Object.entries(SYMBOL_ALIASES)) {
+    if (aliases.some((alias) => rawBase === baseOf(alias))) return display;
+  }
+  for (const [aliasBase, display] of Object.entries(DISPLAY_PREF_BY_ALIAS_BASE)) {
+    if (rawBase.startsWith(aliasBase) || rawBase.endsWith(aliasBase)) return display;
+  }
+  let best: { display: string; len: number } | null = null;
+  for (const [display, aliases] of Object.entries(SYMBOL_ALIASES)) {
+    for (const alias of aliases) {
+      const aliasBase = baseOf(alias);
+      if (rawBase.startsWith(aliasBase) || rawBase.endsWith(aliasBase)) {
+        if (!best || aliasBase.length > best.len) best = { display, len: aliasBase.length };
+      }
+    }
+  }
+  if (best) return best.display;
+  return raw.replace(/^[#.]/, "").replace(/([._-](X|S|M|R|PRO|RAW|ECN|STD|MICRO)|[MCPZ#])$/i, "");
+}
+
+export function detectSymbolPatterns(symbols: string[]): {
+  suffixes: string[];
+  prefixes: string[];
+  examples: Record<string, string>;
+} {
+  const suffixes = new Set<string>();
+  const prefixes = new Set<string>();
+  const examples: Record<string, string> = {};
+  const knownDisplays = Object.keys(SYMBOL_ALIASES);
+  for (const symbol of symbols) {
+    const upper = symbol.trim().toUpperCase();
+    if (!upper) continue;
+    for (const display of knownDisplays) {
+      for (const alias of displaySymbolAliases(display)) {
+        if (upper === alias) {
+          examples[display] ??= symbol;
+          continue;
+        }
+        if (upper.startsWith(alias)) {
+          const suffix = symbol.slice(alias.length);
+          if (suffix) suffixes.add(suffix);
+          examples[display] ??= symbol;
+        }
+        if (upper.endsWith(alias)) {
+          const prefix = symbol.slice(0, symbol.length - alias.length);
+          if (prefix) prefixes.add(prefix);
+          examples[display] ??= symbol;
+        }
+      }
+    }
+  }
+  return {
+    suffixes: Array.from(suffixes).slice(0, 16),
+    prefixes: Array.from(prefixes).slice(0, 16),
+    examples,
+  };
+}
+
 export function candidateBrokerSymbols(requestedDisplaySymbol: string, knownSymbols: string[]): string[] {
   const aliases = displaySymbolAliases(requestedDisplaySymbol);
   const known = Array.from(new Set(knownSymbols.map((s) => s.trim()).filter(Boolean)));
@@ -85,6 +171,7 @@ export function candidateBrokerSymbols(requestedDisplaySymbol: string, knownSymb
   for (const alias of aliases) {
     push(alias);
     for (const suffix of COMMON_SUFFIXES) push(`${alias}${suffix}`);
+    for (const prefix of COMMON_PREFIXES) push(`${prefix}${alias}`);
   }
 
   const aliasBases = new Set(aliases.map(baseOf));
@@ -101,7 +188,7 @@ export function candidateBrokerSymbols(requestedDisplaySymbol: string, knownSymb
     }
   }
 
-  return attempted.slice(0, 24);
+  return attempted.slice(0, 48);
 }
 
 export function resolveBrokerSymbol(

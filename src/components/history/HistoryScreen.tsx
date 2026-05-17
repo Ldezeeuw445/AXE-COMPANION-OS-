@@ -120,12 +120,11 @@ export function HistoryScreen({
     activeAccountId &&
     selectedAccountId === activeAccountId;
 
-  // Trade history is "live" when Supabase delivered the broker_trades
-  // payload — even an empty payload counts as a live, authenticated
-  // round-trip. Errors flip the pulse to amber; otherwise green.
+  // History is an authenticated Supabase snapshot, not a live stream.
+  // Keep the top pulse honest: loaded data is available, but not LIVE.
   useEffect(() => {
     setLiveStatus({
-      allLive: loadError ? false : true,
+      allLive: loadError ? false : null,
       liveCount: loadError ? 0 : 1,
       totalCount: 1,
       freshestAgeSec: null,

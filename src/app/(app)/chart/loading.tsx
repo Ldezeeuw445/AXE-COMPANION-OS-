@@ -1,3 +1,5 @@
+import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
+
 export default function ChartLoading() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 py-2">
@@ -20,9 +22,8 @@ export default function ChartLoading() {
       <div className="relative min-h-[320px] flex-1 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#04070C]">
         <div className="absolute inset-0 opacity-55 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:100%_64px,72px_100%]" />
         <div className="absolute inset-x-0 top-1/2 h-px animate-pulse bg-cyan-300/20" />
-        <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-cyan-300/18 bg-black/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/75 backdrop-blur">
-          <span className="h-1.5 w-1.5 rounded-full bg-cyan-300/80 shadow-[0_0_10px_rgba(103,232,249,0.65)]" aria-hidden />
-          Preparing broker chart
+        <div className="absolute left-4 top-4 rounded-full border border-cyan-300/18 bg-black/60 px-3 py-1.5 backdrop-blur">
+          <AxeBreatheLoader label="Preparing chart" size="sm" />
         </div>
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-[11px] uppercase tracking-[0.18em] text-tos-dim">
           Restoring last stable candles…

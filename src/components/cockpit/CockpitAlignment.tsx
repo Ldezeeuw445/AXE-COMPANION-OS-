@@ -4,9 +4,10 @@ import { formatWeekdayMonthDayTime } from "@/lib/formatDate";
 
 type Props = {
   data: CockpitAlignmentType;
+  calibrationMessage?: string;
 };
 
-export function CockpitAlignment({ data }: Props) {
+export function CockpitAlignment({ data, calibrationMessage }: Props) {
   const { score, capturedAt, deltaFromPrior } = data;
   const circumference = 2 * Math.PI * 42;
   const offset = circumference - (score / 100) * circumference;
@@ -79,8 +80,8 @@ export function CockpitAlignment({ data }: Props) {
               </p>
             </div>
             <p className="text-[11px] leading-relaxed text-tos-muted">
-              Creeping up after you corrected invalidation wording through CPI
-              week — small moves, honest ones.
+              {calibrationMessage ??
+                "Alignment moves only when AXE has real chat, journal, memory, and account signals to learn from."}
             </p>
             <time
               className="block text-[10px] tabular-nums tracking-wide text-tos-dim"

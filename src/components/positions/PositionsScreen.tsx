@@ -7,6 +7,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
+import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 
 type Props = {
   positions: OpenPositionRow[];
@@ -41,7 +42,7 @@ export function PositionsScreen({ positions, providerStatus, error, hint }: Prop
         title="Positions"
         subtitle="Open positions from AXE MT5 Cloud — same symbols and prices as the broker terminal."
         left={<Layers className="h-6 w-6 text-cyan-400/80" aria-hidden />}
-        right={providerStatus ? <Badge variant="long">{providerStatus}</Badge> : null}
+        right={providerStatus ? <Badge variant="long">{friendlyProviderStatus(providerStatus)}</Badge> : null}
       />
 
       {error ? (

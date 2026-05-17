@@ -144,4 +144,9 @@ export const mockCockpitDashboard: CockpitDashboard = {
     "confidence_mean_7d",
     "session_london_weight",
   ],
+  calibration: {
+    state: "active",
+    signalCount: 64,
+    message: "Mock dashboard only: real cockpit scores stay conservative until live user signals exist.",
+  },
 };

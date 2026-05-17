@@ -15,7 +15,13 @@ import {
   generateDemoCandles,
   isDemoAccount,
 } from "@/lib/broker/demoAccount";
-import { candidateBrokerSymbols, displaySymbolAliases, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
+import {
+  candidateBrokerSymbols,
+  cleanDisplaySymbol,
+  detectSymbolPatterns,
+  displaySymbolAliases,
+  resolveBrokerSymbol,
+} from "@/lib/broker/symbolResolution";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
 const DEFAULT_SYMBOL = "XAUUSD";
@@ -397,7 +403,8 @@ export async function loadChartPageData(
   const isDemo = account?.connectionMethod === "demo_paper";
 
   if (isDemo && account) {
-    const requested = normalizeSymbol(symbolParam) || watchSyms[0] || DEFAULT_SYMBOL;
+    const requestedRaw = normalizeSymbol(symbolParam) || watchSyms[0] || DEFAULT_SYMBOL;
+    const requested = cleanDisplaySymbol(requestedRaw) || requestedRaw;
     const candles = generateDemoCandles(requested, timeframeKey, 500);
     const last = candles.at(-1)?.close ?? null;
     const lastTime = candles.at(-1)?.time ?? null;
@@ -415,7 +422,7 @@ export async function loadChartPageData(
       failure: "ok",
       dataError: null,
       hint: "AXE Demo is a virtual paper account. No broker order is sent.",
-      symbolOptions: Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms])).sort(),
+      symbolOptions: Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms.map(cleanDisplaySymbol).filter(Boolean)])).sort(),
       attemptedSymbols: [requested],
       account,
       accountChoices,
@@ -425,7 +432,7 @@ export async function loadChartPageData(
   }
 
   if (!getMetaApiToken()) {
-    const requested = normalizeSymbol(symbolParam) || DEFAULT_SYMBOL;
+    const requested = cleanDisplaySymbol(normalizeSymbol(symbolParam)) || DEFAULT_SYMBOL;
     const out = emptyData(
       timeframeKey,
       metaApiTimeframe,
@@ -435,13 +442,13 @@ export async function loadChartPageData(
       "provider_not_configured",
       "Chart data is not available because AXE MT5 Cloud is not configured for this deployment.",
     );
-    out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms])).sort();
+    out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms.map(cleanDisplaySymbol).filter(Boolean)])).sort();
     out.accountChoices = accountChoices;
     return out;
   }
 
   if (!account) {
-    const requested = normalizeSymbol(symbolParam) || DEFAULT_SYMBOL;
+    const requested = cleanDisplaySymbol(normalizeSymbol(symbolParam)) || DEFAULT_SYMBOL;
     const out = emptyData(
       timeframeKey,
       metaApiTimeframe,
@@ -451,7 +458,7 @@ export async function loadChartPageData(
       null,
       "No AXE MT5 Cloud account is connected yet.",
     );
-    out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms])).sort();
+    out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms.map(cleanDisplaySymbol).filter(Boolean)])).sort();
     out.accountChoices = accountChoices;
     return out;
   }
@@ -497,6 +504,7 @@ export async function loadChartPageData(
             symbols: discoveredSymbols.slice(0, 600),
             updatedAt: new Date().toISOString(),
           },
+          symbol_patterns: detectSymbolPatterns(discoveredSymbols),
         };
         void supabase
           .from("user_broker_accounts")
@@ -514,8 +522,9 @@ export async function loadChartPageData(
     ...knownFromUniverse,
     ...discoveredSymbols,
   ]));
-  const requested = normalizeSymbol(symbolParam) || allPositions[0]?.symbol || watchSyms[0] || DEFAULT_SYMBOL;
-  const cachedBroker = symbolMap[requested];
+  const requestedRaw = normalizeSymbol(symbolParam) || allPositions[0]?.symbol || watchSyms[0] || DEFAULT_SYMBOL;
+  const requested = cleanDisplaySymbol(requestedRaw) || requestedRaw;
+  const cachedBroker = symbolMap[requested] ?? symbolMap[requestedRaw];
   const resolution = cachedBroker
     ? {
         brokerSymbol: cachedBroker,
@@ -526,19 +535,19 @@ export async function loadChartPageData(
       }
     : resolveBrokerSymbol(requested, knownAccountSymbols);
 
+  const cleanPositionSymbols = fromPositions.map(cleanDisplaySymbol).filter(Boolean);
   const symbolSet = new Set<string>([
     requested,
-    resolution.brokerSymbol,
     ...FALLBACK_SYMBOLS,
     ...watchSyms,
-    ...fromPositions,
-    ...displaySymbolAliases(requested),
+    ...cleanPositionSymbols,
+    ...displaySymbolAliases(requested).map(cleanDisplaySymbol).filter(Boolean),
   ]);
   symbolSet.delete("");
   const symbolOptions = [...symbolSet].sort();
 
   const positionsOnSymbol = allPositions
-    .filter((p) => p.symbol === resolution.brokerSymbol || p.symbol === requested)
+    .filter((p) => p.symbol === resolution.brokerSymbol || cleanDisplaySymbol(p.symbol) === requested)
     .map(toOverlay);
 
   const candleCandidates = Array.from(new Set([
@@ -568,7 +577,11 @@ export async function loadChartPageData(
 
     // Persist successful broker symbol resolution per account.
     if (candles.length > 0 && symbolMap[requested] !== brokerSymbol) {
-      const nextMetadata = { ...accountMetadata, symbol_map: { ...symbolMap, [requested]: brokerSymbol } };
+      const nextMetadata = {
+        ...accountMetadata,
+        symbol_map: { ...symbolMap, [requested]: brokerSymbol },
+        symbol_map_updated_at: new Date().toISOString(),
+      };
       void supabase
         .from("user_broker_accounts")
         .update({ metadata: nextMetadata })

@@ -36,7 +36,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const livePill = (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/95">
       <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
-      {ctx.hasLiveData ? "Live" : "Idle"}
+      {ctx.hasLiveData ? "Ready" : "Warming"}
     </span>
   );
 
@@ -103,7 +103,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         liveCount={liveProviderCount}
         totalCount={ctx.providers.length}
         label="Market"
-        allLiveOverride={ctx.hasLiveData ? true : false}
+        allLiveOverride={ctx.hasLiveData ? false : null}
       />
       <ScreenHeader
         title="Market context"
@@ -263,7 +263,7 @@ function ProviderBadges({ providers }: { providers: ProviderStatus[] }) {
           }`}
           title={p.description}
         >
-          {p.label}
+          {marketHealthLabel(p.id)}
           {p.state === "live" ? "" : " · off"}
         </span>
       ))}
@@ -272,6 +272,17 @@ function ProviderBadges({ providers }: { providers: ProviderStatus[] }) {
       </span>
     </div>
   );
+}
+
+function marketHealthLabel(id: string): string {
+  const labels: Record<string, string> = {
+    polygon: "AXE Market Data",
+    perigon: "AXE News",
+    finnhub: "AXE News",
+    eodhd: "AXE News",
+    fred: "AXE Macro",
+  };
+  return labels[id] ?? "AXE Market Data";
 }
 
 function MacroPoint({ point }: { point: MacroSnapshot["points"][number] }) {

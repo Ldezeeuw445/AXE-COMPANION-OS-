@@ -33,6 +33,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
@@ -141,7 +142,7 @@ function statusPillCopy(
 ): { label: string; className: string; dot: string } {
   if (providerStatus === "failed") {
     return {
-      label: "Failed",
+      label: "Connection issue",
       className: "border-rose-500/30 bg-rose-500/12 text-rose-200/95",
       dot: "bg-rose-400/85",
     };
@@ -176,7 +177,7 @@ function statusPillCopy(
   }
   if (live === "stale") {
     return {
-      label: "Stale feed",
+      label: "Data stale",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85",
     };
@@ -2691,8 +2692,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         ) : null}
 
         {isTimeframePending ? (
-          <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-cyan-300/20 bg-black/78 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/85 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-            Loading {CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}
+          <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-cyan-300/20 bg-black/78 px-2.5 py-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+            <AxeBreatheLoader
+              label={`Loading ${CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}`}
+              size="sm"
+            />
           </div>
         ) : null}
         {routeFallbackMessage ? (

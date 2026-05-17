@@ -26,24 +26,25 @@ export default async function IntelPage({ searchParams }: PageProps) {
 
   const intel = await loadIntelSnapshot({ symbol });
   const isStale = intel.cache.state === "stale";
+  const hasFreshLiveIntel = intel.hasLiveData && !isStale;
   const cacheLabel =
     intel.cache.state === "stale"
       ? "Cached"
-      : intel.hasLiveData
+      : hasFreshLiveIntel
         ? "Live"
         : "Warming";
 
   const livePill = (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-        intel.hasLiveData
+        hasFreshLiveIntel
           ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
           : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200/90"
       }`}
       title={intel.cache.message}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${intel.hasLiveData ? "bg-cyan-300" : "bg-amber-300/80"}`}
+        className={`h-1.5 w-1.5 rounded-full ${hasFreshLiveIntel ? "bg-cyan-300" : "bg-amber-300/80"}`}
         aria-hidden
       />
       {cacheLabel}
@@ -111,7 +112,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
         totalCount={intel.providers.length}
         freshestAgeSec={intel.cache.ageSeconds ?? null}
         label="Intel"
-        allLiveOverride={intel.hasLiveData && !isStale ? true : intel.hasLiveData ? false : null}
+        allLiveOverride={hasFreshLiveIntel ? true : intel.hasLiveData ? false : null}
       />
       <ScreenHeader
         title="Intel"
@@ -400,9 +401,9 @@ function ProviderBadges({
   const degraded = errorCount > 0 || cache.state === "stale";
   const summary =
     cache.state === "fresh"
-      ? `${liveCount}/${providers.length} live`
+      ? `${liveCount}/${providers.length} ready`
       : cache.state === "stale"
-        ? `${liveCount}/${providers.length} live · cached ${cache.ageSeconds != null ? formatAge(cache.ageSeconds) : "snapshot"}`
+        ? `${liveCount}/${providers.length} ready · cached ${cache.ageSeconds != null ? formatAge(cache.ageSeconds) : "snapshot"}`
         : "Feed warming";
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
@@ -441,7 +442,7 @@ function ProviderBadges({
                 }`}
                 aria-hidden
               />
-              {p.label}
+              {intelHealthLabel(p.id)}
               {p.state === "live" ? "" : ` · ${p.state}`}
             </span>
           );
@@ -449,6 +450,17 @@ function ProviderBadges({
       </div>
     </div>
   );
+}
+
+function intelHealthLabel(id: string): string {
+  const labels: Record<string, string> = {
+    marketTide: "AXE Intel Tide",
+    insiderTrades: "AXE Insider Flow",
+    senateTrades: "AXE Policy Flow",
+    darkPoolPrints: "AXE Dark Pool",
+    unusualOptions: "AXE Options Flow",
+  };
+  return labels[id] ?? "AXE Intel";
 }
 
 function Tile({

@@ -14,14 +14,15 @@ import { getCockpitDashboard } from "@/services/cockpitService";
 export default async function CockpitPage() {
   const dash = await getCockpitDashboard();
   const hasSnapshot = Boolean(dash.snapshotId);
+  const cockpitReady = hasSnapshot && dash.calibration.state === "active";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 pb-2">
       <LiveStatusReporter
-        liveCount={hasSnapshot ? 1 : 0}
+        liveCount={cockpitReady ? 1 : 0}
         totalCount={1}
-        label={hasSnapshot ? "Cockpit · snapshot live" : "Cockpit · awaiting snapshot"}
-        allLiveOverride={hasSnapshot ? true : null}
+        label={cockpitReady ? "Cockpit · calibrated" : "Cockpit · calibrating"}
+        allLiveOverride={cockpitReady ? false : null}
       />
       <ScreenHeader
         title="Assistant cockpit"
@@ -35,21 +36,22 @@ export default async function CockpitPage() {
         </p>
       </div>
 
-      {!hasSnapshot ? (
+      {!hasSnapshot || dash.calibration.state !== "active" ? (
         <GlassPanel className="p-6 text-center">
           <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-tos-dim">
-            Private snapshot
+            {dash.calibration.state === "insufficient_data" ? "Insufficient data" : "Calibrating"}
           </p>
           <p className="mt-3 text-sm leading-relaxed text-tos-muted">
-            AXE hasn&apos;t built a snapshot yet. Hit the button below and it will
-            analyse your session history — sessions, instruments, patterns, and
-            how well it&apos;s tracking your rules.
+            {dash.calibration.message}
+          </p>
+          <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-tos-dim">
+            {dash.calibration.signalCount} real signals found
           </p>
           <CockpitGenerateButton />
         </GlassPanel>
       ) : (
         <>
-          <CockpitAlignment data={dash.alignment} />
+          <CockpitAlignment data={dash.alignment} calibrationMessage={dash.calibration.message} />
 
           <CockpitLearningProgress
             headline={dash.learningProgress.headline}

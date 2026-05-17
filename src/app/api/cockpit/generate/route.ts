@@ -48,7 +48,7 @@ Analyze the provided data and return a JSON object matching this exact schema:
 
 Rules:
 - Base everything on the actual data provided. Do not invent specifics that aren't supported by the data.
-- alignment_score: 0.5-0.65 if few sessions, 0.65-0.80 for moderate history, 0.80+ for rich history
+- alignment_score must be conservative and evidence-based: 0-0.25 for sparse/early signals, 0.25-0.55 for useful but incomplete history, 0.55-0.80 for broad repeated evidence, 0.80+ only for rich history with repeated confirmed feedback
 - Identify which instruments were discussed most and weight them
 - Identify session patterns from timestamps (UTC: 02-10 = London, 13-21 = NY, rest = Asia)
 - Count: accepted setups = user agreed with AXE's analysis, rejected = user pushed back or corrected
@@ -73,7 +73,7 @@ export async function POST() {
   }
 
   // Fetch data in parallel
-  const [messagesResult, memoryResult, alertsResult, execResult] = await Promise.all([
+  const [messagesResult, memoryResult, alertsResult, execResult, journalResult, tradesResult] = await Promise.all([
     supabase
       .from("messages")
       .select("role,content,created_at")
@@ -101,16 +101,33 @@ export async function POST() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(30),
+
+    supabase
+      .from("user_journal_entries")
+      .select("symbol,notes,rating,tags,created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(30),
+
+    supabase
+      .from("broker_trades")
+      .select("symbol,side,pnl,close_time,open_time")
+      .eq("user_id", user.id)
+      .order("close_time", { ascending: false })
+      .limit(50),
   ]);
 
   const messages = (messagesResult.data ?? []).reverse();
   const memory = memoryResult.data ?? [];
   const alerts = alertsResult.data ?? [];
   const execs = execResult.data ?? [];
+  const journals = journalResult.data ?? [];
+  const trades = tradesResult.data ?? [];
+  const signalCount = messages.length + memory.length + alerts.length + execs.length + journals.length + trades.length;
 
-  if (messages.length < 2) {
+  if (signalCount < 5 || messages.length < 2) {
     return NextResponse.json(
-      { error: "Not enough conversation history to generate a snapshot. Have a few sessions with AXE first." },
+      { error: "Not enough real signals to generate a cockpit snapshot yet. Chat, journal, or trade history will calibrate AXE first." },
       { status: 422 }
     );
   }
@@ -130,6 +147,8 @@ export async function POST() {
     memory: memory.map((m) => ({ scope: m.scope, key: m.entry_key, value: m.content })),
     alerts: alerts.map((a) => ({ title: a.title, type: a.type, at: a.created_at })),
     executions: execs.map((e) => ({ symbol: e.symbol, direction: e.direction, status: e.status, at: e.created_at })),
+    journals: journals.map((j) => ({ symbol: j.symbol, rating: j.rating, tags: j.tags, at: j.created_at, notes: String(j.notes ?? "").slice(0, 260) })),
+    trades: trades.map((t) => ({ symbol: t.symbol, side: t.side, pnl: t.pnl, opened: t.open_time, closed: t.close_time })),
   };
 
   const client = new OpenAI({ apiKey });

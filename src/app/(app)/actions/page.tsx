@@ -58,7 +58,7 @@ export default async function ActionsPage() {
         liveCount={capabilities}
         totalCount={3}
         label={`Actions · ${executions.length + setups.length} pending`}
-        allLiveOverride={capabilities > 0 ? true : null}
+        allLiveOverride={capabilities > 0 ? false : null}
       />
       <ScreenHeader
         title="Actions"

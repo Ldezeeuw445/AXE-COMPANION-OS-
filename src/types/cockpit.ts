@@ -82,4 +82,9 @@ export type CockpitDashboard = {
    * replace with live rollup keys when fetching from DB.
    */
   metricKeysSample: string[];
+  calibration: {
+    state: "calibrating" | "insufficient_data" | "active";
+    signalCount: number;
+    message: string;
+  };
 };

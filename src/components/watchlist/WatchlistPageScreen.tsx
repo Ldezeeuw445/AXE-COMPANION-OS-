@@ -5,7 +5,14 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
-type Row = { id: string; symbol: string; message: string | null };
+type Row = {
+  id: string;
+  symbol: string;
+  message: string | null;
+  brokerSymbol?: string | null;
+  supportLabel?: string;
+  supportTone?: "live" | "warm" | "muted";
+};
 
 const DEFAULTS = ["XAUUSD", "EURUSD", "BTCUSD"];
 
@@ -14,6 +21,7 @@ type Props = {
 };
 
 export function WatchlistPageScreen({ items }: Props) {
+  const itemMap = new Map(items.map((i) => [i.symbol, i]));
   const merged = [...new Set([...items.map((i) => i.symbol), ...DEFAULTS])];
 
   return (
@@ -41,10 +49,27 @@ export function WatchlistPageScreen({ items }: Props) {
       <GlassPanel className="p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Quick open chart</h2>
         <ul className="mt-2 space-y-2">
-          {merged.map((sym) => (
+          {merged.map((sym) => {
+            const item = itemMap.get(sym);
+            const tone = item?.supportTone ?? "muted";
+            const supportClass =
+              tone === "live"
+                ? "border-cyan-400/20 bg-cyan-400/[0.07] text-cyan-100/85"
+                : tone === "warm"
+                  ? "border-amber-400/20 bg-amber-400/[0.07] text-amber-100/85"
+                  : "border-white/10 bg-white/[0.025] text-tos-dim";
+            return (
             <li key={sym} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-              <span className="font-mono text-sm text-tos-text">{sym}</span>
+              <div className="min-w-0">
+                <span className="font-mono text-sm text-tos-text">{sym}</span>
+                {item?.brokerSymbol && item.brokerSymbol !== sym ? (
+                  <p className="mt-0.5 text-[10px] text-tos-dim">Broker: {item.brokerSymbol}</p>
+                ) : null}
+              </div>
               <div className="flex gap-2 text-[11px]">
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] ${supportClass}`}>
+                  {item?.supportLabel ?? "Open chart to resolve"}
+                </span>
                 <Link href={`/chart?symbol=${encodeURIComponent(sym)}`} className="text-cyan-400 hover:underline">
                   Chart
                 </Link>
@@ -59,7 +84,8 @@ export function WatchlistPageScreen({ items }: Props) {
                 </Link>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </GlassPanel>
     </div>

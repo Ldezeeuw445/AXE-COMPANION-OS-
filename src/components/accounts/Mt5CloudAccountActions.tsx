@@ -8,6 +8,7 @@ import {
   syncCloudMt5AccountAction,
   testCloudMt5ConnectionAction,
 } from "@/app/actions/mt5Cloud";
+import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
 
 type Props = {
   accountId: string;
@@ -193,13 +194,16 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
         </button>
       </div>
       {busyLabel ? (
-        <p className="text-[10px] leading-relaxed text-tos-dim">
+        <div className="space-y-1.5">
+          <AxeBreatheLoader label={busyLabel === "Sync" ? "Syncing account" : busyLabel === "Redeploy" ? "Recovering account" : "Checking account"} size="sm" />
+          <p className="text-[10px] leading-relaxed text-tos-dim">
           {busyLabel === "Sync"
             ? "AXE is syncing broker history. If the broker is slow, this panel will release and keep the account usable."
             : busyLabel === "Redeploy"
               ? "AXE is redeploying the cloud terminal, then checking whether the broker terminal comes back online."
             : "AXE is checking the account. This will release automatically if the runtime stalls."}
-        </p>
+          </p>
+        </div>
       ) : null}
       {feedback ? (
         <div className="text-[10px] leading-relaxed text-tos-muted">

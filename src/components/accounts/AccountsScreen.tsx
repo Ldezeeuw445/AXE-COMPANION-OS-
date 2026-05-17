@@ -53,8 +53,8 @@ function connectionKind(a: BrokerAccountRow): "demo" | "cloud" | "cloud_off" | "
 
 function statusBadgeVariant(s: string | null | undefined): "warm" | "neutral" | "long" {
   const friendly = friendlyProviderStatus(s);
-  if (friendly === "Connected") return "long";
-  if (friendly === "Failed" || friendly === "Provisioning") return "warm";
+  if (friendly === "Fresh" || friendly === "Recently synced") return "long";
+  if (friendly === "Connection issue" || friendly === "Credentials issue" || friendly === "Syncing") return "warm";
   return "neutral";
 }
 
@@ -93,14 +93,14 @@ function syncFreshness(iso: string | null | undefined): {
   }
   if (minutes <= 180) {
     return {
-      label: "Stale soon",
+      label: "Recently synced",
       detail: `Synced ${ageLabel}`,
       tone: "border-amber-400/25 bg-amber-400/10 text-amber-100/90",
       dot: "bg-amber-300/85",
     };
   }
   return {
-    label: "Stale",
+    label: "Data stale",
     detail: `Synced ${ageLabel}`,
     tone: "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/85",
     dot: "bg-amber-300/70",
@@ -322,19 +322,29 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
     initialAccounts.length > 0 &&
     initialAccounts.every((a) => isDemoAccount(a));
   const runtimeHealth = accountRuntimeHealth(initialAccounts, loadError);
+  const cloudAccounts = initialAccounts.filter((a) => connectionKind(a) === "cloud");
+  const freshCloudAccounts = cloudAccounts.filter((a) => {
+    const status = (a.provider_status ?? "").toLowerCase();
+    return status === "connected" && syncFreshness(a.last_sync_at).label === "Fresh";
+  });
 
-  // The pulse is honest here: green when Supabase delivered the
-  // account list (regardless of how many accounts there are — even
-  // zero is a successful round-trip). Amber when we got a load error
-  // back from the server.
+  // The pulse is honest here: green only when a real AXE MT5 Cloud
+  // account is connected with a fresh sync. A plain Supabase account
+  // list is useful truth, but it is not a live broker connection.
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 pb-6">
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
-        liveCount={loadError ? 0 : 1}
-        totalCount={1}
+        liveCount={freshCloudAccounts.length}
+        totalCount={cloudAccounts.length || 1}
         label={`Accounts · ${initialAccounts.length} connected`}
-        allLiveOverride={loadError ? false : true}
+        allLiveOverride={
+          loadError
+            ? false
+            : cloudAccounts.length > 0
+              ? freshCloudAccounts.length === cloudAccounts.length
+              : null
+        }
       />
       <ScreenHeader
         title="Accounts"

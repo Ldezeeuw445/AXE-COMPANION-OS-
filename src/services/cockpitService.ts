@@ -22,6 +22,11 @@ const EMPTY_DASHBOARD: CockpitDashboard = {
   },
   behavior: { sessions: [], preferredAssets: [], patternTendencies: [] },
   metricKeysSample: [],
+  calibration: {
+    state: "insufficient_data",
+    signalCount: 0,
+    message: "AXE needs real chat, journal, memory, or trade signals before it can score alignment.",
+  },
 };
 
 function safeArray<T>(val: unknown): T[] {
@@ -46,6 +51,33 @@ function mapAlignment(
     capturedAt,
     deltaFromPrior: prior !== null ? Math.round((score - prior) * (score > 1 ? 1 : 100)) : 0,
   };
+}
+
+function calibrationState(signalCount: number, hasSnapshot: boolean): CockpitDashboard["calibration"] {
+  if (signalCount < 5) {
+    return {
+      state: "insufficient_data",
+      signalCount,
+      message: "Not enough real signals yet. Chat, journal notes, trades, and saved memory will calibrate AXE.",
+    };
+  }
+  if (!hasSnapshot || signalCount < 12) {
+    return {
+      state: "calibrating",
+      signalCount,
+      message: "AXE is calibrating from early real signals. Scores stay conservative until more history exists.",
+    };
+  }
+  return {
+    state: "active",
+    signalCount,
+    message: "Alignment is based on current saved context, messages, journal patterns, and account history.",
+  };
+}
+
+function countOrZero(result: { count: number | null; error?: unknown }): number {
+  if (result.error) return 0;
+  return result.count ?? 0;
 }
 
 function mapConfidenceTrend(raw: unknown): CockpitConfidencePoint[] {
@@ -124,6 +156,20 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
 
   const { supabase, user } = authed;
 
+  const [messageCount, memoryCount, journalCount, tradeCount, metricsCount] = await Promise.all([
+    supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("assistant_learning_metrics").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+  ]);
+  const signalCount =
+    countOrZero(messageCount) +
+    countOrZero(memoryCount) +
+    countOrZero(journalCount) +
+    countOrZero(tradeCount) +
+    countOrZero(metricsCount);
+
   // Fetch the two most recent snapshots so we can compute alignment delta
   const { data: snapshots, error: snapErr } = await supabase
     .from("assistant_cockpit_snapshots")
@@ -134,15 +180,16 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
 
   if (snapErr) {
     console.error("[cockpitService] snapshot error:", snapErr.message);
-    return EMPTY_DASHBOARD;
+    return { ...EMPTY_DASHBOARD, calibration: calibrationState(signalCount, false) };
   }
 
   if (!snapshots || snapshots.length === 0) {
-    return EMPTY_DASHBOARD;
+    return { ...EMPTY_DASHBOARD, calibration: calibrationState(signalCount, false) };
   }
 
   const latest = snapshots[0];
   const prior = snapshots[1] ?? null;
+  const calibration = calibrationState(signalCount, true);
 
   // Fetch recent metric keys
   const { data: metrics } = await supabase
@@ -169,5 +216,6 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     feedback: mapFeedback(latest.feedback_loop_stats),
     behavior: mapBehavior(latest.behavior_map),
     metricKeysSample,
+    calibration,
   };
 }
