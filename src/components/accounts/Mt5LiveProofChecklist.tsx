@@ -8,7 +8,7 @@ type Props = {
 const steps = [
   {
     n: 1,
-    title: "Connect MT5 (MetaApi cloud)",
+    title: "Connect MT5 with AXE MT5 Cloud",
     body: (
       <>
         Use <strong className="text-tos-text">Recommended — Connect MT5 account</strong> above. Confirm read-only access,
@@ -63,7 +63,7 @@ const steps = [
     body: (
       <>
         Optional: expand <strong className="text-tos-text">Advanced — Local MT5 Bridge Token</strong> if you POST fills
-        from your own EA instead of MetaApi cloud.
+        from your own EA instead of AXE MT5 Cloud.
       </>
     ),
   },
@@ -77,7 +77,7 @@ export function Mt5LiveProofChecklist({ embedded }: Props) {
       ) : null}
       {!embedded ? (
         <p className="mt-2 text-xs leading-relaxed text-tos-muted">
-          Primary path: <strong className="text-tos-text">MetaApi cloud</strong> from this app. Advanced: local bridge
+          Primary path: <strong className="text-tos-text">AXE MT5 Cloud</strong> from this app. Advanced: local bridge
           token.
         </p>
       ) : (

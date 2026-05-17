@@ -163,7 +163,7 @@ function compactDiagnosticStatus(a: BrokerAccountRow): {
   if (provider === "provisioning" || provider === "created" || provider === "deploying") {
     return {
       label: "Provisioning pending",
-      detail: "MetaAPI cloud terminal is still starting.",
+      detail: "AXE MT5 Cloud terminal is still starting.",
       tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
       dot: "bg-amber-300",
     };
@@ -179,7 +179,7 @@ function compactDiagnosticStatus(a: BrokerAccountRow): {
   if (provider === "recovering") {
     return {
       label: "Reconnecting",
-      detail: "AXE is redeploying the MetaAPI cloud terminal.",
+      detail: "AXE is redeploying the MT5 Cloud terminal.",
       tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
       dot: "bg-amber-300",
     };
@@ -187,7 +187,7 @@ function compactDiagnosticStatus(a: BrokerAccountRow): {
   if (provider === "orphaned") {
     return {
       label: "Server issue",
-      detail: "Stored MetaAPI account id is stale. Redeploy will confirm; reconnect may be required.",
+      detail: "Stored cloud account link is stale. Redeploy will confirm; reconnect may be required.",
       tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
       dot: "bg-rose-300",
     };
@@ -290,7 +290,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
   async function onRemoveAccount(id: string) {
     if (
       !confirm(
-        "Remove this account from AXE? This deletes synced trades and journal tags for this account (MetaApi cloud is removed if still linked).",
+        "Remove this account from AXE? This deletes synced trades and journal tags for this account. AXE MT5 Cloud is removed if still linked.",
       )
     ) {
       return;
@@ -362,7 +362,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
       <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Runtime health</span>
-          <span className="text-[10px] text-tos-dim">Account truth, MetaAPI cloud, sync freshness and recovery readiness.</span>
+          <span className="text-[10px] text-tos-dim">Account truth, AXE MT5 Cloud, sync freshness and recovery readiness.</span>
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-4">
           {runtimeHealth.map((item) => (
@@ -392,11 +392,11 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
         </p>
       </div>
 
-      {/* B — Recommended MetaApi cloud */}
+      {/* B — Recommended AXE MT5 Cloud */}
       <GlassPanel glow="cyan" className="border-cyan-500/12 p-5 sm:p-6">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/95">Recommended — Connect MT5 account</h2>
         <p className="mt-2 text-sm text-tos-muted">
-          Secure MetaApi cloud link from this app. Use your <strong className="text-tos-text/95">investor / read-only</strong> password.
+          Secure AXE MT5 Cloud link from this app. Use your <strong className="text-tos-text/95">investor / read-only</strong> password.
           Nothing executes from AXE by default.
         </p>
 
@@ -408,7 +408,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
           <div className="space-y-2 border-t border-white/[0.06] px-3 py-3 text-[11px] leading-relaxed text-tos-muted">
             <ul className="list-disc space-y-1.5 pl-4">
               <li>You sign in with MT5 login, broker server and investor (read-only) password.</li>
-              <li>AXE provisions a secure MetaApi connection from the server — passwords are not stored in the database.</li>
+              <li>AXE provisions a secure cloud connection from the server — passwords are not stored in the database.</li>
               <li>After you run <strong className="text-tos-text/95">Test</strong> and <strong className="text-tos-text/95">Sync</strong>, account summary, positions and history feed Chat, Chart, History and Journal.</li>
               <li>Order placement from AXE remains disabled unless you explicitly enable it later.</li>
             </ul>

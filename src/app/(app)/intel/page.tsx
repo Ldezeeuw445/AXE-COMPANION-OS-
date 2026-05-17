@@ -103,7 +103,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
           provider grid below is the detail view. */}
       <AxeTopBarInjector
         title="Intel"
-        subtitle={`${symbol} smart-money flow`}
+        subtitle={`${symbol} AXE Intel flow`}
         sections={toolbarSections}
       />
       <LiveStatusReporter
@@ -115,7 +115,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
       />
       <ScreenHeader
         title="Intel"
-        subtitle={`Smart-money intelligence — Unusual Whales feeds filtered by ${symbol}.`}
+        subtitle={`AXE Intel flow filtered by ${symbol}.`}
         left={<Target className="h-6 w-6 text-cyan-400/85" aria-hidden />}
         right={
           <div className="flex items-center gap-2">
@@ -123,7 +123,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <span className="hidden md:inline-flex">
               <AxeContextToolbar
                 title="Intel"
-                subtitle={`${symbol} smart-money flow`}
+                subtitle={`${symbol} AXE Intel flow`}
                 sections={toolbarSections}
               />
             </span>
@@ -152,7 +152,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             </h2>
           </div>
           <span className="text-[10px] text-tos-dim">
-            {intel.tide ? `Unusual Whales · ${isStale ? "cached" : "live"}` : "Feed warming"}
+            {intel.tide ? `AXE Intel · ${isStale ? "cached" : "live"}` : "Feed warming"}
           </span>
         </div>
         {intel.tide ? (
@@ -380,8 +380,8 @@ export default async function IntelPage({ searchParams }: PageProps) {
       </div>
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
-        Intel feeds are powered by Unusual Whales via the Supabase intel-proxy. AXE serializes requests and reuses cached
-        snapshots so one app session cannot burn the weekly plan with repeated refreshes. Nothing here is fabricated.
+        AXE Intel runs through the Supabase intel-proxy. AXE serializes requests and reuses cached snapshots so one app
+        session cannot overload the runtime with repeated refreshes. Nothing here is fabricated.
       </p>
     </div>
   );

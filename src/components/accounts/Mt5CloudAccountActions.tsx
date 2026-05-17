@@ -184,7 +184,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           type="button"
           disabled={pending}
           onClick={() => {
-            if (!confirm("Disconnect this MetaApi cloud account? Trade history in AXE is kept.")) return;
+            if (!confirm("Disconnect this AXE MT5 Cloud account? Trade history in AXE is kept.")) return;
             run(disconnectCloudMt5AccountAction, "Disconnect");
           }}
           className="rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-red-200/90 hover:bg-red-500/20 disabled:opacity-50"
@@ -197,8 +197,8 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           {busyLabel === "Sync"
             ? "AXE is syncing broker history. If the broker is slow, this panel will release and keep the account usable."
             : busyLabel === "Redeploy"
-              ? "AXE is asking MetaApi to redeploy the cloud terminal, then checking whether the broker terminal comes back online."
-            : "AXE is checking the account. This will release automatically if the provider stalls."}
+              ? "AXE is redeploying the cloud terminal, then checking whether the broker terminal comes back online."
+            : "AXE is checking the account. This will release automatically if the runtime stalls."}
         </p>
       ) : null}
       {feedback ? (

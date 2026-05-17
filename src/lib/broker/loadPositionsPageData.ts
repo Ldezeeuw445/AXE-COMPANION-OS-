@@ -47,7 +47,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       positions: [],
       providerStatus: "provider_not_configured",
       error: null,
-      hint: "Add METAAPI_TOKEN (or AXE_METAAPI_TOKEN) on the server to load live MT5 positions.",
+      hint: "AXE MT5 Cloud is not configured on the server yet, so live positions cannot load.",
     };
   }
 
@@ -57,7 +57,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       positions: [],
       providerStatus: null,
       error: null,
-      hint: "Set an active account on Accounts that uses MetaApi cloud, then Sync. Positions load from your MT5 terminal via MetaApi.",
+      hint: "Set an active AXE MT5 Cloud account on Accounts, then Sync. Positions load from your MT5 terminal through AXE.",
     };
   }
 
@@ -96,7 +96,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       positions: [],
       providerStatus: "failed",
       error: null,
-      hint: "Could not load positions from MetaApi. Try Test/Sync on Accounts, or check server logs.",
+      hint: "Could not load positions through AXE MT5 Cloud. Try Test/Sync on Accounts, or check server logs.",
     };
   }
 }

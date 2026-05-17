@@ -122,7 +122,7 @@ export default async function SettingsPage() {
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
           A short name so AXE can reference your account in conversation — e.g. &quot;FTMO Challenge&quot; or &quot;Live IC Markets&quot;.
-          AXE uses your connected MT5 account (MetaApi cloud) to understand balance, equity, margin, trades and open positions — no manual entry.
+          AXE uses your connected AXE MT5 Cloud account to understand balance, equity, margin, trades and open positions — no manual entry.
         </p>
         <div className="mt-3">
           <AccountNameEditor initialValue={accountName} />

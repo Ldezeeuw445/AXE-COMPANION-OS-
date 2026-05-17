@@ -84,19 +84,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
-  // The provider label is derived from whatever actually returned items —
-  // that's the most honest signal for the user. Falls back to Google News
-  // (the no-key RSS source we use when no keyed provider is configured).
-  const newsProviderLabel = (() => {
-    if (ctx.news.length === 0) return null;
-    const usedId = ctx.news[0]?.provider;
-    if (usedId === "perigon") return "Perigon";
-    if (usedId === "finnhub") return "Finnhub";
-    if (usedId === "eodhd") return "EODHD";
-    if (usedId === "unusualWhales") return "Unusual Whales";
-    if (usedId === "demo") return "Google News";
-    return null;
-  })();
+  const hasNewsFeed = ctx.news.length > 0;
 
   const liveProviderCount = ctx.providers.filter((p) => p.state === "live").length;
 
@@ -157,7 +145,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Macro snapshot</h2>
-          <span className="text-[10px] text-tos-dim">{hasFred ? "FRED · live" : "Configure FRED_API_KEY"}</span>
+          <span className="text-[10px] text-tos-dim">{hasFred ? "AXE Macro · live" : "AXE Macro idle"}</span>
         </div>
         {ctx.macro && ctx.macro.points.length > 0 ? (
           <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
@@ -168,8 +156,8 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
             {hasFred
-              ? "FRED returned no observations for this symbol's series yet — try another symbol."
-              : "Add FRED_API_KEY on Vercel to unlock yields, rates, CPI and USD-index context."}
+              ? "AXE Macro returned no observations for this symbol yet — try another symbol."
+              : "AXE Macro is not configured for this deployment yet."}
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
@@ -205,7 +193,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            Configure FINNHUB_API_KEY to load economic events with impact ratings.
+            AXE Calendar is not configured for impact-rated economic events yet.
           </p>
         )}
       </GlassPanel>
@@ -218,7 +206,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Headlines</h2>
           </div>
           <span className="text-[10px] text-tos-dim">
-            {newsProviderLabel ? `AXE Market Data · live` : "AXE Market Data idle"}
+            {hasNewsFeed ? "AXE Market Data · live" : "AXE Market Data idle"}
           </span>
         </div>
         {ctx.news.length > 0 ? (
@@ -229,8 +217,8 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            No headlines came back for {symbol} just now. Add Perigon / Finnhub / EODHD keys for symbol-tagged premium
-            feeds — Google News is used as a free fallback.
+            No headlines came back for {symbol} just now. AXE Market Data will keep using the configured server-side feeds
+            and safe fallback cache.
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
@@ -254,7 +242,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
         AXE Market Data blends macro, news and the economic calendar with your active pair, watchlist
-        and open positions. Nothing here is fabricated — expanded sources report their own state.
+        and open positions. Nothing here is fabricated — expanded technical details report their own state.
       </p>
     </div>
   );
@@ -352,7 +340,7 @@ function NewsRow({ item }: { item: NewsItem }) {
       >
         <span className="text-[12px] font-medium text-tos-text group-hover:text-cyan-100/95">{item.title}</span>
         <span className="flex flex-wrap items-baseline gap-2 text-[10px] text-tos-dim">
-          <span>{item.source}</span>
+          <span title={item.source}>AXE Market Data</span>
           {date ? <span>· {date}</span> : null}
           {item.symbols && item.symbols.length > 0 ? (
             <span className="font-mono">· {item.symbols.slice(0, 3).join(", ")}</span>

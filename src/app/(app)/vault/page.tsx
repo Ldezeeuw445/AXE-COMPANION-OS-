@@ -47,10 +47,10 @@ export default async function VaultPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <LiveStatusReporter
-        liveCount={2}
-        totalCount={2}
+        liveCount={0}
+        totalCount={0}
         label={`Vault · ${notes.length} notes · ${media.length} media`}
-        allLiveOverride={true}
+        allLiveOverride={null}
       />
       <AxeTopBarInjector title="Vault" subtitle="Notes & media" sections={toolbarSections} />
       <ScreenHeader

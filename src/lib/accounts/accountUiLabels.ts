@@ -20,7 +20,7 @@ export function friendlyProviderStatus(raw: string | null | undefined): string {
     failed: "Failed",
     sync_failed: "Failed",
     invalid_credentials: "Failed",
-    provider_not_configured: "Provider not configured",
+    provider_not_configured: "AXE MT5 Cloud not configured",
     not_found: "Needs setup",
     metaapi_auth_failed: "Failed",
     metaapi_region_error: "Failed",
@@ -39,7 +39,7 @@ function capitalizeWords(s: string): string {
 
 export function accountMethodLabel(connectionMethod: string | null | undefined, hasExternalId: boolean): string {
   const m = (connectionMethod ?? "").toLowerCase();
-  if (m === "cloud_mt5" && hasExternalId) return "MetaApi Cloud";
-  if (m === "cloud_mt5" || m === "cloud_mt5_disconnected") return "MetaApi Cloud";
+  if (m === "cloud_mt5" && hasExternalId) return "AXE MT5 Cloud";
+  if (m === "cloud_mt5" || m === "cloud_mt5_disconnected") return "AXE MT5 Cloud";
   return "Local bridge (token)";
 }

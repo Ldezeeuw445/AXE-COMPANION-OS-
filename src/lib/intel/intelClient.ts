@@ -225,7 +225,7 @@ async function fetchIntelSnapshot(
       cached.snapshot,
       "stale",
       cached.savedAt,
-      "Provider is cooling down or rate-limited. Showing the last cached intel snapshot.",
+      "AXE Intel is cooling down or rate-limited. Showing the last cached intel snapshot.",
     );
   }
 
@@ -233,35 +233,35 @@ async function fetchIntelSnapshot(
     toStatus(
       "insiderTrades",
       "Insider trades",
-      "Form 4 buys and sells via Unusual Whales",
+      "AXE Intel insider transaction feed",
       insiderRes.ok && insiders.length > 0,
       insiderRes.ok ? undefined : insiderRes.error,
     ),
     toStatus(
       "senateTrades",
       "Congress",
-      "Senate + House disclosures via Unusual Whales",
+      "AXE Intel congressional disclosure feed",
       senateRes.ok && senate.length > 0,
       senateRes.ok ? undefined : senateRes.error,
     ),
     toStatus(
       "darkPoolPrints",
       "Dark pool",
-      "Off-exchange prints via Unusual Whales",
+      "AXE Intel off-exchange print feed",
       darkPoolRes.ok && darkPool.length > 0,
       darkPoolRes.ok ? undefined : darkPoolRes.error,
     ),
     toStatus(
       "unusualOptions",
       "Options flow",
-      "Smart-money options alerts via Unusual Whales",
+      "AXE Intel smart-money options feed",
       optionsRes.ok && options.length > 0,
       optionsRes.ok ? undefined : optionsRes.error,
     ),
     toStatus(
       "marketTide",
       "Market tide",
-      "Net call/put premium tide via Unusual Whales",
+      "AXE Intel net call/put premium tide",
       tideRes.ok && tide != null,
       tideRes.ok ? undefined : tideRes.error,
     ),
@@ -279,7 +279,7 @@ async function fetchIntelSnapshot(
     cache: {
       state: hasLiveData ? "fresh" : "empty",
       ageSeconds: null,
-      message: hasLiveData ? undefined : "No cached intel rows yet. The feed will retry without exposing provider errors.",
+      message: hasLiveData ? undefined : "No cached intel rows yet. AXE Intel will retry without exposing runtime errors.",
     },
   };
 
