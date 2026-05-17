@@ -17,8 +17,8 @@ type Props = {
 
 export function PositionsScreen({ positions, providerStatus, error, hint }: Props) {
   // Honest live mapping for the AXE pulse:
-  //  • "connected" → green pulse (MetaApi is delivering)
-  //  • "failed"    → amber (provider configured but failing)
+  //  • "connected" → green pulse (AXE MT5 Cloud is delivering)
+  //  • "failed"    → amber (runtime configured but failing)
   //  • anything else (provider_not_configured / no active account) → no opinion
   const allLiveOverride: boolean | null =
     providerStatus === "connected"
@@ -34,12 +34,12 @@ export function PositionsScreen({ positions, providerStatus, error, hint }: Prop
       <LiveStatusReporter
         liveCount={liveCount}
         totalCount={totalCount}
-        label="MetaApi positions"
+        label="AXE MT5 Cloud positions"
         allLiveOverride={allLiveOverride}
       />
       <ScreenHeader
         title="Positions"
-        subtitle="Open positions from your connected MetaApi MT5 account — same symbols and prices as the broker terminal."
+        subtitle="Open positions from AXE MT5 Cloud — same symbols and prices as the broker terminal."
         left={<Layers className="h-6 w-6 text-cyan-400/80" aria-hidden />}
         right={providerStatus ? <Badge variant="long">{providerStatus}</Badge> : null}
       />

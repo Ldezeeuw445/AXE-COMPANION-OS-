@@ -137,6 +137,7 @@ function statusPillCopy(
   transport: LiveTransport,
   providerStatus: string | null,
   hasCandles: boolean,
+  hasFreshLiveData: boolean,
 ): { label: string; className: string; dot: string } {
   if (providerStatus === "failed") {
     return {
@@ -159,11 +160,18 @@ function statusPillCopy(
       dot: "bg-cyan-300/80",
     };
   }
-  if (live === "connected" || live === "live_stream") {
+  if ((live === "connected" || live === "live_stream") && hasFreshLiveData) {
     return {
-      label: transport === "ws" ? "WS live" : "Live",
+      label: transport === "ws" ? "AXE Live" : "AXE Live",
       className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95 shadow-[0_0_22px_-16px_rgba(52,211,153,0.9)]",
       dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.75)]",
+    };
+  }
+  if (live === "connected" || live === "live_stream") {
+    return {
+      label: hasCandles ? "Connected" : "Loading",
+      className: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200/95",
+      dot: "bg-cyan-300/80",
     };
   }
   if (live === "stale") {
@@ -203,9 +211,9 @@ function statusPillCopy(
   }
   if (hasCandles) {
     return {
-      label: "Connected",
-      className: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200/95",
-      dot: "bg-cyan-300/80",
+      label: providerStatus === "stale" ? "Cached" : "Loaded",
+      className: "border-white/12 bg-white/[0.04] text-tos-muted",
+      dot: "bg-white/30",
     };
   }
   return {
@@ -253,7 +261,7 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
       return {
         title: "Connect MT5 account to unlock broker chart",
         body:
-          "AXE Companion uses your MetaApi-connected MT5 account as the only chart source. No external feed.",
+          "AXE Companion uses AXE MT5 Cloud as the broker chart source. No frontend feed keys are used.",
       };
     case "broker_symbol_not_found":
       return {
@@ -265,7 +273,7 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
       return {
         title: "MT5 market data not available yet",
         body:
-          "MetaApi could not return candles for this broker symbol or timeframe. Try Sync, change timeframe, or check the broker symbol.",
+          "AXE Market Data could not return candles for this broker symbol or timeframe. Try Sync, change timeframe, or check the broker symbol.",
       };
     case "timeframe_unavailable":
       return {
@@ -280,12 +288,12 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
     case "market_data_unavailable":
       return {
         title: "Chart connection failed",
-        body: "MetaApi market data did not respond. Try again or check Accounts → Sync.",
+        body: "AXE Market Data did not respond. Try again or check Accounts → Sync.",
       };
     case "provider_not_configured":
       return {
         title: "Chart not configured for this deployment",
-        body: "MetaApi is not configured on the server. Connect a token to enable broker data.",
+        body: "AXE MT5 Cloud is not configured on the server. Connect the server token to enable broker data.",
       };
     case "ok":
     default:
@@ -1342,12 +1350,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     data.totalPositions,
   ]);
 
-  const statusPill = statusPillCopy(liveStatus, liveTransport, data.providerStatus, data.candles.length > 0);
   const liveAge = formatLiveAge(liveLastUpdateAt);
+  const liveFresh =
+    liveLastUpdateAt != null &&
+    Date.now() - Date.parse(liveLastUpdateAt) < 30_000 &&
+    (liveStatus === "connected" || liveStatus === "live_stream");
+  const statusPill = statusPillCopy(
+    liveStatus,
+    liveTransport,
+    data.providerStatus,
+    data.candles.length > 0,
+    liveFresh,
+  );
   const liveDetail = useMemo(() => {
     if (data.providerStatus === "demo") return "Demo stream";
+    if ((liveStatus === "connected" || liveStatus === "live_stream") && liveFresh) {
+      return liveAge ? `Updated ${liveAge}` : "AXE Live feed";
+    }
     if (liveStatus === "connected" || liveStatus === "live_stream") {
-      return liveAge ? `Updated ${liveAge}` : liveTransport === "ws" ? "Cloudflare WebSocket" : "Live feed";
+      return data.candles.length > 0 ? "Waiting for first live tick" : "Opening AXE Live";
     }
     if (liveStatus === "delayed_polling") {
       return liveAge ? `Poll updated ${liveAge}` : "SSE fallback active";
@@ -1359,7 +1380,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     if (liveStatus === "offline") return liveAge ? `Cached from ${liveAge}` : "Cached broker candles";
     if (liveStatus === "connecting") return "Opening live feed";
     return data.candles.length > 0 ? "Cached candles" : "No live feed";
-  }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveTransport, reconnectAttempt]);
+  }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveFresh, reconnectAttempt]);
 
   const goSymbol = useCallback(
     (sym: string) => {

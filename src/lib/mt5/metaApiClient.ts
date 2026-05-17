@@ -338,6 +338,37 @@ export async function clientGetPositions(
   return Array.isArray(body) ? body : [];
 }
 
+export async function clientListSymbols(
+  accountId: string,
+  region?: string | null,
+): Promise<string[]> {
+  const base = getMetaApiClientBaseUrl(region);
+  const res = await fetchWithTimeout(
+    `${base}/users/current/accounts/${encodeURIComponent(accountId)}/symbols`,
+    {
+      method: "GET",
+      headers: authHeadersGet(),
+      timeoutMs: 20_000,
+    },
+  );
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new MetaApiRequestError(classifyHttpStatus(res.status), `Symbols ${res.status}`, res.status, body);
+  }
+  if (!Array.isArray(body)) return [];
+  return body
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object") {
+        const obj = item as { symbol?: unknown; name?: unknown };
+        return typeof obj.symbol === "string" ? obj.symbol : typeof obj.name === "string" ? obj.name : "";
+      }
+      return "";
+    })
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export type MetaApiSymbolPrice = {
   symbol: string;
   bid: number | null;

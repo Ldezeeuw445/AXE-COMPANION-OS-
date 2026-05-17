@@ -148,7 +148,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
                 {symbol} · News
               </p>
               <p className="text-[9px] uppercase tracking-[0.2em] text-tos-dim">
-                Cached 5 min · paid feeds prioritized
+                AXE Intel · cached 5 min
               </p>
             </div>
           </div>
@@ -177,13 +177,16 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
           </div>
         </div>
 
-        {/* Provider chips — three states:
+        {/* AXE source chips — three states:
               fresh    → key configured AND delivered items in this fetch (cyan)
               ready    → key configured but no items returned (dim cyan ring)
               off      → no key configured                       (grey muted)
         */}
         {newsProviders.length > 0 ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-white/[0.05] px-3 py-1.5">
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-tos-dim">
+              AXE sources
+            </span>
             {newsProviders.map((p) => {
               const configured = p.state === "live";
               const delivered = deliveringProviders.has(p.id);

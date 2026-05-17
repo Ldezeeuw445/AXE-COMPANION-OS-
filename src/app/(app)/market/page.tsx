@@ -218,7 +218,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Headlines</h2>
           </div>
           <span className="text-[10px] text-tos-dim">
-            {newsProviderLabel ? `${newsProviderLabel} · live` : "No news provider configured"}
+            {newsProviderLabel ? `AXE Market Data · live` : "AXE Market Data idle"}
           </span>
         </div>
         {ctx.news.length > 0 ? (
@@ -253,8 +253,8 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       </GlassPanel>
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
-        Market context blends FRED macro, your news provider and the economic calendar with your active pair, watchlist
-        and open positions. Nothing here is fabricated — providers report their own state.
+        AXE Market Data blends macro, news and the economic calendar with your active pair, watchlist
+        and open positions. Nothing here is fabricated — expanded sources report their own state.
       </p>
     </div>
   );
@@ -264,7 +264,7 @@ function ProviderBadges({ providers }: { providers: ProviderStatus[] }) {
   const liveCount = providers.filter((p) => p.state === "live").length;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-tos-dim">Providers</span>
+      <span className="text-[10px] uppercase tracking-wider text-tos-dim">AXE sources</span>
       {providers.map((p) => (
         <span
           key={p.id}

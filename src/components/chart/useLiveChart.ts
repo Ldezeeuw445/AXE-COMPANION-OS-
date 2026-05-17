@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   ChartLiveEvent,
-  ChartLiveStatus,
   LivePositionPayload,
   LiveCandle,
 } from "@/lib/chart/liveContract";
@@ -96,7 +95,6 @@ export function useLiveChart({
     let offlineTimer: ReturnType<typeof setTimeout> | null = null;
     let lastDataAt = Date.now();
     let hasStableData = false;
-    let upstreamStatus: ChartLiveStatus | null = null;
     const transportRef = { current: "off" as LiveTransport };
 
     function clearHealthTimers() {
@@ -193,7 +191,7 @@ export function useLiveChart({
     function applyEvent(evt: ChartLiveEvent) {
       switch (evt.type) {
         case "ready":
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          setUi(hasStableData ? (transportRef.current === "ws" ? "connected" : "delayed_polling") : "connecting");
           return;
         case "tick": {
           const mid = evt.price ?? evt.bid ?? evt.ask ?? null;
@@ -218,9 +216,12 @@ export function useLiveChart({
           markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
           return;
         case "live_status":
-          upstreamStatus = evt.status;
           if (evt.status === "live") {
-            markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+            if (hasStableData) {
+              markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+            } else {
+              setUi(transportRef.current === "ws" ? "connected" : "delayed_polling");
+            }
           } else if (evt.status === "delayed") {
             markHealthy("stale");
             setReasonSafe(evt.reason ?? "Live stream is delayed; showing the latest stable broker state.");
@@ -236,7 +237,7 @@ export function useLiveChart({
           }
           return;
         case "heartbeat":
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          if (!hasStableData) setUi(transportRef.current === "ws" ? "connected" : "delayed_polling");
           return;
         case "error":
           return;
@@ -270,7 +271,7 @@ export function useLiveChart({
         ws.onopen = () => {
           opened = true;
           backoff = 1500;
-          markHealthy(upstreamStatus === "live" ? "connected" : "connected");
+          setUi("connected");
         };
         ws.onmessage = (ev) => {
           if (!ev.data) return;
@@ -323,7 +324,7 @@ export function useLiveChart({
       es.onopen = () => {
         opened = true;
         backoff = 1500;
-        markHealthy("delayed_polling");
+        setUi("delayed_polling");
       };
       es.onmessage = (ev) => {
         if (!ev.data) return;
