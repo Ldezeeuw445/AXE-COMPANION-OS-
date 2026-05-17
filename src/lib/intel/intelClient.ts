@@ -4,6 +4,7 @@ import { getSupabaseKey } from "@/lib/env";
 const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
 const SNAPSHOT_FRESH_MS = 15 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
+const INTEL_PROXY_TIMEOUT_MS = 12_000;
 
 export type IntelProviderState = "live" | "off" | "error";
 
@@ -115,6 +116,8 @@ async function callIntelProxy<T>(
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
   const key = getSupabaseKey();
   if (!url || !key) return { ok: false, error: "missing_supabase_env" };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), INTEL_PROXY_TIMEOUT_MS);
   try {
     const res = await fetch(`${url}/functions/v1/intel-proxy`, {
       method: "POST",
@@ -123,6 +126,7 @@ async function callIntelProxy<T>(
         Authorization: `Bearer ${key}`,
         apikey: key,
       },
+      signal: ctrl.signal,
       body: JSON.stringify({ action, ...args }),
       // Edge function is rate-limited and the data is slow-moving. Keep each
       // action cached for long enough that page reloads and chat context refreshes
@@ -137,7 +141,12 @@ async function callIntelProxy<T>(
     if (!json.ok) return { ok: false, error: json.error ?? "intel_proxy_unknown_error" };
     return { ok: true, data: (json.data ?? null) as T };
   } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      return { ok: false, error: `intel_proxy_timeout_${INTEL_PROXY_TIMEOUT_MS}ms` };
+    }
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

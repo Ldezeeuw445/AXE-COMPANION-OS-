@@ -19,6 +19,15 @@ import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
 const DEFAULT_SYMBOL = "XAUUSD";
 const FALLBACK_SYMBOLS = ["XAUUSD", "EURUSD", "BTCUSD"];
+const POSITIONS_RENDER_BUDGET_MS = 12_000;
+const CANDLES_RENDER_BUDGET_MS = 18_000;
+
+class ChartDataTimeoutError extends Error {
+  constructor(readonly operation: string) {
+    super(`${operation}_timeout`);
+    this.name = "ChartDataTimeoutError";
+  }
+}
 
 export type ChartOverlayRow = {
   id: string;
@@ -127,6 +136,28 @@ function toOverlay(p: OpenPositionRow): ChartOverlayRow {
     openTime: p.openTime,
     currentPrice: p.currentPrice,
   };
+}
+
+async function withRenderBudget<T>(
+  operation: string,
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new ChartDataTimeoutError(operation)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isTimeoutError(e: unknown): e is ChartDataTimeoutError {
+  return e instanceof ChartDataTimeoutError;
 }
 
 function emptyData(
@@ -319,14 +350,20 @@ export async function loadChartPageData(
   }
 
   let allPositions: OpenPositionRow[] = [];
+  let positionsTimedOut = false;
   try {
-    const raw = (await clientGetPositions(
-      account.metaApiAccountId,
-      true,
-      account.metaApiRegion ?? null,
+    const raw = (await withRenderBudget(
+      "positions",
+      clientGetPositions(
+        account.metaApiAccountId,
+        true,
+        account.metaApiRegion ?? null,
+      ),
+      POSITIONS_RENDER_BUDGET_MS,
     )) as Record<string, unknown>[];
     allPositions = mapPositions(raw);
-  } catch {
+  } catch (e) {
+    positionsTimedOut = isTimeoutError(e);
     allPositions = [];
   }
 
@@ -363,12 +400,16 @@ export async function loadChartPageData(
     .map(toOverlay);
 
   try {
-    const candles = await clientGetHistoricalCandles(
-      account.metaApiAccountId,
-      resolution.brokerSymbol,
-      metaApiTimeframe,
-      500,
-      account.metaApiRegion ?? null,
+    const candles = await withRenderBudget(
+      "candles",
+      clientGetHistoricalCandles(
+        account.metaApiAccountId,
+        resolution.brokerSymbol,
+        metaApiTimeframe,
+        500,
+        account.metaApiRegion ?? null,
+      ),
+      CANDLES_RENDER_BUDGET_MS,
     );
     const last = candles.length > 0 ? candles[candles.length - 1]?.close ?? null : null;
     const lastTime = candles.length > 0 ? candles[candles.length - 1]?.time ?? null : null;
@@ -420,7 +461,9 @@ export async function loadChartPageData(
       providerStatus: "connected",
       failure: "ok",
       dataError: null,
-      hint: null,
+      hint: positionsTimedOut
+        ? "Chart candles loaded, but open positions are still refreshing. AXE will update overlays when the live feed catches up."
+        : null,
       symbolOptions,
       attemptedSymbols: resolution.attempted,
       account,
@@ -429,6 +472,29 @@ export async function loadChartPageData(
       source: "MetaApi MT5",
     };
   } catch (e) {
+    if (isTimeoutError(e)) {
+      return {
+        symbol: requested,
+        brokerSymbol: resolution.brokerSymbol,
+        timeframeKey,
+        metaApiTimeframe,
+        candles: [],
+        positionsOnSymbol,
+        positionsOnSymbolCount: positionsOnSymbol.length,
+        totalPositions: allPositions.length,
+        lastPrice: null,
+        providerStatus: positionsTimedOut ? "stale" : "failed",
+        failure: "market_data_unavailable",
+        dataError: "MT5 market data is taking longer than expected.",
+        hint: "AXE stopped waiting so the chart could render. The live stream and Sync can retry without freezing the screen.",
+        symbolOptions,
+        attemptedSymbols: resolution.attempted,
+        account,
+        accountChoices,
+        lastCandleTime: null,
+        source: "MetaApi MT5",
+      };
+    }
     const isMeta = e instanceof MetaApiRequestError;
     const code = isMeta ? e.code : null;
     const failure: ChartFailureKind =

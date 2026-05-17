@@ -27,6 +27,27 @@ const SYMBOL_MAP: Record<string, string> = {
   ETH: "ETH-USD",
 };
 
+const LIVE_PRICE_TIMEOUT_MS = 8_000;
+const ECONOMIC_CALENDAR_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit & { timeoutMs: number; next?: { revalidate?: number } },
+): Promise<Response> {
+  const { timeoutMs, ...rest } = init;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...rest, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
 export type LivePriceResult = {
   symbol: string;
   price: number;
@@ -44,13 +65,14 @@ export async function fetchLivePrice(
   const ticker = SYMBOL_MAP[upper] ?? `${upper}=X`;
 
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d`,
       {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         },
+        timeoutMs: LIVE_PRICE_TIMEOUT_MS,
         // Revalidate every 30s — prices are near-real-time
         next: { revalidate: 30 },
       }
@@ -95,6 +117,9 @@ export async function fetchLivePrice(
       currency: meta.currency ?? "USD",
     };
   } catch (err) {
+    if (isAbortError(err)) {
+      return { error: `Live price for ${symbol} timed out. Showing cached context when available.` };
+    }
     return { error: `Failed to fetch ${symbol}: ${String(err)}` };
   }
 }
@@ -152,8 +177,9 @@ export async function fetchEconomicCalendar(
   impact?: "High" | "Medium" | "Low"
 ): Promise<CalendarEvent[] | { error: string }> {
   try {
-    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
+    const res = await fetchWithTimeout("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
       headers: { "User-Agent": "Mozilla/5.0" },
+      timeoutMs: ECONOMIC_CALENDAR_TIMEOUT_MS,
       next: { revalidate: 300 }, // cache 5 min
     });
 
@@ -194,6 +220,9 @@ export async function fetchEconomicCalendar(
 
     return events;
   } catch (err) {
+    if (isAbortError(err)) {
+      return { error: "Economic calendar timed out. AXE will retry on the next refresh." };
+    }
     return { error: `Failed to fetch calendar: ${String(err)}` };
   }
 }

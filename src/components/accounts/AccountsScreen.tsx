@@ -23,6 +23,7 @@ import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAu
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { accountMethodLabel, friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
+import type { Mt5DoctorOverallStatus, Mt5DoctorReport } from "@/types/mt5Doctor";
 
 type Props = {
   initialAccounts: BrokerAccountRow[];
@@ -55,6 +56,196 @@ function statusBadgeVariant(s: string | null | undefined): "warm" | "neutral" | 
   if (friendly === "Connected") return "long";
   if (friendly === "Failed" || friendly === "Provisioning") return "warm";
   return "neutral";
+}
+
+function syncFreshness(iso: string | null | undefined): {
+  label: string;
+  detail: string;
+  tone: string;
+  dot: string;
+} {
+  if (!iso) {
+    return {
+      label: "No sync yet",
+      detail: "Run Sync after Test passes",
+      tone: "border-white/10 bg-white/[0.03] text-tos-dim",
+      dot: "bg-white/30",
+    };
+  }
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) {
+    return {
+      label: "Sync unknown",
+      detail: iso,
+      tone: "border-white/10 bg-white/[0.03] text-tos-dim",
+      dot: "bg-white/30",
+    };
+  }
+  const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
+  const ageLabel = minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
+  if (minutes <= 20) {
+    return {
+      label: "Fresh",
+      detail: `Synced ${ageLabel}`,
+      tone: "border-emerald-400/25 bg-emerald-400/10 text-emerald-100/90",
+      dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.6)]",
+    };
+  }
+  if (minutes <= 180) {
+    return {
+      label: "Stale soon",
+      detail: `Synced ${ageLabel}`,
+      tone: "border-amber-400/25 bg-amber-400/10 text-amber-100/90",
+      dot: "bg-amber-300/85",
+    };
+  }
+  return {
+    label: "Stale",
+    detail: `Synced ${ageLabel}`,
+    tone: "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/85",
+    dot: "bg-amber-300/70",
+  };
+}
+
+function readLastDoctor(meta: Record<string, unknown> | null | undefined): Mt5DoctorReport | null {
+  const value = meta?.lastDoctor;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const report = value as Partial<Mt5DoctorReport>;
+  if (!report.checkedAt || !report.overallStatus || !report.headline) return null;
+  return report as Mt5DoctorReport;
+}
+
+function doctorStatusLabel(status: Mt5DoctorOverallStatus): string {
+  const labels: Record<Mt5DoctorOverallStatus, string> = {
+    connected: "Connected",
+    syncing: "Syncing",
+    reconnecting: "Reconnecting",
+    needs_attention: "Needs attention",
+    read_only: "Read-only",
+    server_issue: "Server issue",
+    credentials_issue: "Credentials issue",
+    provisioning_pending: "Provisioning pending",
+  };
+  return labels[status];
+}
+
+function compactDiagnosticStatus(a: BrokerAccountRow): {
+  label: string;
+  detail: string;
+  tone: string;
+  dot: string;
+} {
+  const doctor = readLastDoctor(a.metadata);
+  if (doctor) {
+    const status = doctor.overallStatus;
+    const critical = status === "server_issue" || status === "credentials_issue" || status === "needs_attention";
+    const warm = status === "syncing" || status === "reconnecting" || status === "provisioning_pending";
+    return {
+      label: doctorStatusLabel(status),
+      detail: doctor.summary,
+      tone: critical
+        ? "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90"
+        : warm
+          ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90"
+          : "border-cyan-400/22 bg-cyan-400/[0.07] text-cyan-100/90",
+      dot: critical ? "bg-rose-300" : warm ? "bg-amber-300" : "bg-cyan-300",
+    };
+  }
+  const provider = (a.provider_status ?? a.status ?? "").toLowerCase();
+  if (provider.includes("credential")) {
+    return {
+      label: "Credentials issue",
+      detail: "Run Doctor to confirm the failing step.",
+      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
+      dot: "bg-rose-300",
+    };
+  }
+  if (provider === "provisioning" || provider === "created" || provider === "deploying") {
+    return {
+      label: "Provisioning pending",
+      detail: "MetaAPI cloud terminal is still starting.",
+      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
+      dot: "bg-amber-300",
+    };
+  }
+  if (provider === "syncing" || provider === "connecting") {
+    return {
+      label: "Syncing",
+      detail: "Broker connection is in progress.",
+      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
+      dot: "bg-amber-300",
+    };
+  }
+  if (provider.includes("fail") || provider.includes("error") || provider === "metaapi_region_error") {
+    return {
+      label: "Needs attention",
+      detail: "Run Doctor to isolate the failed MT5 step.",
+      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
+      dot: "bg-rose-300",
+    };
+  }
+  if (provider === "connected" || provider === "provisioned") {
+    return {
+      label: "Read-only",
+      detail: "Connected for account data. Live trading remains separately gated.",
+      tone: "border-cyan-400/22 bg-cyan-400/[0.07] text-cyan-100/90",
+      dot: "bg-cyan-300",
+    };
+  }
+  return {
+    label: "Needs attention",
+    detail: "Run Doctor for a full connection read.",
+    tone: "border-white/10 bg-white/[0.03] text-tos-dim",
+    dot: "bg-white/30",
+  };
+}
+
+function accountRuntimeHealth(accounts: BrokerAccountRow[], loadError: string | null): Array<{
+  label: string;
+  value: string;
+  tone: string;
+  dot: string;
+}> {
+  const cloudAccounts = accounts.filter((a) => connectionKind(a) === "cloud");
+  const provisioning = cloudAccounts.filter((a) =>
+    ["provisioning", "created", "deploying", "connecting", "syncing"].includes((a.provider_status ?? "").toLowerCase()),
+  ).length;
+  const needsAttention = cloudAccounts.filter((a) => {
+    const d = compactDiagnosticStatus(a).label.toLowerCase();
+    return d.includes("attention") || d.includes("issue") || d.includes("credential");
+  }).length;
+  const freshSync = cloudAccounts.filter((a) => syncFreshness(a.last_sync_at).label === "Fresh").length;
+  const cyan = "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-100/90";
+  const amber = "border-amber-400/22 bg-amber-400/[0.07] text-amber-100/90";
+  const rose = "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90";
+  const neutral = "border-white/10 bg-white/[0.035] text-tos-dim";
+
+  return [
+    {
+      label: "Supabase",
+      value: loadError ? "Degraded" : "Account truth live",
+      tone: loadError ? rose : cyan,
+      dot: loadError ? "bg-rose-300" : "bg-cyan-300",
+    },
+    {
+      label: "MetaAPI",
+      value: cloudAccounts.length ? `${cloudAccounts.length} cloud linked` : "Ready to connect",
+      tone: cloudAccounts.length ? cyan : neutral,
+      dot: cloudAccounts.length ? "bg-cyan-300" : "bg-white/30",
+    },
+    {
+      label: "Recovery",
+      value: needsAttention ? `${needsAttention} needs Doctor` : provisioning ? `${provisioning} settling` : "No blockers",
+      tone: needsAttention ? rose : provisioning ? amber : cyan,
+      dot: needsAttention ? "bg-rose-300" : provisioning ? "bg-amber-300" : "bg-cyan-300",
+    },
+    {
+      label: "Sync",
+      value: cloudAccounts.length ? `${freshSync}/${cloudAccounts.length} fresh` : "No real account yet",
+      tone: cloudAccounts.length && freshSync === 0 ? amber : cloudAccounts.length ? cyan : neutral,
+      dot: cloudAccounts.length && freshSync === 0 ? "bg-amber-300" : cloudAccounts.length ? "bg-cyan-300" : "bg-white/30",
+    },
+  ];
 }
 
 const detailsSummaryClass =
@@ -114,6 +305,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
   const onlyDemo =
     initialAccounts.length > 0 &&
     initialAccounts.every((a) => isDemoAccount(a));
+  const runtimeHealth = accountRuntimeHealth(initialAccounts, loadError);
 
   // The pulse is honest here: green when Supabase delivered the
   // account list (regardless of how many accounts there are — even
@@ -150,6 +342,24 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
           </p>
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Runtime health</span>
+          <span className="text-[10px] text-tos-dim">Account truth, MetaAPI cloud, sync freshness and recovery readiness.</span>
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-4">
+          {runtimeHealth.map((item) => (
+            <div key={item.label} className={`rounded-xl border px-2.5 py-2 ${item.tone}`}>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} aria-hidden />
+                <p className="text-[9px] font-semibold uppercase tracking-wider opacity-80">{item.label}</p>
+              </div>
+              <p className="mt-1 text-[10.5px] font-medium">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* A — Intro */}
       <div className="space-y-2 text-sm leading-relaxed text-tos-muted">
@@ -223,6 +433,8 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
               const loginDisp = a.masked_login ?? a.mt5_login ?? "—";
               const method = accountMethodLabel(a.connection_method, Boolean(a.external_connection_id));
               const syncLabel = friendlyProviderStatus(a.provider_status ?? a.status);
+              const freshness = syncFreshness(a.last_sync_at);
+              const diagnostic = compactDiagnosticStatus(a);
 
               return (
                 <GlassPanel
@@ -252,6 +464,28 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                       ) : (
                         <p className="mt-1 text-[10px] text-tos-dim/90">Last sync · —</p>
                       )}
+                      <div
+                        className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${freshness.tone}`}
+                        title={a.last_sync_at ? formatDate(a.last_sync_at) : freshness.detail}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${freshness.dot}`} aria-hidden />
+                        {freshness.label}
+                        <span className="border-l border-current/20 pl-1.5 font-normal normal-case tracking-normal opacity-75">
+                          {freshness.detail}
+                        </span>
+                      </div>
+                      {kind === "cloud" ? (
+                        <div
+                          className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${diagnostic.tone}`}
+                          title={diagnostic.detail}
+                        >
+                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${diagnostic.dot}`} aria-hidden />
+                          {diagnostic.label}
+                          <span className="truncate border-l border-current/20 pl-1.5 font-normal normal-case tracking-normal opacity-75">
+                            {diagnostic.detail}
+                          </span>
+                        </div>
+                      ) : null}
                       <p className="mt-1 text-[10px] text-tos-dim/70">Added {formatDate(a.created_at)}</p>
                       {active ? (
                         <p className="mt-2 text-[11px] leading-relaxed text-cyan-200/75">
