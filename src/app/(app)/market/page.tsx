@@ -32,10 +32,12 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const symbol = requestedSymbol || watchlist[0]?.toUpperCase() || DEFAULT_SYMBOL;
 
   const ctx = await buildMarketContext({ symbol, watchlist });
-  const macroReady = Boolean(ctx.macro?.points.some((point) => point.value != null));
+  const macroPoints = ctx.macro?.points.filter((point) => point.value != null) ?? [];
+  const macroReady = macroPoints.length > 0;
   const calendarReady = ctx.events.length > 0;
   const newsReady = ctx.news.length > 0;
   const contentReady = macroReady || calendarReady || newsReady;
+  const liveProviderCount = [macroReady, newsReady, calendarReady].filter(Boolean).length;
 
   const livePill = (
     <span
@@ -46,7 +48,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       }`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${contentReady ? "bg-cyan-300" : "bg-amber-300/80"}`} aria-hidden />
-      {contentReady ? "Ready" : "Warming"}
+      {contentReady ? (liveProviderCount === 3 ? "Live" : "Degraded") : "Warming"}
     </span>
   );
 
@@ -94,8 +96,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
-  const liveProviderCount = [macroReady, newsReady, calendarReady].filter(Boolean).length;
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
       {/* Mobile top bar: the AXE wordmark in the centre carries the
@@ -112,6 +112,9 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         totalCount={3}
         label="Market"
         allLiveOverride={contentReady ? liveProviderCount === 3 : null}
+        severity={contentReady ? (liveProviderCount === 3 ? "fresh" : "degraded") : "inactive"}
+        reason={contentReady ? `${liveProviderCount}/3 AXE market sections have data.` : "Market context is warming or not configured."}
+        scope="market"
       />
       <ScreenHeader
         title="Market context"
@@ -157,18 +160,23 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             {macroReady ? "AXE Macro · fresh" : hasFred ? "AXE Macro · warming" : "AXE Macro · not configured"}
           </span>
         </div>
-        {ctx.macro && ctx.macro.points.length > 0 ? (
+        {macroReady ? (
           <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-            {ctx.macro.points.map((p) => (
+            {macroPoints.map((p) => (
               <MacroPoint key={p.seriesId} point={p} />
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-xs text-tos-muted">
-            {hasFred
-              ? "AXE Macro returned no observations for this symbol yet — try another symbol."
-              : "AXE Macro is not configured for this deployment yet."}
-          </p>
+          <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-3">
+            <p className="text-sm font-medium text-tos-text">
+              {hasFred ? "AXE Macro is warming" : "AXE Macro is not configured"}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+              {hasFred
+                ? "No macro observations are available for this symbol yet. AXE will not render empty metric cards as live data."
+                : "No server-side macro source is active for this deployment."}
+            </p>
+          </div>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
           <Link

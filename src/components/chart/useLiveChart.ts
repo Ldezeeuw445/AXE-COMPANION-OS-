@@ -220,7 +220,7 @@ export function useLiveChart({
             if (hasStableData) {
               markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
             } else {
-              setUi(transportRef.current === "ws" ? "connected" : "delayed_polling");
+              setUi("connecting");
             }
           } else if (evt.status === "delayed") {
             markHealthy("stale");
@@ -237,7 +237,7 @@ export function useLiveChart({
           }
           return;
         case "heartbeat":
-          if (!hasStableData) setUi(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          if (!hasStableData) setUi("connecting");
           return;
         case "error":
           return;
@@ -271,7 +271,7 @@ export function useLiveChart({
         ws.onopen = () => {
           opened = true;
           backoff = 1500;
-          setUi("connected");
+          setUi(hasStableData ? "connected" : "connecting");
         };
         ws.onmessage = (ev) => {
           if (!ev.data) return;
@@ -324,7 +324,7 @@ export function useLiveChart({
       es.onopen = () => {
         opened = true;
         backoff = 1500;
-        setUi("delayed_polling");
+        setUi(hasStableData ? "delayed_polling" : "connecting");
       };
       es.onmessage = (ev) => {
         if (!ev.data) return;

@@ -16,8 +16,6 @@ import {
   type TrackCommitmentArgs,
 } from "@/services/axeService";
 import {
-  fetchLivePrice,
-  formatLivePrice,
   fetchEconomicCalendar,
   formatEconomicCalendar,
 } from "@/services/marketDataService";
@@ -28,6 +26,7 @@ import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
 import { tryConsumeChatQuota } from "@/lib/chatQuota";
 import type { ChatMessage, ConversationSummary } from "@/types/domain";
 import type OpenAI from "openai";
+import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -61,6 +60,50 @@ function mapMessage(row: MessageRow): ChatMessage {
     content: row.content,
     createdAt: row.created_at,
   };
+}
+
+function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradingOSContext>>, requestedSymbol: string): string {
+  const chart = context.axe_context?.chart;
+  const activeSymbol = (chart?.symbol ?? context.symbol ?? "").toUpperCase();
+  const brokerSymbol = (chart?.brokerSymbol ?? "").toUpperCase();
+  const requested = requestedSymbol.toUpperCase().replace("/", "").trim();
+  if (!chart || !activeSymbol || !brokerSymbol) {
+    return "Live broker pricing unavailable. AXE has no active broker-resolved chart context for this session.";
+  }
+  if (requested && requested !== activeSymbol && requested !== brokerSymbol) {
+    return `Live broker pricing unavailable for ${requested}. Active chart is ${activeSymbol} mapped to broker symbol ${brokerSymbol}.`;
+  }
+  const state = brokerPricingState({
+    status: chart.liveStatus,
+    updatedAt: chart.updatedAt,
+    lastTickAt: chart.lastTickAt,
+    lastCandleAt: chart.lastCandleAt,
+  });
+  const price = canonicalBrokerPrice({
+    lastPrice: chart.lastPrice,
+    lastBid: chart.lastBid,
+    lastAsk: chart.lastAsk,
+  });
+  if (price == null) {
+    return `Live broker pricing unavailable for ${activeSymbol} (${brokerSymbol}). No canonical broker price is available.`;
+  }
+  if (state !== "live" && state !== "degraded") {
+    return `Live broker pricing unavailable for ${activeSymbol} (${brokerSymbol}). AXE will not use generic provider prices for analysis.`;
+  }
+  const freshness = chart.lastTickAt
+    ? `last broker tick ${chart.lastTickAt}`
+    : chart.lastCandleAt
+      ? `last broker candle ${chart.lastCandleAt}`
+      : chart.updatedAt
+        ? `last chart update ${chart.updatedAt}`
+        : "timestamp unknown";
+  return [
+    `${activeSymbol} broker price (${brokerSymbol})`,
+    `Canonical price: ${price}`,
+    `Runtime state: ${state}`,
+    `Freshness: ${freshness}`,
+    "Use this broker context only. Do not substitute Yahoo, generic provider, memory, or stale snapshot prices.",
+  ].join("\n");
 }
 
 export async function ensurePrimaryConversation(userId: string): Promise<ConversationSummary | null> {
@@ -291,8 +334,7 @@ export async function sendChatMessage(
       return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
 
     } else if (tc.tool === "get_live_price") {
-      const price = await fetchLivePrice(tc.args.symbol);
-      return "error" in price ? price.error : formatLivePrice(price);
+      return formatBrokerPriceForChat(contextWithCandles, tc.args.symbol);
 
     } else if (tc.tool === "get_economic_calendar") {
       const calendar = await fetchEconomicCalendar(tc.args.currency, tc.args.impact);

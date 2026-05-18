@@ -206,7 +206,7 @@ function statusPillCopy(
   }
   if (live === "connected" || live === "live_stream") {
     return {
-      label: hasCandles ? "Connected" : "Loading",
+      label: hasCandles ? "Warming" : "Loading",
       className: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200/95",
       dot: "bg-cyan-300/80",
     };
@@ -2285,6 +2285,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 </select>
               </div>
               <p className="mt-0.5 font-mono text-[11px] text-tos-text/82">{lastPriceText}</p>
+              <p className="mt-0.5 truncate font-mono text-[9.5px] uppercase tracking-[0.12em] text-tos-dim">
+                Broker {data.brokerSymbol || "unresolved"}
+              </p>
             </div>
             <div className="pt-0.5 text-right text-[9px] font-semibold uppercase tracking-[0.16em] text-tos-dim">
               {sessionCopy()}

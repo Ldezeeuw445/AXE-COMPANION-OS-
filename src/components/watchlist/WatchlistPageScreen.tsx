@@ -10,8 +10,10 @@ type Row = {
   symbol: string;
   message: string | null;
   brokerSymbol?: string | null;
+  runtimePrice?: number | null;
+  runtimeState?: "live" | "degraded" | "warming" | "unavailable" | "inactive";
   supportLabel?: string;
-  supportTone?: "live" | "warm" | "muted";
+  supportTone?: "live" | "warm" | "muted" | "blocked";
 };
 
 const DEFAULTS = ["XAUUSD", "EURUSD", "BTCUSD"];
@@ -27,10 +29,13 @@ export function WatchlistPageScreen({ items }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-2">
       <LiveStatusReporter
-        liveCount={0}
-        totalCount={0}
+        liveCount={items.filter((i) => i.runtimeState === "live").length}
+        totalCount={items.length}
         label={`Watchlist · ${items.length} saved`}
         allLiveOverride={null}
+        severity={items.length === 0 ? "inactive" : items.some((i) => i.runtimeState === "live") ? "fresh" : "degraded"}
+        reason={items.length === 0 ? "No watchlist symbols yet." : "Watchlist shows broker support and price availability per symbol."}
+        scope="watchlist"
       />
       <ScreenHeader
         title="Watchlist"
@@ -57,6 +62,8 @@ export function WatchlistPageScreen({ items }: Props) {
                 ? "border-cyan-400/20 bg-cyan-400/[0.07] text-cyan-100/85"
                 : tone === "warm"
                   ? "border-amber-400/20 bg-amber-400/[0.07] text-amber-100/85"
+                  : tone === "blocked"
+                    ? "border-rose-400/20 bg-rose-400/[0.07] text-rose-100/85"
                   : "border-white/10 bg-white/[0.025] text-tos-dim";
             return (
             <li key={sym} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
@@ -65,6 +72,12 @@ export function WatchlistPageScreen({ items }: Props) {
                 {item?.brokerSymbol && item.brokerSymbol !== sym ? (
                   <p className="mt-0.5 text-[10px] text-tos-dim">Broker: {item.brokerSymbol}</p>
                 ) : null}
+                <p className="mt-0.5 text-[10px] text-tos-dim">
+                  Price:{" "}
+                  {item?.runtimeState === "live" || item?.runtimeState === "degraded"
+                    ? item.runtimePrice ?? "unavailable"
+                    : "unavailable"}
+                </p>
               </div>
               <div className="flex gap-2 text-[11px]">
                 <span className={`rounded-full border px-2 py-0.5 text-[10px] ${supportClass}`}>

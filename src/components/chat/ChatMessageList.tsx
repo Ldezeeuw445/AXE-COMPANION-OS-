@@ -8,6 +8,7 @@ import { ActionCard } from "@/components/chat/ActionCard";
 import { TtsButton } from "@/components/chat/TtsButton";
 import { formatTimeHm } from "@/lib/formatDate";
 import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
+import { MarkdownLite, renderMarkdownInline } from "@/components/ui/MarkdownLite";
 
 /**
  * Suggested first prompts shown when the thread is empty. Each runs through
@@ -85,83 +86,8 @@ function EmptyState() {
  * Everything outside the markers stays as plain pre-wrapped text; markers
  * become tappable cyan buttons that route inside the app via next/link.
  */
-function renderInlineContent(content: string): ReactNode[] {
-  const parts: ReactNode[] = [];
-  const re = /(\[\[link:([^|\]]+)\|([^\]]+)\]\]|\*\*([^*]+)\*\*)/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(content))) {
-    if (match.index > cursor) parts.push(content.slice(cursor, match.index));
-    if (match[2] && match[3]) {
-      const href = match[2].trim();
-      const label = match[3].trim();
-      parts.push(
-        <Link
-          key={`${match.index}-${href}`}
-          href={href}
-          className="mx-0.5 inline-flex items-center gap-1 rounded-full border border-cyan-400/35 bg-cyan-400/10 px-2.5 py-0.5 align-baseline text-[11.5px] font-semibold text-cyan-200/95 hover:border-cyan-400/60 hover:bg-cyan-400/15"
-        >
-          {label}
-          <ArrowUpRight className="h-3 w-3" aria-hidden />
-        </Link>,
-      );
-    } else if (match[4]) {
-      parts.push(
-        <strong key={`${match.index}-strong`} className="font-semibold text-cyan-100">
-          {match[4]}
-        </strong>,
-      );
-    }
-    cursor = re.lastIndex;
-  }
-  if (cursor < content.length) parts.push(content.slice(cursor));
-  return parts;
-}
-
 function renderAssistantBody(content: string): ReactNode {
-  const blocks = content
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean);
-
-  if (blocks.length === 0) return null;
-
-  return (
-    <div className="space-y-3">
-      {blocks.map((block, blockIndex) => {
-        const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
-        const heading = lines.length === 1 ? lines[0].match(/^#{1,3}\s+(.+)$/) : null;
-        if (heading) {
-          return (
-            <h3 key={`h-${blockIndex}`} className="text-[13px] font-semibold uppercase tracking-[0.14em] text-cyan-100/95">
-              {renderInlineContent(heading[1])}
-            </h3>
-          );
-        }
-
-        const isList = lines.every((line) => /^([-*•]|\d+\.)\s+/.test(line));
-        if (isList) {
-          return (
-            <ul key={`ul-${blockIndex}`} className="space-y-1.5">
-              {lines.map((line, i) => (
-                <li key={`${blockIndex}-${i}`} className="flex gap-2 text-sm leading-relaxed">
-                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-cyan-300/75" aria-hidden />
-                  <span>{renderInlineContent(line.replace(/^([-*•]|\d+\.)\s+/, ""))}</span>
-                </li>
-              ))}
-            </ul>
-          );
-        }
-
-        return (
-          <p key={`p-${blockIndex}`} className="whitespace-pre-wrap text-sm leading-relaxed">
-            {renderInlineContent(block.replace(/^#{1,3}\s+/, ""))}
-          </p>
-        );
-      })}
-    </div>
-  );
+  return <MarkdownLite content={content} />;
 }
 
 function renderUserBody(content: string): ReactNode {
@@ -174,14 +100,14 @@ function renderUserBody(content: string): ReactNode {
           const cleaned = line.replace(/^([-*•]|\d+\.)\s+/, "");
           return (
             <p key={i} className="text-tos-text">
-              {renderInlineContent(cleaned)}
+              {renderMarkdownInline(cleaned)}
             </p>
           );
         })}
       </div>
     );
   }
-  return <p className="whitespace-pre-wrap text-sm leading-relaxed">{renderInlineContent(normalized)}</p>;
+  return <p className="whitespace-pre-wrap text-sm leading-relaxed">{renderMarkdownInline(normalized)}</p>;
 }
 
 type ChatMessageListProps = {

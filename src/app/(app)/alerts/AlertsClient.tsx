@@ -28,6 +28,12 @@ type PushStatus = {
   hasSubscription: boolean;
 };
 
+type AlertRuntimeCheck = {
+  state: "checking" | "valid" | "degraded" | "unavailable" | "inactive";
+  brokerSymbol: string | null;
+  reason: string;
+};
+
 function chatQ(text: string): string {
   return `/chat?q=${encodeURIComponent(text)}`;
 }
@@ -57,7 +63,7 @@ function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
   if (!status) {
     return {
       label: "Delivery: in-app",
-      short: "Live",
+      short: "In-app",
       className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
       dot: "bg-cyan-300/85",
     };
@@ -73,14 +79,14 @@ function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
   if (status.vapidConfigured) {
     return {
       label: "Delivery: in-app · enable push",
-      short: "Live",
+      short: "In-app",
       className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
       dot: "bg-cyan-300/85",
     };
   }
   return {
     label: "Delivery: in-app",
-    short: "Live",
+    short: "In-app",
     className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
     dot: "bg-cyan-300/85",
   };
@@ -94,6 +100,11 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [push, setPush] = useState<PushStatus | null>(null);
+  const [runtimeCheck, setRuntimeCheck] = useState<AlertRuntimeCheck>({
+    state: "inactive",
+    brokerSymbol: null,
+    reason: "No symbol selected.",
+  });
 
   const [formType, setFormType] = useState<string>("price");
   const [formSymbol, setFormSymbol] = useState<string>(focusSymbol || "");
@@ -105,6 +116,65 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
     if (!focusSymbol) return;
     setFormSymbol(focusSymbol);
   }, [focusSymbol]);
+
+  useEffect(() => {
+    const symbol = formSymbol.trim().toUpperCase();
+    if (!symbol) {
+      setRuntimeCheck({ state: "inactive", brokerSymbol: null, reason: "No symbol selected." });
+      return;
+    }
+    const ctrl = new AbortController();
+    setRuntimeCheck((prev) => ({ ...prev, state: "checking", reason: "Checking active broker runtime." }));
+    const timer = setTimeout(() => {
+      void fetch(`/api/context?symbol=${encodeURIComponent(symbol)}`, {
+        credentials: "include",
+        signal: ctrl.signal,
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Context unavailable");
+          return (await res.json()) as {
+            axe_context?: {
+              chart?: {
+                symbol?: string | null;
+                brokerSymbol?: string | null;
+                lastPrice?: number | null;
+                staleState?: string | null;
+              };
+              accounts?: { activeAccountId?: string | null };
+            };
+          };
+        })
+        .then((ctx) => {
+          const chart = ctx.axe_context?.chart;
+          if (!ctx.axe_context?.accounts?.activeAccountId) {
+            setRuntimeCheck({ state: "inactive", brokerSymbol: null, reason: "Select an active broker account before creating price alerts." });
+            return;
+          }
+          if (!chart?.brokerSymbol || (chart.symbol ?? "").toUpperCase() !== symbol) {
+            setRuntimeCheck({ state: "unavailable", brokerSymbol: chart?.brokerSymbol ?? null, reason: "Symbol is not resolved on the active broker account." });
+            return;
+          }
+          if (chart.lastPrice == null) {
+            setRuntimeCheck({ state: "degraded", brokerSymbol: chart.brokerSymbol, reason: "Broker symbol is mapped, but no broker price is available yet." });
+            return;
+          }
+          setRuntimeCheck({
+            state: chart.staleState === "live" ? "valid" : "degraded",
+            brokerSymbol: chart.brokerSymbol,
+            reason: chart.staleState === "live" ? "Broker symbol and price are available." : "Broker data is mapped but not fresh.",
+          });
+        })
+        .catch(() => {
+          if (!ctrl.signal.aborted) {
+            setRuntimeCheck({ state: "unavailable", brokerSymbol: null, reason: "Could not verify broker runtime for this symbol." });
+          }
+        });
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [formSymbol]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -160,6 +230,10 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       setError("Price alerts need a valid threshold.");
       return;
     }
+    if (type === "price" && (runtimeCheck.state === "unavailable" || runtimeCheck.state === "inactive")) {
+      setError(runtimeCheck.reason);
+      return;
+    }
     if ((type === "news" || type === "macro") && !keyword) {
       setError("News/Macro alerts need a keyword.");
       return;
@@ -195,7 +269,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
     } finally {
       setSaving(false);
     }
-  }, [formType, formSymbol, formCondition, formThreshold, formKeyword, push, refresh]);
+  }, [formType, formSymbol, formCondition, formThreshold, formKeyword, push, refresh, runtimeCheck]);
 
   const setAlertStatus = useCallback(
     async (id: string, status: "active" | "paused") => {
@@ -315,6 +389,9 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       totalCount: totalChannels,
       freshestAgeSec: null,
       label: `Alerts · ${delivery.short}`,
+      severity: error ? "degraded" : "fresh",
+      reason: error ?? "Alert manager reachable. Price alerts still require a verified broker symbol.",
+      scope: "alerts",
     });
     return () => {
       clearLiveStatus();
@@ -381,6 +458,22 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
               {push?.hasSubscription && push?.vapidConfigured ? "push + in-app" : "in-app"}
             </span>
           </p>
+        </div>
+        <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2 text-[11px] text-tos-muted">
+          Runtime:{" "}
+          <span className="font-semibold text-tos-text">
+            {runtimeCheck.state === "valid"
+              ? "Broker verified"
+              : runtimeCheck.state === "checking"
+                ? "Checking"
+                : runtimeCheck.state === "degraded"
+                  ? "Degraded"
+                  : runtimeCheck.state === "unavailable"
+                    ? "Unavailable"
+                    : "Inactive"}
+          </span>
+          {runtimeCheck.brokerSymbol ? <span className="font-mono"> · {runtimeCheck.brokerSymbol}</span> : null}
+          <span> · {runtimeCheck.reason}</span>
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -454,7 +547,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           <button
             type="button"
             onClick={() => void createAlert()}
-            disabled={saving}
+            disabled={saving || (formType === "price" && (runtimeCheck.state === "unavailable" || runtimeCheck.state === "inactive" || runtimeCheck.state === "checking"))}
             className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/12 px-3 py-2 text-[12px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18 disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
@@ -541,4 +634,3 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
     </div>
   );
 }
-

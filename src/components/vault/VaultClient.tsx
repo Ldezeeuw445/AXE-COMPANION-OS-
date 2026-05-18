@@ -5,6 +5,7 @@ import type { VaultMediaItem, VaultNote } from "@/types/domain";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { ImageIcon, Mic, FileText } from "lucide-react";
+import { MarkdownLite } from "@/components/ui/MarkdownLite";
 
 type VaultClientProps = {
   notes: VaultNote[];
@@ -110,7 +111,11 @@ export function VaultClient({ notes, media }: VaultClientProps) {
                       <h3 className="text-sm font-medium text-tos-text">{n.title}</h3>
                       {n.symbol ? <Badge variant="neutral">{n.symbol}</Badge> : null}
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap text-xs text-tos-muted">{n.body}</p>
+                    <MarkdownLite
+                      content={n.body}
+                      className="mt-2 space-y-2 text-xs text-tos-muted"
+                      paragraphClassName="whitespace-pre-wrap text-xs leading-relaxed text-tos-muted"
+                    />
                     <div className="mt-2 flex flex-wrap gap-1">
                       {n.tags
                         .filter((t) => t.toLowerCase() !== "axe")
@@ -151,9 +156,11 @@ export function VaultClient({ notes, media }: VaultClientProps) {
                         <Badge variant="neutral">{n.symbol}</Badge>
                       ) : null}
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap text-xs text-tos-muted">
-                      {n.body}
-                    </p>
+                    <MarkdownLite
+                      content={n.body}
+                      className="mt-2 space-y-2 text-xs text-tos-muted"
+                      paragraphClassName="whitespace-pre-wrap text-xs leading-relaxed text-tos-muted"
+                    />
                     <div className="mt-2 flex flex-wrap gap-1">
                       {n.tags.map((t) => (
                         <span

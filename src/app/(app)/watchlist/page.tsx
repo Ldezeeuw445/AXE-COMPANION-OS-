@@ -2,6 +2,7 @@ import { WatchlistPageScreen } from "@/components/watchlist/WatchlistPageScreen"
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
+import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 
 function metadataSymbols(meta: Record<string, unknown>): string[] {
   const raw = meta.symbol_universe;
@@ -44,24 +45,49 @@ export default async function WatchlistPage() {
   const universe = metadataSymbols(metadata);
   const map = symbolMap(metadata);
   const connected = ["connected", "provisioned"].includes(String(account?.provider_status ?? "").toLowerCase());
+  const { data: snapshots } = await supabase
+    .from("chart_live_snapshots")
+    .select("display_symbol,broker_symbol,last_price,last_tick_at,last_candle_at,status,updated_at")
+    .eq("user_id", user.id)
+    .eq("account_id", activeId)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  const snapshotByDisplay = new Map(
+    (snapshots ?? []).map((s) => [String(s.display_symbol ?? "").toUpperCase(), s as Record<string, unknown>]),
+  );
 
   const enriched = items.map((item) => {
     const display = cleanDisplaySymbol(item.symbol) || item.symbol.toUpperCase();
     const cached = map[display] ?? map[item.symbol.toUpperCase()];
     const resolved = cached ? { brokerSymbol: cached } : resolveBrokerSymbol(display, universe);
     const supported = universe.length > 0 ? universe.some((s) => s === resolved.brokerSymbol) : Boolean(cached);
+    const snap = snapshotByDisplay.get(display);
+    const pricingState = snap
+      ? brokerPricingState({
+          status: snap.status as string | null,
+          updatedAt: snap.updated_at as string | null,
+          lastTickAt: snap.last_tick_at as string | null,
+          lastCandleAt: snap.last_candle_at as string | null,
+        })
+      : "warming";
     return {
       ...item,
       symbol: display,
       brokerSymbol: resolved.brokerSymbol,
+      runtimePrice: snap?.last_price != null ? Number(snap.last_price) : null,
+      runtimeState: supported ? pricingState : "unavailable",
       supportLabel: supported
         ? connected
-          ? "Supported"
+          ? pricingState === "live"
+            ? "Live"
+            : pricingState === "degraded"
+              ? "Degraded"
+              : "Supported · no price"
           : "Mapped"
         : universe.length > 0
-          ? "Not found"
+          ? "Unavailable"
           : "Resolving",
-      supportTone: supported ? ("live" as const) : universe.length > 0 ? ("warm" as const) : ("muted" as const),
+      supportTone: supported ? (pricingState === "live" ? ("live" as const) : ("warm" as const)) : universe.length > 0 ? ("blocked" as const) : ("muted" as const),
     };
   });
 

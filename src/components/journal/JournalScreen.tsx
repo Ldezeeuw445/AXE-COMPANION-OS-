@@ -107,6 +107,13 @@ export function JournalScreen({
       totalCount: 1,
       freshestAgeSec: null,
       label: `Journal · ${entries.length} notes · ${journalTrades.length} trades`,
+      severity: !ok ? "degraded" : hasContent ? "fresh" : "inactive",
+      reason: !ok
+        ? "Journal data could not load."
+        : hasContent
+          ? "Journal and trade ledger data loaded."
+          : "No journal/trade sample yet.",
+      scope: "journal",
     });
     return () => clearLiveStatus();
   }, [entries.length, journalTrades.length, loadError]);

@@ -30,6 +30,7 @@ import type {
 import type { TerminalAlert, TerminalExecution, WatchlistEntry } from "@/services/axeService";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
+import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
 const INTEL_TIMEOUT_MS = 14_000;
@@ -943,9 +944,19 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
       .join(", ");
     lines.push(`Exposure: ${ctx.accounts.openExposure.positionsCount} open positions${exposure ? `; ${exposure}` : ""}.`);
   }
-  if (ctx.chart.lastPrice != null) {
+  const chartPricingState = brokerPricingState({
+    status: ctx.chart.liveStatus,
+    updatedAt: ctx.chart.updatedAt,
+    lastTickAt: ctx.chart.lastTickAt,
+    lastCandleAt: ctx.chart.lastCandleAt,
+  });
+  if (ctx.chart.lastPrice != null && (chartPricingState === "live" || chartPricingState === "degraded")) {
     lines.push(
-      `Chart: ${ctx.chart.symbol ?? ctx.symbol} ${ctx.chart.timeframe ?? ""} last ${ctx.chart.lastPrice}; ${ctx.chart.staleState}; ${ctx.chart.recentState ?? "no recent candle"}.`,
+      `Chart: ${ctx.chart.symbol ?? ctx.symbol} ${ctx.chart.timeframe ?? ""} broker ${ctx.chart.brokerSymbol ?? "unresolved"} canonical ${ctx.chart.lastPrice}; ${chartPricingState}; ${ctx.chart.recentState ?? "no recent candle"}.`,
+    );
+  } else if (ctx.chart.symbol) {
+    lines.push(
+      `Chart: ${ctx.chart.symbol} broker ${ctx.chart.brokerSymbol ?? "unresolved"}; live broker pricing unavailable; do not invent current price or levels.`,
     );
   }
   if (ctx.trades.recentTrades.length > 0) {

@@ -18,6 +18,23 @@ function fmtPnl(n: number | null) {
 
 export function JournalAnalyticsPanel({ analytics }: Props) {
   const a = analytics;
+  const taggedSample = a.journaledWithTagCount;
+  if (a.totalTrades < 3 || taggedSample < 3) {
+    return (
+      <GlassPanel className="!p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-tos-dim">
+          Journal analytics
+        </p>
+        <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-3">
+          <p className="text-sm font-medium text-tos-text">Not enough tagged trades yet</p>
+          <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+            AXE needs a minimum tagged trade sample before showing analytics. Current sample: {taggedSample} tagged of{" "}
+            {a.totalTrades} closed trades.
+          </p>
+        </div>
+      </GlassPanel>
+    );
+  }
   return (
     <GlassPanel className="!p-4">
       <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-tos-dim">
