@@ -4,10 +4,12 @@
  * Try exact match first, then suffix variants of the requested base.
  */
 
-const COMMON_SUFFIXES = [
+export const COMMON_SUFFIXES = [
   "",
   "m",
   "M",
+  ".c",
+  ".cash",
   ".s",
   ".r",
   ".pro",
@@ -32,15 +34,24 @@ const COMMON_SUFFIXES = [
   "#",
 ];
 
-const COMMON_PREFIXES = ["", "#", ".", "m", "M", "pro.", "raw."];
+export const COMMON_PREFIXES = ["", "#", ".", "m", "M", "pro.", "raw."];
 
-const SYMBOL_ALIASES: Record<string, string[]> = {
+export const SYMBOL_ALIASES: Record<string, string[]> = {
   XAUUSD: ["XAUUSD", "GOLD"],
+  XAGUSD: ["XAGUSD", "SILVER"],
   BTCUSD: ["BTCUSD", "BTCUSDT", "BTC"],
   ETHUSD: ["ETHUSD", "ETHUSDT", "ETH"],
+  AUDUSD: ["AUDUSD"],
   EURUSD: ["EURUSD"],
   GBPUSD: ["GBPUSD"],
   USDJPY: ["USDJPY"],
+  AAPL: ["AAPL"],
+  JPM: ["JPM"],
+  NVDA: ["NVDA"],
+  PLTR: ["PLTR"],
+  TSLA: ["TSLA"],
+  WTI: ["WTI", "USOIL", "XTIUSD"],
+  BRENT: ["BRENT", "UKOIL", "XBRUSD"],
   NASDAQ: ["NASDAQ", "NAS100", "US100", "USTEC", "NDX100", "NAS"],
   NAS100: ["NAS100", "US100", "NASDAQ", "USTEC", "NDX100", "NAS"],
   US100: ["US100", "NAS100", "NASDAQ", "USTEC", "NDX100", "NAS"],
@@ -53,6 +64,7 @@ const SYMBOL_ALIASES: Record<string, string[]> = {
 
 const DISPLAY_PREF_BY_ALIAS_BASE: Record<string, string> = {
   GOLD: "XAUUSD",
+  SILVER: "XAGUSD",
   NAS100: "NAS100",
   US100: "US100",
   USTEC: "NAS100",
@@ -65,6 +77,10 @@ const DISPLAY_PREF_BY_ALIAS_BASE: Record<string, string> = {
   DOW: "US30",
   DJI: "US30",
   WS30: "US30",
+  USOIL: "WTI",
+  XTIUSD: "WTI",
+  UKOIL: "BRENT",
+  XBRUSD: "BRENT",
 };
 
 export type SymbolResolutionResult = {
@@ -114,6 +130,7 @@ export function cleanDisplaySymbol(symbol: string | null | undefined): string {
     }
   }
   if (best) return best.display;
+  if (/^[A-Z]{1,5}$/.test(raw)) return raw;
   return raw.replace(/^[#.]/, "").replace(/([._-](X|S|M|R|PRO|RAW|ECN|STD|MICRO)|[MCPZ#])$/i, "");
 }
 
@@ -159,6 +176,7 @@ export function candidateBrokerSymbols(requestedDisplaySymbol: string, knownSymb
   const aliases = displaySymbolAliases(requestedDisplaySymbol);
   const known = Array.from(new Set(knownSymbols.map((s) => s.trim()).filter(Boolean)));
   const knownUpper = new Map(known.map((s) => [s.toUpperCase(), s]));
+  const patterns = detectSymbolPatterns(known);
   const attempted: string[] = [];
 
   function push(candidate: string) {
@@ -170,6 +188,8 @@ export function candidateBrokerSymbols(requestedDisplaySymbol: string, knownSymb
 
   for (const alias of aliases) {
     push(alias);
+    for (const suffix of patterns.suffixes) push(`${alias}${suffix}`);
+    for (const prefix of patterns.prefixes) push(`${prefix}${alias}`);
     for (const suffix of COMMON_SUFFIXES) push(`${alias}${suffix}`);
     for (const prefix of COMMON_PREFIXES) push(`${prefix}${alias}`);
   }

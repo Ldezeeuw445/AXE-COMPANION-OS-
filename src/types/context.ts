@@ -1,6 +1,7 @@
 import type { WatchlistEntry, TerminalAlert, TerminalExecution } from "@/services/axeService";
 import type { MarketContext, ProviderStatus } from "@/lib/market/marketTypes";
 import type { Mt5DoctorOverallStatus } from "@/types/mt5Doctor";
+import type { BrokerSymbolReportEntry } from "@/lib/broker/brokerSymbolRuntime";
 
 export type FilteredNewsEvent = {
   title: string;
@@ -239,6 +240,8 @@ export type AccountsContext = {
       tradingState: "read_only" | "live_trading_enabled";
       knownFailureReason: string | null;
     } | null;
+    symbolMap: Record<string, string>;
+    symbolResolutionReport: Record<string, BrokerSymbolReportEntry>;
   }>;
   hasCloudMt5: boolean;
   activeLabel: string | null;
@@ -250,6 +253,8 @@ export type AccountsContext = {
     state: "fresh" | "stale" | "old" | "missing";
   };
   activeSymbols: string[];
+  activeSymbolMap: Record<string, string>;
+  activeSymbolResolutionReport: Record<string, BrokerSymbolReportEntry>;
   openExposure: {
     positionsCount: number;
     symbols: string[];

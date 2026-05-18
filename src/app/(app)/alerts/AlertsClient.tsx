@@ -126,42 +126,24 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
     const ctrl = new AbortController();
     setRuntimeCheck((prev) => ({ ...prev, state: "checking", reason: "Checking active broker runtime." }));
     const timer = setTimeout(() => {
-      void fetch(`/api/context?symbol=${encodeURIComponent(symbol)}`, {
+      void fetch(`/api/broker/symbol?symbol=${encodeURIComponent(symbol)}`, {
         credentials: "include",
         signal: ctrl.signal,
       })
         .then(async (res) => {
-          if (!res.ok) throw new Error("Context unavailable");
+          if (!res.ok) throw new Error("Broker runtime unavailable");
           return (await res.json()) as {
-            axe_context?: {
-              chart?: {
-                symbol?: string | null;
-                brokerSymbol?: string | null;
-                lastPrice?: number | null;
-                staleState?: string | null;
-              };
-              accounts?: { activeAccountId?: string | null };
-            };
+            state: "valid" | "degraded" | "unavailable" | "inactive" | "warming";
+            brokerSymbol?: string | null;
+            reason?: string;
+            freshness?: string | null;
           };
         })
-        .then((ctx) => {
-          const chart = ctx.axe_context?.chart;
-          if (!ctx.axe_context?.accounts?.activeAccountId) {
-            setRuntimeCheck({ state: "inactive", brokerSymbol: null, reason: "Select an active broker account before creating price alerts." });
-            return;
-          }
-          if (!chart?.brokerSymbol || (chart.symbol ?? "").toUpperCase() !== symbol) {
-            setRuntimeCheck({ state: "unavailable", brokerSymbol: chart?.brokerSymbol ?? null, reason: "Symbol is not resolved on the active broker account." });
-            return;
-          }
-          if (chart.lastPrice == null) {
-            setRuntimeCheck({ state: "degraded", brokerSymbol: chart.brokerSymbol, reason: "Broker symbol is mapped, but no broker price is available yet." });
-            return;
-          }
+        .then((runtime) => {
           setRuntimeCheck({
-            state: chart.staleState === "live" ? "valid" : "degraded",
-            brokerSymbol: chart.brokerSymbol,
-            reason: chart.staleState === "live" ? "Broker symbol and price are available." : "Broker data is mapped but not fresh.",
+            state: runtime.state === "warming" ? "degraded" : runtime.state,
+            brokerSymbol: runtime.brokerSymbol ?? null,
+            reason: runtime.reason ?? "Broker runtime checked.",
           });
         })
         .catch(() => {

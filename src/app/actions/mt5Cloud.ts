@@ -13,6 +13,7 @@ import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetAccountInformation,
   clientGetHistoryDealsRange,
+  clientListSymbols,
   clientGetPositions,
   defaultRegionForProvisioning,
   metaApiTradingAccountId,
@@ -25,6 +26,12 @@ import {
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
+import {
+  buildBrokerSymbolRuntimeMetadata,
+  CANONICAL_BROKER_SYMBOLS,
+  probeBrokerSymbolReport,
+} from "@/lib/broker/brokerSymbolRuntime";
+import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -652,6 +659,7 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
   let dealsRaw: unknown[] = [];
   let positions: unknown[] = [];
   let info: Record<string, unknown> = {};
+  let brokerSymbols: string[] = [];
   let relinked = false;
 
   try {
@@ -695,6 +703,15 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
       clientGetPositions(extId, false, accountRegion),
       SYNC_POSITIONS_TIMEOUT_MS,
     );
+    try {
+      brokerSymbols = await withActionBudget(
+        "sync_symbols",
+        clientListSymbols(extId, accountRegion),
+        12_000,
+      );
+    } catch {
+      brokerSymbols = [];
+    }
     const end = new Date();
     const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
     dealsRaw = await withActionBudget(
@@ -800,6 +817,29 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
 
   const provider_status = mapConnectionToProviderStatus(accSnap.connectionStatus, accSnap.state) || "connected";
 
+  const positionSymbols = positions
+    .map((p) => (p && typeof p === "object" ? String((p as Record<string, unknown>).symbol ?? "") : ""))
+    .filter(Boolean);
+  const symbolRuntime =
+    brokerSymbols.length > 0
+      ? buildBrokerSymbolRuntimeMetadata({
+          existingMetadata: prevMeta,
+          knownSymbols: [...brokerSymbols, ...positionSymbols],
+          displaySymbols: [...CANONICAL_BROKER_SYMBOLS, ...positionSymbols.map(cleanDisplaySymbol).filter(Boolean)],
+        })
+      : null;
+  const symbolResolutionReport =
+    symbolRuntime && brokerSymbols.length > 0
+      ? await probeBrokerSymbolReport({
+          accountId: extId,
+          region: accountRegion,
+          report: symbolRuntime.symbol_resolution_report,
+          timeframe: "1h",
+          displays: [...CANONICAL_BROKER_SYMBOLS],
+          timeoutMs: 1_800,
+        }).catch(() => symbolRuntime.symbol_resolution_report)
+      : null;
+
   const metadata = {
     ...prevMeta,
     accountSummary: {
@@ -814,6 +854,12 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
     dealsFetched,
     dealsUpserted,
     lastSyncAt: new Date().toISOString(),
+    ...(symbolRuntime
+      ? {
+          ...symbolRuntime,
+          ...(symbolResolutionReport ? { symbol_resolution_report: symbolResolutionReport } : {}),
+        }
+      : {}),
   };
 
   await supabase

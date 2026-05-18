@@ -31,6 +31,7 @@ import type { TerminalAlert, TerminalExecution, WatchlistEntry } from "@/service
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
+import { getMetadataSymbolMap, getMetadataSymbolReport } from "@/lib/broker/brokerSymbolRuntime";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
 const INTEL_TIMEOUT_MS = 14_000;
@@ -54,6 +55,8 @@ const EMPTY_ACCOUNTS: AccountsContext = {
   accountHealth: "unknown",
   syncFreshness: { lastSyncAt: null, ageMinutes: null, state: "missing" },
   activeSymbols: [],
+  activeSymbolMap: {},
+  activeSymbolResolutionReport: {},
   openExposure: { positionsCount: 0, symbols: [], netBySymbol: [] },
 };
 
@@ -420,21 +423,26 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
   ]);
 
   const activeAccountId = (prefsRes.data?.active_account_id as string | null | undefined) ?? null;
-  const accounts = ((accountsRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
-    id: String(r.id),
-    label: String(r.label ?? "MT5 Account"),
-    provider: String(r.provider ?? "mt5"),
-    status: r.status != null ? String(r.status) : null,
-    connectionMethod: r.connection_method != null ? String(r.connection_method) : null,
-    providerStatus: r.provider_status != null ? String(r.provider_status) : null,
-    lastSyncAt: (r.last_sync_at as string | null | undefined) ?? null,
-    maskedLogin:
-      (r.masked_login as string | null | undefined) ??
-      (r.mt5_login != null ? String(r.mt5_login) : null),
-    mt5Server: (r.mt5_server as string | null | undefined) ?? null,
-    active: activeAccountId === r.id,
-    mt5Doctor: normalizeDoctorContext(r.metadata),
-  }));
+  const accounts = ((accountsRes.data ?? []) as Array<Record<string, unknown>>).map((r) => {
+    const metadata = (r.metadata ?? {}) as Record<string, unknown>;
+    return {
+      id: String(r.id),
+      label: String(r.label ?? "MT5 Account"),
+      provider: String(r.provider ?? "mt5"),
+      status: r.status != null ? String(r.status) : null,
+      connectionMethod: r.connection_method != null ? String(r.connection_method) : null,
+      providerStatus: r.provider_status != null ? String(r.provider_status) : null,
+      lastSyncAt: (r.last_sync_at as string | null | undefined) ?? null,
+      maskedLogin:
+        (r.masked_login as string | null | undefined) ??
+        (r.mt5_login != null ? String(r.mt5_login) : null),
+      mt5Server: (r.mt5_server as string | null | undefined) ?? null,
+      active: activeAccountId === r.id,
+      mt5Doctor: normalizeDoctorContext(r.metadata),
+      symbolMap: getMetadataSymbolMap(metadata),
+      symbolResolutionReport: getMetadataSymbolReport(metadata),
+    };
+  });
   const active = accounts.find((a) => a.active) ?? accounts[0] ?? null;
   const ageMinutes = minutesSince(active?.lastSyncAt);
   const freshness = syncState(ageMinutes);
@@ -464,7 +472,9 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
       ageMinutes,
       state: freshness,
     },
-    activeSymbols: [],
+    activeSymbols: Object.keys(active?.symbolMap ?? {}).sort(),
+    activeSymbolMap: active?.symbolMap ?? {},
+    activeSymbolResolutionReport: active?.symbolResolutionReport ?? {},
     openExposure: { positionsCount: 0, symbols: [], netBySymbol: [] },
   };
 }
@@ -935,6 +945,18 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
       ].join(", ");
       lines.push(
         `MT5 doctor: ${activeDoctor.overallStatus}; ${readable}; trading ${activeDoctor.tradingState}; ${activeDoctor.knownFailureReason ?? activeDoctor.headline}.`,
+      );
+    }
+    const mappedSymbols = Object.entries(ctx.accounts.activeSymbolMap)
+      .slice(0, 12)
+      .map(([display, broker]) => `${display}->${broker}`);
+    const unresolvedSymbols = Object.values(ctx.accounts.activeSymbolResolutionReport)
+      .filter((entry) => !entry.resolved)
+      .slice(0, 6)
+      .map((entry) => `${entry.displaySymbol}:${entry.reason}`);
+    if (mappedSymbols.length > 0 || unresolvedSymbols.length > 0) {
+      lines.push(
+        `Broker symbols: ${mappedSymbols.length > 0 ? mappedSymbols.join(", ") : "none mapped"}${unresolvedSymbols.length > 0 ? `; unresolved ${unresolvedSymbols.join(", ")}` : ""}.`,
       );
     }
   }

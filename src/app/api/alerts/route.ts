@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
+import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 
 type CreateAlertBody = {
   symbol?: string | null;
@@ -61,7 +63,43 @@ export async function POST(req: NextRequest) {
         : null;
 
   const status: "active" | "paused" = body.status === "paused" ? "paused" : "active";
-  const metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+  let metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+
+  if (type === "price") {
+    if (!symbol) return NextResponse.json({ error: "Price alerts need a symbol." }, { status: 400 });
+    const { data: prefs } = await supabase
+      .from("user_workspace_preferences")
+      .select("active_account_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const activeId = (prefs?.active_account_id as string | null | undefined) ?? null;
+    if (!activeId) {
+      return NextResponse.json({ error: "Select an active broker account before creating price alerts." }, { status: 400 });
+    }
+    const { data: account } = await supabase
+      .from("user_broker_accounts")
+      .select("metadata")
+      .eq("user_id", user.id)
+      .eq("id", activeId)
+      .maybeSingle();
+    const accountMetadata = (account?.metadata ?? {}) as Record<string, unknown>;
+    const displaySymbol = cleanDisplaySymbol(symbol) || symbol;
+    const map = getMetadataSymbolMap(accountMetadata);
+    const report = getMetadataSymbolReport(accountMetadata)[displaySymbol];
+    const universe = getMetadataSymbolUniverse(accountMetadata);
+    const brokerSymbol = map[displaySymbol] ?? resolveBrokerSymbol(displaySymbol, universe).brokerSymbol;
+    const supported =
+      Boolean(report?.resolved) ||
+      (Boolean(map[displaySymbol]) && report?.resolved !== false) ||
+      (universe.length > 0 && universe.includes(brokerSymbol));
+    if (!supported) {
+      return NextResponse.json(
+        { error: `${displaySymbol} is not available on the active broker account.`, reason: report?.reason ?? "broker_symbol_not_found" },
+        { status: 400 },
+      );
+    }
+    metadata = { ...metadata, broker_symbol: brokerSymbol, account_id: activeId };
+  }
 
   const { data, error } = await supabase
     .from("user_alerts")
@@ -81,4 +119,3 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ alert: data }, { status: 201 });
 }
-

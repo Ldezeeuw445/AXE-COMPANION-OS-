@@ -11,6 +11,10 @@ type Row = {
   message: string | null;
   brokerSymbol?: string | null;
   runtimePrice?: number | null;
+  bid?: number | null;
+  ask?: number | null;
+  spread?: number | null;
+  freshness?: string | null;
   runtimeState?: "live" | "degraded" | "warming" | "unavailable" | "inactive";
   supportLabel?: string;
   supportTone?: "live" | "warm" | "muted" | "blocked";
@@ -78,10 +82,19 @@ export function WatchlistPageScreen({ items }: Props) {
                     ? item.runtimePrice ?? "unavailable"
                     : "unavailable"}
                 </p>
+                {item?.bid != null || item?.ask != null ? (
+                  <p className="mt-0.5 text-[10px] text-tos-dim">
+                    Bid/Ask: <span className="font-mono">{item.bid ?? "—"} / {item.ask ?? "—"}</span>
+                    {item.spread != null ? <span> · spread {item.spread.toFixed(2)}</span> : null}
+                  </p>
+                ) : null}
+                {item?.freshness ? (
+                  <p className="mt-0.5 text-[10px] text-tos-dim">Freshness: {new Date(item.freshness).toLocaleTimeString()}</p>
+                ) : null}
               </div>
               <div className="flex gap-2 text-[11px]">
                 <span className={`rounded-full border px-2 py-0.5 text-[10px] ${supportClass}`}>
-                  {item?.supportLabel ?? "Open chart to resolve"}
+                  {item?.supportLabel ?? "Awaiting broker map"}
                 </span>
                 <Link href={`/chart?symbol=${encodeURIComponent(sym)}`} className="text-cyan-400 hover:underline">
                   Chart

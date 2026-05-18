@@ -3,18 +3,7 @@ import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
-
-function metadataSymbols(meta: Record<string, unknown>): string[] {
-  const raw = meta.symbol_universe;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
-  const symbols = (raw as { symbols?: unknown }).symbols;
-  return Array.isArray(symbols) ? symbols.filter((s): s is string => typeof s === "string" && s.length > 0) : [];
-}
-
-function symbolMap(meta: Record<string, unknown>): Record<string, string> {
-  const raw = meta.symbol_map;
-  return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, string>) : {};
-}
+import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
 
 export default async function WatchlistPage() {
   const items = await listWatchlistItems();
@@ -42,8 +31,9 @@ export default async function WatchlistPage() {
     .maybeSingle();
 
   const metadata = ((account?.metadata ?? {}) as Record<string, unknown>) ?? {};
-  const universe = metadataSymbols(metadata);
-  const map = symbolMap(metadata);
+  const universe = getMetadataSymbolUniverse(metadata);
+  const map = getMetadataSymbolMap(metadata);
+  const report = getMetadataSymbolReport(metadata);
   const connected = ["connected", "provisioned"].includes(String(account?.provider_status ?? "").toLowerCase());
   const { data: snapshots } = await supabase
     .from("chart_live_snapshots")
@@ -60,8 +50,17 @@ export default async function WatchlistPage() {
     const display = cleanDisplaySymbol(item.symbol) || item.symbol.toUpperCase();
     const cached = map[display] ?? map[item.symbol.toUpperCase()];
     const resolved = cached ? { brokerSymbol: cached } : resolveBrokerSymbol(display, universe);
-    const supported = universe.length > 0 ? universe.some((s) => s === resolved.brokerSymbol) : Boolean(cached);
+    const symbolReport = report[display];
+    const supported =
+      Boolean(symbolReport?.resolved) ||
+      (Boolean(cached) && symbolReport?.resolved !== false) ||
+      (universe.length > 0 && universe.some((s) => s === resolved.brokerSymbol));
     const snap = snapshotByDisplay.get(display);
+    const freshness =
+      (typeof snap?.last_tick_at === "string" ? snap.last_tick_at : null) ??
+      (typeof snap?.last_candle_at === "string" ? snap.last_candle_at : null) ??
+      symbolReport?.priceTime ??
+      null;
     const pricingState = snap
       ? brokerPricingState({
           status: snap.status as string | null,
@@ -75,6 +74,10 @@ export default async function WatchlistPage() {
       symbol: display,
       brokerSymbol: resolved.brokerSymbol,
       runtimePrice: snap?.last_price != null ? Number(snap.last_price) : null,
+      bid: snap?.last_bid != null ? Number(snap.last_bid) : symbolReport?.bid ?? null,
+      ask: snap?.last_ask != null ? Number(snap.last_ask) : symbolReport?.ask ?? null,
+      spread: symbolReport?.spread ?? null,
+      freshness,
       runtimeState: supported ? pricingState : "unavailable",
       supportLabel: supported
         ? connected
@@ -85,7 +88,7 @@ export default async function WatchlistPage() {
               : "Supported · no price"
           : "Mapped"
         : universe.length > 0
-          ? "Unavailable"
+          ? `Unavailable · ${symbolReport?.reason ?? "not on broker"}`
           : "Resolving",
       supportTone: supported ? (pricingState === "live" ? ("live" as const) : ("warm" as const)) : universe.length > 0 ? ("blocked" as const) : ("muted" as const),
     };

@@ -18,26 +18,21 @@ import {
 import {
   candidateBrokerSymbols,
   cleanDisplaySymbol,
-  detectSymbolPatterns,
   displaySymbolAliases,
   resolveBrokerSymbol,
 } from "@/lib/broker/symbolResolution";
+import {
+  buildBrokerSymbolRuntimeMetadata,
+  CANONICAL_BROKER_SYMBOLS,
+  getMetadataSymbolMap,
+  getMetadataSymbolUniverse,
+  metadataSymbolUniverseFresh,
+  probeBrokerSymbolReport,
+} from "@/lib/broker/brokerSymbolRuntime";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
 const DEFAULT_SYMBOL = "XAUUSD";
-const FALLBACK_SYMBOLS = [
-  "XAUUSD",
-  "BTCUSD",
-  "ETHUSD",
-  "EURUSD",
-  "GBPUSD",
-  "USDJPY",
-  "US100",
-  "NAS100",
-  "US500",
-  "US30",
-];
-const CORE_CHART_SYMBOLS = new Set(FALLBACK_SYMBOLS);
+const FALLBACK_SYMBOLS = [...CANONICAL_BROKER_SYMBOLS];
 const POSITIONS_RENDER_BUDGET_MS = 12_000;
 const SYMBOLS_RENDER_BUDGET_MS = 8_000;
 const CANDLES_RENDER_BUDGET_MS = 12_000;
@@ -144,7 +139,6 @@ function isCleanDisplayCandidate(symbol: string): boolean {
 }
 
 function chartSymbolSupported(displaySymbol: string, knownSymbols: string[], symbolMap: Record<string, string>): boolean {
-  if (CORE_CHART_SYMBOLS.has(displaySymbol)) return true;
   if (symbolMap[displaySymbol]) return true;
   if (knownSymbols.length === 0) return false;
   const resolved = resolveBrokerSymbol(displaySymbol, knownSymbols);
@@ -211,22 +205,6 @@ function rememberCandles(
     savedAt: Date.now(),
     lastCandleTime: candles.at(-1)?.time ?? null,
   });
-}
-
-function metadataSymbols(meta: Record<string, unknown>): string[] {
-  const raw = meta.symbol_universe;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
-  const symbols = (raw as { symbols?: unknown }).symbols;
-  return Array.isArray(symbols) ? symbols.filter((s): s is string => typeof s === "string" && s.length > 0) : [];
-}
-
-function metadataSymbolsFresh(meta: Record<string, unknown>): boolean {
-  const raw = meta.symbol_universe;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-  const updatedAt = (raw as { updatedAt?: unknown }).updatedAt;
-  if (typeof updatedAt !== "string") return false;
-  const t = Date.parse(updatedAt);
-  return Number.isFinite(t) && Date.now() - t < SYMBOL_UNIVERSE_TTL_MS;
 }
 
 function mapPositions(raw: Record<string, unknown>[]): OpenPositionRow[] {
@@ -534,37 +512,22 @@ export async function loadChartPageData(
   const accountMetadata = (accountRaw?.metadata ?? {}) as Record<string, unknown> & {
     symbol_map?: Record<string, string>;
   };
-  const symbolMap = accountMetadata.symbol_map ?? {};
+  let symbolMap = getMetadataSymbolMap(accountMetadata);
   const knownFromMetadata = Object.values(symbolMap).filter((s): s is string => typeof s === "string" && s.length > 0);
-  const knownFromUniverse = metadataSymbols(accountMetadata);
+  const knownFromUniverse = getMetadataSymbolUniverse(accountMetadata);
   let discoveredSymbols: string[] = [];
-  if (knownFromUniverse.length === 0 || !metadataSymbolsFresh(accountMetadata)) {
+  if (knownFromUniverse.length === 0 || !metadataSymbolUniverseFresh(accountMetadata, SYMBOL_UNIVERSE_TTL_MS)) {
     try {
       discoveredSymbols = await withRenderBudget(
         "symbols",
         clientListSymbols(account.metaApiAccountId, account.metaApiRegion ?? null),
         SYMBOLS_RENDER_BUDGET_MS,
       );
-      if (discoveredSymbols.length > 0) {
-        const nextMetadata = {
-          ...accountMetadata,
-          symbol_universe: {
-            symbols: discoveredSymbols.slice(0, 600),
-            updatedAt: new Date().toISOString(),
-          },
-          symbol_patterns: detectSymbolPatterns(discoveredSymbols),
-        };
-        void supabase
-          .from("user_broker_accounts")
-          .update({ metadata: nextMetadata })
-          .eq("id", account.brokerAccountId)
-          .eq("user_id", user.id);
-      }
     } catch {
       discoveredSymbols = [];
     }
   }
-  const knownAccountSymbols = Array.from(new Set([
+  let knownAccountSymbols = Array.from(new Set([
     ...fromPositions,
     ...knownFromMetadata,
     ...knownFromUniverse,
@@ -572,6 +535,42 @@ export async function loadChartPageData(
   ]));
   const requestedRaw = normalizeSymbol(symbolParam) || allPositions[0]?.symbol || watchSyms[0] || DEFAULT_SYMBOL;
   const requested = safeDisplaySymbol(requestedRaw);
+
+  if (knownAccountSymbols.length > 0) {
+    const runtimeMeta = buildBrokerSymbolRuntimeMetadata({
+      existingMetadata: accountMetadata,
+      knownSymbols: knownAccountSymbols,
+      displaySymbols: [requested, ...watchSyms, ...fromPositions.map(cleanDisplaySymbol).filter(Boolean)],
+    });
+    symbolMap = runtimeMeta.symbol_map;
+    knownAccountSymbols = Array.from(new Set([...knownAccountSymbols, ...Object.values(symbolMap)]));
+    const nextMetadata = { ...accountMetadata, ...runtimeMeta };
+    void supabase
+      .from("user_broker_accounts")
+      .update({ metadata: nextMetadata })
+      .eq("id", account.brokerAccountId)
+      .eq("user_id", user.id);
+    void probeBrokerSymbolReport({
+      accountId: account.metaApiAccountId,
+      region: account.metaApiRegion ?? null,
+      report: runtimeMeta.symbol_resolution_report,
+      timeframe: metaApiTimeframe,
+      displays: [requested, ...CANONICAL_BROKER_SYMBOLS],
+      timeoutMs: 2_000,
+    }).then((symbol_resolution_report) => {
+      void supabase
+        .from("user_broker_accounts")
+        .update({
+          metadata: {
+            ...nextMetadata,
+            symbol_resolution_report,
+          },
+        })
+        .eq("id", account.brokerAccountId)
+        .eq("user_id", user.id);
+    });
+  }
+
   const cachedBroker = symbolMap[requested] ?? symbolMap[requestedRaw];
   const resolution = cachedBroker
     ? {
@@ -582,6 +581,43 @@ export async function loadChartPageData(
         reason: cachedBroker === requested ? ("exact_match" as const) : ("suffix_variant" as const),
       }
     : resolveBrokerSymbol(requested, knownAccountSymbols);
+
+  if (
+    knownAccountSymbols.length > 0 &&
+    resolution.reason === "fallback_request" &&
+    !knownAccountSymbols.includes(resolution.brokerSymbol)
+  ) {
+    const symbolOptions = buildSymbolOptions({
+      requested,
+      fallbackSymbols: FALLBACK_SYMBOLS,
+      watchSymbols: watchSyms,
+      positionSymbols: fromPositions.map(cleanDisplaySymbol).filter(Boolean),
+      aliases: displaySymbolAliases(requested),
+      knownSymbols: knownAccountSymbols,
+      symbolMap,
+    });
+    return {
+      symbol: requested,
+      brokerSymbol: "",
+      timeframeKey,
+      metaApiTimeframe,
+      candles: [],
+      positionsOnSymbol: [],
+      positionsOnSymbolCount: 0,
+      totalPositions: allPositions.length,
+      lastPrice: null,
+      providerStatus: "failed",
+      failure: "broker_symbol_not_found",
+      dataError: `${requested} is not available on this broker account.`,
+      hint: "AXE checked the active broker symbol list and could not resolve a valid MT5 symbol for this account.",
+      symbolOptions,
+      attemptedSymbols: resolution.attempted,
+      account,
+      accountChoices,
+      lastCandleTime: null,
+      source: "MetaApi MT5",
+    };
+  }
 
   const cleanPositionSymbols = fromPositions.map(cleanDisplaySymbol).filter(Boolean);
   const symbolOptions = buildSymbolOptions({
@@ -622,20 +658,6 @@ export async function loadChartPageData(
     const attemptedSymbols = Array.from(new Set([...resolution.attempted, ...loaded.attempted]));
     const last = candles.length > 0 ? candles[candles.length - 1]?.close ?? null : null;
     const lastTime = candles.length > 0 ? candles[candles.length - 1]?.time ?? null : null;
-
-    // Persist successful broker symbol resolution per account.
-    if (candles.length > 0 && symbolMap[requested] !== brokerSymbol) {
-      const nextMetadata = {
-        ...accountMetadata,
-        symbol_map: { ...symbolMap, [requested]: brokerSymbol },
-        symbol_map_updated_at: new Date().toISOString(),
-      };
-      void supabase
-        .from("user_broker_accounts")
-        .update({ metadata: nextMetadata })
-        .eq("id", account.brokerAccountId)
-        .eq("user_id", user.id);
-    }
 
     if (candles.length === 0) {
       return {
