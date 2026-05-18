@@ -161,7 +161,9 @@ export function AppNavigation() {
       >
         <button
           type="button"
-          className={`absolute inset-0 bg-black/60 transition-opacity ${open ? "opacity-100" : "opacity-0"}`}
+          className={`absolute inset-0 bg-black/60 transition-opacity ${
+            open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          }`}
           onClick={close}
           aria-label="Close menu"
         />
