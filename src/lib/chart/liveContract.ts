@@ -82,4 +82,17 @@ export type ChartLiveEvent =
       lastCandleAt?: string | null;
     }
   | { type: "heartbeat" }
-  | { type: "error"; reason: string };
+  | { type: "error"; reason: string }
+  | {
+      /** High-impact market event pushed over the existing live channel.
+       *  Fired when the backend detects a high-impact calendar event or
+       *  breaking news during its periodic poll.  The client can surface
+       *  this as a toast / banner without an extra WebSocket connection. */
+      type: "market_alert";
+      alertKind: "calendar" | "news";
+      title: string;
+      impact?: "high" | "medium";
+      currency?: string | null;
+      startsAt?: string | null;
+      source?: string;
+    };

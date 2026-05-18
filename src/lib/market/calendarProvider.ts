@@ -1,5 +1,6 @@
 import "server-only";
 import { getFinnhubKey } from "@/lib/market/providerStatus";
+import { getSupabaseKey, getSupabaseServiceRoleKey } from "@/lib/env";
 import type { EconomicEvent } from "@/lib/market/marketTypes";
 
 const REVALIDATE_SECONDS = 60 * 30; // 30 min
@@ -79,6 +80,49 @@ function guessCurrency(country: string): string | null {
   return null;
 }
 
+// ── Edge Function fallback ──────────────────────────────────────────────
+// When FINNHUB_API_KEY is missing from the Vercel env, route through the
+// market-proxy Supabase Edge Function which holds the key in its secrets.
+async function fetchCalendarViaEdgeFunction(daysAhead: number): Promise<EconomicEvent[]> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  const anonKey = getSupabaseKey();
+  if (!url || !anonKey) return [];
+  const bearerKey = getSupabaseServiceRoleKey() ?? anonKey;
+  try {
+    const res = await fetch(`${url}/functions/v1/market-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${bearerKey}`,
+        apikey: anonKey,
+      },
+      body: JSON.stringify({ action: "economicCalendar", daysAhead }),
+      next: { revalidate: REVALIDATE_SECONDS, tags: ["calendar:edge-proxy"] },
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as {
+      ok?: boolean;
+      data?: { events?: Array<Record<string, unknown>> };
+    };
+    if (!body.ok || !body.data?.events) return [];
+    return body.data.events.map((e) => ({
+      id: String(e.id ?? ""),
+      title: String(e.title ?? "Economic event"),
+      country: (e.country as string) ?? null,
+      currency: (e.country as string) ? guessCurrency(String(e.country)) : null,
+      startsAt: String(e.startsAt ?? new Date().toISOString()),
+      impact: mapImpact(e.impact as string | null),
+      actual: (e.actual as number | string | null) ?? null,
+      forecast: (e.forecast as number | string | null) ?? null,
+      previous: (e.previous as number | string | null) ?? null,
+      unit: (e.unit as string) ?? null,
+      provider: "finnhub" as const,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** Returns upcoming high-impact-first events; Finnhub-only after FMP was deprecated. */
 export async function loadEconomicCalendar(opts: {
   symbol: string;
@@ -86,7 +130,11 @@ export async function loadEconomicCalendar(opts: {
   limit?: number;
 }): Promise<EconomicEvent[]> {
   const days = Math.max(1, Math.min(14, opts.daysAhead ?? 5));
-  const events = await fetchFinnhubCalendar(days);
+  // Try direct Finnhub first, fall back to Edge Function proxy.
+  let events = await fetchFinnhubCalendar(days);
+  if (events.length === 0) {
+    events = await fetchCalendarViaEdgeFunction(days);
+  }
 
   const briefingCurrency = currencyForSymbol(opts.symbol);
   // Bias to user's relevant currency, then everything else, prioritise high impact.

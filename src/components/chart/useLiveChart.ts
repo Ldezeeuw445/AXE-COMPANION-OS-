@@ -88,7 +88,11 @@ export function useLiveChart({
     }
 
     let cancelled = false;
-    let cleanupActive: (() => void) | null = null;
+    // ── Transport isolation: track WS and SSE cleanup separately so
+    //    an incoming WS connection can abort a lingering SSE, preventing
+    //    both transports from polling MetaAPI at the same time (429s).
+    let cleanupWs: (() => void) | null = null;
+    let cleanupSse: (() => void) | null = null;
     let backoff = 1500;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let staleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,6 +100,17 @@ export function useLiveChart({
     let lastDataAt = Date.now();
     let hasStableData = false;
     const transportRef = { current: "off" as LiveTransport };
+
+    /** Kill whatever is running on the *other* transport. */
+    function killOtherTransport(active: "ws" | "sse") {
+      if (active === "ws" && cleanupSse) {
+        cleanupSse();
+        cleanupSse = null;
+      } else if (active === "sse" && cleanupWs) {
+        cleanupWs();
+        cleanupWs = null;
+      }
+    }
 
     queueMicrotask(() => {
       if (cancelled) return;
@@ -272,6 +287,12 @@ export function useLiveChart({
             setUi("failed");
           }
           return;
+        case "market_alert":
+          // High-impact calendar/news event pushed by the backend.
+          // The UI can subscribe via onMarketAlert in a future pass;
+          // for now we treat it as a health signal.
+          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          return;
         case "heartbeat":
           if (!hasStableData) setUi("connecting");
           return;
@@ -307,6 +328,8 @@ export function useLiveChart({
         ws.onopen = () => {
           opened = true;
           backoff = 1500;
+          // ── WS connected: kill any lingering SSE immediately.
+          killOtherTransport("ws");
           setUi(hasStableData ? "connected" : "connecting");
         };
         ws.onmessage = (ev) => {
@@ -323,17 +346,17 @@ export function useLiveChart({
           // Let onclose drive recovery to avoid double scheduling.
         };
         ws.onclose = () => {
+          cleanupWs = null;
           if (cancelled) return;
           if (!opened) {
             // Token/edge unhealthy → fall back to SSE.
-            cleanupActive = null;
             void connectSse();
             return;
           }
           scheduleReconnect("ws");
         };
 
-        cleanupActive = () => {
+        cleanupWs = () => {
           try {
             ws.close();
           } catch {
@@ -348,6 +371,9 @@ export function useLiveChart({
 
     async function connectSse() {
       if (cancelled) return;
+      // ── SSE starting: make sure no WS is still alive (its DO would
+      //    keep polling MetaAPI in parallel → 429s).
+      killOtherTransport("sse");
       setT("sse");
       setUi(hasStableData ? "reconnecting" : "connecting");
       const qs = new URLSearchParams({
@@ -379,6 +405,7 @@ export function useLiveChart({
         } catch {
           /* ignore */
         }
+        cleanupSse = null;
         if (cancelled) return;
         if (!opened && !hasStableData) {
           setUi("offline");
@@ -387,7 +414,7 @@ export function useLiveChart({
         }
         scheduleReconnect("sse");
       };
-      cleanupActive = () => {
+      cleanupSse = () => {
         try {
           es.close();
         } catch {
@@ -404,7 +431,8 @@ export function useLiveChart({
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
       clearHealthTimers();
-      if (cleanupActive) cleanupActive();
+      if (cleanupWs) cleanupWs();
+      if (cleanupSse) cleanupSse();
     };
   }, [enabled, accountId, displaySymbol, brokerSymbol, timeframeKey]);
 
