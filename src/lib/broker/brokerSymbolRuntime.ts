@@ -156,6 +156,16 @@ export function buildBrokerSymbolRuntimeMetadata(input: {
     };
   }
 
+  // Final pass: evict any remaining symbol_map entries whose broker symbol
+  // is no longer in the current universe (handles symbols not in displaySymbols).
+  if (universe.length > 0) {
+    for (const [display, broker] of Object.entries(map)) {
+      if (!universe.includes(broker)) {
+        delete map[display];
+      }
+    }
+  }
+
   return {
     symbol_map: map,
     symbol_universe: { symbols: universe, updatedAt: now },
