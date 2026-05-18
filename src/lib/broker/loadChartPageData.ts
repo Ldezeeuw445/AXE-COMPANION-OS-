@@ -683,17 +683,44 @@ export async function loadChartPageData(
   ].filter(Boolean)));
 
   try {
-    const loaded = await withRenderBudget(
-      "candles",
-      loadFirstCandles({
-        accountId: account.metaApiAccountId,
-        region: account.metaApiRegion ?? null,
-        candidates: candleCandidates,
-        timeframe: metaApiTimeframe,
-        limit: 500,
-      }),
-      CANDLES_RENDER_BUDGET_MS,
-    );
+    // ── Fast-path: when we have a universe-verified cachedBroker, try it
+    //    directly with the full render budget instead of cycling through
+    //    the candidate list at 4.5 s each.  This makes timeframe switches
+    //    for already-resolved symbols resolve in < 1 s instead of 4-12 s.
+    let loaded: { candles: MetaApiCandle[]; brokerSymbol: string; attempted: string[] } | null = null;
+    if (cachedBroker) {
+      const cachedCandles = getCachedCandles(account.metaApiAccountId, cachedBroker, metaApiTimeframe);
+      if (cachedCandles) {
+        loaded = { candles: cachedCandles.candles, brokerSymbol: cachedCandles.brokerSymbol, attempted: [cachedBroker] };
+      } else {
+        try {
+          const candles = await withRenderBudget(
+            `candles_fastpath_${cachedBroker}`,
+            clientGetHistoricalCandles(account.metaApiAccountId, cachedBroker, metaApiTimeframe, 500, account.metaApiRegion ?? null),
+            CANDLES_RENDER_BUDGET_MS - 2_000, // 10 s — generous, still leaves 2 s headroom
+          );
+          if (candles.length > 0) {
+            rememberCandles(account.metaApiAccountId, cachedBroker, metaApiTimeframe, candles);
+            loaded = { candles, brokerSymbol: cachedBroker, attempted: [cachedBroker] };
+          }
+        } catch {
+          // Fast-path miss — fall through to the full candidate loop below.
+        }
+      }
+    }
+    if (!loaded) {
+      loaded = await withRenderBudget(
+        "candles",
+        loadFirstCandles({
+          accountId: account.metaApiAccountId,
+          region: account.metaApiRegion ?? null,
+          candidates: candleCandidates,
+          timeframe: metaApiTimeframe,
+          limit: 500,
+        }),
+        CANDLES_RENDER_BUDGET_MS,
+      );
+    }
     const candles = loaded.candles;
     const brokerSymbol = loaded.brokerSymbol || resolution.brokerSymbol;
     const attemptedSymbols = Array.from(new Set([...resolution.attempted, ...loaded.attempted]));

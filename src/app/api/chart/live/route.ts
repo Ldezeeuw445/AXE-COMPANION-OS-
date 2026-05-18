@@ -13,6 +13,7 @@ import type {
   ChartLiveStatus,
   LivePositionPayload,
 } from "@/lib/chart/liveContract";
+import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,6 +131,34 @@ export async function GET(request: NextRequest) {
         timeframe: tf,
         source: "metaapi_mt5",
       });
+
+      // ── Push high-impact calendar events via the existing channel ────
+      // Runs once per SSE connection (max 50 s). Calendar data is ISR-cached
+      // for 30 min so this costs zero extra API calls in steady state.
+      try {
+        const events = await loadEconomicCalendar({
+          symbol: requestedDisplaySymbol,
+          daysAhead: 1,
+          limit: 5,
+        });
+        const soon = Date.now() + 30 * 60 * 1000; // next 30 min
+        for (const evt of events) {
+          if (evt.impact !== "high") continue;
+          const t = Date.parse(evt.startsAt);
+          if (!Number.isFinite(t) || t > soon) continue;
+          send({
+            type: "market_alert",
+            alertKind: "calendar",
+            title: evt.title,
+            impact: "high",
+            currency: evt.currency ?? null,
+            startsAt: evt.startsAt,
+            source: "finnhub",
+          });
+        }
+      } catch {
+        /* calendar check is best-effort — never block the live feed */
+      }
 
       let lastTickAt = 0;
       let lastCandleAt = 0;

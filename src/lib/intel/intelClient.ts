@@ -1,5 +1,5 @@
 import "server-only";
-import { getSupabaseKey } from "@/lib/env";
+import { getSupabaseKey, getSupabaseServiceRoleKey } from "@/lib/env";
 
 const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
 const SNAPSHOT_FRESH_MS = 15 * 60 * 1000;
@@ -114,8 +114,14 @@ async function callIntelProxy<T>(
   args: Record<string, unknown> = {},
 ): Promise<IntelEnvelope<T>> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
-  const key = getSupabaseKey();
-  if (!url || !key) return { ok: false, error: "missing_supabase_env" };
+  const anonKey = getSupabaseKey();
+  if (!url || !anonKey) return { ok: false, error: "missing_supabase_env" };
+  // Use the service-role key for the Authorization Bearer token when
+  // available — this gives the Edge Function elevated server-side context
+  // and avoids JWT-verification failures that occur with the anon key on
+  // functions deployed with default settings.  The `apikey` header always
+  // uses the anon key (Supabase API gateway routing).
+  const bearerKey = getSupabaseServiceRoleKey() ?? anonKey;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), INTEL_PROXY_TIMEOUT_MS);
   try {
@@ -123,8 +129,8 @@ async function callIntelProxy<T>(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-        apikey: key,
+        Authorization: `Bearer ${bearerKey}`,
+        apikey: anonKey,
       },
       signal: ctrl.signal,
       body: JSON.stringify({ action, ...args }),
