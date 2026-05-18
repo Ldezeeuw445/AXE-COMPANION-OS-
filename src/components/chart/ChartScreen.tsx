@@ -2758,7 +2758,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-b from-[#04070C]/35 via-[#04070C]/72 to-[#04070C]/96 p-4 sm:items-center">
             <GlassPanel className="w-full max-w-md p-4 sm:p-5" glow="warm">
               {data.candles.length === 0 ? (
-                <div className="mb-3 rounded-xl border border-cyan-300/12 bg-cyan-400/[0.035] px-3 py-2">
+                <div className="mb-3 flex justify-center">
                   <AxeBreatheLoader
                     label={
                       data.failure === "broker_symbol_not_found"

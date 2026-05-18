@@ -48,9 +48,11 @@ export function WatchlistPageScreen({ items }: Props) {
         left={<BarChart3 className="h-6 w-6 text-cyan-400/80" aria-hidden />}
       />
 
-      <GlassPanel className="p-4">
+      <GlassPanel className="p-0">
+        <div className="border-b border-white/[0.06] px-3 py-2">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">AXE MT5 quotes</h2>
-        <ul className="mt-3 space-y-2">
+        </div>
+        <ul className="divide-y divide-white/[0.05]">
           {merged.map((sym) => {
             const item = itemMap.get(sym);
             const tone = item?.supportTone ?? "muted";
@@ -63,7 +65,8 @@ export function WatchlistPageScreen({ items }: Props) {
                     ? "border-rose-400/20 bg-rose-400/[0.07] text-rose-100/85"
                   : "border-white/10 bg-white/[0.025] text-tos-dim";
             return (
-            <li key={sym} className="grid grid-cols-1 gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 sm:grid-cols-[1fr_auto] sm:items-center">
+            <li key={sym}>
+              <Link href={`/chart?symbol=${encodeURIComponent(sym)}`} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2.5 transition-colors hover:bg-white/[0.035] active:bg-cyan-400/[0.06]">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm font-semibold text-tos-text">{sym}</span>
@@ -74,27 +77,16 @@ export function WatchlistPageScreen({ items }: Props) {
                 {item?.brokerSymbol && item.brokerSymbol !== sym ? (
                   <p className="mt-0.5 text-[10px] text-tos-dim">Broker: {item.brokerSymbol}</p>
                 ) : null}
-                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-tos-dim sm:grid-cols-4">
-                  <span>Bid <b className="font-mono font-semibold text-cyan-100/90">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.bid)}</b></span>
-                  <span>Ask <b className="font-mono font-semibold text-rose-100/90">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.ask)}</b></span>
-                  <span>Spread <b className="font-mono font-semibold text-tos-text/85">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.spread)}</b></span>
-                  <span>Fresh <b className="font-mono font-semibold text-tos-text/85">{item?.freshness ? new Date(item.freshness).toLocaleTimeString() : "—"}</b></span>
-                </div>
               </div>
-              <div className="flex gap-2 text-[11px] sm:justify-end">
-                <Link href={`/chart?symbol=${encodeURIComponent(sym)}`} className="text-cyan-400 hover:underline">
-                  Chart
-                </Link>
-                <Link
-                  href={`/chat?q=${encodeURIComponent(`[AXE · ${sym}]\nWhat matters for ${sym} today given my watchlist and open positions?`)}`}
-                  className="text-cyan-400/80 hover:underline"
-                >
-                  Ask AXE
-                </Link>
-                <Link href={`/alerts?symbol=${encodeURIComponent(sym)}`} className="text-tos-muted hover:underline">
-                  Alert
-                </Link>
+              <div className="grid min-w-[6.8rem] gap-0.5 text-right">
+                <span className="font-mono text-[12px] font-semibold text-cyan-100/95">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.bid)}</span>
+                <span className="font-mono text-[12px] font-semibold text-rose-100/95">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.ask)}</span>
               </div>
+              <div className="grid min-w-[4.4rem] gap-0.5 text-right">
+                <span className="font-mono text-[10px] text-tos-muted">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.spread)}</span>
+                <span className="font-mono text-[10px] text-tos-dim">{item?.freshness ? new Date(item.freshness).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</span>
+              </div>
+              </Link>
             </li>
             );
           })}

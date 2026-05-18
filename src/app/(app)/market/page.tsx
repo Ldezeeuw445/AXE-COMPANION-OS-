@@ -96,6 +96,9 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
+  const fredProvider = ctx.providers.find((p) => p.id === "fred");
+  const calendarProvider = ctx.providers.find((p) => p.id === "finnhub");
+  const newsProviders = ctx.providers.filter((p) => ["perigon", "polygon", "finnhub", "eodhd"].includes(p.id));
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
       {/* Mobile top bar: the AXE wordmark in the centre carries the
@@ -174,7 +177,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             <p className="mt-1 text-xs leading-relaxed text-tos-muted">
               {hasFred
                 ? "No macro observations are available for this symbol yet. AXE will not render empty metric cards as live data."
-                : "No server-side macro source is active for this deployment."}
+                : `No server-side macro source is active for this deployment. Set ${fredProvider?.env?.join(" or ") ?? "FRED_API_KEY"} in the server/Vercel environment.`}
             </p>
           </div>
         )}
@@ -211,7 +214,9 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            AXE Calendar is not configured for impact-rated economic events yet.
+            {calendarProvider?.state === "live"
+              ? "AXE Calendar is configured, but returned no impact-rated events for this window."
+              : `AXE Calendar needs ${calendarProvider?.env?.join(" or ") ?? "FINNHUB_API_KEY"} in the server/Vercel environment.`}
           </p>
         )}
       </GlassPanel>
@@ -235,8 +240,9 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            No headlines came back for {symbol} just now. AXE Market Data will keep using the configured server-side feeds
-            and safe fallback cache.
+            {newsProviders.some((p) => p.state === "live")
+              ? `No fresh headlines came back for ${symbol} just now. AXE will not show stale headlines as live.`
+              : `AXE News needs one server-side key: ${newsProviders.flatMap((p) => p.env ?? []).join(" / ") || "PERIGON_API_KEY / POLYGON_API_KEY / FINNHUB_API_KEY / EODHD_API_KEY"}.`}
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
@@ -284,6 +290,7 @@ function ProviderBadges({
       ready: macroReady,
       configured: providers.some((p) => p.id === "fred" && p.state === "live"),
       description: "FRED macro observations.",
+      env: providers.find((p) => p.id === "fred")?.env ?? ["FRED_API_KEY"],
     },
     {
       id: "news",
@@ -291,6 +298,7 @@ function ProviderBadges({
       ready: newsReady,
       configured: providers.some((p) => ["perigon", "polygon", "finnhub", "eodhd"].includes(p.id) && p.state === "live"),
       description: "Configured server-side news feeds.",
+      env: providers.filter((p) => ["perigon", "polygon", "finnhub", "eodhd"].includes(p.id)).flatMap((p) => p.env ?? []),
     },
     {
       id: "calendar",
@@ -298,6 +306,7 @@ function ProviderBadges({
       ready: calendarReady,
       configured: providers.some((p) => p.id === "finnhub" && p.state === "live"),
       description: "Impact-rated economic events.",
+      env: providers.find((p) => p.id === "finnhub")?.env ?? ["FINNHUB_API_KEY"],
     },
   ];
   const liveCount = grouped.filter((p) => p.ready).length;
@@ -314,7 +323,7 @@ function ProviderBadges({
                 ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-100/90"
                 : "border-white/12 bg-white/[0.04] text-tos-dim"
           }`}
-          title={p.description}
+          title={p.configured ? p.description : `${p.description} Missing: ${p.env.join(" / ")}`}
         >
           {p.label}
           {p.ready ? " · fresh" : p.configured ? " · warming" : " · off"}

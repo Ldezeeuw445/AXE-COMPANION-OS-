@@ -38,36 +38,42 @@ export function detectProviders(): ProviderStatus[] {
       label: "AXE Macro",
       state: getFredKey() ? "live" : "missing_config",
       description: "Macro time series — yields, rates, CPI, employment.",
+      env: ["FRED_API_KEY"],
     },
     {
       id: "perigon",
       label: "AXE News",
       state: getPerigonKey() ? "live" : "missing_config",
       description: "Curated news with topics, entities and sentiment.",
+      env: ["PERIGON_API_KEY"],
     },
     {
       id: "polygon",
       label: "AXE Reference",
       state: getPolygonKey() ? "live" : "missing_config",
       description: "Polygon.io reference news — equities, crypto, FX context.",
+      env: ["POLYGON_API_KEY", "POLYGON_KEY"],
     },
     {
       id: "finnhub",
       label: "AXE Calendar",
       state: getFinnhubKey() ? "live" : "missing_config",
       description: "Economic calendar, market news, forex/crypto news.",
+      env: ["FINNHUB_API_KEY"],
     },
     {
       id: "eodhd",
       label: "AXE Fallback",
       state: getEodhdKey() ? "live" : "missing_config",
       description: "Financial news + fundamentals (fallback).",
+      env: ["EODHD_API_KEY"],
     },
     {
       id: "unusualWhales",
       label: "AXE Intel",
       state: getUnusualWhalesKey() ? "live" : "missing_config",
       description: "Smart money: insider, congress, dark pool, options flow, tide.",
+      env: ["UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY"],
     },
   ];
 }

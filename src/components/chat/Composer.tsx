@@ -291,7 +291,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const hasContext = symbol || tf;
 
   return (
-    <div className="mt-3 shrink-0 border-t border-white/[0.06] pt-3">
+    <div className="sticky bottom-0 z-20 -mx-3 mt-3 shrink-0 border-t border-white/[0.06] bg-tos-bg/95 px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:-mx-4 sm:px-4 md:static md:mx-0 md:bg-transparent md:px-0 md:pb-0 md:shadow-none md:backdrop-blur-none">
       {showQuota && quota?.ok ? (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1 text-[10px] text-tos-dim">
           {quota.skipped ? (
@@ -450,7 +450,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         </button>
       </div>
 
-      <p className="mt-2 px-1 text-center text-[10px] leading-relaxed text-tos-dim">{LEGAL_COPY.chatDisclaimer}</p>
+      <p className="mt-1.5 px-1 text-center text-[9.5px] leading-relaxed text-tos-dim">{LEGAL_COPY.chatDisclaimer}</p>
 
       {error ? (
         <p className="mt-2 text-center text-[10px] text-tos-risk">{error}</p>

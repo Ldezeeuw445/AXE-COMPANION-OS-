@@ -41,7 +41,7 @@ export function AxeBreatheLoader({
 
 export function AxeLoadingPanel({ label = "Restoring live context" }: { label?: string }) {
   return (
-    <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-cyan-300/12 bg-cyan-400/[0.035] px-5 py-8">
+    <div className="flex min-h-[180px] items-center justify-center rounded-xl border border-cyan-300/12 bg-black/35 px-5 py-8">
       <AxeBreatheLoader label={label} />
     </div>
   );

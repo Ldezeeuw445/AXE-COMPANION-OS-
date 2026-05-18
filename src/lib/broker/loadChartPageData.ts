@@ -38,6 +38,7 @@ const POSITIONS_RENDER_BUDGET_MS = 12_000;
 const SYMBOLS_RENDER_BUDGET_MS = 8_000;
 const CANDLES_RENDER_BUDGET_MS = 12_000;
 const CANDLES_CANDIDATE_BUDGET_MS = 4_500;
+const CANDLES_RETRY_BACKOFF_MS = 650;
 const CANDLE_CACHE_TTL_MS = 5 * 60 * 1000;
 const SYMBOL_UNIVERSE_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -269,6 +270,35 @@ function isTimeoutError(e: unknown): e is ChartDataTimeoutError {
   return e instanceof ChartDataTimeoutError;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadCandlesWithRetry(input: {
+  accountId: string;
+  candidate: string;
+  timeframe: string;
+  limit: number;
+  region: string | null;
+}): Promise<MetaApiCandle[]> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await withRenderBudget(
+        `candles_${input.candidate}_attempt_${attempt + 1}`,
+        clientGetHistoricalCandles(input.accountId, input.candidate, input.timeframe, input.limit, input.region),
+        CANDLES_CANDIDATE_BUDGET_MS,
+      );
+    } catch (e) {
+      lastError = e;
+      if (e instanceof MetaApiRequestError && e.code === "not_found") throw e;
+      if (attempt === 0 && isTimeoutError(e)) await sleep(CANDLES_RETRY_BACKOFF_MS);
+      else break;
+    }
+  }
+  throw lastError;
+}
+
 async function loadFirstCandles(input: {
   accountId: string;
   region: string | null;
@@ -286,19 +316,15 @@ async function loadFirstCandles(input: {
       return { candles: cached.candles, brokerSymbol: cached.brokerSymbol, attempted };
     }
     try {
-      const candles = await withRenderBudget(
-        `candles_${candidate}`,
-        clientGetHistoricalCandles(input.accountId, candidate, input.timeframe, input.limit, input.region),
-        CANDLES_CANDIDATE_BUDGET_MS,
-      );
+      const candles = await loadCandlesWithRetry({ ...input, candidate });
       if (candles.length > 0) {
         rememberCandles(input.accountId, candidate, input.timeframe, candles);
         return { candles, brokerSymbol: candidate, attempted };
       }
     } catch (e) {
       lastError = e;
-      if (isTimeoutError(e)) break;
-      if (!(e instanceof MetaApiRequestError && e.code === "not_found")) break;
+      if (isTimeoutError(e)) continue;
+      if (!(e instanceof MetaApiRequestError && e.code === "not_found")) continue;
     }
   }
   if (lastError) throw lastError;
