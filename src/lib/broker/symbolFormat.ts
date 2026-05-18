@@ -2,12 +2,14 @@
 export function priceDigitsForSymbol(symbol: string): number {
   const s = (symbol ?? "").toUpperCase();
   if (!s) return 5;
-  if (s.startsWith("BTC") || s.startsWith("ETH") || s.includes("USDT")) return 2;
-  if (s.startsWith("XAU")) return 2;
-  if (s.startsWith("XAG")) return 3;
-  if (/JPY$/.test(s)) return 3;
-  if (/^(US30|US100|US500|GER40|UK100|JPN225|HK50|AUS200|NAS100|SPX500)$/.test(s)) return 1;
-  if (/^(WTI|UKOIL|USOIL|XTI|XBR)/.test(s)) return 2;
+  const base = s.replace(/^[#.]/, "").replace(/([._-](X|S|M|R|P|C|PRO|RAW|ECN|STD|MICRO|CASH)|[MRZ#])$/i, "");
+  if (base.startsWith("BTC") || base.startsWith("ETH") || base.includes("USDT")) return 2;
+  if (base.startsWith("XAU") || base.startsWith("GOLD")) return 2;
+  if (base.startsWith("XAG") || base.startsWith("SILVER")) return 3;
+  if (/JPY$/.test(base)) return 3;
+  if (/^(US30|DJ30|DOW|US100|NAS100|NASDAQ|USTEC|NDX|US500|SPX500|SP500|SPX|GER40|UK100|JPN225|HK50|AUS200)$/.test(base)) return 1;
+  if (/^(AAPL|JPM|NVDA|PLTR|TSLA)$/.test(base)) return 2;
+  if (/^(WTI|BRENT|UKOIL|USOIL|XTI|XBR)/.test(base)) return 2;
   return 5;
 }
 

@@ -4,6 +4,7 @@ import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
 type Row = {
   id: string;
@@ -79,13 +80,16 @@ export function WatchlistPageScreen({ items }: Props) {
                 <p className="mt-0.5 text-[10px] text-tos-dim">
                   Price:{" "}
                   {item?.runtimeState === "live" || item?.runtimeState === "degraded"
-                    ? item.runtimePrice ?? "unavailable"
+                    ? formatBrokerPrice(item.brokerSymbol ?? sym, item.runtimePrice)
                     : "unavailable"}
                 </p>
                 {item?.bid != null || item?.ask != null ? (
                   <p className="mt-0.5 text-[10px] text-tos-dim">
-                    Bid/Ask: <span className="font-mono">{item.bid ?? "—"} / {item.ask ?? "—"}</span>
-                    {item.spread != null ? <span> · spread {item.spread.toFixed(2)}</span> : null}
+                    Bid/Ask:{" "}
+                    <span className="font-mono">
+                      {formatBrokerPrice(item.brokerSymbol ?? sym, item.bid)} / {formatBrokerPrice(item.brokerSymbol ?? sym, item.ask)}
+                    </span>
+                    {item.spread != null ? <span> · spread {formatBrokerPrice(item.brokerSymbol ?? sym, item.spread)}</span> : null}
                   </p>
                 ) : null}
                 {item?.freshness ? (

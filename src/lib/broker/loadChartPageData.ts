@@ -3,6 +3,7 @@ import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetHistoricalCandles,
+  clientGetSymbolPrice,
   clientListSymbols,
   clientGetPositions,
   MetaApiRequestError,
@@ -87,6 +88,8 @@ export type ChartFailureKind =
   | "candles_unavailable"
   | "timeframe_unavailable"
   | "live_stream_unavailable"
+  | "current_price_unavailable"
+  | "metaapi_timeout"
   | "market_data_unavailable"
   | "provider_not_configured";
 
@@ -102,6 +105,9 @@ export type ChartPageData = {
   positionsOnSymbolCount: number;
   totalPositions: number;
   lastPrice: number | null;
+  lastBid: number | null;
+  lastAsk: number | null;
+  lastTickAt: string | null;
   providerStatus: string | null;
   failure: ChartFailureKind;
   /** Friendly error sentence for failure. */
@@ -318,6 +324,9 @@ function emptyData(
     positionsOnSymbolCount: 0,
     totalPositions: 0,
     lastPrice: null,
+    lastBid: null,
+    lastAsk: null,
+    lastTickAt: null,
     providerStatus,
     failure,
     dataError,
@@ -444,6 +453,9 @@ export async function loadChartPageData(
       positionsOnSymbolCount: 0,
       totalPositions: 0,
       lastPrice: last,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: lastTime,
       providerStatus: "demo",
       failure: "ok",
       dataError: null,
@@ -606,6 +618,9 @@ export async function loadChartPageData(
       positionsOnSymbolCount: 0,
       totalPositions: allPositions.length,
       lastPrice: null,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: null,
       providerStatus: "failed",
       failure: "broker_symbol_not_found",
       dataError: `${requested} is not available on this broker account.`,
@@ -658,6 +673,28 @@ export async function loadChartPageData(
     const attemptedSymbols = Array.from(new Set([...resolution.attempted, ...loaded.attempted]));
     const last = candles.length > 0 ? candles[candles.length - 1]?.close ?? null : null;
     const lastTime = candles.length > 0 ? candles[candles.length - 1]?.time ?? null : null;
+    let quote: { bid: number | null; ask: number | null; mid: number | null; time: string | null } | null = null;
+    if (candles.length > 0) {
+      try {
+        const price = await withRenderBudget(
+          `current_price_${brokerSymbol}`,
+          clientGetSymbolPrice(account.metaApiAccountId, brokerSymbol, account.metaApiRegion ?? null),
+          4_000,
+        );
+        const mid =
+          price.bid != null && price.ask != null
+            ? (price.bid + price.ask) / 2
+            : price.bid ?? price.ask ?? null;
+        quote = {
+          bid: price.bid,
+          ask: price.ask,
+          mid,
+          time: price.brokerTime ?? price.time ?? null,
+        };
+      } catch {
+        quote = null;
+      }
+    }
 
     if (candles.length === 0) {
       return {
@@ -670,6 +707,9 @@ export async function loadChartPageData(
         positionsOnSymbolCount: positionsOnSymbol.length,
         totalPositions: allPositions.length,
         lastPrice: null,
+        lastBid: null,
+        lastAsk: null,
+        lastTickAt: null,
         providerStatus: "stale",
         failure: "candles_unavailable",
         dataError: "MT5 market data not available for this symbol yet.",
@@ -692,13 +732,23 @@ export async function loadChartPageData(
       positionsOnSymbol,
       positionsOnSymbolCount: positionsOnSymbol.length,
       totalPositions: allPositions.length,
-      lastPrice: last != null && !Number.isNaN(last) ? last : null,
-      providerStatus: "connected",
+      lastPrice:
+        quote?.mid != null && Number.isFinite(quote.mid)
+          ? quote.mid
+          : last != null && !Number.isNaN(last)
+            ? last
+            : null,
+      lastBid: quote?.bid ?? null,
+      lastAsk: quote?.ask ?? null,
+      lastTickAt: quote?.time ?? null,
+      providerStatus: quote?.mid != null ? "connected" : "stale",
       failure: "ok",
       dataError: null,
-      hint: positionsTimedOut
-        ? "Chart candles loaded, but open positions are still refreshing. AXE will update overlays when the live feed catches up."
-        : null,
+      hint: quote?.mid == null
+        ? "Candles loaded, but current bid/ask is unavailable. AXE will use the candle close until the next broker tick arrives."
+        : positionsTimedOut
+          ? "Chart candles loaded, but open positions are still refreshing. AXE will update overlays when the live feed catches up."
+          : null,
       symbolOptions,
       attemptedSymbols,
       account,
@@ -722,6 +772,9 @@ export async function loadChartPageData(
           positionsOnSymbolCount: positionsOnSymbol.length,
           totalPositions: allPositions.length,
           lastPrice: cached.candles.at(-1)?.close ?? null,
+          lastBid: null,
+          lastAsk: null,
+          lastTickAt: null,
           providerStatus: "stale",
           failure: "ok",
           dataError: null,
@@ -744,10 +797,13 @@ export async function loadChartPageData(
         positionsOnSymbolCount: positionsOnSymbol.length,
         totalPositions: allPositions.length,
         lastPrice: null,
+        lastBid: null,
+        lastAsk: null,
+        lastTickAt: null,
         providerStatus: positionsTimedOut ? "stale" : "failed",
-        failure: "market_data_unavailable",
-        dataError: "MT5 market data is taking longer than expected.",
-        hint: "AXE stopped waiting so the chart could render. The live stream and Sync can retry without freezing the screen.",
+        failure: "metaapi_timeout",
+        dataError: "MetaAPI market data timed out before candles/current price finished.",
+        hint: "The chart request timed out at the MetaAPI market-data step. Sync or retry after the broker terminal is responsive.",
         symbolOptions,
         attemptedSymbols: resolution.attempted,
         account,
@@ -775,6 +831,9 @@ export async function loadChartPageData(
       positionsOnSymbolCount: positionsOnSymbol.length,
       totalPositions: allPositions.length,
       lastPrice: null,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: null,
       providerStatus: "failed",
       failure,
       dataError:

@@ -88,7 +88,7 @@ import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
 
 const TICK_REACT_THROTTLE_MS = 150;
-const SNAPSHOT_INTERVAL_MS = 30_000;
+const SNAPSHOT_INTERVAL_MS = 10_000;
 const ROUTE_PENDING_VISUAL_BUDGET_MS = 12_000;
 
 const CHART_SCALE_MODES = [
@@ -322,10 +322,20 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
         title: "Live stream unavailable",
         body: "REST data still works. Live updates will resume when the stream reconnects.",
       };
+    case "current_price_unavailable":
+      return {
+        title: "Current broker price unavailable",
+        body: "Candles loaded, but MetaAPI did not return bid/ask for this broker symbol. AXE will not mark the feed live until a real quote arrives.",
+      };
+    case "metaapi_timeout":
+      return {
+        title: "MetaAPI market data timed out",
+        body: "The broker terminal did not answer the candle/current-price request within AXE's render budget. Retry after Sync or redeploy.",
+      };
     case "market_data_unavailable":
       return {
-        title: "Chart data is recovering",
-        body: "AXE stopped waiting for this request so the app stays responsive. Try Sync, switch timeframe, or retry the symbol.",
+        title: "Broker market data unavailable",
+        body: "AXE could not complete the broker market-data request for this symbol/timeframe.",
       };
     case "provider_not_configured":
       return {
@@ -602,13 +612,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     !routeFallbackMessage && (isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey));
 
   const [livePrice, setLivePrice] = useState<number | null>(data.lastPrice);
-  const [lastTickAt, setLastTickAt] = useState<string | null>(null);
+  const [liveBid, setLiveBid] = useState<number | null>(data.lastBid);
+  const [liveAsk, setLiveAsk] = useState<number | null>(data.lastAsk);
+  const [lastTickAt, setLastTickAt] = useState<string | null>(data.lastTickAt);
   const [overlays, setOverlays] = useState<ChartOverlayRow[]>(data.positionsOnSymbol);
   const [livePositionsCount, setLivePositionsCount] = useState<number>(data.totalPositions);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
-  const lastBidRef = useRef<number | null>(null);
-  const lastAskRef = useRef<number | null>(null);
   const isVisible = usePageVisible();
   const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
   const sessionState = useMemo(() => marketSessionState(data.symbol), [data.symbol]);
@@ -1252,8 +1262,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     ({ mid, bid, ask, time }: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => {
       if (mid == null || !Number.isFinite(mid)) return;
       if (sessionState.state !== "open" && !eventFreshEnough(time)) return;
-      lastBidRef.current = bid;
-      lastAskRef.current = ask;
+      setLiveBid(bid);
+      setLiveAsk(ask);
       canvasRef.current?.applyTick(mid);
       // Update the mirrored last candle's close so RSI/Volume see live data.
       setLiveLastCandle((prev) => {
@@ -1290,11 +1300,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         tickVolume: candle.tickVolume,
         volume: candle.volume,
       });
-      if (Number.isFinite(candle.close) && Date.now() - lastReactPriceAt.current > 1_500) {
-        lastReactPriceAt.current = Date.now();
-        setLivePrice(candle.close);
-        setLastTickAt(new Date().toISOString());
-      }
+      // Candle close updates the candle body only. The visible quote stays
+      // on the current bid/ask mid so candle-close and tick streams cannot
+      // fight each other visually.
     },
     [sessionState.state],
   );
@@ -1361,8 +1369,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           brokerSymbol: data.brokerSymbol,
           timeframe: data.timeframeKey,
           lastPrice: livePrice,
-          lastBid: lastBidRef.current,
-          lastAsk: lastAskRef.current,
+          lastBid: liveBid,
+          lastAsk: liveAsk,
           lastTickAt,
           lastCandleAt: lastCandle?.time ?? data.lastCandleTime,
           lastCandle,
@@ -1384,6 +1392,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     data.timeframeKey,
     data.candles,
     livePrice,
+    liveBid,
+    liveAsk,
     lastTickAt,
     data.lastCandleTime,
     liveLastCandle,
@@ -1401,15 +1411,20 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     lastResetKeyRef.current = key;
     queueMicrotask(() => {
       setLivePrice(data.lastPrice);
+      setLiveBid(data.lastBid);
+      setLiveAsk(data.lastAsk);
       setOverlays(data.positionsOnSymbol);
       setLivePositionsCount(data.totalPositions);
-      setLastTickAt(null);
+      setLastTickAt(data.lastTickAt);
     });
   }, [
     data.account?.brokerAccountId,
     data.brokerSymbol,
     data.timeframeKey,
     data.lastPrice,
+    data.lastBid,
+    data.lastAsk,
+    data.lastTickAt,
     data.positionsOnSymbol,
     data.totalPositions,
   ]);
@@ -1417,10 +1432,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   useEffect(() => {
     if (sessionState.state === "open") return;
     setLivePrice(closedCanonicalPrice);
+    setLiveBid(data.lastBid);
+    setLiveAsk(data.lastAsk);
     setLastTickAt(null);
     const last = data.candles.at(-1);
     setLiveLastCandle(last ? { ...last } : null);
-  }, [closedCanonicalPrice, data.candles, sessionState.state]);
+  }, [closedCanonicalPrice, data.candles, data.lastBid, data.lastAsk, sessionState.state]);
 
   const freshestRuntimeAt = sessionState.state === "open" ? liveLastUpdateAt : lastTickAt;
   const liveAge = formatLiveAge(freshestRuntimeAt);
@@ -1911,8 +1928,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           brokerSymbol: data.brokerSymbol,
           timeframe: data.timeframeKey,
           lastPrice: livePrice,
-          lastBid: lastBidRef.current,
-          lastAsk: lastAskRef.current,
+          lastBid: liveBid,
+          lastAsk: liveAsk,
           lastTickAt,
           lastCandleAt: data.lastCandleTime,
           openPositionsCount: livePositionsCount,
@@ -1930,7 +1947,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     } finally {
       setTimeout(() => setSnapshotMessage(null), 4_000);
     }
-  }, [accountId, data, livePrice, lastTickAt, livePositionsCount, overlays, liveStatus]);
+  }, [accountId, data, livePrice, liveBid, liveAsk, lastTickAt, livePositionsCount, overlays, liveStatus]);
 
   const resetChartView = useCallback(() => {
     const nextIndex = (scaleModeIndex + 1) % CHART_SCALE_MODES.length;
@@ -2741,7 +2758,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       data.failure === "broker_symbol_not_found"
                         ? "Mapping symbol"
                         : data.failure === "market_data_unavailable"
-                          ? "Recovering chart"
+                          ? "Checking market data"
+                          : data.failure === "metaapi_timeout"
+                            ? "MetaAPI timed out"
                           : "Checking broker data"
                     }
                     size="sm"
@@ -3178,8 +3197,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         symbol={data.symbol}
         digits={priceDigitsForSymbol(data.brokerSymbol)}
         livePrice={livePrice}
-        bid={lastBidRef.current}
-        ask={lastAskRef.current}
+        bid={liveBid}
+        ask={liveAsk}
       />
 
       <ChartNewsDrawer
