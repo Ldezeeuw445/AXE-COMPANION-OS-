@@ -22,7 +22,14 @@ export default async function CockpitPage() {
         liveCount={cockpitReady ? 1 : 0}
         totalCount={1}
         label={cockpitReady ? "Cockpit · calibrated" : "Cockpit · calibrating"}
-        allLiveOverride={cockpitReady ? false : null}
+        allLiveOverride={cockpitReady ? true : null}
+        severity={cockpitReady ? "fresh" : "inactive"}
+        reason={
+          cockpitReady
+            ? `${dash.calibration.signalCount} real signals are available.`
+            : `${dash.calibration.signalCount} real signals found; missing ${dash.calibration.missingSignals.join(", ") || "snapshot"}.`
+        }
+        scope="cockpit"
       />
       <ScreenHeader
         title="Assistant cockpit"

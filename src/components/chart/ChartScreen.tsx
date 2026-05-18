@@ -1332,10 +1332,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     onPositions,
   });
 
-  // Periodic audit snapshot — best-effort, fails silently if migration not applied.
+  // Canonical chart runtime snapshot. Chat, Watchlist and Alerts read this
+  // same Supabase row, so write it as soon as broker candles hydrate and then
+  // keep it fresh while live data arrives.
   useEffect(() => {
-    if (!liveEnabled || (liveStatus !== "connected" && liveStatus !== "live_stream") || !accountId) return;
+    if (data.failure !== "ok" || !accountId || !data.brokerSymbol) return;
     const post = () => {
+      const lastCandle = liveLastCandle ?? data.candles.at(-1) ?? null;
+      const fresh =
+        liveLastUpdateAt != null &&
+        Date.now() - Date.parse(liveLastUpdateAt) < 30_000 &&
+        (liveStatus === "connected" || liveStatus === "live_stream");
+      const status =
+        fresh
+          ? "live"
+          : sessionState.state !== "open"
+            ? sessionState.state
+            : liveStatus === "offline" || liveStatus === "failed"
+              ? liveStatus
+              : "degraded";
       void fetch("/api/chart/snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1349,25 +1364,31 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           lastBid: lastBidRef.current,
           lastAsk: lastAskRef.current,
           lastTickAt,
-          lastCandleAt: data.lastCandleTime,
+          lastCandleAt: lastCandle?.time ?? data.lastCandleTime,
+          lastCandle,
           openPositionsCount: livePositionsCount,
           openPositions: overlays,
-          status: liveStatus,
+          status,
         }),
       }).catch(() => undefined);
     };
+    post();
     const t = setInterval(post, SNAPSHOT_INTERVAL_MS);
     return () => clearInterval(t);
   }, [
-    liveEnabled,
+    data.failure,
     liveStatus,
     accountId,
     data.symbol,
     data.brokerSymbol,
     data.timeframeKey,
+    data.candles,
     livePrice,
     lastTickAt,
     data.lastCandleTime,
+    liveLastCandle,
+    liveLastUpdateAt,
+    sessionState.state,
     livePositionsCount,
     overlays,
   ]);

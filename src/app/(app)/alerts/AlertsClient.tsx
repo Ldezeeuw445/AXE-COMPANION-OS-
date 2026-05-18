@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { PushPermission } from "@/components/push/PushPermission";
-import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
+import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 
 type AlertRow = {
   id: string;
@@ -394,7 +394,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       scope: "alerts",
     });
     return () => {
-      clearLiveStatus();
+      clearLiveStatusScope("alerts");
     };
   }, [error, push?.vapidConfigured, push?.hasSubscription, delivery.short]);
 

@@ -7,7 +7,7 @@ import { ScrollText, Landmark } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
-import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
+import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import type {
   BrokerTradeRow,
   HistoryPageData,
@@ -129,8 +129,15 @@ export function HistoryScreen({
       totalCount: 1,
       freshestAgeSec: null,
       label: `History · ${trades.length} trades`,
+      severity: loadError ? "degraded" : trades.length > 0 ? "fresh" : "inactive",
+      reason: loadError
+        ? "History ledger could not load."
+        : trades.length > 0
+          ? "Broker trade history loaded from Supabase."
+          : "No broker trade history sample yet.",
+      scope: "history",
     });
-    return () => clearLiveStatus();
+    return () => clearLiveStatusScope("history");
   }, [loadError, trades.length]);
 
   function buildHistoryUrl(next: {

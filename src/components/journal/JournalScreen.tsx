@@ -8,7 +8,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
-import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
+import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import type { JournalEntryRow, TradeHighlight } from "@/lib/journal/loadJournalPageData";
 import type { JournalAnalytics } from "@/lib/journal/computeJournalAnalytics";
 import { TradeJournalLabelForm } from "@/components/journal/TradeJournalLabelForm";
@@ -115,7 +115,7 @@ export function JournalScreen({
           : "No journal/trade sample yet.",
       scope: "journal",
     });
-    return () => clearLiveStatus();
+    return () => clearLiveStatusScope("journal");
   }, [entries.length, journalTrades.length, loadError]);
 
   return (
