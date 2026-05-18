@@ -385,11 +385,16 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         };
         const last = lastBarRef.current;
         if (last && last.time === incoming.time) {
+          // Keep the displayed/in-progress close anchored to the canonical
+          // quote stream. Candle polling is still allowed to correct OHLC,
+          // but it must not pull the visible price back to a stale candle
+          // close between real broker ticks.
+          const canonicalClose = Number.isFinite(last.close) ? last.close : incoming.close;
           const merged: CandlestickData = {
             ...incoming,
-            high: Math.max(incoming.high, last.high, incoming.close, last.close),
-            low: Math.min(incoming.low, last.low, incoming.close, last.close),
-            close: incoming.close,
+            high: Math.max(incoming.high, last.high, incoming.close, canonicalClose),
+            low: Math.min(incoming.low, last.low, incoming.close, canonicalClose),
+            close: canonicalClose,
           };
           series.update(merged);
           lastBarRef.current = merged;

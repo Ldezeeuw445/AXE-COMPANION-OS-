@@ -37,7 +37,7 @@ export default async function WatchlistPage() {
   const connected = ["connected", "provisioned"].includes(String(account?.provider_status ?? "").toLowerCase());
   const { data: snapshots } = await supabase
     .from("chart_live_snapshots")
-    .select("display_symbol,broker_symbol,last_price,last_tick_at,last_candle_at,status,updated_at")
+    .select("display_symbol,broker_symbol,last_price,last_bid,last_ask,last_tick_at,last_candle_at,status,updated_at")
     .eq("user_id", user.id)
     .eq("account_id", activeId)
     .order("updated_at", { ascending: false })
@@ -69,14 +69,19 @@ export default async function WatchlistPage() {
           lastCandleAt: snap.last_candle_at as string | null,
         })
       : "warming";
+    const bid = snap?.last_bid != null ? Number(snap.last_bid) : symbolReport?.bid ?? null;
+    const ask = snap?.last_ask != null ? Number(snap.last_ask) : symbolReport?.ask ?? null;
+    const spread = bid != null && ask != null && Number.isFinite(bid) && Number.isFinite(ask)
+      ? Math.abs(ask - bid)
+      : symbolReport?.spread ?? null;
     return {
       ...item,
       symbol: display,
       brokerSymbol: resolved.brokerSymbol,
       runtimePrice: snap?.last_price != null ? Number(snap.last_price) : null,
-      bid: snap?.last_bid != null ? Number(snap.last_bid) : symbolReport?.bid ?? null,
-      ask: snap?.last_ask != null ? Number(snap.last_ask) : symbolReport?.ask ?? null,
-      spread: symbolReport?.spread ?? null,
+      bid,
+      ask,
+      spread,
       freshness,
       runtimeState: supported ? pricingState : "unavailable",
       supportLabel: supported

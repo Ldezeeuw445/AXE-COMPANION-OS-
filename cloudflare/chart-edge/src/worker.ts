@@ -182,6 +182,19 @@ type RoomState = {
 
 const ROOM_STORAGE_KEY = "room_state_v1";
 
+function roomMatchesPayload(current: RoomState | null, next: RoomState): boolean {
+  return Boolean(
+    current &&
+      current.userId === next.userId &&
+      current.accountId === next.accountId &&
+      current.metaApiAccountId === next.metaApiAccountId &&
+      current.displaySymbol === next.displaySymbol &&
+      current.brokerSymbol === next.brokerSymbol &&
+      current.timeframe === next.timeframe &&
+      current.metaApiTimeframe === next.metaApiTimeframe,
+  );
+}
+
 export class ChartLiveRoom implements DurableObject {
   private readonly state: DurableObjectState;
   private readonly env: Env;
@@ -216,17 +229,26 @@ export class ChartLiveRoom implements DurableObject {
     const payload = await verifyChartSessionToken(token, this.env.CHART_SESSION_JWT_SECRET);
     if (!payload) return new Response("invalid_token", { status: 401 });
 
+    const nextRoom: RoomState = {
+      userId: payload.userId,
+      accountId: payload.accountId,
+      metaApiAccountId: payload.metaApiAccountId,
+      displaySymbol: payload.displaySymbol,
+      brokerSymbol: payload.brokerSymbol,
+      timeframe: payload.timeframe,
+      metaApiTimeframe: TF_MAP[payload.timeframe] ?? "1h",
+    };
     if (!this.room) {
       const stored = (await this.state.storage.get<RoomState>(ROOM_STORAGE_KEY)) ?? null;
-      this.room = stored ?? {
-        userId: payload.userId,
-        accountId: payload.accountId,
-        metaApiAccountId: payload.metaApiAccountId,
-        displaySymbol: payload.displaySymbol,
-        brokerSymbol: payload.brokerSymbol,
-        timeframe: payload.timeframe,
-        metaApiTimeframe: TF_MAP[payload.timeframe] ?? "1h",
-      };
+      this.room = roomMatchesPayload(stored, nextRoom) ? stored : nextRoom;
+      await this.state.storage.put(ROOM_STORAGE_KEY, this.room);
+    } else if (!roomMatchesPayload(this.room, nextRoom)) {
+      this.room = nextRoom;
+      this.lastTickAt = 0;
+      this.lastCandleAt = 0;
+      this.lastPositionsAt = 0;
+      this.consecutiveTickFailures = 0;
+      this.status = "reconnecting";
       await this.state.storage.put(ROOM_STORAGE_KEY, this.room);
     }
 

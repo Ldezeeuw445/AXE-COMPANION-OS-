@@ -97,6 +97,15 @@ export function useLiveChart({
     let hasStableData = false;
     const transportRef = { current: "off" as LiveTransport };
 
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setUiStatus("connecting");
+      setTransport("off");
+      setReason(null);
+      setLastUpdateAt(null);
+      setReconnectAttempt(0);
+    });
+
     function clearHealthTimers() {
       if (staleTimer) clearTimeout(staleTimer);
       if (offlineTimer) clearTimeout(offlineTimer);
@@ -188,7 +197,34 @@ export function useLiveChart({
       }
     }
 
+    function eventMatchesSubscription(evt: ChartLiveEvent): boolean {
+      const eventAccount = "accountId" in evt ? evt.accountId : null;
+      const eventDisplay = "displaySymbol" in evt ? evt.displaySymbol : null;
+      const eventBroker = "brokerSymbol" in evt ? evt.brokerSymbol : null;
+      const eventTf = "timeframe" in evt ? evt.timeframe : null;
+      const metaTf =
+        timeframeKey === "m5"
+          ? "5m"
+          : timeframeKey === "m15"
+            ? "15m"
+            : timeframeKey === "m30"
+              ? "30m"
+              : timeframeKey === "h1"
+                ? "1h"
+                : timeframeKey === "h4"
+                  ? "4h"
+                  : timeframeKey === "d1"
+                    ? "1d"
+                    : timeframeKey;
+      if (eventAccount && eventAccount !== accountId) return false;
+      if (eventDisplay && eventDisplay.toUpperCase() !== displaySymbol.toUpperCase()) return false;
+      if (eventBroker && eventBroker !== brokerSymbol) return false;
+      if (eventTf && eventTf !== timeframeKey && eventTf !== metaTf) return false;
+      return true;
+    }
+
     function applyEvent(evt: ChartLiveEvent) {
+      if (cancelled || !eventMatchesSubscription(evt)) return;
       switch (evt.type) {
         case "ready":
           setUi(hasStableData ? (transportRef.current === "ws" ? "connected" : "delayed_polling") : "connecting");
@@ -274,6 +310,7 @@ export function useLiveChart({
           setUi(hasStableData ? "connected" : "connecting");
         };
         ws.onmessage = (ev) => {
+          if (cancelled) return;
           if (!ev.data) return;
           try {
             const evt = JSON.parse(String(ev.data)) as ChartLiveEvent;
@@ -327,6 +364,7 @@ export function useLiveChart({
         setUi(hasStableData ? "delayed_polling" : "connecting");
       };
       es.onmessage = (ev) => {
+        if (cancelled) return;
         if (!ev.data) return;
         try {
           const evt = JSON.parse(String(ev.data)) as ChartLiveEvent;

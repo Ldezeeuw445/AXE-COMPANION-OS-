@@ -1012,7 +1012,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         setTradeToast({
           kind: "demo",
           title: `Demo ${side.toUpperCase()} ${data.symbol} ${isMarketOrder ? "market filled" : "plan filled"}`,
-          body: `${tradeVolumeNum.toFixed(2)} lots @ ${entry.toFixed(priceDigitsForSymbol(data.brokerSymbol))}. Virtual position only — no broker order sent.`,
+          body: `${tradeVolumeNum.toFixed(2)} lots @ ${formatBrokerPrice(data.brokerSymbol, entry)}. Virtual position only — no broker order sent.`,
         });
       } else {
         setTradeToast({
@@ -1291,20 +1291,26 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       canvasRef.current?.updateLastCandle(candle);
       // Mirror to React state so the indicator panes recompute on each
       // candle update — guarantees RSI / Volume tick live with the chart.
-      setLiveLastCandle({
-        time: candle.time,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        tickVolume: candle.tickVolume,
-        volume: candle.volume,
+      setLiveLastCandle((prev) => {
+        const sameBucket = prev?.time === candle.time;
+        const canonicalClose = sameBucket && livePrice != null && Number.isFinite(livePrice)
+          ? livePrice
+          : candle.close;
+        return {
+          time: candle.time,
+          open: candle.open,
+          high: Math.max(candle.high, canonicalClose),
+          low: Math.min(candle.low, canonicalClose),
+          close: canonicalClose,
+          tickVolume: candle.tickVolume,
+          volume: candle.volume,
+        };
       });
       // Candle close updates the candle body only. The visible quote stays
       // on the current bid/ask mid so candle-close and tick streams cannot
       // fight each other visually.
     },
-    [sessionState.state],
+    [livePrice, sessionState.state],
   );
 
   const onPositions = useCallback(({ total, onSymbol }: { total: number; onSymbol: LivePosition[] }) => {
@@ -2763,6 +2769,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                             ? "MetaAPI timed out"
                           : "Checking broker data"
                     }
+                    tone={data.failure === "metaapi_timeout" || data.failure === "candles_unavailable" ? "gold" : "cyan"}
                     size="sm"
                   />
                 </div>
@@ -2827,7 +2834,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         {isTimeframePending ? (
           <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-cyan-300/20 bg-black/78 px-2.5 py-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
             <AxeBreatheLoader
-              label={`Loading ${CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}`}
+              label={`Running ${CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}`}
               size="sm"
             />
           </div>
@@ -2973,7 +2980,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </span>
             <span className="ml-auto font-mono text-[11px] text-tos-muted">
               {executionMode === "pending" && pendingOrderPrice != null
-                ? pendingOrderPrice.toFixed(priceDigitsForSymbol(data.brokerSymbol))
+                ? formatBrokerPrice(data.brokerSymbol, pendingOrderPrice)
                 : tradeVolume}
             </span>
           </button>
@@ -3194,7 +3201,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       <ChartOrderBookDrawer
         open={orderBookOpen}
         onClose={() => setOrderBookOpen(false)}
-        symbol={data.symbol}
+        symbol={data.brokerSymbol}
         digits={priceDigitsForSymbol(data.brokerSymbol)}
         livePrice={livePrice}
         bid={liveBid}

@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { X, BarChart2 } from "lucide-react";
+import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
 type Props = {
   open: boolean;
@@ -256,14 +257,14 @@ export function ChartOrderBookDrawer({
                     : "text-tos-text"
               }`}
             >
-              {mid != null ? mid.toFixed(digits) : "—"}
+              {formatBrokerPrice(symbol, mid)}
             </span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="text-tos-muted">Spread</span>
             <span className="font-mono text-[11px] text-tos-text">
               {spread != null
-                ? `${spread.toFixed(digits)}${spreadPoints != null ? ` · ${spreadPoints}p` : ""}`
+                ? `${formatBrokerPrice(symbol, spread)}${spreadPoints != null ? ` · ${spreadPoints}p` : ""}`
                 : "—"}
             </span>
           </span>
@@ -306,7 +307,7 @@ export function ChartOrderBookDrawer({
                         {formatSize(row.cumulative)}
                       </span>
                       <span className="relative text-right font-mono text-[11px] font-semibold text-rose-300/95">
-                        {row.price.toFixed(digits)}
+                        {formatBrokerPrice(symbol, row.price)}
                       </span>
                       <span className="relative text-left font-mono text-[11px] text-tos-muted">
                         {formatSize(row.size)}
@@ -322,7 +323,7 @@ export function ChartOrderBookDrawer({
               {/* Mid bar */}
               <div className="flex shrink-0 items-center justify-between border-y border-cyan-400/15 bg-cyan-400/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-100/85">
                 <span>{lastTickDir === "up" ? "↑ Uptick" : lastTickDir === "down" ? "↓ Downtick" : "·"}</span>
-                <span className="font-mono text-[11px] text-cyan-100">{mid.toFixed(digits)}</span>
+                <span className="font-mono text-[11px] text-cyan-100">{formatBrokerPrice(symbol, mid)}</span>
                 <span>{spreadPoints != null ? `${spreadPoints}p` : "—"}</span>
               </div>
 
@@ -350,7 +351,7 @@ export function ChartOrderBookDrawer({
                         {formatSize(row.size)}
                       </span>
                       <span className="relative text-left font-mono text-[11px] font-semibold text-cyan-200/95">
-                        {row.price.toFixed(digits)}
+                        {formatBrokerPrice(symbol, row.price)}
                       </span>
                       <span className="relative text-right font-mono text-[10px] text-tos-dim">
                         {row.kind === "real" ? "L1" : ""}

@@ -212,7 +212,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       setError("Price alerts need a valid threshold.");
       return;
     }
-    if (type === "price" && (runtimeCheck.state === "unavailable" || runtimeCheck.state === "inactive")) {
+    if (type === "price" && runtimeCheck.state !== "valid") {
       setError(runtimeCheck.reason);
       return;
     }
@@ -529,7 +529,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           <button
             type="button"
             onClick={() => void createAlert()}
-            disabled={saving || (formType === "price" && (runtimeCheck.state === "unavailable" || runtimeCheck.state === "inactive" || runtimeCheck.state === "checking"))}
+            disabled={saving || (formType === "price" && runtimeCheck.state !== "valid")}
             className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/12 px-3 py-2 text-[12px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18 disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}

@@ -44,21 +44,13 @@ export function WatchlistPageScreen({ items }: Props) {
       />
       <ScreenHeader
         title="Watchlist"
-        subtitle="Symbols AXE uses for chat context, news/macro filtering and alerts. Prices come from your connected MT5 account when you open Chart."
+        subtitle="MT5 broker quotes for the active account. Clean symbols stay readable; broker symbols, bid, ask, spread and freshness show the runtime truth."
         left={<BarChart3 className="h-6 w-6 text-cyan-400/80" aria-hidden />}
       />
 
       <GlassPanel className="p-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Your symbols</h2>
-        <p className="mt-1 text-xs text-tos-muted">Edit here or in Settings — same list.</p>
-        <div className="mt-3">
-          <WatchlistManager items={items} />
-        </div>
-      </GlassPanel>
-
-      <GlassPanel className="p-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Quick open chart</h2>
-        <ul className="mt-2 space-y-2">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">AXE MT5 quotes</h2>
+        <ul className="mt-3 space-y-2">
           {merged.map((sym) => {
             const item = itemMap.get(sym);
             const tone = item?.supportTone ?? "muted";
@@ -71,35 +63,25 @@ export function WatchlistPageScreen({ items }: Props) {
                     ? "border-rose-400/20 bg-rose-400/[0.07] text-rose-100/85"
                   : "border-white/10 bg-white/[0.025] text-tos-dim";
             return (
-            <li key={sym} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+            <li key={sym} className="grid grid-cols-1 gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 sm:grid-cols-[1fr_auto] sm:items-center">
               <div className="min-w-0">
-                <span className="font-mono text-sm text-tos-text">{sym}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-tos-text">{sym}</span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] ${supportClass}`}>
+                    {item?.supportLabel ?? "Awaiting broker map"}
+                  </span>
+                </div>
                 {item?.brokerSymbol && item.brokerSymbol !== sym ? (
                   <p className="mt-0.5 text-[10px] text-tos-dim">Broker: {item.brokerSymbol}</p>
                 ) : null}
-                <p className="mt-0.5 text-[10px] text-tos-dim">
-                  Price:{" "}
-                  {item?.runtimeState === "live" || item?.runtimeState === "degraded"
-                    ? formatBrokerPrice(item.brokerSymbol ?? sym, item.runtimePrice)
-                    : "unavailable"}
-                </p>
-                {item?.bid != null || item?.ask != null ? (
-                  <p className="mt-0.5 text-[10px] text-tos-dim">
-                    Bid/Ask:{" "}
-                    <span className="font-mono">
-                      {formatBrokerPrice(item.brokerSymbol ?? sym, item.bid)} / {formatBrokerPrice(item.brokerSymbol ?? sym, item.ask)}
-                    </span>
-                    {item.spread != null ? <span> · spread {formatBrokerPrice(item.brokerSymbol ?? sym, item.spread)}</span> : null}
-                  </p>
-                ) : null}
-                {item?.freshness ? (
-                  <p className="mt-0.5 text-[10px] text-tos-dim">Freshness: {new Date(item.freshness).toLocaleTimeString()}</p>
-                ) : null}
+                <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-tos-dim sm:grid-cols-4">
+                  <span>Bid <b className="font-mono font-semibold text-cyan-100/90">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.bid)}</b></span>
+                  <span>Ask <b className="font-mono font-semibold text-rose-100/90">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.ask)}</b></span>
+                  <span>Spread <b className="font-mono font-semibold text-tos-text/85">{formatBrokerPrice(item?.brokerSymbol ?? sym, item?.spread)}</b></span>
+                  <span>Fresh <b className="font-mono font-semibold text-tos-text/85">{item?.freshness ? new Date(item.freshness).toLocaleTimeString() : "—"}</b></span>
+                </div>
               </div>
-              <div className="flex gap-2 text-[11px]">
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] ${supportClass}`}>
-                  {item?.supportLabel ?? "Awaiting broker map"}
-                </span>
+              <div className="flex gap-2 text-[11px] sm:justify-end">
                 <Link href={`/chart?symbol=${encodeURIComponent(sym)}`} className="text-cyan-400 hover:underline">
                   Chart
                 </Link>
@@ -117,6 +99,14 @@ export function WatchlistPageScreen({ items }: Props) {
             );
           })}
         </ul>
+      </GlassPanel>
+
+      <GlassPanel className="p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Edit watchlist</h2>
+        <p className="mt-1 text-xs text-tos-muted">Add or remove clean symbols. Runtime quotes resolve through the active MT5 account.</p>
+        <div className="mt-3">
+          <WatchlistManager items={items} />
+        </div>
       </GlassPanel>
     </div>
   );

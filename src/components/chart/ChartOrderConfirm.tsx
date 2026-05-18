@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, X } from "lucide-react";
+import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
 export type OrderConfirmInput = {
   symbol: string;
@@ -61,10 +62,10 @@ export function ChartOrderConfirm({
   const orderTypeLabel = labelOrderType(input.orderType);
   const priceLabel = input.orderType === "market"
     ? input.livePrice != null
-      ? input.livePrice.toFixed(input.digits)
+      ? formatBrokerPrice(input.brokerSymbol, input.livePrice)
       : "—"
     : input.openPrice != null
-      ? input.openPrice.toFixed(input.digits)
+      ? formatBrokerPrice(input.brokerSymbol, input.openPrice)
       : "—";
 
   return (
@@ -124,12 +125,12 @@ export function ChartOrderConfirm({
           <Row label="Price" value={priceLabel} highlight={isBuy ? "cyan" : "rose"} />
           <Row
             label="Stop loss"
-            value={input.stopLoss != null ? input.stopLoss.toFixed(input.digits) : "—"}
+            value={input.stopLoss != null ? formatBrokerPrice(input.brokerSymbol, input.stopLoss) : "—"}
             highlight={input.stopLoss != null ? "rose" : null}
           />
           <Row
             label="Take profit"
-            value={input.takeProfit != null ? input.takeProfit.toFixed(input.digits) : "—"}
+            value={input.takeProfit != null ? formatBrokerPrice(input.brokerSymbol, input.takeProfit) : "—"}
             highlight={input.takeProfit != null ? "cyan" : null}
           />
           <Row label="Slippage" value={`${input.slippagePoints} pts`} />

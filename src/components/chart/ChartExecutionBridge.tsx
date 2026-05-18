@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Activity, Lock, ShieldAlert, X } from "lucide-react";
+import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
 type Props = {
   symbol: string;
@@ -38,7 +39,6 @@ export function ChartExecutionBridge({
   brokerSymbol,
   timeframeLabel,
   lastPrice,
-  digits,
   defaultSide = "buy",
   defaultOrderType = "market",
   defaultVolume = "0.10",
@@ -50,7 +50,7 @@ export function ChartExecutionBridge({
   const [side, setSide] = useState<"buy" | "sell">(defaultSide);
   const [orderType, setOrderType] = useState<"market" | "limit" | "stop">(defaultOrderType);
   const [volume, setVolume] = useState<string>(defaultVolume);
-  const [entry, setEntry] = useState<string>((entryPrice ?? lastPrice) ? (entryPrice ?? lastPrice)?.toFixed(digits) ?? "" : "");
+  const [entry, setEntry] = useState<string>((entryPrice ?? lastPrice) ? formatBrokerPrice(brokerSymbol, entryPrice ?? lastPrice) : "");
   const [stopLoss, setStopLoss] = useState<string>("");
   const [takeProfit, setTakeProfit] = useState<string>("");
   const [risk, setRisk] = useState<string>("0.5");
@@ -71,16 +71,16 @@ export function ChartExecutionBridge({
 
   useEffect(() => {
     const next = entryPrice ?? lastPrice;
-    if (next != null && Number.isFinite(next)) setEntry(next.toFixed(digits));
-  }, [digits, entryPrice, lastPrice]);
+    if (next != null && Number.isFinite(next)) setEntry(formatBrokerPrice(brokerSymbol, next));
+  }, [brokerSymbol, entryPrice, lastPrice]);
 
   useEffect(() => {
-    if (stopLossPrice != null && Number.isFinite(stopLossPrice)) setStopLoss(stopLossPrice.toFixed(digits));
-  }, [digits, stopLossPrice]);
+    if (stopLossPrice != null && Number.isFinite(stopLossPrice)) setStopLoss(formatBrokerPrice(brokerSymbol, stopLossPrice));
+  }, [brokerSymbol, stopLossPrice]);
 
   useEffect(() => {
-    if (takeProfitPrice != null && Number.isFinite(takeProfitPrice)) setTakeProfit(takeProfitPrice.toFixed(digits));
-  }, [digits, takeProfitPrice]);
+    if (takeProfitPrice != null && Number.isFinite(takeProfitPrice)) setTakeProfit(formatBrokerPrice(brokerSymbol, takeProfitPrice));
+  }, [brokerSymbol, takeProfitPrice]);
 
   const planText = buildPlanText({
     symbol,
@@ -174,7 +174,7 @@ export function ChartExecutionBridge({
             label={orderType === "market" ? "Entry (last)" : "Entry"}
             value={entry}
             onChange={setEntry}
-            placeholder={lastPrice ? lastPrice.toFixed(digits) : "—"}
+            placeholder={lastPrice ? formatBrokerPrice(brokerSymbol, lastPrice) : "—"}
           />
           <Field label="Stop loss" value={stopLoss} onChange={setStopLoss} placeholder="—" />
           <Field
