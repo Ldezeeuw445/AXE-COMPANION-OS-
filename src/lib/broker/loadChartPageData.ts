@@ -40,7 +40,7 @@ const CANDLES_RENDER_BUDGET_MS = 12_000;
 const CANDLES_CANDIDATE_BUDGET_MS = 4_500;
 const CANDLES_RETRY_BACKOFF_MS = 650;
 const CANDLE_CACHE_TTL_MS = 5 * 60 * 1000;
-const SYMBOL_UNIVERSE_TTL_MS = 12 * 60 * 60 * 1000;
+const SYMBOL_UNIVERSE_TTL_MS = 30 * 60 * 1000;
 
 type CandleCacheEntry = {
   candles: MetaApiCandle[];
@@ -609,7 +609,12 @@ export async function loadChartPageData(
     });
   }
 
-  const cachedBroker = symbolMap[requested] ?? symbolMap[requestedRaw];
+  const rawCachedBroker = symbolMap[requested] ?? symbolMap[requestedRaw];
+  // Validate: if the cached broker symbol is no longer in the account's known universe, evict it.
+  const cachedBroker =
+    rawCachedBroker && knownAccountSymbols.length > 0 && !knownAccountSymbols.includes(rawCachedBroker)
+      ? undefined
+      : rawCachedBroker;
   const resolution = cachedBroker
     ? {
         brokerSymbol: cachedBroker,
@@ -675,12 +680,23 @@ export async function loadChartPageData(
     .filter((p) => p.symbol === resolution.brokerSymbol || cleanDisplaySymbol(p.symbol) === requested)
     .map(toOverlay);
 
-  const candleCandidates = Array.from(new Set([
+  const rawCandidates = Array.from(new Set([
     ...(cachedBroker ? [cachedBroker] : []),
     resolution.brokerSymbol,
     ...resolution.attempted,
     ...candidateBrokerSymbols(requested, knownAccountSymbols),
   ].filter(Boolean)));
+
+  // When we have a fresh universe, only try candidates verified to exist on the broker.
+  // This eliminates blind probing (up to 48 × 4.5s worst-case → 1-3 targeted calls).
+  const universeSet = knownAccountSymbols.length > 0 ? new Set(knownAccountSymbols) : null;
+  const verifiedCandidates = universeSet
+    ? rawCandidates.filter((c) => universeSet.has(c))
+    : rawCandidates;
+  // Always keep at least the top resolved candidate so we don't bail with zero candidates.
+  const candleCandidates = verifiedCandidates.length > 0
+    ? verifiedCandidates
+    : rawCandidates.slice(0, 3);
 
   try {
     const loaded = await withRenderBudget(
