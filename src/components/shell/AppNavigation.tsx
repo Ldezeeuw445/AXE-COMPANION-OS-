@@ -105,7 +105,7 @@ export function AppNavigation() {
   return (
     <>
       {/* Mobile top bar — hamburger | page center slot | page right slot */}
-      <div className="sticky top-0 z-40 grid h-[3.25rem] w-full shrink-0 grid-cols-[3.25rem_minmax(0,1fr)_3.25rem] items-center overflow-hidden border-b border-white/[0.06] bg-tos-bg/90 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-md md:hidden">
+      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-tos-bg/90 px-2 backdrop-blur-md md:hidden">
         <div className="flex justify-start">
           <button
             type="button"
@@ -125,13 +125,13 @@ export function AppNavigation() {
             opted out of the wordmark — it has its own dedicated controls
             in this slot (depth, news, settings, indicators). */}
         <div className="pointer-events-none relative flex min-w-0 items-center justify-center">
-          <AxeWordmarkLive />
+          {isChart ? null : <AxeWordmarkLive />}
 
           {/* Optional page-injected center content (stacked under AXE, does not shift the wordmark) */}
           {slots.center ? (
             <div
               className={`pointer-events-auto absolute left-1/2 z-[41] flex -translate-x-1/2 justify-center px-1 ${
-                isChart ? "top-[calc(100%-0.1rem)]" : "top-[calc(100%-0.15rem)]"
+                isChart ? "top-1/2 -translate-y-1/2" : "top-[calc(100%-0.15rem)]"
               }`}
             >
               <div className="max-w-[min(18rem,calc(100vw-7rem))]">{slots.center}</div>
