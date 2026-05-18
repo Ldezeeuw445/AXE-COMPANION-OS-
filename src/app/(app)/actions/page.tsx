@@ -17,28 +17,60 @@ import {
   getPerigonKey,
 } from "@/lib/market/providerStatus";
 
-async function detectActiveCloudAccount(): Promise<boolean> {
+type ActionRuntime = {
+  hasActiveAccount: boolean;
+  hasOpenPositions: boolean;
+  hasTradeHistory: boolean;
+  hasJournal: boolean;
+  hasMemory: boolean;
+};
+
+async function detectActionRuntime(): Promise<ActionRuntime> {
   const supabase = await createServerSupabaseClient();
-  if (!supabase) return false;
+  if (!supabase) {
+    return { hasActiveAccount: false, hasOpenPositions: false, hasTradeHistory: false, hasJournal: false, hasMemory: false };
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return false;
+  if (!user) {
+    return { hasActiveAccount: false, hasOpenPositions: false, hasTradeHistory: false, hasJournal: false, hasMemory: false };
+  }
   const { data } = await supabase
     .from("user_broker_accounts")
-    .select("id,connection_method,external_connection_id")
+    .select("id,connection_method,external_connection_id,provider_status")
     .eq("user_id", user.id)
     .eq("connection_method", "cloud_mt5")
     .not("external_connection_id", "is", null)
     .limit(1);
-  return Array.isArray(data) && data.length > 0;
+  const activeAccount = Array.isArray(data)
+    ? data.find((a) => ["connected", "provisioned"].includes(String(a.provider_status ?? "").toLowerCase())) ?? data[0]
+    : null;
+  const accountId = activeAccount?.id as string | undefined;
+  const [positions, trades, journal, memory] = await Promise.all([
+    accountId
+      ? supabase.from("mt5_positions").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("account_id", accountId)
+      : Promise.resolve({ count: 0 }),
+    accountId
+      ? supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("account_id", accountId)
+      : Promise.resolve({ count: 0 }),
+    supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+  ]);
+  return {
+    hasActiveAccount: Boolean(activeAccount),
+    hasOpenPositions: (positions.count ?? 0) > 0,
+    hasTradeHistory: (trades.count ?? 0) > 0,
+    hasJournal: (journal.count ?? 0) > 0,
+    hasMemory: (memory.count ?? 0) > 0,
+  };
 }
 
 export default async function ActionsPage() {
-  const [executions, setups, hasActiveAccount] = await Promise.all([
+  const [executions, setups, runtime] = await Promise.all([
     listExecutionRequests(),
     listSetupReviews(),
-    detectActiveCloudAccount(),
+    detectActionRuntime(),
   ]);
 
   // Headlines / curated news come from Perigon, Finnhub, EODHD. Macro time
@@ -50,7 +82,7 @@ export default async function ActionsPage() {
 
   // Pulse: green when both Supabase reads delivered and we have at
   // least one capability (active MT5 account, news, or macro).
-  const capabilities = (hasActiveAccount ? 1 : 0) + (hasNews ? 1 : 0) + (hasMacro ? 1 : 0);
+  const capabilities = (runtime.hasActiveAccount ? 1 : 0) + (hasNews ? 1 : 0) + (hasMacro ? 1 : 0);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-6">
@@ -65,7 +97,15 @@ export default async function ActionsPage() {
         subtitle="One-tap AXE workflows. Execution stays disabled by default."
       />
 
-      <AxeWorkflowsHub hasActiveAccount={hasActiveAccount} hasNews={hasNews} hasMacro={hasMacro} />
+      <AxeWorkflowsHub
+        hasActiveAccount={runtime.hasActiveAccount}
+        hasOpenPositions={runtime.hasOpenPositions}
+        hasTradeHistory={runtime.hasTradeHistory}
+        hasJournal={runtime.hasJournal}
+        hasMemory={runtime.hasMemory}
+        hasNews={hasNews}
+        hasMacro={hasMacro}
+      />
 
       {/* Existing review pipelines moved into a folded section so the hub owns the page */}
       <details className="group mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/25">

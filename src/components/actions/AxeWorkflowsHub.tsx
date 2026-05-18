@@ -19,7 +19,15 @@ import {
   Wallet,
 } from "lucide-react";
 
-type WorkflowStatus = "ready" | "needs_account" | "needs_news" | "needs_macro" | "soon";
+type WorkflowStatus =
+  | "ready"
+  | "needs_account"
+  | "needs_positions"
+  | "needs_market"
+  | "needs_journal"
+  | "needs_memory"
+  | "warming"
+  | "soon";
 
 type WorkflowAction = {
   id: string;
@@ -39,6 +47,10 @@ type WorkflowCategory = {
 
 type Props = {
   hasActiveAccount: boolean;
+  hasOpenPositions?: boolean;
+  hasTradeHistory?: boolean;
+  hasJournal?: boolean;
+  hasMemory?: boolean;
   /** Any headline news provider configured (Perigon / Finnhub / EODHD). */
   hasNews?: boolean;
   /** FRED — or any news provider — configured for macro context. */
@@ -52,23 +64,41 @@ function chatQ(text: string): string {
 const STATUS_LABEL: Record<WorkflowStatus, string> = {
   ready: "Ready",
   needs_account: "Needs MT5",
-  needs_news: "Needs news",
-  needs_macro: "Needs macro",
+  needs_positions: "Needs positions",
+  needs_market: "Needs market context",
+  needs_journal: "Needs journal",
+  needs_memory: "Needs memory",
+  warming: "Warming",
   soon: "Coming soon",
 };
 
 const STATUS_CLASS: Record<WorkflowStatus, string> = {
   ready: "border-cyan-400/30 text-cyan-200/95 bg-cyan-400/10",
   needs_account: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
-  needs_news: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
-  needs_macro: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
+  needs_positions: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
+  needs_market: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
+  needs_journal: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
+  needs_memory: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
+  warming: "border-white/12 text-tos-dim bg-white/[0.03]",
   soon: "border-white/12 text-tos-dim bg-white/[0.03]",
 };
 
-export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = false }: Props) {
+export function AxeWorkflowsHub({
+  hasActiveAccount,
+  hasOpenPositions = false,
+  hasTradeHistory = false,
+  hasJournal = false,
+  hasMemory = false,
+  hasNews = false,
+  hasMacro = false,
+}: Props) {
   const acctState: WorkflowStatus = hasActiveAccount ? "ready" : "needs_account";
-  const newsState: WorkflowStatus = hasNews ? "ready" : "needs_news";
-  const macroState: WorkflowStatus = hasMacro ? "ready" : "needs_macro";
+  const positionsState: WorkflowStatus = hasActiveAccount ? (hasOpenPositions ? "ready" : "needs_positions") : "needs_account";
+  const historyState: WorkflowStatus = hasActiveAccount ? (hasTradeHistory ? "ready" : "warming") : "needs_account";
+  const journalState: WorkflowStatus = hasJournal || hasTradeHistory ? "ready" : "needs_journal";
+  const memoryState: WorkflowStatus = hasMemory ? "ready" : "needs_memory";
+  const newsState: WorkflowStatus = hasNews ? "ready" : "needs_market";
+  const macroState: WorkflowStatus = hasMacro ? "ready" : "needs_market";
 
   const categories: WorkflowCategory[] = [
     {
@@ -104,7 +134,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · XAUUSD]\nGive me a focused brief on XAUUSD today: bias drivers, key levels and what would change your view.",
           ),
-          status: "ready",
+          status: hasMacro || hasNews ? "ready" : "needs_market",
         },
         {
           id: "sentiment",
@@ -131,7 +161,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · risk]\nRisk-check my open MT5 positions — distance to SL/TP, RR and what needs attention.",
           ),
-          status: acctState,
+          status: positionsState,
         },
         {
           id: "exposure",
@@ -141,7 +171,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · exposure]\nExplain my current exposure: by currency, by symbol, and any correlated risks I should watch.",
           ),
-          status: acctState,
+          status: positionsState,
         },
         {
           id: "near-sltp",
@@ -151,7 +181,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · near-sl-tp]\nWhich of my open positions are closest to SL/TP and need a decision now?",
           ),
-          status: acctState,
+          status: positionsState,
         },
         {
           id: "drawdown",
@@ -161,7 +191,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · drawdown]\nCheck my floating drawdown and what % of risk budget that represents on my active account.",
           ),
-          status: acctState,
+          status: positionsState,
         },
       ],
     },
@@ -178,7 +208,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · journal · today]\nReview my trades from today: what worked, what to fix, and what I should journal.",
           ),
-          status: "ready",
+          status: historyState,
         },
         {
           id: "biggest-mistake",
@@ -188,7 +218,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · journal · week]\nFind my biggest mistake this week and propose one specific rule to prevent it.",
           ),
-          status: "ready",
+          status: journalState,
         },
         {
           id: "weekly",
@@ -198,7 +228,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · journal · weekly review]\nCreate a structured weekly review: stats, behaviour patterns, rule alignment, and 3 concrete adjustments.",
           ),
-          status: "ready",
+          status: journalState,
         },
       ],
     },
@@ -215,7 +245,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · account · health]\nShow me my account health: equity, margin, daily/total loss buffer and any funded-account rules I am close to.",
           ),
-          status: acctState,
+          status: historyState,
         },
         {
           id: "today-pnl",
@@ -223,7 +253,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           description: "Realised + floating",
           icon: <LineChart className="h-3.5 w-3.5" />,
           href: chatQ("[AXE · pnl · today]\nShow my realised + floating P/L for today on the active account."),
-          status: acctState,
+          status: historyState,
         },
         {
           id: "consistency",
@@ -233,7 +263,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · consistency]\nCheck my funded-account consistency: risk per trade, daily distribution, and any drift from my plan.",
           ),
-          status: acctState,
+          status: positionsState,
         },
       ],
     },
@@ -248,7 +278,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           description: "Price above/below on broker symbol",
           icon: <Bell className="h-3.5 w-3.5" />,
           href: "/alerts",
-          status: "ready",
+          status: acctState,
         },
         {
           id: "news-alert",
@@ -285,7 +315,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · memory · save rule]\nSave the most recent insight from our chat as a binding trading rule in my AXE memory. Confirm before saving.",
           ),
-          status: "ready",
+          status: memoryState,
         },
         {
           id: "playbook",
@@ -295,7 +325,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · memory · playbook]\nUpdate my playbook based on what we just discussed: setups, invalidations, and what triggers a no-trade day.",
           ),
-          status: "ready",
+          status: memoryState,
         },
         {
           id: "mistake",
@@ -305,7 +335,7 @@ export function AxeWorkflowsHub({ hasActiveAccount, hasNews = false, hasMacro = 
           href: chatQ(
             "[AXE · memory · mistake]\nMark the most recent decision we discussed as a mistake pattern, with the trigger and the rule that should prevent it next time.",
           ),
-          status: "ready",
+          status: memoryState,
         },
       ],
     },

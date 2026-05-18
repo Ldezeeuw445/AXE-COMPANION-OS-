@@ -25,6 +25,8 @@ const EMPTY_DASHBOARD: CockpitDashboard = {
   calibration: {
     state: "insufficient_data",
     signalCount: 0,
+    missingSignals: ["chat", "journal", "trade history", "memory"],
+    lastCalculatedAt: null,
     message: "AXE needs real chat, journal, memory, or trade signals before it can score alignment.",
   },
 };
@@ -53,24 +55,44 @@ function mapAlignment(
   };
 }
 
-function calibrationState(signalCount: number, hasSnapshot: boolean): CockpitDashboard["calibration"] {
-  if (signalCount < 5) {
+function calibrationState(input: {
+  signalCount: number;
+  hasSnapshot: boolean;
+  lastCalculatedAt: string | null;
+  messageCount: number;
+  memoryCount: number;
+  journalCount: number;
+  tradeCount: number;
+}): CockpitDashboard["calibration"] {
+  const missingSignals = [
+    input.messageCount > 0 ? null : "chat",
+    input.memoryCount > 0 ? null : "memory",
+    input.journalCount > 0 ? null : "journal",
+    input.tradeCount > 0 ? null : "trade history",
+  ].filter((s): s is string => Boolean(s));
+
+  const base = {
+    signalCount: input.signalCount,
+    missingSignals,
+    lastCalculatedAt: input.lastCalculatedAt,
+  };
+  if (input.signalCount < 5) {
     return {
+      ...base,
       state: "insufficient_data",
-      signalCount,
       message: "Not enough real signals yet. Chat, journal notes, trades, and saved memory will calibrate AXE.",
     };
   }
-  if (!hasSnapshot || signalCount < 12) {
+  if (!input.hasSnapshot || input.signalCount < 12 || missingSignals.length >= 3) {
     return {
+      ...base,
       state: "calibrating",
-      signalCount,
       message: "AXE is calibrating from early real signals. Scores stay conservative until more history exists.",
     };
   }
   return {
+    ...base,
     state: "active",
-    signalCount,
     message: "Alignment is based on current saved context, messages, journal patterns, and account history.",
   };
 }
@@ -163,12 +185,19 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_learning_metrics").select("id", { count: "exact", head: true }).eq("user_id", user.id),
   ]);
+  const counts = {
+    messageCount: countOrZero(messageCount),
+    memoryCount: countOrZero(memoryCount),
+    journalCount: countOrZero(journalCount),
+    tradeCount: countOrZero(tradeCount),
+    metricsCount: countOrZero(metricsCount),
+  };
   const signalCount =
-    countOrZero(messageCount) +
-    countOrZero(memoryCount) +
-    countOrZero(journalCount) +
-    countOrZero(tradeCount) +
-    countOrZero(metricsCount);
+    counts.messageCount +
+    counts.memoryCount +
+    counts.journalCount +
+    counts.tradeCount +
+    counts.metricsCount;
 
   // Fetch the two most recent snapshots so we can compute alignment delta
   const { data: snapshots, error: snapErr } = await supabase
@@ -180,16 +209,27 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
 
   if (snapErr) {
     console.error("[cockpitService] snapshot error:", snapErr.message);
-    return { ...EMPTY_DASHBOARD, calibration: calibrationState(signalCount, false) };
+    return {
+      ...EMPTY_DASHBOARD,
+      calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
+    };
   }
 
   if (!snapshots || snapshots.length === 0) {
-    return { ...EMPTY_DASHBOARD, calibration: calibrationState(signalCount, false) };
+    return {
+      ...EMPTY_DASHBOARD,
+      calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
+    };
   }
 
   const latest = snapshots[0];
   const prior = snapshots[1] ?? null;
-  const calibration = calibrationState(signalCount, true);
+  const calibration = calibrationState({
+    ...counts,
+    signalCount,
+    hasSnapshot: true,
+    lastCalculatedAt: latest.captured_at,
+  });
 
   // Fetch recent metric keys
   const { data: metrics } = await supabase

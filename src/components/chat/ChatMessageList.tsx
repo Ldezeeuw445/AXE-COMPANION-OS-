@@ -164,6 +164,26 @@ function renderAssistantBody(content: string): ReactNode {
   );
 }
 
+function renderUserBody(content: string): ReactNode {
+  const normalized = content.replace(/\r\n/g, "\n").trim();
+  const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1 && lines.every((line) => /^([-*•]|\d+\.)\s+/.test(line) || /^\[[^\]]+\]$/.test(line))) {
+    return (
+      <div className="space-y-1.5 text-sm leading-relaxed">
+        {lines.map((line, i) => {
+          const cleaned = line.replace(/^([-*•]|\d+\.)\s+/, "");
+          return (
+            <p key={i} className="text-tos-text">
+              {renderInlineContent(cleaned)}
+            </p>
+          );
+        })}
+      </div>
+    );
+  }
+  return <p className="whitespace-pre-wrap text-sm leading-relaxed">{renderInlineContent(normalized)}</p>;
+}
+
 type ChatMessageListProps = {
   messages: ChatMessage[];
 };
@@ -314,7 +334,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
                   : "tos-bubble-assistant text-tos-text"
               }`}
             >
-              {m.role === "assistant" ? renderAssistantBody(m.content) : <p className="whitespace-pre-wrap">{m.content}</p>}
+              {m.role === "assistant" ? renderAssistantBody(m.content) : renderUserBody(m.content)}
               {m.actionCard ? <ActionCard card={m.actionCard} /> : null}
             </div>
 
@@ -343,13 +363,13 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
               <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-gold/80">You said</p>
             </div>
             <div className="tos-bubble-user text-tos-text max-w-[92%] rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed opacity-90">
-              <p className="whitespace-pre-wrap">
+              <div>
                 {p.hasImage && p.content === "(chart attached)" ? (
                   <span className="italic text-tos-muted">Chart attached…</span>
                 ) : (
-                  p.content
+                  renderUserBody(p.content)
                 )}
-              </p>
+              </div>
             </div>
             <div className="flex flex-row-reverse items-center gap-1.5 px-1.5">
               <time className="text-[10px] text-tos-dim" dateTime={p.createdAt}>

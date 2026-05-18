@@ -4,9 +4,9 @@
  * Mirrors the pattern in the Trading OS terminal so the two products share
  * the same honest semantics:
  *
- *   • pulsing green dot     → every feed the current page registered is live
- *   • amber dot             → at least one is degraded
- *   • dim grey dot (no anim)→ the current page has no opinion (no feeds claimed)
+ *   • pulsing green dot     → current page registered fresh/connected runtime
+ *   • amber dot             → current page is partial, warming, stale, or degraded
+ *   • dim grey dot (no anim)→ current page has no runtime opinion
  *
  * The dot only goes green when a page has *explicitly* claimed feeds AND
  * they are all delivering. Silence is honest — if a page hasn't reported,
@@ -15,8 +15,8 @@
 
 export type LiveStatus = {
   /**
-   *  true  → every feed the current page registered is live
-   *  false → at least one is stale / failing
+   *  true  → current page runtime is fresh/connected
+   *  false → current page runtime is partial / stale / failing
    *  null  → the current page hasn't reported (no opinion)
    */
   allLive: boolean | null;
@@ -27,6 +27,10 @@ export type LiveStatus = {
   totalCount: number;
   /** Optional human label for the tooltip — e.g. "Intel · 5 feeds". */
   label?: string;
+  /** Optional explicit severity for the header dot. */
+  severity?: "fresh" | "degraded" | "blocking" | "inactive";
+  /** Human reason shown in the top AXE tooltip. */
+  reason?: string;
 };
 
 const initialStatus: LiveStatus = {

@@ -32,11 +32,21 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const symbol = requestedSymbol || watchlist[0]?.toUpperCase() || DEFAULT_SYMBOL;
 
   const ctx = await buildMarketContext({ symbol, watchlist });
+  const macroReady = Boolean(ctx.macro?.points.some((point) => point.value != null));
+  const calendarReady = ctx.events.length > 0;
+  const newsReady = ctx.news.length > 0;
+  const contentReady = macroReady || calendarReady || newsReady;
 
   const livePill = (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/95">
-      <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
-      {ctx.hasLiveData ? "Ready" : "Warming"}
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
+        contentReady
+          ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
+          : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200/90"
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${contentReady ? "bg-cyan-300" : "bg-amber-300/80"}`} aria-hidden />
+      {contentReady ? "Ready" : "Warming"}
     </span>
   );
 
@@ -84,9 +94,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
-  const hasNewsFeed = ctx.news.length > 0;
-
-  const liveProviderCount = ctx.providers.filter((p) => p.state === "live").length;
+  const liveProviderCount = [macroReady, newsReady, calendarReady].filter(Boolean).length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
@@ -101,9 +109,9 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       />
       <LiveStatusReporter
         liveCount={liveProviderCount}
-        totalCount={ctx.providers.length}
+        totalCount={3}
         label="Market"
-        allLiveOverride={ctx.hasLiveData ? false : null}
+        allLiveOverride={contentReady ? liveProviderCount === 3 : null}
       />
       <ScreenHeader
         title="Market context"
@@ -121,7 +129,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         }
       />
 
-      <ProviderBadges providers={ctx.providers} />
+      <ProviderBadges providers={ctx.providers} macroReady={macroReady} newsReady={newsReady} calendarReady={calendarReady} />
 
       {ctx.symbols.length > 1 ? (
         <div className="flex flex-wrap gap-1.5">
@@ -145,7 +153,9 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Macro snapshot</h2>
-          <span className="text-[10px] text-tos-dim">{hasFred ? "AXE Macro · live" : "AXE Macro idle"}</span>
+          <span className="text-[10px] text-tos-dim">
+            {macroReady ? "AXE Macro · fresh" : hasFred ? "AXE Macro · warming" : "AXE Macro · not configured"}
+          </span>
         </div>
         {ctx.macro && ctx.macro.points.length > 0 ? (
           <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
@@ -206,7 +216,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Headlines</h2>
           </div>
           <span className="text-[10px] text-tos-dim">
-            {hasNewsFeed ? "AXE Market Data · live" : "AXE Market Data idle"}
+            {newsReady ? "AXE Market Data · fresh" : "AXE Market Data · warming"}
           </span>
         </div>
         {ctx.news.length > 0 ? (
@@ -248,41 +258,65 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   );
 }
 
-function ProviderBadges({ providers }: { providers: ProviderStatus[] }) {
-  const liveCount = providers.filter((p) => p.state === "live").length;
+function ProviderBadges({
+  providers,
+  macroReady,
+  newsReady,
+  calendarReady,
+}: {
+  providers: ProviderStatus[];
+  macroReady: boolean;
+  newsReady: boolean;
+  calendarReady: boolean;
+}) {
+  const grouped = [
+    {
+      id: "macro",
+      label: "AXE Macro",
+      ready: macroReady,
+      configured: providers.some((p) => p.id === "fred" && p.state === "live"),
+      description: "FRED macro observations.",
+    },
+    {
+      id: "news",
+      label: "AXE News",
+      ready: newsReady,
+      configured: providers.some((p) => ["perigon", "polygon", "finnhub", "eodhd"].includes(p.id) && p.state === "live"),
+      description: "Configured server-side news feeds.",
+    },
+    {
+      id: "calendar",
+      label: "AXE Calendar",
+      ready: calendarReady,
+      configured: providers.some((p) => p.id === "finnhub" && p.state === "live"),
+      description: "Impact-rated economic events.",
+    },
+  ];
+  const liveCount = grouped.filter((p) => p.ready).length;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-[10px] uppercase tracking-wider text-tos-dim">AXE sources</span>
-      {providers.map((p) => (
+      {grouped.map((p) => (
         <span
           key={p.id}
           className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-            p.state === "live"
+            p.ready
               ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
-              : "border-white/12 bg-white/[0.04] text-tos-dim"
+              : p.configured
+                ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-100/90"
+                : "border-white/12 bg-white/[0.04] text-tos-dim"
           }`}
           title={p.description}
         >
-          {marketHealthLabel(p.id)}
-          {p.state === "live" ? "" : " · off"}
+          {p.label}
+          {p.ready ? " · fresh" : p.configured ? " · warming" : " · off"}
         </span>
       ))}
       <span className="ml-auto text-[10px] text-tos-dim">
-        {liveCount}/{providers.length} configured
+        {liveCount}/{grouped.length} fresh
       </span>
     </div>
   );
-}
-
-function marketHealthLabel(id: string): string {
-  const labels: Record<string, string> = {
-    polygon: "AXE Market Data",
-    perigon: "AXE News",
-    finnhub: "AXE News",
-    eodhd: "AXE News",
-    fred: "AXE Macro",
-  };
-  return labels[id] ?? "AXE Market Data";
 }
 
 function MacroPoint({ point }: { point: MacroSnapshot["points"][number] }) {

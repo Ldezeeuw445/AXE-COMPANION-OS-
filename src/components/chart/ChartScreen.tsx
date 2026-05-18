@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
@@ -128,6 +129,33 @@ function sessionCopy(now = new Date()): string {
   return sessions.length ? sessions.join(" + ") : "After-hours";
 }
 
+function marketSessionState(symbol: string, now = new Date()): { state: "open" | "after_hours" | "closed"; label: string; reason: string } {
+  const s = symbol.toUpperCase();
+  if (s.startsWith("BTC") || s.startsWith("ETH")) {
+    return { state: "open", label: "Open", reason: "Crypto trades continuously." };
+  }
+  const day = now.getUTCDay();
+  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const weekendClosed = day === 6 || (day === 5 && hour >= 22) || (day === 0 && hour < 22);
+  if (weekendClosed) {
+    return {
+      state: "closed",
+      label: "Closed",
+      reason: "Broker session is closed; AXE freezes the last stable broker price until a fresh tick arrives.",
+    };
+  }
+  if (["XAU", "XAG", "EUR", "GBP", "USD", "NAS", "US100", "SPX", "US500", "US30", "DOW"].some((prefix) => s.startsWith(prefix))) {
+    return { state: "open", label: "Open", reason: "Broker session is open." };
+  }
+  return { state: "after_hours", label: "After-hours", reason: "No confirmed live market session for this symbol." };
+}
+
+function eventFreshEnough(iso: string | null | undefined, maxAgeMs = 30_000): boolean {
+  if (!iso) return false;
+  const time = Date.parse(iso);
+  return Number.isFinite(time) && Math.abs(Date.now() - time) <= maxAgeMs;
+}
+
 function newAnnotationId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -139,7 +167,15 @@ function statusPillCopy(
   providerStatus: string | null,
   hasCandles: boolean,
   hasFreshLiveData: boolean,
+  sessionState: ReturnType<typeof marketSessionState>,
 ): { label: string; className: string; dot: string } {
+  if (sessionState.state !== "open" && hasCandles && !hasFreshLiveData) {
+    return {
+      label: sessionState.label,
+      className: "border-white/12 bg-white/[0.04] text-tos-muted",
+      dot: "bg-white/30",
+    };
+  }
   if (providerStatus === "failed") {
     return {
       label: "Connection issue",
@@ -266,15 +302,15 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
       };
     case "broker_symbol_not_found":
       return {
-        title: "Broker symbol not found on this account",
+        title: "Symbol unsupported by active broker",
         body:
-          "Different brokers use suffixes like XAUUSDm or XAUUSD.r. Try another suffix from your account, or pick a symbol from your open positions.",
+          "AXE could not map this clean symbol to a broker symbol on the active MT5 account. Sync the account, pick a supported symbol, or check Data details.",
       };
     case "candles_unavailable":
       return {
-        title: "MT5 market data not available yet",
+        title: "Broker candles unavailable",
         body:
-          "AXE Market Data could not return candles for this broker symbol or timeframe. Try Sync, change timeframe, or check the broker symbol.",
+          "The symbol mapping exists, but this account did not return candles for the selected timeframe. The market may be closed or the account needs Sync.",
       };
     case "timeframe_unavailable":
       return {
@@ -288,8 +324,8 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
       };
     case "market_data_unavailable":
       return {
-        title: "Chart connection failed",
-        body: "AXE Market Data did not respond. Try again or check Accounts → Sync.",
+        title: "Chart data is recovering",
+        body: "AXE stopped waiting for this request so the app stays responsive. Try Sync, switch timeframe, or retry the symbol.",
       };
     case "provider_not_configured":
       return {
@@ -575,6 +611,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const lastAskRef = useRef<number | null>(null);
   const isVisible = usePageVisible();
   const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
+  const sessionState = useMemo(() => marketSessionState(data.symbol), [data.symbol]);
+  const closedCanonicalPrice = useMemo(() => data.lastPrice ?? data.candles.at(-1)?.close ?? null, [data.candles, data.lastPrice]);
 
   useEffect(() => {
     setPendingTfKey(null);
@@ -1213,6 +1251,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const onTick = useCallback(
     ({ mid, bid, ask, time }: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => {
       if (mid == null || !Number.isFinite(mid)) return;
+      if (sessionState.state !== "open" && !eventFreshEnough(time)) return;
       lastBidRef.current = bid;
       lastAskRef.current = ask;
       canvasRef.current?.applyTick(mid);
@@ -1233,11 +1272,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         setLastTickAt(time ?? new Date().toISOString());
       }
     },
-    [evaluateAlerts],
+    [evaluateAlerts, sessionState.state],
   );
 
   const onCandleUpdate = useCallback(
     (candle: { time: string; open: number; high: number; low: number; close: number; tickVolume?: number; volume?: number }) => {
+      if (sessionState.state !== "open" && !eventFreshEnough(candle.time)) return;
       canvasRef.current?.updateLastCandle(candle);
       // Mirror to React state so the indicator panes recompute on each
       // candle update — guarantees RSI / Volume tick live with the chart.
@@ -1256,7 +1296,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         setLastTickAt(new Date().toISOString());
       }
     },
-    [],
+    [sessionState.state],
   );
 
   const onPositions = useCallback(({ total, onSymbol }: { total: number; onSymbol: LivePosition[] }) => {
@@ -1353,10 +1393,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     data.totalPositions,
   ]);
 
-  const liveAge = formatLiveAge(liveLastUpdateAt);
+  useEffect(() => {
+    if (sessionState.state === "open") return;
+    setLivePrice(closedCanonicalPrice);
+    setLastTickAt(null);
+    const last = data.candles.at(-1);
+    setLiveLastCandle(last ? { ...last } : null);
+  }, [closedCanonicalPrice, data.candles, sessionState.state]);
+
+  const freshestRuntimeAt = sessionState.state === "open" ? liveLastUpdateAt : lastTickAt;
+  const liveAge = formatLiveAge(freshestRuntimeAt);
   const liveFresh =
-    liveLastUpdateAt != null &&
-    Date.now() - Date.parse(liveLastUpdateAt) < 30_000 &&
+    freshestRuntimeAt != null &&
+    Date.now() - Date.parse(freshestRuntimeAt) < 30_000 &&
     (liveStatus === "connected" || liveStatus === "live_stream");
   const statusPill = statusPillCopy(
     liveStatus,
@@ -1364,9 +1413,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     data.providerStatus,
     data.candles.length > 0,
     liveFresh,
+    sessionState,
   );
   const liveDetail = useMemo(() => {
     if (data.providerStatus === "demo") return "Demo stream";
+    if (sessionState.state !== "open" && !liveFresh) return sessionState.reason;
     if ((liveStatus === "connected" || liveStatus === "live_stream") && liveFresh) {
       return liveAge ? `Updated ${liveAge}` : "AXE Live feed";
     }
@@ -1383,7 +1434,23 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     if (liveStatus === "offline") return liveAge ? `Cached from ${liveAge}` : "Cached broker candles";
     if (liveStatus === "connecting") return "Opening live feed";
     return data.candles.length > 0 ? "Cached candles" : "No live feed";
-  }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveFresh, reconnectAttempt]);
+  }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveFresh, reconnectAttempt, sessionState]);
+  const headerSeverity: "fresh" | "degraded" | "blocking" | "inactive" =
+    data.failure !== "ok"
+      ? "blocking"
+      : liveFresh
+        ? "fresh"
+        : data.candles.length > 0 || sessionState.state !== "open"
+          ? "degraded"
+          : "inactive";
+  const headerReason =
+    headerSeverity === "fresh"
+      ? "Fresh real broker tick received."
+      : sessionState.state !== "open"
+        ? sessionState.reason
+        : data.failure !== "ok"
+          ? failureCardCopy(data.failure)?.title ?? "Chart runtime is blocked."
+          : liveDetail;
 
   const goSymbol = useCallback(
     (sym: string) => {
@@ -2021,6 +2088,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     <div
       className="fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
     >
+      <LiveStatusReporter
+        liveCount={headerSeverity === "fresh" ? 1 : 0}
+        totalCount={1}
+        freshestAgeSec={liveFresh && freshestRuntimeAt ? Math.max(0, Math.round((Date.now() - Date.parse(freshestRuntimeAt)) / 1000)) : null}
+        label={`Chart · ${data.symbol}`}
+        allLiveOverride={headerSeverity === "fresh" ? true : headerSeverity === "inactive" ? null : false}
+        severity={headerSeverity}
+        reason={headerReason}
+      />
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
         <div className="flex shrink-0 items-baseline gap-1.5">
@@ -2632,8 +2708,22 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
         {/* Failure overlay sits on top of the chart frame so layout stays stable */}
         {failureCopy ? (
-          <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-b from-transparent via-[#04070C]/60 to-[#04070C]/95 p-4 sm:items-center">
+          <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-b from-[#04070C]/35 via-[#04070C]/72 to-[#04070C]/96 p-4 sm:items-center">
             <GlassPanel className="w-full max-w-md p-4 sm:p-5" glow="warm">
+              {data.candles.length === 0 ? (
+                <div className="mb-3 rounded-xl border border-cyan-300/12 bg-cyan-400/[0.035] px-3 py-2">
+                  <AxeBreatheLoader
+                    label={
+                      data.failure === "broker_symbol_not_found"
+                        ? "Mapping symbol"
+                        : data.failure === "market_data_unavailable"
+                          ? "Recovering chart"
+                          : "Checking broker data"
+                    }
+                    size="sm"
+                  />
+                </div>
+              ) : null}
               <p className="text-sm font-semibold text-tos-text">{failureCopy.title}</p>
               <p className="mt-1.5 text-xs leading-relaxed text-tos-muted">{failureCopy.body}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-[11px]">

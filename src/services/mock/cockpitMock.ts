@@ -147,6 +147,8 @@ export const mockCockpitDashboard: CockpitDashboard = {
   calibration: {
     state: "active",
     signalCount: 64,
+    missingSignals: [],
+    lastCalculatedAt: "2026-03-29T06:30:00.000Z",
     message: "Mock dashboard only: real cockpit scores stay conservative until live user signals exist.",
   },
 };

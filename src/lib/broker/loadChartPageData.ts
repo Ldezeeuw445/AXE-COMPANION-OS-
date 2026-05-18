@@ -37,6 +37,7 @@ const FALLBACK_SYMBOLS = [
   "US500",
   "US30",
 ];
+const CORE_CHART_SYMBOLS = new Set(FALLBACK_SYMBOLS);
 const POSITIONS_RENDER_BUDGET_MS = 12_000;
 const SYMBOLS_RENDER_BUDGET_MS = 8_000;
 const CANDLES_RENDER_BUDGET_MS = 12_000;
@@ -133,6 +134,53 @@ function mapSide(t: string | undefined): string {
 function normalizeSymbol(raw: string | undefined): string {
   const s = (raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9._+\-]/g, "");
   return s;
+}
+
+function isCleanDisplayCandidate(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  if (!/^[A-Z0-9]{3,12}$/.test(s)) return false;
+  if (s.length < 3) return false;
+  return true;
+}
+
+function chartSymbolSupported(displaySymbol: string, knownSymbols: string[], symbolMap: Record<string, string>): boolean {
+  if (CORE_CHART_SYMBOLS.has(displaySymbol)) return true;
+  if (symbolMap[displaySymbol]) return true;
+  if (knownSymbols.length === 0) return false;
+  const resolved = resolveBrokerSymbol(displaySymbol, knownSymbols);
+  return resolved.reason !== "fallback_request" && knownSymbols.includes(resolved.brokerSymbol);
+}
+
+function buildSymbolOptions(input: {
+  requested: string;
+  fallbackSymbols: string[];
+  watchSymbols: string[];
+  positionSymbols: string[];
+  aliases: string[];
+  knownSymbols: string[];
+  symbolMap: Record<string, string>;
+}): string[] {
+  const raw = [
+    input.requested,
+    ...input.fallbackSymbols,
+    ...input.watchSymbols,
+    ...input.positionSymbols,
+    ...input.aliases,
+  ];
+  const cleaned = raw.map(cleanDisplaySymbol).filter(Boolean);
+  const out = new Set<string>();
+  for (const symbol of cleaned) {
+    if (!isCleanDisplayCandidate(symbol)) continue;
+    if (!chartSymbolSupported(symbol, input.knownSymbols, input.symbolMap)) continue;
+    out.add(symbol);
+  }
+  if (isCleanDisplayCandidate(input.requested)) out.add(input.requested);
+  return Array.from(out).sort();
+}
+
+function safeDisplaySymbol(raw: string): string {
+  const display = cleanDisplaySymbol(raw) || raw;
+  return isCleanDisplayCandidate(display) ? display : DEFAULT_SYMBOL;
 }
 
 function chartCacheKey(accountId: string, brokerSymbol: string, timeframe: string): string {
@@ -404,7 +452,7 @@ export async function loadChartPageData(
 
   if (isDemo && account) {
     const requestedRaw = normalizeSymbol(symbolParam) || watchSyms[0] || DEFAULT_SYMBOL;
-    const requested = cleanDisplaySymbol(requestedRaw) || requestedRaw;
+    const requested = safeDisplaySymbol(requestedRaw);
     const candles = generateDemoCandles(requested, timeframeKey, 500);
     const last = candles.at(-1)?.close ?? null;
     const lastTime = candles.at(-1)?.time ?? null;
@@ -432,7 +480,7 @@ export async function loadChartPageData(
   }
 
   if (!getMetaApiToken()) {
-    const requested = cleanDisplaySymbol(normalizeSymbol(symbolParam)) || DEFAULT_SYMBOL;
+    const requested = safeDisplaySymbol(normalizeSymbol(symbolParam) || DEFAULT_SYMBOL);
     const out = emptyData(
       timeframeKey,
       metaApiTimeframe,
@@ -448,7 +496,7 @@ export async function loadChartPageData(
   }
 
   if (!account) {
-    const requested = cleanDisplaySymbol(normalizeSymbol(symbolParam)) || DEFAULT_SYMBOL;
+    const requested = safeDisplaySymbol(normalizeSymbol(symbolParam) || DEFAULT_SYMBOL);
     const out = emptyData(
       timeframeKey,
       metaApiTimeframe,
@@ -523,7 +571,7 @@ export async function loadChartPageData(
     ...discoveredSymbols,
   ]));
   const requestedRaw = normalizeSymbol(symbolParam) || allPositions[0]?.symbol || watchSyms[0] || DEFAULT_SYMBOL;
-  const requested = cleanDisplaySymbol(requestedRaw) || requestedRaw;
+  const requested = safeDisplaySymbol(requestedRaw);
   const cachedBroker = symbolMap[requested] ?? symbolMap[requestedRaw];
   const resolution = cachedBroker
     ? {
@@ -536,15 +584,15 @@ export async function loadChartPageData(
     : resolveBrokerSymbol(requested, knownAccountSymbols);
 
   const cleanPositionSymbols = fromPositions.map(cleanDisplaySymbol).filter(Boolean);
-  const symbolSet = new Set<string>([
+  const symbolOptions = buildSymbolOptions({
     requested,
-    ...FALLBACK_SYMBOLS,
-    ...watchSyms,
-    ...cleanPositionSymbols,
-    ...displaySymbolAliases(requested).map(cleanDisplaySymbol).filter(Boolean),
-  ]);
-  symbolSet.delete("");
-  const symbolOptions = [...symbolSet].sort();
+    fallbackSymbols: FALLBACK_SYMBOLS,
+    watchSymbols: watchSyms,
+    positionSymbols: cleanPositionSymbols,
+    aliases: displaySymbolAliases(requested),
+    knownSymbols: knownAccountSymbols,
+    symbolMap,
+  });
 
   const positionsOnSymbol = allPositions
     .filter((p) => p.symbol === resolution.brokerSymbol || cleanDisplaySymbol(p.symbol) === requested)
@@ -709,7 +757,7 @@ export async function loadChartPageData(
       failure,
       dataError:
         failure === "broker_symbol_not_found"
-          ? "Broker symbol not found on this account."
+          ? "Symbol unsupported by the active broker account."
           : "MT5 market data not available for this symbol yet.",
       hint:
         failure === "broker_symbol_not_found"

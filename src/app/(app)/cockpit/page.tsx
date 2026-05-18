@@ -47,11 +47,33 @@ export default async function CockpitPage() {
           <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-tos-dim">
             {dash.calibration.signalCount} real signals found
           </p>
+          {dash.calibration.missingSignals.length > 0 ? (
+            <p className="mt-2 text-[11px] text-tos-dim">
+              Missing: {dash.calibration.missingSignals.join(", ")}
+            </p>
+          ) : null}
           <CockpitGenerateButton />
         </GlassPanel>
       ) : (
         <>
           <CockpitAlignment data={dash.alignment} calibrationMessage={dash.calibration.message} />
+
+          <GlassPanel className="p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Score basis</p>
+            <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+              {dash.alignment.score} is based on {dash.calibration.signalCount} real workspace signals. Mock/fallback cockpit
+              data is ignored once live user data exists.
+            </p>
+            <p className="mt-1 text-[11px] text-tos-dim">
+              Last recalculated:{" "}
+              {dash.calibration.lastCalculatedAt
+                ? new Date(dash.calibration.lastCalculatedAt).toLocaleString()
+                : "not yet"}
+              {dash.calibration.missingSignals.length
+                ? ` · Missing: ${dash.calibration.missingSignals.join(", ")}`
+                : ""}
+            </p>
+          </GlassPanel>
 
           <CockpitLearningProgress
             headline={dash.learningProgress.headline}

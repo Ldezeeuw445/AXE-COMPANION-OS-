@@ -85,6 +85,8 @@ export type CockpitDashboard = {
   calibration: {
     state: "calibrating" | "insufficient_data" | "active";
     signalCount: number;
+    missingSignals: string[];
+    lastCalculatedAt: string | null;
     message: string;
   };
 };
