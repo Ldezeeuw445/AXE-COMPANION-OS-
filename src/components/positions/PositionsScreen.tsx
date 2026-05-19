@@ -41,7 +41,7 @@ export function PositionsScreen({ positions, providerStatus, error, hint }: Prop
       <ScreenHeader
         title="Positions"
         subtitle="Open positions from AXE MT5 Cloud — same symbols and prices as the broker terminal."
-        left={<Layers className="h-6 w-6 text-cyan-400/80" aria-hidden />}
+        left={<Layers className="h-6 w-6 text-white/60" aria-hidden />}
         right={providerStatus ? <Badge variant="long">{friendlyProviderStatus(providerStatus)}</Badge> : null}
       />
 

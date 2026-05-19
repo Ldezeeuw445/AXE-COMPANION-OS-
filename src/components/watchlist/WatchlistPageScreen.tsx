@@ -30,7 +30,7 @@ type Props = {
 function StatusDot({ tone }: { tone: string }) {
   const color =
     tone === "live"
-      ? "bg-cyan-400"
+      ? "bg-emerald-400"
       : tone === "warm"
         ? "bg-amber-400"
         : tone === "blocked"
@@ -71,7 +71,7 @@ export function WatchlistPageScreen({ items }: Props) {
       <ScreenHeader
         title="Watchlist"
         subtitle="Live broker quotes from MT5. Tap any symbol to open its chart."
-        left={<BarChart3 className="h-6 w-6 text-cyan-400/80" aria-hidden />}
+        left={<BarChart3 className="h-6 w-6 text-white/60" aria-hidden />}
       />
 
       {/* Quotes grid */}
@@ -102,7 +102,7 @@ export function WatchlistPageScreen({ items }: Props) {
                       </span>
                     ) : null}
                     {isLive ? (
-                      <span className="rounded-full bg-cyan-400/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-widest text-cyan-400">
+                      <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-widest text-emerald-400">
                         Live
                       </span>
                     ) : isDegraded ? (
