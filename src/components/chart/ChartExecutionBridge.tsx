@@ -99,7 +99,7 @@ export function ChartExecutionBridge({
     <section className="-mx-4 relative shrink-0 overflow-hidden border-b border-white/[0.08] bg-[#030508] md:mx-0 md:border-x">
       <header className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <Activity className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+          <Activity className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
             Execution bridge
           </p>
@@ -158,7 +158,7 @@ export function ChartExecutionBridge({
               onClick={() => setOrderType(t)}
               className={`rounded border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${
                 orderType === t
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100/95"
+                  ? "border-white/[0.12] bg-white/[0.05] text-white/90"
                   : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
               }`}
             >
@@ -202,7 +202,7 @@ export function ChartExecutionBridge({
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/chat?q=${encodeURIComponent(planText)}`}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2.5 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2.5 text-[11px] font-semibold text-white/90 hover:bg-white/[0.08]"
           >
             <ShieldAlert className="h-3.5 w-3.5" />
             Prepare order ticket (review)
@@ -281,7 +281,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 font-mono text-[12px] text-tos-text outline-none focus:border-cyan-500/40"
+        className="rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
       />
     </label>
   );

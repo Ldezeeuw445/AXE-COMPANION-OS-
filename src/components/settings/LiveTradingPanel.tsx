@@ -57,7 +57,7 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
         <span
           className={`shrink-0 rounded-full border px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.18em] ${
             live.enabled
-              ? "border-cyan-400/35 bg-cyan-400/10 text-cyan-200/95"
+              ? "border-white/[0.10] bg-white/[0.05] text-white/90"
               : "border-white/12 bg-white/[0.04] text-tos-dim"
           }`}
         >
@@ -87,8 +87,8 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
         </div>
       ) : (
         <div className="mt-4 space-y-3">
-          <div className="flex items-start gap-2 rounded-xl border border-cyan-400/22 bg-cyan-400/[0.04] px-3 py-2.5 text-[11.5px] leading-relaxed text-cyan-100/95">
-            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden />
+          <div className="flex items-start gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5 text-[11.5px] leading-relaxed text-white/90">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden />
             <p>
               Live trading is enabled on your account. BUY / SELL on a connected MT5 account opens a
               final 2‑tap confirm before any order leaves the app. The arming window below is
@@ -121,7 +121,7 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
               <button
                 type="button"
                 onClick={live.arm}
-                className="rounded-full border border-cyan-400/35 bg-cyan-400/10 px-3 py-1 text-[10.5px] font-semibold text-cyan-200/95 hover:bg-cyan-400/15"
+                className="rounded-full border border-white/[0.10] bg-white/[0.05] px-3 py-1 text-[10.5px] font-semibold text-white/90 hover:bg-white/[0.08]"
               >
                 Arm for {armWindowMin}m
               </button>
@@ -285,7 +285,7 @@ function ActivateModal({
               phrase.length === 0
                 ? "border-white/10 bg-black/35"
                 : phraseMatches
-                  ? "border-cyan-400/40 bg-cyan-400/[0.04]"
+                  ? "border-white/[0.12] bg-white/[0.025]"
                   : "border-rose-400/30 bg-rose-400/[0.05]"
             }`}
           />

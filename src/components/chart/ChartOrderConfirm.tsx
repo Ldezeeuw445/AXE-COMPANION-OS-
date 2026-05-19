@@ -56,7 +56,7 @@ export function ChartOrderConfirm({
 
   const isBuy = input.side === "buy";
   const sideClasses = isBuy
-    ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
+    ? "border-white/[0.12] bg-emerald-400/12 text-white"
     : "border-rose-400/40 bg-rose-400/12 text-rose-100";
 
   const orderTypeLabel = labelOrderType(input.orderType);
@@ -88,7 +88,7 @@ export function ChartOrderConfirm({
             <div>
               <p className="text-[15px] font-semibold tracking-tight text-tos-text">
                 Send{" "}
-                <span className={isBuy ? "text-cyan-300" : "text-rose-300"}>
+                <span className={isBuy ? "text-emerald-300" : "text-rose-300"}>
                   {input.side.toUpperCase()}
                 </span>{" "}
                 · {input.symbol}
@@ -122,7 +122,7 @@ export function ChartOrderConfirm({
           <Row label="Broker symbol" value={input.brokerSymbol} />
           <Row label="Type" value={orderTypeLabel} mono={false} />
           <Row label="Volume" value={`${input.volume.toFixed(2)} lots`} />
-          <Row label="Price" value={priceLabel} highlight={isBuy ? "cyan" : "rose"} />
+          <Row label="Price" value={priceLabel} highlight={isBuy ? "buy" : "rose"} />
           <Row
             label="Stop loss"
             value={input.stopLoss != null ? formatBrokerPrice(input.brokerSymbol, input.stopLoss) : "—"}
@@ -131,7 +131,7 @@ export function ChartOrderConfirm({
           <Row
             label="Take profit"
             value={input.takeProfit != null ? formatBrokerPrice(input.brokerSymbol, input.takeProfit) : "—"}
-            highlight={input.takeProfit != null ? "cyan" : null}
+            highlight={input.takeProfit != null ? "buy" : null}
           />
           <Row label="Slippage" value={`${input.slippagePoints} pts`} />
         </dl>
@@ -142,7 +142,7 @@ export function ChartOrderConfirm({
           </div>
         ) : null}
         {status.kind === "ok" ? (
-          <div className="mt-3 rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-3 py-2 text-[11.5px] leading-relaxed text-cyan-100/95">
+          <div className="mt-3 rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2 text-[11.5px] leading-relaxed text-white/90">
             {status.message}
           </div>
         ) : null}
@@ -163,7 +163,7 @@ export function ChartOrderConfirm({
               disabled={status.kind === "sending"}
               className={`rounded-xl border px-4 py-2.5 text-[12px] font-semibold ${
                 isBuy
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/16"
+                  ? "border-white/[0.12] bg-white/[0.05] text-white hover:bg-emerald-400/16"
                   : "border-rose-400/40 bg-rose-400/10 text-rose-100 hover:bg-rose-400/16"
               } disabled:opacity-45`}
             >
@@ -176,7 +176,7 @@ export function ChartOrderConfirm({
               disabled={status.kind === "sending" || status.kind === "ok"}
               className={`rounded-xl border px-4 py-2.5 text-[12px] font-semibold ${
                 isBuy
-                  ? "border-cyan-400/65 bg-cyan-400/22 text-cyan-50 shadow-[0_0_0_3px_rgba(34,211,238,0.16)] hover:bg-cyan-400/28"
+                  ? "border-emerald-400/65 bg-emerald-400/22 text-white/90 shadow-[0_0_0_3px_rgba(52,211,153,0.16)] hover:bg-emerald-400/28"
                   : "border-rose-400/65 bg-rose-400/22 text-rose-50 shadow-[0_0_0_3px_rgba(244,63,94,0.16)] hover:bg-rose-400/28"
               } disabled:opacity-55`}
             >
@@ -206,10 +206,10 @@ function Row({
   label: string;
   value: string;
   mono?: boolean;
-  highlight?: "cyan" | "rose" | null;
+  highlight?: "buy" | "rose" | null;
 }) {
-  const valueClass = highlight === "cyan"
-    ? "text-cyan-200"
+  const valueClass = highlight === "buy"
+    ? "text-emerald-200"
     : highlight === "rose"
       ? "text-rose-200"
       : "text-tos-text";

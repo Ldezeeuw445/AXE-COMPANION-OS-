@@ -129,14 +129,14 @@ export function Mt5ProvisioningAutoPoll({ targets }: { targets: ProvisioningTarg
 
   if (!expired) {
     return (
-      <div className="rounded-2xl border border-cyan-400/18 bg-cyan-400/[0.05] px-4 py-3 text-[12px] leading-relaxed text-cyan-100/90">
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[12px] leading-relaxed text-white/85">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.7)]" aria-hidden />
-              <p className="font-semibold text-cyan-50">MT5 cloud terminal is provisioning.</p>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(103,232,249,0.7)]" aria-hidden />
+              <p className="font-semibold text-white/90">MT5 cloud terminal is provisioning.</p>
             </div>
-            <p className="mt-1 text-cyan-100/70">
+            <p className="mt-1 text-white/70">
               Checking MetaApi status every 5 seconds · {elapsedLabel} elapsed. The page remains usable while this settles.
             </p>
           </div>
@@ -144,7 +144,7 @@ export function Mt5ProvisioningAutoPoll({ targets }: { targets: ProvisioningTarg
             type="button"
             onClick={() => void retryNow()}
             disabled={manualRetrying}
-            className="shrink-0 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-[11px] font-semibold text-cyan-50 hover:bg-cyan-300/18 disabled:opacity-50"
+            className="shrink-0 rounded-xl border border-white/[0.10] bg-emerald-300/10 px-3 py-2 text-[11px] font-semibold text-white/90 hover:bg-emerald-300/18 disabled:opacity-50"
           >
             {manualRetrying ? "Checking…" : "Check now"}
           </button>

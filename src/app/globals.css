@@ -23,10 +23,10 @@
   --tos-text-dim: #4a4a54;
 
   /* ─── Brand accent — teal/cyan, used sparingly ─── */
-  --tos-accent-cyan: #00d4f5;
-  --tos-accent-cyan-deep: #0090aa;
-  --tos-accent-cyan-muted: rgba(0, 212, 245, 0.08);
-  --tos-accent-cyan-glow: rgba(0, 212, 245, 0.12);
+  --tos-accent-cyan: #94a3b8;
+  --tos-accent-cyan-deep: #64748b;
+  --tos-accent-cyan-muted: rgba(148, 163, 184, 0.08);
+  --tos-accent-cyan-glow: rgba(148, 163, 184, 0.10);
   --tos-neon-blue: #22d3ee;
 
   /* Route / icon accents — muted for inactive, pops on active */

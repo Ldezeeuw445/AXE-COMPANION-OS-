@@ -38,13 +38,13 @@ export default async function IntelPage({ searchParams }: PageProps) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
         hasFreshLiveIntel
-          ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
+          ? "border-white/[0.10] bg-white/[0.05] text-white/90"
           : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200/90"
       }`}
       title={intel.cache.message}
     >
       <span
-        className={`h-1.5 w-1.5 rounded-full ${hasFreshLiveIntel ? "bg-cyan-300" : "bg-amber-300/80"}`}
+        className={`h-1.5 w-1.5 rounded-full ${hasFreshLiveIntel ? "bg-emerald-300" : "bg-amber-300/80"}`}
         aria-hidden
       />
       {cacheLabel}
@@ -117,7 +117,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
       <ScreenHeader
         title="Intel"
         subtitle={`AXE Intel flow filtered by ${symbol}.`}
-        left={<Target className="h-6 w-6 text-cyan-400/85" aria-hidden />}
+        left={<Target className="h-6 w-6 text-white/60" aria-hidden />}
         right={
           <div className="flex items-center gap-2">
             {livePill}
@@ -144,10 +144,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
       ) : null}
 
       {/* MARKET TIDE */}
-      <GlassPanel className="p-4" glow="cyan">
+      <GlassPanel className="p-4" glow="none">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Activity className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+            <Activity className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
               Market tide
             </h2>
@@ -192,7 +192,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
         <GlassPanel className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Eye className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+              <Eye className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
                 Insider transactions
               </h2>
@@ -217,7 +217,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   </span>
                   <span
                     className={`font-mono text-[10px] font-semibold uppercase ${
-                      row.type === "BUY" ? "text-cyan-300" : "text-rose-300"
+                      row.type === "BUY" ? "text-emerald-300" : "text-rose-300"
                     }`}
                   >
                     {row.type}
@@ -236,7 +236,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
         <GlassPanel className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Landmark className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+              <Landmark className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
                 Congress
               </h2>
@@ -259,7 +259,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   </span>
                   <span
                     className={`font-mono text-[10px] font-semibold uppercase ${
-                      row.direction === "BUY" ? "text-cyan-300" : "text-rose-300"
+                      row.direction === "BUY" ? "text-emerald-300" : "text-rose-300"
                     }`}
                   >
                     {row.direction}
@@ -281,7 +281,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
         <GlassPanel className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <BarChart3 className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+              <BarChart3 className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
                 Dark pool prints
               </h2>
@@ -303,7 +303,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   {row.side ? (
                     <span
                       className={`font-mono text-[10px] font-semibold uppercase ${
-                        row.side === "buy" ? "text-cyan-300" : row.side === "sell" ? "text-rose-300" : "text-tos-dim"
+                        row.side === "buy" ? "text-emerald-300" : row.side === "sell" ? "text-rose-300" : "text-tos-dim"
                       }`}
                     >
                       {row.side}
@@ -325,7 +325,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
         <GlassPanel className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
                 Unusual options
               </h2>
@@ -346,7 +346,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   <span className="font-mono text-[10px] text-tos-dim">{row.exp}</span>
                   <span
                     className={`ml-auto font-mono text-[10px] font-semibold uppercase ${
-                      row.side === "CALL" ? "text-cyan-300" : "text-rose-300"
+                      row.side === "CALL" ? "text-emerald-300" : "text-rose-300"
                     }`}
                   >
                     {row.side}
@@ -368,7 +368,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
           href={chatQ(
             `[AXE · intel]\nGive me a smart-money read on ${symbol} right now: insider buys, congressional activity, dark-pool prints and unusual options flow. Be specific about names, sizes and timing.`,
           )}
-          className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+          className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
         >
           Ask AXE about smart money
         </Link>
@@ -413,11 +413,11 @@ function ProviderBadges({
           className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
             degraded
               ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/90"
-              : "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95"
+              : "border-white/[0.08] bg-white/[0.05] text-white/90"
           }`}
           title={cache.message}
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${degraded ? "bg-amber-300/85" : "bg-cyan-300"}`} aria-hidden />
+          <span className={`h-1.5 w-1.5 rounded-full ${degraded ? "bg-amber-300/85" : "bg-emerald-300"}`} aria-hidden />
           {summary}
         </span>
         {offCount > 0 ? <span className="text-[10px] text-tos-dim">{offCount} optional off</span> : null}
@@ -426,7 +426,7 @@ function ProviderBadges({
         {providers.map((p) => {
           const tone =
             p.state === "live"
-              ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
+              ? "border-white/[0.10] bg-white/[0.05] text-white/90"
               : p.state === "error"
                 ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/90"
                 : "border-white/12 bg-white/[0.04] text-tos-dim";
@@ -438,7 +438,7 @@ function ProviderBadges({
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  p.state === "live" ? "bg-cyan-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25"
+                  p.state === "live" ? "bg-emerald-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25"
                 }`}
                 aria-hidden
               />
@@ -474,7 +474,7 @@ function Tile({
 }) {
   const tone =
     accent === "positive"
-      ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-100/95"
+      ? "border-white/[0.10] bg-white/[0.05] text-white/90"
       : accent === "negative"
         ? "border-rose-400/30 bg-rose-400/10 text-rose-100/95"
         : "border-white/12 bg-white/[0.04] text-tos-text";

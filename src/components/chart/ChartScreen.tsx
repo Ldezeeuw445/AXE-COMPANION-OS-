@@ -193,8 +193,8 @@ function statusPillCopy(
   if (providerStatus === "demo") {
     return {
       label: "Demo",
-      className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95",
-      dot: "bg-cyan-300/80",
+      className: "border-white/[0.10] bg-white/[0.05] text-white/90",
+      dot: "bg-white/60",
     };
   }
   if ((live === "connected" || live === "live_stream") && hasFreshLiveData) {
@@ -207,8 +207,8 @@ function statusPillCopy(
   if (live === "connected" || live === "live_stream") {
     return {
       label: hasCandles ? "Warming" : "Loading",
-      className: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200/95",
-      dot: "bg-cyan-300/80",
+      className: "border-white/[0.08] bg-white/[0.04] text-white/90",
+      dot: "bg-white/60",
     };
   }
   if (live === "stale") {
@@ -242,8 +242,8 @@ function statusPillCopy(
   if (live === "connecting") {
     return {
       label: "Connecting",
-      className: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200/90",
-      dot: "bg-cyan-300/80 animate-pulse",
+      className: "border-white/[0.08] bg-white/[0.04] text-white/80",
+      dot: "bg-white/60 animate-pulse",
     };
   }
   if (hasCandles) {
@@ -2062,9 +2062,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
     const baseBtn =
-      "inline-flex h-8 w-8 items-center justify-center rounded-full border bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95";
-    const idle = "border-cyan-400/30";
-    const active = "border-cyan-300/60 bg-cyan-400/14 text-cyan-100";
+      "inline-flex h-8 w-8 items-center justify-center rounded-full border bg-black/72 text-white/80 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95";
+    const idle = "border-white/[0.10]";
+    const active = "border-white/[0.18] bg-white/[0.06] text-white";
     setCenter(
       <div className="flex items-center gap-1.5">
         <button
@@ -2172,7 +2172,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* Drawing mode hint */}
       {drawingHint ? (
-        <div className="mt-2 hidden items-center justify-between gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/8 px-3 py-2 text-[11px] text-cyan-100/95 md:flex">
+        <div className="mt-2 hidden items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] text-white/90 md:flex">
           <span>
             Drawing: <span className="font-semibold">{drawingHint}</span>
           </span>
@@ -2286,7 +2286,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               onClick={() => handleSendCurrentPlan()}
               className={`absolute right-3 top-[5.25rem] z-30 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wider shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur transition ${
                 pendingOrderSide === "buy"
-                  ? "border border-cyan-300/60 bg-cyan-400/22 text-cyan-50 hover:bg-cyan-400/30"
+                  ? "border border-white/[0.18] bg-white/[0.10] text-white/90 hover:bg-white/[0.12]"
                   : "border border-rose-300/60 bg-rose-400/22 text-rose-50 hover:bg-rose-400/30"
               }`}
               aria-label={`Send ${pendingOrderSide.toUpperCase()} ${
@@ -2344,8 +2344,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           onClick={() => setToolRailOpen((v) => !v)}
           className={`absolute left-0 top-[36%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             toolRailOpen
-              ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.2)]"
-              : "border-cyan-400/18 bg-black/78 text-cyan-200"
+              ? "border-white/[0.14] bg-white/[0.08] text-white shadow-[0_0_24px_rgba(255,255,255,0.2)]"
+              : "border-white/[0.08] bg-black/78 text-white/80"
           }`}
           aria-label="Toggle SMC chart toolbar"
         >
@@ -2357,7 +2357,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
         >
-          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-100/85">Chart tools</div>
+          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/70">Chart tools</div>
           <div className="grid grid-cols-3 gap-1.5">
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
@@ -2416,8 +2416,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   isDisabled
                     ? "cursor-not-allowed border-white/[0.04] bg-white/[0.02] text-tos-dim opacity-50"
                     : item.active
-                      ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100"
-                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                      ? "border-white/[0.14] bg-white/[0.08] text-white"
+                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-white"
                 }`}
                 aria-label={item.label}
               >
@@ -2445,8 +2445,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateOrderBlockCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                       }`}
                       aria-label={`Show ${value} order block${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2476,8 +2476,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateFvgCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                       }`}
                       aria-label={`Show ${value} FVG${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2509,8 +2509,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateInverseFvgCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                       }`}
                       aria-label={`Show ${value} iFVG${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2542,8 +2542,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateProjectionCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                       }`}
                       aria-label={`Project ${value} indicator${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2584,8 +2584,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                         onClick={() => updateFibMode(opt.value)}
                         className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
                           isActive
-                            ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                            : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                         }`}
                         aria-label={`Fib source ${opt.label}`}
                         aria-pressed={isActive}
@@ -2613,8 +2613,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     onClick={() => setFibExtendOnAll("extendLeft", !allFibsExtendLeft)}
                     className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
                       allFibsExtendLeft
-                        ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                        ? "border-white/[0.16] bg-white/[0.10] text-white"
+                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                     }`}
                     aria-label="Extend fib lines left"
                     aria-pressed={allFibsExtendLeft}
@@ -2626,8 +2626,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     onClick={() => setFibExtendOnAll("extendRight", !allFibsExtendRight)}
                     className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
                       allFibsExtendRight
-                        ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                        ? "border-white/[0.16] bg-white/[0.10] text-white"
+                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                     }`}
                     aria-label="Extend fib lines right"
                     aria-pressed={allFibsExtendRight}
@@ -2657,8 +2657,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                           onClick={() => updateFibSwingOffset(opt.value)}
                           className={`grid h-6 min-w-[1.8rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
                             isActive
-                              ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                              : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                              ? "border-white/[0.16] bg-white/[0.10] text-white"
+                              : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
                           }`}
                           aria-label={`Use swing leg ${opt.label}`}
                           aria-pressed={isActive}
@@ -2758,7 +2758,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-b from-[#04070C]/35 via-[#04070C]/72 to-[#04070C]/96 p-4 sm:items-center">
             <GlassPanel className="w-full max-w-md p-4 sm:p-5" glow="warm">
               {data.candles.length === 0 ? (
-                <div className="mb-3 rounded-xl border border-cyan-300/12 bg-cyan-400/[0.035] px-3 py-2">
+                <div className="mb-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
                   <AxeBreatheLoader
                     label={
                       data.failure === "broker_symbol_not_found"
@@ -2769,7 +2769,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                             ? "MetaAPI timed out"
                           : "Checking broker data"
                     }
-                    tone={data.failure === "metaapi_timeout" || data.failure === "candles_unavailable" ? "gold" : "cyan"}
+                    tone={data.failure === "metaapi_timeout" || data.failure === "candles_unavailable" ? "gold" : "default"}
                     size="sm"
                   />
                 </div>
@@ -2780,14 +2780,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 {data.failure === "account_not_connected" || data.failure === "provider_not_configured" ? (
                   <Link
                     href="/accounts"
-                    className="rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+                    className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
                   >
                     Connect account
                   </Link>
                 ) : (
                   <Link
                     href="/accounts"
-                    className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+                    className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
                   >
                     Sync account
                   </Link>
@@ -2815,7 +2815,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={resetChartView}
-          className="absolute bottom-3 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/76 text-cyan-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/45 hover:bg-cyan-400/12 active:scale-95"
+          className="absolute bottom-3 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/76 text-white/85 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-white/[0.14] hover:bg-white/[0.06] active:scale-95"
           aria-label={CHART_SCALE_MODES[scaleModeIndex].label}
           title={CHART_SCALE_MODES[scaleModeIndex].label}
         >
@@ -2832,7 +2832,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         ) : null}
 
         {isTimeframePending ? (
-          <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-cyan-300/20 bg-black/78 px-2.5 py-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+          <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-white/[0.08] bg-black/78 px-2.5 py-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
             <AxeBreatheLoader
               label={`Running ${CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}`}
               size="sm"
@@ -2858,7 +2858,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : null}
         {data.hint && !failureCopy && liveStatus !== "stale" && liveStatus !== "offline" ? (
-          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-cyan-300/15 bg-black/76 px-3 py-2 text-[10.5px] leading-snug text-cyan-100/82 shadow-[0_10px_30px_rgba(0,0,0,0.42)] backdrop-blur">
+          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-white/[0.06] bg-black/76 px-3 py-2 text-[10.5px] leading-snug text-white/82 shadow-[0_10px_30px_rgba(0,0,0,0.42)] backdrop-blur">
             {data.hint}
           </div>
         ) : null}
@@ -2906,7 +2906,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           of the screen on iPhone (no black gap below the rounded corner). */}
       <div className="mx-2 mb-2 shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         <div className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.12] bg-white/[0.055] p-1.5 shadow-[0_-18px_52px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.10)] backdrop-blur-2xl">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.16),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.16),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]" />
           <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
           <div className="relative z-10">
         {/* Row 1: SELL · MKT / Lots / BUY · MKT. These buttons are
@@ -2946,7 +2946,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             type="button"
             className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
               executionMode === "market" && pendingOrderSide === "buy"
-                ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(34,211,238,0.32)]"
+                ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(255,255,255,0.32)]"
                 : "bg-gradient-to-r from-[#03252A] via-[#0A5662] to-[#11808D] text-white/85"
             }`}
             onClick={() => {
@@ -2972,7 +2972,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-black/50 px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
             aria-label="Choose execution type"
           >
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/12 text-cyan-200">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.06] text-white/80">
               <ChevronDown className="h-3 w-3" />
             </span>
             <span className="truncate uppercase tracking-wide text-tos-text">
@@ -3002,7 +3002,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <div className="mt-1 flex h-9 items-stretch gap-1">
           <div className={`flex min-w-[5.1rem] items-center justify-center rounded-[1.05rem] border px-2 text-[10px] font-bold uppercase tracking-wide ${
             pendingOrderSide === "buy"
-              ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+              ? "border-white/[0.12] bg-white/[0.06] text-white"
               : "border-rose-300/35 bg-rose-400/12 text-rose-100"
           }`}>
             {orderTypeLabel(pendingOrderType)}
@@ -3103,7 +3103,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   }}
                   className={`rounded-xl border px-3 py-2 text-left text-[12px] font-semibold ${
                     isActive
-                      ? "border-cyan-300/45 bg-cyan-400/12 text-cyan-100"
+                      ? "border-white/[0.14] bg-white/[0.06] text-white"
                       : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
                   }`}
                 >
@@ -3149,7 +3149,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   }}
                   className={`rounded-lg border px-2 py-2 text-center font-mono text-[12px] font-bold ${
                     isActive
-                      ? "border-cyan-300/45 bg-cyan-400/12 text-cyan-100"
+                      ? "border-white/[0.14] bg-white/[0.06] text-white"
                       : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
                   }`}
                 >
@@ -3168,7 +3168,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   const next = Math.max(0.01, +(cur + step).toFixed(2));
                   setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(1).replace(/\.0$/, ""));
                 }}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2 py-1.5 text-[11px] font-bold text-cyan-200/95"
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.05] px-2 py-1.5 text-[11px] font-bold text-white/90"
               >
                 <Plus className="h-3 w-3" />
                 {step}
@@ -3217,13 +3217,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Standalone alert fired toast */}
       {firedAlert ? (
         <div
-          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-cyan-300/45 bg-[#031418]/95 px-3 py-2 text-[11px] text-cyan-100 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-white/[0.14] bg-[#031418]/95 px-3 py-2 text-[11px] text-white shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
           role="status"
         >
-          <Bell className="h-4 w-4 text-cyan-300" aria-hidden />
+          <Bell className="h-4 w-4 text-emerald-300" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">Alert · {firedAlert.message}</p>
-            <p className="text-[10px] text-cyan-200/70">
+            <p className="text-[10px] text-white/50">
               {firedAlert.pushed ? "Push delivered" : "Delivered in-app"}
             </p>
           </div>
@@ -3242,9 +3242,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <div
           className={`pointer-events-auto absolute left-1/2 bottom-[8.5rem] z-[60] flex max-w-[88%] -translate-x-1/2 items-start gap-2 rounded-xl border px-3 py-2 text-[11px] shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur ${
             tradeToast.kind === "demo"
-              ? "border-cyan-300/40 bg-cyan-400/10 text-cyan-100"
+              ? "border-white/[0.12] bg-white/[0.05] text-white"
               : tradeToast.kind === "live"
-                ? "border-cyan-200/55 bg-cyan-300/14 text-cyan-50"
+                ? "border-emerald-200/55 bg-emerald-300/14 text-white/90"
                 : tradeToast.kind === "error"
                   ? "border-rose-400/45 bg-rose-400/12 text-rose-100"
                   : "border-amber-400/35 bg-amber-400/8 text-amber-100"
@@ -3286,24 +3286,24 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             const newest = demoBook.forSymbol[0];
             if (newest) demoBook.close(newest.id);
           }}
-          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-300/40 bg-[#031418]/92 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-cyan-300/12"
+          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/[0.12] bg-[#031418]/92 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-emerald-300/12"
           aria-label="Close most recent demo position"
         >
-          <span className="rounded-full bg-cyan-400/25 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-cyan-50">
+          <span className="rounded-full bg-white/[0.10] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-white/90">
             DEMO
           </span>
           <span>
             {demoBook.forSymbol.length} open ·{" "}
             <span
               className={`font-mono ${
-                demoBook.pnlOnSymbol >= 0 ? "text-cyan-200" : "text-rose-300"
+                demoBook.pnlOnSymbol >= 0 ? "text-white/80" : "text-rose-300"
               }`}
             >
               {demoBook.pnlOnSymbol >= 0 ? "+" : ""}
               {demoBook.pnlOnSymbol.toFixed(2)} $
             </span>
           </span>
-          <span className="text-[9px] text-cyan-200/70">tap to close</span>
+          <span className="text-[9px] text-white/50">tap to close</span>
         </button>
       ) : null}
 

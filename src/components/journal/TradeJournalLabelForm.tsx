@@ -41,7 +41,7 @@ export function TradeJournalLabelForm({ trade, compact }: Props) {
         {JOURNAL_TRADE_TAGS.map((tag) => (
           <label
             key={tag}
-            className="cursor-pointer rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium text-tos-muted transition hover:border-cyan-500/35 hover:text-cyan-200/90 has-[:checked]:border-cyan-400/50 has-[:checked]:bg-cyan-500/15 has-[:checked]:text-cyan-100"
+            className="cursor-pointer rounded-full border border-white/12 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium text-tos-muted transition hover:border-white/[0.10] hover:text-white/80 has-[:checked]:border-cyan-400/50 has-[:checked]:bg-white/[0.06] has-[:checked]:text-white"
           >
             <input
               type="radio"
@@ -79,7 +79,7 @@ export function TradeJournalLabelForm({ trade, compact }: Props) {
       ) : null}
       <button
         type="submit"
-        className="rounded-xl border border-cyan-500/35 bg-cyan-500/12 px-4 py-2 text-xs font-semibold text-cyan-200/95 hover:bg-cyan-500/20"
+        className="rounded-xl border border-white/[0.10] bg-white/[0.05] px-4 py-2 text-xs font-semibold text-white/90 hover:bg-cyan-500/20"
       >
         Save tag
       </button>

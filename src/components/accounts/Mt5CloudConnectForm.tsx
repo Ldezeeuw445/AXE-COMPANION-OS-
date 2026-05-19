@@ -31,12 +31,12 @@ function SubmitButton() {
         {pending ? "Starting secure MT5 connection…" : "Connect MT5 account"}
       </button>
       {pending ? (
-        <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2 text-[10.5px] leading-relaxed text-cyan-100/80">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[10.5px] leading-relaxed text-white/70">
           <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.65)]" aria-hidden />
-            <span className="font-semibold uppercase tracking-wider text-cyan-100">Secure provisioning active</span>
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(103,232,249,0.65)]" aria-hidden />
+            <span className="font-semibold uppercase tracking-wider text-white">Secure provisioning active</span>
           </div>
-          <p className="mt-1 text-cyan-100/70">
+          <p className="mt-1 text-white/70">
             AXE is asking MetaAPI to create the cloud terminal. If the broker is slow, the account still appears below
             and continues provisioning from there.
           </p>
@@ -155,19 +155,19 @@ export function Mt5CloudConnectForm({ defaultRegion }: Props) {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-[11px] leading-relaxed text-tos-muted">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-[11px] leading-relaxed text-tos-muted">
         <p className="font-medium text-tos-text">What AXE needs</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
           <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/90">Login</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">Login</p>
             <p className="mt-1 text-[10px] text-tos-dim">Digits only from MT5. No email or broker portal login.</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/90">Server</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">Server</p>
             <p className="mt-1 text-[10px] text-tos-dim">Exact MT5 server string, including suffixes and dashes.</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200/90">Password</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">Password</p>
             <p className="mt-1 text-[10px] text-tos-dim">Investor/read-only password for account data.</p>
           </div>
         </div>

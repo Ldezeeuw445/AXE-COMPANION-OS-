@@ -4,7 +4,50 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 
-export function renderMarkdownInline(content: string, strongClassName = "font-semibold text-cyan-100"): ReactNode[] {
+/* ── Semantic keyword colours for AXE chat ─────────────────────────────
+   Matte, premium palette inspired by Linear's restrained use of colour.
+   Each trading concept gets a dedicated hue so AXE analysis is scannable
+   without feeling like a christmas tree. */
+const SEMANTIC_KEYWORDS: Record<string, string> = {
+  // Structure & direction
+  "market structure": "text-violet-300/85",
+  bias: "text-violet-300/85",
+  outlook: "text-violet-300/85",
+  trend: "text-violet-300/85",
+  // Levels
+  resistance: "text-rose-300/85",
+  support: "text-emerald-300/85",
+  "key levels": "text-amber-300/85",
+  "key level": "text-amber-300/85",
+  "take profit": "text-emerald-300/85",
+  "stop loss": "text-rose-300/85",
+  tp: "text-emerald-300/85",
+  sl: "text-rose-300/85",
+  // Patterns
+  consolidation: "text-sky-300/80",
+  "breakout watch": "text-indigo-300/85",
+  breakout: "text-indigo-300/85",
+  reversal: "text-pink-300/80",
+  // Catalysts
+  catalysts: "text-amber-300/85",
+  catalyst: "text-amber-300/85",
+  // Risk & entries
+  entry: "text-emerald-300/85",
+  risk: "text-rose-300/85",
+  "risk/reward": "text-amber-300/85",
+  "r:r": "text-amber-300/85",
+  // Sentiment
+  bullish: "text-emerald-300/85",
+  bearish: "text-rose-300/85",
+  neutral: "text-white/70",
+};
+
+function semanticColor(text: string): string | null {
+  const lower = text.toLowerCase().replace(/:$/, "").trim();
+  return SEMANTIC_KEYWORDS[lower] ?? null;
+}
+
+export function renderMarkdownInline(content: string, strongClassName = "font-semibold text-white"): ReactNode[] {
   const parts: ReactNode[] = [];
   const re = /(\[\[link:([^|\]]+)\|([^\]]+)\]\]|\*\*([^*]+)\*\*)/g;
   let cursor = 0;
@@ -18,15 +61,18 @@ export function renderMarkdownInline(content: string, strongClassName = "font-se
         <Link
           key={`${match.index}-${href}`}
           href={href}
-          className="mx-0.5 inline-flex items-center gap-1 rounded-full border border-cyan-400/35 bg-cyan-400/10 px-2.5 py-0.5 align-baseline text-[11.5px] font-semibold text-cyan-200/95 hover:border-cyan-400/60 hover:bg-cyan-400/15"
+          className="mx-0.5 inline-flex items-center gap-1 rounded-full border border-white/[0.10] bg-white/[0.05] px-2.5 py-0.5 align-baseline text-[11.5px] font-semibold text-white/85 hover:border-white/[0.18] hover:bg-white/[0.08]"
         >
           {label}
           <ArrowUpRight className="h-3 w-3" aria-hidden />
         </Link>,
       );
     } else if (match[4]) {
+      // Check for semantic keyword colouring (e.g. **Resistance:** or **Bullish**)
+      const color = semanticColor(match[4]);
+      const cls = color ? `font-semibold ${color}` : strongClassName;
       parts.push(
-        <strong key={`${match.index}-strong`} className={strongClassName}>
+        <strong key={`${match.index}-strong`} className={cls}>
           {match[4]}
         </strong>,
       );
@@ -60,7 +106,7 @@ export function MarkdownLite({
         const heading = lines.length === 1 ? lines[0].match(/^#{1,3}\s+(.+)$/) : null;
         if (heading) {
           return (
-            <h3 key={`h-${blockIndex}`} className="text-[13px] font-semibold uppercase tracking-[0.14em] text-cyan-100/95">
+            <h3 key={`h-${blockIndex}`} className="text-[13px] font-semibold uppercase tracking-[0.14em] text-white/90">
               {renderMarkdownInline(heading[1])}
             </h3>
           );
@@ -72,7 +118,7 @@ export function MarkdownLite({
             <ul key={`ul-${blockIndex}`} className="space-y-1.5">
               {lines.map((line, i) => (
                 <li key={`${blockIndex}-${i}`} className="flex gap-2 text-sm leading-relaxed">
-                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-cyan-300/75" aria-hidden />
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-white/40" aria-hidden />
                   <span>{renderMarkdownInline(line.replace(/^([-*•]|\d+\.)\s+/, ""))}</span>
                 </li>
               ))}
@@ -89,4 +135,3 @@ export function MarkdownLite({
     </div>
   );
 }
-

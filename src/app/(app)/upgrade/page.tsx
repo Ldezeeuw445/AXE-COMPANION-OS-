@@ -133,10 +133,10 @@ export default async function SubscriptionsPage() {
       ) : null}
 
       {isPro ? (
-        <GlassPanel glow="cyan" className="mb-4 p-4">
+        <GlassPanel glow="none" className="mb-4 p-4">
           <div className="flex items-center gap-2">
-            <Crown className="h-4 w-4 text-cyan-300" aria-hidden />
-            <p className="text-sm font-semibold text-cyan-200/95">You are on Pro</p>
+            <Crown className="h-4 w-4 text-white/80" aria-hidden />
+            <p className="text-sm font-semibold text-white/90">You are on Pro</p>
           </div>
           <p className="mt-1 text-xs text-tos-muted">
             Unlimited chat sends (fair use). Thank you for supporting AXE.
@@ -169,11 +169,11 @@ export default async function SubscriptionsPage() {
         </GlassPanel>
 
         <GlassPanel
-          glow="cyan"
-          className="relative overflow-hidden border-cyan-400/20 p-5 ring-1 ring-cyan-400/15"
+          glow="none"
+          className="relative overflow-hidden border-white/[0.08] p-5 ring-1 ring-white/[0.08]"
         >
           <div className="flex items-baseline justify-between">
-            <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300/95">Pro</h2>
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80">Pro</h2>
             <Badge variant="long">Recommended</Badge>
           </div>
           <p className="mt-2 font-mono text-3xl font-semibold tracking-tight text-tos-text">
@@ -183,7 +183,7 @@ export default async function SubscriptionsPage() {
           <ul className="mt-4 space-y-2 text-xs text-tos-muted">
             {PRO_FEATURES.map((f) => (
               <li key={f} className="flex items-start gap-2">
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300/85" aria-hidden />
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/60" aria-hidden />
                 <span>{f}</span>
               </li>
             ))}
@@ -209,7 +209,7 @@ export default async function SubscriptionsPage() {
               </div>
               <Link
                 href={`mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@tradingosapp.com"}?subject=AXE%20Pro%20waitlist`}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/10 py-2.5 text-xs font-semibold text-cyan-100/95 transition-colors hover:bg-cyan-500/15"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.05] py-2.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
               >
                 <Mail className="h-3.5 w-3.5" />
                 Notify me when Pro opens

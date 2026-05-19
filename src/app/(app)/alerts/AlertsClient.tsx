@@ -64,8 +64,8 @@ function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
     return {
       label: "Delivery: in-app",
       short: "In-app",
-      className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
-      dot: "bg-cyan-300/85",
+      className: "border-white/[0.08] bg-white/[0.05] text-white/90",
+      dot: "bg-white/60",
     };
   }
   if (status.vapidConfigured && status.hasSubscription) {
@@ -80,15 +80,15 @@ function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
     return {
       label: "Delivery: in-app · enable push",
       short: "In-app",
-      className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
-      dot: "bg-cyan-300/85",
+      className: "border-white/[0.08] bg-white/[0.05] text-white/90",
+      dot: "bg-white/60",
     };
   }
   return {
     label: "Delivery: in-app",
     short: "In-app",
-    className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
-    dot: "bg-cyan-300/85",
+    className: "border-white/[0.08] bg-white/[0.05] text-white/90",
+    dot: "bg-white/60",
   };
 }
 
@@ -385,7 +385,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       {/* Desktop header; mobile uses AppTopBar slots */}
       <div className="hidden items-center justify-between gap-3 border-b border-white/[0.04] py-2 md:flex">
         <div className="flex items-center gap-2">
-          <Bell className="h-5 w-5 text-cyan-400/80" aria-hidden />
+          <Bell className="h-5 w-5 text-white/60" aria-hidden />
           <div>
             <p className="text-sm font-semibold text-tos-text">Alerts</p>
             <p className="text-xs text-tos-muted">No simulated triggers. Push stays explicit.</p>
@@ -401,8 +401,8 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
 
       {focusSymbol ? (
         <p className="text-xs text-tos-muted">
-          Focus symbol: <span className="font-mono text-cyan-200/90">{focusSymbol}</span> —{" "}
-          <Link href="/alerts" className="text-cyan-400 hover:underline">
+          Focus symbol: <span className="font-mono text-white/80">{focusSymbol}</span> —{" "}
+          <Link href="/alerts" className="text-white/70 hover:underline">
             clear
           </Link>
         </p>
@@ -412,7 +412,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           dig into Settings. Only renders when push is actually configured on
           the deployment AND the user hasn't subscribed yet. */}
       {push?.vapidConfigured && !push.hasSubscription ? (
-        <GlassPanel className="p-4" glow="cyan">
+        <GlassPanel className="p-4" glow="none">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
             Enable notifications on this device
           </p>
@@ -424,14 +424,14 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           fires the alert locally. Web-push is optional / additive. */}
       {push && !push.vapidConfigured ? (
         <GlassPanel className="p-3 text-[11px] text-tos-muted">
-          <span className="font-semibold text-cyan-200/95">In-app alerts are live.</span>{" "}
-          Open <Link href="/chart" className="text-cyan-400 hover:underline">Chart</Link> to evaluate
+          <span className="font-semibold text-white/90">In-app alerts are live.</span>{" "}
+          Open <Link href="/chart" className="text-white/70 hover:underline">Chart</Link> to evaluate
           price alerts on the active symbol. Push notifications are an extra channel — add VAPID
           keys on Vercel to also send them when the app is closed.
         </GlassPanel>
       ) : null}
 
-      <GlassPanel className="p-4" glow="cyan">
+      <GlassPanel className="p-4" glow="none">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tos-dim">Create alert</p>
           <p className="text-[11px] text-tos-muted">
@@ -464,7 +464,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             <select
               value={formType}
               onChange={(e) => setFormType(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
             >
               <option value="price">price</option>
               <option value="position_risk">position_risk</option>
@@ -480,7 +480,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
               value={formSymbol}
               onChange={(e) => setFormSymbol(e.target.value)}
               placeholder="XAUUSD"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] uppercase tracking-wider text-tos-text outline-none focus:border-cyan-500/35"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] uppercase tracking-wider text-tos-text outline-none focus:border-white/[0.15]"
             />
           </label>
 
@@ -491,7 +491,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                 <select
                   value={formCondition}
                   onChange={(e) => setFormCondition(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 >
                   <option value="above">above</option>
                   <option value="below">below</option>
@@ -504,7 +504,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                   onChange={(e) => setFormThreshold(e.target.value)}
                   placeholder="2356.50"
                   inputMode="decimal"
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 />
               </label>
             </>
@@ -517,7 +517,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                 value={formKeyword}
                 onChange={(e) => setFormKeyword(e.target.value)}
                 placeholder={formType === "news" ? "Powell, CPI, gold…" : "CPI, NFP, FOMC…"}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+                className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
               />
             </label>
           ) : null}
@@ -530,7 +530,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             type="button"
             onClick={() => void createAlert()}
             disabled={saving || (formType === "price" && runtimeCheck.state !== "valid")}
-            className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/12 px-3 py-2 text-[12px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2 text-[12px] font-semibold text-white/90 hover:bg-white/[0.08] disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
             Create
@@ -541,7 +541,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             )}
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[12px] font-semibold text-tos-muted hover:bg-white/[0.06]"
           >
-            <Check className="h-4 w-4 text-cyan-400/80" aria-hidden />
+            <Check className="h-4 w-4 text-white/60" aria-hidden />
             Ask AXE to refine
           </Link>
         </div>

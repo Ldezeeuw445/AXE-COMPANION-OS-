@@ -193,9 +193,9 @@ export default async function SettingsPage() {
       </div>
 
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}
-      <GlassPanel glow="cyan" className="mb-4 p-4">
+      <GlassPanel glow="none" className="mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[10px] font-medium uppercase tracking-widest text-cyan-300/95">
+          <h2 className="text-[10px] font-medium uppercase tracking-widest text-white/80">
             Trading OS terminal · in development
           </h2>
           <Badge variant="long">Same Supabase</Badge>
@@ -207,7 +207,7 @@ export default async function SettingsPage() {
         </p>
         <p className="mt-2 text-[11px] text-tos-dim">
           Need a local MT5 bridge token? It lives under{" "}
-          <Link href="/accounts" className="text-cyan-300/95 underline-offset-2 hover:underline">
+          <Link href="/accounts" className="text-white/80 underline-offset-2 hover:underline">
             Accounts → Advanced
           </Link>
           .
