@@ -49,7 +49,7 @@ export default async function MigrationsPage({
         <p className="mt-4 text-sm text-tos-muted">
           Example URL (default secret matches your internal migrate header value):
         </p>
-        <p className="mt-2 break-all rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-tos-warm">
+        <p className="mt-2 break-all rounded-xl border border-white/10 bg-[#0e0f12]/95 p-3 font-mono text-[11px] text-tos-warm">
           /migrations?key={DEFAULT_KEY}
         </p>
         <p className="mt-4 text-xs text-tos-dim">

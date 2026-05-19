@@ -28,7 +28,7 @@ export function MigrationCopyBlock({ filename, sql }: { filename: string; sql: s
           {copied ? "Copied" : "Copy all"}
         </button>
       </div>
-      <pre className="tos-scrollbar max-h-[min(70vh,520px)] overflow-auto rounded-xl border border-white/[0.06] bg-black/50 p-3 text-left">
+      <pre className="tos-scrollbar max-h-[min(70vh,520px)] overflow-auto rounded-xl border border-white/[0.06] bg-[#0e0f12] p-3 text-left">
         <code className="whitespace-pre font-mono text-[11px] leading-relaxed text-tos-muted">{sql}</code>
       </pre>
     </section>

@@ -4,47 +4,78 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 
-/* ── Semantic keyword colours for AXE chat ─────────────────────────────
-   Matte, premium palette inspired by Linear's restrained use of colour.
-   Each trading concept gets a dedicated hue so AXE analysis is scannable
-   without feeling like a christmas tree. */
+/* ── Three-tier colour hierarchy for AXE chat ──────────────────────────
+   Tier 1 — Section headers: cyan, bold — they anchor each analysis block.
+   Tier 2 — Sub-labels: plain white bold — calm, no colour noise.
+   Tier 3 — Key detail keywords: matte semantic colour per trading concept
+            so users build colour→context muscle memory over time.          */
+
+/** Tier 1 — Main section headers → cyan + bold (anchor the section) */
+const HEADER_KEYWORDS = new Set([
+  "market structure",
+  "outlook",
+  "analysis",
+  "summary",
+  "trade plan",
+  "trade setup",
+  "overview",
+  "technical analysis",
+  "fundamental analysis",
+  "sentiment",
+  "price action",
+]);
+
+/** Tier 2 — Sub-labels → white bold, no colour (keeps it calm) */
+const SUBLABEL_KEYWORDS = new Set([
+  "bias",
+  "key levels",
+  "key level",
+  "trend",
+  "current price",
+  "neutral",
+  "timeframe",
+  "context",
+  "note",
+  "notes",
+]);
+
+/** Tier 3 — Key detail keywords → matte semantic colour per concept */
 const SEMANTIC_KEYWORDS: Record<string, string> = {
-  // Structure & direction
-  "market structure": "text-violet-300/85",
-  bias: "text-violet-300/85",
-  outlook: "text-violet-300/85",
-  trend: "text-violet-300/85",
-  // Levels
+  // Resistance / risk side → rose
   resistance: "text-rose-300/85",
-  support: "text-emerald-300/85",
-  "key levels": "text-amber-300/85",
-  "key level": "text-amber-300/85",
-  "take profit": "text-emerald-300/85",
   "stop loss": "text-rose-300/85",
-  tp: "text-emerald-300/85",
   sl: "text-rose-300/85",
-  // Patterns
+  risk: "text-rose-300/85",
+  bearish: "text-rose-300/85",
+  // Support / entry side → emerald
+  support: "text-emerald-300/85",
+  "take profit": "text-emerald-300/85",
+  tp: "text-emerald-300/85",
+  entry: "text-emerald-300/85",
+  bullish: "text-emerald-300/85",
+  // Patterns → indigo/sky
   consolidation: "text-sky-300/80",
   "breakout watch": "text-indigo-300/85",
   breakout: "text-indigo-300/85",
   reversal: "text-pink-300/80",
-  // Catalysts
+  // Catalysts & levels → amber
   catalysts: "text-amber-300/85",
   catalyst: "text-amber-300/85",
-  // Risk & entries
-  entry: "text-emerald-300/85",
-  risk: "text-rose-300/85",
   "risk/reward": "text-amber-300/85",
   "r:r": "text-amber-300/85",
-  // Sentiment
-  bullish: "text-emerald-300/85",
-  bearish: "text-rose-300/85",
-  neutral: "text-white/70",
 };
 
-function semanticColor(text: string): string | null {
+type KeywordTier = { tier: 1 | 2 | 3; cls: string };
+
+function classifyKeyword(text: string): KeywordTier | null {
   const lower = text.toLowerCase().replace(/:$/, "").trim();
-  return SEMANTIC_KEYWORDS[lower] ?? null;
+  if (HEADER_KEYWORDS.has(lower))
+    return { tier: 1, cls: "font-bold text-cyan-300" };
+  if (SUBLABEL_KEYWORDS.has(lower))
+    return { tier: 2, cls: "font-semibold text-white" };
+  const color = SEMANTIC_KEYWORDS[lower];
+  if (color) return { tier: 3, cls: `font-semibold ${color}` };
+  return null;
 }
 
 export function renderMarkdownInline(content: string, strongClassName = "font-semibold text-white"): ReactNode[] {
@@ -68,9 +99,9 @@ export function renderMarkdownInline(content: string, strongClassName = "font-se
         </Link>,
       );
     } else if (match[4]) {
-      // Check for semantic keyword colouring (e.g. **Resistance:** or **Bullish**)
-      const color = semanticColor(match[4]);
-      const cls = color ? `font-semibold ${color}` : strongClassName;
+      // Three-tier keyword colouring: headers → cyan, sub-labels → white, details → semantic
+      const kw = classifyKeyword(match[4]);
+      const cls = kw ? kw.cls : strongClassName;
       parts.push(
         <strong key={`${match.index}-strong`} className={cls}>
           {match[4]}

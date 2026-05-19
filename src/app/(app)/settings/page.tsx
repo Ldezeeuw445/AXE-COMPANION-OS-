@@ -297,7 +297,7 @@ export default async function SettingsPage() {
       </GlassPanel>
 
       {/* Mobile install — folded by default, no QR clutter on the main flow */}
-      <details className="group mb-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/25">
+      <details className="group mb-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0a0a0d]/90">
         <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-tos-dim [&::-webkit-details-marker]:hidden">
           Install on another device
           <span className="text-[10px] text-tos-dim/85 group-open:hidden">Open</span>

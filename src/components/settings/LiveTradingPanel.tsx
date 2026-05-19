@@ -42,7 +42,7 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
   const armWindowMin = Math.round(ARM_WINDOW_MS / 60_000);
 
   return (
-    <section className="rounded-2xl border border-white/[0.07] bg-black/30 p-4">
+    <section className="rounded-2xl border border-white/[0.07] bg-[#0c0d0e]/90 p-4">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
@@ -283,7 +283,7 @@ function ActivateModal({
             spellCheck={false}
             className={`mt-1 w-full rounded-lg border px-2.5 py-2 font-mono text-[12.5px] text-tos-text outline-none transition ${
               phrase.length === 0
-                ? "border-white/10 bg-black/35"
+                ? "border-white/10 bg-[#0c0d0e]"
                 : phraseMatches
                   ? "border-white/[0.12] bg-white/[0.025]"
                   : "border-rose-400/30 bg-rose-400/[0.05]"

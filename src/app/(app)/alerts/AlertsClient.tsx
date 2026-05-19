@@ -441,7 +441,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             </span>
           </p>
         </div>
-        <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2 text-[11px] text-tos-muted">
+        <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-2 text-[11px] text-tos-muted">
           Runtime:{" "}
           <span className="font-semibold text-tos-text">
             {runtimeCheck.state === "valid"
@@ -464,7 +464,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             <select
               value={formType}
               onChange={(e) => setFormType(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
             >
               <option value="price">price</option>
               <option value="position_risk">position_risk</option>
@@ -480,7 +480,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
               value={formSymbol}
               onChange={(e) => setFormSymbol(e.target.value)}
               placeholder="XAUUSD"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] uppercase tracking-wider text-tos-text outline-none focus:border-white/[0.15]"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] uppercase tracking-wider text-tos-text outline-none focus:border-white/[0.15]"
             />
           </label>
 
@@ -491,7 +491,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                 <select
                   value={formCondition}
                   onChange={(e) => setFormCondition(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 >
                   <option value="above">above</option>
                   <option value="below">below</option>
@@ -504,7 +504,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                   onChange={(e) => setFormThreshold(e.target.value)}
                   placeholder="2356.50"
                   inputMode="decimal"
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 />
               </label>
             </>
@@ -517,7 +517,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                 value={formKeyword}
                 onChange={(e) => setFormKeyword(e.target.value)}
                 placeholder={formType === "news" ? "Powell, CPI, gold…" : "CPI, NFP, FOMC…"}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
               />
             </label>
           ) : null}

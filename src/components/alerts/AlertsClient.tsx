@@ -67,7 +67,7 @@ export function AlertsClient({ initialAlerts }: AlertsClientProps) {
             required
             maxLength={200}
             placeholder="Title"
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-tos-text placeholder:text-tos-dim focus:border-tos-accent-cyan/40 focus:outline-none"
+            className="w-full rounded-xl border border-white/10 bg-[#0c0d0e]/90 px-3 py-2 text-sm text-tos-text placeholder:text-tos-dim focus:border-tos-accent-cyan/40 focus:outline-none"
           />
           <label className="sr-only" htmlFor="alert-body">
             Detail
@@ -78,7 +78,7 @@ export function AlertsClient({ initialAlerts }: AlertsClientProps) {
             rows={2}
             maxLength={2000}
             placeholder="Detail (optional)"
-            className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-tos-text placeholder:text-tos-dim focus:border-tos-accent-cyan/40 focus:outline-none"
+            className="w-full resize-none rounded-xl border border-white/10 bg-[#0c0d0e]/90 px-3 py-2 text-sm text-tos-text placeholder:text-tos-dim focus:border-tos-accent-cyan/40 focus:outline-none"
           />
           <div className="flex flex-wrap items-center gap-2">
             <label htmlFor="alert-type" className="text-[11px] text-tos-dim">
@@ -87,7 +87,7 @@ export function AlertsClient({ initialAlerts }: AlertsClientProps) {
             <select
               id="alert-type"
               name="type"
-              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-tos-text"
+              className="rounded-lg border border-white/10 bg-[#0c0d0e]/90 px-2 py-1.5 text-xs text-tos-text"
             >
               <option value="system">Reminder / general</option>
               <option value="price">Price</option>

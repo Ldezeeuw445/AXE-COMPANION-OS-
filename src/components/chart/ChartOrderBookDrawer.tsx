@@ -237,7 +237,7 @@ export function ChartOrderBookDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-white/80"
+            className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-[#08080a]/80 text-tos-muted hover:text-white/80"
             aria-label="Close depth"
           >
             <X className="h-3.5 w-3.5" aria-hidden />

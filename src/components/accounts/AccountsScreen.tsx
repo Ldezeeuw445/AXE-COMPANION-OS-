@@ -410,7 +410,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
           Nothing executes from AXE by default.
         </p>
 
-        <details className="group mt-4 overflow-hidden rounded-xl border border-white/[0.07] bg-black/25">
+        <details className="group mt-4 overflow-hidden rounded-xl border border-white/[0.07] bg-[#0a0a0d]/90">
           <summary className={detailsSummaryClass}>
             <span>How it works</span>
             <ChevronDown className="h-4 w-4 shrink-0 text-tos-dim transition-transform group-open:rotate-180" aria-hidden />
@@ -582,7 +582,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
             Copy into your MT5 EA or bridge only — not into Companion settings. Store it safely; only a hash is kept
             server-side.
           </p>
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-white/10 bg-black/40 p-3">
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-white/10 bg-[#0e0f12]/95 p-3">
             <code className="min-w-0 flex-1 break-all text-[11px] text-tos-text">{showToken}</code>
             <button
               type="button"
@@ -673,7 +673,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
       </details>
 
       {/* E — Checklist (collapsed) */}
-      <details className="group overflow-hidden rounded-[1.35rem] border border-white/[0.07] bg-black/25">
+      <details className="group overflow-hidden rounded-[1.35rem] border border-white/[0.07] bg-[#0a0a0d]/90">
         <summary className={`${detailsSummaryClass} px-4 py-3.5 sm:px-5`}>
           <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-tos-dim">Verify your setup</span>
           <ChevronDown className="h-4 w-4 shrink-0 text-tos-dim transition-transform group-open:rotate-180" aria-hidden />

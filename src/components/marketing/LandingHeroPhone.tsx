@@ -509,7 +509,7 @@ function DepthFrame({ seed }: { seed: number }) {
       <div className="absolute inset-0 opacity-25">
         <ChartFrame seed={seed - 1} />
       </div>
-      <div className="absolute inset-0 bg-black/55" aria-hidden />
+      <div className="absolute inset-0 bg-[#08080a]/80" aria-hidden />
 
       <aside className="absolute inset-y-0 left-0 flex w-[88%] flex-col border-r border-white/10 bg-[#030810]/96 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
         <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
@@ -642,7 +642,7 @@ function NewsFrame({ seed }: { seed: number }) {
       <div className="absolute inset-0 opacity-25">
         <ChartFrame seed={seed - 2} />
       </div>
-      <div className="absolute inset-0 bg-black/55" aria-hidden />
+      <div className="absolute inset-0 bg-[#08080a]/80" aria-hidden />
 
       <aside className="absolute inset-y-0 left-0 flex w-[92%] flex-col border-r border-white/10 bg-[#030810]/96 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
         <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
@@ -919,7 +919,7 @@ function ExecDock({ active, seed }: { active: boolean; seed: number }) {
             <span className="text-[8px] font-semibold uppercase tracking-wide text-white/95">Sell</span>
             <span className="font-mono text-[12px] font-bold text-white">4708.20</span>
           </button>
-          <div className="flex w-12 flex-col items-center justify-center rounded-[1rem] border border-white/[0.08] bg-black/55 text-[9px] font-semibold text-tos-text">
+          <div className="flex w-12 flex-col items-center justify-center rounded-[1rem] border border-white/[0.08] bg-[#08080a]/80 text-[9px] font-semibold text-tos-text">
             <span className="text-[7px] uppercase tracking-[0.2em] text-tos-dim">Lots</span>
             <span className="font-mono text-[10px]">0.10</span>
           </div>

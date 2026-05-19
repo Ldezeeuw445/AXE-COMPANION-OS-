@@ -2130,7 +2130,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
+      className="tos-ambient-glow fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
     >
       <LiveStatusReporter
         liveCount={headerSeverity === "fresh" ? 1 : 0}
@@ -2935,7 +2935,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </button>
           <button
             type="button"
-            className="flex min-w-[5rem] flex-col items-center justify-center rounded-[1.15rem] border border-white/[0.08] bg-black/55 px-2 text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+            className="flex min-w-[5rem] flex-col items-center justify-center rounded-[1.15rem] border border-white/[0.08] bg-[#08080a]/80 px-2 text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
             onClick={() => setLotMenuOpen((v) => !v)}
             aria-label="Choose lot size"
           >
@@ -2969,7 +2969,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           <button
             type="button"
             onClick={() => setOrderTypeMenuOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-black/50 px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-[#0e0f12] px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
             aria-label="Choose execution type"
           >
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.06] text-white/80">

@@ -108,7 +108,7 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
             type="button"
             aria-label="Close AXE actions"
             onClick={close}
-            className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+            className="absolute inset-0 bg-[#08080a]/80 backdrop-blur-sm"
           />
           <div
             ref={sheetRef}
@@ -183,7 +183,7 @@ function ToolbarRow({
     "group/item flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-white/15";
   const labelEl = (
     <>
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.07] bg-black/40 text-white/60">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.07] bg-[#0e0f12]/95 text-white/60">
         {item.icon ?? <ChevronRight className="h-3.5 w-3.5" aria-hidden />}
       </span>
       <span className="min-w-0 flex-1">
