@@ -236,7 +236,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
       ref={hostRef}
       className="tos-indicator-pane relative h-full w-full overflow-hidden"
     >
-      <span className="pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] text-cyan-100/85">
+      <span className="pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] text-white/70">
         {mode === "rsi"
           ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
           : mode === "macd"

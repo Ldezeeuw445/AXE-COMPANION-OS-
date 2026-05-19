@@ -70,12 +70,15 @@ function NavLink({
       onClick={onNavigate}
       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
         active
-          ? "bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-500/25"
-          : "text-tos-muted hover:bg-white/[0.05] hover:text-tos-text"
+          ? "bg-white/[0.07] text-white ring-1 ring-white/[0.10]"
+          : "text-tos-muted hover:bg-white/[0.04] hover:text-tos-text"
       } ${compact ? "justify-center px-0 py-3" : ""}`}
       title={item.label}
     >
-      <item.Icon className={`h-5 w-5 shrink-0 ${active ? "text-cyan-300" : "text-tos-dim"}`} strokeWidth={active ? 2.1 : 1.7} />
+      <item.Icon
+        className={`h-5 w-5 shrink-0 ${active ? "text-white" : "text-tos-dim"}`}
+        strokeWidth={active ? 2 : 1.6}
+      />
       {!compact ? (
         <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
           <span>{item.label}</span>
@@ -98,36 +101,27 @@ export function AppNavigation() {
 
   const close = useCallback(() => setOpen(false), []);
   useEffect(() => {
-    // Close mobile drawer after client-side navigation (no Link click).
     queueMicrotask(() => setOpen(false));
   }, [pathname]);
 
   return (
     <>
-      {/* Mobile top bar — hamburger | page center slot | page right slot */}
-      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-tos-bg/90 px-2 backdrop-blur-md md:hidden">
+      {/* Mobile top bar */}
+      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-[var(--tos-bg-base)]/90 px-2 backdrop-blur-md md:hidden">
         <div className="flex justify-start">
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-white/[0.04] text-cyan-300 transition-colors hover:bg-white/[0.08]"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-white/70 transition-colors hover:bg-white/[0.06]"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
           </button>
         </div>
 
-        {/* True center column — AXE wordmark + live pulse stay visually
-            centred regardless of injected slots. The pulse to the LEFT
-            of the wordmark is the only "is this page actually live?"
-            indicator for the whole app. Pages push their state via
-            `setLiveStatus` from `@/lib/liveStatusBus`. Chart page is
-            opted out of the wordmark — it has its own dedicated controls
-            in this slot (depth, news, settings, indicators). */}
         <div className="pointer-events-none relative flex min-w-0 items-center justify-center">
           {isChart ? null : <AxeWordmarkLive />}
 
-          {/* Optional page-injected center content (stacked under AXE, does not shift the wordmark) */}
           {slots.center ? (
             <div
               className={`pointer-events-auto absolute left-1/2 z-[41] flex -translate-x-1/2 justify-center px-1 ${
@@ -144,7 +138,7 @@ export function AppNavigation() {
 
       {/* Desktop rail */}
       <aside
-        className="fixed bottom-0 left-0 top-0 z-40 hidden w-[4.25rem] flex-col border-r border-white/[0.06] bg-black/50 py-3 backdrop-blur-xl md:flex"
+        className="fixed bottom-0 left-0 top-0 z-40 hidden w-[4.25rem] flex-col border-r border-white/[0.06] bg-[var(--tos-bg-base)]/80 py-3 backdrop-blur-xl md:flex"
         aria-label="Primary"
       >
         <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -161,23 +155,23 @@ export function AppNavigation() {
       >
         <button
           type="button"
-          className={`absolute inset-0 bg-black/60 transition-opacity ${
+          className={`absolute inset-0 bg-black/65 transition-opacity ${
             open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
           }`}
           onClick={close}
           aria-label="Close menu"
         />
         <div
-          className={`absolute left-0 top-0 flex h-full w-[min(20rem,88vw)] max-w-full flex-col border-r border-white/10 bg-tos-bg shadow-2xl transition-transform ${
+          className={`absolute left-0 top-0 flex h-full w-[min(20rem,88vw)] max-w-full flex-col border-r border-white/[0.08] bg-[var(--tos-bg-base)] shadow-2xl transition-transform ${
             open ? "translate-x-0" : "-translate-x-full"
           }`}
         >
           <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Navigate</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">Navigate</span>
             <button
               type="button"
               onClick={close}
-              className="rounded-lg p-2 text-tos-muted hover:bg-white/10"
+              className="rounded-lg p-2 text-tos-muted hover:bg-white/[0.06]"
               aria-label="Close"
             >
               <X className="h-5 w-5" />

@@ -4,7 +4,7 @@ type GlassPanelProps = {
   children: ReactNode;
   className?: string;
   glow?: "warm" | "cyan" | "none";
-  /** Use Linear-style gradient border instead of flat border. */
+  /** Use Linear-style card variant. */
   linear?: boolean;
 };
 
@@ -22,28 +22,16 @@ export function GlassPanel({
     );
   }
 
-  const elevation =
-    glow === "warm"
-      ? "shadow-[var(--tos-shadow-float),0_0_0_1px_rgba(255,255,255,0.04),0_0_40px_-28px_rgba(0,224,255,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]"
-      : glow === "cyan"
-        ? "shadow-[var(--tos-shadow-float),0_0_0_1px_rgba(34,211,238,0.12),0_0_48px_-28px_rgba(34,211,238,0.18),inset_0_1px_0_rgba(255,255,255,0.07)]"
-        : "shadow-[var(--tos-shadow-float),inset_0_1px_0_rgba(255,255,255,0.04)]";
+  /* Glow prop still accepted for API compat, but rendered very subtly. */
+  const borderExtra =
+    glow === "cyan"
+      ? "border-[rgba(0,212,245,0.10)]"
+      : "border-[color:var(--tos-glass-border)]";
+
   return (
     <div
-      className={`relative overflow-hidden rounded-[1.35rem] border border-[color:var(--tos-glass-border)] bg-gradient-to-br from-white/[0.05] via-white/[0.02] to-transparent backdrop-blur-xl ${elevation} ${className}`}
+      className={`relative overflow-hidden rounded-[1rem] border ${borderExtra} bg-[var(--tos-bg-elevated)] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.5)] ${className}`}
     >
-      {glow === "warm" ? (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 via-tos-warm/25 via-tos-gold/15 to-transparent"
-          aria-hidden
-        />
-      ) : null}
-      {glow === "cyan" ? (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/20 via-cyan-300/35 to-transparent"
-          aria-hidden
-        />
-      ) : null}
       {children}
     </div>
   );

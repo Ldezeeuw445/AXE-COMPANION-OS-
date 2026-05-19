@@ -18,7 +18,7 @@ export function ScreenHeader({
       <div className="flex min-w-0 items-start gap-3">
         {left ? <div className="pt-0.5">{left}</div> : null}
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold uppercase tracking-[0.12em] text-cyan-400">
+          <h1 className="truncate text-lg font-bold uppercase tracking-[0.12em] text-white">
             {title}
           </h1>
           {subtitle ? (
@@ -30,12 +30,12 @@ export function ScreenHeader({
       </div>
       {right ? <div className="shrink-0 pt-0.5">{right}</div> : null}
 
-      {/* Linear-style gradient separator */}
+      {/* Subtle separator — Linear-style faint gradient */}
       <div
         className="absolute bottom-0 left-0 right-0 h-px"
         style={{
           background:
-            "linear-gradient(90deg, transparent 0%, rgba(0,224,255,0.15) 20%, rgba(0,224,255,0.20) 50%, rgba(0,224,255,0.15) 80%, transparent 100%)",
+            "linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.06) 75%, transparent 95%)",
         }}
       />
     </header>

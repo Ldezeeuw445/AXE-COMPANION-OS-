@@ -1,67 +1,78 @@
 @import "tailwindcss";
 
 /*
-  Premium terminal UI: deep black + bright cyan accents.
-  Cleaner, more minimal — depth via subtle glow, not loud inset highlights.
+  AXE Companion OS — Linear-inspired monochrome.
+  Matte black base, surgical cyan accents.
+  Color is earned: only for active states, CTAs, and live data.
 */
 :root {
-  --tos-bg-base: #040810;
-  --tos-bg-elevated: #081018;
-  --tos-surface-928: #0c1420;
-  --tos-surface-900: #111a28;
-  --tos-surface-868: #182030;
-  --tos-neu-field-bg: #080e18;
-  --tos-glass: rgba(255, 255, 255, 0.025);
+  /* ─── Matte black foundations ─── */
+  --tos-bg-base: #060608;
+  --tos-bg-elevated: #0c0c0f;
+  --tos-surface-928: #101013;
+  --tos-surface-900: #141417;
+  --tos-surface-868: #1a1a1e;
+  --tos-neu-field-bg: #0a0a0d;
+  --tos-glass: rgba(255, 255, 255, 0.02);
   --tos-glass-border: rgba(255, 255, 255, 0.06);
-  --tos-glass-border-strong: rgba(255, 255, 255, 0.08);
-  --tos-text: #f0f2f7;
-  --tos-text-muted: #8b95a8;
-  --tos-text-dim: #4a5568;
-  /* Widget teal — iets gedempt, minder “neon mint” */
-  --tos-accent-cyan: #00e0ff;
-  --tos-accent-cyan-deep: #0088aa;
-  --tos-accent-cyan-muted: rgba(0, 224, 255, 0.10);
-  --tos-accent-cyan-glow: rgba(0, 224, 255, 0.15);
+  --tos-glass-border-strong: rgba(255, 255, 255, 0.09);
+
+  /* ─── Typography ─── */
+  --tos-text: #ededef;
+  --tos-text-muted: #8a8a94;
+  --tos-text-dim: #4a4a54;
+
+  /* ─── Brand accent — teal/cyan, used sparingly ─── */
+  --tos-accent-cyan: #00d4f5;
+  --tos-accent-cyan-deep: #0090aa;
+  --tos-accent-cyan-muted: rgba(0, 212, 245, 0.08);
+  --tos-accent-cyan-glow: rgba(0, 212, 245, 0.12);
   --tos-neon-blue: #22d3ee;
-  /* Route / icon accents */
-  --icon-chat: #00e0ff;
+
+  /* Route / icon accents — muted for inactive, pops on active */
+  --icon-chat: #00d4f5;
   --icon-accounts: #34d399;
   --icon-history: #f472b6;
   --icon-journal: #fb923c;
   --icon-alerts: #ddb84a;
   --icon-news: #38bdf8;
-  --icon-intel: #00e0ff;
+  --icon-intel: #00d4f5;
   --icon-vault: #a78bfa;
   --icon-actions: #60a5fa;
   --icon-cockpit: #4f8fea;
-  --icon-settings: #8896a8;
+  --icon-settings: #6e6e78;
   --tos-news: #38bdf8;
   --tos-price: #ddb84a;
   --tos-audio: #a78bfa;
   --tos-alignment-ring: #4f8fea;
-  /* Primary actions — koeler blauw, minder fel dan widget-teal */
+
+  /* Primary CTA */
   --tos-cta-blue: #3d7dd6;
   --tos-cta-blue-mid: #2f64b8;
   --tos-cta-blue-deep: #244a8f;
-  --tos-cta-blue-glow: rgba(61, 125, 214, 0.38);
-  /* Gold / metals — champagne, niet fel geel */
+  --tos-cta-blue-glow: rgba(61, 125, 214, 0.28);
+
+  /* Gold / metals */
   --tos-accent-gold: #d4b84a;
-  --tos-accent-gold-soft: rgba(212, 184, 74, 0.12);
-  /* Aliases — `tos-warm` = primary widget / CTA teal */
+  --tos-accent-gold-soft: rgba(212, 184, 74, 0.10);
+
+  /* Aliases */
   --tos-accent-warm: var(--tos-accent-cyan);
   --tos-accent-warm-soft: var(--tos-accent-cyan-muted);
-  --tos-glow-warm: rgba(0, 224, 255, 0.06);
+  --tos-glow-warm: rgba(0, 212, 245, 0.04);
   --tos-accent-blue: #3d7dd6;
-  --tos-glow-blue: rgba(79, 143, 234, 0.05);
-  /* PnL — TV-achtig maar niet flashy */
+  --tos-glow-blue: rgba(79, 143, 234, 0.04);
+
+  /* PnL */
   --tos-long: #00d68f;
   --tos-short: #ff4757;
   --tos-risk: #ff4757;
-  --tos-grid: rgba(255, 255, 255, 0.018);
-  /* Schaduwen — lagen (cards / modals) */
+  --tos-grid: rgba(255, 255, 255, 0.016);
+
+  /* Shadows */
   --tos-shadow-floor: 0 28px 56px -28px rgba(0, 0, 0, 0.92);
   --tos-shadow-float: 0 12px 32px -12px rgba(0, 0, 0, 0.65);
-  --tos-inner-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --tos-inner-top: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-inter);
 }
@@ -98,22 +109,11 @@ html {
 
 body {
   /*
-   * App-wide woven cloth backdrop — subtle navy weave with a soft cyan/teal
-   * highlight bleeding from the top-right. Strakker dan een streep-patroon,
-   * blijft donker genoeg voor candle leesbaarheid op de chart.
+   * Pure matte black — no blue/navy tints.
+   * Depth comes from card elevation and subtle white borders, not color.
    */
-  background-color: #030508;
-  background-image:
-    radial-gradient(
-      ellipse 80% 50% at 70% 8%,
-      rgba(0, 140, 200, 0.08),
-      transparent 55%
-    ),
-    radial-gradient(
-      ellipse 60% 40% at 15% 90%,
-      rgba(0, 80, 160, 0.05),
-      transparent 55%
-    );
+  background-color: #060608;
+  background-image: none;
   background-attachment: fixed;
   color: var(--tos-text);
   font-family: var(--font-sans), system-ui, sans-serif;
@@ -122,191 +122,105 @@ body {
 }
 
 ::selection {
-  background: rgba(61, 125, 214, 0.25);
+  background: rgba(0, 212, 245, 0.18);
   color: var(--tos-text);
 }
 
-/* Premium card shell — dashboard widgets + AXE inset */
+/* ═══════════════════════════════════════════════════════════
+   CARD SYSTEM — flat borders, matte surfaces, no gradient glow
+   ═══════════════════════════════════════════════════════════ */
+
+/* Premium card — dashboard widgets */
 .tos-card-premium {
   border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgb(10, 15, 26);
-  backdrop-filter: blur(36px) saturate(160%);
-  -webkit-backdrop-filter: blur(36px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--tos-bg-elevated);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 1px 0 rgba(0, 0, 0, 0.7),
-    0 16px 40px -12px rgba(0, 0, 0, 0.80);
-  transition: box-shadow 0.2s ease, background 0.2s ease;
+    0 1px 0 rgba(0, 0, 0, 0.6),
+    0 12px 32px -12px rgba(0, 0, 0, 0.70);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .tos-card-premium:hover {
-  background: rgb(14, 20, 32);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 1px 0 rgba(0, 0, 0, 0.7),
-    0 16px 40px -12px rgba(0, 0, 0, 0.80),
-    0 0 28px -4px rgba(0, 224, 255, 0.04);
+  background: var(--tos-surface-928);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 .tos-card-premium-subtle {
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgb(8, 12, 22);
-  backdrop-filter: blur(30px) saturate(155%);
-  -webkit-backdrop-filter: blur(30px) saturate(155%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 8px 24px -12px rgba(0, 0, 0, 0.75);
-  transition: box-shadow 0.2s ease, background 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--tos-bg-elevated);
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.65);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .tos-card-premium-subtle:hover {
-  background: rgb(12, 16, 28);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 8px 24px -12px rgba(0, 0, 0, 0.75),
-    0 0 24px -4px rgba(0, 224, 255, 0.03);
+  background: var(--tos-surface-928);
+  border-color: rgba(255, 255, 255, 0.09);
 }
 
 .tos-asset-pill {
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgb(8, 14, 24);
-  backdrop-filter: blur(28px) saturate(155%);
-  -webkit-backdrop-filter: blur(28px) saturate(155%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 6px 20px -10px rgba(0, 0, 0, 0.65);
-  transition: box-shadow 0.2s ease, background 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--tos-bg-elevated);
+  box-shadow: 0 6px 20px -10px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .tos-asset-pill:hover {
-  background: rgb(12, 18, 30);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 6px 20px -10px rgba(0, 0, 0, 0.65),
-    0 0 22px -3px rgba(0, 224, 255, 0.04);
+  background: var(--tos-surface-928);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
-/* ─── Linear-style gradient border cards ─── */
+/* ─── Linear-style card — subtle flat border ─── */
 .tos-linear-card {
   position: relative;
-  border-radius: 1rem;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.10) 0%,
-      rgba(255, 255, 255, 0.03) 40%,
-      rgba(255, 255, 255, 0.00) 100%
-    ) border-box;
+  border-radius: 0.875rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--tos-bg-elevated);
   box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.6),
-    0 12px 32px -12px rgba(0, 0, 0, 0.6);
-  transition: box-shadow 0.25s ease, background 0.25s ease;
+    0 1px 0 rgba(0, 0, 0, 0.5),
+    0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.25s ease, background 0.25s ease;
 }
 
 .tos-linear-card:hover {
-  background:
-    linear-gradient(rgb(12, 18, 28), rgb(12, 18, 28)) padding-box,
-    linear-gradient(
-      165deg,
-      rgba(255, 255, 255, 0.14) 0%,
-      rgba(255, 255, 255, 0.05) 40%,
-      rgba(255, 255, 255, 0.00) 100%
-    ) border-box;
-  box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.6),
-    0 16px 40px -12px rgba(0, 0, 0, 0.7),
-    0 0 32px -8px rgba(0, 224, 255, 0.04);
+  background: var(--tos-surface-928);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
-/* Watchlist row — compact premium row */
+/* Watchlist row — clean, minimal */
 .tos-watchlist-row {
   position: relative;
-  border-radius: 0.75rem;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(rgb(8, 13, 22), rgb(8, 13, 22)) padding-box,
-    linear-gradient(
-      170deg,
-      rgba(255, 255, 255, 0.08) 0%,
-      rgba(255, 255, 255, 0.02) 50%,
-      rgba(255, 255, 255, 0.00) 100%
-    ) border-box;
-  box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.5),
-    0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  border-radius: 0.625rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   transition: all 0.2s ease;
 }
 
 .tos-watchlist-row:hover {
-  background:
-    linear-gradient(rgb(10, 16, 26), rgb(10, 16, 26)) padding-box,
-    linear-gradient(
-      170deg,
-      rgba(0, 224, 255, 0.12) 0%,
-      rgba(255, 255, 255, 0.04) 50%,
-      rgba(255, 255, 255, 0.00) 100%
-    ) border-box;
-  box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.5),
-    0 8px 20px -8px rgba(0, 0, 0, 0.6),
-    0 0 24px -6px rgba(0, 224, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 /* Premium indicator sub-pane (volume/RSI/MACD under chart) */
 .tos-indicator-pane {
   position: relative;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(4, 8, 16, 0.85) 0%, rgba(6, 10, 18, 0.90) 100%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(6, 6, 8, 0.92);
 }
 
-.tos-indicator-pane::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 60% 100% at 50% 0%, rgba(0, 224, 255, 0.02), transparent 70%);
-  pointer-events: none;
-}
-
-/* Bottom nav — premium floating bar */
+/* Bottom nav — clean floating bar, matte glass */
 .tos-bottom-nav {
-  border-radius: 1.35rem;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(
-      rgba(10, 14, 22, 0.82),
-      rgba(6, 10, 16, 0.88)
-    ) padding-box,
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.12) 0%,
-      rgba(255, 255, 255, 0.04) 100%
-    ) border-box;
-  backdrop-filter: blur(32px) saturate(170%);
-  -webkit-backdrop-filter: blur(32px) saturate(170%);
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 15, 0.85);
+  backdrop-filter: blur(32px) saturate(150%);
+  -webkit-backdrop-filter: blur(32px) saturate(150%);
   box-shadow:
-    0 -4px 20px rgba(0, 0, 0, 0.5),
-    0 8px 32px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-/* Ambient glow — subtle background accent behind main content */
-.tos-ambient-glow::before {
-  content: "";
-  position: fixed;
-  top: -20%;
-  right: -10%;
-  width: 60%;
-  height: 60%;
-  background: radial-gradient(circle, rgba(0, 224, 255, 0.03) 0%, transparent 65%);
-  pointer-events: none;
-  z-index: -1;
+    0 -2px 12px rgba(0, 0, 0, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 /* iOS safe-area aware mobile shell */
@@ -315,33 +229,29 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Soft inset fields (neumorphic, dark UI ref) */
+/* Soft inset fields */
 .tos-neu-inset {
   background: var(--tos-neu-field-bg);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow:
-    inset 4px 4px 10px rgba(0, 0, 0, 0.55),
-    inset -2px -2px 6px rgba(255, 255, 255, 0.03);
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .tos-neu-inset:focus,
 .tos-neu-inset:focus-within {
   outline: none;
-  border-color: rgba(0, 224, 255, 0.25);
+  border-color: rgba(0, 212, 245, 0.25);
   box-shadow:
-    inset 3px 3px 8px rgba(0, 0, 0, 0.5),
-    inset -1px -1px 5px rgba(255, 255, 255, 0.03),
-    0 0 0 1px rgba(0, 224, 255, 0.15),
-    0 0 22px -6px var(--tos-accent-cyan-glow);
+    inset 2px 2px 6px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(0, 212, 245, 0.12);
 }
 
 .tos-neu-raised {
   box-shadow:
-    6px 6px 16px rgba(0, 0, 0, 0.5),
-    -3px -3px 10px rgba(255, 255, 255, 0.02);
+    4px 4px 12px rgba(0, 0, 0, 0.45),
+    -2px -2px 8px rgba(255, 255, 255, 0.015);
 }
 
-/* Primary CTA (Send, Enter companion…) — blauw + skeuomorf, teal blijft op tabs/widgets */
+/* Primary CTA button */
 .tos-btn-cyan {
   background: linear-gradient(
     180deg,
@@ -352,12 +262,11 @@ body {
   );
   color: #f8fafc;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(30, 64, 175, 0.55);
+  border: 1px solid rgba(30, 64, 175, 0.45);
   box-shadow:
-    inset 0 2px 1px rgba(255, 255, 255, 0.35),
-    inset 0 -2px 2px rgba(0, 0, 0, 0.25),
-    0 6px 14px rgba(0, 0, 0, 0.42),
-    0 14px 38px -12px var(--tos-cta-blue-glow);
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.2),
+    0 6px 14px rgba(0, 0, 0, 0.35);
 }
 
 .tos-btn-cyan:hover:not(:disabled) {
@@ -367,21 +276,18 @@ body {
 .tos-btn-cyan:active:not(:disabled) {
   filter: brightness(0.94);
   box-shadow:
-    inset 0 3px 10px rgba(0, 0, 0, 0.38),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.12),
-    0 2px 6px rgba(0, 0, 0, 0.35),
-    0 0 24px -8px var(--tos-cta-blue-glow);
+    inset 0 2px 8px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-/* Secondary raised pad (skeuomorphic gray button) */
+/* Secondary raised button */
 .tos-btn-raised-muted {
-  background: linear-gradient(180deg, #1a2030 0%, #121828 55%, #0c1220 100%);
+  background: linear-gradient(180deg, #18181b 0%, #121215 55%, #0c0c0f 100%);
   color: var(--tos-text);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.28),
-    0 5px 12px rgba(0, 0, 0, 0.42);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .tos-btn-raised-muted:hover:not(:disabled) {
@@ -389,95 +295,61 @@ body {
 }
 
 .tos-btn-raised-muted:active:not(:disabled) {
-  box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
   filter: brightness(0.96);
 }
 
-/* Icon wells — recessed (carved-in) */
+/* Icon wells */
 .tos-icon-recessed {
   border-radius: 0.75rem;
-  background: linear-gradient(165deg, #080c14 0%, #0e1220 100%);
-  border: 1px solid rgba(0, 0, 0, 0.45);
-  box-shadow:
-    inset 3px 3px 6px rgba(0, 0, 0, 0.58),
-    inset -1px -1px 3px rgba(255, 255, 255, 0.05);
+  background: var(--tos-bg-base);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 .tos-icon-recessed:hover:not(:disabled) {
-  box-shadow:
-    inset 2px 2px 6px rgba(0, 0, 0, 0.52),
-    inset -1px -1px 3px rgba(255, 255, 255, 0.06),
-    0 0 0 1px rgba(59, 130, 246, 0.16);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .tos-icon-recessed:active:not(:disabled) {
-  box-shadow:
-    inset 3px 3px 8px rgba(0, 0, 0, 0.6),
-    inset -1px -1px 2px rgba(255, 255, 255, 0.04);
+  box-shadow: inset 3px 3px 8px rgba(0, 0, 0, 0.5);
 }
 
-/* Bottom nav — zeer subtiel; kleur zit vooral in het icoon (via --nav-accent) */
+/* Bottom nav — active pill */
 .tos-nav-pill-active {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 3px 10px rgba(0, 0, 0, 0.35);
-  color: var(--nav-accent, var(--tos-text-muted));
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.625rem;
+  color: var(--nav-accent, var(--tos-text));
 }
 
 .tos-nav-pill-idle:hover {
-  background: color-mix(in srgb, var(--nav-accent, #ffffff) 10%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 0 10px color-mix(in srgb, var(--nav-accent, #ffffff) 18%, transparent);
-  color: var(--nav-accent, var(--tos-text-muted));
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--tos-text-muted);
 }
 
-.tos-nav-pill-idle:hover .tos-nav-icon {
-  color: var(--nav-accent, var(--tos-text-muted));
-}
-
-/* Inner “well” panels — mat diepte (cockpit, enz.) */
+/* Inner "well" panels */
 .tos-inset-panel {
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgb(8, 12, 22);
-  backdrop-filter: blur(30px) saturate(155%);
-  -webkit-backdrop-filter: blur(30px) saturate(155%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 4px 16px rgba(0, 0, 0, 0.50);
-  transition: box-shadow 0.2s ease, background 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--tos-bg-elevated);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.40);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .tos-inset-panel:hover {
-  background: rgb(12, 16, 28);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 4px 16px rgba(0, 0, 0, 0.50),
-    0 0 24px -4px rgba(0, 224, 255, 0.03);
+  background: var(--tos-surface-928);
+  border-color: rgba(255, 255, 255, 0.09);
 }
 
-/* Gold CTA — raised (demo / secondary accent), skeuomorphic */
+/* Gold CTA */
 .tos-btn-raised-gold {
-  background: linear-gradient(
-    180deg,
-    #2a2418 0%,
-    #1a1810 48%,
-    #10100c 100%
-  );
+  background: linear-gradient(180deg, #1e1c14 0%, #14130e 48%, #0c0c0a 100%);
   color: var(--tos-accent-gold);
-  border: 1px solid rgba(232, 197, 71, 0.35);
+  border: 1px solid rgba(212, 184, 74, 0.25);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.3),
-    0 6px 16px rgba(0, 0, 0, 0.45),
-    0 0 28px -10px rgba(232, 197, 71, 0.25);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 16px rgba(0, 0, 0, 0.40);
 }
 
 .tos-btn-raised-gold:hover:not(:disabled) {
@@ -485,84 +357,59 @@ body {
 }
 
 .tos-btn-raised-gold:active:not(:disabled) {
-  box-shadow:
-    inset 0 2px 8px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
   filter: brightness(0.95);
 }
 
 /* Chat bubbles */
 .tos-bubble-user {
-  border: 1px solid rgba(212, 184, 74, 0.18);
-  background: rgb(10, 18, 16);
-  backdrop-filter: blur(32px) saturate(165%);
-  -webkit-backdrop-filter: blur(32px) saturate(165%);
-  box-shadow:
-    0 8px 24px -6px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(212, 184, 74, 0.08);
-  transition: box-shadow 0.2s ease, background 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--tos-bg-elevated);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.2s ease;
 }
 
 .tos-bubble-user:hover {
-  background: rgb(14, 22, 18);
-  box-shadow:
-    0 8px 24px -6px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(212, 184, 74, 0.12),
-    0 0 24px -3px rgba(212, 184, 74, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
 .tos-bubble-assistant {
-  border: 1px solid rgba(0, 224, 255, 0.12);
-  background: rgb(6, 12, 22);
-  backdrop-filter: blur(32px) saturate(165%);
-  -webkit-backdrop-filter: blur(32px) saturate(165%);
-  box-shadow:
-    0 10px 28px -8px rgba(0, 0, 0, 0.58),
-    inset 0 1px 0 rgba(0, 224, 255, 0.06);
-  transition: box-shadow 0.2s ease, background 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.2s ease;
 }
 
 .tos-bubble-assistant:hover {
-  background: rgb(10, 16, 28);
-  box-shadow:
-    0 10px 28px -8px rgba(0, 0, 0, 0.58),
-    inset 0 1px 0 rgba(0, 224, 255, 0.08),
-    0 0 24px -3px rgba(0, 224, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
 }
 
-/* Composer bar — reads lighter than page black */
+/* Composer bar */
 .tos-neu-composer {
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgb(6, 10, 18);
-  backdrop-filter: blur(28px) saturate(170%);
-  -webkit-backdrop-filter: blur(28px) saturate(170%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 14px 36px -18px rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--tos-bg-elevated);
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
 }
 
 .tos-neu-composer:focus-within {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.28);
+  border-color: rgba(0, 212, 245, 0.22);
   box-shadow:
-    inset 2px 2px 8px rgba(0, 0, 0, 0.38),
-    inset -1px -1px 5px rgba(255, 255, 255, 0.04),
-    0 0 0 1px rgba(59, 130, 246, 0.2),
-    0 0 28px -10px var(--tos-cta-blue-glow),
-    0 14px 36px -18px rgba(0, 0, 0, 0.85);
+    0 0 0 1px rgba(0, 212, 245, 0.10),
+    0 8px 24px -12px rgba(0, 0, 0, 0.6);
 }
 
 .tos-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
 }
 
 .tos-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 .tos-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.10);
   border-radius: 999px;
 }
 
@@ -586,14 +433,13 @@ body {
   }
 }
 
-/* Home landing — marquee + headline shimmer (aligned with Trading OS AXE landing) */
+/* ═══════════════════════════════════════════════════════════
+   MARKETING / LANDING — kept separate from app chrome
+   ═══════════════════════════════════════════════════════════ */
+
 @keyframes axe-landing-marquee {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 .animate-axe-landing-marquee {
@@ -601,21 +447,16 @@ body {
 }
 
 @keyframes axe-landing-shimmer {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 .axe-landing-heading-shimmer {
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0.96) 0%,
-    rgba(0, 224, 255, 0.95) 42%,
-    rgba(34, 211, 238, 0.88) 58%,
+    rgba(0, 212, 245, 0.90) 42%,
+    rgba(34, 211, 238, 0.82) 58%,
     rgba(255, 255, 255, 0.94) 100%
   );
   background-size: 220% auto;
@@ -626,100 +467,42 @@ body {
 }
 
 .axe-landing-matte-bg {
-  background-color: #020406;
+  background-color: #060608;
   background-image:
-    radial-gradient(900px circle at 50% 12%, rgba(0, 224, 255, 0.05), transparent 34%),
-    linear-gradient(180deg, #020406 0%, #030610 38%, #040812 72%, #020406 100%);
+    radial-gradient(800px circle at 50% 12%, rgba(0, 212, 245, 0.03), transparent 34%),
+    linear-gradient(180deg, #060608 0%, #080810 38%, #0a0a0e 72%, #060608 100%);
 }
 
 .axe-landing-card {
   border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.02);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 16px 40px -12px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
 }
 
-/* Premium hover-glow card (cyan halo + lift). Used on the feature
-   grid so each tile feels like a small live module. */
 .axe-landing-card-glow {
   position: relative;
-  border-radius: 1.1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.012) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 18px 44px -16px rgba(0, 0, 0, 0.72);
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
   transition:
-    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 320ms ease,
-    box-shadow 320ms ease,
-    background 320ms ease;
-}
-
-.axe-landing-card-glow::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: 1.1rem;
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    rgba(34, 211, 238, 0) 0%,
-    rgba(0, 224, 255, 0.35) 35%,
-    rgba(0, 224, 255, 0.25) 60%,
-    rgba(34, 211, 238, 0) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 320ms ease;
-  pointer-events: none;
-}
-
-.axe-landing-card-glow::after {
-  content: "";
-  position: absolute;
-  inset: -36px;
-  border-radius: 2.4rem;
-  background: radial-gradient(
-    ellipse at 50% 100%,
-    rgba(34, 211, 238, 0.16) 0%,
-    transparent 64%
-  );
-  opacity: 0;
-  filter: blur(28px);
-  transition: opacity 320ms ease;
-  pointer-events: none;
-  z-index: -1;
+    transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 300ms ease,
+    box-shadow 300ms ease;
 }
 
 .axe-landing-card-glow:hover {
-  transform: translateY(-3px);
-  border-color: rgba(34, 211, 238, 0.18);
-  background: linear-gradient(180deg, rgba(0, 224, 255, 0.035) 0%, rgba(255, 255, 255, 0.01) 100%);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.12);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 28px 64px -22px rgba(34, 211, 238, 0.32),
-    0 18px 44px -16px rgba(0, 0, 0, 0.72);
+    0 16px 40px -12px rgba(0, 0, 0, 0.7),
+    0 0 40px -12px rgba(0, 212, 245, 0.08);
 }
 
-.axe-landing-card-glow:hover::before,
-.axe-landing-card-glow:hover::after {
-  opacity: 1;
-}
-
-/* Subtle conic shine sweeping across CTA buttons on hover. */
 @keyframes axe-cta-shine {
-  0% {
-    transform: translateX(-120%) skewX(-12deg);
-  }
-  100% {
-    transform: translateX(160%) skewX(-12deg);
-  }
+  0% { transform: translateX(-120%) skewX(-12deg); }
+  100% { transform: translateX(160%) skewX(-12deg); }
 }
 
 .axe-landing-cta {
@@ -738,7 +521,7 @@ body {
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.32) 50%,
+    rgba(255, 255, 255, 0.25) 50%,
     rgba(255, 255, 255, 0) 100%
   );
   transform: translateX(-120%) skewX(-12deg);
@@ -749,15 +532,12 @@ body {
   animation: axe-cta-shine 900ms ease-out 1;
 }
 
-/* Hero "live" pulse — used for the green dot on the badge and the
-   cyan ring around the AXE logo button in the phone mock. */
 @keyframes axe-cyan-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 224, 255, 0.35), 0 0 22px rgba(0, 224, 255, 0.15);
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 245, 0.25), 0 0 16px rgba(0, 212, 245, 0.10);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(0, 224, 255, 0), 0 0 38px rgba(0, 224, 255, 0.22);
+    box-shadow: 0 0 0 5px rgba(0, 212, 245, 0), 0 0 28px rgba(0, 212, 245, 0.15);
   }
 }
 
