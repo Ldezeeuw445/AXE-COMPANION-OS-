@@ -75,7 +75,7 @@ export function ChartOrderConfirm({
       aria-modal="true"
       aria-label="Confirm live order"
     >
-      <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#08080C] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
+      <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#060a14] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <span className={`grid h-9 w-9 place-items-center rounded-full border ${sideClasses}`}>

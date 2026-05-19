@@ -3064,7 +3064,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Order-type chooser popover */}
       {orderTypeMenuOpen ? (
         <div
-          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#080c12]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -3122,7 +3122,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Lot quick picker — same UX as MT5 mobile */}
       {lotMenuOpen ? (
         <div
-          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#080c12]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -3217,7 +3217,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Standalone alert fired toast */}
       {firedAlert ? (
         <div
-          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-cyan-300/45 bg-[#04161b]/95 px-3 py-2 text-[11px] text-cyan-100 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-cyan-300/45 bg-[#031418]/95 px-3 py-2 text-[11px] text-cyan-100 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
           role="status"
         >
           <Bell className="h-4 w-4 text-cyan-300" aria-hidden />
@@ -3286,7 +3286,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             const newest = demoBook.forSymbol[0];
             if (newest) demoBook.close(newest.id);
           }}
-          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-300/40 bg-[#04161b]/92 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-cyan-300/12"
+          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-300/40 bg-[#031418]/92 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-cyan-300/12"
           aria-label="Close most recent demo position"
         >
           <span className="rounded-full bg-cyan-400/25 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-cyan-50">

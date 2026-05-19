@@ -316,7 +316,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
           type="button"
           onClick={jumpToLatest}
           aria-label="Jump to latest message"
-          className="pointer-events-auto absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-[#070A10]/85 px-3 py-1.5 text-[10.5px] font-semibold text-cyan-100/95 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur transition-colors hover:bg-cyan-500/15"
+          className="pointer-events-auto absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-[#040a14]/85 px-3 py-1.5 text-[10.5px] font-semibold text-cyan-100/95 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur transition-colors hover:bg-cyan-500/15"
         >
           <ArrowDown className="h-3 w-3" />
           Jump to latest
