@@ -123,7 +123,7 @@ export function JournalScreen({
       <ScreenHeader
         title="Journal"
         subtitle="Preset tags per trade, analytics, and free-form notes — same ledger as History."
-        left={<BookOpen className="h-6 w-6 text-cyan-400/80" aria-hidden />}
+        left={<BookOpen className="h-6 w-6 text-white/60" aria-hidden />}
         right={
           <div className="flex items-center gap-2">
             <Badge variant="warm">Supabase</Badge>
@@ -143,7 +143,7 @@ export function JournalScreen({
       {!activeAccountId ? (
         <GlassPanel className="!p-4 text-sm text-tos-muted">
           Set an <strong className="text-tos-text">active account</strong> on{" "}
-          <Link href="/accounts" className="text-cyan-400 hover:underline">
+          <Link href="/accounts" className="text-white/70 hover:underline">
             Accounts
           </Link>{" "}
           to load trades and journal analytics here.
@@ -176,7 +176,7 @@ export function JournalScreen({
             {tradeHighlight.note ? ` — ${tradeHighlight.note}` : ""}
           </p>
           <TradeJournalLabelForm trade={tradeHighlight} />
-          <Link href="/journal" className="mt-3 inline-block text-xs text-cyan-400 hover:underline">
+          <Link href="/journal" className="mt-3 inline-block text-xs text-white/70 hover:underline">
             ← All journal trades
           </Link>
         </GlassPanel>
@@ -201,7 +201,7 @@ export function JournalScreen({
                 {t.label ? (
                   <>
                     {" "}
-                    · <span className="text-cyan-300/90">Tag: {t.label}</span>
+                    · <span className="text-white/70">Tag: {t.label}</span>
                   </>
                 ) : null}
               </p>
@@ -213,7 +213,7 @@ export function JournalScreen({
         <GlassPanel className="!py-8 text-center text-sm text-tos-muted">
           No closed trades in <code className="text-[11px] text-tos-text">broker_trades</code> for the active account
           yet. Sync from{" "}
-          <Link href="/accounts" className="text-cyan-400 hover:underline">
+          <Link href="/accounts" className="text-white/70 hover:underline">
             Accounts
           </Link>{" "}
           or post via ingest.

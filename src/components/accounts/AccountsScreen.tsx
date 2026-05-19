@@ -147,8 +147,8 @@ function compactDiagnosticStatus(a: BrokerAccountRow): {
         ? "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90"
         : warm
           ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90"
-          : "border-cyan-400/22 bg-cyan-400/[0.07] text-cyan-100/90",
-      dot: critical ? "bg-rose-300" : warm ? "bg-amber-300" : "bg-cyan-300",
+          : "border-white/[0.08] bg-white/[0.04] text-white/85",
+      dot: critical ? "bg-rose-300" : warm ? "bg-amber-300" : "bg-emerald-300",
     };
   }
   const provider = (a.provider_status ?? a.status ?? "").toLowerCase();
@@ -204,8 +204,8 @@ function compactDiagnosticStatus(a: BrokerAccountRow): {
     return {
       label: "Read-only",
       detail: "Connected for account data. Live trading remains separately gated.",
-      tone: "border-cyan-400/22 bg-cyan-400/[0.07] text-cyan-100/90",
-      dot: "bg-cyan-300",
+      tone: "border-white/[0.08] bg-white/[0.04] text-white/85",
+      dot: "bg-emerald-300",
     };
   }
   return {
@@ -231,7 +231,7 @@ function accountRuntimeHealth(accounts: BrokerAccountRow[], loadError: string | 
     return d.includes("attention") || d.includes("issue") || d.includes("credential");
   }).length;
   const freshSync = cloudAccounts.filter((a) => syncFreshness(a.last_sync_at).label === "Fresh").length;
-  const cyan = "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-100/90";
+  const positive = "border-white/[0.08] bg-white/[0.04] text-white/85";
   const amber = "border-amber-400/22 bg-amber-400/[0.07] text-amber-100/90";
   const rose = "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90";
   const neutral = "border-white/10 bg-white/[0.035] text-tos-dim";
@@ -240,26 +240,26 @@ function accountRuntimeHealth(accounts: BrokerAccountRow[], loadError: string | 
     {
       label: "Supabase",
       value: loadError ? "Degraded" : "Account truth live",
-      tone: loadError ? rose : cyan,
-      dot: loadError ? "bg-rose-300" : "bg-cyan-300",
+      tone: loadError ? rose : positive,
+      dot: loadError ? "bg-rose-300" : "bg-emerald-300",
     },
     {
       label: "MetaAPI",
       value: cloudAccounts.length ? `${cloudAccounts.length} cloud linked` : "Ready to connect",
-      tone: cloudAccounts.length ? cyan : neutral,
-      dot: cloudAccounts.length ? "bg-cyan-300" : "bg-white/30",
+      tone: cloudAccounts.length ? positive : neutral,
+      dot: cloudAccounts.length ? "bg-emerald-300" : "bg-white/30",
     },
     {
       label: "Recovery",
       value: needsAttention ? `${needsAttention} needs Doctor` : provisioning ? `${provisioning} settling` : "No blockers",
-      tone: needsAttention ? rose : provisioning ? amber : cyan,
-      dot: needsAttention ? "bg-rose-300" : provisioning ? "bg-amber-300" : "bg-cyan-300",
+      tone: needsAttention ? rose : provisioning ? amber : positive,
+      dot: needsAttention ? "bg-rose-300" : provisioning ? "bg-amber-300" : "bg-emerald-300",
     },
     {
       label: "Sync",
       value: cloudAccounts.length ? `${freshSync}/${cloudAccounts.length} fresh` : "No real account yet",
-      tone: cloudAccounts.length && freshSync === 0 ? amber : cloudAccounts.length ? cyan : neutral,
-      dot: cloudAccounts.length && freshSync === 0 ? "bg-amber-300" : cloudAccounts.length ? "bg-cyan-300" : "bg-white/30",
+      tone: cloudAccounts.length && freshSync === 0 ? amber : cloudAccounts.length ? positive : neutral,
+      dot: cloudAccounts.length && freshSync === 0 ? "bg-amber-300" : cloudAccounts.length ? "bg-emerald-300" : "bg-white/30",
     },
   ];
 }
@@ -349,7 +349,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
       <ScreenHeader
         title="Accounts"
         subtitle="Connect your real MT5 account in under a minute — AXE stays read-first; execution stays off by default."
-        left={<Landmark className="h-6 w-6 text-cyan-400/85" aria-hidden />}
+        left={<Landmark className="h-6 w-6 text-white/60" aria-hidden />}
       />
 
       {loadError ? (
@@ -357,9 +357,9 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
       ) : null}
 
       {onlyDemo ? (
-        <div className="rounded-2xl border border-cyan-400/15 bg-cyan-500/[0.04] px-4 py-3 text-[12px] leading-relaxed text-tos-muted">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-[12px] leading-relaxed text-tos-muted">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300/80 shadow-[0_0_0_3px_rgba(34,211,238,0.18)]" aria-hidden />
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-white/60 shadow-[0_0_0_3px_rgba(255,255,255,0.08)]" aria-hidden />
             <p className="font-medium text-tos-text">You&apos;re on AXE Demo</p>
           </div>
           <p className="mt-1.5 text-tos-muted">
@@ -395,7 +395,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
         <p className="text-xs text-tos-dim">{LEGAL_COPY.mt5Connect}</p>
         <p className="text-[11px] text-tos-dim">
           More on data use:{" "}
-          <Link href="/privacy" className="text-cyan-400/90 hover:underline">
+          <Link href="/privacy" className="text-white/70 hover:underline">
             Privacy
           </Link>
           .
@@ -403,8 +403,8 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
       </div>
 
       {/* B — Recommended AXE MT5 Cloud */}
-      <GlassPanel glow="cyan" className="border-cyan-500/12 p-5 sm:p-6">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/95">Recommended — Connect MT5 account</h2>
+      <GlassPanel glow="none" className="border-white/[0.06] p-5 sm:p-6">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80">Recommended — Connect MT5 account</h2>
         <p className="mt-2 text-sm text-tos-muted">
           Secure AXE MT5 Cloud link from this app. Use your <strong className="text-tos-text/95">investor / read-only</strong> password.
           Nothing executes from AXE by default.
@@ -465,14 +465,14 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
               return (
                 <GlassPanel
                   key={a.id}
-                  className={`p-4 sm:p-5 ${active ? "border-cyan-400/30 ring-1 ring-cyan-400/25 shadow-[0_0_32px_-16px_rgba(34,211,238,0.22)]" : ""}`}
+                  className={`p-4 sm:p-5 ${active ? "border-white/[0.10] ring-1 ring-white/[0.08] " : ""}`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-base font-semibold text-tos-text">{a.label}</span>
                         {active ? (
-                          <span className="rounded-md border border-cyan-400/35 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/95">
+                          <span className="rounded-md border border-white/[0.10] bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/90">
                             Active
                           </span>
                         ) : null}
@@ -514,7 +514,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                       ) : null}
                       <p className="mt-1 text-[10px] text-tos-dim/70">Added {formatDate(a.created_at)}</p>
                       {active ? (
-                        <p className="mt-2 text-[11px] leading-relaxed text-cyan-200/75">
+                        <p className="mt-2 text-[11px] leading-relaxed text-white/60">
                           {kind === "demo"
                             ? "Virtual paper account. Used for chart practice and demo execution only."
                             : "Used for chat, journal, chart and alerts."}
@@ -525,7 +525,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                       {kind === "cloud" || kind === "demo" ? (
                         <Link
                           href={`/chart?account=${encodeURIComponent(a.id)}&symbol=XAUUSD&tf=h1`}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-white/90 hover:bg-white/[0.08]"
                         >
                           <LineChart className="h-3.5 w-3.5" aria-hidden />
                           Open chart
@@ -536,7 +536,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                           type="button"
                           disabled={pending}
                           onClick={() => void onSetActive(null)}
-                          className="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-tos-muted hover:border-cyan-500/25 hover:bg-cyan-500/10 hover:text-cyan-100/90 disabled:opacity-50"
+                          className="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-tos-muted hover:border-white/[0.10] hover:bg-white/[0.06] hover:text-white/85 disabled:opacity-50"
                         >
                           Set inactive
                         </button>
@@ -545,7 +545,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                           type="button"
                           disabled={pending}
                           onClick={() => void onSetActive(a.id)}
-                          className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18 disabled:opacity-50"
+                          className="rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-white/90 hover:bg-white/[0.08] disabled:opacity-50"
                         >
                           Set active
                         </button>

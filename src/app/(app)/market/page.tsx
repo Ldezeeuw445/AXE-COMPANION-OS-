@@ -43,11 +43,11 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
         contentReady
-          ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
+          ? "border-white/[0.10] bg-white/[0.05] text-white/90"
           : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200/90"
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${contentReady ? "bg-cyan-300" : "bg-amber-300/80"}`} aria-hidden />
+      <span className={`h-1.5 w-1.5 rounded-full ${contentReady ? "bg-emerald-300" : "bg-amber-300/80"}`} aria-hidden />
       {contentReady ? (liveProviderCount === 3 ? "Live" : "Degraded") : "Warming"}
     </span>
   );
@@ -119,7 +119,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       <ScreenHeader
         title="Market context"
         subtitle={`Filtered by ${symbol}${ctx.symbols.length > 1 ? ` + ${ctx.symbols.length - 1} watch` : ""} — macro, news and calendar.`}
-        left={<Globe2 className="h-6 w-6 text-cyan-400/85" aria-hidden />}
+        left={<Globe2 className="h-6 w-6 text-white/60" aria-hidden />}
         right={
           <span className="hidden md:inline-flex items-center gap-2">
             {livePill}
@@ -142,7 +142,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
               href={`/market?symbol=${encodeURIComponent(s)}`}
               className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                 s === symbol
-                  ? "border-cyan-400/35 bg-cyan-500/15 text-cyan-200/95"
+                  ? "border-white/[0.10] bg-white/[0.06] text-white/90"
                   : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
               }`}
             >
@@ -183,7 +183,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             href={chatQ(
               `[AXE · macro]\nWalk me through today's macro risk on ${symbol}: rates, yields, DXY proxy and the gold/USD axis. Anchor it on my active pair.`,
             )}
-            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+            className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
           >
             Ask AXE about macro
           </Link>
@@ -194,7 +194,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
-            <CalendarDays className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+            <CalendarDays className="h-3.5 w-3.5 text-white/60" aria-hidden />
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
               Upcoming events (5d)
             </h2>
@@ -220,7 +220,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Newspaper className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+            <Newspaper className="h-3.5 w-3.5 text-white/60" aria-hidden />
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Headlines</h2>
           </div>
           <span className="text-[10px] text-tos-dim">
@@ -244,7 +244,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             href={chatQ(
               `[AXE · news]\nSummarize the most market-moving headlines for ${symbol} today. Tie them back to my open positions if any.`,
             )}
-            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+            className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
           >
             <Sparkles className="mr-1 inline h-3 w-3" aria-hidden />
             Ask AXE about news
@@ -309,7 +309,7 @@ function ProviderBadges({
           key={p.id}
           className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
             p.ready
-              ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
+              ? "border-white/[0.10] bg-white/[0.05] text-white/90"
               : p.configured
                 ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-100/90"
                 : "border-white/12 bg-white/[0.04] text-tos-dim"
@@ -389,9 +389,9 @@ function NewsRow({ item }: { item: NewsItem }) {
         href={item.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="group flex flex-col gap-0.5 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2 hover:border-cyan-400/25"
+        className="group flex flex-col gap-0.5 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2 hover:border-white/[0.10]"
       >
-        <span className="text-[12px] font-medium text-tos-text group-hover:text-cyan-100/95">{item.title}</span>
+        <span className="text-[12px] font-medium text-tos-text group-hover:text-white/90">{item.title}</span>
         <span className="flex flex-wrap items-baseline gap-2 text-[10px] text-tos-dim">
           <span title={item.source}>AXE Market Data</span>
           {date ? <span>· {date}</span> : null}

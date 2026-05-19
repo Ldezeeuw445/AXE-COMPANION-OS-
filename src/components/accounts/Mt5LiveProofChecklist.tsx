@@ -23,7 +23,7 @@ const steps = [
     body: (
       <>
         Open{" "}
-        <Link href="/history" className="text-cyan-400/90 hover:underline">
+        <Link href="/history" className="text-white/70 hover:underline">
           History
         </Link>{" "}
         with the account active. Closed trades should appear after a successful sync.
@@ -36,7 +36,7 @@ const steps = [
     body: (
       <>
         From History, open a row in{" "}
-        <Link href="/journal" className="text-cyan-400/90 hover:underline">
+        <Link href="/journal" className="text-white/70 hover:underline">
           Journal
         </Link>{" "}
         to add labels and notes.
@@ -49,7 +49,7 @@ const steps = [
     body: (
       <>
         In{" "}
-        <Link href="/chat" className="text-cyan-400/90 hover:underline">
+        <Link href="/chat" className="text-white/70 hover:underline">
           Chat
         </Link>
         , AXE uses your active account, recent trades and journal on the server — nothing is invented as live broker
@@ -73,7 +73,7 @@ export function Mt5LiveProofChecklist({ embedded }: Props) {
   const inner = (
     <>
       {!embedded ? (
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-cyan-300/90">MT5 live proof checklist</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/70">MT5 live proof checklist</p>
       ) : null}
       {!embedded ? (
         <p className="mt-2 text-xs leading-relaxed text-tos-muted">
@@ -88,7 +88,7 @@ export function Mt5LiveProofChecklist({ embedded }: Props) {
       <ol className={`space-y-3 text-[11px] leading-relaxed text-tos-muted ${embedded ? "mt-3" : "mt-4"}`}>
         {steps.map((s) => (
           <li key={s.n} className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-[10px] font-bold text-cyan-400/90">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-[10px] font-bold text-white/70">
               {s.n}
             </span>
             <div>
@@ -106,6 +106,6 @@ export function Mt5LiveProofChecklist({ embedded }: Props) {
   }
 
   return (
-    <div className="mb-4 rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 shadow-inner">{inner}</div>
+    <div className="mb-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4 shadow-inner">{inner}</div>
   );
 }

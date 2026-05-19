@@ -266,7 +266,7 @@ export function PushPermission() {
             type="button"
             onClick={handleTest}
             disabled={testState === "sending"}
-            className="rounded border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100/95 transition-colors hover:bg-cyan-500/15 disabled:opacity-60"
+            className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08] disabled:opacity-60"
           >
             {testState === "sending" ? "Sending…" : "Send test notification"}
           </button>
@@ -297,7 +297,7 @@ export function PushPermission() {
         <button
           type="button"
           onClick={handleEnable}
-          className="rounded border border-cyan-400/35 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100/95 transition-colors hover:bg-cyan-500/15"
+          className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
         >
           Subscribe
         </button>
@@ -321,7 +321,7 @@ export function PushPermission() {
       <button
         type="button"
         onClick={handleEnable}
-        className="w-full rounded border border-cyan-400/35 bg-cyan-500/10 py-2.5 text-xs font-semibold text-cyan-100/95 transition-colors hover:bg-cyan-500/18"
+        className="w-full rounded border border-white/[0.10] bg-white/[0.05] py-2.5 text-xs font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
       >
         Enable push notifications
       </button>

@@ -64,13 +64,13 @@ function EmptyState() {
           <li key={p.label}>
             <Link
               href={`/chat?q=${encodeURIComponent(p.q)}`}
-              className="group flex w-full items-center justify-between gap-2 rounded-xl border border-cyan-400/15 bg-cyan-500/[0.04] px-3 py-2.5 text-left text-[12.5px] text-tos-text hover:border-cyan-400/30 hover:bg-cyan-500/[0.08]"
+              className="group flex w-full items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 text-left text-[12.5px] text-tos-text hover:border-white/[0.12] hover:bg-white/[0.05]"
             >
               <span className="flex flex-col">
                 <span className="font-medium">{p.label}</span>
                 <span className="text-[10.5px] text-tos-dim">{p.hint}</span>
               </span>
-              <ArrowUpRight className="h-3.5 w-3.5 text-cyan-300/70 transition-transform group-hover:translate-x-0.5" aria-hidden />
+              <ArrowUpRight className="h-3.5 w-3.5 text-white/40 transition-transform group-hover:translate-x-0.5" aria-hidden />
             </Link>
           </li>
         ))}
@@ -316,7 +316,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
           type="button"
           onClick={jumpToLatest}
           aria-label="Jump to latest message"
-          className="pointer-events-auto absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-[#040a14]/85 px-3 py-1.5 text-[10.5px] font-semibold text-cyan-100/95 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur transition-colors hover:bg-cyan-500/15"
+          className="pointer-events-auto absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/[0.10] bg-[#060608]/90 px-3 py-1.5 text-[10.5px] font-semibold text-white/85 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur transition-colors hover:bg-white/[0.08]"
         >
           <ArrowDown className="h-3 w-3" />
           Jump to latest
@@ -370,7 +370,7 @@ function SaveToVaultButton({ message }: { message: ChatMessage }) {
           ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-200/95"
           : state === "error"
             ? "border-rose-400/35 bg-rose-400/10 text-rose-200/95"
-            : "border-white/[0.06] hover:border-cyan-400/30 hover:text-cyan-200"
+            : "border-white/[0.06] hover:border-white/[0.15] hover:text-white/80"
       }`}
     >
       {state === "saved" ? <Check className="h-3 w-3" /> : <Bookmark className="h-3 w-3" />}

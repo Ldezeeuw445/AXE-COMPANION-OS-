@@ -222,8 +222,8 @@ export function ChartOrderBookDrawer({
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/30 bg-cyan-400/10">
-              <BarChart2 className="h-3.5 w-3.5 text-cyan-200" aria-hidden />
+            <span className="grid h-7 w-7 place-items-center rounded-full border border-white/[0.10] bg-white/[0.05]">
+              <BarChart2 className="h-3.5 w-3.5 text-emerald-200" aria-hidden />
             </span>
             <div className="min-w-0">
               <p className="truncate font-mono text-[12px] font-bold uppercase tracking-wider text-tos-text">
@@ -237,7 +237,7 @@ export function ChartOrderBookDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-cyan-200"
+            className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-white/80"
             aria-label="Close depth"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
@@ -251,7 +251,7 @@ export function ChartOrderBookDrawer({
             <span
               className={`font-mono text-[11px] font-semibold ${
                 lastTickDir === "up"
-                  ? "text-cyan-200"
+                  ? "text-emerald-200"
                   : lastTickDir === "down"
                     ? "text-rose-300"
                     : "text-tos-text"
@@ -274,7 +274,7 @@ export function ChartOrderBookDrawer({
         <div className="grid shrink-0 grid-cols-[1fr_64px_64px_1fr] items-center gap-1 border-b border-white/[0.04] bg-white/[0.015] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-tos-dim">
           <span className="text-left">Cum</span>
           <span className="text-right text-rose-200/70">Ask</span>
-          <span className="text-left text-cyan-200/80">Bid</span>
+          <span className="text-left text-emerald-200/80">Bid</span>
           <span className="text-right">Cum</span>
         </div>
 
@@ -321,9 +321,9 @@ export function ChartOrderBookDrawer({
               </div>
 
               {/* Mid bar */}
-              <div className="flex shrink-0 items-center justify-between border-y border-cyan-400/15 bg-cyan-400/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-100/85">
+              <div className="flex shrink-0 items-center justify-between border-y border-white/[0.06] bg-emerald-400/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">
                 <span>{lastTickDir === "up" ? "↑ Uptick" : lastTickDir === "down" ? "↓ Downtick" : "·"}</span>
-                <span className="font-mono text-[11px] text-cyan-100">{formatBrokerPrice(symbol, mid)}</span>
+                <span className="font-mono text-[11px] text-white">{formatBrokerPrice(symbol, mid)}</span>
                 <span>{spreadPoints != null ? `${spreadPoints}p` : "—"}</span>
               </div>
 
@@ -336,12 +336,12 @@ export function ChartOrderBookDrawer({
                     <div
                       key={`bid-${idx}`}
                       className={`relative grid grid-cols-[1fr_64px_64px_1fr] items-center gap-1 px-2.5 ${
-                        isInner ? "bg-cyan-500/[0.07]" : ""
+                        isInner ? "bg-emerald-500/[0.07]" : ""
                       }`}
                     >
                       <span
                         aria-hidden
-                        className="pointer-events-none absolute inset-y-0 left-1/2 origin-left bg-cyan-500/[0.06]"
+                        className="pointer-events-none absolute inset-y-0 left-1/2 origin-left bg-emerald-500/[0.06]"
                         style={{ width: `${fill * 50}%` }}
                       />
                       <span className="relative font-mono text-[10px] text-tos-dim">
@@ -350,7 +350,7 @@ export function ChartOrderBookDrawer({
                       <span className="relative text-right font-mono text-[11px] text-tos-muted">
                         {formatSize(row.size)}
                       </span>
-                      <span className="relative text-left font-mono text-[11px] font-semibold text-cyan-200/95">
+                      <span className="relative text-left font-mono text-[11px] font-semibold text-white/90">
                         {formatBrokerPrice(symbol, row.price)}
                       </span>
                       <span className="relative text-right font-mono text-[10px] text-tos-dim">

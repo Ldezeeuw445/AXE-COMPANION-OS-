@@ -73,7 +73,7 @@ const STATUS_LABEL: Record<WorkflowStatus, string> = {
 };
 
 const STATUS_CLASS: Record<WorkflowStatus, string> = {
-  ready: "border-cyan-400/30 text-cyan-200/95 bg-cyan-400/10",
+  ready: "border-white/[0.10] text-white/90 bg-white/[0.05]",
   needs_account: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
   needs_positions: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
   needs_market: "border-amber-400/25 text-amber-200/90 bg-amber-400/[0.06]",
@@ -345,7 +345,7 @@ export function AxeWorkflowsHub({
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/95">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80">
             AXE Quick workflows
           </p>
           <p className="mt-0.5 text-xs text-tos-muted">
@@ -354,7 +354,7 @@ export function AxeWorkflowsHub({
         </div>
         <Link
           href="/chat"
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium text-tos-muted hover:border-cyan-400/30 hover:text-tos-text"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium text-tos-muted hover:border-white/[0.12] hover:text-tos-text"
         >
           <MessageSquare className="h-3 w-3" />
           Open Chat
@@ -385,11 +385,11 @@ function ActionTile({ action }: { action: WorkflowAction }) {
   return (
     <Link
       href={action.href}
-      className={`group flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-left transition-colors hover:border-cyan-400/30 hover:bg-white/[0.05]`}
+      className={`group flex flex-col gap-1 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.05]`}
       prefetch={false}
     >
       <div className="flex items-center gap-2">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.06] bg-black/40 text-cyan-300/85">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.06] bg-black/40 text-white/60">
           {action.icon}
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-tos-text">{action.title}</span>
@@ -401,7 +401,7 @@ function ActionTile({ action }: { action: WorkflowAction }) {
         >
           {STATUS_LABEL[action.status]}
         </span>
-        {blocked ? null : <span className="text-[9px] text-tos-dim/80 group-hover:text-cyan-300/85">Run →</span>}
+        {blocked ? null : <span className="text-[9px] text-tos-dim/80 group-hover:text-white/60">Run →</span>}
       </div>
     </Link>
   );

@@ -53,11 +53,11 @@ export function PositionsScreen({ positions, providerStatus, error, hint }: Prop
           {hint}
           {!error && !positions.length ? (
             <span className="mt-2 block">
-              <Link href="/accounts" className="text-cyan-400 hover:underline">
+              <Link href="/accounts" className="text-white/70 hover:underline">
                 Accounts
               </Link>{" "}
               ·{" "}
-              <Link href="/chart" className="text-cyan-400 hover:underline">
+              <Link href="/chart" className="text-white/70 hover:underline">
                 Chart
               </Link>
             </span>
@@ -69,7 +69,7 @@ export function PositionsScreen({ positions, providerStatus, error, hint }: Prop
         <div className="space-y-2">
           {positions.map((p) => (
             <Link key={p.id} href={`/chart?symbol=${encodeURIComponent(p.symbol)}`}>
-              <GlassPanel className="!p-3 transition-colors hover:border-cyan-500/20">
+              <GlassPanel className="!p-3 transition-colors hover:border-white/[0.10]">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="font-semibold text-tos-text">{p.symbol}</span>
                   <span className={`text-sm font-medium ${(p.profit ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>

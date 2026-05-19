@@ -82,7 +82,7 @@ export function InstallPrompt() {
     <button
       type="button"
       onClick={onClick}
-      className="rounded border border-cyan-400/35 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100/95 transition-colors hover:bg-cyan-500/18"
+      className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
     >
       Install AXE on this device
     </button>

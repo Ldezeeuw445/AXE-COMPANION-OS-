@@ -169,7 +169,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           type="button"
           disabled={pending}
           onClick={() => run(syncCloudMt5AccountAction, "Sync")}
-          className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-200/90 hover:bg-cyan-500/20 disabled:opacity-50"
+          className="rounded-lg border border-white/[0.08] bg-white/[0.05] px-2.5 py-1.5 text-[10px] font-semibold text-white/80 hover:bg-cyan-500/20 disabled:opacity-50"
         >
           {busyLabel === "Sync" ? "Syncing…" : "Sync"}
         </button>

@@ -47,7 +47,7 @@ function timeAgo(iso: string): string {
 
 function sentimentDot(score: number | null | undefined): { className: string; label: string } | null {
   if (score == null || !Number.isFinite(score)) return null;
-  if (score > 0.15) return { className: "bg-cyan-300", label: "positive" };
+  if (score > 0.15) return { className: "bg-emerald-300", label: "positive" };
   if (score < -0.15) return { className: "bg-rose-300", label: "negative" };
   return { className: "bg-white/35", label: "neutral" };
 }
@@ -140,8 +140,8 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/30 bg-cyan-400/10">
-              <Newspaper className="h-3.5 w-3.5 text-cyan-200" aria-hidden />
+            <span className="grid h-7 w-7 place-items-center rounded-full border border-white/[0.10] bg-white/[0.05]">
+              <Newspaper className="h-3.5 w-3.5 text-white/80" aria-hidden />
             </span>
             <div className="min-w-0">
               <p className="truncate font-mono text-[12px] font-bold uppercase tracking-wider text-tos-text">
@@ -156,7 +156,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
             <button
               type="button"
               onClick={() => void load()}
-              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-cyan-200"
+              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-white/80"
               aria-label="Refresh news"
               title="Refresh"
               disabled={loading}
@@ -169,7 +169,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-cyan-200"
+              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-white/80"
               aria-label="Close news"
             >
               <X className="h-3.5 w-3.5" aria-hidden />
@@ -192,7 +192,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
               const delivered = deliveringProviders.has(p.id);
               const tone =
                 configured && delivered
-                  ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
+                  ? "border-white/[0.12] bg-white/[0.06] text-white"
                   : configured
                     ? "border-white/10 bg-white/[0.025] text-tos-muted"
                     : "border-white/10 bg-white/[0.02] text-tos-dim";
@@ -239,7 +239,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
               <button
                 type="button"
                 onClick={() => void load()}
-                className="rounded-lg border border-cyan-400/25 bg-cyan-400/8 px-3 py-1.5 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-400/14"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/90 hover:bg-white/[0.06]"
               >
                 Try again
               </button>
@@ -266,14 +266,14 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
         <div className="shrink-0 border-t border-white/[0.05] px-3 py-2">
           <Link
             href={`/intel?symbol=${encodeURIComponent(symbol)}`}
-            className="flex items-center justify-between gap-2 rounded-xl border border-cyan-400/22 bg-cyan-400/8 px-3 py-2 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-400/14"
+            className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-semibold text-white/90 hover:bg-white/[0.06]"
             onClick={onClose}
           >
             <span className="flex items-center gap-2">
-              <Target className="h-3.5 w-3.5 text-cyan-300" aria-hidden />
+              <Target className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
               Smart-money intel for {symbol}
             </span>
-            <ExternalLink className="h-3 w-3 text-cyan-300/85" aria-hidden />
+            <ExternalLink className="h-3 w-3 text-emerald-300/85" aria-hidden />
           </Link>
         </div>
       </aside>
