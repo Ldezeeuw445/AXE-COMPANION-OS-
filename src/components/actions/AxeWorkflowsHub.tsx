@@ -389,7 +389,7 @@ function ActionTile({ action }: { action: WorkflowAction }) {
       prefetch={false}
     >
       <div className="flex items-center gap-2">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.06] bg-black/40 text-white/60">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.06] bg-[#0e0f12]/95 text-white/60">
           {action.icon}
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-tos-text">{action.title}</span>

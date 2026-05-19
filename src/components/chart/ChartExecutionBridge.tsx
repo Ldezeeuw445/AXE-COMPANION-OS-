@@ -186,7 +186,7 @@ export function ChartExecutionBridge({
           />
         </div>
 
-        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/[0.06] bg-black/35 p-2 text-[11px] leading-relaxed text-tos-muted">
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/[0.06] bg-[#0c0d0e] p-2 text-[11px] leading-relaxed text-tos-muted">
           <input
             type="checkbox"
             checked={acknowledged}
@@ -281,7 +281,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+        className="rounded-lg border border-white/10 bg-[#0c0d0e] px-2 py-1.5 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
       />
     </label>
   );

@@ -25,7 +25,7 @@ export function JournalAnalyticsPanel({ analytics }: Props) {
         <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-tos-dim">
           Journal analytics
         </p>
-        <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-3">
+        <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-3">
           <p className="text-sm font-medium text-tos-text">Not enough tagged trades yet</p>
           <p className="mt-1 text-xs leading-relaxed text-tos-muted">
             AXE needs a minimum tagged trade sample before showing analytics. Current sample: {taggedSample} tagged of{" "}
@@ -98,7 +98,7 @@ function MetricCard({
   highlight?: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2.5">
+    <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-2.5">
       <div className="flex items-center gap-2">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
           {icon}

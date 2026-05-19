@@ -167,7 +167,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             ))}
           </ul>
         ) : (
-          <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-3">
+          <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-3">
             <p className="text-sm font-medium text-tos-text">
               {hasFred ? "AXE Macro is warming" : "AXE Macro is not configured"}
             </p>
@@ -351,7 +351,7 @@ function EventRow({ event }: { event: EconomicEvent }) {
   const ts = new Date(event.startsAt);
   const date = ts.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   return (
-    <li className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2">
+    <li className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2">
       <span className="font-mono text-[10px] uppercase tracking-wider text-tos-dim">{date}</span>
       <span className="min-w-0 flex-1 text-xs text-tos-text">
         <span className="font-medium">{event.title}</span>
@@ -389,7 +389,7 @@ function NewsRow({ item }: { item: NewsItem }) {
         href={item.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="group flex flex-col gap-0.5 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2 hover:border-white/[0.10]"
+        className="group flex flex-col gap-0.5 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2 hover:border-white/[0.10]"
       >
         <span className="text-[12px] font-medium text-tos-text group-hover:text-white/90">{item.title}</span>
         <span className="flex flex-wrap items-baseline gap-2 text-[10px] text-tos-dim">

@@ -158,15 +158,15 @@ export function Mt5CloudConnectForm({ defaultRegion }: Props) {
       <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3 text-[11px] leading-relaxed text-tos-muted">
         <p className="font-medium text-tos-text">What AXE needs</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
+          <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0d]/80 px-2.5 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">Login</p>
             <p className="mt-1 text-[10px] text-tos-dim">Digits only from MT5. No email or broker portal login.</p>
           </div>
-          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
+          <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0d]/80 px-2.5 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">Server</p>
             <p className="mt-1 text-[10px] text-tos-dim">Exact MT5 server string, including suffixes and dashes.</p>
           </div>
-          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2">
+          <div className="rounded-xl border border-white/[0.06] bg-[#0a0a0d]/80 px-2.5 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-white/80">Password</p>
             <p className="mt-1 text-[10px] text-tos-dim">Investor/read-only password for account data.</p>
           </div>
@@ -205,7 +205,7 @@ export function Mt5CloudConnectForm({ defaultRegion }: Props) {
         <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-3 py-3 text-[11px] text-red-200/95">
           <p className="font-medium text-red-100/95">Connection needs attention</p>
           <p className="mt-1 text-[10.5px] leading-relaxed text-red-200/85">{err.message}</p>
-          <div className="mt-2 rounded-xl border border-red-300/15 bg-black/20 px-2.5 py-2 text-[10.5px] leading-relaxed text-red-100/85">
+          <div className="mt-2 rounded-xl border border-red-300/15 bg-[#0a0a0d]/80 px-2.5 py-2 text-[10.5px] leading-relaxed text-red-100/85">
             <p className="font-medium">Fast recovery path</p>
             <p className="mt-0.5 text-red-200/80">
               Keep the account page open, correct the highlighted field, then retry. If the row already exists below,

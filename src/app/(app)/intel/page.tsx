@@ -206,7 +206,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
               {intel.insiders.slice(0, 10).map((row, i) => (
                 <li
                   key={`${row.ticker}-${row.date}-${i}`}
-                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2"
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
                   <span className="font-mono text-[11px] font-semibold text-tos-text">{row.ticker}</span>
                   <span className="min-w-0 flex-1 truncate text-[11px] text-tos-text" title={row.insider}>
@@ -250,7 +250,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
               {intel.senate.slice(0, 10).map((row, i) => (
                 <li
                   key={`${row.ticker}-${row.politician}-${i}`}
-                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2"
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
                   <span className="font-mono text-[11px] font-semibold text-tos-text">{row.ticker}</span>
                   <span className="min-w-0 flex-1 truncate text-[11px] text-tos-text" title={row.politician}>
@@ -295,7 +295,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
               {intel.darkPool.slice(0, 10).map((row, i) => (
                 <li
                   key={`${row.symbol}-${row.time ?? i}`}
-                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2"
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
                   <span className="font-mono text-[11px] font-semibold text-tos-text">{row.symbol}</span>
                   <span className="font-mono text-[10px] text-tos-muted">${row.price.toFixed(2)}</span>
@@ -339,7 +339,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
               {intel.options.slice(0, 10).map((row, i) => (
                 <li
                   key={`${row.symbol}-${row.exp}-${row.strike}-${i}`}
-                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2"
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
                   <span className="font-mono text-[11px] font-semibold text-tos-text">{row.symbol}</span>
                   <span className="font-mono text-[10px] text-tos-muted">${row.strike.toFixed(2)}</span>

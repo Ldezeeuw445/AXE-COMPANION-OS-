@@ -130,78 +130,94 @@ body {
    CARD SYSTEM — flat borders, matte surfaces, no gradient glow
    ═══════════════════════════════════════════════════════════ */
 
-/* Premium card — dashboard widgets */
+/* Premium card — dashboard widgets
+   Linear-style gradient border: top edge subtly lit, fading to invisible */
 .tos-card-premium {
   border-radius: 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: var(--tos-bg-elevated);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)) border-box;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.6),
     0 12px 32px -12px rgba(0, 0, 0, 0.70);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tos-card-premium:hover {
-  background: var(--tos-surface-928);
-  border-color: rgba(255, 255, 255, 0.10);
+  background:
+    linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03)) border-box;
 }
 
 .tos-card-premium-subtle {
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: var(--tos-bg-elevated);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.65);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tos-card-premium-subtle:hover {
-  background: var(--tos-surface-928);
-  border-color: rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)) border-box;
 }
 
 .tos-asset-pill {
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: var(--tos-bg-elevated);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 6px 20px -10px rgba(0, 0, 0, 0.55);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tos-asset-pill:hover {
-  background: var(--tos-surface-928);
-  border-color: rgba(255, 255, 255, 0.10);
+  background:
+    linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)) border-box;
 }
 
-/* ─── Linear-style card — subtle flat border ─── */
+/* ─── Linear-style card — signature gradient border ─── */
 .tos-linear-card {
   position: relative;
   border-radius: 0.875rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: var(--tos-bg-elevated);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)) border-box;
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.5),
     0 8px 24px -12px rgba(0, 0, 0, 0.5);
-  transition: border-color 0.25s ease, background 0.25s ease;
+  transition: background 0.25s ease;
 }
 
 .tos-linear-card:hover {
-  background: var(--tos-surface-928);
-  border-color: rgba(255, 255, 255, 0.10);
+  background:
+    linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.035)) border-box;
 }
 
-/* Watchlist row — clean, minimal */
+/* Watchlist row — clean, minimal, linear gradient border */
 .tos-watchlist-row {
   position: relative;
   border-radius: 0.625rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tos-watchlist-row:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.10);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)) border-box;
 }
 
 /* Premium indicator sub-pane (volume/RSI/MACD under chart) */
@@ -211,16 +227,41 @@ body {
   background: rgba(6, 6, 8, 0.92);
 }
 
-/* Bottom nav — clean floating bar, matte glass */
+/* Bottom nav — frosted glass floating bar with gradient border */
 .tos-bottom-nav {
   border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(12, 12, 15, 0.85);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgba(12, 12, 15, 0.85), rgba(12, 12, 15, 0.85)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)) border-box;
   backdrop-filter: blur(32px) saturate(150%);
   -webkit-backdrop-filter: blur(32px) saturate(150%);
   box-shadow:
     0 -2px 12px rgba(0, 0, 0, 0.4),
     0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Subtle ambient glow — ultra-faint radial light behind key content */
+.tos-ambient-glow {
+  position: relative;
+}
+
+.tos-ambient-glow::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 60% 50% at 50% 30%,
+    rgba(99, 102, 241, 0.035) 0%,
+    transparent 70%
+  );
+}
+
+/* Price glow — very faint radial behind price numbers */
+.tos-price-glow {
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.06);
 }
 
 /* iOS safe-area aware mobile shell */
@@ -328,18 +369,21 @@ body {
   color: var(--tos-text-muted);
 }
 
-/* Inner "well" panels */
+/* Inner "well" panels — linear gradient border */
 .tos-inset-panel {
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: var(--tos-bg-elevated);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.40);
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tos-inset-panel:hover {
-  background: var(--tos-surface-928);
-  border-color: rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)) border-box;
 }
 
 /* Gold CTA */
@@ -361,41 +405,53 @@ body {
   filter: brightness(0.95);
 }
 
-/* Chat bubbles */
+/* Chat bubbles — gradient border, top edge slightly lit */
 .tos-bubble-user {
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: var(--tos-bg-elevated);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)) border-box;
   box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.5);
-  transition: border-color 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tos-bubble-user:hover {
-  border-color: rgba(255, 255, 255, 0.10);
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)) border-box;
 }
 
 .tos-bubble-assistant {
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 8px 22px -8px rgba(0, 0, 0, 0.5);
-  transition: border-color 0.2s ease;
+  transition: background 0.2s ease;
 }
 
 .tos-bubble-assistant:hover {
-  border-color: rgba(255, 255, 255, 0.10);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)) border-box;
 }
 
-/* Composer bar */
+/* Composer bar — gradient border, subtle glow on focus */
 .tos-neu-composer {
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: var(--tos-bg-elevated);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)) border-box;
   box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
 }
 
 .tos-neu-composer:focus-within {
   outline: none;
-  border-color: rgba(0, 212, 245, 0.22);
+  background:
+    linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)) border-box;
   box-shadow:
-    0 0 0 1px rgba(0, 212, 245, 0.10),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
     0 8px 24px -12px rgba(0, 0, 0, 0.6);
 }
 
@@ -475,26 +531,32 @@ body {
 
 .axe-landing-card {
   border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)) border-box;
   box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
 }
 
 .axe-landing-card-glow {
   position: relative;
   border-radius: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
   transition:
     transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 300ms ease,
+    background 300ms ease,
     box-shadow 300ms ease;
 }
 
 .axe-landing-card-glow:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)) padding-box,
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03)) border-box;
   box-shadow:
     0 16px 40px -12px rgba(0, 0, 0, 0.7),
     0 0 40px -12px rgba(0, 212, 245, 0.08);

@@ -21,7 +21,7 @@ export function AxeBreatheLoader({
 
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/35 px-2.5 py-1.5 ${className}`}
+      className={`inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0c0d0e] px-2.5 py-1.5 ${className}`}
       role="status"
       aria-live="polite"
     >
