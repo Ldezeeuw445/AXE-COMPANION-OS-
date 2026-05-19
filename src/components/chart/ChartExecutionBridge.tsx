@@ -96,7 +96,7 @@ export function ChartExecutionBridge({
   });
 
   return (
-    <section className="-mx-4 relative shrink-0 overflow-hidden border-b border-white/[0.08] bg-[#05070A] md:mx-0 md:border-x">
+    <section className="-mx-4 relative shrink-0 overflow-hidden border-b border-white/[0.08] bg-[#030508] md:mx-0 md:border-x">
       <header className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-1.5">
         <div className="flex items-center gap-2">
           <Activity className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
@@ -227,8 +227,8 @@ export function ChartExecutionBridge({
       </div>
 
       {approvalOpen ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#04070C]/90 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-rose-400/25 bg-[#0A0E14] p-4">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#030810]/90 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-rose-400/25 bg-[#060c16] p-4">
             <p className="text-sm font-semibold text-tos-text">Final approval</p>
             <p className="mt-2 text-[12px] leading-relaxed text-tos-muted">
               {EXECUTION_FEATURE_FLAG

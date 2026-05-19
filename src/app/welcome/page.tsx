@@ -25,7 +25,7 @@ export default function WelcomePage() {
             width: 420,
             height: 180,
             background:
-              "radial-gradient(ellipse at center, rgba(46,196,182,0.12) 0%, transparent 70%)",
+              "radial-gradient(ellipse at center, rgba(0,224,255,0.08) 0%, transparent 70%)",
           }}
         />
       </div>

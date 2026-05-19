@@ -19,7 +19,7 @@ const TICKER = [
 ];
 
 const ASSETS = [
-  { label: "Forex", glow: "rgba(46, 196, 182, 0.18)" },
+  { label: "Forex", glow: "rgba(0, 224, 255, 0.14)" },
   { label: "Metals", glow: "rgba(212, 184, 74, 0.16)" },
   { label: "Energy", glow: "rgba(245, 158, 11, 0.14)" },
   { label: "Commodities", glow: "rgba(167, 139, 250, 0.12)" },

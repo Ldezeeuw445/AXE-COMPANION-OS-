@@ -224,7 +224,7 @@ function ActivateModal({
       aria-modal="true"
       aria-label="Activate live trading"
     >
-      <div className="w-full max-w-md rounded-2xl border border-rose-400/30 bg-[#08080C] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
+      <div className="w-full max-w-md rounded-2xl border border-rose-400/30 bg-[#060a14] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <span className="grid h-8 w-8 place-items-center rounded-full border border-rose-400/35 bg-rose-400/10">
@@ -329,7 +329,7 @@ function DisableModal({
       aria-modal="true"
       aria-label="Disable live trading"
     >
-      <div className="w-full max-w-sm rounded-2xl border border-white/12 bg-[#08080C] p-5">
+      <div className="w-full max-w-sm rounded-2xl border border-white/12 bg-[#060a14] p-5">
         <p className="text-[14px] font-semibold tracking-tight text-tos-text">
           Disable live trading?
         </p>

@@ -20,7 +20,7 @@ export default function LoginPage() {
             height: 200,
             borderRadius: "50%",
             background:
-              "radial-gradient(ellipse at center, rgba(46,196,182,0.10) 0%, rgba(46,196,182,0.03) 55%, transparent 75%)",
+              "radial-gradient(ellipse at center, rgba(0,224,255,0.07) 0%, rgba(0,224,255,0.02) 55%, transparent 75%)",
           }}
         />
       </div>
@@ -32,7 +32,7 @@ export default function LoginPage() {
           <div
             style={{
               filter:
-                "drop-shadow(0 0 22px rgba(46,196,182,0.30)) drop-shadow(0 0 6px rgba(46,196,182,0.18))",
+                "drop-shadow(0 0 22px rgba(0,224,255,0.25)) drop-shadow(0 0 6px rgba(0,224,255,0.12))",
             }}
           >
             <Image
@@ -53,7 +53,7 @@ export default function LoginPage() {
               width: 80,
               height: 1,
               background:
-                "linear-gradient(90deg, transparent, rgba(46,196,182,0.40), transparent)",
+                "linear-gradient(90deg, transparent, rgba(0,224,255,0.30), transparent)",
             }}
           />
 

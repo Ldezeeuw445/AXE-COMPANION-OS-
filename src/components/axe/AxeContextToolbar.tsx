@@ -112,7 +112,7 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
           />
           <div
             ref={sheetRef}
-            className="relative z-[81] mt-[3.25rem] w-[min(20rem,calc(100vw-1rem))] origin-top-right rounded-2xl border border-white/10 bg-[#070A10]/95 p-3 shadow-[0_24px_60px_-20px_rgba(34,211,238,0.35),0_0_0_1px_rgba(34,211,238,0.10)] backdrop-blur-xl sm:mt-[3.5rem]"
+            className="relative z-[81] mt-[3.25rem] w-[min(20rem,calc(100vw-1rem))] origin-top-right rounded-2xl border border-white/10 bg-[#040a14]/95 p-3 shadow-[0_24px_60px_-20px_rgba(34,211,238,0.35),0_0_0_1px_rgba(34,211,238,0.10)] backdrop-blur-xl sm:mt-[3.5rem]"
             style={{ animation: "axeSheetIn 160ms ease-out both" }}
           >
             <header className="mb-2 flex items-center justify-between gap-3 px-2 pt-1">

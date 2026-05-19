@@ -132,7 +132,7 @@ export function LandingHeroPhone() {
         />
 
         {/* Inner display */}
-        <div className="relative h-[640px] w-[300px] overflow-hidden rounded-[2.35rem] bg-[#04070C]">
+        <div className="relative h-[640px] w-[300px] overflow-hidden rounded-[2.35rem] bg-[#030810]">
           {/* Status bar (iOS-style) */}
           <div className="flex h-9 items-center justify-between bg-black px-5 font-mono text-[11px] font-semibold text-white/80">
             <span>09:41</span>
@@ -321,7 +321,7 @@ function ChartFrame({ seed }: { seed: number }) {
   const toY = (price: number) => 18 + ((maxHigh - price) / range) * 220;
 
   return (
-    <div className="relative h-full bg-[#04070C]">
+    <div className="relative h-full bg-[#030810]">
       {/* Symbol header */}
       <div className="absolute left-3 top-2 z-10">
         <div className="flex items-baseline gap-2">
@@ -504,14 +504,14 @@ function DepthFrame({ seed }: { seed: number }) {
   }, [mid, seed]);
 
   return (
-    <div className="relative h-full bg-[#04070C]">
+    <div className="relative h-full bg-[#030810]">
       {/* The drawer sliding in over a faint chart silhouette */}
       <div className="absolute inset-0 opacity-25">
         <ChartFrame seed={seed - 1} />
       </div>
       <div className="absolute inset-0 bg-black/55" aria-hidden />
 
-      <aside className="absolute inset-y-0 left-0 flex w-[88%] flex-col border-r border-white/10 bg-[#04070C]/96 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+      <aside className="absolute inset-y-0 left-0 flex w-[88%] flex-col border-r border-white/10 bg-[#030810]/96 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
         <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
           <div className="flex items-center gap-2">
             <span className="grid h-6 w-6 place-items-center rounded-full border border-cyan-400/30 bg-cyan-400/10">
@@ -638,13 +638,13 @@ function NewsFrame({ seed }: { seed: number }) {
   const reveal = (seed % 4) + 1;
 
   return (
-    <div className="relative h-full bg-[#04070C]">
+    <div className="relative h-full bg-[#030810]">
       <div className="absolute inset-0 opacity-25">
         <ChartFrame seed={seed - 2} />
       </div>
       <div className="absolute inset-0 bg-black/55" aria-hidden />
 
-      <aside className="absolute inset-y-0 left-0 flex w-[92%] flex-col border-r border-white/10 bg-[#04070C]/96 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+      <aside className="absolute inset-y-0 left-0 flex w-[92%] flex-col border-r border-white/10 bg-[#030810]/96 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl">
         <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
           <div className="flex items-center gap-2">
             <span className="grid h-6 w-6 place-items-center rounded-full border border-cyan-400/30 bg-cyan-400/10">
@@ -730,7 +730,7 @@ function ExecFrame({ seed }: { seed: number }) {
   // Show the chart in the back with a draggable plan overlay (BUY ticket).
   const flash = seed % 2 === 0;
   return (
-    <div className="relative h-full bg-[#04070C]">
+    <div className="relative h-full bg-[#030810]">
       <ChartFrame seed={seed} />
 
       {/* Plan lines: limit + SL + TP */}
@@ -819,7 +819,7 @@ function AxeFrame({ seed }: { seed: number }) {
   const showTyping = seed % 4 === 3;
 
   return (
-    <div className="relative h-full bg-[#04070C] px-3 pt-2">
+    <div className="relative h-full bg-[#030810] px-3 pt-2">
       <header className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
           <Image

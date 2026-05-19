@@ -171,12 +171,12 @@ export default function HomeLandingPage() {
         className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[820px]"
         style={{
           background:
-            "radial-gradient(900px circle at 22% 18%, rgba(34,211,238,0.10), transparent 55%), radial-gradient(900px circle at 80% 8%, rgba(46,196,182,0.08), transparent 55%), radial-gradient(800px circle at 50% 60%, rgba(34,211,238,0.05), transparent 65%)",
+            "radial-gradient(900px circle at 22% 18%, rgba(0,224,255,0.07), transparent 55%), radial-gradient(900px circle at 80% 8%, rgba(0,224,255,0.05), transparent 55%), radial-gradient(800px circle at 50% 60%, rgba(0,224,255,0.03), transparent 65%)",
         }}
       />
 
       {/* ─── header ─── */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#050508]/85 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020406]/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
           <Link href="/" className="flex items-center gap-2">
             <Image
@@ -256,9 +256,9 @@ export default function HomeLandingPage() {
               className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium"
               style={{
                 background:
-                  "linear-gradient(135deg, rgba(34,211,238,0.18) 0%, rgba(46,196,182,0.08) 100%)",
+                  "linear-gradient(135deg, rgba(0,224,255,0.14) 0%, rgba(0,224,255,0.05) 100%)",
                 border: "1px solid rgba(34,211,238,0.32)",
-                boxShadow: "0 0 22px rgba(34,211,238,0.10)",
+                boxShadow: "0 0 22px rgba(0,224,255,0.07)",
               }}
             >
               <span className="relative flex h-2 w-2">

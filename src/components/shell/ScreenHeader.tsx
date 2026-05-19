@@ -35,7 +35,7 @@ export function ScreenHeader({
         className="absolute bottom-0 left-0 right-0 h-px"
         style={{
           background:
-            "linear-gradient(90deg, transparent 0%, rgba(46,196,182,0.35) 30%, rgba(46,196,182,0.35) 70%, transparent 100%)",
+            "linear-gradient(90deg, transparent 0%, rgba(0,224,255,0.20) 30%, rgba(0,224,255,0.20) 70%, transparent 100%)",
         }}
       />
     </header>
