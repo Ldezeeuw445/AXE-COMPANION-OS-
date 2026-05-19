@@ -4,13 +4,24 @@ type GlassPanelProps = {
   children: ReactNode;
   className?: string;
   glow?: "warm" | "cyan" | "none";
+  /** Use Linear-style gradient border instead of flat border. */
+  linear?: boolean;
 };
 
 export function GlassPanel({
   children,
   className = "",
   glow = "none",
+  linear = false,
 }: GlassPanelProps) {
+  if (linear) {
+    return (
+      <div className={`tos-linear-card p-0 ${className}`}>
+        {children}
+      </div>
+    );
+  }
+
   const elevation =
     glow === "warm"
       ? "shadow-[var(--tos-shadow-float),0_0_0_1px_rgba(255,255,255,0.04),0_0_40px_-28px_rgba(0,224,255,0.10),inset_0_1px_0_rgba(255,255,255,0.04)]"

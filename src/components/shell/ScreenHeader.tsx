@@ -30,12 +30,12 @@ export function ScreenHeader({
       </div>
       {right ? <div className="shrink-0 pt-0.5">{right}</div> : null}
 
-      {/* Accent separator line */}
+      {/* Linear-style gradient separator */}
       <div
         className="absolute bottom-0 left-0 right-0 h-px"
         style={{
           background:
-            "linear-gradient(90deg, transparent 0%, rgba(0,224,255,0.20) 30%, rgba(0,224,255,0.20) 70%, transparent 100%)",
+            "linear-gradient(90deg, transparent 0%, rgba(0,224,255,0.15) 20%, rgba(0,224,255,0.20) 50%, rgba(0,224,255,0.15) 80%, transparent 100%)",
         }}
       />
     </header>
