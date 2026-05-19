@@ -1,15 +1,17 @@
 // supabase/functions/intel-proxy/index.ts
 // ─────────────────────────────────────────────────────────────────────
-// AXE Intel Proxy — Supabase Edge Function
-// Replaces Unusual Whales with free-tier providers:
-//   • Insider trades   → Finnhub insider-transactions (free) + FMP /stable/ fallback
-//   • Congress trades   → FMP /stable/senate-trading (paid) → graceful empty on free
+// AXE Intel Proxy — Supabase Edge Function (v2)
+// 
+// Providers:
+//   • Insider trades   → SEC EDGAR (free, no API key)
+//   • Congress trades   → FMP /stable/ (paid plan) → graceful fallback
 //   • Dark pool prints  → Finnhub volume anomaly detection (free)
 //   • Unusual options   → Finnhub recommendation trends (free)
 //   • Market tide       → Finnhub aggregate sentiment (free)
 //
 // Deploy:  supabase functions deploy intel-proxy --no-verify-jwt
-// Secrets: FINNHUB_API_KEY (required), FMP_API_KEY (optional, paid only)
+// Secrets: FINNHUB_API_KEY (required)
+//          FMP_API_KEY (optional — enables congress feed)
 // ─────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -45,19 +47,48 @@ function setCache(key: string, data: unknown) {
 async function fetchWithTimeout(
   url: string,
   timeoutMs = 10_000,
+  headers?: Record<string, string>,
 ): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    return await fetch(url, { signal: ctrl.signal });
+    return await fetch(url, {
+      signal: ctrl.signal,
+      headers: headers ?? {},
+    });
   } finally {
     clearTimeout(timer);
   }
 }
 
+// SEC EDGAR requires a User-Agent header with contact info
+const SEC_HEADERS = {
+  "User-Agent": "AXE-Companion-OS support@axecompanion.com",
+  Accept: "application/json",
+};
+
+// ── XML helper: extract text between tags ──────────────────────────
+function xmlVal(xml: string, tag: string): string {
+  // Match <tag>...<value>X</value>...</tag> or <tag>X</tag>
+  const outerRe = new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "i");
+  const outerMatch = xml.match(outerRe);
+  if (!outerMatch) return "";
+  const inner = outerMatch[0];
+  // Try <value>X</value> first (Form 4 nesting)
+  const valMatch = inner.match(/<value>([\s\S]*?)<\/value>/i);
+  if (valMatch) return valMatch[1].trim();
+  // Fallback: direct text content
+  const directMatch = inner.match(
+    new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"),
+  );
+  return directMatch ? directMatch[1].trim() : "";
+}
+
 // ═══════════════════════════════════════════════════════════════════
-// 1. INSIDER TRADES — Finnhub insider-transactions (free tier)
-//    Fallback: FMP /stable/insider-trading (paid tier only)
+// 1. INSIDER TRADES — SEC EDGAR (free, no API key)
+// ═══════════════════════════════════════════════════════════════════
+// Flow: EFTS search for recent Form 4 filings → fetch individual
+// Form 4 XMLs → parse transaction details.
 // ═══════════════════════════════════════════════════════════════════
 type InsiderTrade = {
   ticker: string;
@@ -69,142 +100,161 @@ type InsiderTrade = {
   date: string;
 };
 
-async function fetchFinnhubInsiderTrades(
-  finnhubKey: string,
+async function handleInsiderTrades(
   symbol?: string,
-): Promise<InsiderTrade[] | null> {
-  try {
-    // Finnhub insider-transactions endpoint
-    const sym = symbol ?? "AAPL"; // Default to AAPL for general feed
-    const symbols = symbol ? [symbol] : ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM"];
-
-    const allTrades: InsiderTrade[] = [];
-
-    for (const s of symbols) {
-      try {
-        const res = await fetchWithTimeout(
-          `https://finnhub.io/api/v1/stock/insider-transactions?symbol=${s}&token=${finnhubKey}`,
-          6000,
-        );
-        if (!res.ok) continue;
-        const data = await res.json();
-
-        if (!data?.data || !Array.isArray(data.data)) continue;
-
-        for (const tx of data.data.slice(0, 5)) {
-          const shares = Math.abs(Number(tx.share ?? tx.change ?? 0));
-          const price = Number(tx.transactionPrice ?? 0);
-          if (shares <= 0) continue;
-
-          allTrades.push({
-            ticker: String(tx.symbol ?? s),
-            insider: String(tx.name ?? "Unknown"),
-            role: tx.filingDate ? `Filed ${tx.filingDate}` : undefined,
-            type: Number(tx.change ?? 0) > 0 ? "BUY" : "SELL",
-            shares,
-            value: Math.round(shares * price) || Math.round(shares * 100),
-            date: String(tx.transactionDate ?? tx.filingDate ?? ""),
-          });
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    if (allTrades.length > 0) {
-      // Sort by date descending, limit to 25
-      allTrades.sort((a, b) => b.date.localeCompare(a.date));
-      return allTrades.slice(0, 25);
-    }
-    return null; // Signal to try fallback
-  } catch {
-    return null;
-  }
-}
-
-async function fetchFmpInsiderTrades(
-  fmpKey: string,
-  symbol?: string,
-): Promise<InsiderTrade[] | null> {
-  try {
-    const params = new URLSearchParams({ page: "0", apikey: fmpKey });
-    if (symbol) params.set("symbol", symbol);
-
-    // Try /stable/ first (new API), then /api/v4/ (legacy)
-    for (const base of [
-      "https://financialmodelingprep.com/stable",
-      "https://financialmodelingprep.com/api/v4",
-    ]) {
-      try {
-        const res = await fetchWithTimeout(
-          `${base}/insider-trading?${params}`,
-          8000,
-        );
-        if (!res.ok) continue;
-        const raw = await res.json();
-
-        // Check for error messages (paid-only or legacy)
-        if (raw?.["Error Message"] || !Array.isArray(raw)) continue;
-
-        const trades: InsiderTrade[] = raw.slice(0, 25).map(
-          (r: Record<string, unknown>) => {
-            const isAcquisition =
-              String(r.acquistionOrDisposition ?? "A") === "A";
-            const shares = Number(r.securitiesTransacted ?? 0);
-            const price = Number(r.price ?? 0);
-            return {
-              ticker: String(r.symbol ?? ""),
-              insider: String(r.reportingName ?? "Unknown"),
-              role: r.typeOfOwner ? String(r.typeOfOwner) : undefined,
-              type: isAcquisition ? ("BUY" as const) : ("SELL" as const),
-              shares: shares > 0 ? shares : undefined,
-              value: Math.round(shares * price),
-              date: String(r.transactionDate ?? r.filingDate ?? ""),
-            };
-          },
-        ).filter((t: InsiderTrade) => t.ticker && t.value > 0);
-
-        if (trades.length > 0) return trades;
-      } catch {
-        continue;
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-async function handleInsiderTrades(symbol?: string): Promise<Response> {
+): Promise<Response> {
   const cacheKey = `insider:${symbol ?? "all"}`;
   const hit = cached<InsiderTrade[]>(cacheKey);
   if (hit) return json({ ok: true, data: hit });
 
-  const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  const fmpKey = Deno.env.get("FMP_API_KEY");
+  try {
+    // Step 1: Search EDGAR EFTS for recent Form 4 filings
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 86400 * 1000);
+    const endDt = now.toISOString().slice(0, 10);
+    const startDt = weekAgo.toISOString().slice(0, 10);
 
-  // Try Finnhub first (free), then FMP (paid fallback)
-  let trades: InsiderTrade[] | null = null;
+    // If symbol provided, search for it; otherwise get recent filings
+    const query = symbol
+      ? encodeURIComponent(`"${symbol}"`)
+      : "%22%22";
 
-  if (finnhubKey) {
-    trades = await fetchFinnhubInsiderTrades(finnhubKey, symbol);
+    const eftsUrl =
+      `https://efts.sec.gov/LATEST/search-index?q=${query}&forms=4` +
+      `&dateRange=custom&startdt=${startDt}&enddt=${endDt}&from=0&size=12`;
+
+    const eftsRes = await fetchWithTimeout(eftsUrl, 8000, SEC_HEADERS);
+    if (!eftsRes.ok) {
+      return json(
+        { ok: false, error: `edgar_efts_${eftsRes.status}` },
+        502,
+      );
+    }
+
+    const eftsData = await eftsRes.json();
+    const hits = eftsData?.hits?.hits;
+    if (!Array.isArray(hits) || hits.length === 0) {
+      return json({ ok: true, data: [] });
+    }
+
+    // Step 2: Build XML URLs from EFTS hits
+    type FilingRef = { xmlUrl: string; displayNames: string[] };
+    const filingRefs: FilingRef[] = [];
+
+    for (const hit of hits.slice(0, 10)) {
+      const src = hit._source;
+      const id = hit._id as string; // "ADSH:filename.xml"
+      const [adsh, filename] = id.split(":");
+      if (!adsh || !filename) continue;
+
+      const ciks = src?.ciks as string[] | undefined;
+      if (!ciks || ciks.length === 0) continue;
+
+      // Use first CIK (reporting owner) — strip leading zeros for URL
+      const cik = ciks[0].replace(/^0+/, "");
+      const adshNoDash = adsh.replace(/-/g, "");
+
+      filingRefs.push({
+        xmlUrl: `https://www.sec.gov/Archives/edgar/data/${cik}/${adshNoDash}/${filename}`,
+        displayNames: (src?.display_names as string[]) ?? [],
+      });
+    }
+
+    // Step 3: Fetch Form 4 XMLs in parallel (max 8 concurrent)
+    const xmlPromises = filingRefs.map(async (ref) => {
+      try {
+        const res = await fetchWithTimeout(ref.xmlUrl, 6000, SEC_HEADERS);
+        if (!res.ok) return null;
+        const xml = await res.text();
+        return { xml, ref };
+      } catch {
+        return null;
+      }
+    });
+
+    const xmlResults = await Promise.all(xmlPromises);
+
+    // Step 4: Parse each Form 4 XML
+    const trades: InsiderTrade[] = [];
+
+    for (const result of xmlResults) {
+      if (!result) continue;
+      const { xml } = result;
+
+      // Extract issuer info
+      const ticker = xmlVal(xml, "issuerTradingSymbol")
+        .split(/[\s,]+/)[0] // Take first ticker if multiple
+        .toUpperCase();
+      const insiderName = xmlVal(xml, "rptOwnerName");
+      const officerTitle = xmlVal(xml, "officerTitle") || undefined;
+      const txDate =
+        xmlVal(xml, "periodOfReport") ||
+        xmlVal(xml, "transactionDate");
+
+      // Parse all nonDerivativeTransactions
+      const txRegex =
+        /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/gi;
+      let txMatch;
+      while ((txMatch = txRegex.exec(xml)) !== null) {
+        const txXml = txMatch[1];
+        const code = xmlVal(txXml, "transactionCode").toUpperCase();
+        // P = Purchase, S = Sale — skip awards (A), gifts (G), etc.
+        if (code !== "P" && code !== "S") continue;
+
+        const shares = Math.round(
+          Number(xmlVal(txXml, "transactionShares")) || 0,
+        );
+        const price = Number(xmlVal(txXml, "transactionPricePerShare")) || 0;
+        const value = Math.round(shares * price);
+
+        if (value <= 0 && shares <= 0) continue;
+
+        trades.push({
+          ticker: ticker || "N/A",
+          insider: insiderName || "Unknown",
+          role: officerTitle,
+          type: code === "P" ? "BUY" : "SELL",
+          shares: shares > 0 ? shares : undefined,
+          value,
+          date: txDate,
+        });
+      }
+    }
+
+    // De-duplicate (same insider + same ticker + same date = one entry)
+    const seen = new Set<string>();
+    const uniqueTrades = trades.filter((t) => {
+      const key = `${t.insider}:${t.ticker}:${t.date}:${t.type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Sort by value descending
+    uniqueTrades.sort((a, b) => b.value - a.value);
+
+    // If symbol filter was set, double-check that results match
+    const filtered = symbol
+      ? uniqueTrades.filter(
+          (t) =>
+            t.ticker === symbol ||
+            t.ticker.startsWith(symbol),
+        )
+      : uniqueTrades;
+
+    const result = filtered.slice(0, 25);
+    setCache(cacheKey, result);
+    return json({ ok: true, data: result });
+  } catch (e) {
+    return json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      500,
+    );
   }
-  if (!trades && fmpKey) {
-    trades = await fetchFmpInsiderTrades(fmpKey, symbol);
-  }
-
-  if (trades && trades.length > 0) {
-    setCache(cacheKey, trades);
-    return json({ ok: true, data: trades });
-  }
-
-  // Graceful empty — no error, just no data
-  return json({ ok: true, data: [] });
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 2. SENATE / CONGRESS TRADES
-//    FMP /stable/ (paid) → graceful empty on free tier
+// 2. SENATE / CONGRESS TRADES — FMP /stable/ (paid) with fallback
 // ═══════════════════════════════════════════════════════════════════
 type SenateTrade = {
   politician: string;
@@ -222,54 +272,81 @@ async function handleSenateTrades(): Promise<Response> {
 
   const fmpKey = Deno.env.get("FMP_API_KEY");
   if (!fmpKey) {
-    // No FMP key — return empty (not error)
-    return json({ ok: true, data: [] });
+    return json({
+      ok: false,
+      error: "FMP_API_KEY not configured — congress feed requires FMP Starter plan ($22/mo) at financialmodelingprep.com",
+    }, 503);
   }
 
-  // Try /stable/ first, then /api/v4/
-  for (const base of [
-    "https://financialmodelingprep.com/stable",
-    "https://financialmodelingprep.com/api/v4",
-  ]) {
-    try {
-      const params = new URLSearchParams({ page: "0", apikey: fmpKey });
-      const res = await fetchWithTimeout(
-        `${base}/senate-trading?${params}`,
-        8000,
-      );
-      if (!res.ok) continue;
-      const raw = await res.json();
+  try {
+    // Use the new /stable/ base URL (replaces legacy /api/v4/)
+    const params = new URLSearchParams({ page: "0", apikey: fmpKey });
+    const res = await fetchWithTimeout(
+      `https://financialmodelingprep.com/stable/senate-trading?${params}`,
+    );
 
-      if (raw?.["Error Message"] || !Array.isArray(raw)) continue;
-
-      const trades: SenateTrade[] = raw.slice(0, 25).map(
-        (r: Record<string, unknown>) => {
-          const type = String(r.type ?? "").toLowerCase();
-          const isPurchase =
-            type.includes("purchase") || type.includes("buy");
-          return {
-            politician:
-              `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() || "Unknown",
-            chamber: String(r.office ?? "Senate"),
-            ticker: String(r.symbol ?? r.assetDescription ?? ""),
-            direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
-            size: String(r.amount ?? "N/A"),
-            date: String(r.transactionDate ?? r.dateRecieved ?? ""),
-          };
-        },
-      ).filter((t: SenateTrade) => t.ticker);
-
-      if (trades.length > 0) {
-        setCache(cacheKey, trades);
-        return json({ ok: true, data: trades });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      // Check for legacy/paid-only error
+      if (
+        body.includes("Legacy") ||
+        body.includes("not available") ||
+        body.includes("Upgrade") ||
+        res.status === 403 ||
+        res.status === 402
+      ) {
+        return json({
+          ok: false,
+          error: "congress_feed_requires_paid_plan",
+          message: "Congress trading data requires FMP Starter plan or higher. Visit financialmodelingprep.com to upgrade.",
+        }, 402);
       }
-    } catch {
-      continue;
+      return json(
+        { ok: false, error: `fmp_senate_${res.status}` },
+        502,
+      );
     }
-  }
 
-  // FMP didn't work (paid-only) — return empty gracefully
-  return json({ ok: true, data: [] });
+    const raw = (await res.json()) as Array<Record<string, unknown>>;
+
+    // Check for error response in JSON body
+    if (!Array.isArray(raw)) {
+      const errMsg = (raw as Record<string, unknown>)?.["Error Message"];
+      if (errMsg && String(errMsg).includes("Legacy")) {
+        return json({
+          ok: false,
+          error: "congress_feed_requires_paid_plan",
+          message: "Congress trading data requires FMP Starter plan or higher. Visit financialmodelingprep.com to upgrade.",
+        }, 402);
+      }
+      return json({ ok: false, error: "fmp_senate_bad_response" }, 502);
+    }
+
+    const trades: SenateTrade[] = raw.slice(0, 25).map((r) => {
+      const type = String(r.type ?? "").toLowerCase();
+      const isPurchase =
+        type.includes("purchase") || type.includes("buy");
+      return {
+        politician: `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() ||
+          "Unknown",
+        chamber: String(r.office ?? "Senate"),
+        ticker: String(r.symbol ?? r.assetDescription ?? ""),
+        direction: isPurchase ? "BUY" as const : "SELL" as const,
+        size: String(r.amount ?? "N/A"),
+        date: String(
+          r.transactionDate ?? r.dateRecieved ?? "",
+        ),
+      };
+    }).filter((t) => t.ticker);
+
+    setCache(cacheKey, trades);
+    return json({ ok: true, data: trades });
+  } catch (e) {
+    return json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      500,
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -296,11 +373,16 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
 
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
   if (!finnhubKey)
-    return json({ ok: true, data: [] });
+    return json(
+      { ok: false, error: "FINNHUB_API_KEY not configured" },
+      503,
+    );
 
   try {
     const symbols = symbol
-      ? [symbol, "SPY", "QQQ"].filter((s, i, a) => a.indexOf(s) === i)
+      ? [symbol, "SPY", "QQQ"].filter(
+          (s, i, a) => a.indexOf(s) === i,
+        )
       : DARK_POOL_WATCHLIST.slice(0, 8);
 
     const prints: DarkPoolPrint[] = [];
@@ -368,10 +450,14 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
     }
 
     prints.sort((a, b) => b.notional - a.notional);
+
     setCache(cacheKey, prints);
     return json({ ok: true, data: prints });
   } catch (e) {
-    return json({ ok: true, data: [] });
+    return json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      500,
+    );
   }
 }
 
@@ -397,7 +483,10 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
 
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
   if (!finnhubKey)
-    return json({ ok: true, data: [] });
+    return json(
+      { ok: false, error: "FINNHUB_API_KEY not configured" },
+      503,
+    );
 
   try {
     const symbols = symbol
@@ -436,13 +525,12 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
         const price = Number(quote?.c ?? 100);
 
         const isBullish = buyChange > sellChange;
-        const magnitude = Math.max(
-          Math.abs(buyChange),
-          Math.abs(sellChange),
-        );
+        const magnitude = Math.max(Math.abs(buyChange), Math.abs(sellChange));
 
         const strike =
-          Math.round((isBullish ? price * 1.05 : price * 0.95) / 5) * 5;
+          Math.round(
+            (isBullish ? price * 1.05 : price * 0.95) / 5,
+          ) * 5;
         const exp = new Date(Date.now() + 30 * 86400 * 1000)
           .toISOString()
           .slice(0, 10);
@@ -464,10 +552,14 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
     }
 
     options.sort((a, b) => b.premium - a.premium);
+
     setCache(cacheKey, options);
     return json({ ok: true, data: options });
   } catch (e) {
-    return json({ ok: true, data: [] });
+    return json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      500,
+    );
   }
 }
 
@@ -489,7 +581,10 @@ async function handleMarketTide(): Promise<Response> {
 
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
   if (!finnhubKey)
-    return json({ ok: true, data: [] });
+    return json(
+      { ok: false, error: "FINNHUB_API_KEY not configured" },
+      503,
+    );
 
   try {
     const [quoteRes, recRes] = await Promise.all([
@@ -557,7 +652,10 @@ async function handleMarketTide(): Promise<Response> {
     setCache(cacheKey, tide);
     return json({ ok: true, data: tide });
   } catch (e) {
-    return json({ ok: true, data: [] });
+    return json(
+      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      500,
+    );
   }
 }
 
@@ -570,8 +668,7 @@ serve(async (req: Request) => {
   try {
     const body = await req.json();
     const action = body?.action as string;
-    const symbol =
-      (body?.symbol as string)?.trim()?.toUpperCase() || undefined;
+    const symbol = (body?.symbol as string)?.trim()?.toUpperCase() || undefined;
 
     switch (action) {
       case "insiderTrades":
