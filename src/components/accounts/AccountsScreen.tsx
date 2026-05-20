@@ -332,7 +332,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
   // account is connected with a fresh sync. A plain Supabase account
   // list is useful truth, but it is not a live broker connection.
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 pb-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
         liveCount={freshCloudAccounts.length}
@@ -462,10 +462,27 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
               const freshness = syncFreshness(a.last_sync_at);
               const diagnostic = compactDiagnosticStatus(a);
 
+              /** Tap a non-active account → auto-activate + open chart. */
+              async function activateAndOpen() {
+                if (active || pending) return;
+                startTransition(async () => {
+                  const r = await setActiveAccountAction(a.id);
+                  if (!r.error) {
+                    router.push(
+                      `/chart?account=${encodeURIComponent(a.id)}&symbol=XAUUSD&tf=h1`,
+                    );
+                    router.refresh();
+                  } else {
+                    alert(r.error);
+                  }
+                });
+              }
+
               return (
                 <GlassPanel
                   key={a.id}
-                  className={`p-4 sm:p-5 ${active ? "border-white/[0.10] ring-1 ring-white/[0.08] " : ""}`}
+                  className={`p-4 sm:p-5 transition-transform ${active ? "border-white/[0.10] ring-1 ring-white/[0.08] " : "cursor-pointer active:scale-[0.985]"}`}
+                  {...(!active ? { onClick: () => void activateAndOpen() } : {})}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
@@ -519,48 +536,36 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
                             ? "Virtual paper account. Used for chart practice and demo execution only."
                             : "Used for chat, journal, chart and alerts."}
                         </p>
-                      ) : null}
+                      ) : (
+                        <p className="mt-2 flex items-center gap-1 text-[10px] text-tos-dim">
+                          <LineChart className="h-3 w-3" aria-hidden />
+                          Tap to activate &amp; open chart
+                        </p>
+                      )}
                     </div>
                     <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[9.5rem] sm:items-end">
-                      {kind === "cloud" || kind === "demo" ? (
-                        <Link
-                          href={`/chart?account=${encodeURIComponent(a.id)}&symbol=XAUUSD&tf=h1`}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-white/90 hover:bg-white/[0.08]"
-                        >
-                          <LineChart className="h-3.5 w-3.5" aria-hidden />
-                          Open chart
-                        </Link>
-                      ) : null}
                       {active ? (
                         <button
                           type="button"
                           disabled={pending}
-                          onClick={() => void onSetActive(null)}
+                          onClick={(e) => { e.stopPropagation(); void onSetActive(null); }}
                           className="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-tos-muted hover:border-white/[0.10] hover:bg-white/[0.06] hover:text-white/85 disabled:opacity-50"
                         >
                           Set inactive
                         </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() => void onSetActive(a.id)}
-                          className="rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-white/90 hover:bg-white/[0.08] disabled:opacity-50"
-                        >
-                          Set active
-                        </button>
-                      )}
+                      ) : null}
                       <button
                         type="button"
                         disabled={pending}
-                        onClick={() => void onRemoveAccount(a.id)}
+                        onClick={(e) => { e.stopPropagation(); void onRemoveAccount(a.id); }}
                         className="rounded-lg border border-red-500/20 px-2 py-1.5 text-[10px] font-medium text-red-300/85 hover:bg-red-500/10 disabled:opacity-50"
                       >
                         Remove account
                       </button>
                     </div>
                   </div>
-                  {kind === "cloud" ? <Mt5CloudAccountActions accountId={a.id} /> : null}
+                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions */}
+                  {kind === "cloud" ? <div onClick={(e) => e.stopPropagation()}><Mt5CloudAccountActions accountId={a.id} /></div> : null}
                 </GlassPanel>
               );
             })}
