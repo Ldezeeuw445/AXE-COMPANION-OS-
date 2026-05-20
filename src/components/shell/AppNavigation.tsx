@@ -107,7 +107,7 @@ export function AppNavigation() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-[var(--tos-bg-base)]/90 px-2 backdrop-blur-md md:hidden">
+      <div className="sticky top-0 z-40 grid min-h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-[var(--tos-bg-base)]/90 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-md md:hidden">
         <div className="flex justify-start">
           <button
             type="button"
