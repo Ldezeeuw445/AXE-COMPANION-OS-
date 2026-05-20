@@ -291,10 +291,8 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const hasContext = symbol || tf;
 
   return (
-    <div
-      className="mt-3 shrink-0 border-t border-white/[0.06] pt-3"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-    >
+    <div className="mt-auto shrink-0 border-t border-white/[0.06] px-1 pb-1 pt-2">
+
       {showQuota && quota?.ok ? (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1 text-[10px] text-tos-dim">
           {quota.skipped ? (

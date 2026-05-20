@@ -107,15 +107,15 @@ export function AppNavigation() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-40 grid min-h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-[var(--tos-bg-base)]/90 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-md md:hidden">
+      <div className="sticky top-0 z-40 grid min-h-[var(--tos-topbar-h)] shrink-0 grid-cols-[2.75rem_1fr_2.75rem] items-center border-b border-white/[0.04] bg-[var(--tos-bg-base)]/85 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
         <div className="flex justify-start">
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-white/70 transition-colors hover:bg-white/[0.06]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white/80 active:bg-white/[0.08]"
             aria-label="Open menu"
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-[18px] w-[18px]" />
           </button>
         </div>
 

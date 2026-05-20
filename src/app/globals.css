@@ -75,6 +75,12 @@
   --tos-inner-top: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-inter);
+
+  /* ─── Shell layout ─── */
+  --tos-topbar-h: 2.75rem;
+  --tos-nav-h: 3rem;
+  --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom));
+  --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
 }
 
 @theme inline {
@@ -227,18 +233,21 @@ body {
   background: rgba(6, 6, 8, 0.92);
 }
 
-/* Bottom nav — frosted glass floating bar with gradient border */
+/* Bottom nav — premium frosted glass dock with depth.
+   Visible on ALL pages (including chart & chat) — MT5-style. */
 .tos-bottom-nav {
-  border-radius: 1rem;
+  border-radius: 0.875rem;
   border: 1px solid transparent;
   background:
-    linear-gradient(rgba(12, 12, 15, 0.85), rgba(12, 12, 15, 0.85)) padding-box,
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03)) border-box;
-  backdrop-filter: blur(32px) saturate(150%);
-  -webkit-backdrop-filter: blur(32px) saturate(150%);
+    linear-gradient(180deg, rgba(16, 16, 20, 0.88), rgba(10, 10, 14, 0.92)) padding-box,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)) border-box;
+  backdrop-filter: blur(40px) saturate(160%);
+  -webkit-backdrop-filter: blur(40px) saturate(160%);
   box-shadow:
-    0 -2px 12px rgba(0, 0, 0, 0.4),
-    0 8px 24px rgba(0, 0, 0, 0.5);
+    0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 -4px 16px rgba(0, 0, 0, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Subtle ambient glow — ultra-faint radial light behind key content.
@@ -264,20 +273,19 @@ body {
 }
 
 /* ── App content bottom padding ─────────────────────────────────────────
-   Default: clears the fixed bottom nav. Full-screen pages override to
-   just safe-area-inset-bottom so they reclaim the nav space. */
+   Default: clears the fixed bottom nav + extra breathing room.
+   Full-screen pages (chat) get tighter clearance — just the nav. */
 .tos-app-content {
-  padding-bottom: max(5rem, calc(4rem + env(safe-area-inset-bottom)));
+  padding-bottom: calc(var(--tos-nav-offset) + 1rem);
 }
 @media (min-width: 768px) {
   .tos-app-content {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
-/* Full-screen pages (chat, chart) don't show the bottom nav —
-   reclaim the nav clearance space at the parent level. */
+/* Full-screen pages (chat) — tight clearance, just enough for the nav. */
 .tos-app-content:has(> .tos-fullscreen-page) {
-  padding-bottom: 0 !important;
+  padding-bottom: var(--tos-nav-offset) !important;
 }
 @media (min-width: 768px) {
   .tos-app-content:has(> .tos-fullscreen-page) {
