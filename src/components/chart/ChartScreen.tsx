@@ -2130,7 +2130,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   return (
     <div
-      className="tos-ambient-glow fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
+      className="tos-ambient-glow fixed inset-x-0 bottom-0 top-[calc(3.25rem+env(safe-area-inset-top))] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
     >
       <LiveStatusReporter
         liveCount={headerSeverity === "fresh" ? 1 : 0}
