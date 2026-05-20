@@ -263,10 +263,70 @@ body {
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.06);
 }
 
+/* ── App content bottom padding ─────────────────────────────────────────
+   Default: clears the fixed bottom nav. Full-screen pages override to
+   just safe-area-inset-bottom so they reclaim the nav space. */
+.tos-app-content {
+  padding-bottom: max(5rem, calc(4rem + env(safe-area-inset-bottom)));
+}
+@media (min-width: 768px) {
+  .tos-app-content {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+/* Full-screen pages (chat, chart) don't show the bottom nav —
+   reclaim the nav clearance space at the parent level. */
+.tos-app-content:has(> .tos-fullscreen-page) {
+  padding-bottom: 0 !important;
+}
+@media (min-width: 768px) {
+  .tos-app-content:has(> .tos-fullscreen-page) {
+    padding-bottom: 0 !important;
+  }
+}
+
 /* iOS safe-area aware mobile shell */
 .tos-mobile-safe {
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ── Touch optimization ─────────────────────────────────────────────────
+   Prevent unwanted mobile behaviors on interactive elements. */
+
+/* Disable tap highlight globally — we handle feedback via CSS transitions */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent long-press context menu + callout on chrome/interactive elements.
+   Message text (tos-bubble-*) is excluded so users CAN select/copy text. */
+button,
+a,
+nav,
+.tos-card-premium,
+.tos-card-premium-subtle,
+.tos-linear-card,
+.tos-watchlist-row,
+.tos-bottom-nav,
+.tos-asset-pill,
+.tos-inset-panel,
+.tos-neu-composer,
+[role="button"] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Double-tap zoom prevention on the entire app shell.
+   Individual elements like inputs/textarea keep default. */
+.tos-app-content {
+  touch-action: pan-x pan-y;
+}
+input,
+textarea,
+select {
+  touch-action: auto;
 }
 
 /* Soft inset fields */

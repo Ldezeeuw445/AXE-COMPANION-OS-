@@ -14,7 +14,7 @@ export function ScreenHeader({
   right,
 }: ScreenHeaderProps) {
   return (
-    <header className="relative flex shrink-0 items-start justify-between gap-3 px-1 pb-4 pt-1">
+    <header className="relative flex shrink-0 items-start justify-between gap-3 px-1 pb-3 pt-1">
       <div className="flex min-w-0 items-start gap-3">
         {left ? <div className="pt-0.5">{left}</div> : null}
         <div className="min-w-0">

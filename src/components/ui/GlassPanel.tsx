@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, MouseEventHandler } from "react";
 
 type GlassPanelProps = {
   children: ReactNode;
@@ -7,6 +7,7 @@ type GlassPanelProps = {
   glow?: "warm" | "cyan" | "none";
   /** Use Linear-style card variant. */
   linear?: boolean;
+  onClick?: MouseEventHandler<HTMLDivElement>;
 };
 
 export function GlassPanel({
@@ -14,10 +15,11 @@ export function GlassPanel({
   className = "",
   glow: _glow = "none",
   linear = false,
+  onClick,
 }: GlassPanelProps) {
   if (linear) {
     return (
-      <div className={`tos-linear-card p-0 ${className}`}>
+      <div className={`tos-linear-card p-0 ${className}`} onClick={onClick}>
         {children}
       </div>
     );
@@ -31,6 +33,7 @@ export function GlassPanel({
         background:
           "linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box, linear-gradient(to bottom, rgba(255,255,255,0.09), rgba(255,255,255,0.02)) border-box",
       }}
+      onClick={onClick}
     >
       {children}
     </div>
