@@ -241,16 +241,15 @@ body {
     0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-/* Subtle ambient glow — ultra-faint radial light behind key content */
-.tos-ambient-glow {
-  position: relative;
-}
-
+/* Subtle ambient glow — ultra-faint radial light behind key content.
+   Does NOT set position: relative to avoid overriding Tailwind positioning
+   utilities (fixed, absolute, sticky) on the same element.
+   Use on containers that already have their own positioning context. */
 .tos-ambient-glow::before {
   content: "";
   position: absolute;
   inset: -20%;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
   background: radial-gradient(
     ellipse 60% 50% at 50% 30%,
