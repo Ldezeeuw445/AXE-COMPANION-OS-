@@ -5,6 +5,7 @@ import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import { AmbientSoundToggles } from "@/components/settings/AmbientSoundToggles";
 import { listLearningMetricsPreview } from "@/services/learningService";
 import { listMemoryPreview } from "@/services/memoryService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
@@ -281,6 +282,14 @@ export default async function SettingsPage() {
             </li>
           ))}
         </ul>
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Appearance &amp; Sound</h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Ambient visuals and interaction sounds. These are cosmetic — they never affect trading.
+        </p>
+        <AmbientSoundToggles />
       </GlassPanel>
 
       <GlassPanel className="mb-4 p-4">

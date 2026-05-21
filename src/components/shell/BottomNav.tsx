@@ -10,11 +10,17 @@ import {
   Repeat2,
   Settings,
 } from "lucide-react";
+import { useAmbient } from "@/components/ambient/AmbientProvider";
 
 /**
  * Primary bottom nav — 6 tabs matching MT5 layout + AXE.
  * Quotes · Chart · Trade · AXE · History · Settings
- * Always visible on mobile. Slim premium frosted glass dock.
+ *
+ * Skeuomorph depth inspired by heartbeat.ua dark-mode banking:
+ * - Raised dock with inner top highlight + deep drop shadow
+ * - Active tab emits a soft colored glow that "illuminates" the bar surface
+ * - Inactive icons are deeply recessed (very dim)
+ * - Plays a tap sound on switch (when sound-fx enabled)
  */
 const TABS = [
   { href: "/watchlist", label: "Quotes",   Icon: BarChart3,       accentVar: "--icon-accounts" },
@@ -27,6 +33,7 @@ const TABS = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { playSound } = useAmbient();
 
   return (
     <nav
@@ -34,6 +41,9 @@ export function BottomNav() {
       aria-label="Primary"
     >
       <div className="tos-bottom-nav mx-auto max-w-lg">
+        {/* Top edge highlight — simulates light catching the raised surface */}
+        <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
         <div className="flex items-center justify-around py-1">
           {TABS.map(({ href, label, Icon, accentVar }) => {
             const active =
@@ -45,18 +55,32 @@ export function BottomNav() {
               <Link
                 key={href}
                 href={href}
+                onClick={() => playSound("tap")}
                 className={`group relative flex flex-col items-center gap-px rounded-md px-2 py-1 text-[8.5px] font-medium tracking-wide transition-all duration-200 ${
                   active
                     ? "text-white"
                     : "text-[var(--tos-text-dim)] hover:text-[var(--tos-text-muted)]"
                 }`}
               >
-                {/* Active glow behind icon */}
+                {/* Active glow — larger, softer halo that illuminates the bar */}
                 {active ? (
-                  <span
-                    className="absolute -top-0.5 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full opacity-20 blur-md"
-                    style={{ background: accentColor }}
-                  />
+                  <>
+                    {/* Outer diffuse glow */}
+                    <span
+                      className="absolute -top-1 left-1/2 h-8 w-8 -translate-x-1/2 rounded-full opacity-[0.12] blur-xl"
+                      style={{ background: accentColor }}
+                    />
+                    {/* Inner concentrated glow */}
+                    <span
+                      className="absolute -top-0.5 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full opacity-25 blur-md"
+                      style={{ background: accentColor }}
+                    />
+                    {/* Dot indicator below icon */}
+                    <span
+                      className="absolute -bottom-0.5 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full"
+                      style={{ background: accentColor, boxShadow: `0 0 6px ${accentColor}` }}
+                    />
+                  </>
                 ) : null}
 
                 <Icon
