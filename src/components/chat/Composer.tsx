@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mic, MicOff, Paperclip, Send, X, ImageIcon, ChevronRight } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
-import { LEGAL_COPY } from "@/lib/legal/constants";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
+import { useAmbient } from "@/components/ambient/AmbientProvider";
 
 declare global {
   interface Window {
@@ -54,6 +54,7 @@ function chartActionHref(action: string, symbol: string, tf: string): string {
 function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { vibrate } = useAmbient();
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -445,13 +446,11 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           className="tos-btn-cyan flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
           disabled={(!value.trim() && !image) || sending}
           aria-label="Send"
-          onClick={() => void submit()}
+          onClick={() => { vibrate("medium"); void submit(); }}
         >
           <Send className="h-4 w-4" />
         </button>
       </div>
-
-      <p className="mt-2 px-1 text-center text-[10px] leading-relaxed text-tos-dim">{LEGAL_COPY.chatDisclaimer}</p>
 
       {error ? (
         <p className="mt-2 text-center text-[10px] text-tos-risk">{error}</p>

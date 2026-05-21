@@ -1,10 +1,7 @@
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { Composer } from "@/components/chat/Composer";
 import { PinnedContext } from "@/components/chat/PinnedContext";
-import { ChatAxeContextButton } from "@/components/chat/ChatAxeContextButton";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
-import { BrandMark } from "@/components/brand/BrandMark";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
@@ -68,12 +65,6 @@ export default async function ChatPage() {
             Live chat persistence is not wired to the database yet.
           </p>
         ) : null}
-        <ScreenHeader
-          left={<BrandMark />}
-          title="AXE"
-          subtitle={operatorName ? `AXE ↔ ${operatorName}` : conversation.title}
-          right={<ChatAxeContextButton conversationTitle={conversation.title ?? null} />}
-        />
         <PinnedContext text={conversation.pinnedContext} />
         <ChatMessageList messages={messages} />
         <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />

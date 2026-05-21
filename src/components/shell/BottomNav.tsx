@@ -33,7 +33,7 @@ const TABS = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { playSound } = useAmbient();
+  const { playSound, vibrate } = useAmbient();
 
   return (
     <nav
@@ -55,7 +55,7 @@ export function BottomNav() {
               <Link
                 key={href}
                 href={href}
-                onClick={() => playSound("tap")}
+                onClick={() => { vibrate("light"); playSound("tap"); }}
                 className={`group relative flex flex-col items-center gap-px rounded-md px-2 py-1 text-[8.5px] font-medium tracking-wide transition-all duration-200 ${
                   active
                     ? "text-white"
