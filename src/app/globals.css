@@ -147,13 +147,18 @@ body {
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.6),
     0 12px 32px -12px rgba(0, 0, 0, 0.70);
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, transform 0.12s ease, filter 0.12s ease;
 }
 
 .tos-card-premium:hover {
   background:
     linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03)) border-box;
+}
+
+.tos-card-premium:active {
+  transform: scale(0.975);
+  filter: brightness(0.92);
 }
 
 .tos-card-premium-subtle {
@@ -163,13 +168,18 @@ body {
     linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.65);
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, transform 0.12s ease, filter 0.12s ease;
 }
 
 .tos-card-premium-subtle:hover {
   background:
     linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)) border-box;
+}
+
+.tos-card-premium-subtle:active {
+  transform: scale(0.975);
+  filter: brightness(0.92);
 }
 
 .tos-asset-pill {
@@ -179,13 +189,18 @@ body {
     linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 6px 20px -10px rgba(0, 0, 0, 0.55);
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, transform 0.12s ease, filter 0.12s ease;
 }
 
 .tos-asset-pill:hover {
   background:
     linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)) border-box;
+}
+
+.tos-asset-pill:active {
+  transform: scale(0.97);
+  filter: brightness(0.92);
 }
 
 /* ─── Linear-style card — signature gradient border ─── */
@@ -199,13 +214,18 @@ body {
   box-shadow:
     0 1px 0 rgba(0, 0, 0, 0.5),
     0 8px 24px -12px rgba(0, 0, 0, 0.5);
-  transition: background 0.25s ease;
+  transition: background 0.25s ease, transform 0.12s ease, filter 0.12s ease;
 }
 
 .tos-linear-card:hover {
   background:
     linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.035)) border-box;
+}
+
+.tos-linear-card:active {
+  transform: scale(0.98);
+  filter: brightness(0.93);
 }
 
 /* Watchlist row — clean, minimal, linear gradient border */
@@ -217,13 +237,18 @@ body {
     linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, transform 0.12s ease, filter 0.12s ease;
 }
 
 .tos-watchlist-row:hover {
   background:
     linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)) border-box;
+}
+
+.tos-watchlist-row:active {
+  transform: scale(0.985);
+  filter: brightness(0.93);
 }
 
 /* Premium indicator sub-pane (volume/RSI/MACD under chart) */
@@ -390,6 +415,7 @@ select {
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     inset 0 -1px 1px rgba(0, 0, 0, 0.2),
     0 6px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 0.1s ease, filter 0.1s ease, box-shadow 0.1s ease;
 }
 
 .tos-btn-cyan:hover:not(:disabled) {
@@ -397,6 +423,7 @@ select {
 }
 
 .tos-btn-cyan:active:not(:disabled) {
+  transform: scale(0.92);
   filter: brightness(0.94);
   box-shadow:
     inset 0 2px 8px rgba(0, 0, 0, 0.35),
@@ -411,6 +438,7 @@ select {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 4px 10px rgba(0, 0, 0, 0.35);
+  transition: transform 0.1s ease, filter 0.1s ease, box-shadow 0.1s ease;
 }
 
 .tos-btn-raised-muted:hover:not(:disabled) {
@@ -418,6 +446,7 @@ select {
 }
 
 .tos-btn-raised-muted:active:not(:disabled) {
+  transform: scale(0.96);
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
   filter: brightness(0.96);
 }
@@ -459,13 +488,18 @@ select {
     linear-gradient(var(--tos-bg-elevated), var(--tos-bg-elevated)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)) border-box;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.40);
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, transform 0.12s ease, filter 0.12s ease;
 }
 
 .tos-inset-panel:hover {
   background:
     linear-gradient(var(--tos-surface-928), var(--tos-surface-928)) padding-box,
     linear-gradient(to bottom, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.025)) border-box;
+}
+
+.tos-inset-panel:active {
+  transform: scale(0.975);
+  filter: brightness(0.92);
 }
 
 /* Gold CTA */
@@ -476,6 +510,7 @@ select {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 6px 16px rgba(0, 0, 0, 0.40);
+  transition: transform 0.1s ease, filter 0.1s ease, box-shadow 0.1s ease;
 }
 
 .tos-btn-raised-gold:hover:not(:disabled) {
@@ -483,6 +518,7 @@ select {
 }
 
 .tos-btn-raised-gold:active:not(:disabled) {
+  transform: scale(0.96);
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
   filter: brightness(0.95);
 }
@@ -721,28 +757,52 @@ select {
   to   { opacity: 1; }
 }
 
+/* Staggered children — slide up + fade for a native page-turn feel.
+   translateY on children is safe because they're cards/sections, not the
+   fixed-position page wrapper itself. */
+@keyframes axe-stagger-slide {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .axe-page-enter {
   animation: axe-page-enter 0.3s ease-out both;
 }
 
-/* Staggered children — each child fades in sequentially */
+/* Staggered children — each child slides up + fades in sequentially */
 .axe-stagger-enter > * {
   opacity: 0;
-  animation: axe-page-enter 0.3s ease-out both;
+  animation: axe-stagger-slide 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.axe-stagger-enter > *:nth-child(1) { animation-delay: 0.04s; }
-.axe-stagger-enter > *:nth-child(2) { animation-delay: 0.08s; }
-.axe-stagger-enter > *:nth-child(3) { animation-delay: 0.12s; }
-.axe-stagger-enter > *:nth-child(4) { animation-delay: 0.16s; }
-.axe-stagger-enter > *:nth-child(5) { animation-delay: 0.20s; }
-.axe-stagger-enter > *:nth-child(6) { animation-delay: 0.24s; }
-.axe-stagger-enter > *:nth-child(7) { animation-delay: 0.28s; }
-.axe-stagger-enter > *:nth-child(8) { animation-delay: 0.32s; }
+.axe-stagger-enter > *:nth-child(1)  { animation-delay: 0.03s; }
+.axe-stagger-enter > *:nth-child(2)  { animation-delay: 0.06s; }
+.axe-stagger-enter > *:nth-child(3)  { animation-delay: 0.09s; }
+.axe-stagger-enter > *:nth-child(4)  { animation-delay: 0.12s; }
+.axe-stagger-enter > *:nth-child(5)  { animation-delay: 0.15s; }
+.axe-stagger-enter > *:nth-child(6)  { animation-delay: 0.18s; }
+.axe-stagger-enter > *:nth-child(7)  { animation-delay: 0.21s; }
+.axe-stagger-enter > *:nth-child(8)  { animation-delay: 0.24s; }
+.axe-stagger-enter > *:nth-child(9)  { animation-delay: 0.27s; }
+.axe-stagger-enter > *:nth-child(10) { animation-delay: 0.30s; }
 
 @media (prefers-reduced-motion: reduce) {
   .axe-page-enter,
   .axe-stagger-enter > * {
     animation: none !important;
     opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Disable press-scale on reduced motion */
+  .tos-card-premium:active,
+  .tos-card-premium-subtle:active,
+  .tos-linear-card:active,
+  .tos-watchlist-row:active,
+  .tos-asset-pill:active,
+  .tos-inset-panel:active,
+  .tos-btn-cyan:active,
+  .tos-btn-raised-muted:active,
+  .tos-btn-raised-gold:active {
+    transform: none !important;
   }
 }

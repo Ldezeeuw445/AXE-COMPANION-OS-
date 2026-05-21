@@ -57,7 +57,7 @@ export function BottomNav() {
                 key={href}
                 href={href}
                 onClick={() => { vibrate("light"); playSound("tap"); }}
-                className={`group relative flex flex-col items-center gap-px rounded-md px-2 py-1 text-[8.5px] font-medium tracking-wide transition-all duration-200 ${
+                className={`group relative flex flex-col items-center gap-px rounded-md px-2 py-1 text-[8.5px] font-medium tracking-wide transition-all duration-150 active:scale-90 ${
                   active
                     ? "text-white"
                     : "text-[var(--tos-text-dim)] hover:text-[var(--tos-text-muted)]"
