@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
 import { AxeWordmarkLive } from "@/components/brand/AxeWordmarkLive";
+import Image from "next/image";
 
 type NavItem = {
   href: string;
@@ -129,15 +130,23 @@ export function AppNavigation() {
           )}
         </div>
 
-        {/* Right — AXE context (page-injected) or brand button */}
+        {/* Right — AXE context (page-injected) or brand mark */}
         <div className="flex items-center">
           {slots.right ?? (
             <Link
               href="/chat"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.10] bg-white/[0.04] transition-colors hover:bg-white/[0.07] active:bg-white/[0.10]"
+              className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl"
               aria-label="AXE Chat"
             >
-              <MessageSquare className="h-[16px] w-[16px] text-white/70" />
+              <Image
+                src="/axe-logo-companion.png"
+                alt=""
+                width={32}
+                height={32}
+                className="h-8 w-8 object-cover"
+                priority
+                unoptimized
+              />
             </Link>
           )}
         </div>
