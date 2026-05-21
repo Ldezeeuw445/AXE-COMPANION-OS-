@@ -52,9 +52,6 @@ export default async function VaultPage() {
         allLiveOverride={null}
       />
       <AxeTopBarInjector title="Vault" subtitle="Notes & media" sections={toolbarSections} center={<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Vault</span>} />
-          </span>
-        }
-      />
       <VaultClient notes={notes} media={media} />
     </div>
   );

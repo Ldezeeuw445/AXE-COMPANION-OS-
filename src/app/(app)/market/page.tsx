@@ -103,9 +103,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         reason={contentReady ? `${liveProviderCount}/3 AXE market sections have data.` : "Market context is warming or not configured."}
         scope="market"
       />
-          </span>
-        }
-      />
 
       <ProviderBadges providers={ctx.providers} macroReady={macroReady} newsReady={newsReady} calendarReady={calendarReady} />
 
