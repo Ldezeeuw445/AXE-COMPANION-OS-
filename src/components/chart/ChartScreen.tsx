@@ -2299,14 +2299,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </>
         ) : null}
 
-        <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/68 px-2 py-1.5 backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
+        <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.06] bg-black/72 px-2.5 py-1.5 backdrop-blur-lg">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {/* Symbol chip */}
+              <div className="relative">
                 <select
                   value={data.symbol}
                   onChange={(e) => goSymbol(e.target.value)}
-                  className="min-w-0 max-w-[7.5rem] appearance-none bg-transparent font-mono text-[13px] font-bold uppercase tracking-tight text-[#1f8cff] outline-none"
+                  className="min-w-0 max-w-[7.5rem] appearance-none rounded-lg border border-white/[0.10] bg-white/[0.05] px-2 py-0.5 pr-5 font-mono text-[12px] font-bold uppercase tracking-tight text-cyan-400 outline-none transition-colors hover:bg-white/[0.08]"
                   aria-label="Symbol"
                 >
                   {data.symbolOptions.map((s) => (
@@ -2315,10 +2316,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     </option>
                   ))}
                 </select>
+                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-cyan-400/60" />
+              </div>
+              {/* Timeframe chip */}
+              <div className="relative">
                 <select
                   value={pendingTfKey ?? data.timeframeKey}
                   onChange={(e) => goTf(e.target.value)}
-                  className="appearance-none bg-transparent font-mono text-[13px] font-semibold uppercase text-tos-text outline-none"
+                  className="appearance-none rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 pr-5 font-mono text-[12px] font-semibold uppercase text-white/80 outline-none transition-colors hover:bg-white/[0.07]"
                   aria-label="Timeframe"
                 >
                   {CHART_TF_OPTIONS.map((t) => (
@@ -2327,15 +2332,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     </option>
                   ))}
                 </select>
+                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
               </div>
-              <p className="mt-0.5 font-mono text-[11px] text-tos-text/82">{lastPriceText}</p>
-              <p className="mt-0.5 truncate font-mono text-[9.5px] uppercase tracking-[0.12em] text-tos-dim">
-                Broker {data.brokerSymbol || "unresolved"}
-              </p>
+              {/* Live price */}
+              <span className="font-mono text-[11px] font-medium text-white/70">{lastPriceText}</span>
             </div>
-            <div className="pt-0.5 text-right text-[9px] font-semibold uppercase tracking-[0.16em] text-tos-dim">
+            {/* Session state */}
+            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.14em] text-tos-dim">
               {sessionCopy()}
-            </div>
+            </span>
           </div>
         </div>
 

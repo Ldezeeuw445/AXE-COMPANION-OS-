@@ -338,6 +338,33 @@ export async function clientGetPositions(
   return Array.isArray(body) ? body : [];
 }
 
+/**
+ * Fetch pending orders (buy-limit, sell-limit, buy-stop, sell-stop, etc.)
+ * from MetaApi client API. These are NOT open positions — they are orders
+ * waiting to be triggered.
+ */
+export async function clientGetOrders(
+  accountId: string,
+  refreshTerminalState: boolean,
+  region?: string | null,
+): Promise<unknown[]> {
+  const base = getMetaApiClientBaseUrl(region);
+  const q = refreshTerminalState ? "?refreshTerminalState=true" : "";
+  const res = await fetchWithTimeout(
+    `${base}/users/current/accounts/${encodeURIComponent(accountId)}/orders${q}`,
+    {
+      method: "GET",
+      headers: authHeadersGet(),
+      timeoutMs: 60_000,
+    },
+  );
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new MetaApiRequestError(classifyHttpStatus(res.status), `Orders ${res.status}`, res.status, body);
+  }
+  return Array.isArray(body) ? body : [];
+}
+
 export async function clientListSymbols(
   accountId: string,
   region?: string | null,

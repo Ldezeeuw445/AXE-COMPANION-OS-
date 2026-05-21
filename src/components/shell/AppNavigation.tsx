@@ -107,33 +107,40 @@ export function AppNavigation() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-40 grid min-h-[var(--tos-topbar-h)] shrink-0 grid-cols-[2.75rem_1fr_2.75rem] items-center border-b border-white/[0.04] bg-[var(--tos-bg-base)]/85 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
-        <div className="flex justify-start">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white/80 active:bg-white/[0.08]"
-            aria-label="Open menu"
-          >
-            <Menu className="h-[18px] w-[18px]" />
-          </button>
-        </div>
+      <div className="sticky top-0 z-40 flex min-h-[var(--tos-topbar-h)] shrink-0 items-center justify-between border-b border-white/[0.05] bg-[var(--tos-bg-base)]/88 px-2.5 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
+        {/* Left — hamburger */}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.10] bg-white/[0.04] text-white/70 transition-colors hover:bg-white/[0.07] active:bg-white/[0.10]"
+          aria-label="Open menu"
+        >
+          <Menu className="h-[16px] w-[16px]" />
+        </button>
 
-        <div className="pointer-events-none relative flex min-w-0 items-center justify-center">
-          {isChart ? null : <AxeWordmarkLive />}
-
+        {/* Center — chart controls OR wordmark */}
+        <div className="pointer-events-none relative flex min-w-0 flex-1 items-center justify-center px-2">
           {slots.center ? (
-            <div
-              className={`pointer-events-auto absolute left-1/2 z-[41] flex -translate-x-1/2 justify-center px-1 ${
-                isChart ? "top-1/2 -translate-y-1/2" : "top-[calc(100%-0.15rem)]"
-              }`}
-            >
-              <div className="max-w-[min(18rem,calc(100vw-7rem))]">{slots.center}</div>
+            <div className="pointer-events-auto flex items-center justify-center">
+              <div className="max-w-[min(20rem,calc(100vw-8rem))]">{slots.center}</div>
             </div>
-          ) : null}
+          ) : (
+            <AxeWordmarkLive />
+          )}
         </div>
 
-        <div className="flex justify-end">{slots.right}</div>
+        {/* Right — AXE context (page-injected) or brand button */}
+        <div className="flex items-center">
+          {slots.right ?? (
+            <Link
+              href="/chat"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.10] bg-white/[0.04] transition-colors hover:bg-white/[0.07] active:bg-white/[0.10]"
+              aria-label="AXE Chat"
+            >
+              <MessageSquare className="h-[16px] w-[16px] text-white/70" />
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Desktop rail */}
