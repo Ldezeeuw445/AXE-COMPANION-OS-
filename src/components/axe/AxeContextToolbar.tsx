@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
-import { BrandMark } from "@/components/brand/BrandMark";
+import Image from "next/image";
 
 export type AxeToolbarItem = {
   id: string;
@@ -79,21 +79,16 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
         aria-expanded={open}
         aria-label={`Open AXE actions for ${title}`}
         onClick={() => setOpen((v) => !v)}
-        className="group relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/12 bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-transparent backdrop-blur transition-all hover:border-white/20 hover:from-white/[0.10] focus:outline-none focus:ring-2 focus:ring-white/20"
-        style={{
-          boxShadow:
-            "0 0 0 1px rgba(255,255,255,0.06), 0 8px 24px -10px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.10)",
-        }}
+        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center"
       >
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-2xl opacity-60 transition-opacity group-hover:opacity-90"
-          style={{
-            background:
-              "radial-gradient(60% 60% at 50% 0%, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 70%)",
-          }}
+        <Image
+          src="/axe-logo-companion.png"
+          alt=""
+          width={32}
+          height={32}
+          className="pointer-events-none h-8 w-8 object-contain"
+          unoptimized
         />
-        <BrandMark size={32} className="!bg-transparent !ring-0" />
         <span className="sr-only">AXE</span>
       </button>
 
