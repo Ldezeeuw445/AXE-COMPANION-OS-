@@ -683,3 +683,60 @@ select {
 .axe-landing-pulse-cyan {
   animation: axe-cyan-pulse 2.6s ease-in-out infinite;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Phase 8 — Orb loader + page entrance animations
+   ═══════════════════════════════════════════════════════════ */
+
+/* Orb loader — breathe, glow, shimmer, orbit */
+@keyframes axe-orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+@keyframes axe-orb-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.15); }
+}
+
+@keyframes axe-orb-shimmer {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
+}
+
+@keyframes axe-orb-orbit {
+  from { transform: rotate(0deg)   translateY(-58%) translateX(-50%); }
+  to   { transform: rotate(360deg) translateY(-58%) translateX(-50%); }
+}
+
+/* Page content entrance */
+@keyframes axe-page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.axe-page-enter {
+  animation: axe-page-enter 0.35s ease-out both;
+}
+
+/* Staggered children — each child fades in sequentially */
+.axe-stagger-enter > * {
+  opacity: 0;
+  animation: axe-page-enter 0.3s ease-out both;
+}
+.axe-stagger-enter > *:nth-child(1) { animation-delay: 0.04s; }
+.axe-stagger-enter > *:nth-child(2) { animation-delay: 0.08s; }
+.axe-stagger-enter > *:nth-child(3) { animation-delay: 0.12s; }
+.axe-stagger-enter > *:nth-child(4) { animation-delay: 0.16s; }
+.axe-stagger-enter > *:nth-child(5) { animation-delay: 0.20s; }
+.axe-stagger-enter > *:nth-child(6) { animation-delay: 0.24s; }
+.axe-stagger-enter > *:nth-child(7) { animation-delay: 0.28s; }
+.axe-stagger-enter > *:nth-child(8) { animation-delay: 0.32s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .axe-page-enter,
+  .axe-stagger-enter > * {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
