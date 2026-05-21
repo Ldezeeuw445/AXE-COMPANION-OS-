@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useTransition } from "react";
-import { ScrollText, Landmark } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { Landmark } from "lucide-react";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
-import { Badge } from "@/components/ui/Badge";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import type {
   BrokerTradeRow,
@@ -160,13 +159,8 @@ export function HistoryScreen({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
-      <ScreenHeader
-        title="Trade history"
-        subtitle="Closed trades from broker_trades — same data as AXE web (RLS)."
-        left={<ScrollText className="h-6 w-6 text-tos-warm/80" aria-hidden />}
-        right={<Badge variant="warm">Supabase</Badge>}
-      />
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-4">
+      <PageTitleInjector title="History" />
 
       {loadError ? (
         <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">

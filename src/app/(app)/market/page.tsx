@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { CalendarDays, Globe2, Newspaper, Sparkles } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { CalendarDays, Newspaper, Sparkles } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
-import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { buildMarketContext } from "@/lib/market/marketContextService";
@@ -39,18 +38,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const contentReady = macroReady || calendarReady || newsReady;
   const liveProviderCount = [macroReady, newsReady, calendarReady].filter(Boolean).length;
 
-  const livePill = (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-        contentReady
-          ? "border-white/[0.10] bg-white/[0.05] text-white/90"
-          : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200/90"
-      }`}
-    >
-      <span className={`h-1.5 w-1.5 rounded-full ${contentReady ? "bg-emerald-300" : "bg-amber-300/80"}`} aria-hidden />
-      {contentReady ? (liveProviderCount === 3 ? "Live" : "Degraded") : "Warming"}
-    </span>
-  );
 
   const toolbarSections: AxeToolbarSection[] = [
     {
@@ -97,7 +84,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-6">
       {/* Mobile top bar: the AXE wordmark in the centre carries the
           single live indicator now, fed by `LiveStatusReporter` below.
           We deliberately no longer inject a "LIVE" pill in the centre
@@ -116,18 +103,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         reason={contentReady ? `${liveProviderCount}/3 AXE market sections have data.` : "Market context is warming or not configured."}
         scope="market"
       />
-      <ScreenHeader
-        title="Market context"
-        subtitle={`Filtered by ${symbol}${ctx.symbols.length > 1 ? ` + ${ctx.symbols.length - 1} watch` : ""} — macro, news and calendar.`}
-        left={<Globe2 className="h-6 w-6 text-white/60" aria-hidden />}
-        right={
-          <span className="hidden md:inline-flex items-center gap-2">
-            {livePill}
-            <AxeContextToolbar
-              title="Market"
-              subtitle={`${symbol} context`}
-              sections={toolbarSections}
-            />
           </span>
         }
       />

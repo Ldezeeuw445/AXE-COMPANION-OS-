@@ -293,9 +293,19 @@ body {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
-/* Full-screen pages (chat) — tight clearance, just enough for the nav. */
+/* Full-screen pages (chat) — tight clearance, just enough for the nav.
+   Also lock body overflow to prevent iOS rubber-band scroll behind the
+   fixed overlay, which lets the sticky top bar slide off-screen. */
 .tos-app-content:has(> .tos-fullscreen-page) {
   padding-bottom: var(--tos-nav-offset) !important;
+}
+html:has(.tos-fullscreen-page) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html:has(.tos-fullscreen-page) body {
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 @media (min-width: 768px) {
   .tos-app-content:has(> .tos-fullscreen-page) {

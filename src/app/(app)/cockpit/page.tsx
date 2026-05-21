@@ -5,8 +5,7 @@ import { CockpitFeedbackImpact } from "@/components/cockpit/CockpitFeedbackImpac
 import { CockpitFooterNote } from "@/components/cockpit/CockpitFooterNote";
 import { CockpitLearningProgress } from "@/components/cockpit/CockpitLearningProgress";
 import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
-import { Badge } from "@/components/ui/Badge";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { getCockpitDashboard } from "@/services/cockpitService";
@@ -17,7 +16,7 @@ export default async function CockpitPage() {
   const cockpitReady = hasSnapshot && dash.calibration.state === "active";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 pb-2">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-5 pb-2">
       <LiveStatusReporter
         liveCount={cockpitReady ? 1 : 0}
         totalCount={1}
@@ -31,11 +30,7 @@ export default async function CockpitPage() {
         }
         scope="cockpit"
       />
-      <ScreenHeader
-        title="Assistant cockpit"
-        subtitle="How your private assistant is evolving with you"
-        right={<Badge variant="warm">Private</Badge>}
-      />
+      <PageTitleInjector title="Cockpit" />
       <div className="-mt-1 border-l-2 border-tos-warm/35 pl-3.5">
         <p className="text-[13px] leading-relaxed text-tos-text/95">
           A quiet read on the same brain you message in Chat — pacing, doubt,

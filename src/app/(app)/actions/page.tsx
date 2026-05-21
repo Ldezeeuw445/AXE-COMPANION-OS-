@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { ExecutionCard } from "@/components/actions/ExecutionCard";
@@ -85,17 +85,14 @@ export default async function ActionsPage() {
   const capabilities = (runtime.hasActiveAccount ? 1 : 0) + (hasNews ? 1 : 0) + (hasMacro ? 1 : 0);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col pb-6">
       <LiveStatusReporter
         liveCount={capabilities}
         totalCount={3}
         label={`Actions · ${executions.length + setups.length} pending`}
         allLiveOverride={capabilities > 0 ? false : null}
       />
-      <ScreenHeader
-        title="Actions"
-        subtitle="One-tap AXE workflows. Execution stays disabled by default."
-      />
+      <PageTitleInjector title="Actions" />
 
       <AxeWorkflowsHub
         hasActiveAccount={runtime.hasActiveAccount}
