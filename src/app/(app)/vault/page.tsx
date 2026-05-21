@@ -1,8 +1,7 @@
 import { VaultClient } from "@/components/vault/VaultClient";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { listVaultMedia, listVaultNotes } from "@/services/vaultService";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
-import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
 export default async function VaultPage() {
@@ -45,20 +44,14 @@ export default async function VaultPage() {
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col">
       <LiveStatusReporter
         liveCount={2}
         totalCount={2}
         label={`Vault · ${notes.length} notes · ${media.length} media`}
         allLiveOverride={true}
       />
-      <AxeTopBarInjector title="Vault" subtitle="Notes & media" sections={toolbarSections} />
-      <ScreenHeader
-        title="Vault"
-        subtitle="Notes, screenshots, voice — yours only"
-        right={
-          <span className="hidden md:inline-flex">
-            <AxeContextToolbar title="Vault" subtitle="Saved knowledge" sections={toolbarSections} />
+      <AxeTopBarInjector title="Vault" subtitle="Notes & media" sections={toolbarSections} center={<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Vault</span>} />
           </span>
         }
       />

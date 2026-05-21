@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { Check, Crown, Mail, Sparkles, Zap } from "lucide-react";
-import { BrandMark } from "@/components/brand/BrandMark";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
-import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
@@ -107,21 +105,14 @@ export default async function SubscriptionsPage() {
   const upgradeReady = Boolean(supabase) && billingConfigured;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col pb-6">
       <LiveStatusReporter
         liveCount={(supabase ? 1 : 0) + (billingConfigured ? 1 : 0)}
         totalCount={2}
         label={`Subscriptions · ${isPro ? "Pro" : "Free"}`}
         allLiveOverride={upgradeReady ? true : false}
       />
-      <AxeTopBarInjector title="Subscriptions" subtitle={isPro ? "You’re on Pro" : "Free → Pro"} sections={toolbarSections} />
-      <ScreenHeader
-        left={<BrandMark />}
-        title="Subscriptions"
-        subtitle="Pick what fits — billing stays simple."
-        right={
-          <span className="hidden md:inline-flex">
-            <AxeContextToolbar title="Subscriptions" subtitle={isPro ? "Pro active" : "Upgrade"} sections={toolbarSections} />
+      <AxeTopBarInjector title="Subscriptions" subtitle={isPro ? "You’re on Pro" : "Free → Pro"} sections={toolbarSections} center={<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Subscriptions</span>} />
           </span>
         }
       />

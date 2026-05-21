@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { BarChart3 } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -17,18 +16,14 @@ export function WatchlistPageScreen({ items }: Props) {
   const merged = [...new Set([...items.map((i) => i.symbol), ...DEFAULTS])];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-2">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-2">
       <LiveStatusReporter
         liveCount={1}
         totalCount={1}
         label={`Watchlist · ${items.length} saved`}
         allLiveOverride={true}
       />
-      <ScreenHeader
-        title="Watchlist"
-        subtitle="Symbols AXE uses for chat context, news/macro filtering and alerts. Prices come from your connected MT5 account when you open Chart."
-        left={<BarChart3 className="h-6 w-6 text-cyan-400/80" aria-hidden />}
-      />
+      <PageTitleInjector title="Quotes" />
 
       <GlassPanel className="p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Your symbols</h2>

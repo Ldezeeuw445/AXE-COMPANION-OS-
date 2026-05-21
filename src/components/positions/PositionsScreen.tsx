@@ -1,10 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Layers } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
-import { Badge } from "@/components/ui/Badge";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
@@ -30,19 +28,14 @@ export function PositionsScreen({ positions, providerStatus, error, hint }: Prop
   const liveCount = providerStatus === "connected" ? 1 : 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-3 pb-2">
       <LiveStatusReporter
         liveCount={liveCount}
         totalCount={totalCount}
         label="MetaApi positions"
         allLiveOverride={allLiveOverride}
       />
-      <ScreenHeader
-        title="Positions"
-        subtitle="Open positions from your connected MetaApi MT5 account — same symbols and prices as the broker terminal."
-        left={<Layers className="h-6 w-6 text-cyan-400/80" aria-hidden />}
-        right={providerStatus ? <Badge variant="long">{providerStatus}</Badge> : null}
-      />
+      <PageTitleInjector title="Trade" />
 
       {error ? (
         <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>

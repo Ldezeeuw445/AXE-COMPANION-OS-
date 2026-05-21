@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { CalendarDays, Globe2, Newspaper, Sparkles } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { CalendarDays, Newspaper, Sparkles } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
-import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { buildMarketContext } from "@/lib/market/marketContextService";
@@ -33,12 +32,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
 
   const ctx = await buildMarketContext({ symbol, watchlist });
 
-  const livePill = (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/95">
-      <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden />
-      {ctx.hasLiveData ? "Live" : "Idle"}
-    </span>
-  );
 
   const toolbarSections: AxeToolbarSection[] = [
     {
@@ -101,7 +94,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const liveProviderCount = ctx.providers.filter((p) => p.state === "live").length;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-6">
       {/* Mobile top bar: the AXE wordmark in the centre carries the
           single live indicator now, fed by `LiveStatusReporter` below.
           We deliberately no longer inject a "LIVE" pill in the centre
@@ -117,18 +110,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         label="Market"
         allLiveOverride={ctx.hasLiveData ? true : false}
       />
-      <ScreenHeader
-        title="Market context"
-        subtitle={`Filtered by ${symbol}${ctx.symbols.length > 1 ? ` + ${ctx.symbols.length - 1} watch` : ""} — macro, news and calendar.`}
-        left={<Globe2 className="h-6 w-6 text-cyan-400/85" aria-hidden />}
-        right={
-          <span className="hidden md:inline-flex items-center gap-2">
-            {livePill}
-            <AxeContextToolbar
-              title="Market"
-              subtitle={`${symbol} context`}
-              sections={toolbarSections}
-            />
           </span>
         }
       />
