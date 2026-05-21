@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import { ScreenHeader } from "@/components/shell/ScreenHeader";
-import { GlassPanel } from "@/components/ui/GlassPanel";
-import { WatchlistManager } from "@/components/settings/WatchlistManager";
+
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
@@ -145,18 +144,7 @@ export function WatchlistPageScreen({ items }: Props) {
         })}
       </div>
 
-      {/* Edit section */}
-      <GlassPanel linear className="p-4">
-        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          Edit watchlist
-        </h2>
-        <p className="mt-1 text-xs text-tos-muted">
-          Add or remove symbols. Quotes resolve through the active MT5 account.
-        </p>
-        <div className="mt-3">
-          <WatchlistManager items={items} />
-        </div>
-      </GlassPanel>
+
     </div>
   );
 }
