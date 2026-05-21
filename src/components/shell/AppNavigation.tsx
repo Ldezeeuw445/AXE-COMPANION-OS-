@@ -135,7 +135,7 @@ export function AppNavigation() {
           {slots.right ?? (
             <Link
               href="/chat"
-              className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl"
+              className="relative inline-flex h-11 w-11 items-center justify-center"
               aria-label="AXE Chat"
             >
               <Image
@@ -143,7 +143,7 @@ export function AppNavigation() {
                 alt=""
                 width={32}
                 height={32}
-                className="h-8 w-8 object-cover"
+                className="pointer-events-none h-8 w-8 rounded-xl object-cover"
                 priority
                 unoptimized
               />
