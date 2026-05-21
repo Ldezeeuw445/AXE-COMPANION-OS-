@@ -709,14 +709,15 @@ select {
   to   { transform: rotate(360deg) translateY(-58%) translateX(-50%); }
 }
 
-/* Page content entrance */
+/* Page content entrance — opacity only (transform creates a containing
+   block that breaks fixed children like chat). */
 @keyframes axe-page-enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .axe-page-enter {
-  animation: axe-page-enter 0.35s ease-out both;
+  animation: axe-page-enter 0.3s ease-out both;
 }
 
 /* Staggered children — each child fades in sequentially */

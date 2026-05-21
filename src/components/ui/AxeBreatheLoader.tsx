@@ -1,101 +1,160 @@
+"use client";
+
 /**
- * AXE Loader — Premium glossy orb with constellation particles.
+ * AXE Loader — Particle-globe orb with glossy core.
  *
- * Inspired by Gleb Kuznetsov's "Trading dark theme loader" (Dribbble).
- * Pure CSS — no Framer Motion or canvas required.
+ * References:
+ *  - Gleb Kuznetsov "Trading dark theme loader" (glossy 3D sphere)
+ *  - Afraz "Interactive Particle Globe" (constellation dots on sphere)
+ *
+ * Uses a tiny <canvas> for the particle sphere + CSS overlays for
+ * the glossy core highlight and glow.  Pure client — no deps.
  */
 
+import { useEffect, useRef } from "react";
+
+/* ─── types ─── */
 type AxeBreatheLoaderProps = {
   label?: string;
-  size?: "sm" | "md";
-  tone?: "default" | "gold";
+  size?: "sm" | "md" | "lg";
   className?: string;
 };
 
+/* ─── helpers ─── */
+const TAU = Math.PI * 2;
+
+function initParticles(count: number) {
+  const pts: { phi: number; theta: number; r: number; speed: number; brightness: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    pts.push({
+      phi: Math.acos(2 * Math.random() - 1),       // latitude
+      theta: TAU * Math.random(),                    // longitude
+      r: 0.92 + Math.random() * 0.16,               // slight depth variation
+      speed: 0.08 + Math.random() * 0.12,            // rotation speed multiplier
+      brightness: 0.25 + Math.random() * 0.75,
+    });
+  }
+  return pts;
+}
+
+/* ─── component ─── */
 export function AxeBreatheLoader({
-  label = "Running...",
+  label,
   size = "md",
-  tone = "default",
   className = "",
 }: AxeBreatheLoaderProps) {
-  const orbSize = size === "sm" ? 32 : 48;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef(0);
+
+  const dim = size === "sm" ? 48 : size === "lg" ? 140 : 96;
+  const particleCount = size === "sm" ? 90 : size === "lg" ? 280 : 160;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = dim * dpr;
+    canvas.height = dim * dpr;
+    ctx.scale(dpr, dpr);
+
+    const cx = dim / 2;
+    const cy = dim / 2;
+    const radius = dim * 0.38;
+    const pts = initParticles(particleCount);
+    let t = 0;
+
+    function draw() {
+      if (!ctx) return;
+      ctx.clearRect(0, 0, dim, dim);
+      t += 0.004;
+
+      // Breathe scale
+      const breathe = 1 + 0.03 * Math.sin(t * 2.5);
+
+      for (const p of pts) {
+        const theta = p.theta + t * p.speed;
+        const sinPhi = Math.sin(p.phi);
+        const x3d = Math.cos(theta) * sinPhi;
+        const y3d = Math.cos(p.phi);
+        const z3d = Math.sin(theta) * sinPhi;
+
+        // Simple perspective
+        const scale = 1 / (1 - z3d * 0.3);
+        const px = cx + x3d * radius * p.r * breathe * scale;
+        const py = cy + y3d * radius * p.r * breathe * scale;
+
+        // Depth-based opacity: front particles brighter
+        const depthAlpha = 0.08 + (z3d + 1) * 0.5 * p.brightness * 0.7;
+        const dotSize = (0.5 + (z3d + 1) * 0.5) * (size === "sm" ? 0.6 : size === "lg" ? 1.1 : 0.8);
+
+        ctx.beginPath();
+        ctx.arc(px, py, dotSize, 0, TAU);
+        ctx.fillStyle = `rgba(200, 220, 255, ${depthAlpha})`;
+        ctx.fill();
+      }
+
+      frameRef.current = requestAnimationFrame(draw);
+    }
+
+    frameRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [dim, particleCount, size]);
+
   const textClass = size === "sm" ? "text-[10px]" : "text-[11px]";
-  const labelColor =
-    tone === "gold" ? "text-amber-100/85" : "text-white/70";
 
   return (
     <span
-      className={`inline-flex items-center gap-3 ${className}`}
+      className={`inline-flex flex-col items-center gap-3 ${className}`}
       role="status"
       aria-live="polite"
     >
-      {/* Orb container */}
+      {/* Globe container */}
       <span
-        className="relative shrink-0"
-        style={{ width: orbSize, height: orbSize }}
+        className="relative"
+        style={{ width: dim, height: dim }}
         aria-hidden
       >
-        {/* Outer glow ring */}
-        <span
-          className="absolute inset-[-4px] rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(0,212,245,0.12) 0%, transparent 70%)",
-            animation: "axe-orb-glow 3s ease-in-out infinite",
-          }}
+        {/* Particle canvas */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0"
+          style={{ width: dim, height: dim }}
         />
 
-        {/* Main glossy sphere */}
+        {/* Glossy core overlay */}
         <span
-          className="absolute inset-0 rounded-full"
+          className="absolute rounded-full"
           style={{
+            top: "28%",
+            left: "28%",
+            width: "44%",
+            height: "44%",
             background:
-              "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 30%, rgba(0,212,245,0.06) 60%, rgba(0,0,0,0.4) 100%)",
+              "radial-gradient(circle at 40% 35%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.03) 40%, rgba(0,212,245,0.04) 70%, transparent 100%)",
             boxShadow:
-              "0 0 24px -4px rgba(0,212,245,0.15), inset 0 -8px 16px -4px rgba(0,0,0,0.5), inset 0 2px 6px rgba(255,255,255,0.12)",
+              "0 0 20px 4px rgba(0,212,245,0.08), inset 0 -4px 10px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.08)",
             animation: "axe-orb-breathe 3s ease-in-out infinite",
           }}
         />
 
-        {/* Iridescent highlight arc */}
+        {/* Outer glow */}
         <span
-          className="absolute rounded-full"
+          className="absolute inset-[-8px] rounded-full pointer-events-none"
           style={{
-            top: "8%",
-            left: "18%",
-            width: "60%",
-            height: "35%",
             background:
-              "linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(148,163,184,0.08) 50%, transparent 100%)",
-            borderRadius: "50%",
-            filter: "blur(1px)",
-            animation: "axe-orb-shimmer 3s ease-in-out infinite",
+              "radial-gradient(circle, rgba(0,212,245,0.06) 0%, transparent 65%)",
+            animation: "axe-orb-glow 3s ease-in-out infinite",
           }}
         />
-
-        {/* Constellation dots orbiting */}
-        {[0, 60, 120, 180, 240, 300].map((deg, i) => (
-          <span
-            key={deg}
-            className="absolute rounded-full bg-white/60"
-            style={{
-              width: i % 2 === 0 ? 2 : 1.5,
-              height: i % 2 === 0 ? 2 : 1.5,
-              top: "50%",
-              left: "50%",
-              transform: `rotate(${deg}deg) translateY(-${orbSize * 0.58}px) translateX(-50%)`,
-              animation: `axe-orb-orbit 8s linear infinite`,
-              animationDelay: `${i * -1.33}s`,
-              opacity: 0.4 + (i % 3) * 0.2,
-            }}
-          />
-        ))}
       </span>
 
       {/* Label */}
       {label && (
         <span
-          className={`${textClass} font-semibold uppercase tracking-[0.16em] ${labelColor}`}
+          className={`${textClass} font-semibold uppercase tracking-[0.16em] text-white/50`}
         >
           {label}
         </span>
@@ -104,15 +163,15 @@ export function AxeBreatheLoader({
   );
 }
 
-/** Full loading panel — centered orb + label. */
+/** Full loading panel — centered orb + label. No border, no block. */
 export function AxeLoadingPanel({
   label = "Restoring live context",
 }: {
   label?: string;
 }) {
   return (
-    <div className="axe-page-enter flex min-h-[180px] items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-8">
-      <AxeBreatheLoader label={label} />
+    <div className="flex min-h-[240px] flex-1 items-center justify-center">
+      <AxeBreatheLoader label={label} size="lg" />
     </div>
   );
 }
