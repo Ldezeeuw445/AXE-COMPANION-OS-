@@ -40,6 +40,8 @@ const CANDLES_RENDER_BUDGET_MS = 12_000;
 const CANDLES_CANDIDATE_BUDGET_MS = 4_500;
 const CANDLES_RETRY_BACKOFF_MS = 650;
 const CANDLE_CACHE_TTL_MS = 5 * 60 * 1000;
+/** Stale-while-revalidate: serve stale data up to 10 min while refreshing. */
+const CANDLE_CACHE_STALE_TTL_MS = 10 * 60 * 1000;
 const SYMBOL_UNIVERSE_TTL_MS = 30 * 60 * 1000;
 
 type CandleCacheEntry = {
@@ -196,6 +198,18 @@ function getCachedCandles(
   const cached = candleCache.get(chartCacheKey(accountId, brokerSymbol, timeframe));
   if (!cached) return null;
   if (Date.now() - cached.savedAt > CANDLE_CACHE_TTL_MS) return null;
+  return cached;
+}
+
+/** Stale-while-revalidate: return entry even if past TTL (up to stale limit). */
+function getStaleCachedCandles(
+  accountId: string,
+  brokerSymbol: string,
+  timeframe: string,
+): CandleCacheEntry | null {
+  const cached = candleCache.get(chartCacheKey(accountId, brokerSymbol, timeframe));
+  if (!cached) return null;
+  if (Date.now() - cached.savedAt > CANDLE_CACHE_STALE_TTL_MS) return null;
   return cached;
 }
 
@@ -527,25 +541,10 @@ export async function loadChartPageData(
     return out;
   }
 
-  let allPositions: OpenPositionRow[] = [];
-  let positionsTimedOut = false;
-  try {
-    const raw = (await withRenderBudget(
-      "positions",
-      clientGetPositions(
-        account.metaApiAccountId,
-        true,
-        account.metaApiRegion ?? null,
-      ),
-      POSITIONS_RENDER_BUDGET_MS,
-    )) as Record<string, unknown>[];
-    allPositions = mapPositions(raw);
-  } catch (e) {
-    positionsTimedOut = isTimeoutError(e);
-    allPositions = [];
-  }
-
-  const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);
+  // ── Phase 11: parallel positions + symbols fetch ─────────────────
+  // Previously sequential — a slow positions call (up to 12s) would
+  // delay symbol discovery. Now they fire in parallel, shaving up to
+  // 8s off cold-start chart loads.
   const accountRaw = rawAccounts.find((r) => r.id === account.brokerAccountId);
   const accountMetadata = (accountRaw?.metadata ?? {}) as Record<string, unknown> & {
     symbol_map?: Record<string, string>;
@@ -553,18 +552,34 @@ export async function loadChartPageData(
   let symbolMap = getMetadataSymbolMap(accountMetadata);
   const knownFromMetadata = Object.values(symbolMap).filter((s): s is string => typeof s === "string" && s.length > 0);
   const knownFromUniverse = getMetadataSymbolUniverse(accountMetadata);
-  let discoveredSymbols: string[] = [];
-  if (knownFromUniverse.length === 0 || !metadataSymbolUniverseFresh(accountMetadata, SYMBOL_UNIVERSE_TTL_MS)) {
-    try {
-      discoveredSymbols = await withRenderBudget(
+  const needSymbolFetch = knownFromUniverse.length === 0 || !metadataSymbolUniverseFresh(accountMetadata, SYMBOL_UNIVERSE_TTL_MS);
+
+  const positionsPromise = withRenderBudget(
+    "positions",
+    clientGetPositions(
+      account.metaApiAccountId,
+      true,
+      account.metaApiRegion ?? null,
+    ),
+    POSITIONS_RENDER_BUDGET_MS,
+  ).then(
+    (raw) => ({ positions: mapPositions(raw as Record<string, unknown>[]), timedOut: false }),
+    (e) => ({ positions: [] as OpenPositionRow[], timedOut: isTimeoutError(e) }),
+  );
+
+  const symbolsPromise = needSymbolFetch
+    ? withRenderBudget(
         "symbols",
         clientListSymbols(account.metaApiAccountId, account.metaApiRegion ?? null),
         SYMBOLS_RENDER_BUDGET_MS,
-      );
-    } catch {
-      discoveredSymbols = [];
-    }
-  }
+      ).catch(() => [] as string[])
+    : Promise.resolve([] as string[]);
+
+  const [posResult, discoveredSymbols] = await Promise.all([positionsPromise, symbolsPromise]);
+  let allPositions = posResult.positions;
+  let positionsTimedOut = posResult.timedOut;
+
+  const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);
   let knownAccountSymbols = Array.from(new Set([
     ...fromPositions,
     ...knownFromMetadata,
@@ -827,8 +842,10 @@ export async function loadChartPageData(
     };
   } catch (e) {
     if (isTimeoutError(e)) {
+      // Phase 11: stale-while-revalidate — serve slightly old data rather than
+      // showing an empty chart when MetaAPI is slow.
       const cached = candleCandidates
-        .map((candidate) => getCachedCandles(account.metaApiAccountId, candidate, metaApiTimeframe))
+        .map((candidate) => getStaleCachedCandles(account.metaApiAccountId, candidate, metaApiTimeframe))
         .find((entry): entry is CandleCacheEntry => Boolean(entry));
       if (cached) {
         return {
