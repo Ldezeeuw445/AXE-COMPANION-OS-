@@ -2,7 +2,6 @@ import Link from "next/link";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AmbientSoundToggles } from "@/components/settings/AmbientSoundToggles";
@@ -18,7 +17,7 @@ import { InstallPrompt } from "@/components/push/InstallPrompt";
 import { LiveTradingPanel } from "@/components/settings/LiveTradingPanel";
 import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
-import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
 async function getPrimaryConversation() {
@@ -95,7 +94,7 @@ export default async function SettingsPage() {
     (accountName ? 1 : 0) +
     1; // liveTrading flag always loaded
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-4">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col pb-4">
       <LiveStatusReporter
         liveCount={liveSections}
         totalCount={6}
@@ -105,15 +104,7 @@ export default async function SettingsPage() {
         title="Settings"
         subtitle="You · AXE · one Supabase"
         sections={toolbarSections}
-      />
-      <ScreenHeader
-        title="Settings"
-        subtitle="You · AXE · one Supabase account"
-        right={
-          <span className="hidden md:inline-flex">
-            <AxeContextToolbar title="Settings" subtitle="Setup & preferences" sections={toolbarSections} />
-          </span>
-        }
+        center={<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Settings</span>}
       />
 
       {/* Account Name */}

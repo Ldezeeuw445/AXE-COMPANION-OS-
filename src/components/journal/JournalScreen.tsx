@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo } from "react";
-import { BookOpen } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
-import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
@@ -119,20 +117,8 @@ export function JournalScreen({
   }, [entries.length, journalTrades.length, loadError]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
-      <ScreenHeader
-        title="Journal"
-        subtitle="Preset tags per trade, analytics, and free-form notes — same ledger as History."
-        left={<BookOpen className="h-6 w-6 text-white/60" aria-hidden />}
-        right={
-          <div className="flex items-center gap-2">
-            <Badge variant="warm">Supabase</Badge>
-            <span className="hidden md:inline-flex">
-              <AxeContextToolbar title="Journal" subtitle={focusSymbol ? `${focusSymbol} review` : "Trades & notes"} sections={toolbarSections} />
-            </span>
-          </div>
-        }
-      />
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-4">
+      <PageTitleInjector title="Journal" />
 
       {loadError ? (
         <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">

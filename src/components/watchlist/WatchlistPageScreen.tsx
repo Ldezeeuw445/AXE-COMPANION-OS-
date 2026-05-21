@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { BarChart3 } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
@@ -57,7 +56,7 @@ export function WatchlistPageScreen({ items }: Props) {
   const merged = [...new Set([...items.map((i) => i.symbol), ...DEFAULTS])];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-2">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-2">
       <LiveStatusReporter
         liveCount={items.filter((i) => i.runtimeState === "live").length}
         totalCount={items.length}
@@ -67,11 +66,7 @@ export function WatchlistPageScreen({ items }: Props) {
         reason={items.length === 0 ? "No watchlist symbols yet." : "Watchlist shows broker support and price availability per symbol."}
         scope="watchlist"
       />
-      <ScreenHeader
-        title="Watchlist"
-        subtitle="Live broker quotes from MT5. Tap any symbol to open its chart."
-        left={<BarChart3 className="h-6 w-6 text-white/60" aria-hidden />}
-      />
+      <PageTitleInjector title="Quotes" />
 
       {/* Quotes grid */}
       <div className="space-y-2">
