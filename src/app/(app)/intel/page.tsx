@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Activity, BarChart3, Eye, Landmark, Target, TrendingUp } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { Activity, BarChart3, Eye, Landmark, TrendingUp } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
-import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot } from "@/lib/intel/intelClient";
@@ -27,29 +26,6 @@ export default async function IntelPage({ searchParams }: PageProps) {
   const intel = await loadIntelSnapshot({ symbol });
   const isStale = intel.cache.state === "stale";
   const hasFreshLiveIntel = intel.hasLiveData && !isStale;
-  const cacheLabel =
-    intel.cache.state === "stale"
-      ? "Cached"
-      : hasFreshLiveIntel
-        ? "Live"
-        : "Warming";
-
-  const livePill = (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
-        hasFreshLiveIntel
-          ? "border-white/[0.10] bg-white/[0.05] text-white/90"
-          : "border-amber-400/25 bg-amber-400/[0.06] text-amber-200/90"
-      }`}
-      title={intel.cache.message}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${hasFreshLiveIntel ? "bg-emerald-300" : "bg-amber-300/80"}`}
-        aria-hidden
-      />
-      {cacheLabel}
-    </span>
-  );
 
   const toolbarSections: AxeToolbarSection[] = [
     {
@@ -97,7 +73,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
   const liveProviderCount = intel.providers.filter((p) => p.state === "live").length;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-6">
       {/* Mobile top bar: AXE wordmark + pulse is the single live
           indicator now — see `AxeWordmarkLive`. We pass our provider
           counts and freshness through `LiveStatusReporter`. The
@@ -114,19 +90,6 @@ export default async function IntelPage({ searchParams }: PageProps) {
         label="Intel"
         allLiveOverride={hasFreshLiveIntel ? true : intel.hasLiveData ? false : null}
       />
-      <ScreenHeader
-        title="Intel"
-        subtitle={`AXE Intel flow filtered by ${symbol}.`}
-        left={<Target className="h-6 w-6 text-white/60" aria-hidden />}
-        right={
-          <div className="flex items-center gap-2">
-            {livePill}
-            <span className="hidden md:inline-flex">
-              <AxeContextToolbar
-                title="Intel"
-                subtitle={`${symbol} AXE Intel flow`}
-                sections={toolbarSections}
-              />
             </span>
           </div>
         }
