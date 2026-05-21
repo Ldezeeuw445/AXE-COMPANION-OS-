@@ -37,14 +37,15 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 px-2 pb-[env(safe-area-inset-bottom)]"
+      className="fixed bottom-0 left-0 right-0 z-50 pb-[env(safe-area-inset-bottom)]"
+      style={{ background: "rgba(8,8,12,0.97)" }}
       aria-label="Primary"
     >
       <div className="tos-bottom-nav mx-auto max-w-lg">
         {/* Top edge highlight — simulates light catching the raised surface */}
         <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-        <div className="flex items-center justify-around py-1">
+        <div className="flex items-center justify-around py-0.5">
           {TABS.map(({ href, label, Icon, accentVar }) => {
             const active =
               pathname === href || pathname.startsWith(`${href}/`);

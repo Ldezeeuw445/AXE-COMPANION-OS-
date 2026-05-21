@@ -1,4 +1,5 @@
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
+import { ChatAmbientOrb } from "@/components/chat/ChatAmbientOrb";
 import { Composer } from "@/components/chat/Composer";
 import { PinnedContext } from "@/components/chat/PinnedContext";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
@@ -67,6 +68,7 @@ export default async function ChatPage() {
         ) : null}
         <PinnedContext text={conversation.pinnedContext} />
         <ChatMessageList messages={messages} />
+        <ChatAmbientOrb />
         <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
       </div>
     </div>
