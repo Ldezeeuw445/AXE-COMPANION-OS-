@@ -2774,7 +2774,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                             ? "MetaAPI timed out"
                           : "Checking broker data"
                     }
-                    tone={data.failure === "metaapi_timeout" || data.failure === "candles_unavailable" ? "gold" : "default"}
                     size="sm"
                   />
                 </div>
