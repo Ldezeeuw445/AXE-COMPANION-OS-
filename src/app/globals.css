@@ -78,7 +78,7 @@
 
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
-  --tos-nav-h: 3rem;
+  --tos-nav-h: 2.75rem;
   --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom));
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
 }
@@ -243,21 +243,16 @@ body {
    - Subtle inner shadow gives a concave "tray" feel */
 .tos-bottom-nav {
   position: relative;
-  border-radius: 1rem;
-  border: 1px solid transparent;
-  background:
-    linear-gradient(180deg, rgba(18, 18, 23, 0.92), rgba(8, 8, 12, 0.96)) padding-box,
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03)) border-box;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
   backdrop-filter: blur(48px) saturate(170%);
   -webkit-backdrop-filter: blur(48px) saturate(170%);
   box-shadow:
-    /* Outer: deep floor shadow anchoring the bar */
-    0 8px 40px rgba(0, 0, 0, 0.70),
-    0 2px 12px rgba(0, 0, 0, 0.50),
-    /* Inner: top-edge highlight (light catching the raised surface) */
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    /* Inner: bottom shadow gives concave tray depth */
-    inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+    /* top shadow for subtle depth separation */
+    0 -2px 16px rgba(0, 0, 0, 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Subtle ambient glow — ultra-faint radial light behind key content.

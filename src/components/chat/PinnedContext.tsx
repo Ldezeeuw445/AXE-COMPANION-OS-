@@ -1,25 +1,29 @@
-import { GlassPanel } from "@/components/ui/GlassPanel";
+"use client";
+
+import Link from "next/link";
+import { Pin, ChevronRight } from "lucide-react";
 
 type PinnedContextProps = {
   text: string;
 };
 
+/**
+ * Slim single-line pinned context strip.
+ * Tapping navigates to Settings where the user can edit their context.
+ */
 export function PinnedContext({ text }: PinnedContextProps) {
+  if (!text) return null;
+
   return (
-    <GlassPanel glow="warm" className="relative mb-4 px-3 py-3">
-      <div className="flex gap-3">
-        <div
-          className="w-1 shrink-0 self-stretch rounded-full bg-gradient-to-b from-tos-gold/90 via-tos-warm/50 to-tos-warm/10"
-          aria-hidden
-        />
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-medium uppercase tracking-widest text-tos-muted">
-            <span className="text-tos-gold/95">Pinned</span>
-            <span className="text-tos-dim"> · context</span>
-          </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-tos-text/90">{text}</p>
-        </div>
-      </div>
-    </GlassPanel>
+    <Link
+      href="/settings"
+      className="group flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-white/[0.02] px-3 py-1.5 transition-colors hover:bg-white/[0.04]"
+    >
+      <Pin className="h-3 w-3 shrink-0 text-tos-gold/70" />
+      <span className="flex-1 truncate text-[11px] text-white/50">
+        {text}
+      </span>
+      <ChevronRight className="h-3 w-3 shrink-0 text-white/20 transition-colors group-hover:text-white/40" />
+    </Link>
   );
 }
