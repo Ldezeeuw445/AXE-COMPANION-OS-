@@ -2906,14 +2906,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </ResizablePane>
       ) : null}
 
-      {/* Execution bar — flush to the device bottom. Safe-area inset is
-          applied INSIDE the bar so the colored gradients reach the very edge
-          of the screen on iPhone (no black gap below the rounded corner). */}
-      <div className="mx-2 mb-2 shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.12] bg-white/[0.055] p-1.5 shadow-[0_-18px_52px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.10)] backdrop-blur-2xl">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.16),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]" />
-          <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
-          <div className="relative z-10">
+      {/* Execution bar — sits flush against the bottom nav. No safe-area
+          padding needed since the chart frame already stops at --tos-nav-offset
+          and the bottom nav handles the safe area. */}
+      <div className="shrink-0 border-t border-white/[0.08] bg-[var(--tos-bg-base)]/90 px-2 py-1.5 backdrop-blur-2xl">
+        <div>
         {/* Row 1: SELL · MKT / Lots / BUY · MKT. These buttons are
             market-only now. Pending orders are sent from the separate
             gold Set ▶ row below, so a Buy/ Sell tap can never
@@ -3062,7 +3059,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </button>
         </div>
         ) : null}
-          </div>
         </div>
       </div>
 
@@ -3070,7 +3066,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {orderTypeMenuOpen ? (
         <div
           className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+          style={{ paddingBottom: "0.75rem" }}
         >
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-tos-dim">Execution type</p>
@@ -3128,7 +3124,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {lotMenuOpen ? (
         <div
           className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+          style={{ paddingBottom: "0.75rem" }}
         >
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-tos-dim">Lots</p>
