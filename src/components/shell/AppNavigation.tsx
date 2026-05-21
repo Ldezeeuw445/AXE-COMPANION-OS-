@@ -143,7 +143,7 @@ export function AppNavigation() {
                 alt=""
                 width={32}
                 height={32}
-                className="pointer-events-none h-8 w-8 rounded-xl object-cover"
+                className="pointer-events-none h-8 w-8 object-contain"
                 priority
                 unoptimized
               />
