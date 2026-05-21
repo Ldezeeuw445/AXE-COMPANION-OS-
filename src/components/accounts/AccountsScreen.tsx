@@ -3,8 +3,8 @@
 import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Landmark, Copy, Check, ChevronDown, LineChart } from "lucide-react";
-import { ScreenHeader } from "@/components/shell/ScreenHeader";
+import { Copy, Check, ChevronDown, LineChart } from "lucide-react";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -320,11 +320,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
         label={`Accounts · ${initialAccounts.length} connected`}
         allLiveOverride={loadError ? false : true}
       />
-      <ScreenHeader
-        title="Accounts"
-        subtitle="Connect your real MT5 account in under a minute — AXE stays read-first; execution stays off by default."
-        left={<Landmark className="h-6 w-6 text-cyan-400/85" aria-hidden />}
-      />
+      <PageTitleInjector title="Accounts" />
 
       {loadError ? (
         <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">{loadError}</p>
