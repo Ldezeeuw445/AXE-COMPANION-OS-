@@ -1,5 +1,19 @@
 "use client";
 
+/**
+ * SkeuNavBar — bottom navigation carved into brushed metal.
+ *
+ * Background: linear-gradient(180deg, #101016, #0a0a0e).
+ * Icon wells: 40×40 px, border-radius 12 px, inset shadows.
+ * Active tab: deeper inset + cyan glow dot (4 px, #00d4f5).
+ *
+ * Tabs: Quotes · Chart · Trade · AXE · History + conditional 6th:
+ *   – AXE view  → Upgrade (gold star ★ #d4af37)
+ *   – Otherwise → Settings (gear)
+ *
+ * Label: 8 px uppercase, letter-spacing 0.06 em.
+ */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -9,99 +23,105 @@ import {
   MessageSquare,
   Repeat2,
   Settings,
+  Star,
 } from "lucide-react";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 
-/**
- * Primary bottom nav — 6 tabs matching MT5 layout + AXE.
- * Quotes · Chart · Trade · AXE · History · Settings
- *
- * Skeuomorph depth inspired by heartbeat.ua dark-mode banking:
- * - Raised dock with inner top highlight + deep drop shadow
- * - Active tab emits a soft colored glow that "illuminates" the bar surface
- * - Inactive icons are deeply recessed (very dim)
- * - Plays a tap sound on switch (when sound-fx enabled)
- */
-const TABS = [
-  { href: "/watchlist", label: "Quotes",   Icon: BarChart3,       accentVar: "--icon-accounts" },
-  { href: "/chart",     label: "Chart",    Icon: LineChart,       accentVar: "--icon-chat" },
-  { href: "/positions", label: "Trade",    Icon: Repeat2,         accentVar: "--icon-long" },
-  { href: "/chat",      label: "AXE",      Icon: MessageSquare,   accentVar: "--icon-chat" },
-  { href: "/history",   label: "History",  Icon: Clock,           accentVar: "--icon-intel" },
-  { href: "/settings",  label: "Settings", Icon: Settings,        accentVar: "--icon-news" },
+const CYAN = "#00d4f5";
+const GOLD = "#d4af37";
+
+const CORE_TABS = [
+  { href: "/watchlist",  label: "Quotes",  Icon: BarChart3 },
+  { href: "/chart",      label: "Chart",   Icon: LineChart },
+  { href: "/positions",  label: "Trade",   Icon: Repeat2 },
+  { href: "/chat",       label: "AXE",     Icon: MessageSquare },
+  { href: "/history",    label: "History",  Icon: Clock },
 ] as const;
 
 export function BottomNav() {
   const pathname = usePathname();
   const { playSound, vibrate } = useAmbient();
+  const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
+
+  // Conditional 6th tab
+  const sixthTab = isAxeView
+    ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
+    : { href: "/settings", label: "Settings", Icon: Settings, accent: undefined };
+
+  const tabs = [...CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined })), sixthTab];
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 pb-[env(safe-area-inset-bottom)]"
-      style={{ background: "rgba(8,8,12,0.97)" }}
+      className="fixed bottom-0 left-0 right-0 z-50"
+      style={{
+        background: "linear-gradient(180deg, #101016, #0a0a0e)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
       aria-label="Primary"
     >
-      <div className="tos-bottom-nav mx-auto max-w-lg">
-        {/* Top edge highlight — simulates light catching the raised surface */}
-        <div className="pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+      {/* Top edge — subtle bevel highlight */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
 
-        <div className="flex items-center justify-around py-0.5">
-          {TABS.map(({ href, label, Icon, accentVar }) => {
-            const active =
-              pathname === href || pathname.startsWith(`${href}/`);
+      <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-1.5">
+        {tabs.map(({ href, label, Icon, accent }) => {
+          const active = pathname === href || pathname.startsWith(`${href}/`);
+          const color = active ? (accent ?? CYAN) : undefined;
 
-            const accentColor = `var(${accentVar})`;
-
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => { vibrate("light"); playSound("tap"); }}
-                className={`group relative flex flex-col items-center gap-px rounded-md px-2 py-1 text-[8.5px] font-medium tracking-wide transition-all duration-150 active:scale-90 ${
+          return (
+            <Link
+              key={href}
+              href={href}
+              onClick={() => {
+                vibrate("light");
+                playSound("tap");
+              }}
+              className="group relative flex flex-col items-center gap-[3px] active:scale-95 transition-transform"
+            >
+              {/* Icon well */}
+              <div
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150"
+                style={
                   active
-                    ? "text-white"
-                    : "text-[var(--tos-text-dim)] hover:text-[var(--tos-text-muted)]"
-                }`}
+                    ? {
+                        boxShadow: `inset 2px 2px 5px rgba(0,0,0,0.7), inset -1px -1px 3px rgba(255,255,255,0.04), 0 0 8px ${color}33`,
+                        background: "rgba(255,255,255,0.03)",
+                      }
+                    : {
+                        boxShadow:
+                          "inset 3px 3px 6px rgba(0,0,0,0.5), inset -2px -2px 4px rgba(255,255,255,0.03)",
+                        background: "rgba(255,255,255,0.015)",
+                      }
+                }
               >
-                {/* Active glow — larger, softer halo that illuminates the bar */}
-                {active ? (
-                  <>
-                    {/* Outer diffuse glow */}
-                    <span
-                      className="absolute -top-1 left-1/2 h-8 w-8 -translate-x-1/2 rounded-full opacity-[0.12] blur-xl"
-                      style={{ background: accentColor }}
-                    />
-                    {/* Inner concentrated glow */}
-                    <span
-                      className="absolute -top-0.5 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full opacity-25 blur-md"
-                      style={{ background: accentColor }}
-                    />
-                    {/* Dot indicator below icon */}
-                    <span
-                      className="absolute -bottom-0.5 left-1/2 h-[3px] w-[3px] -translate-x-1/2 rounded-full"
-                      style={{ background: accentColor, boxShadow: `0 0 6px ${accentColor}` }}
-                    />
-                  </>
-                ) : null}
-
                 <Icon
-                  className="relative h-[17px] w-[17px] transition-colors duration-200"
-                  style={active ? { color: accentColor } : undefined}
+                  className="h-[18px] w-[18px] transition-colors duration-200"
+                  style={{ color: active ? color : "rgba(255,255,255,0.25)" }}
                   strokeWidth={active ? 2 : 1.5}
                   aria-hidden
                 />
-                <span
-                  className={`relative transition-colors duration-200 ${
-                    active ? "" : "opacity-50"
-                  }`}
-                  style={active ? { color: accentColor } : undefined}
-                >
-                  {label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+
+                {/* Active cyan (or gold) glow dot */}
+                {active && (
+                  <span
+                    className="absolute -bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
+                    style={{
+                      background: color,
+                      boxShadow: `0 0 6px ${color}, 0 0 12px ${color}66`,
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Label */}
+              <span
+                className="text-[8px] font-medium tracking-[0.06em] uppercase transition-colors duration-200"
+                style={{ color: active ? color : "rgba(255,255,255,0.22)" }}
+              >
+                {label}
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

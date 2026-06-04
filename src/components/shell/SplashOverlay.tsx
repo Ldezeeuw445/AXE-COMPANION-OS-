@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
 
 const SEEN_KEY = "axe.splashSeen.v1";
-const AUTO_DISMISS_MS = 9400;
 
 export function SplashOverlay() {
   // Default to hidden so the splash never blocks the UI on subsequent
-  // visits (and never flashes a black screen during SSR hydration). We
-  // flip it to true in useEffect only when this device hasn't seen it.
+  // visits (and never flashes during SSR hydration). We flip it to true
+  // in useEffect only when this device hasn't seen it.
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -20,8 +20,6 @@ export function SplashOverlay() {
     }
     if (alreadySeen) return;
     setVisible(true);
-    const timer = setTimeout(() => setVisible(false), AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
   }, []);
 
   if (!visible) return null;
@@ -36,34 +34,15 @@ export function SplashOverlay() {
   }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 999,
-        background: "#000",
-        overflow: "hidden",
-      }}
-    >
-      <iframe
-        src="/splash.html"
-        style={{
-          width: "100%",
-          height: "100%",
-          border: "none",
-          display: "block",
-        }}
-        title="AXE Companion OS"
-        sandbox="allow-scripts"
-      />
+    <>
+      <FullScreenLoader onDone={dismiss} />
       <button
         type="button"
         onClick={dismiss}
         aria-label="Skip intro"
         style={{
-          position: "absolute",
-          // Sits clear of the iPhone notch / Dynamic Island while staying
-          // tappable on devices without one.
+          position: "fixed",
+          zIndex: 1000,
           top: "max(env(safe-area-inset-top, 0px), 14px)",
           right: "max(env(safe-area-inset-right, 0px), 14px)",
           padding: "8px 14px",
@@ -85,6 +64,6 @@ export function SplashOverlay() {
       >
         Skip
       </button>
-    </div>
+    </>
   );
 }
