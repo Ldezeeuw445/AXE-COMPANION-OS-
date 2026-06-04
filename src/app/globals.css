@@ -752,6 +752,11 @@ select {
 
 /* Page content entrance — opacity only (transform creates a containing
    block that breaks fixed children like chat). */
+@keyframes axe-dot-breathe {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.2); }
+}
+
 @keyframes axe-page-enter {
   from { opacity: 0; }
   to   { opacity: 1; }

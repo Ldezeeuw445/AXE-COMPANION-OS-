@@ -76,6 +76,7 @@ export function AxeAuraWave() {
   // Smooth transition: lerp between current visual values and target
   const currentSpeed = useRef(STATE_CFG.idle.speed);
   const currentAmp = useRef(STATE_CFG.idle.amp);
+  const currentSphere = useRef(0);
 
   // Listen for external state changes
   useEffect(() => {
@@ -128,6 +129,11 @@ export function AxeAuraWave() {
 
     const midY = H * 0.5;
 
+    // How "spherical" the wave should look (0 = flat wave, 1 = converge to center)
+    const sphereTarget = stateRef.current === "thinking" ? 0.7 : 0;
+    currentSphere.current += (sphereTarget - currentSphere.current) * 0.04;
+    const sphereT = currentSphere.current;
+
     for (let layer = 0; layer < 5; layer++) {
       const color = COLORS[layer % COLORS.length];
       const [cr, cg, cb] = color;
@@ -141,7 +147,10 @@ export function AxeAuraWave() {
       for (let x = 0; x <= W; x += step) {
         const nx = x / W;
         const noise = fbm(nx * 3 + now * speed + layerOffset, 3);
-        const y = midY + (noise - 0.5) * H * layerAmp;
+        // When thinking: amplitude peaks at center, creating a sphere/ball shape
+        const centerDist = Math.abs(nx - 0.5) * 2; // 0 at center, 1 at edges
+        const sphereEnv = 1 - sphereT * centerDist * centerDist;
+        const y = midY + (noise - 0.5) * H * layerAmp * sphereEnv;
         points.push([x, y]);
       }
 
@@ -173,6 +182,20 @@ export function AxeAuraWave() {
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
+    }
+
+    // ── Center glow when thinking (sphere effect) ──
+    if (sphereT > 0.05) {
+      const glowR = Math.min(W, H) * 0.4;
+      const glow = ctx.createRadialGradient(W / 2, midY, 0, W / 2, midY, glowR);
+      const ga = sphereT * 0.15;
+      glow.addColorStop(0, `rgba(0,212,245,${ga})`);
+      glow.addColorStop(0.5, `rgba(88,83,178,${ga * 0.4})`);
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.beginPath();
+      ctx.arc(W / 2, midY, glowR, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
     }
 
     frameRef.current = requestAnimationFrame(draw);

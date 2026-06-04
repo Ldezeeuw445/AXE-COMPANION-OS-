@@ -7,7 +7,6 @@ import type { ChatMessage } from "@/types/domain";
 import { ActionCard } from "@/components/chat/ActionCard";
 import { TtsButton } from "@/components/chat/TtsButton";
 import { formatTimeHm } from "@/lib/formatDate";
-import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
 import { MarkdownLite, renderMarkdownInline } from "@/components/ui/MarkdownLite";
 
 /**
@@ -39,11 +38,20 @@ function TypingBubble() {
   return (
     <article className="group flex flex-col items-start">
       <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
-        <span className="h-1 w-1 rounded-full bg-tos-warm/70" />
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-warm/80">AXE</p>
+        <span className="h-1 w-1 rounded-full bg-[#00d4f5]/70" />
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
-      <div className="tos-bubble-assistant text-tos-text max-w-[60%] rounded-[1.15rem] px-3.5 py-3 text-sm leading-relaxed">
-        <AxeBreatheLoader label="AXE is reading" size="sm" />
+      <div className="flex items-center gap-[5px] px-3 py-2">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <span
+            key={i}
+            className="inline-block h-[6px] w-[6px] rounded-full bg-[#00d4f5]"
+            style={{
+              animation: "axe-dot-breathe 1.6s ease-in-out infinite",
+              animationDelay: `${i * 0.15}s`,
+            }}
+          />
+        ))}
       </div>
     </article>
   );
