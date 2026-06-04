@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AppNavigation } from "@/components/shell/AppNavigation";
 import { AppTopBarProvider } from "@/components/shell/AppTopBarContext";
 import { ClientBottomNav } from "@/components/shell/ClientBottomNav";
+import { ClientSplashOverlay } from "@/components/shell/ClientSplashOverlay";
 import { AmbientProvider } from "@/components/ambient/AmbientProvider";
 
 /**
@@ -31,6 +32,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
           </div>
         </div>
       </AmbientProvider>
+      <ClientSplashOverlay />
     </AppTopBarProvider>
   );
 }

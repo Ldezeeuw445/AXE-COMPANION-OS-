@@ -348,14 +348,17 @@ export function AxeBreatheLoader({
   );
 }
 
-/** Full loading panel — centered orb + label. Seamless dark background. */
+/** Full loading panel — fullscreen overlay with centered orb + label. */
 export function AxeLoadingPanel({
   label = "Restoring live context",
 }: {
   label?: string;
 }) {
   return (
-    <div className="flex min-h-[280px] flex-1 items-center justify-center">
+    <div
+      className="fixed inset-0 z-[998] flex items-center justify-center"
+      style={{ background: "#060608" }}
+    >
       <AxeBreatheLoader label={label} size="lg" />
     </div>
   );

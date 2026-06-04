@@ -80,7 +80,7 @@ export function PinnedContext({ text }: PinnedContextProps) {
   const hasContext = Boolean(symbol || tf);
 
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-white/[0.015] px-3 py-1.5">
+    <div className="flex shrink-0 items-center gap-2.5 border-b border-white/[0.06] bg-white/[0.015] px-3 py-2">
       {/* Pin icon + label */}
       <Pin className="h-3 w-3 shrink-0 text-white/30" />
       <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-white/30">
@@ -100,14 +100,14 @@ export function PinnedContext({ text }: PinnedContextProps) {
             if (e.key === "Escape") setEditing(false);
           }}
           placeholder="XAUUSD"
-          className="w-20 rounded border border-[rgba(0,212,245,0.25)] bg-[rgba(0,212,245,0.06)] px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-[#00d4f5] focus:border-[rgba(0,212,245,0.5)] focus:outline-none"
+          className="w-20 rounded-lg border border-[rgba(0,212,245,0.25)] bg-[rgba(0,212,245,0.06)] px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-[#00d4f5] focus:border-[rgba(0,212,245,0.5)] focus:outline-none"
           maxLength={10}
         />
       ) : (
         <button
           type="button"
           onClick={openEdit}
-          className={`rounded border px-2 py-0.5 font-mono text-[11px] tracking-wider transition-colors ${
+          className={`rounded-lg border px-2.5 py-1.5 font-mono text-[11px] tracking-wider transition-colors active:scale-95 ${
             symbol
               ? "border-[rgba(0,212,245,0.15)] bg-[rgba(0,212,245,0.06)] text-[#00d4f5] hover:bg-[rgba(0,212,245,0.1)]"
               : "border-white/[0.06] bg-white/[0.03] text-white/25 hover:border-white/10 hover:text-white/40"
@@ -121,7 +121,7 @@ export function PinnedContext({ text }: PinnedContextProps) {
       <button
         type="button"
         onClick={cycleTf}
-        className={`rounded border px-2 py-0.5 font-mono text-[11px] tracking-wider transition-colors ${
+        className={`rounded-lg border px-2.5 py-1.5 font-mono text-[11px] tracking-wider transition-colors active:scale-95 ${
           tf
             ? "border-[rgba(0,212,245,0.15)] bg-[rgba(0,212,245,0.06)] text-[#00d4f5] hover:bg-[rgba(0,212,245,0.1)]"
             : "border-white/[0.06] bg-white/[0.03] text-white/25 hover:border-white/10 hover:text-white/40"
