@@ -14,6 +14,7 @@
  * Label: 8 px uppercase, letter-spacing 0.06 em.
  */
 
+import { useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -41,7 +42,27 @@ const CORE_TABS = [
 export function BottomNav() {
   const pathname = usePathname();
   const { playSound, vibrate } = useAmbient();
+  const navRef = useRef<HTMLElement>(null);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
+
+  // Keep --tos-nav-h in sync with the real rendered height (minus safe-area padding).
+  // This prevents any gap between content and nav on any device/orientation.
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const sync = () => {
+      const total = el.offsetHeight;
+      const safeArea = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      const navH = total - safeArea;
+      if (navH > 0) {
+        document.documentElement.style.setProperty("--tos-nav-h", `${navH}px`);
+      }
+    };
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    sync(); // immediate first sync
+    return () => ro.disconnect();
+  }, []);
 
   // Conditional 6th tab
   const sixthTab = isAxeView
@@ -52,6 +73,7 @@ export function BottomNav() {
 
   return (
     <nav
+      ref={navRef}
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
         background: "linear-gradient(180deg, #101016, #0a0a0e)",
