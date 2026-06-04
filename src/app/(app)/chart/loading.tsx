@@ -1,9 +1,5 @@
-import { AxeLoadingPanel } from "@/components/ui/AxeBreatheLoader";
+import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
 
 export default function ChartLoading() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-      <AxeLoadingPanel label="AXE Chart" />
-    </div>
-  );
+  return <FullScreenLoader autoFade={false} label="AXE Chart" />;
 }

@@ -1,5 +1,5 @@
-import { AxeLoadingPanel } from "@/components/ui/AxeBreatheLoader";
+import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
 
 export default function IntelLoading() {
-  return <AxeLoadingPanel label="AXE Intel" />;
+  return <FullScreenLoader autoFade={false} label="AXE Intel" />;
 }

@@ -88,7 +88,17 @@ interface Orb {
 
 // ── Component ───────────────────────────────────────────────────────────
 
-export function FullScreenLoader({ onDone }: { onDone?: () => void }) {
+export function FullScreenLoader({
+  onDone,
+  autoFade = true,
+  label = "Restoring live context…",
+}: {
+  onDone?: () => void;
+  /** When false the triangle holds indefinitely (page-transition loaders). */
+  autoFade?: boolean;
+  /** Tagline shown at the bottom of the screen. */
+  label?: string;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const startRef = useRef(0);
@@ -102,18 +112,22 @@ export function FullScreenLoader({ onDone }: { onDone?: () => void }) {
 
       // Phase timing
       const formT = Math.min(elapsed / FORM_DURATION, 1);
-      const totalVisible = FORM_DURATION + HOLD_DURATION;
-      const fadingOut = elapsed > totalVisible;
-      const fadeT = fadingOut ? Math.min((elapsed - totalVisible) / FADE_DURATION, 1) : 0;
-      const globalAlpha = 1 - fadeT;
+      let globalAlpha = 1;
 
-      if (fadeT >= 1) {
-        setOpacity(0);
-        onDone?.();
-        return; // stop loop
+      if (autoFade) {
+        const totalVisible = FORM_DURATION + HOLD_DURATION;
+        const fadingOut = elapsed > totalVisible;
+        const fadeT = fadingOut ? Math.min((elapsed - totalVisible) / FADE_DURATION, 1) : 0;
+        globalAlpha = 1 - fadeT;
+
+        if (fadeT >= 1) {
+          setOpacity(0);
+          onDone?.();
+          return; // stop loop
+        }
+
+        setOpacity(globalAlpha);
       }
-
-      setOpacity(globalAlpha);
 
       ctx.clearRect(0, 0, W, H);
       ctx.globalAlpha = globalAlpha;
@@ -190,7 +204,7 @@ export function FullScreenLoader({ onDone }: { onDone?: () => void }) {
       ctx.globalAlpha = 1;
       frameRef.current = requestAnimationFrame(() => draw(particles, orbs, ctx, W, H));
     },
-    [onDone],
+    [onDone, autoFade],
   );
 
   useEffect(() => {
@@ -263,7 +277,7 @@ export function FullScreenLoader({ onDone }: { onDone?: () => void }) {
           textTransform: "uppercase",
         }}
       >
-        Restoring live context…
+        {label}
       </p>
     </div>
   );

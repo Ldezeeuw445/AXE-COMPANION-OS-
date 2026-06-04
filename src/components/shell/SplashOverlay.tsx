@@ -1,35 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
 
-const SEEN_KEY = "axe.splashSeen.v1";
-
 export function SplashOverlay() {
-  // Default to hidden so the splash never blocks the UI on subsequent
-  // visits (and never flashes during SSR hydration). We flip it to true
-  // in useEffect only when this device hasn't seen it.
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    let alreadySeen = false;
-    try {
-      alreadySeen = window.localStorage.getItem(SEEN_KEY) === "1";
-    } catch {
-      // Private mode / Safari quirks — fall through and just show once.
-    }
-    if (alreadySeen) return;
-    setVisible(true);
-  }, []);
+  const [visible, setVisible] = useState(true);
 
   if (!visible) return null;
 
   function dismiss() {
-    try {
-      window.localStorage.setItem(SEEN_KEY, "1");
-    } catch {
-      // ignore — best effort
-    }
     setVisible(false);
   }
 

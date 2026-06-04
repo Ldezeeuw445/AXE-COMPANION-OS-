@@ -1,5 +1,5 @@
-import { AxeLoadingPanel } from "@/components/ui/AxeBreatheLoader";
+import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
 
 export default function MarketLoading() {
-  return <AxeLoadingPanel label="AXE Market" />;
+  return <FullScreenLoader autoFade={false} label="AXE Market" />;
 }
