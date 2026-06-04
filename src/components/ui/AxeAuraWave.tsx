@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * AxeAuraWave — 5-layer animated FBM wave with orbital orb mode.
+ * AxeAuraWave — 5-layer animated FBM wave rendered above the chat composer.
  *
- * Canvas: 100% wide, 48 px tall, overflow-visible so glow bleeds out.
+ * Canvas: 100% wide, ~48 px tall, overflow-visible so thinking peaks
+ * can extend beyond the strip.
  *
  * States (driven by `axe:thinking` / `axe:recording` custom events):
- *   • idle      — calm horizontal waves drifting across
- *   • thinking  — waves converge to center, orbital rings + glowing core appear
+ *   • idle      — calm drift, small amplitude
+ *   • thinking  — waves swell significantly at center, brighter, pulsing
  *   • recording — pulsing amplitude envelope
  *
- * When thinking, the wave strip transforms: waves bunch into the center,
- * 4 rotating elliptical orbits appear (FBM-distorted), and a multi-layer
- * radial glow gives a concentrated energy-orb effect.
+ * When thinking the wave LINES themselves grow taller/louder in the center,
+ * creating a clear visual that AXE is actively speaking. No separate shapes
+ * or orbs — just the waves breathing.
  */
 
 import { useEffect, useRef, useCallback } from "react";
@@ -61,7 +62,7 @@ type WaveState = "idle" | "thinking" | "recording";
 
 const STATE_CFG: Record<WaveState, { speed: number; amp: number; pulse: boolean }> = {
   idle:      { speed: 0.4,  amp: 0.55, pulse: false },
-  thinking:  { speed: 1.2,  amp: 0.85, pulse: false },
+  thinking:  { speed: 1.0,  amp: 0.85, pulse: false },
   recording: { speed: 0.7,  amp: 0.75, pulse: true  },
 };
 
@@ -74,7 +75,7 @@ export function AxeAuraWave() {
 
   const currentSpeed = useRef(STATE_CFG.idle.speed);
   const currentAmp = useRef(STATE_CFG.idle.amp);
-  const currentSphere = useRef(0); // 0 = flat waves, 1 = full orb
+  const currentBoost = useRef(0); // 0 = idle, 1 = full thinking boost
 
   useEffect(() => {
     function onThinking(e: Event) {
@@ -114,44 +115,61 @@ export function AxeAuraWave() {
     currentSpeed.current += (cfg.speed - currentSpeed.current) * 0.04;
     currentAmp.current += (cfg.amp - currentAmp.current) * 0.04;
 
+    // Thinking boost lerp
+    const boostTarget = stateRef.current === "thinking" ? 1 : 0;
+    currentBoost.current += (boostTarget - currentBoost.current) * 0.04;
+    const boost = currentBoost.current;
+
     const now = performance.now() * 0.001;
     const speed = currentSpeed.current;
     const baseAmp = currentAmp.current;
     const pulseEnv = cfg.pulse ? 0.8 + 0.2 * Math.sin(now * 5) : 1;
 
-    // Sphere lerp — target 0.92 when thinking for dramatic convergence
-    const sphereTarget = stateRef.current === "thinking" ? 0.92 : 0;
-    currentSphere.current += (sphereTarget - currentSphere.current) * 0.035;
-    const sT = currentSphere.current;
+    // When thinking, add a breathing oscillation to the amplitude
+    const breathe = boost > 0.01 ? 1 + boost * 0.3 * Math.sin(now * 2.5) : 1;
 
     ctx.clearRect(0, 0, W, H);
 
     const midY = H * 0.5;
-    const cX = W * 0.5;
 
-    // ── 1. Horizontal waves (converge to center when thinking) ──────
+    // ── Subtle ambient glow behind center when thinking ──────────────
+    if (boost > 0.02) {
+      const glowR = W * 0.22;
+      const ga = boost * 0.12;
+      const glow = ctx.createRadialGradient(W / 2, midY, 0, W / 2, midY, glowR);
+      glow.addColorStop(0, `rgba(0,212,245,${ga})`);
+      glow.addColorStop(0.6, `rgba(88,83,178,${ga * 0.4})`);
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(W / 2 - glowR, midY - glowR, glowR * 2, glowR * 2);
+    }
+
+    // ── Wave layers ─────────────────────────────────────────────────────
     for (let layer = 0; layer < 5; layer++) {
       const color = COLORS[layer % COLORS.length];
       const [cr, cg, cb] = color;
       const layerOffset = layer * 2.7;
-      const layerAmp = baseAmp * (0.6 + 0.4 * ((4 - layer) / 4)) * pulseEnv;
+      const layerAmp = baseAmp * (0.6 + 0.4 * ((4 - layer) / 4)) * pulseEnv * breathe;
       const layerAlpha = 0.25 + 0.15 * ((4 - layer) / 4);
 
-      // When converged, the wave alpha fades at edges
       const step = 2;
       const points: [number, number][] = [];
       for (let x = 0; x <= W; x += step) {
         const nx = x / W;
         const noise = fbm(nx * 3 + now * speed + layerOffset, 3);
-        const centerDist = Math.abs(nx - 0.5) * 2;
-        // Stronger exponential convergence — waves nearly vanish at edges
-        const sphereEnv = 1 - sT * Math.pow(centerDist, 1.4);
-        const y = midY + (noise - 0.5) * H * layerAmp * Math.max(sphereEnv, 0);
+
+        // When thinking: amplitude BOOSTS at center (Gaussian bell curve)
+        // Center gets ~2.5x bigger, edges stay similar
+        const centerDist = Math.abs(nx - 0.5) * 2; // 0 at center, 1 at edges
+        const centerBell = Math.exp(-centerDist * centerDist * 3); // Gaussian peak at center
+        const ampMultiplier = 1 + boost * 1.8 * centerBell; // up to 2.8x at center
+
+        const y = midY + (noise - 0.5) * H * layerAmp * ampMultiplier;
         points.push([x, y]);
       }
 
-      // Edge-fade alpha: when in sphere mode, fade the wave alpha at the edges
-      // We draw segments with varying alpha for a nicer falloff
+      // Alpha boost at center when thinking
+      const centerAlphaBoost = 1 + boost * 0.5;
 
       // 1) Glow pass
       ctx.save();
@@ -162,9 +180,8 @@ export function AxeAuraWave() {
       for (let i = 1; i < points.length; i++) {
         ctx.lineTo(points[i][0], points[i][1]);
       }
-      const glowAlpha = layerAlpha * 0.5 * (1 + sT * 0.6); // brighter at center when converged
-      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${glowAlpha})`;
-      ctx.lineWidth = 6 + layer * 0.5;
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${layerAlpha * 0.5 * centerAlphaBoost})`;
+      ctx.lineWidth = 6 + layer * 0.5 + boost * 2;
       ctx.stroke();
       ctx.restore();
 
@@ -176,110 +193,10 @@ export function AxeAuraWave() {
       for (let i = 1; i < points.length; i++) {
         ctx.lineTo(points[i][0], points[i][1]);
       }
-      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${layerAlpha * (1 + sT * 0.4)})`;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${layerAlpha * centerAlphaBoost})`;
+      ctx.lineWidth = 2 + boost * 0.5;
       ctx.stroke();
       ctx.restore();
-    }
-
-    // ── 2. Orbital rings (appear when thinking) ─────────────────────
-    if (sT > 0.05) {
-      const orbAlpha = Math.min(sT / 0.5, 1); // fade in over first 50% of transition
-      const orbCount = 4;
-      const maxR = H * 0.45; // max orbit radius — fits within the strip
-
-      for (let o = 0; o < orbCount; o++) {
-        const color = COLORS[o % COLORS.length];
-        const [cr, cg, cb] = color;
-        const baseAngle = (o / orbCount) * Math.PI + now * (0.6 + o * 0.15);
-        const rX = maxR * (0.55 + 0.45 * ((orbCount - o) / orbCount)); // x radius
-        const rY = maxR * (0.4 + 0.3 * ((orbCount - o) / orbCount)); // y radius (elliptical)
-        const tilt = (o / orbCount) * Math.PI * 0.6; // tilt each orbit differently
-
-        const segments = 80;
-        const points: [number, number][] = [];
-        for (let s = 0; s <= segments; s++) {
-          const angle = (s / segments) * Math.PI * 2;
-          // FBM distortion on radius for organic feel
-          const rNoise = 1 + (fbm(angle * 2 + now * 1.5 + o * 3, 2) - 0.5) * 0.35;
-          const px = Math.cos(angle + baseAngle) * rX * rNoise;
-          // Apply tilt: mix Y with a bit of X rotation
-          const pyRaw = Math.sin(angle + baseAngle) * rY * rNoise;
-          const py = pyRaw * Math.cos(tilt) + px * Math.sin(tilt) * 0.15;
-          points.push([cX + px, midY + py]);
-        }
-
-        // Glow pass
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        ctx.filter = `blur(${4 + o}px)`;
-        ctx.beginPath();
-        ctx.moveTo(points[0][0], points[0][1]);
-        for (let i = 1; i < points.length; i++) {
-          ctx.lineTo(points[i][0], points[i][1]);
-        }
-        ctx.closePath();
-        ctx.strokeStyle = `rgba(${cr},${cg},${cb},${orbAlpha * 0.25})`;
-        ctx.lineWidth = 4;
-        ctx.stroke();
-        ctx.restore();
-
-        // Sharp pass
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        ctx.beginPath();
-        ctx.moveTo(points[0][0], points[0][1]);
-        for (let i = 1; i < points.length; i++) {
-          ctx.lineTo(points[i][0], points[i][1]);
-        }
-        ctx.closePath();
-        ctx.strokeStyle = `rgba(${cr},${cg},${cb},${orbAlpha * 0.4})`;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-
-    // ── 3. Multi-layer center glow (orb core) ──────────────────────
-    if (sT > 0.05) {
-      const ga = sT;
-
-      // Layer 1: Large outer bloom — soft cyan
-      const r1 = Math.min(W * 0.18, H * 1.2);
-      const g1 = ctx.createRadialGradient(cX, midY, 0, cX, midY, r1);
-      g1.addColorStop(0, `rgba(0,212,245,${ga * 0.18})`);
-      g1.addColorStop(0.4, `rgba(88,83,178,${ga * 0.08})`);
-      g1.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g1;
-      ctx.fillRect(cX - r1, midY - r1, r1 * 2, r1 * 2);
-
-      // Layer 2: Medium purple/violet ring
-      const r2 = H * 0.6;
-      const g2 = ctx.createRadialGradient(cX, midY, r2 * 0.15, cX, midY, r2);
-      g2.addColorStop(0, `rgba(146,112,216,${ga * 0.2})`);
-      g2.addColorStop(0.5, `rgba(88,83,178,${ga * 0.1})`);
-      g2.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g2;
-      ctx.fillRect(cX - r2, midY - r2, r2 * 2, r2 * 2);
-
-      // Layer 3: Inner white-hot core — pulsing
-      const corePulse = 1 + 0.2 * Math.sin(now * 4);
-      const r3 = H * 0.2 * corePulse;
-      const g3 = ctx.createRadialGradient(cX, midY, 0, cX, midY, r3);
-      g3.addColorStop(0, `rgba(220,240,255,${ga * 0.6})`);
-      g3.addColorStop(0.3, `rgba(0,212,245,${ga * 0.35})`);
-      g3.addColorStop(0.7, `rgba(88,83,178,${ga * 0.12})`);
-      g3.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g3;
-      ctx.fillRect(cX - r3, midY - r3, r3 * 2, r3 * 2);
-
-      // Layer 4: Tiny bright center point
-      const r4 = H * 0.06 * corePulse;
-      const g4 = ctx.createRadialGradient(cX, midY, 0, cX, midY, r4);
-      g4.addColorStop(0, `rgba(255,255,255,${ga * 0.9})`);
-      g4.addColorStop(1, `rgba(0,212,245,${ga * 0.0})`);
-      ctx.fillStyle = g4;
-      ctx.fillRect(cX - r4, midY - r4, r4 * 2, r4 * 2);
     }
 
     frameRef.current = requestAnimationFrame(draw);
