@@ -1,9 +1,19 @@
 "use client";
 
+/**
+ * AXEComposer — streamlined chat input.
+ *
+ * Pair/TF selection has moved to PinnedContext.
+ * Queries-left count is now in the placeholder: "Ask AXE… · 12 queries left"
+ * Buttons: attach, mic (skeu inset), send (cyan).
+ *
+ * All business logic (submit, speech-to-text, image attach, chart-action
+ * detection, optimistic bubbles, quota refresh) is preserved unchanged.
+ */
+
 import { Suspense, useState, useRef, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Mic, MicOff, Paperclip, Send, X, ImageIcon, ChevronRight } from "lucide-react";
+import { Mic, MicOff, Paperclip, Send, X, ImageIcon } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
@@ -17,19 +27,21 @@ declare global {
   }
 }
 
-const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "D", "W"];
-
 const LS_SYMBOL = "axe_active_symbol";
 const LS_TF = "axe_active_tf";
 
 type ComposerProps = {
   initialQuota?: ChatQuotaPayload | null;
-  /** When false, hide quota strip (e.g. demo / mock thread). */
   showQuota?: boolean;
 };
 
 function ComposerFallback() {
-  return <div className="mt-3 h-24 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03]" aria-hidden />;
+  return (
+    <div
+      className="mt-3 h-16 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03]"
+      aria-hidden
+    />
+  );
 }
 
 function toChartTfKey(raw: string): string {
@@ -65,19 +77,15 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
-  // ── Active pair / timeframe context ────────────────────────────────────────
-  const [symbol, setSymbol] = useState("");
-  const [tf, setTf] = useState("");
-  const [editingSymbol, setEditingSymbol] = useState(false);
-  const [symbolDraft, setSymbolDraft] = useState("");
-  const symbolInputRef = useRef<HTMLInputElement>(null);
-
-  // Hydrate from localStorage after mount (SSR-safe)
-  useEffect(() => {
-    setSymbol(localStorage.getItem(LS_SYMBOL) ?? "");
-    setTf(localStorage.getItem(LS_TF) ?? "");
+  // Read pair/TF from localStorage (PinnedContext writes these)
+  const getSymbol = useCallback(() => {
+    try { return localStorage.getItem(LS_SYMBOL) ?? ""; } catch { return ""; }
+  }, []);
+  const getTf = useCallback(() => {
+    try { return localStorage.getItem(LS_TF) ?? ""; } catch { return ""; }
   }, []);
 
+  // Prefill from ?q= query param
   useEffect(() => {
     const q = searchParams.get("q");
     if (!q) return;
@@ -108,53 +116,21 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     }
   }, [showQuota]);
 
-  // Focus the symbol input when editing mode opens
-  useEffect(() => {
-    if (editingSymbol) {
-      symbolInputRef.current?.focus();
-      symbolInputRef.current?.select();
-    }
-  }, [editingSymbol]);
+  // ── Placeholder with queries-left ─────────────────────────────────────
+  const placeholder = (() => {
+    if (listening) return "Listening…";
+    if (!showQuota || !quota?.ok) return "Ask AXE…";
+    if (quota.skipped || quota.remaining === -1) return "Ask AXE…";
+    return `Ask AXE… · ${quota.remaining} queries left`;
+  })();
 
-  function openSymbolEdit() {
-    setSymbolDraft(symbol);
-    setEditingSymbol(true);
-  }
-
-  function commitSymbol() {
-    const upper = symbolDraft.trim().toUpperCase();
-    setSymbol(upper);
-    if (upper) {
-      localStorage.setItem(LS_SYMBOL, upper);
-    } else {
-      localStorage.removeItem(LS_SYMBOL);
-    }
-    setEditingSymbol(false);
-  }
-
-  function cycleTf() {
-    const idx = tf ? TIMEFRAMES.indexOf(tf) : -1;
-    const next = idx === TIMEFRAMES.length - 1 ? "" : (TIMEFRAMES[idx + 1] ?? "");
-    setTf(next);
-    if (next) {
-      localStorage.setItem(LS_TF, next);
-    } else {
-      localStorage.removeItem(LS_TF);
-    }
-  }
-
-  function clearContext() {
-    setSymbol("");
-    setTf("");
-    setEditingSymbol(false);
-    localStorage.removeItem(LS_SYMBOL);
-    localStorage.removeItem(LS_TF);
-  }
-
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────────────────
   async function submit() {
     const text = value.trim();
     if ((!text && !image) || sending) return;
+
+    const symbol = getSymbol();
+    const tf = getTf();
 
     const chartAction = detectFallbackChartActionIntent(text);
     if (chartAction && !image) {
@@ -166,10 +142,6 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     setSending(true);
     setError(null);
     if (typeof window !== "undefined") {
-      // Optimistic user bubble: the message list paints this immediately so
-      // the user never sends into silence. It gets cleared by the
-      // ChatMessageList when a fresh `messages` prop arrives after the
-      // server round-trip (router.refresh()).
       const optimisticId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       window.dispatchEvent(
         new CustomEvent("axe:user-message", {
@@ -181,9 +153,6 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           },
         }),
       );
-      // Tell the message list AXE is thinking so it can show a typing
-      // bubble immediately — the server round-trip can be 3-8s while AXE
-      // chains tools, and silence there feels broken.
       window.dispatchEvent(
         new CustomEvent("axe:thinking", { detail: { thinking: true } }),
       );
@@ -212,7 +181,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         if (res.status === 429 && resBody.code === "CHAT_QUOTA") {
           setError(
             resBody.error ??
-              "Daily free message limit reached. Upgrade to Pro for unlimited chat."
+              "Daily free message limit reached. Upgrade to Pro for unlimited chat.",
           );
           void loadQuota();
           return;
@@ -235,7 +204,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     }
   }
 
-  // ── Mic ────────────────────────────────────────────────────────────────────
+  // ── Mic ───────────────────────────────────────────────────────────────
   const toggleMic = useCallback(() => {
     const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
     if (!SR) {
@@ -270,7 +239,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     setListening(true);
   }, [listening]);
 
-  // ── File ───────────────────────────────────────────────────────────────────
+  // ── File ──────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -289,105 +258,17 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     e.target.value = "";
   }
 
-  const hasContext = symbol || tf;
-
   return (
     <div className="mt-auto shrink-0 border-t border-white/[0.06] px-1 pb-2 pt-2">
-
-      {showQuota && quota?.ok ? (
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1 text-[10px] text-tos-dim">
-          {quota.skipped ? (
-            <span className="text-tos-dim">Quota checks off (dev)</span>
-          ) : quota.remaining === -1 ? (
-            <span className="text-tos-accent-cyan/90">Pro · unlimited sends</span>
-          ) : (
-            <span>
-              <span className="text-tos-muted">{quota.remaining} sends left</span>
-              <span className="text-tos-dim"> · UTC day · </span>
-              <span className="text-tos-dim">limit {quota.limit ?? 20}</span>
-            </span>
-          )}
-          {quota.remaining !== -1 && !quota.skipped ? (
-            <Link
-              href="/upgrade"
-              className="shrink-0 font-medium text-tos-accent-cyan hover:underline"
-            >
-              Upgrade
-            </Link>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* ── Active context strip ──────────────────────────────────────────── */}
-      <div className="mb-2 flex items-center gap-1.5 px-1">
-        {editingSymbol ? (
-          <input
-            ref={symbolInputRef}
-            type="text"
-            value={symbolDraft}
-            onChange={(e) => setSymbolDraft(e.target.value.toUpperCase())}
-            onBlur={commitSymbol}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); commitSymbol(); }
-              if (e.key === "Escape") { setEditingSymbol(false); }
-            }}
-            placeholder="XAUUSD"
-            className="w-24 rounded border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-tos-text focus:border-tos-accent-cyan/50 focus:outline-none"
-            maxLength={10}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={openSymbolEdit}
-            title="Set active pair"
-            className={`rounded border px-2 py-0.5 font-mono text-[11px] tracking-wider transition-colors ${
-              symbol
-                ? "border-tos-accent-cyan/30 bg-tos-accent-cyan/10 text-tos-accent-cyan hover:bg-tos-accent-cyan/15"
-                : "border-white/[0.06] bg-white/[0.03] text-tos-dim hover:border-white/10 hover:text-tos-muted"
-            }`}
-          >
-            {symbol || "+ pair"}
-          </button>
-        )}
-
-        {/* TF chip — click to cycle */}
-        <button
-          type="button"
-          onClick={cycleTf}
-          title="Cycle timeframe"
-          className={`flex items-center gap-0.5 rounded border px-2 py-0.5 font-mono text-[11px] tracking-wider transition-colors ${
-            tf
-              ? "border-tos-accent-cyan/30 bg-tos-accent-cyan/10 text-tos-accent-cyan hover:bg-tos-accent-cyan/15"
-              : "border-white/[0.06] bg-white/[0.03] text-tos-dim hover:border-white/10 hover:text-tos-muted"
-          }`}
-        >
-          {tf || "tf"}
-          <ChevronRight className="h-2.5 w-2.5 opacity-50" />
-        </button>
-
-        {/* Clear button — only when something is set */}
-        {hasContext && (
-          <button
-            type="button"
-            onClick={clearContext}
-            title="Clear pair/tf context"
-            className="ml-auto text-tos-dim hover:text-tos-muted transition-colors"
-            aria-label="Clear context"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        )}
-      </div>
-
-      {/* ── Image preview ────────────────────────────────────────────────── */}
+      {/* ── Image preview ────────────────────────────────────────────── */}
       {image ? (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">
-          <ImageIcon className="h-4 w-4 shrink-0 text-tos-accent-cyan" />
-          <span className="flex-1 truncate text-xs text-tos-muted">{image.name}</span>
+          <ImageIcon className="h-4 w-4 shrink-0 text-[#00d4f5]" />
+          <span className="flex-1 truncate text-xs text-white/50">{image.name}</span>
           <button
             type="button"
             onClick={() => setImage(null)}
-            className="text-tos-dim hover:text-tos-muted"
+            className="text-white/25 hover:text-white/50"
             aria-label="Remove image"
           >
             <X className="h-3.5 w-3.5" />
@@ -395,16 +276,22 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         </div>
       ) : null}
 
-      {/* ── Composer row ─────────────────────────────────────────────────── */}
-      <div className="tos-neu-composer flex items-end gap-2 rounded-[1.15rem] p-2">
+      {/* ── Composer row ─────────────────────────────────────────────── */}
+      <div className="flex items-end gap-2 rounded-[1.15rem] border border-white/[0.06] bg-white/[0.02] p-2">
+        {/* Attach button */}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="tos-icon-recessed flex h-10 w-10 shrink-0 items-center justify-center text-tos-dim transition-colors hover:text-tos-muted"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/25 transition-colors hover:text-white/45"
+          style={{
+            boxShadow:
+              "inset 2px 2px 4px rgba(0,0,0,0.4), inset -1px -1px 3px rgba(255,255,255,0.03)",
+            background: "rgba(255,255,255,0.015)",
+          }}
           aria-label="Attach chart"
           title="Attach chart image"
         >
-          <Paperclip className="h-5 w-5" />
+          <Paperclip className="h-[18px] w-[18px]" />
         </button>
         <input
           ref={fileInputRef}
@@ -413,17 +300,30 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           className="hidden"
           onChange={handleFileChange}
         />
+
+        {/* Mic button — skeu inset */}
         <button
           type="button"
           onClick={toggleMic}
-          className={`tos-icon-recessed flex h-10 w-10 shrink-0 items-center justify-center transition-colors ${
-            listening ? "text-tos-accent-cyan" : "text-tos-dim hover:text-tos-muted"
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+            listening ? "text-[#00d4f5]" : "text-white/25 hover:text-white/45"
           }`}
+          style={{
+            boxShadow:
+              "inset 2px 2px 4px rgba(0,0,0,0.4), inset -1px -1px 3px rgba(255,255,255,0.03)",
+            background: listening ? "rgba(0,212,245,0.06)" : "rgba(255,255,255,0.015)",
+          }}
           aria-label={listening ? "Stop recording" : "Voice input"}
           title={listening ? "Tap to stop" : "Voice input"}
         >
-          {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+          {listening ? (
+            <MicOff className="h-[18px] w-[18px]" />
+          ) : (
+            <Mic className="h-[18px] w-[18px]" />
+          )}
         </button>
+
+        {/* Text input */}
         <label className="sr-only" htmlFor="composer-input">
           Message
         </label>
@@ -438,25 +338,34 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
               void submit();
             }
           }}
-          placeholder={listening ? "Listening…" : "Private channel…"}
-          className="max-h-28 min-h-10 flex-1 resize-none border-0 bg-transparent py-2.5 text-sm text-tos-text shadow-none placeholder:text-tos-dim focus:outline-none focus:ring-0"
+          placeholder={placeholder}
+          className="max-h-28 min-h-10 flex-1 resize-none border-0 bg-transparent py-2.5 text-sm text-white/90 shadow-none placeholder:text-white/20 focus:outline-none focus:ring-0"
         />
+
+        {/* Send button — cyan */}
         <button
           type="button"
-          className="tos-btn-cyan flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-30"
+          style={{
+            background: "#00d4f5",
+            boxShadow: "0 0 10px rgba(0,212,245,0.3), 0 2px 8px rgba(0,0,0,0.3)",
+          }}
           disabled={(!value.trim() && !image) || sending}
           aria-label="Send"
-          onClick={() => { vibrate("medium"); void submit(); }}
+          onClick={() => {
+            vibrate("medium");
+            void submit();
+          }}
         >
-          <Send className="h-4 w-4" />
+          <Send className="h-4 w-4 text-black" />
         </button>
       </div>
 
       {error ? (
-        <p className="mt-2 text-center text-[10px] text-tos-risk">{error}</p>
+        <p className="mt-2 text-center text-[10px] text-red-400/90">{error}</p>
       ) : null}
       {listening ? (
-        <p className="mt-2 text-center text-[10px] text-tos-accent-cyan animate-pulse">
+        <p className="mt-2 text-center text-[10px] text-[#00d4f5] animate-pulse">
           Listening — speak now
         </p>
       ) : null}
