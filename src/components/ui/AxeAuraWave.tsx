@@ -62,8 +62,8 @@ type WaveState = "idle" | "thinking" | "recording";
 
 const STATE_CFG: Record<WaveState, { speed: number; amp: number; pulse: boolean }> = {
   idle:      { speed: 0.4,  amp: 0.55, pulse: false },
-  thinking:  { speed: 1.0,  amp: 0.85, pulse: false },
-  recording: { speed: 0.7,  amp: 0.75, pulse: true  },
+  thinking:  { speed: 0.6,  amp: 0.80, pulse: false },
+  recording: { speed: 0.5,  amp: 0.75, pulse: true  },
 };
 
 // ── Component ───────────────────────────────────────────────────────────
@@ -125,8 +125,8 @@ export function AxeAuraWave() {
     const baseAmp = currentAmp.current;
     const pulseEnv = cfg.pulse ? 0.8 + 0.2 * Math.sin(now * 5) : 1;
 
-    // When thinking, add a breathing oscillation to the amplitude
-    const breathe = boost > 0.01 ? 1 + boost * 0.3 * Math.sin(now * 2.5) : 1;
+    // When thinking, add a slow breathing oscillation to the amplitude
+    const breathe = boost > 0.01 ? 1 + boost * 0.2 * Math.sin(now * 1.4) : 1;
 
     ctx.clearRect(0, 0, W, H);
 
