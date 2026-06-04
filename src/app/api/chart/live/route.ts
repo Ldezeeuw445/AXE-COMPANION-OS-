@@ -62,6 +62,8 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return new Response("unauthorized", { status: 401 });
+  // Capture after null guard so TS narrows inside closures (tickLoop / candleLoop).
+  const userId = user.id;
 
   if (!getMetaApiToken()) {
     return new Response("provider_not_configured", { status: 503 });
@@ -82,6 +84,7 @@ export async function GET(request: NextRequest) {
   ) {
     return new Response("account_not_connected", { status: 404 });
   }
+  const accountId = account.id as string;
 
   if (!requestedDisplaySymbol) {
     return new Response("symbol_required", { status: 400 });
@@ -125,8 +128,8 @@ export async function GET(request: NextRequest) {
 
       send({
         type: "ready",
-        userId: user.id,
-        accountId: account.id as string,
+        userId,
+        accountId,
         displaySymbol: requestedDisplaySymbol,
         brokerSymbol,
         timeframe: tf,
@@ -182,8 +185,8 @@ export async function GET(request: NextRequest) {
                 : price.bid ?? price.ask;
             send({
               type: "tick",
-              userId: user.id,
-              accountId: account.id as string,
+              userId,
+              accountId,
               displaySymbol: requestedDisplaySymbol,
               brokerSymbol,
               bid: price.bid,
@@ -225,8 +228,8 @@ export async function GET(request: NextRequest) {
             if (last)
               send({
                 type: "candle_update",
-                userId: user.id,
-                accountId: account.id as string,
+                userId,
+                accountId,
                 displaySymbol: requestedDisplaySymbol,
                 brokerSymbol,
                 timeframe: tf,
@@ -273,8 +276,8 @@ export async function GET(request: NextRequest) {
               }));
             send({
               type: "positions_update",
-              userId: user.id,
-              accountId: account.id as string,
+              userId,
+              accountId,
               total: raw.length,
               onSymbol,
               source: "metaapi_mt5",
