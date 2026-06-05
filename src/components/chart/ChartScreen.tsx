@@ -492,6 +492,7 @@ const TradePlanLine = memo(function TradePlanLine({
   const priceTextRef = useRef<SVGTextElement | null>(null);
   const labelTextRef = useRef<SVGTextElement | null>(null);
   const circleRef = useRef<SVGCircleElement | null>(null);
+  const handleDivRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState(0);
   const [baseY, setBaseY] = useState<number | null>(null);
@@ -501,14 +502,14 @@ const TradePlanLine = memo(function TradePlanLine({
   const rafRef = useRef(0);
   const baseYRef = useRef<number | null>(null);
   const dragPriceRef = useRef<number | null>(null);
-  const originRef = useRef<{ pointerY: number; baseY: number; rect: DOMRect } | null>(null);
+  const originRef = useRef<{ pointerY: number; baseY: number } | null>(null);
 
-  // Stable refs for callbacks (window listeners see latest via ref)
+  // Stable refs for callbacks
   const onChangeRef = useRef(onChange);  onChangeRef.current = onChange;
   const onDragStartRef = useRef(onDragStart);  onDragStartRef.current = onDragStart;
   const onDragEndRef = useRef(onDragEnd);  onDragEndRef.current = onDragEnd;
 
-  // Prop refs needed inside drag rAF (closure-safe)
+  // Prop refs for closure safety inside rAF
   const digitsRef = useRef(digits);  digitsRef.current = digits;
   const dashedRef = useRef(dashed);  dashedRef.current = dashed;
   const entryPriceRef = useRef(entryPrice);  entryPriceRef.current = entryPrice;
@@ -549,21 +550,23 @@ const TradePlanLine = memo(function TradePlanLine({
   // Cleanup on unmount
   useEffect(() => () => { isDraggingRef.current = false; cancelAnimationFrame(rafRef.current); }, []);
 
-  // ── Drag handler — pure DOM manipulation, no React in the loop ──
-  const handlePointerDown = useCallback((e: React.PointerEvent<SVGGElement>) => {
+  // ── Drag via HTML div + setPointerCapture ──
+  // SVG pointer-events on iOS are unreliable — the HTML div guarantees touch works
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     isDraggingRef.current = true;
     dragPriceRef.current = null;
 
-    const host = hostRef.current;
-    if (host) {
-      originRef.current = {
-        pointerY: e.clientY,
-        baseY: baseYRef.current ?? 0,
-        rect: host.getBoundingClientRect(), // cached once — no reflow during drag
-      };
-    }
+    // Capture pointer to this HTML element — all subsequent pointer events
+    // go to this element regardless of where the finger moves
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+
+    originRef.current = {
+      pointerY: e.clientY,
+      baseY: baseYRef.current ?? 0,
+    };
 
     // Visual feedback via direct DOM
     if (circleRef.current) {
@@ -575,30 +578,33 @@ const TradePlanLine = memo(function TradePlanLine({
     onDragStartRef.current?.();
 
     const onMove = (ev: PointerEvent) => {
-      ev.preventDefault();
       if (!isDraggingRef.current) return;
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
-        const handle = canvasRef.current;
+        const chartHandle = canvasRef.current;
         const origin = originRef.current;
         const group = groupRef.current;
-        if (!handle || !origin || !group) return;
+        if (!chartHandle || !origin || !group) return;
 
-        // Delta from pointer-down position — no jump, no getBoundingClientRect
         const delta = ev.clientY - origin.pointerY;
         const newY = origin.baseY + delta;
-        const newPrice = handle.coordinateToPrice(newY);
+        const newPrice = chartHandle.coordinateToPrice(newY);
         if (newPrice == null || !Number.isFinite(newPrice)) return;
 
-        // Direct DOM — bypass React entirely
+        // Move SVG group (line + label + circle + price tag)
         group.setAttribute("transform", `translate(0,${newY})`);
         dragPriceRef.current = newPrice;
+
+        // Move HTML handle div to follow
+        if (handleDivRef.current) {
+          handleDivRef.current.style.top = `${newY - 28}px`;
+        }
 
         // Update price text
         if (priceTextRef.current) {
           priceTextRef.current.textContent = newPrice.toFixed(digitsRef.current);
         }
-        // Update label (USD estimate for TP/SL lines)
+        // Update USD label for TP/SL
         if (labelTextRef.current && dashedRef.current) {
           const info = slTpInfo(entryPriceRef.current, newPrice, volumeRef.current, sideRef.current, digitsRef.current);
           labelTextRef.current.textContent = info
@@ -611,9 +617,9 @@ const TradePlanLine = memo(function TradePlanLine({
     const onUp = () => {
       isDraggingRef.current = false;
       cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("lostpointercapture", onUp);
 
       // Reset circle visual
       if (circleRef.current) {
@@ -625,14 +631,14 @@ const TradePlanLine = memo(function TradePlanLine({
       const finalPrice = dragPriceRef.current;
       dragPriceRef.current = null;
       originRef.current = null;
-      // Don't reset transform — let React's next render set the correct baseY
       if (finalPrice != null) onChangeRef.current(finalPrice);
       onDragEndRef.current?.();
     };
 
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
+    // Listen on the captured element itself — more reliable than window
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("lostpointercapture", onUp);
   }, [canvasRef]);
 
   // ── Render ──
@@ -664,9 +670,8 @@ const TradePlanLine = memo(function TradePlanLine({
         className="absolute inset-0"
         style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
       >
-        {/* All elements in a group — transform moves everything during drag */}
+        {/* All visuals in a group — transform moves everything during drag */}
         <g ref={groupRef} transform={`translate(0,${y})`}>
-          {/* MT5-style line — rendered at y=0, group transform positions it */}
           <line
             x1={labelPixels + 4}
             x2={plotRight}
@@ -677,7 +682,6 @@ const TradePlanLine = memo(function TradePlanLine({
             strokeDasharray={dashed ? "6 4" : ""}
           />
 
-          {/* Left label */}
           <text
             ref={labelTextRef}
             x={4}
@@ -690,25 +694,19 @@ const TradePlanLine = memo(function TradePlanLine({
             {labelText}
           </text>
 
-          {/* Circle drag handle — 56×56 hit area */}
-          <g
-            style={{ pointerEvents: "auto", cursor: "ns-resize", touchAction: "none" }}
-            onPointerDown={handlePointerDown}
-          >
-            <rect x={handleCx - 28} y={-28} width={56} height={56} fill="transparent" />
-            <circle
-              ref={circleRef}
-              cx={handleCx}
-              cy={0}
-              r={5}
-              fill={color}
-              fillOpacity={0}
-              stroke={color}
-              strokeWidth={1.5}
-            />
-          </g>
+          {/* Circle — visual only, no pointer events */}
+          <circle
+            ref={circleRef}
+            cx={handleCx}
+            cy={0}
+            r={5}
+            fill={color}
+            fillOpacity={0}
+            stroke={color}
+            strokeWidth={1.5}
+            style={{ pointerEvents: "none" }}
+          />
 
-          {/* Right axis price tag */}
           <g style={{ pointerEvents: "none" }}>
             <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
             <text
@@ -726,6 +724,22 @@ const TradePlanLine = memo(function TradePlanLine({
           </g>
         </g>
       </svg>
+
+      {/* HTML drag handle — sits on top of SVG circle, reliable touch on iOS */}
+      <div
+        ref={handleDivRef}
+        onPointerDown={handlePointerDown}
+        style={{
+          position: "absolute",
+          left: handleCx - 28,
+          top: y - 28,
+          width: 56,
+          height: 56,
+          pointerEvents: "auto",
+          touchAction: "none",
+          cursor: "ns-resize",
+        }}
+      />
     </div>
   );
 }, (prev, next) =>
