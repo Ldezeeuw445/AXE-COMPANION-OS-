@@ -2119,29 +2119,37 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => {
-            setOneClickVisible((v) => !v);
-            if (!oneClickVisible) {
+            if (oneClickVisible) {
+              // Turning off: close bar + reset pending state
+              setOneClickVisible(false);
+              setExecutionMode("market");
+              setPendingOrderVisible(false);
+            } else {
+              // Turning on: show market bar only
+              setOneClickVisible(true);
               setExecutionMode("market");
               setPendingOrderVisible(false);
             }
           }}
-          className={`${baseBtn} ${oneClickVisible ? active : idle}`}
-          style={oneClickVisible ? { borderColor: "rgba(0,212,245,0.35)", boxShadow: "0 0 10px rgba(0,212,245,0.18)" } : undefined}
+          className={`${baseBtn} ${oneClickVisible && executionMode === "market" ? active : idle}`}
+          style={oneClickVisible && executionMode === "market" ? { borderColor: "rgba(0,212,245,0.35)", boxShadow: "0 0 10px rgba(0,212,245,0.18)" } : undefined}
           aria-label="1-Click Trade"
           title="1-Click Trade"
-          aria-pressed={oneClickVisible}
+          aria-pressed={oneClickVisible && executionMode === "market"}
         >
-          <Zap className="h-3.5 w-3.5" style={oneClickVisible ? { color: "#00d4f5" } : undefined} />
+          <Zap className="h-3.5 w-3.5" style={oneClickVisible && executionMode === "market" ? { color: "#00d4f5" } : undefined} />
         </button>
         <button
           type="button"
           onClick={() => {
             if (executionMode === "pending" && pendingOrderVisible) {
+              // Already in pending mode — turn it off, go back to market bar
               setExecutionMode("market");
               setPendingOrderVisible(false);
             } else {
-              showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
+              // Enter pending mode (also opens bar if closed)
               setOneClickVisible(true);
+              showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
             }
           }}
           className={`${baseBtn} ${executionMode === "pending" && pendingOrderVisible ? active : idle}`}
