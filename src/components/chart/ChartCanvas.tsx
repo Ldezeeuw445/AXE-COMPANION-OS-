@@ -284,14 +284,28 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     }
     positionLinesRef.current = [];
 
-    overlays.forEach((o, idx) => {
-      const sideTitle = o.side === "buy" ? "Long" : o.side === "sell" ? "Short" : o.side;
+    overlays.forEach((o) => {
+      // MT5-style: "BUY 1, +391.00 USD" — side, volume, live P&L
+      const sideLabel = o.side?.toUpperCase() ?? "TRADE";
+      const profitStr =
+        o.profit != null
+          ? `, ${o.profit >= 0 ? "+" : ""}${o.profit.toFixed(2)} USD`
+          : "";
+      const entryTitle = `${sideLabel} ${o.volume}${profitStr}`;
+      // Color shifts green/red based on live P&L (MT5 behavior)
+      const entryColor =
+        o.profit != null && o.profit >= 0
+          ? CHART_THEME.positiveText
+          : o.profit != null && o.profit < 0
+            ? CHART_THEME.negativeText
+            : CHART_THEME.entryLine;
+
       if (o.entryPrice != null && o.entryPrice > 0) {
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.entryPrice,
-            title: `${sideTitle} ${o.volume}${overlays.length > 1 ? ` · #${idx + 1}` : ""}`,
-            color: CHART_THEME.entryLine,
+            title: entryTitle,
+            color: entryColor,
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
           }),
