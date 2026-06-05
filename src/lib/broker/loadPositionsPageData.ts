@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getActiveMetaApiCloudAccount } from "@/lib/mt5/activeCloudAccount";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
-import { clientGetPositions, clientGetOrders } from "@/lib/mt5/metaApiClient";
+import { clientGetPositions, clientGetOrders, clientGetAccountInformation } from "@/lib/mt5/metaApiClient";
 
 export type OpenPositionRow = {
   id: string;
@@ -28,9 +28,19 @@ export type PendingOrderRow = {
   openTime: string | null;
 };
 
+export type AccountSummary = {
+  balance: number | null;
+  equity: number | null;
+  margin: number | null;
+  freeMargin: number | null;
+  marginLevel: number | null;
+  currency: string | null;
+};
+
 export type PositionsPageData = {
   positions: OpenPositionRow[];
   pendingOrders: PendingOrderRow[];
+  accountSummary: AccountSummary | null;
   providerStatus: string | null;
   error: string | null;
   hint: string | null;
@@ -57,19 +67,20 @@ function mapOrderType(t: string | undefined): string {
 export async function loadPositionsPageData(): Promise<PositionsPageData> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
-    return { positions: [], pendingOrders: [], providerStatus: null, error: "Supabase is not configured.", hint: null };
+    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Supabase is not configured.", hint: null };
   }
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { positions: [], pendingOrders: [], providerStatus: null, error: "Not signed in.", hint: null };
+    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Not signed in.", hint: null };
   }
 
   if (!getMetaApiToken()) {
     return {
       positions: [],
       pendingOrders: [],
+      accountSummary: null,
       providerStatus: "provider_not_configured",
       error: null,
       hint: "AXE MT5 Cloud is not configured on the server yet, so live positions cannot load.",
@@ -81,6 +92,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
     return {
       positions: [],
       pendingOrders: [],
+      accountSummary: null,
       providerStatus: null,
       error: null,
       hint: "Set an active AXE MT5 Cloud account on Accounts, then Sync. Positions load from your MT5 terminal through AXE.",
@@ -88,11 +100,21 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
   }
 
   try {
-    // Fetch positions and pending orders in parallel
-    const [rawPositions, rawOrders] = await Promise.all([
+    // Fetch account info, positions, and pending orders in parallel
+    const [rawAccountInfo, rawPositions, rawOrders] = await Promise.all([
+      clientGetAccountInformation(cloud.metaApiAccountId, false, cloud.metaApiRegion).catch(() => ({}) as Record<string, unknown>),
       clientGetPositions(cloud.metaApiAccountId, true, cloud.metaApiRegion) as Promise<Record<string, unknown>[]>,
       clientGetOrders(cloud.metaApiAccountId, false, cloud.metaApiRegion).catch(() => [] as Record<string, unknown>[]) as Promise<Record<string, unknown>[]>,
     ]);
+
+    const accountSummary: AccountSummary = {
+      balance: rawAccountInfo.balance != null ? Number(rawAccountInfo.balance) : null,
+      equity: rawAccountInfo.equity != null ? Number(rawAccountInfo.equity) : null,
+      margin: rawAccountInfo.margin != null ? Number(rawAccountInfo.margin) : null,
+      freeMargin: rawAccountInfo.freeMargin != null ? Number(rawAccountInfo.freeMargin) : null,
+      marginLevel: rawAccountInfo.marginLevel != null ? Number(rawAccountInfo.marginLevel) : null,
+      currency: typeof rawAccountInfo.currency === "string" ? rawAccountInfo.currency : null,
+    };
 
     const positions: OpenPositionRow[] = rawPositions.map((p, i) => {
       const id = String(p.id ?? p.positionId ?? i);
@@ -133,6 +155,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
     return {
       positions,
       pendingOrders,
+      accountSummary,
       providerStatus: "connected",
       error: null,
       hint: isEmpty ? "No open positions or pending orders on this account right now." : null,
@@ -141,6 +164,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
     return {
       positions: [],
       pendingOrders: [],
+      accountSummary: null,
       providerStatus: "failed",
       error: null,
       hint: "Could not load positions through AXE MT5 Cloud. Try Test/Sync on Accounts, or check server logs.",
