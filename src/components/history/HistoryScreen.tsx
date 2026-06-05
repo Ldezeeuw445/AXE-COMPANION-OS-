@@ -1,33 +1,33 @@
 "use client";
 
-import Link from "next/link";
+/**
+ * HistoryScreen — MT5-native History tab.
+ *
+ * Three sub-tabs: Positions · Orders · Deals
+ * Compact trade rows:  SYMBOL  side vol         PnL
+ *                      entry → exit        timestamp
+ * Summary footer: Profit / Commission / Balance
+ * Filter panel hidden behind a small filter icon.
+ */
+
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useTransition } from "react";
-import { Landmark } from "lucide-react";
+import { useState, useMemo, useTransition } from "react";
+import { Filter, X } from "lucide-react";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
-import { GlassPanel } from "@/components/ui/GlassPanel";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
+import { useEffect } from "react";
 import type {
   BrokerTradeRow,
   HistoryPageData,
   HistorySummary,
 } from "@/lib/broker/loadHistoryPageData";
 
+/* ── Props ─────────────────────────────────────────────────────────── */
 type Props = Omit<HistoryPageData, "error"> & { loadError: string | null };
+type HistoryTab = "positions" | "orders" | "deals";
 
-function formatDateTime(iso: string | null) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function formatNum(n: number | null, digits = 2) {
+/* ── Helpers ───────────────────────────────────────────────────────── */
+function fmtPrice(n: number | null, digits = 2) {
   if (n === null || Number.isNaN(n)) return "—";
   return n.toLocaleString(undefined, {
     minimumFractionDigits: digits,
@@ -35,67 +35,37 @@ function formatNum(n: number | null, digits = 2) {
   });
 }
 
-function formatPnl(n: number) {
+function fmtPnl(n: number) {
   const s = n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  if (n > 0) return `+${s}`;
-  return s;
+  return n > 0 ? `+${s}` : s;
 }
 
-function SummaryStrip({ s }: { s: HistorySummary }) {
-  const pct = (s.winRate * 100).toLocaleString(undefined, {
-    maximumFractionDigits: 1,
-  });
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      <GlassPanel className="!p-3">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-tos-muted">
-          Trades
-        </p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-tos-text">
-          {s.totalTrades}
-        </p>
-      </GlassPanel>
-      <GlassPanel className="!p-3">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-tos-muted">
-          Total PnL
-        </p>
-        <p
-          className={`mt-1 text-lg font-semibold tabular-nums ${
-            s.totalPnl >= 0 ? "text-emerald-400" : "text-rose-400"
-          }`}
-        >
-          {formatPnl(s.totalPnl)}
-        </p>
-      </GlassPanel>
-      <GlassPanel className="!p-3">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-tos-muted">
-          Win rate
-        </p>
-        <p className="mt-1 text-lg font-semibold tabular-nums text-tos-text">
-          {s.wins + s.losses > 0 ? `${pct}%` : "—"}
-        </p>
-      </GlassPanel>
-      <GlassPanel className="!p-3">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-tos-muted">
-          Avg win / loss
-        </p>
-        <p className="mt-1 text-xs font-medium tabular-nums leading-snug text-tos-text">
-          <span className="text-emerald-400/90">
-            {s.avgWin != null ? formatPnl(s.avgWin) : "—"}
-          </span>
-          <span className="text-tos-muted"> / </span>
-          <span className="text-rose-400/90">
-            {s.avgLoss != null ? formatNum(s.avgLoss, 2) : "—"}
-          </span>
-        </p>
-      </GlassPanel>
-    </div>
-  );
+function fmtTime(iso: string | null) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    const hh = d.getHours().toString().padStart(2, "0");
+    const mm = d.getMinutes().toString().padStart(2, "0");
+    const mon = d.toLocaleString(undefined, { month: "short" });
+    const day = d.getDate();
+    return `${hh}:${mm}  ${day} ${mon}`;
+  } catch {
+    return "";
+  }
 }
 
+/** Guess decimal digits from the price magnitude. */
+function priceDigits(p: number | null): number {
+  if (!p) return 2;
+  if (p > 100) return 2;   // Gold, indices
+  if (p > 10) return 3;
+  return 5;                 // Forex
+}
+
+/* ── Main Component ────────────────────────────────────────────────── */
 export function HistoryScreen({
   accounts,
   activeAccountId,
@@ -107,20 +77,12 @@ export function HistoryScreen({
 }: Props) {
   const router = useRouter();
   const [navPending, startNav] = useTransition();
+  const [tab, setTab] = useState<HistoryTab>("positions");
+  const [showFilter, setShowFilter] = useState(false);
 
-  const selectedLabel = useMemo(() => {
-    if (!selectedAccountId) return null;
-    const a = accounts.find((x) => x.id === selectedAccountId);
-    return a?.label ?? selectedAccountId.slice(0, 8);
-  }, [accounts, selectedAccountId]);
+  const hasActiveFilters = !!(filters.symbol || filters.from || filters.to);
 
-  const isActiveChip =
-    selectedAccountId &&
-    activeAccountId &&
-    selectedAccountId === activeAccountId;
-
-  // History is an authenticated Supabase snapshot, not a live stream.
-  // Keep the top pulse honest: loaded data is available, but not LIVE.
+  // Live-status reporter
   useEffect(() => {
     setLiveStatus({
       allLive: loadError ? false : null,
@@ -132,14 +94,15 @@ export function HistoryScreen({
       reason: loadError
         ? "History ledger could not load."
         : trades.length > 0
-          ? "Broker trade history loaded from Supabase."
-          : "No broker trade history sample yet.",
+          ? "Broker trade history loaded."
+          : "No broker trade history yet.",
       scope: "history",
     });
     return () => clearLiveStatusScope("history");
   }, [loadError, trades.length]);
 
-  function buildHistoryUrl(next: {
+  /* ── URL builder for filter navigation ─────────────────────────── */
+  function buildUrl(next: {
     account?: string | null;
     symbol?: string;
     from?: string;
@@ -158,244 +121,321 @@ export function HistoryScreen({
     return qs ? `/history?${qs}` : "/history";
   }
 
+  /* ── Summary totals ────────────────────────────────────────────── */
+  const totalProfit = summary?.totalPnl ?? 0;
+  const totalFees = useMemo(
+    () => trades.reduce((s, t) => s + t.fees, 0),
+    [trades],
+  );
+
+  /* ── No account selected ───────────────────────────────────────── */
+  if (!selectedAccountId) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <PageTitleInjector title="History" />
+        <p className="text-sm text-tos-muted">
+          {accounts.length === 0
+            ? "Connect a broker account to view trade history."
+            : "Select an account to view history."}
+        </p>
+        {accounts.length > 0 && (
+          <select
+            className="mt-2 rounded-lg border border-white/10 bg-[#0c0c0f] px-3 py-2 text-sm text-tos-text"
+            defaultValue=""
+            onChange={(e) => {
+              if (e.target.value) {
+                startNav(() =>
+                  router.push(`/history?account=${encodeURIComponent(e.target.value)}`),
+                );
+              }
+            }}
+          >
+            <option value="" disabled>
+              Choose account…
+            </option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col pb-2">
       <PageTitleInjector title="History" />
 
-      {loadError ? (
-        <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+      {loadError && (
+        <p className="mx-4 mb-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
           {loadError}
         </p>
-      ) : null}
-
-      {!selectedAccountId ? (
-        <GlassPanel className="flex flex-col items-center gap-3 !py-10 text-center">
-          <Landmark className="h-10 w-10 text-tos-muted/60" aria-hidden />
-          <p className="max-w-xs text-sm text-tos-muted">
-            {accounts.length === 0
-              ? "Add a broker account on Accounts and set it active (or pick one below when you have accounts)."
-              : "Select an account first — set your active account on Accounts, or pick one below."}
-          </p>
-          <Link
-            href="/accounts"
-            className="rounded-xl bg-tos-warm/20 px-4 py-2 text-sm font-medium text-tos-warm hover:bg-tos-warm/30"
-          >
-            Open accounts
-          </Link>
-          {accounts.length > 0 ? (
-            <form
-              className="mt-2 flex w-full max-w-sm flex-col gap-2"
-              action="/history"
-              method="get"
-            >
-              <label className="text-left text-[11px] text-tos-muted">
-                Or view history for
-                <select
-                  name="account"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-tos-bg/80 px-3 py-2 text-sm text-tos-text"
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    Choose account…
-                  </option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="submit"
-                className="rounded-xl bg-white/10 px-4 py-2 text-sm font-medium text-tos-text hover:bg-white/15"
-              >
-                Show history
-              </button>
-            </form>
-          ) : null}
-        </GlassPanel>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-2">
-            {selectedLabel ? (
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-tos-text">
-                <span className="font-medium">{selectedLabel}</span>
-                {isActiveChip ? (
-                  <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
-                    Active
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-tos-muted">Viewing</span>
-                )}
-              </span>
-            ) : null}
-          </div>
-
-          <GlassPanel className="!p-3">
-            <form className="flex flex-col gap-3" action="/history" method="get">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="flex flex-col gap-1 text-[11px] text-tos-muted">
-                  Account
-                  <select
-                    name="account"
-                    className="rounded-lg border border-white/10 bg-tos-bg/80 px-2 py-2 text-sm text-tos-text"
-                    defaultValue={selectedAccountId}
-                    disabled={navPending}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      startNav(() => {
-                        router.push(
-                          buildHistoryUrl({
-                            account: v || null,
-                          }),
-                        );
-                      });
-                    }}
-                  >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.label}
-                        {a.id === activeAccountId ? " (active)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1 text-[11px] text-tos-muted">
-                  Symbol
-                  <input
-                    name="symbol"
-                    type="text"
-                    placeholder="e.g. XAUUSD"
-                    defaultValue={filters.symbol}
-                    className="rounded-lg border border-white/10 bg-tos-bg/80 px-2 py-2 text-sm text-tos-text placeholder:text-tos-muted/50"
-                    disabled={navPending}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-[11px] text-tos-muted">
-                  From (close)
-                  <input
-                    name="from"
-                    type="date"
-                    defaultValue={filters.from}
-                    className="rounded-lg border border-white/10 bg-tos-bg/80 px-2 py-2 text-sm text-tos-text"
-                    disabled={navPending}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-[11px] text-tos-muted">
-                  To (close)
-                  <input
-                    name="to"
-                    type="date"
-                    defaultValue={filters.to}
-                    className="rounded-lg border border-white/10 bg-tos-bg/80 px-2 py-2 text-sm text-tos-text"
-                    disabled={navPending}
-                  />
-                </label>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="submit"
-                  className="rounded-xl bg-tos-warm/20 px-4 py-2 text-sm font-medium text-tos-warm hover:bg-tos-warm/30 disabled:opacity-50"
-                  disabled={navPending}
-                >
-                  Apply filters
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl border border-white/10 px-4 py-2 text-sm text-tos-muted hover:bg-white/5"
-                  disabled={navPending}
-                  onClick={() =>
-                    startNav(() => {
-                      router.push(
-                        selectedAccountId
-                          ? `/history?account=${encodeURIComponent(selectedAccountId)}`
-                          : "/history",
-                      );
-                    })
-                  }
-                >
-                  Clear symbol & dates
-                </button>
-              </div>
-            </form>
-          </GlassPanel>
-
-          {summary ? <SummaryStrip s={summary} /> : null}
-
-          {trades.length === 0 ? (
-            <GlassPanel className="!py-12 text-center text-sm text-tos-muted">
-              No trades synced yet — when MT5 posts fills to your link token,
-              they appear here automatically.
-            </GlassPanel>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-white/[0.08] bg-tos-surface-928/40">
-              <table className="w-full min-w-[720px] border-collapse text-left text-xs">
-                <thead className="sticky top-0 z-10 border-b border-white/10 bg-tos-bg/95 backdrop-blur">
-                  <tr className="text-[10px] font-semibold uppercase tracking-wide text-tos-muted">
-                    <th className="px-2 py-2">Symbol</th>
-                    <th className="px-2 py-2">Side</th>
-                    <th className="px-2 py-2">Vol</th>
-                    <th className="px-2 py-2">Open</th>
-                    <th className="px-2 py-2">Close</th>
-                    <th className="px-2 py-2">Open px</th>
-                    <th className="px-2 py-2">Close px</th>
-                    <th className="px-2 py-2">PnL</th>
-                    <th className="px-2 py-2">Fees</th>
-                    <th className="px-2 py-2">Journal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trades.map((t: BrokerTradeRow) => (
-                    <tr
-                      key={t.id}
-                      className="border-b border-white/[0.05] text-tos-text hover:bg-white/[0.03]"
-                    >
-                      <td className="px-2 py-2 font-medium">{t.symbol}</td>
-                      <td className="px-2 py-2 capitalize">{t.side}</td>
-                      <td className="px-2 py-2 tabular-nums">{formatNum(t.volume, 2)}</td>
-                      <td className="px-2 py-2 text-tos-muted">
-                        {formatDateTime(t.openTime)}
-                      </td>
-                      <td className="px-2 py-2 text-tos-muted">
-                        {formatDateTime(t.closeTime)}
-                      </td>
-                      <td className="px-2 py-2 tabular-nums text-tos-muted">
-                        {formatNum(t.openPrice, 5)}
-                      </td>
-                      <td className="px-2 py-2 tabular-nums text-tos-muted">
-                        {formatNum(t.closePrice, 5)}
-                      </td>
-                      <td
-                        className={`px-2 py-2 tabular-nums font-medium ${
-                          t.pnl > 0
-                            ? "text-emerald-400"
-                            : t.pnl < 0
-                              ? "text-rose-400"
-                              : "text-tos-muted"
-                        }`}
-                      >
-                        {formatPnl(t.pnl)}
-                      </td>
-                      <td className="px-2 py-2 tabular-nums text-tos-muted">
-                        {formatNum(t.fees, 2)}
-                      </td>
-                      <td className="px-2 py-2">
-                        <Link
-                          href={`/journal?trade=${encodeURIComponent(t.id)}&account=${encodeURIComponent(t.accountId)}`}
-                          className="text-tos-warm hover:underline"
-                          prefetch={false}
-                        >
-                          Open
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
       )}
+
+      {/* ── Tab bar + filter icon ─────────────────────────────────── */}
+      <div className="flex items-center gap-1 px-3 pb-2">
+        {(["positions", "orders", "deals"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 rounded-lg py-2 text-center text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+              tab === t
+                ? "bg-white/[0.08] text-white"
+                : "text-white/30 hover:text-white/50"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setShowFilter((v) => !v)}
+          className={`ml-1 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+            showFilter || hasActiveFilters
+              ? "bg-white/[0.08] text-white"
+              : "text-white/30 hover:text-white/50"
+          }`}
+          aria-label="Filter"
+        >
+          <Filter className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* ── Collapsible filter row ────────────────────────────────── */}
+      {showFilter && (
+        <form
+          className="mx-3 mb-2 flex flex-wrap items-end gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+          action="/history"
+          method="get"
+        >
+          {selectedAccountId && (
+            <input type="hidden" name="account" value={selectedAccountId} />
+          )}
+          {/* Account switcher */}
+          {accounts.length > 1 && (
+            <label className="flex flex-col gap-0.5 text-[10px] text-white/40">
+              Account
+              <select
+                name="account"
+                className="rounded border border-white/10 bg-[#0c0c0f] px-2 py-1.5 text-xs text-tos-text"
+                defaultValue={selectedAccountId}
+                disabled={navPending}
+                onChange={(e) => {
+                  startNav(() =>
+                    router.push(buildUrl({ account: e.target.value || null })),
+                  );
+                }}
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}{a.id === activeAccountId ? " ✦" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="flex flex-col gap-0.5 text-[10px] text-white/40">
+            Symbol
+            <input
+              name="symbol"
+              type="text"
+              placeholder="XAUUSD"
+              defaultValue={filters.symbol}
+              className="w-24 rounded border border-white/10 bg-[#0c0c0f] px-2 py-1.5 text-xs text-tos-text placeholder:text-white/20"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[10px] text-white/40">
+            From
+            <input
+              name="from"
+              type="date"
+              defaultValue={filters.from}
+              className="rounded border border-white/10 bg-[#0c0c0f] px-2 py-1.5 text-xs text-tos-text"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[10px] text-white/40">
+            To
+            <input
+              name="to"
+              type="date"
+              defaultValue={filters.to}
+              className="rounded border border-white/10 bg-[#0c0c0f] px-2 py-1.5 text-xs text-tos-text"
+            />
+          </label>
+          <div className="flex gap-1.5">
+            <button
+              type="submit"
+              className="rounded bg-white/[0.08] px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-white/[0.12]"
+              disabled={navPending}
+            >
+              Apply
+            </button>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                className="rounded px-2 py-1.5 text-[10px] text-white/40 hover:text-white/60"
+                onClick={() =>
+                  startNav(() =>
+                    router.push(
+                      selectedAccountId
+                        ? `/history?account=${encodeURIComponent(selectedAccountId)}`
+                        : "/history",
+                    ),
+                  )
+                }
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+
+      {/* ── Tab content ───────────────────────────────────────────── */}
+      {tab === "positions" && (
+        <PositionsTab
+          trades={trades}
+          totalProfit={totalProfit}
+          totalFees={totalFees}
+          summary={summary}
+        />
+      )}
+      {tab === "orders" && (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="text-xs text-white/25">Order history — coming soon</p>
+        </div>
+      )}
+      {tab === "deals" && (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="text-xs text-white/25">Deal history — coming soon</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Positions Tab ─────────────────────────────────────────────────── */
+function PositionsTab({
+  trades,
+  totalProfit,
+  totalFees,
+  summary,
+}: {
+  trades: BrokerTradeRow[];
+  totalProfit: number;
+  totalFees: number;
+  summary: HistorySummary | null;
+}) {
+  if (trades.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-6">
+        <p className="text-xs text-white/25">No closed positions yet</p>
+      </div>
+    );
+  }
+
+  const balance = totalProfit - Math.abs(totalFees);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Scrollable trade list */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Balance header row */}
+        <div className="flex items-center justify-between border-b border-white/[0.04] px-4 py-2.5">
+          <span className="text-[11px] font-medium text-white/40">Balance</span>
+          <span
+            className={`font-mono text-sm font-bold tabular-nums ${
+              totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"
+            }`}
+          >
+            {fmtPnl(totalProfit)}
+          </span>
+        </div>
+
+        {/* Trade rows */}
+        {trades.map((t, i) => {
+          const digits = priceDigits(t.openPrice);
+          const pnlColor =
+            t.pnl > 0
+              ? "text-emerald-400"
+              : t.pnl < 0
+                ? "text-rose-400"
+                : "text-white/40";
+          const sideColor =
+            t.side === "buy" ? "text-emerald-400/80" : "text-rose-400/80";
+
+          return (
+            <div
+              key={t.id}
+              className={`border-b border-white/[0.04] px-4 py-2.5 ${
+                i % 2 === 1 ? "bg-white/[0.015]" : ""
+              }`}
+            >
+              {/* Row 1: symbol  side  vol  ·····  PnL */}
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="flex items-baseline gap-1.5 min-w-0">
+                  <span className="font-mono text-[12px] font-semibold text-white">
+                    {t.symbol}
+                  </span>
+                  <span className={`text-[10px] font-medium capitalize ${sideColor}`}>
+                    {t.side}
+                  </span>
+                  <span className="text-[10px] text-white/30 tabular-nums">
+                    {fmtPrice(t.volume, 2)}
+                  </span>
+                </div>
+                <span className={`font-mono text-[12px] font-bold tabular-nums shrink-0 ${pnlColor}`}>
+                  {fmtPnl(t.pnl)}
+                </span>
+              </div>
+              {/* Row 2: entry → exit  ·····  timestamp */}
+              <div className="mt-0.5 flex items-center justify-between gap-2">
+                <span className="text-[10px] text-white/25 tabular-nums">
+                  {fmtPrice(t.openPrice, digits)} → {fmtPrice(t.closePrice, digits)}
+                </span>
+                <span className="text-[10px] text-white/20 shrink-0 tabular-nums">
+                  {fmtTime(t.closeTime)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Summary footer ────────────────────────────────────────── */}
+      <div className="shrink-0 border-t border-white/[0.08] bg-[#0a0a0e] px-4 py-2.5">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-white/30">Profit</span>
+          <span
+            className={`font-mono font-semibold tabular-nums ${
+              totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"
+            }`}
+          >
+            {fmtPnl(totalProfit)}
+          </span>
+        </div>
+        {totalFees !== 0 && (
+          <div className="mt-1 flex items-center justify-between text-[10px]">
+            <span className="text-white/30">Commission</span>
+            <span className="font-mono tabular-nums text-white/40">
+              {fmtPnl(-Math.abs(totalFees))}
+            </span>
+          </div>
+        )}
+        {summary && (
+          <div className="mt-1 flex items-center justify-between text-[10px]">
+            <span className="text-white/30">
+              {summary.totalTrades} trades · {summary.wins}W / {summary.losses}L
+            </span>
+            <span className="font-mono tabular-nums text-white/30">
+              {(summary.winRate * 100).toFixed(0)}% win
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
