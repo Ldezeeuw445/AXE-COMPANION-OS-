@@ -140,6 +140,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         secondsVisible: false,
         rightOffset: 4,
         barSpacing: 6,
+        timeVisible: true,
+        minimumHeight: 26,
       },
       autoSize: true,
       handleScroll: {

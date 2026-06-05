@@ -485,14 +485,18 @@ function TradePlanLine({
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
-  // Plot area ends where the right price axis starts. Drawing the line up to
-  // there (instead of edge-to-edge) keeps the chart legible — exactly like
-  // MT5's pending-order overlay.
+  // Plot area ends where the right price axis starts.
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
   const labelText = label.toUpperCase();
-  const labelWidth = Math.max(46, labelText.length * 7 + 14);
-  const priceWidth = Math.max(58, axisWidth - 4);
-  const priceX = size.w - priceWidth - 2;
+  const priceText = price.toFixed(digits);
+  // Compact inline pill: "TP 4410.92" — label + price in one element.
+  // ~5.5px per char at 10px font, plus padding.
+  const pillText = `${labelText} ${priceText}`;
+  const pillWidth = Math.max(60, pillText.length * 5.5 + 12);
+  // Semi-transparent color fill per Luka's spec (25% opacity background).
+  const rgbaFill = color.startsWith("#")
+    ? `rgba(${parseInt(color.slice(1, 3), 16)},${parseInt(color.slice(3, 5), 16)},${parseInt(color.slice(5, 7), 16)},0.25)`
+    : color.replace(/[\d.]+\)$/, "0.25)");
 
   return (
     <div
@@ -526,18 +530,19 @@ function TradePlanLine({
         }}
         onPointerCancel={() => setDragging(false)}
       >
-        {/* Single thin line across the plot — solid for entry, dashed for TP/SL */}
+        {/* Thin line — 1px, 70% opacity. Dashed for TP/SL, solid for entry. */}
         <line
-          x1={labelWidth + 8}
+          x1={pillWidth + 6}
           x2={plotRight}
           y1={y}
           y2={y}
           stroke={color}
           strokeWidth={1}
-          strokeDasharray={dashed ? "4 4" : ""}
+          strokeOpacity={0.7}
+          strokeDasharray={dashed ? "4 8" : ""}
         />
 
-        {/* Left side: small drag handle + label pill (MT5 style) */}
+        {/* Left: compact inline pill — "TP 4410.92" — draggable */}
         <g
           style={{ pointerEvents: "auto", cursor: "ns-resize" }}
           onPointerDown={(event) => {
@@ -548,53 +553,26 @@ function TradePlanLine({
             updateFromPointer(event.clientY);
           }}
         >
-          {/* Generous invisible hit area so finger taps land reliably */}
-          <rect x={0} y={y - 14} width={labelWidth + 16} height={28} fill="transparent" />
+          {/* Generous invisible hit area for finger taps */}
+          <rect x={0} y={y - 12} width={pillWidth + 12} height={24} fill="transparent" />
           <rect
-            x={4}
-            y={y - 9}
-            width={labelWidth}
-            height={18}
-            rx={3}
-            fill="rgba(0,0,0,0.78)"
-            stroke={color}
-            strokeWidth={1}
+            x={3}
+            y={y - 7}
+            width={pillWidth}
+            height={14}
+            rx={7}
+            fill={rgbaFill}
           />
           <text
-            x={4 + labelWidth / 2}
-            y={y + 4}
-            textAnchor="middle"
-            fontFamily="ui-sans-serif, system-ui, -apple-system"
-            fontSize={9}
-            fontWeight={700}
-            fill={color}
-          >
-            {labelText}
-          </text>
-        </g>
-
-        {/* Right side: price label that visually sits in the price-axis gutter */}
-        <g style={{ pointerEvents: "none" }}>
-          <rect
-            x={priceX}
-            y={y - 9}
-            width={priceWidth}
-            height={18}
-            rx={3}
-            fill="rgba(0,0,0,0.82)"
-            stroke={color}
-            strokeWidth={1}
-          />
-          <text
-            x={priceX + priceWidth / 2}
-            y={y + 4}
+            x={3 + pillWidth / 2}
+            y={y + 3}
             textAnchor="middle"
             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
             fontSize={10}
-            fontWeight={700}
+            fontWeight={600}
             fill={color}
           >
-            {price.toFixed(digits)}
+            {pillText}
           </text>
         </g>
       </svg>
@@ -2957,16 +2935,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Execution bar — hidden by default, shown when ⚡ 1-Click is active
           or a pending order is being placed. */}
       {oneClickVisible ? (
-      <div className="shrink-0 border-t border-white/[0.08] bg-[var(--tos-bg-base)]/90 px-2 py-1.5 backdrop-blur-2xl">
+      <div className="shrink-0 border-t border-white/[0.08] bg-[var(--tos-bg-base)]/90 px-1.5 py-1 backdrop-blur-2xl">
         <div>
-        {/* Row 1: SELL · MKT / Lots / BUY · MKT. These buttons are
-            market-only now. Pending orders are sent from the separate
-            gold Set ▶ row below, so a Buy/ Sell tap can never
-            accidentally place a limit/stop. */}
-        <div className="flex h-11 items-stretch gap-1">
+        {/* Row 1: compact SELL / Lots / BUY strip */}
+        <div className="flex h-9 items-stretch gap-0.5">
           <button
             type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
+            className={`flex min-w-0 flex-1 items-center justify-between rounded-[0.9rem] px-2 text-left transition-shadow ${
               executionMode === "market" && pendingOrderSide === "sell"
                 ? "bg-gradient-to-r from-[#3A0710] via-[#9C1A26] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.32)]"
                 : "bg-gradient-to-r from-[#1A0408] via-[#4A0C13] to-[#7A1722] text-white/85"
@@ -2980,21 +2955,20 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             }}
             aria-label="Sell market"
           >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Sell · MKT</span>
-            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wide">Sell</span>
+            <span className="font-mono text-[13px] font-bold leading-none">{lastPriceText}</span>
           </button>
           <button
             type="button"
-            className="flex min-w-[5rem] flex-col items-center justify-center rounded-[1.15rem] border border-white/[0.08] bg-[#08080a]/80 px-2 text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+            className="flex min-w-[3.5rem] flex-col items-center justify-center rounded-[0.9rem] border border-white/[0.08] bg-[#08080a]/80 px-1.5 text-[10px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
             onClick={() => setLotMenuOpen((v) => !v)}
             aria-label="Choose lot size"
           >
-            <span className="text-[8px] font-bold uppercase tracking-[0.22em] text-tos-dim">Lots</span>
-            <span className="mt-0.5 font-mono text-[12px] font-semibold">{tradeVolume}</span>
+            <span className="font-mono text-[11px] font-semibold">{tradeVolume}</span>
           </button>
           <button
             type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
+            className={`flex min-w-0 flex-1 items-center justify-between rounded-[0.9rem] px-2 text-left transition-shadow ${
               executionMode === "market" && pendingOrderSide === "buy"
                 ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(255,255,255,0.32)]"
                 : "bg-gradient-to-r from-[#03252A] via-[#0A5662] to-[#11808D] text-white/85"
@@ -3008,18 +2982,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             }}
             aria-label="Buy market"
           >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Buy · MKT</span>
-            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wide">Buy</span>
+            <span className="font-mono text-[13px] font-bold leading-none">{lastPriceText}</span>
           </button>
         </div>
 
         {/* Order-type chip row. Selecting a pending type opens the
             dedicated pending row; selecting Market hides it. */}
-        <div className="mt-1 flex h-9 items-stretch gap-1">
+        <div className="mt-0.5 flex h-7 items-stretch gap-0.5">
           <button
             type="button"
             onClick={() => setOrderTypeMenuOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-[#0e0f12] px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+            className="flex min-w-0 flex-1 items-center justify-between gap-1 rounded-[0.7rem] border border-white/[0.08] bg-[#0e0f12] px-2 text-left text-[10px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
             aria-label="Choose execution type"
           >
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.06] text-white/80">
@@ -3037,7 +3011,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           <button
             type="button"
             onClick={() => setDeviationPoints((v) => (v >= 100 ? 1 : v + 5))}
-            className="flex min-w-[3.4rem] items-center justify-center gap-1 rounded-[1.05rem] border border-white/[0.08] bg-black/45 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
+            className="flex min-w-[2.8rem] items-center justify-center gap-0.5 rounded-[0.7rem] border border-white/[0.08] bg-black/45 px-1.5 text-[8px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
             aria-label="Cycle slippage / deviation"
             title="Slippage / Deviation in points"
           >
@@ -3049,8 +3023,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         {/* Row 2: pending-only ticket. This is the only place pending
             Limit/Stop orders can be submitted. */}
         {executionMode === "pending" ? (
-        <div className="mt-1 flex h-9 items-stretch gap-1">
-          <div className={`flex min-w-[5.1rem] items-center justify-center rounded-[1.05rem] border px-2 text-[10px] font-bold uppercase tracking-wide ${
+        <div className="mt-0.5 flex h-7 items-stretch gap-0.5">
+          <div className={`flex min-w-[4.2rem] items-center justify-center rounded-[0.7rem] border px-1.5 text-[9px] font-bold uppercase tracking-wide ${
             pendingOrderSide === "buy"
               ? "border-white/[0.12] bg-white/[0.06] text-white"
               : "border-rose-300/35 bg-rose-400/12 text-rose-100"
