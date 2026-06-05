@@ -46,6 +46,7 @@ import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
 import {
   buildFibonacciActionFromCandles,
   buildTrendlineActionFromCandles,
+  buildTrendlinePairFromCandles,
 } from "@/lib/axeChartActions/swingAnalysis";
 import type {
   ChartActionCommand,
@@ -829,6 +830,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // Project count: how many of each indicator extend forward when the
   // future-projection cursor is on. 1 = only the latest each side.
   const [projectionCount, setProjectionCount] = useState<1 | 2 | 3>(1);
+  // MA period + type — user-configurable via the indicator picker. The
+  // four periods mirror MT5's standard lines; EMA toggle gives traders
+  // the faster-reacting alternative they often prefer.
+  const [maPeriod, setMaPeriod] = useState<9 | 20 | 50 | 200>(20);
+  const [maType, setMaType] = useState<"sma" | "ema">("sma");
   // Auto-Fib source mode:
   //   "auto"   — most recent good trend leg on the active TF (default)
   //   "swing"  — latest SH ↔ SL pair from the swing-dot detection
@@ -851,6 +857,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       if (rawFvg === 1 || rawFvg === 2 || rawFvg === 3) setFvgCount(rawFvg);
       const rawProj = Number(localStorage.getItem("axe.chart.projectionCount") ?? "");
       if (rawProj === 1 || rawProj === 2 || rawProj === 3) setProjectionCount(rawProj);
+      const rawMaPeriod = Number(localStorage.getItem("axe.chart.maPeriod") ?? "");
+      if (rawMaPeriod === 9 || rawMaPeriod === 20 || rawMaPeriod === 50 || rawMaPeriod === 200) setMaPeriod(rawMaPeriod);
+      const rawMaType = localStorage.getItem("axe.chart.maType");
+      if (rawMaType === "sma" || rawMaType === "ema") setMaType(rawMaType);
       const rawIndicatorFlags = localStorage.getItem("axe.chart.indicatorFlags");
       if (rawIndicatorFlags) {
         const parsed = JSON.parse(rawIndicatorFlags) as Record<string, unknown>;
@@ -924,6 +934,29 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     } catch {
       /* ignore */
     }
+  }, []);
+  const cycleMaPeriod = useCallback(() => {
+    const periods: Array<9 | 20 | 50 | 200> = [9, 20, 50, 200];
+    setMaPeriod((prev) => {
+      const next = periods[(periods.indexOf(prev) + 1) % periods.length];
+      try {
+        localStorage.setItem("axe.chart.maPeriod", String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+  const toggleMaType = useCallback(() => {
+    setMaType((prev) => {
+      const next = prev === "sma" ? "ema" : "sma";
+      try {
+        localStorage.setItem("axe.chart.maType", next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }, []);
   // Persist + apply on change. The actual "rebuild the fib annotation
   // when the mode changes while a Fib is active" hook lives further down,
@@ -1970,8 +2003,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       if (type === "draw_trendline") {
         try {
-          const command = buildTrendlineActionFromCandles({
-            id: newAnnotationId(),
+          // Draw BOTH upper (through swing highs) and lower (through
+          // swing lows) trendlines so the chart shows the full channel.
+          const commands = buildTrendlinePairFromCandles({
+            idUpper: newAnnotationId(),
+            idLower: newAnnotationId(),
             source,
             symbol: data.symbol,
             timeframe: data.timeframeKey,
@@ -1979,7 +2015,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             candles: data.candles,
             strength: 3,
           });
-          return executeChartAction(command);
+          let lastResult: ChartActionResult | undefined;
+          for (const command of commands) {
+            lastResult = executeChartAction(command);
+          }
+          return lastResult!;
         } catch {
           const failed: ChartActionResult = {
             id: newAnnotationId(),
@@ -2431,6 +2471,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           inverseFvgCount={inverseFvgCount}
           fvgCount={fvgCount}
           projectionCount={projectionCount}
+          maPeriod={maPeriod}
+          maType={maType}
           active={{
             ma: indicatorToolFlags.ma,
             bollinger: indicatorToolFlags.bollinger,
@@ -2949,6 +2991,41 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               );
             })}
           </div>
+          {/* MA settings — visible when MA indicator is active */}
+          {indicatorToolFlags.ma ? (
+            <div className="mt-2 flex items-center gap-1.5 border-t border-white/[0.06] pt-2">
+              <span className="text-[8px] font-bold uppercase tracking-widest text-amber-100/60">MA</span>
+              {([9, 20, 50, 200] as const).map((period) => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => {
+                    setMaPeriod(period);
+                    try { localStorage.setItem("axe.chart.maPeriod", String(period)); } catch { /* ignore */ }
+                  }}
+                  className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold transition ${
+                    maPeriod === period
+                      ? "border-blue-400/50 bg-blue-400/20 text-blue-200"
+                      : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-blue-200"
+                  }`}
+                >
+                  {period}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={toggleMaType}
+                className={`ml-auto rounded-md border px-1.5 py-0.5 text-[9px] font-bold transition ${
+                  maType === "ema"
+                    ? "border-blue-400/50 bg-blue-400/20 text-blue-200"
+                    : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-blue-200"
+                }`}
+                title={`Switch to ${maType === "sma" ? "EMA" : "SMA"}`}
+              >
+                {maType === "ema" ? "EMA" : "SMA"}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
@@ -3044,14 +3121,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : null}
 
-        {isTimeframePending ? (
-          <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-white/[0.08] bg-black/78 px-2.5 py-1 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-            <AxeBreatheLoader
-              label={`Running ${CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}`}
-              size="sm"
-            />
-          </div>
-        ) : null}
+        {/* "Running TF" orb removed — the AxeBreatheLoader particle globe
+            was visually distracting on every TF/symbol switch. The chart
+            already shows candles appearing; no extra indicator needed. */}
         {routeFallbackMessage ? (
           <div className="pointer-events-none absolute right-3 top-12 z-30 max-w-[18rem] rounded-xl border border-amber-300/20 bg-black/82 px-3 py-2 text-[10.5px] font-medium leading-snug text-amber-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
             {routeFallbackMessage}
