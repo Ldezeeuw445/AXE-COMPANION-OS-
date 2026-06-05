@@ -426,6 +426,32 @@ function ResizablePane({
   );
 }
 
+/** Compute points distance and potential USD profit for TP/SL labels. */
+function slTpInfo(
+  entryPrice: number | null,
+  levelPrice: number | null,
+  volume: string | number,
+  side: "buy" | "sell",
+  digits: number,
+): { pointsStr: string; usdStr: string } | null {
+  if (entryPrice == null || levelPrice == null) return null;
+  const pointSize = Math.pow(10, -digits); // e.g. 0.01 for 2-digit gold
+  const dist = levelPrice - entryPrice;
+  const pointsRaw = Math.round(dist / pointSize);
+  // Positive points = in-favour; negative = against (depends on side)
+  const signedPoints = side === "buy" ? pointsRaw : -pointsRaw;
+  // Rough USD: 1 lot gold = $1/point, forex majors = ~$10/pip but we show
+  // a generic "$X per point * volume" estimate. For gold the contract is
+  // 100 oz → $0.01 move = $1 per lot. Forex 100k → 1 pip ≈ $10 per lot.
+  // We can't know the exact contract size so we skip USD for now and only
+  // show points distance. The number is still very useful to traders.
+  const absPoints = Math.abs(signedPoints);
+  return {
+    pointsStr: `${signedPoints >= 0 ? "+" : "-"}${absPoints} pts`,
+    usdStr: "", // would need contract-size from broker
+  };
+}
+
 function TradePlanLine({
   canvasRef,
   price,
@@ -434,6 +460,9 @@ function TradePlanLine({
   digits,
   onChange,
   dashed = false,
+  entryPrice = null,
+  volume = "0",
+  side = "buy",
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
   price: number | null;
@@ -443,6 +472,12 @@ function TradePlanLine({
   onChange: (price: number) => void;
   /** TP/SL render dashed; entry/limit renders solid — same convention MT5 uses. */
   dashed?: boolean;
+  /** Entry price for computing TP/SL distance info (MT5-style). */
+  entryPrice?: number | null;
+  /** Lot volume for TP/SL distance labels. */
+  volume?: string | number;
+  /** Trade side for TP/SL distance sign. */
+  side?: "buy" | "sell";
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -474,14 +509,21 @@ function TradePlanLine({
     return handle.subscribeViewport(compute);
   }, [canvasRef, price]);
 
-  function updateFromPointer(clientY: number) {
-    const host = hostRef.current;
-    const handle = canvasRef.current;
-    if (!host || !handle) return;
-    const rect = host.getBoundingClientRect();
-    const next = handle.coordinateToPrice(clientY - rect.top);
-    if (next != null && Number.isFinite(next)) onChange(next);
-  }
+  // Use a ref to avoid stale closures during drag — gives buttery-smooth updates
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const updateFromPointer = useCallback(
+    (clientY: number) => {
+      const host = hostRef.current;
+      const handle = canvasRef.current;
+      if (!host || !handle) return;
+      const rect = host.getBoundingClientRect();
+      const next = handle.coordinateToPrice(clientY - rect.top);
+      if (next != null && Number.isFinite(next)) onChangeRef.current(next);
+    },
+    [canvasRef],
+  );
 
   if (price == null || y == null || size.w <= 0 || size.h <= 0) {
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
@@ -489,7 +531,13 @@ function TradePlanLine({
 
   // Plot area ends where the right price axis starts.
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
-  const labelText = label.toUpperCase();
+
+  // Build label text — MT5 shows "SL, -1 049.00 USD, -1049 points" on TP/SL
+  const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits) : null;
+  const labelText = info
+    ? `${label.toUpperCase()}, ${info.pointsStr}`
+    : label.toUpperCase();
+
   const priceText = price.toFixed(digits);
   // Label width: ~5.5px per char at 10px font
   const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
@@ -503,7 +551,7 @@ function TradePlanLine({
     <div
       ref={hostRef}
       className="pointer-events-none absolute inset-0 z-[24]"
-      style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
+      style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none", touchAction: "none" }}
       onContextMenu={(event) => event.preventDefault()}
     >
       <svg
@@ -512,7 +560,7 @@ function TradePlanLine({
         viewBox={`0 0 ${size.w} ${size.h}`}
         className="absolute inset-0"
         style={{
-          touchAction: dragging ? "none" : "manipulation",
+          touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
@@ -556,17 +604,16 @@ function TradePlanLine({
 
         {/* Circle drag handle in center of line — MT5's main drag affordance */}
         <g
-          style={{ pointerEvents: "auto", cursor: "ns-resize" }}
+          style={{ pointerEvents: "auto", cursor: "ns-resize", touchAction: "none" }}
           onPointerDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
             setDragging(true);
-            event.currentTarget.setPointerCapture(event.pointerId);
-            updateFromPointer(event.clientY);
+            (event.target as SVGElement).setPointerCapture(event.pointerId);
           }}
         >
           {/* Large invisible hit area for easy finger tapping */}
-          <rect x={handleCx - 24} y={y - 24} width={48} height={48} fill="transparent" />
+          <rect x={handleCx - 28} y={y - 28} width={56} height={56} fill="transparent" />
           <circle cx={handleCx} cy={y} r={5} fill="none" stroke={color} strokeWidth={1.5} />
         </g>
 
@@ -2316,6 +2363,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={setPendingStopLossPrice}
               dashed
+              entryPrice={pendingOrderPrice}
+              volume={tradeVolume}
+              side={pendingOrderSide}
             />
             <TradePlanLine
               canvasRef={canvasRef}
@@ -2325,6 +2375,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={setPendingTakeProfitPrice}
               dashed
+              entryPrice={pendingOrderPrice}
+              volume={tradeVolume}
+              side={pendingOrderSide}
             />
             {/* Small cancel button — actions live in bottom bar now */}
             <button
@@ -2942,28 +2995,26 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* ─── MT5-style execution bar ─── */}
       {oneClickVisible ? (
-      <div className="shrink-0 border-t border-white/[0.06] bg-[#060608]">
+      <div className="shrink-0 border-t border-white/[0.04]" style={{ background: "linear-gradient(180deg, #0c0e12 0%, #060608 100%)" }}>
         {executionMode === "pending" ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
-          <div className="flex h-11 items-center gap-0 px-0">
-            {/* Submit arrow */}
+          <div className="flex h-12 items-center gap-0 px-0">
+            {/* Submit arrow — rounded pill */}
             <button
               type="button"
               onClick={() => handleSendCurrentPlan()}
-              className={`flex h-full w-14 items-center justify-center ${
+              className={`ml-1.5 flex h-9 w-12 items-center justify-center rounded-full ${
                 pendingOrderSide === "buy"
-                  ? "bg-[#0A5662] text-white"
-                  : "bg-[#7A1722] text-white"
+                  ? "bg-gradient-to-b from-[#0e6b7a] to-[#0a5060] text-white shadow-[0_0_12px_rgba(34,211,238,0.15)]"
+                  : "bg-gradient-to-b from-[#9c1a26] to-[#7a1520] text-white shadow-[0_0_12px_rgba(225,57,71,0.15)]"
               }`}
               aria-label={`Place ${orderTypeLabel(pendingOrderType)}`}
             >
               <ArrowRight className="h-5 w-5" />
             </button>
-            {/* Order label + volume */}
-            <div className={`flex h-full min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold ${
-              pendingOrderSide === "buy" ? "bg-[#063D44] text-[#22D3EE]" : "bg-[#3A0710] text-[#E13947]"
-            }`}>
-              <span>{orderTypeLabel(pendingOrderType)}</span>
+            {/* Order label + volume — center */}
+            <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold">
+              <span className={pendingOrderSide === "buy" ? "text-[#22D3EE]" : "text-[#E13947]"}>{orderTypeLabel(pendingOrderType)}</span>
               <span className="font-mono text-white/90">{tradeVolume}</span>
             </div>
             {/* SL toggle */}
@@ -2978,17 +3029,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 );
                 setPendingOrderVisible(true);
               }}
-              className={`flex h-full w-12 items-center justify-center ${
-                pendingStopLossPrice != null
-                  ? "bg-[#E13947]/20"
-                  : "bg-white/[0.03]"
-              }`}
+              className="flex h-full w-12 items-center justify-center"
               aria-label="Toggle stop loss"
             >
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black ${
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
                 pendingStopLossPrice != null
-                  ? "border-[#E13947] text-[#E13947]"
-                  : "border-white/20 text-white/30"
+                  ? "border-[#E13947] bg-[#E13947]/15 text-[#E13947]"
+                  : "border-white/15 text-white/25"
               }`}>SL</span>
             </button>
             {/* TP toggle */}
@@ -3003,35 +3050,31 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 );
                 setPendingOrderVisible(true);
               }}
-              className={`flex h-full w-12 items-center justify-center ${
-                pendingTakeProfitPrice != null
-                  ? "bg-[#4ECBA0]/20"
-                  : "bg-white/[0.03]"
-              }`}
+              className="flex h-full w-12 items-center justify-center"
               aria-label="Toggle take profit"
             >
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black ${
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
                 pendingTakeProfitPrice != null
-                  ? "border-[#4ECBA0] text-[#4ECBA0]"
-                  : "border-white/20 text-white/30"
+                  ? "border-[#4ECBA0] bg-[#4ECBA0]/15 text-[#4ECBA0]"
+                  : "border-white/15 text-white/25"
               }`}>TP</span>
             </button>
             {/* Order-type picker */}
             <button
               type="button"
               onClick={() => setOrderTypeMenuOpen((v) => !v)}
-              className="flex h-full w-12 items-center justify-center bg-white/[0.03]"
+              className="flex h-full w-11 items-center justify-center"
               aria-label="Change order type"
             >
-              <ChevronUp className="h-4 w-4 text-white/50" />
+              <ChevronUp className="h-4 w-4 text-white/40" />
             </button>
           </div>
         ) : (
           /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
-          <div className="flex h-11 items-stretch gap-0">
+          <div className="flex h-12 items-stretch gap-0">
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between bg-[#9C1A26] px-3"
+              className="flex min-w-0 flex-1 items-center justify-between bg-gradient-to-b from-[#B01E2D] to-[#8A1522] px-3"
               onClick={() => {
                 setPendingOrderSide("sell");
                 setExecutionMode("market");
@@ -3041,8 +3084,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               }}
               aria-label="Sell market"
             >
-              <span className="text-[10px] font-bold uppercase text-white/80">Sell</span>
-              <span className="font-mono text-[16px] font-bold text-white">{lastPriceText}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-white/70">Sell</span>
+              <span className="font-mono text-[17px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{lastPriceText}</span>
             </button>
             <button
               type="button"
@@ -3056,7 +3099,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </button>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between bg-[#0F6A7A] px-3"
+              className="flex min-w-0 flex-1 items-center justify-between bg-gradient-to-b from-[#0e7a8a] to-[#0a5e6c] px-3"
               onClick={() => {
                 setPendingOrderSide("buy");
                 setExecutionMode("market");
@@ -3066,8 +3109,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               }}
               aria-label="Buy market"
             >
-              <span className="text-[10px] font-bold uppercase text-white/80">Buy</span>
-              <span className="font-mono text-[16px] font-bold text-white">{lastPriceText}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-white/70">Buy</span>
+              <span className="font-mono text-[17px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{lastPriceText}</span>
             </button>
           </div>
         )}
