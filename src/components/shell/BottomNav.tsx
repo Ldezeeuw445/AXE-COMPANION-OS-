@@ -14,7 +14,7 @@
  * Label: 8 px uppercase, letter-spacing 0.06 em.
  */
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useLayoutEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -46,8 +46,8 @@ export function BottomNav() {
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
   // Keep --tos-nav-h in sync with the real rendered height (minus safe-area padding).
-  // This prevents any gap between content and nav on any device/orientation.
-  useEffect(() => {
+  // useLayoutEffect fires before paint → no first-frame height jump.
+  useLayoutEffect(() => {
     const el = navRef.current;
     if (!el) return;
     const sync = () => {
@@ -77,14 +77,14 @@ export function BottomNav() {
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
         background: "linear-gradient(180deg, #101016, #0a0a0e)",
-        paddingBottom: "max(env(safe-area-inset-bottom), 20px)",
+        paddingBottom: "max(env(safe-area-inset-bottom), 8px)",
       }}
       aria-label="Primary"
     >
       {/* Top edge — subtle bevel highlight */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
 
-      <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-1.5">
+      <div className="mx-auto flex max-w-lg items-center justify-center gap-1 px-2 py-1">
         {tabs.map(({ href, label, Icon, accent }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const color = active ? (accent ?? CYAN) : undefined;
