@@ -88,6 +88,7 @@ import {
 } from "@/components/chart/ChartOrderConfirm";
 import { useDemoPositions } from "@/components/chart/useDemoPositions";
 import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
+import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
 
 const TICK_REACT_THROTTLE_MS = 150;
@@ -426,30 +427,37 @@ function ResizablePane({
   );
 }
 
-/** Compute points distance and potential USD profit for TP/SL labels. */
+/**
+ * Compute estimated USD profit/loss for TP/SL labels.
+ *
+ * Uses the fact that for most MT5 brokers, the tick value (minimum price
+ * increment per standard lot) is ~$1 for common instruments:
+ * - XAUUSD: 100 oz, tick=0.01 → $1/tick/lot
+ * - Forex *USD pairs: 100k units, tick=0.00001 → $1/tick/lot
+ * - JPY pairs: ~$0.67/tick/lot (close enough)
+ *
+ * This gives a useful on-chart estimate without needing contract specs.
+ */
 function slTpInfo(
   entryPrice: number | null,
   levelPrice: number | null,
   volume: string | number,
   side: "buy" | "sell",
   digits: number,
-): { pointsStr: string; usdStr: string } | null {
+): { label: string } | null {
   if (entryPrice == null || levelPrice == null) return null;
-  const pointSize = Math.pow(10, -digits); // e.g. 0.01 for 2-digit gold
+  const pointSize = Math.pow(10, -digits);
   const dist = levelPrice - entryPrice;
   const pointsRaw = Math.round(dist / pointSize);
-  // Positive points = in-favour; negative = against (depends on side)
   const signedPoints = side === "buy" ? pointsRaw : -pointsRaw;
-  // Rough USD: 1 lot gold = $1/point, forex majors = ~$10/pip but we show
-  // a generic "$X per point * volume" estimate. For gold the contract is
-  // 100 oz → $0.01 move = $1 per lot. Forex 100k → 1 pip ≈ $10 per lot.
-  // We can't know the exact contract size so we skip USD for now and only
-  // show points distance. The number is still very useful to traders.
-  const absPoints = Math.abs(signedPoints);
-  return {
-    pointsStr: `${signedPoints >= 0 ? "+" : "-"}${absPoints} pts`,
-    usdStr: "", // would need contract-size from broker
-  };
+  const vol = typeof volume === "string" ? parseFloat(volume) || 0 : volume;
+  // ~$1 per point per lot for most *USD pairs + gold
+  const usd = signedPoints * vol;
+  const sign = usd >= 0 ? "+" : "-";
+  const absUsd = Math.abs(usd);
+  // Show as integer if >= $10, 2 decimals if < $10
+  const fmt = absUsd >= 10 ? Math.round(absUsd).toLocaleString("en-US") : absUsd.toFixed(2);
+  return { label: `${sign}$${fmt}` };
 }
 
 function TradePlanLine({
@@ -463,6 +471,8 @@ function TradePlanLine({
   entryPrice = null,
   volume = "0",
   side = "buy",
+  onDragStart,
+  onDragEnd,
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
   price: number | null;
@@ -470,21 +480,37 @@ function TradePlanLine({
   color: string;
   digits: number;
   onChange: (price: number) => void;
-  /** TP/SL render dashed; entry/limit renders solid — same convention MT5 uses. */
   dashed?: boolean;
-  /** Entry price for computing TP/SL distance info (MT5-style). */
   entryPrice?: number | null;
-  /** Lot volume for TP/SL distance labels. */
   volume?: string | number;
-  /** Trade side for TP/SL distance sign. */
   side?: "buy" | "sell";
+  /** Called on drag start — fire haptic/sound feedback. */
+  onDragStart?: () => void;
+  /** Called on drag end — fire haptic feedback. */
+  onDragEnd?: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState(0);
-  const [y, setY] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
+  const [baseY, setBaseY] = useState<number | null>(null);
 
+  // ── Local drag state — only THIS component re-renders during drag ──
+  // Parent (ChartScreen) only gets onChange on pointer up → no jank
+  const [drag, setDrag] = useState<{ y: number; price: number } | null>(null);
+  const dragRef = useRef<{ y: number; price: number } | null>(null);
+  const dragOriginRef = useRef<{ pointerY: number; baseY: number } | null>(null);
+  const isDraggingRef = useRef(false);
+  const rafRef = useRef(0);
+  const baseYRef = useRef<number | null>(null);
+  // Stable refs for callbacks to avoid stale closures in window listeners
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const onDragStartRef = useRef(onDragStart);
+  onDragStartRef.current = onDragStart;
+  const onDragEndRef = useRef(onDragEnd);
+  onDragEndRef.current = onDragEnd;
+
+  // Size observer
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
@@ -498,54 +524,111 @@ function TradePlanLine({
     return () => ro.disconnect();
   }, []);
 
+  // Viewport subscription — updates baseY from parent price, skipped during drag
   useEffect(() => {
     const handle = canvasRef.current;
     if (!handle) return;
     const compute = () => {
-      setY(price == null ? null : handle.priceToCoordinate(price));
+      if (!isDraggingRef.current) {
+        const by = price == null ? null : handle.priceToCoordinate(price);
+        setBaseY(by);
+        baseYRef.current = by;
+      }
       setAxisWidth(handle.getRightAxisWidth());
     };
     compute();
     return handle.subscribeViewport(compute);
   }, [canvasRef, price]);
 
-  // Use a ref to avoid stale closures during drag — gives buttery-smooth updates
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isDraggingRef.current = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
-  const updateFromPointer = useCallback(
-    (clientY: number) => {
-      const host = hostRef.current;
-      const handle = canvasRef.current;
-      if (!host || !handle) return;
+  // Drag handler — window-level listeners for reliable mobile tracking
+  const handlePointerDown = useCallback((e: React.PointerEvent<SVGGElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingRef.current = true;
+
+    // Record origin for delta-based drag (no visual jump)
+    const host = hostRef.current;
+    if (host) {
       const rect = host.getBoundingClientRect();
-      const next = handle.coordinateToPrice(clientY - rect.top);
-      if (next != null && Number.isFinite(next)) onChangeRef.current(next);
-    },
-    [canvasRef],
-  );
+      dragOriginRef.current = {
+        pointerY: e.clientY - rect.top,
+        baseY: baseYRef.current ?? 0,
+      };
+    }
 
-  if (price == null || y == null || size.w <= 0 || size.h <= 0) {
+    onDragStartRef.current?.();
+
+    const onMove = (ev: PointerEvent) => {
+      ev.preventDefault();
+      if (!isDraggingRef.current) return;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        const h = hostRef.current;
+        const handle = canvasRef.current;
+        const origin = dragOriginRef.current;
+        if (!h || !handle || !origin) return;
+        const rect = h.getBoundingClientRect();
+        const currentPointerY = ev.clientY - rect.top;
+        // Delta-based: line tracks finger offset, never jumps
+        const newY = origin.baseY + (currentPointerY - origin.pointerY);
+        const newPrice = handle.coordinateToPrice(newY);
+        if (newPrice != null && Number.isFinite(newPrice)) {
+          const s = { y: newY, price: newPrice };
+          dragRef.current = s;
+          setDrag(s);
+        }
+      });
+    };
+
+    const onUp = () => {
+      isDraggingRef.current = false;
+      cancelAnimationFrame(rafRef.current);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      const final = dragRef.current;
+      dragRef.current = null;
+      dragOriginRef.current = null;
+      setDrag(null);
+      if (final) onChangeRef.current(final.price);
+      onDragEndRef.current?.();
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, [canvasRef]);
+
+  // Effective rendering values — local drag takes priority
+  const y = drag?.y ?? baseY;
+  const displayPrice = drag?.price ?? price;
+
+  if (displayPrice == null || y == null || size.w <= 0 || size.h <= 0) {
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
-  // Plot area ends where the right price axis starts.
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
 
-  // Build label text — MT5 shows "SL, -1 049.00 USD, -1049 points" on TP/SL
-  const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits) : null;
+  // Build label — USD estimate for TP/SL
+  const info = dashed ? slTpInfo(entryPrice, displayPrice, volume, side, digits) : null;
   const labelText = info
-    ? `${label.toUpperCase()}, ${info.pointsStr}`
+    ? `${label.toUpperCase()}, ${info.label}`
     : label.toUpperCase();
 
-  const priceText = price.toFixed(digits);
-  // Label width: ~5.5px per char at 10px font
+  const priceText = displayPrice.toFixed(digits);
   const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
-  // Right axis price tag
   const priceWidth = Math.max(58, axisWidth - 4);
   const priceX = size.w - priceWidth - 2;
-  // Circle drag handle sits in the center of the plot area
   const handleCx = (labelPixels + 4 + plotRight) / 2;
+  const isDrag = drag != null;
 
   return (
     <div
@@ -559,27 +642,9 @@ function TradePlanLine({
         height={size.h}
         viewBox={`0 0 ${size.w} ${size.h}`}
         className="absolute inset-0"
-        style={{
-          touchAction: "none",
-          userSelect: "none",
-          WebkitUserSelect: "none",
-          WebkitTouchCallout: "none",
-        }}
-        onPointerMove={(event) => {
-          if (!dragging) return;
-          event.preventDefault();
-          event.stopPropagation();
-          updateFromPointer(event.clientY);
-        }}
-        onPointerUp={(event) => {
-          if (!dragging) return;
-          event.preventDefault();
-          event.stopPropagation();
-          setDragging(false);
-        }}
-        onPointerCancel={() => setDragging(false)}
+        style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
       >
-        {/* MT5-style: solid line across plot, dashed for TP/SL */}
+        {/* MT5-style line */}
         <line
           x1={labelPixels + 4}
           x2={plotRight}
@@ -588,9 +653,10 @@ function TradePlanLine({
           stroke={color}
           strokeWidth={1}
           strokeDasharray={dashed ? "6 4" : ""}
+          opacity={isDrag ? 0.8 : 1}
         />
 
-        {/* Left label text — plain, no pill background (MT5 style) */}
+        {/* Left label — plain text (MT5 style) */}
         <text
           x={4}
           y={y + 3}
@@ -602,31 +668,26 @@ function TradePlanLine({
           {labelText}
         </text>
 
-        {/* Circle drag handle in center of line — MT5's main drag affordance */}
+        {/* Circle drag handle — grows slightly when dragging for feedback */}
         <g
           style={{ pointerEvents: "auto", cursor: "ns-resize", touchAction: "none" }}
-          onPointerDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setDragging(true);
-            (event.target as SVGElement).setPointerCapture(event.pointerId);
-          }}
+          onPointerDown={handlePointerDown}
         >
-          {/* Large invisible hit area for easy finger tapping */}
           <rect x={handleCx - 28} y={y - 28} width={56} height={56} fill="transparent" />
-          <circle cx={handleCx} cy={y} r={5} fill="none" stroke={color} strokeWidth={1.5} />
+          <circle
+            cx={handleCx}
+            cy={y}
+            r={isDrag ? 7 : 5}
+            fill={isDrag ? color : "none"}
+            fillOpacity={isDrag ? 0.2 : 0}
+            stroke={color}
+            strokeWidth={isDrag ? 2 : 1.5}
+          />
         </g>
 
-        {/* Right axis: price tag (MT5 style) */}
+        {/* Right axis price tag */}
         <g style={{ pointerEvents: "none" }}>
-          <rect
-            x={priceX}
-            y={y - 9}
-            width={priceWidth}
-            height={18}
-            rx={2}
-            fill={color}
-          />
+          <rect x={priceX} y={y - 9} width={priceWidth} height={18} rx={2} fill={color} />
           <text
             x={priceX + priceWidth / 2}
             y={y + 4}
@@ -646,6 +707,7 @@ function TradePlanLine({
 
 export function ChartScreen({ data, initialAction, liveTradingEnabled = false }: Props) {
   const router = useRouter();
+  const { playSound, vibrate } = useAmbient();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
   const [isRoutePending, startRouteTransition] = useTransition();
@@ -2163,20 +2225,22 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         >
           <Newspaper className="h-3.5 w-3.5" />
         </button>
+        {/* Subtle divider — separates info (depth/news) from execution (⚡/crosshair) */}
+        <div className="mx-0.5 h-4 w-px rounded-full bg-white/[0.08]" />
         <button
           type="button"
           onClick={() => {
             if (oneClickVisible) {
-              // Turning off: close bar + reset pending state
               setOneClickVisible(false);
               setExecutionMode("market");
               setPendingOrderVisible(false);
             } else {
-              // Turning on: show market bar only
               setOneClickVisible(true);
               setExecutionMode("market");
               setPendingOrderVisible(false);
             }
+            vibrate("light");
+            playSound("tap");
           }}
           className={`${baseBtn} ${oneClickVisible && executionMode === "market" ? active : idle}`}
           style={oneClickVisible && executionMode === "market" ? { borderColor: "rgba(0,212,245,0.35)", boxShadow: "0 0 10px rgba(0,212,245,0.18)" } : undefined}
@@ -2190,14 +2254,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           type="button"
           onClick={() => {
             if (executionMode === "pending" && pendingOrderVisible) {
-              // Already in pending mode — turn it off, go back to market bar
               setExecutionMode("market");
               setPendingOrderVisible(false);
             } else {
-              // Enter pending mode (also opens bar if closed)
               setOneClickVisible(true);
               showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
             }
+            vibrate("light");
+            playSound("tap");
           }}
           className={`${baseBtn} ${executionMode === "pending" && pendingOrderVisible ? active : idle}`}
           aria-label="Limit / Stop order"
@@ -2232,6 +2296,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     pendingOrderVisible,
     pendingOrderSide,
     showPendingTradePlan,
+    vibrate,
+    playSound,
   ]);
 
   return (
@@ -2354,6 +2420,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={handlePendingEntryPriceChange}
+              onDragStart={() => vibrate("light")}
+              onDragEnd={() => vibrate("light")}
             />
             <TradePlanLine
               canvasRef={canvasRef}
@@ -2366,6 +2434,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               entryPrice={pendingOrderPrice}
               volume={tradeVolume}
               side={pendingOrderSide}
+              onDragStart={() => vibrate("light")}
+              onDragEnd={() => { vibrate("light"); playSound("tap"); }}
             />
             <TradePlanLine
               canvasRef={canvasRef}
@@ -2378,6 +2448,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               entryPrice={pendingOrderPrice}
               volume={tradeVolume}
               side={pendingOrderSide}
+              onDragStart={() => vibrate("light")}
+              onDragEnd={() => { vibrate("light"); playSound("tap"); }}
             />
             {/* Small cancel button — actions live in bottom bar now */}
             <button
@@ -2995,14 +3067,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* ─── MT5-style execution bar ─── */}
       {oneClickVisible ? (
-      <div className="shrink-0 border-t border-white/[0.04]" style={{ background: "linear-gradient(180deg, #0c0e12 0%, #060608 100%)" }}>
+      <div className="shrink-0" style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.04)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }}>
         {executionMode === "pending" ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
-          <div className="flex h-12 items-center gap-0 px-0">
+          <div className="flex h-[3.25rem] items-center gap-0 px-0">
             {/* Submit arrow — rounded pill */}
             <button
               type="button"
-              onClick={() => handleSendCurrentPlan()}
+              onClick={() => { vibrate("medium"); playSound("chime"); handleSendCurrentPlan(); }}
               className={`ml-1.5 flex h-9 w-12 items-center justify-center rounded-full ${
                 pendingOrderSide === "buy"
                   ? "bg-gradient-to-b from-[#0e6b7a] to-[#0a5060] text-white shadow-[0_0_12px_rgba(34,211,238,0.15)]"
@@ -3028,6 +3100,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
                 );
                 setPendingOrderVisible(true);
+                vibrate("light"); playSound("tap");
               }}
               className="flex h-full w-12 items-center justify-center"
               aria-label="Toggle stop loss"
@@ -3049,6 +3122,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
                 );
                 setPendingOrderVisible(true);
+                vibrate("light"); playSound("tap");
               }}
               className="flex h-full w-12 items-center justify-center"
               aria-label="Toggle take profit"
@@ -3062,7 +3136,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             {/* Order-type picker */}
             <button
               type="button"
-              onClick={() => setOrderTypeMenuOpen((v) => !v)}
+              onClick={() => { setOrderTypeMenuOpen((v) => !v); vibrate("light"); }}
               className="flex h-full w-11 items-center justify-center"
               aria-label="Change order type"
             >
@@ -3071,15 +3145,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : (
           /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
-          <div className="flex h-12 items-stretch gap-0">
+          <div className="flex h-[3.25rem] items-stretch gap-0">
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between bg-gradient-to-b from-[#B01E2D] to-[#8A1522] px-3"
+              className="flex min-w-0 flex-1 items-center justify-between px-3"
+              style={{ background: "linear-gradient(180deg, #B01E2D 0%, #8A1522 100%)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3)" }}
               onClick={() => {
                 setPendingOrderSide("sell");
                 setExecutionMode("market");
                 setPendingOrderType("market");
                 setPendingOrderVisible(false);
+                vibrate("heavy"); playSound("chime");
                 handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
               }}
               aria-label="Sell market"
@@ -3099,12 +3175,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </button>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between bg-gradient-to-b from-[#0e7a8a] to-[#0a5e6c] px-3"
+              className="flex min-w-0 flex-1 items-center justify-between px-3"
+              style={{ background: "linear-gradient(180deg, #0e7a8a 0%, #0a5e6c 100%)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3)" }}
               onClick={() => {
                 setPendingOrderSide("buy");
                 setExecutionMode("market");
                 setPendingOrderType("market");
                 setPendingOrderVisible(false);
+                vibrate("heavy"); playSound("chime");
                 handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
               }}
               aria-label="Buy market"
@@ -3162,6 +3240,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       showPendingTradePlan(sideForType, typeId as any);
                     }
                     setOrderTypeMenuOpen(false);
+                    vibrate("light"); playSound("tap");
                   }}
                   className={`flex items-center gap-3 border-b border-white/[0.06] px-3 py-2.5 text-left text-[14px] ${
                     isActive ? "font-bold text-white" : "font-medium text-white/70"
