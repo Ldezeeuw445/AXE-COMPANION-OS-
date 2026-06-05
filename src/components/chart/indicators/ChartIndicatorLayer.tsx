@@ -9,6 +9,7 @@ import {
   sessionVwap,
   atrSeries,
   smaSeries,
+  emaSeries,
   type IndicatorMathCandle,
 } from "@/lib/chart/indicatorMath";
 
@@ -84,6 +85,10 @@ type Props = {
    * extension (the previous default), independent of this setting.
    */
   projectionCount?: 1 | 2 | 3;
+  /** Moving Average period — SMA or EMA. Default 20. */
+  maPeriod?: number;
+  /** Moving Average type — "sma" or "ema". Default "sma". */
+  maType?: "sma" | "ema";
 };
 
 type Size = { w: number; h: number };
@@ -185,6 +190,8 @@ export function ChartIndicatorLayer({
   fvgCount = 1,
   projectionCount = 1,
   futureProjectionX = null,
+  maPeriod = 20,
+  maType = "sma",
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
@@ -215,6 +222,7 @@ export function ChartIndicatorLayer({
     if (!handle || size.w <= 0 || size.h <= 0) {
       return {
         maPath: "",
+        latestMaY: null as number | null,
         bollingerUpperPath: "",
         bollingerMiddlePath: "",
         bollingerLowerPath: "",
@@ -260,19 +268,21 @@ export function ChartIndicatorLayer({
       futureProjectionX,
     );
 
-    const ma = sma(visible.map((candle) => candle.close), 20);
+    const closes = visible.map((candle) => candle.close);
+    const ma = maType === "ema"
+      ? emaSeries(closes, maPeriod)
+      : sma(closes, maPeriod);
     const maPoints: Point[] = visible
       .map((candle, index) => {
         if (ma[index] == null || candle.time == null) return null;
         const x = handle.timeToCoordinate(candle.time);
-        const y = handle.priceToCoordinate(ma[index]);
+        const y = handle.priceToCoordinate(ma[index]!);
         if (x == null || y == null) return null;
         return { x, y };
       })
       .filter(Boolean) as Point[];
 
     const mathCandles = visibleWithTime as IndicatorMathCandle[];
-    const closes = visibleWithTime.map((candle) => candle.close);
     const bollinger = bollingerBands(closes, 20, 2);
     const bollingerUpperPoints: Point[] = [];
     const bollingerMiddlePoints: Point[] = [];
@@ -336,8 +346,11 @@ export function ChartIndicatorLayer({
       .slice(-200)
       .reduce((sum, c) => sum + (Number(c.tickVolume ?? c.volume ?? 0) || 0), 0);
 
+    const latestMaY = maPoints.length > 0 ? maPoints[maPoints.length - 1].y : null;
+
     return {
       maPath: toPath(maPoints),
+      latestMaY,
       bollingerUpperPath: toPath(bollingerUpperPoints),
       bollingerMiddlePath: toPath(bollingerMiddlePoints),
       bollingerLowerPath: toPath(bollingerLowerPoints),
@@ -377,7 +390,7 @@ export function ChartIndicatorLayer({
       supplyDemand,
       totalChartVolume,
     };
-  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount]);
+  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
@@ -645,6 +658,9 @@ export function ChartIndicatorLayer({
             and the dedicated PDQ indicator now expresses the same idea
             cleanly with a fixed level from yesterday's H + L. */}
 
+        {/* BOS/MSS structure lines — premium LuxAlgo style: thinner
+            lines, smaller labels, softer opacity. BOS = dashed
+            (continuation), MSS = solid (reversal/break). */}
         {active.structure
           ? geometry.structureLines.map((item, index) => (
               <g key={`line-${item.label}-${index}`}>
@@ -653,20 +669,20 @@ export function ChartIndicatorLayer({
                   x2={item.x2}
                   y1={item.y}
                   y2={item.y}
-                  stroke={item.bullish ? "rgba(8,153,129,0.92)" : "rgba(242,54,69,0.92)"}
-                  strokeWidth={item.continuation ? 1.35 : 2}
-                  strokeDasharray={item.continuation ? "6 5" : undefined}
+                  stroke={item.bullish ? "rgba(8,153,129,0.72)" : "rgba(242,54,69,0.72)"}
+                  strokeWidth={item.continuation ? 0.8 : 1.2}
+                  strokeDasharray={item.continuation ? "5 4" : undefined}
                 />
                 <text
                   x={(item.x1 + item.x2) / 2}
-                  y={item.y - 6}
+                  y={item.y - 5}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
+                  fontSize="8"
+                  fontWeight="500"
+                  fill={item.bullish ? "rgba(8,153,129,0.82)" : "rgba(242,54,69,0.82)"}
+                  stroke="rgba(0,0,0,0.55)"
+                  strokeWidth="2"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -676,7 +692,25 @@ export function ChartIndicatorLayer({
           : null}
 
         {active.ma && geometry.maPath ? (
-          <path d={geometry.maPath} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth={1.7} />
+          <g pointerEvents="none">
+            <path d={geometry.maPath} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth={1.7} />
+            {geometry.latestMaY != null ? (
+              <text
+                x={size.w - RIGHT_RAIL_OFFSET}
+                y={Math.max(12, Math.min(size.h - 4, geometry.latestMaY - 4))}
+                textAnchor="end"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                fontSize="9"
+                fontWeight={700}
+                fill="rgba(96,165,250,0.9)"
+                stroke="rgba(0,0,0,0.72)"
+                strokeWidth={2.4}
+                paintOrder="stroke"
+              >
+                {maType === "ema" ? "EMA" : "MA"}{maPeriod}
+              </text>
+            ) : null}
+          </g>
         ) : null}
 
         {active.bollinger && geometry.bollingerFillPath ? (
@@ -742,6 +776,9 @@ export function ChartIndicatorLayer({
           </g>
         ) : null}
 
+        {/* Structure pivot labels (HH/HL/LH/LL) — subtle, premium style.
+            Smaller font, thinner weight, softer opacity so they inform
+            without screaming over the candles. */}
         {active.structure
           ? geometry.structureLabels.map((item, index) => (
               <g key={`${item.label}-${index}`}>
@@ -750,11 +787,11 @@ export function ChartIndicatorLayer({
                   y={item.y}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.kind === "high" ? "rgba(34,211,238,0.92)" : "rgba(45,212,191,0.92)"}
-                  stroke="rgba(0,0,0,0.75)"
-                  strokeWidth="3"
+                  fontSize="8"
+                  fontWeight="500"
+                  fill={item.kind === "high" ? "rgba(34,211,238,0.72)" : "rgba(45,212,191,0.72)"}
+                  stroke="rgba(0,0,0,0.6)"
+                  strokeWidth="2"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -771,11 +808,11 @@ export function ChartIndicatorLayer({
                   y={item.y}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
+                  fontSize="8"
+                  fontWeight="500"
+                  fill={item.bullish ? "rgba(8,153,129,0.82)" : "rgba(242,54,69,0.82)"}
+                  stroke="rgba(0,0,0,0.55)"
+                  strokeWidth="2"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -839,8 +876,9 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
     : `S ${Math.round(v.sellerPercent)}%`;
   // Both rows use the OB's own direction colour — softer, premium look.
   // No more red/green dominance split: the volumetric inner bars already
-  // show which side is bigger.
-  const labelColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
+  // show which side is bigger. Dialled back to 75% opacity so the labels
+  // read as ambient data, not loud annotations.
+  const labelColor = zone.direction === "up" ? "rgba(167,243,208,0.75)" : "rgba(252,165,165,0.75)";
   const sideColor = labelColor;
   const baseColor = labelColor;
 
@@ -858,11 +896,11 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
         y={yTop}
         textAnchor="end"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-        fontSize="9.5"
-        fontWeight={700}
+        fontSize="8.5"
+        fontWeight={600}
         fill={baseColor}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.6"
+        stroke="rgba(0,0,0,0.65)"
+        strokeWidth="2.2"
         paintOrder="stroke"
       >
         {volLabel}
@@ -873,11 +911,11 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
           y={yBottom}
           textAnchor="end"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight={700}
+          fontSize="8"
+          fontWeight={600}
           fill={sideColor}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.6"
+          stroke="rgba(0,0,0,0.65)"
+          strokeWidth="2.2"
           paintOrder="stroke"
         >
           {sideLabel}
@@ -1429,8 +1467,14 @@ function buildStructureOverlay(
           // profile bars on the left edge are kept for shape; the
           // split-bar (`volumetric`) gives the LuxAlgo-style buyer/seller
           // dominance read at a glance.
-          const profile = mitigated ? undefined : buildVolumeProfile(visible, top, bottom, topY, bottomY);
-          const volumetric = mitigated ? undefined : buildVolumetricBreakdown(visible, top, bottom);
+          // Mitigated OBs are completely hidden — a red OB below a green
+          // OB means it was breached and is no longer valid. Previously we
+          // rendered at 45% opacity, but Luka confirmed these should not
+          // appear at all ("die zijn mitigated, dat moet niet kunnen").
+          if (mitigated) continue;
+
+          const profile = buildVolumeProfile(visible, top, bottom, topY, bottomY);
+          const volumetric = buildVolumetricBreakdown(visible, top, bottom);
 
           orderBlocks.push({
             x,
@@ -1444,7 +1488,7 @@ function buildStructureOverlay(
             fill: isBullishOb ? "rgba(45,212,191,0.18)" : "rgba(239,68,68,0.18)",
             direction: isBullishOb ? "up" : "down",
             extend: true,
-            mitigated,
+            mitigated: false,
             volumeProfile: profile,
             volumetric,
           });
