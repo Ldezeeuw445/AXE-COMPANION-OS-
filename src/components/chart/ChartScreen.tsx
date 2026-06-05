@@ -28,6 +28,7 @@ import {
   Save,
   Settings2,
   Sparkles,
+  Zap,
   Spline,
   Square,
   TrendingUp,
@@ -914,6 +915,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [orderTypeMenuOpen, setOrderTypeMenuOpen] = useState(false);
   const [lotMenuOpen, setLotMenuOpen] = useState(false);
   const [deviationPoints, setDeviationPoints] = useState(10);
+  const [oneClickVisible, setOneClickVisible] = useState(false);
   const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
 
   // Order send wiring — demo fills locally, live opens a confirm modal that
@@ -2121,21 +2123,38 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
         <button
           type="button"
-          onClick={() => setToolRailOpen((v) => !v)}
-          className={`${baseBtn} ${idle}`}
-          aria-label="Indicators"
-          title="Indicators"
+          onClick={() => {
+            setOneClickVisible((v) => !v);
+            if (!oneClickVisible) {
+              setExecutionMode("market");
+              setPendingOrderVisible(false);
+            }
+          }}
+          className={`${baseBtn} ${oneClickVisible ? active : idle}`}
+          style={oneClickVisible ? { borderColor: "rgba(0,212,245,0.35)", boxShadow: "0 0 10px rgba(0,212,245,0.18)" } : undefined}
+          aria-label="1-Click Trade"
+          title="1-Click Trade"
+          aria-pressed={oneClickVisible}
         >
-          <Crosshair className="h-3.5 w-3.5" />
+          <Zap className="h-3.5 w-3.5" style={oneClickVisible ? { color: "#00d4f5" } : undefined} />
         </button>
         <button
           type="button"
-          onClick={resetChartView}
-          className={`${baseBtn} ${idle}`}
-          aria-label="Chart settings"
-          title="Chart settings / view"
+          onClick={() => {
+            if (executionMode === "pending" && pendingOrderVisible) {
+              setExecutionMode("market");
+              setPendingOrderVisible(false);
+            } else {
+              showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
+              setOneClickVisible(true);
+            }
+          }}
+          className={`${baseBtn} ${executionMode === "pending" && pendingOrderVisible ? active : idle}`}
+          aria-label="Limit / Stop order"
+          title="Limit / Stop order"
+          aria-pressed={executionMode === "pending" && pendingOrderVisible}
         >
-          <Settings2 className="h-3.5 w-3.5" />
+          <Crosshair className="h-3.5 w-3.5" />
         </button>
       </div>,
     );
@@ -2158,6 +2177,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     newsOpen,
     openOrderBook,
     openNews,
+    oneClickVisible,
+    executionMode,
+    pendingOrderVisible,
+    pendingOrderSide,
+    showPendingTradePlan,
   ]);
 
   return (
@@ -2848,15 +2872,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : null}
 
-        <button
-          type="button"
-          onClick={resetChartView}
-          className="absolute bottom-3 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/76 text-white/85 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-white/[0.14] hover:bg-white/[0.06] active:scale-95"
-          aria-label={CHART_SCALE_MODES[scaleModeIndex].label}
-          title={CHART_SCALE_MODES[scaleModeIndex].label}
-        >
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        {/* Floating reset button removed — chart reset accessible via
+            long-press or indicator tool rail instead. */}
 
         {/* Floating toast: lives INSIDE the chart frame so it can never push the
             indicator panes or the execution bar around. pointer-events:none so
@@ -2937,9 +2954,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </ResizablePane>
       ) : null}
 
-      {/* Execution bar — sits flush against the bottom nav. No safe-area
-          padding needed since the chart frame already stops at --tos-nav-offset
-          and the bottom nav handles the safe area. */}
+      {/* Execution bar — hidden by default, shown when ⚡ 1-Click is active
+          or a pending order is being placed. */}
+      {oneClickVisible ? (
       <div className="shrink-0 border-t border-white/[0.08] bg-[var(--tos-bg-base)]/90 px-2 py-1.5 backdrop-blur-2xl">
         <div>
         {/* Row 1: SELL · MKT / Lots / BUY · MKT. These buttons are
@@ -3092,6 +3109,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         ) : null}
         </div>
       </div>
+      ) : null}
 
       {/* Order-type chooser popover */}
       {orderTypeMenuOpen ? (
