@@ -77,7 +77,7 @@ export function BottomNav() {
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
         background: "linear-gradient(180deg, #101016, #0a0a0e)",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingBottom: "max(env(safe-area-inset-bottom), 20px)",
       }}
       aria-label="Primary"
     >

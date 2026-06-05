@@ -961,6 +961,38 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     [data.candles, data.lastPrice, livePrice, pendingOrderPrice, pendingOrderSide],
   );
 
+  /**
+   * Auto-flip buy/sell side when dragging the pending entry price line.
+   * Limit orders: entry below live → buy_limit, entry above live → sell_limit.
+   * Stop orders:  entry above live → buy_stop,  entry below live → sell_stop.
+   */
+  const handlePendingEntryPriceChange = useCallback(
+    (newPrice: number) => {
+      setPendingOrderPrice(newPrice);
+      const ref = livePrice ?? data.lastPrice;
+      if (ref == null || !Number.isFinite(ref)) return;
+      const isStop = pendingOrderType === "buy_stop" || pendingOrderType === "sell_stop";
+      if (isStop) {
+        if (newPrice > ref && pendingOrderType !== "buy_stop") {
+          setPendingOrderSide("buy");
+          setPendingOrderType("buy_stop");
+        } else if (newPrice < ref && pendingOrderType !== "sell_stop") {
+          setPendingOrderSide("sell");
+          setPendingOrderType("sell_stop");
+        }
+      } else {
+        if (newPrice < ref && pendingOrderType !== "buy_limit") {
+          setPendingOrderSide("buy");
+          setPendingOrderType("buy_limit");
+        } else if (newPrice > ref && pendingOrderType !== "sell_limit") {
+          setPendingOrderSide("sell");
+          setPendingOrderType("sell_limit");
+        }
+      }
+    },
+    [livePrice, data.lastPrice, pendingOrderType],
+  );
+
   const tradeVolumeNum = useMemo(() => {
     const n = Number.parseFloat(tradeVolume);
     return Number.isFinite(n) && n > 0 ? n : 0.1;
@@ -2247,7 +2279,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               label={orderTypeLabel(pendingOrderType)}
               color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
-              onChange={setPendingOrderPrice}
+              onChange={handlePendingEntryPriceChange}
             />
             <TradePlanLine
               canvasRef={canvasRef}
