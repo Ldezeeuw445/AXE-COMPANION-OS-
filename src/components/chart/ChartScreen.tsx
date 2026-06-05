@@ -6,12 +6,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import type { RefObject } from "react";
 import {
   Activity,
+  ArrowRight,
   ArrowUpDown,
   BarChart2,
   BarChart3,
   Bell,
   BookOpen,
   ChevronDown,
+  ChevronUp,
   ClipboardList,
   Crosshair,
   GitBranch,
@@ -485,14 +487,17 @@ function TradePlanLine({
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
-  // Plot area ends where the right price axis starts. Drawing the line up to
-  // there (instead of edge-to-edge) keeps the chart legible — exactly like
-  // MT5's pending-order overlay.
+  // Plot area ends where the right price axis starts.
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
   const labelText = label.toUpperCase();
-  const labelWidth = Math.max(46, labelText.length * 7 + 14);
+  const priceText = price.toFixed(digits);
+  // Label width: ~5.5px per char at 10px font
+  const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
+  // Right axis price tag
   const priceWidth = Math.max(58, axisWidth - 4);
   const priceX = size.w - priceWidth - 2;
+  // Circle drag handle sits in the center of the plot area
+  const handleCx = (labelPixels + 4 + plotRight) / 2;
 
   return (
     <div
@@ -526,18 +531,30 @@ function TradePlanLine({
         }}
         onPointerCancel={() => setDragging(false)}
       >
-        {/* Single thin line across the plot — solid for entry, dashed for TP/SL */}
+        {/* MT5-style: solid line across plot, dashed for TP/SL */}
         <line
-          x1={labelWidth + 8}
+          x1={labelPixels + 4}
           x2={plotRight}
           y1={y}
           y2={y}
           stroke={color}
           strokeWidth={1}
-          strokeDasharray={dashed ? "4 4" : ""}
+          strokeDasharray={dashed ? "6 4" : ""}
         />
 
-        {/* Left side: small drag handle + label pill (MT5 style) */}
+        {/* Left label text — plain, no pill background (MT5 style) */}
+        <text
+          x={4}
+          y={y + 3}
+          fontFamily="ui-sans-serif, system-ui, -apple-system"
+          fontSize={10}
+          fontWeight={700}
+          fill={color}
+        >
+          {labelText}
+        </text>
+
+        {/* Circle drag handle in center of line — MT5's main drag affordance */}
         <g
           style={{ pointerEvents: "auto", cursor: "ns-resize" }}
           onPointerDown={(event) => {
@@ -548,42 +565,20 @@ function TradePlanLine({
             updateFromPointer(event.clientY);
           }}
         >
-          {/* Generous invisible hit area so finger taps land reliably */}
-          <rect x={0} y={y - 14} width={labelWidth + 16} height={28} fill="transparent" />
-          <rect
-            x={4}
-            y={y - 9}
-            width={labelWidth}
-            height={18}
-            rx={3}
-            fill="rgba(0,0,0,0.78)"
-            stroke={color}
-            strokeWidth={1}
-          />
-          <text
-            x={4 + labelWidth / 2}
-            y={y + 4}
-            textAnchor="middle"
-            fontFamily="ui-sans-serif, system-ui, -apple-system"
-            fontSize={9}
-            fontWeight={700}
-            fill={color}
-          >
-            {labelText}
-          </text>
+          {/* Large invisible hit area for easy finger tapping */}
+          <rect x={handleCx - 24} y={y - 24} width={48} height={48} fill="transparent" />
+          <circle cx={handleCx} cy={y} r={5} fill="none" stroke={color} strokeWidth={1.5} />
         </g>
 
-        {/* Right side: price label that visually sits in the price-axis gutter */}
+        {/* Right axis: price tag (MT5 style) */}
         <g style={{ pointerEvents: "none" }}>
           <rect
             x={priceX}
             y={y - 9}
             width={priceWidth}
             height={18}
-            rx={3}
-            fill="rgba(0,0,0,0.82)"
-            stroke={color}
-            strokeWidth={1}
+            rx={2}
+            fill={color}
           />
           <text
             x={priceX + priceWidth / 2}
@@ -592,9 +587,9 @@ function TradePlanLine({
             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
             fontSize={10}
             fontWeight={700}
-            fill={color}
+            fill="#000"
           >
-            {price.toFixed(digits)}
+            {priceText}
           </text>
         </g>
       </svg>
@@ -2300,7 +2295,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             <TradePlanLine
               canvasRef={canvasRef}
               price={pendingOrderPrice}
-              label={orderTypeLabel(pendingOrderType)}
+              label={`${orderTypeLabel(pendingOrderType)} ${tradeVolume}`}
               color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={handlePendingEntryPriceChange}
@@ -2323,34 +2318,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               onChange={setPendingTakeProfitPrice}
               dashed
             />
+            {/* Clear plan — small X in top-right corner */}
             <button
               type="button"
               onClick={() => {
                 setPendingOrderVisible(false);
                 setExecutionMode("market");
               }}
-              className="absolute right-3 top-12 z-30 inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/82 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
-              aria-label="Cancel pending order overlay"
+              className="absolute right-3 top-12 z-30 flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/82 text-[12px] text-white/70 shadow-[0_4px_12px_rgba(0,0,0,0.45)] backdrop-blur"
+              aria-label="Cancel pending order"
             >
-              <span aria-hidden>✕</span>
-              <span>Clear plan</span>
-            </button>
-            {/* Send pill — sole entry point for actually opening a position.
-                Demo: virtual fill. Live: ChartOrderConfirm. */}
-            <button
-              type="button"
-              onClick={() => handleSendCurrentPlan()}
-              className={`absolute right-3 top-[5.25rem] z-30 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wider shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur transition ${
-                pendingOrderSide === "buy"
-                  ? "border border-white/[0.18] bg-white/[0.10] text-white/90 hover:bg-white/[0.12]"
-                  : "border border-rose-300/60 bg-rose-400/22 text-rose-50 hover:bg-rose-400/30"
-              }`}
-              aria-label={`Send ${pendingOrderSide.toUpperCase()} ${
-                isDemoAccount ? "(demo virtual fill)" : "(live order)"
-              }`}
-            >
-              {pendingOrderSide === "buy" ? "▲" : "▼"}{" "}
-              {isDemoAccount ? "Send · DEMO" : liveTrading.enabled ? "Send · LIVE" : "Live OFF"}
+              ✕
             </button>
           </>
         ) : null}
@@ -2954,167 +2932,144 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </ResizablePane>
       ) : null}
 
-      {/* Execution bar — hidden by default, shown when ⚡ 1-Click is active
-          or a pending order is being placed. */}
+      {/* ─── MT5-style execution bar ─── */}
       {oneClickVisible ? (
-      <div className="shrink-0 border-t border-white/[0.08] bg-[var(--tos-bg-base)]/90 px-2 py-1.5 backdrop-blur-2xl">
-        <div>
-        {/* Row 1: SELL · MKT / Lots / BUY · MKT. These buttons are
-            market-only now. Pending orders are sent from the separate
-            gold Set ▶ row below, so a Buy/ Sell tap can never
-            accidentally place a limit/stop. */}
-        <div className="flex h-11 items-stretch gap-1">
-          <button
-            type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
-              executionMode === "market" && pendingOrderSide === "sell"
-                ? "bg-gradient-to-r from-[#3A0710] via-[#9C1A26] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.32)]"
-                : "bg-gradient-to-r from-[#1A0408] via-[#4A0C13] to-[#7A1722] text-white/85"
-            }`}
-            onClick={() => {
-              setPendingOrderSide("sell");
-              setExecutionMode("market");
-              setPendingOrderType("market");
-              setPendingOrderVisible(false);
-              handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
-            }}
-            aria-label="Sell market"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Sell · MKT</span>
-            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
-          </button>
-          <button
-            type="button"
-            className="flex min-w-[5rem] flex-col items-center justify-center rounded-[1.15rem] border border-white/[0.08] bg-[#08080a]/80 px-2 text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-            onClick={() => setLotMenuOpen((v) => !v)}
-            aria-label="Choose lot size"
-          >
-            <span className="text-[8px] font-bold uppercase tracking-[0.22em] text-tos-dim">Lots</span>
-            <span className="mt-0.5 font-mono text-[12px] font-semibold">{tradeVolume}</span>
-          </button>
-          <button
-            type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
-              executionMode === "market" && pendingOrderSide === "buy"
-                ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(255,255,255,0.32)]"
-                : "bg-gradient-to-r from-[#03252A] via-[#0A5662] to-[#11808D] text-white/85"
-            }`}
-            onClick={() => {
-              setPendingOrderSide("buy");
-              setExecutionMode("market");
-              setPendingOrderType("market");
-              setPendingOrderVisible(false);
-              handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
-            }}
-            aria-label="Buy market"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Buy · MKT</span>
-            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
-          </button>
-        </div>
-
-        {/* Order-type chip row. Selecting a pending type opens the
-            dedicated pending row; selecting Market hides it. */}
-        <div className="mt-1 flex h-9 items-stretch gap-1">
-          <button
-            type="button"
-            onClick={() => setOrderTypeMenuOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-[#0e0f12] px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-            aria-label="Choose execution type"
-          >
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/[0.06] text-white/80">
-              <ChevronDown className="h-3 w-3" />
-            </span>
-            <span className="truncate uppercase tracking-wide text-tos-text">
-              {executionMode === "market" ? "Market execution" : orderTypeLabel(pendingOrderType)}
-            </span>
-            <span className="ml-auto font-mono text-[11px] text-tos-muted">
-              {executionMode === "pending" && pendingOrderPrice != null
-                ? formatBrokerPrice(data.brokerSymbol, pendingOrderPrice)
-                : tradeVolume}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeviationPoints((v) => (v >= 100 ? 1 : v + 5))}
-            className="flex min-w-[3.4rem] items-center justify-center gap-1 rounded-[1.05rem] border border-white/[0.08] bg-black/45 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
-            aria-label="Cycle slippage / deviation"
-            title="Slippage / Deviation in points"
-          >
-            <span>DEV</span>
-            <span className="font-mono text-[10px] text-tos-text">{deviationPoints}</span>
-          </button>
-        </div>
-
-        {/* Row 2: pending-only ticket. This is the only place pending
-            Limit/Stop orders can be submitted. */}
+      <div className="shrink-0 border-t border-white/[0.06] bg-[#060608]">
         {executionMode === "pending" ? (
-        <div className="mt-1 flex h-9 items-stretch gap-1">
-          <div className={`flex min-w-[5.1rem] items-center justify-center rounded-[1.05rem] border px-2 text-[10px] font-bold uppercase tracking-wide ${
-            pendingOrderSide === "buy"
-              ? "border-white/[0.12] bg-white/[0.06] text-white"
-              : "border-rose-300/35 bg-rose-400/12 text-rose-100"
-          }`}>
-            {orderTypeLabel(pendingOrderType)}
+          /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
+          <div className="flex h-11 items-center gap-0 px-0">
+            {/* Submit arrow */}
+            <button
+              type="button"
+              onClick={() => handleSendCurrentPlan()}
+              className={`flex h-full w-14 items-center justify-center ${
+                pendingOrderSide === "buy"
+                  ? "bg-[#0A5662] text-white"
+                  : "bg-[#7A1722] text-white"
+              }`}
+              aria-label={`Place ${orderTypeLabel(pendingOrderType)}`}
+            >
+              <ArrowRight className="h-5 w-5" />
+            </button>
+            {/* Order label + volume */}
+            <div className={`flex h-full min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold ${
+              pendingOrderSide === "buy" ? "bg-[#063D44] text-[#22D3EE]" : "bg-[#3A0710] text-[#E13947]"
+            }`}>
+              <span>{orderTypeLabel(pendingOrderType)}</span>
+              <span className="font-mono text-white/90">{tradeVolume}</span>
+            </div>
+            {/* SL toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                if (entry == null || !Number.isFinite(entry)) return;
+                const distance = draggablePlanDistance(data.candles, entry);
+                setPendingStopLossPrice((prev) =>
+                  prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
+                );
+                setPendingOrderVisible(true);
+              }}
+              className={`flex h-full w-12 items-center justify-center ${
+                pendingStopLossPrice != null
+                  ? "bg-[#E13947]/20"
+                  : "bg-white/[0.03]"
+              }`}
+              aria-label="Toggle stop loss"
+            >
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black ${
+                pendingStopLossPrice != null
+                  ? "border-[#E13947] text-[#E13947]"
+                  : "border-white/20 text-white/30"
+              }`}>SL</span>
+            </button>
+            {/* TP toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                if (entry == null || !Number.isFinite(entry)) return;
+                const distance = draggablePlanDistance(data.candles, entry);
+                setPendingTakeProfitPrice((prev) =>
+                  prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
+                );
+                setPendingOrderVisible(true);
+              }}
+              className={`flex h-full w-12 items-center justify-center ${
+                pendingTakeProfitPrice != null
+                  ? "bg-[#4ECBA0]/20"
+                  : "bg-white/[0.03]"
+              }`}
+              aria-label="Toggle take profit"
+            >
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black ${
+                pendingTakeProfitPrice != null
+                  ? "border-[#4ECBA0] text-[#4ECBA0]"
+                  : "border-white/20 text-white/30"
+              }`}>TP</span>
+            </button>
+            {/* Order-type picker */}
+            <button
+              type="button"
+              onClick={() => setOrderTypeMenuOpen((v) => !v)}
+              className="flex h-full w-12 items-center justify-center bg-white/[0.03]"
+              aria-label="Change order type"
+            >
+              <ChevronUp className="h-4 w-4 text-white/50" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-              if (entry == null || !Number.isFinite(entry)) return;
-              const distance = draggablePlanDistance(data.candles, entry);
-              setPendingStopLossPrice((prev) =>
-                prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
-              );
-              setPendingOrderVisible(true);
-            }}
-            className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
-              pendingStopLossPrice != null
-                ? "border border-rose-500/60 bg-rose-500/15 text-rose-200/95"
-                : "border border-white/[0.08] bg-black/45 text-rose-300/85 hover:bg-rose-500/8"
-            }`}
-            aria-label="Set stop loss"
-          >
-            SL
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-              if (entry == null || !Number.isFinite(entry)) return;
-              const distance = draggablePlanDistance(data.candles, entry);
-              setPendingTakeProfitPrice((prev) =>
-                prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
-              );
-              setPendingOrderVisible(true);
-            }}
-            className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
-              pendingTakeProfitPrice != null
-                ? "border border-emerald-400/60 bg-emerald-400/15 text-emerald-200/95"
-                : "border border-white/[0.08] bg-black/45 text-emerald-300/85 hover:bg-emerald-400/8"
-            }`}
-            aria-label="Set take profit"
-          >
-            TP
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSendCurrentPlan()}
-            className="flex min-w-[4.15rem] items-center justify-center rounded-[1.05rem] border border-amber-300/55 bg-amber-400/18 px-2 text-[10px] font-black uppercase tracking-wider text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.12)] hover:bg-amber-400/25"
-            aria-label={`Set pending ${orderTypeLabel(pendingOrderType)}`}
-          >
-            Set ▶
-          </button>
-        </div>
-        ) : null}
-        </div>
+        ) : (
+          /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
+          <div className="flex h-11 items-stretch gap-0">
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center justify-between bg-[#9C1A26] px-3"
+              onClick={() => {
+                setPendingOrderSide("sell");
+                setExecutionMode("market");
+                setPendingOrderType("market");
+                setPendingOrderVisible(false);
+                handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
+              }}
+              aria-label="Sell market"
+            >
+              <span className="text-[10px] font-bold uppercase text-white/80">Sell</span>
+              <span className="font-mono text-[16px] font-bold text-white">{lastPriceText}</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-16 flex-col items-center justify-center bg-[#0a0a0c] text-white"
+              onClick={() => setLotMenuOpen((v) => !v)}
+              aria-label="Choose lot size"
+            >
+              <ChevronDown className="h-2.5 w-2.5 text-white/40" />
+              <span className="font-mono text-[13px] font-bold">{tradeVolume}</span>
+              <ChevronUp className="h-2.5 w-2.5 text-white/40" />
+            </button>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center justify-between bg-[#0F6A7A] px-3"
+              onClick={() => {
+                setPendingOrderSide("buy");
+                setExecutionMode("market");
+                setPendingOrderType("market");
+                setPendingOrderVisible(false);
+                handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
+              }}
+              aria-label="Buy market"
+            >
+              <span className="text-[10px] font-bold uppercase text-white/80">Buy</span>
+              <span className="font-mono text-[16px] font-bold text-white">{lastPriceText}</span>
+            </button>
+          </div>
+        )}
       </div>
       ) : null}
 
       {/* Order-type chooser popover */}
       {orderTypeMenuOpen ? (
         <div
-          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="absolute inset-x-2 bottom-[3.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
           style={{ paddingBottom: "0.75rem" }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -3127,52 +3082,55 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               Close
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="flex flex-col">
             {([
-              { id: "market", label: "Market execution" },
-              { id: "buy_limit", label: "Buy Limit" },
-              { id: "sell_limit", label: "Sell Limit" },
-              { id: "buy_stop", label: "Buy Stop" },
-              { id: "sell_stop", label: "Sell Stop" },
+              { id: "market", label: "Buy" },
+              { id: "market_sell", label: "Sell" },
+              { id: "buy_limit", label: "Limit" },
+              { id: "buy_stop", label: "Stop" },
+              { id: "sell_stop", label: "Stop Limit" },
             ] as const).map((opt) => {
-              const isActive = pendingOrderType === opt.id;
+              const isLimit = opt.id === "buy_limit" || opt.id === "sell_limit";
+              const isActive = opt.id === "market"
+                ? executionMode === "market" && pendingOrderSide === "buy"
+                : opt.id === "market_sell"
+                  ? executionMode === "market" && pendingOrderSide === "sell"
+                  : pendingOrderType === opt.id;
               return (
                 <button
                   key={opt.id}
                   type="button"
                   onClick={() => {
-                    setPendingOrderType(opt.id);
-                    if (opt.id !== "market") {
-                      const sideForType = opt.id.startsWith("buy") ? "buy" : "sell";
-                      showPendingTradePlan(sideForType, opt.id);
-                    } else {
+                    if (opt.id === "market" || opt.id === "market_sell") {
+                      setPendingOrderType("market");
                       setExecutionMode("market");
                       setPendingOrderVisible(false);
+                      setPendingOrderSide(opt.id === "market" ? "buy" : "sell");
+                    } else {
+                      setPendingOrderType(opt.id === "buy_limit" ? (pendingOrderSide === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (pendingOrderSide === "sell" ? "sell_stop" : "buy_stop") : opt.id);
+                      const sideForType = pendingOrderSide;
+                      const typeId = opt.id === "buy_limit" ? (sideForType === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (sideForType === "sell" ? "sell_stop" : "buy_stop") : opt.id;
+                      showPendingTradePlan(sideForType, typeId as any);
                     }
                     setOrderTypeMenuOpen(false);
                   }}
-                  className={`rounded-xl border px-3 py-2 text-left text-[12px] font-semibold ${
-                    isActive
-                      ? "border-white/[0.14] bg-white/[0.06] text-white"
-                      : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
+                  className={`flex items-center gap-3 border-b border-white/[0.06] px-3 py-2.5 text-left text-[14px] ${
+                    isActive ? "font-bold text-white" : "font-medium text-white/70"
                   }`}
                 >
-                  {opt.label}
+                  {isActive ? <span className="text-[14px]">✓</span> : <span className="w-[14px]" />}
+                  <span>{opt.label}</span>
                 </button>
               );
             })}
           </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
-            Market uses the red/cyan MKT tickets immediately. Pending types draw a movable plan line —
-            drag entry/SL/TP, then press the gold Set ▶ button.
-          </p>
         </div>
       ) : null}
 
       {/* Lot quick picker — same UX as MT5 mobile */}
       {lotMenuOpen ? (
         <div
-          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="absolute inset-x-2 bottom-[3.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
           style={{ paddingBottom: "0.75rem" }}
         >
           <div className="mb-2 flex items-center justify-between">
