@@ -484,31 +484,37 @@ const TradePlanLine = memo(function TradePlanLine({
   entryPrice?: number | null;
   volume?: string | number;
   side?: "buy" | "sell";
-  /** Called on drag start — fire haptic/sound feedback. */
   onDragStart?: () => void;
-  /** Called on drag end — fire haptic feedback. */
   onDragEnd?: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const groupRef = useRef<SVGGElement | null>(null);
+  const priceTextRef = useRef<SVGTextElement | null>(null);
+  const labelTextRef = useRef<SVGTextElement | null>(null);
+  const circleRef = useRef<SVGCircleElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState(0);
   const [baseY, setBaseY] = useState<number | null>(null);
 
-  // ── Local drag state — only THIS component re-renders during drag ──
-  // Parent (ChartScreen) only gets onChange on pointer up → no jank
-  const [drag, setDrag] = useState<{ y: number; price: number } | null>(null);
-  const dragRef = useRef<{ y: number; price: number } | null>(null);
-  const dragOriginRef = useRef<{ pointerY: number; baseY: number } | null>(null);
+  // ── Drag is 100% ref-based — zero React state during drag ──
   const isDraggingRef = useRef(false);
   const rafRef = useRef(0);
   const baseYRef = useRef<number | null>(null);
-  // Stable refs for callbacks to avoid stale closures in window listeners
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const onDragStartRef = useRef(onDragStart);
-  onDragStartRef.current = onDragStart;
-  const onDragEndRef = useRef(onDragEnd);
-  onDragEndRef.current = onDragEnd;
+  const dragPriceRef = useRef<number | null>(null);
+  const originRef = useRef<{ pointerY: number; baseY: number; rect: DOMRect } | null>(null);
+
+  // Stable refs for callbacks (window listeners see latest via ref)
+  const onChangeRef = useRef(onChange);  onChangeRef.current = onChange;
+  const onDragStartRef = useRef(onDragStart);  onDragStartRef.current = onDragStart;
+  const onDragEndRef = useRef(onDragEnd);  onDragEndRef.current = onDragEnd;
+
+  // Prop refs needed inside drag rAF (closure-safe)
+  const digitsRef = useRef(digits);  digitsRef.current = digits;
+  const dashedRef = useRef(dashed);  dashedRef.current = dashed;
+  const entryPriceRef = useRef(entryPrice);  entryPriceRef.current = entryPrice;
+  const volumeRef = useRef(volume);  volumeRef.current = volume;
+  const sideRef = useRef(side);  sideRef.current = side;
+  const labelPropRef = useRef(label);  labelPropRef.current = label;
 
   // Size observer
   useEffect(() => {
@@ -524,7 +530,7 @@ const TradePlanLine = memo(function TradePlanLine({
     return () => ro.disconnect();
   }, []);
 
-  // Viewport subscription — updates baseY from parent price, skipped during drag
+  // Viewport subscription — updates baseY, skipped during drag
   useEffect(() => {
     const handle = canvasRef.current;
     if (!handle) return;
@@ -541,27 +547,29 @@ const TradePlanLine = memo(function TradePlanLine({
   }, [canvasRef, price]);
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isDraggingRef.current = false;
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
+  useEffect(() => () => { isDraggingRef.current = false; cancelAnimationFrame(rafRef.current); }, []);
 
-  // Drag handler — window-level listeners for reliable mobile tracking
+  // ── Drag handler — pure DOM manipulation, no React in the loop ──
   const handlePointerDown = useCallback((e: React.PointerEvent<SVGGElement>) => {
     e.preventDefault();
     e.stopPropagation();
     isDraggingRef.current = true;
+    dragPriceRef.current = null;
 
-    // Record origin for delta-based drag (no visual jump)
     const host = hostRef.current;
     if (host) {
-      const rect = host.getBoundingClientRect();
-      dragOriginRef.current = {
-        pointerY: e.clientY - rect.top,
+      originRef.current = {
+        pointerY: e.clientY,
         baseY: baseYRef.current ?? 0,
+        rect: host.getBoundingClientRect(), // cached once — no reflow during drag
       };
+    }
+
+    // Visual feedback via direct DOM
+    if (circleRef.current) {
+      circleRef.current.setAttribute("r", "7");
+      circleRef.current.setAttribute("stroke-width", "2");
+      circleRef.current.setAttribute("fill-opacity", "0.2");
     }
 
     onDragStartRef.current?.();
@@ -571,19 +579,31 @@ const TradePlanLine = memo(function TradePlanLine({
       if (!isDraggingRef.current) return;
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
-        const h = hostRef.current;
         const handle = canvasRef.current;
-        const origin = dragOriginRef.current;
-        if (!h || !handle || !origin) return;
-        const rect = h.getBoundingClientRect();
-        const currentPointerY = ev.clientY - rect.top;
-        // Delta-based: line tracks finger offset, never jumps
-        const newY = origin.baseY + (currentPointerY - origin.pointerY);
+        const origin = originRef.current;
+        const group = groupRef.current;
+        if (!handle || !origin || !group) return;
+
+        // Delta from pointer-down position — no jump, no getBoundingClientRect
+        const delta = ev.clientY - origin.pointerY;
+        const newY = origin.baseY + delta;
         const newPrice = handle.coordinateToPrice(newY);
-        if (newPrice != null && Number.isFinite(newPrice)) {
-          const s = { y: newY, price: newPrice };
-          dragRef.current = s;
-          setDrag(s);
+        if (newPrice == null || !Number.isFinite(newPrice)) return;
+
+        // Direct DOM — bypass React entirely
+        group.setAttribute("transform", `translate(0,${newY})`);
+        dragPriceRef.current = newPrice;
+
+        // Update price text
+        if (priceTextRef.current) {
+          priceTextRef.current.textContent = newPrice.toFixed(digitsRef.current);
+        }
+        // Update label (USD estimate for TP/SL lines)
+        if (labelTextRef.current && dashedRef.current) {
+          const info = slTpInfo(entryPriceRef.current, newPrice, volumeRef.current, sideRef.current, digitsRef.current);
+          labelTextRef.current.textContent = info
+            ? `${labelPropRef.current.toUpperCase()}, ${info.label}`
+            : labelPropRef.current.toUpperCase();
         }
       });
     };
@@ -594,11 +614,19 @@ const TradePlanLine = memo(function TradePlanLine({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
-      const final = dragRef.current;
-      dragRef.current = null;
-      dragOriginRef.current = null;
-      setDrag(null);
-      if (final) onChangeRef.current(final.price);
+
+      // Reset circle visual
+      if (circleRef.current) {
+        circleRef.current.setAttribute("r", "5");
+        circleRef.current.setAttribute("stroke-width", "1.5");
+        circleRef.current.setAttribute("fill-opacity", "0");
+      }
+
+      const finalPrice = dragPriceRef.current;
+      dragPriceRef.current = null;
+      originRef.current = null;
+      // Don't reset transform — let React's next render set the correct baseY
+      if (finalPrice != null) onChangeRef.current(finalPrice);
       onDragEndRef.current?.();
     };
 
@@ -607,28 +635,20 @@ const TradePlanLine = memo(function TradePlanLine({
     window.addEventListener("pointercancel", onUp);
   }, [canvasRef]);
 
-  // Effective rendering values — local drag takes priority
-  const y = drag?.y ?? baseY;
-  const displayPrice = drag?.price ?? price;
-
-  if (displayPrice == null || y == null || size.w <= 0 || size.h <= 0) {
+  // ── Render ──
+  const y = baseY;
+  if (price == null || y == null || size.w <= 0 || size.h <= 0) {
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
-
-  // Build label — USD estimate for TP/SL
-  const info = dashed ? slTpInfo(entryPrice, displayPrice, volume, side, digits) : null;
-  const labelText = info
-    ? `${label.toUpperCase()}, ${info.label}`
-    : label.toUpperCase();
-
-  const priceText = displayPrice.toFixed(digits);
+  const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits) : null;
+  const labelText = info ? `${label.toUpperCase()}, ${info.label}` : label.toUpperCase();
+  const priceText = price.toFixed(digits);
   const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
   const priceWidth = Math.max(58, axisWidth - 4);
   const priceX = size.w - priceWidth - 2;
   const handleCx = (labelPixels + 4 + plotRight) / 2;
-  const isDrag = drag != null;
 
   return (
     <div
@@ -644,67 +664,71 @@ const TradePlanLine = memo(function TradePlanLine({
         className="absolute inset-0"
         style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
       >
-        {/* MT5-style line */}
-        <line
-          x1={labelPixels + 4}
-          x2={plotRight}
-          y1={y}
-          y2={y}
-          stroke={color}
-          strokeWidth={1}
-          strokeDasharray={dashed ? "6 4" : ""}
-          opacity={isDrag ? 0.8 : 1}
-        />
-
-        {/* Left label — plain text (MT5 style) */}
-        <text
-          x={4}
-          y={y + 3}
-          fontFamily="ui-sans-serif, system-ui, -apple-system"
-          fontSize={10}
-          fontWeight={700}
-          fill={color}
-        >
-          {labelText}
-        </text>
-
-        {/* Circle drag handle — grows slightly when dragging for feedback */}
-        <g
-          style={{ pointerEvents: "auto", cursor: "ns-resize", touchAction: "none" }}
-          onPointerDown={handlePointerDown}
-        >
-          <rect x={handleCx - 28} y={y - 28} width={56} height={56} fill="transparent" />
-          <circle
-            cx={handleCx}
-            cy={y}
-            r={isDrag ? 7 : 5}
-            fill={isDrag ? color : "none"}
-            fillOpacity={isDrag ? 0.2 : 0}
+        {/* All elements in a group — transform moves everything during drag */}
+        <g ref={groupRef} transform={`translate(0,${y})`}>
+          {/* MT5-style line — rendered at y=0, group transform positions it */}
+          <line
+            x1={labelPixels + 4}
+            x2={plotRight}
+            y1={0}
+            y2={0}
             stroke={color}
-            strokeWidth={isDrag ? 2 : 1.5}
+            strokeWidth={1}
+            strokeDasharray={dashed ? "6 4" : ""}
           />
-        </g>
 
-        {/* Right axis price tag */}
-        <g style={{ pointerEvents: "none" }}>
-          <rect x={priceX} y={y - 9} width={priceWidth} height={18} rx={2} fill={color} />
+          {/* Left label */}
           <text
-            x={priceX + priceWidth / 2}
-            y={y + 4}
-            textAnchor="middle"
-            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+            ref={labelTextRef}
+            x={4}
+            y={3}
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
             fontSize={10}
             fontWeight={700}
-            fill="#000"
+            fill={color}
           >
-            {priceText}
+            {labelText}
           </text>
+
+          {/* Circle drag handle — 56×56 hit area */}
+          <g
+            style={{ pointerEvents: "auto", cursor: "ns-resize", touchAction: "none" }}
+            onPointerDown={handlePointerDown}
+          >
+            <rect x={handleCx - 28} y={-28} width={56} height={56} fill="transparent" />
+            <circle
+              ref={circleRef}
+              cx={handleCx}
+              cy={0}
+              r={5}
+              fill={color}
+              fillOpacity={0}
+              stroke={color}
+              strokeWidth={1.5}
+            />
+          </g>
+
+          {/* Right axis price tag */}
+          <g style={{ pointerEvents: "none" }}>
+            <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
+            <text
+              ref={priceTextRef}
+              x={priceX + priceWidth / 2}
+              y={4}
+              textAnchor="middle"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize={10}
+              fontWeight={700}
+              fill="#000"
+            >
+              {priceText}
+            </text>
+          </g>
         </g>
       </svg>
     </div>
   );
-}, /* custom areEqual — skip function props (refs keep them fresh inside) */
-(prev, next) =>
+}, (prev, next) =>
   prev.price === next.price &&
   prev.label === next.label &&
   prev.color === next.color &&
@@ -2452,7 +2476,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               canvasRef={canvasRef}
               price={pendingTakeProfitPrice}
               label="TP"
-              color="#22D3EE"
+              color="#1F9C7B"
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               onChange={setPendingTakeProfitPrice}
               dashed
@@ -3081,23 +3105,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       <div className="shrink-0" style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}>
         {executionMode === "pending" ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
-          <div className="flex h-[3.5rem] items-center gap-0 px-0">
+          <div className="flex h-[2.75rem] items-center gap-0 px-0">
             {/* Submit arrow — rounded pill */}
             <button
               type="button"
               onClick={() => { vibrate("medium"); playSound("chime"); handleSendCurrentPlan(); }}
-              className={`ml-2 flex h-10 w-10 items-center justify-center rounded-full active:scale-95 ${
-                pendingOrderSide === "buy"
-                  ? "text-white"
-                  : "text-white"
-              }`}
+              className="ml-2 flex h-8 w-8 items-center justify-center rounded-full text-white active:scale-95"
               style={{
                 background: pendingOrderSide === "buy"
-                  ? "linear-gradient(180deg, #11899b 0%, #0a5e6c 100%)"
-                  : "linear-gradient(180deg, #c4242f 0%, #8a1522 100%)",
+                  ? "linear-gradient(180deg, #14a0b5 0%, #0a5e6c 100%)"
+                  : "linear-gradient(180deg, #d42a36 0%, #8a1522 100%)",
                 boxShadow: pendingOrderSide === "buy"
-                  ? "0 0 16px rgba(17,137,155,0.25), inset 0 1px 0 rgba(255,255,255,0.15)"
-                  : "0 0 16px rgba(192,36,47,0.25), inset 0 1px 0 rgba(255,255,255,0.15)",
+                  ? "0 0 14px rgba(20,160,181,0.3), inset 0 1px 0 rgba(255,255,255,0.18)"
+                  : "0 0 14px rgba(212,42,54,0.3), inset 0 1px 0 rgba(255,255,255,0.18)",
               }}
               aria-label={`Place ${orderTypeLabel(pendingOrderType)}`}
             >
@@ -3171,13 +3191,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : (
           /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
-          <div className="flex h-[3.5rem] items-stretch gap-px" style={{ background: "#000" }}>
+          <div className="flex h-[2.75rem] items-stretch gap-px" style={{ background: "#000" }}>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between px-3.5 active:brightness-110"
+              className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
               style={{
-                background: "linear-gradient(180deg, #c4242f 0%, #a01d28 40%, #7a1520 100%)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.4), 0 0 16px rgba(192,36,47,0.15)",
+                background: "linear-gradient(180deg, #d42a36 0%, #a01d28 50%, #6e1018 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(212,42,54,0.2)",
               }}
               onClick={() => {
                 setPendingOrderSide("sell");
@@ -3189,26 +3209,26 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               }}
               aria-label="Sell market"
             >
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/80">Sell</span>
-              <span className="font-mono text-[18px] font-bold text-white" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.6), 0 0 8px rgba(192,36,47,0.3)" }}>{lastPriceText}</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Sell</span>
+              <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(212,42,54,0.35)" }}>{lastPriceText}</span>
             </button>
             <button
               type="button"
-              className="flex w-[4.25rem] flex-col items-center justify-center text-white active:bg-white/[0.06]"
+              className="flex w-14 flex-col items-center justify-center text-white active:bg-white/[0.06]"
               style={{ background: "linear-gradient(180deg, #0c0e14 0%, #060608 100%)" }}
               onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
               aria-label="Choose lot size"
             >
               <ChevronDown className="h-2.5 w-2.5 text-white/40" />
-              <span className="font-mono text-[14px] font-bold">{tradeVolume}</span>
+              <span className="font-mono text-[13px] font-bold">{tradeVolume}</span>
               <ChevronUp className="h-2.5 w-2.5 text-white/40" />
             </button>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between px-3.5 active:brightness-110"
+              className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
               style={{
-                background: "linear-gradient(180deg, #11899b 0%, #0d6d7e 40%, #095461 100%)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.4), 0 0 16px rgba(17,137,155,0.15)",
+                background: "linear-gradient(180deg, #14a0b5 0%, #0d7080 50%, #084d5c 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(20,160,181,0.2)",
               }}
               onClick={() => {
                 setPendingOrderSide("buy");
@@ -3220,8 +3240,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               }}
               aria-label="Buy market"
             >
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/80">Buy</span>
-              <span className="font-mono text-[18px] font-bold text-white" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.6), 0 0 8px rgba(17,137,155,0.3)" }}>{lastPriceText}</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Buy</span>
+              <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(20,160,181,0.35)" }}>{lastPriceText}</span>
             </button>
           </div>
         )}
@@ -3291,7 +3311,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Lot quick picker — MT5-style vertical scroll list */}
       {lotMenuOpen ? (
         <div
-          className="absolute inset-x-4 bottom-[3.75rem] z-40 overflow-hidden rounded-2xl border border-white/10 shadow-[0_18px_48px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+          className="absolute inset-x-4 bottom-[3rem] z-40 overflow-hidden rounded-2xl border border-white/10 shadow-[0_18px_48px_rgba(0,0,0,0.6)] backdrop-blur-xl"
           style={{ background: "linear-gradient(180deg, rgba(12,16,24,0.97) 0%, rgba(6,8,12,0.98) 100%)" }}
         >
           {/* Title */}
