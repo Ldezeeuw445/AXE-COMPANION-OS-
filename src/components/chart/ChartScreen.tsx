@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { RefObject } from "react";
 import {
   Activity,
@@ -460,7 +460,7 @@ function slTpInfo(
   return { label: `${sign}$${fmt}` };
 }
 
-function TradePlanLine({
+const TradePlanLine = memo(function TradePlanLine({
   canvasRef,
   price,
   label,
@@ -533,8 +533,8 @@ function TradePlanLine({
         const by = price == null ? null : handle.priceToCoordinate(price);
         setBaseY(by);
         baseYRef.current = by;
+        setAxisWidth(handle.getRightAxisWidth());
       }
-      setAxisWidth(handle.getRightAxisWidth());
     };
     compute();
     return handle.subscribeViewport(compute);
@@ -703,7 +703,18 @@ function TradePlanLine({
       </svg>
     </div>
   );
-}
+}, /* custom areEqual — skip function props (refs keep them fresh inside) */
+(prev, next) =>
+  prev.price === next.price &&
+  prev.label === next.label &&
+  prev.color === next.color &&
+  prev.digits === next.digits &&
+  prev.dashed === next.dashed &&
+  prev.entryPrice === next.entryPrice &&
+  prev.volume === next.volume &&
+  prev.side === next.side &&
+  prev.canvasRef === next.canvasRef,
+);
 
 export function ChartScreen({ data, initialAction, liveTradingEnabled = false }: Props) {
   const router = useRouter();
@@ -3067,27 +3078,42 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* ─── MT5-style execution bar ─── */}
       {oneClickVisible ? (
-      <div className="shrink-0" style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.04)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }}>
+      <div className="shrink-0" style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}>
         {executionMode === "pending" ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
-          <div className="flex h-[3.25rem] items-center gap-0 px-0">
+          <div className="flex h-[3.5rem] items-center gap-0 px-0">
             {/* Submit arrow — rounded pill */}
             <button
               type="button"
               onClick={() => { vibrate("medium"); playSound("chime"); handleSendCurrentPlan(); }}
-              className={`ml-1.5 flex h-9 w-12 items-center justify-center rounded-full ${
+              className={`ml-2 flex h-10 w-10 items-center justify-center rounded-full active:scale-95 ${
                 pendingOrderSide === "buy"
-                  ? "bg-gradient-to-b from-[#0e6b7a] to-[#0a5060] text-white shadow-[0_0_12px_rgba(34,211,238,0.15)]"
-                  : "bg-gradient-to-b from-[#9c1a26] to-[#7a1520] text-white shadow-[0_0_12px_rgba(225,57,71,0.15)]"
+                  ? "text-white"
+                  : "text-white"
               }`}
+              style={{
+                background: pendingOrderSide === "buy"
+                  ? "linear-gradient(180deg, #11899b 0%, #0a5e6c 100%)"
+                  : "linear-gradient(180deg, #c4242f 0%, #8a1522 100%)",
+                boxShadow: pendingOrderSide === "buy"
+                  ? "0 0 16px rgba(17,137,155,0.25), inset 0 1px 0 rgba(255,255,255,0.15)"
+                  : "0 0 16px rgba(192,36,47,0.25), inset 0 1px 0 rgba(255,255,255,0.15)",
+              }}
               aria-label={`Place ${orderTypeLabel(pendingOrderType)}`}
             >
               <ArrowRight className="h-5 w-5" />
             </button>
-            {/* Order label + volume — center */}
+            {/* Order label + volume — center (volume tappable → opens lot picker) */}
             <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold">
               <span className={pendingOrderSide === "buy" ? "text-[#22D3EE]" : "text-[#E13947]"}>{orderTypeLabel(pendingOrderType)}</span>
-              <span className="font-mono text-white/90">{tradeVolume}</span>
+              <button
+                type="button"
+                onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
+                className="flex items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-white/90 active:bg-white/[0.08]"
+              >
+                {tradeVolume}
+                <ChevronDown className="ml-0.5 h-2.5 w-2.5 text-white/40" />
+              </button>
             </div>
             {/* SL toggle */}
             <button
@@ -3145,11 +3171,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : (
           /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
-          <div className="flex h-[3.25rem] items-stretch gap-0">
+          <div className="flex h-[3.5rem] items-stretch gap-px" style={{ background: "#000" }}>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between px-3"
-              style={{ background: "linear-gradient(180deg, #B01E2D 0%, #8A1522 100%)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3)" }}
+              className="flex min-w-0 flex-1 items-center justify-between px-3.5 active:brightness-110"
+              style={{
+                background: "linear-gradient(180deg, #c4242f 0%, #a01d28 40%, #7a1520 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.4), 0 0 16px rgba(192,36,47,0.15)",
+              }}
               onClick={() => {
                 setPendingOrderSide("sell");
                 setExecutionMode("market");
@@ -3160,23 +3189,27 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               }}
               aria-label="Sell market"
             >
-              <span className="text-[10px] font-bold uppercase tracking-wide text-white/70">Sell</span>
-              <span className="font-mono text-[17px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{lastPriceText}</span>
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/80">Sell</span>
+              <span className="font-mono text-[18px] font-bold text-white" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.6), 0 0 8px rgba(192,36,47,0.3)" }}>{lastPriceText}</span>
             </button>
             <button
               type="button"
-              className="flex w-16 flex-col items-center justify-center bg-[#0a0a0c] text-white"
-              onClick={() => setLotMenuOpen((v) => !v)}
+              className="flex w-[4.25rem] flex-col items-center justify-center text-white active:bg-white/[0.06]"
+              style={{ background: "linear-gradient(180deg, #0c0e14 0%, #060608 100%)" }}
+              onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
               aria-label="Choose lot size"
             >
               <ChevronDown className="h-2.5 w-2.5 text-white/40" />
-              <span className="font-mono text-[13px] font-bold">{tradeVolume}</span>
+              <span className="font-mono text-[14px] font-bold">{tradeVolume}</span>
               <ChevronUp className="h-2.5 w-2.5 text-white/40" />
             </button>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center justify-between px-3"
-              style={{ background: "linear-gradient(180deg, #0e7a8a 0%, #0a5e6c 100%)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.3)" }}
+              className="flex min-w-0 flex-1 items-center justify-between px-3.5 active:brightness-110"
+              style={{
+                background: "linear-gradient(180deg, #11899b 0%, #0d6d7e 40%, #095461 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.4), 0 0 16px rgba(17,137,155,0.15)",
+              }}
               onClick={() => {
                 setPendingOrderSide("buy");
                 setExecutionMode("market");
@@ -3187,8 +3220,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               }}
               aria-label="Buy market"
             >
-              <span className="text-[10px] font-bold uppercase tracking-wide text-white/70">Buy</span>
-              <span className="font-mono text-[17px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">{lastPriceText}</span>
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/80">Buy</span>
+              <span className="font-mono text-[18px] font-bold text-white" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.6), 0 0 8px rgba(17,137,155,0.3)" }}>{lastPriceText}</span>
             </button>
           </div>
         )}
@@ -3255,26 +3288,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </div>
       ) : null}
 
-      {/* Lot quick picker — same UX as MT5 mobile */}
+      {/* Lot quick picker — MT5-style vertical scroll list */}
       {lotMenuOpen ? (
         <div
-          className="absolute inset-x-2 bottom-[3.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
-          style={{ paddingBottom: "0.75rem" }}
+          className="absolute inset-x-4 bottom-[3.75rem] z-40 overflow-hidden rounded-2xl border border-white/10 shadow-[0_18px_48px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+          style={{ background: "linear-gradient(180deg, rgba(12,16,24,0.97) 0%, rgba(6,8,12,0.98) 100%)" }}
         >
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-tos-dim">Lots</p>
-            <button
-              type="button"
-              onClick={() => setLotMenuOpen(false)}
-              className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-tos-muted"
-            >
-              Close
-            </button>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {[0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2].map((v) => {
-              const txt = v < 1 ? v.toFixed(2) : v.toFixed(1).replace(/\.0$/, "");
-              const isActive = parseFloat(tradeVolume) === v;
+          {/* Title */}
+          <p className="py-2.5 text-center text-[15px] font-bold text-white">Volume</p>
+          {/* Vertical scroll list */}
+          <div className="max-h-[220px] overflow-y-auto px-3" style={{ scrollSnapType: "y mandatory" }}>
+            {[0.01, 0.02, 0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.50, 2.00, 3.00, 5.00, 10.00].map((v) => {
+              const txt = v < 1 ? v.toFixed(2) : v >= 10 ? v.toFixed(1).replace(/\.0$/, "") : v.toFixed(2);
+              const isActive = Math.abs(parseFloat(tradeVolume) - v) < 0.001;
               return (
                 <button
                   key={v}
@@ -3282,49 +3308,56 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   onClick={() => {
                     setTradeVolume(txt);
                     setLotMenuOpen(false);
+                    vibrate("light");
                   }}
-                  className={`rounded-lg border px-2 py-2 text-center font-mono text-[12px] font-bold ${
-                    isActive
-                      ? "border-white/[0.14] bg-white/[0.06] text-white"
-                      : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
-                  }`}
+                  className="flex w-full items-center justify-center py-2 font-mono transition-colors"
+                  style={{ scrollSnapAlign: "center" }}
                 >
-                  {txt}
+                  <span className={isActive
+                    ? "rounded-xl bg-white/[0.08] px-8 py-1.5 text-[18px] font-bold text-white"
+                    : "text-[16px] font-medium text-white/35"
+                  }>{txt}</span>
                 </button>
               );
             })}
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
-            {[0.01, 0.1, 1].map((step) => (
+          {/* Bottom increment buttons — MT5 style: -1.00  -0.10 | +0.10  +1.00 */}
+          <div className="flex items-center border-t border-white/[0.06] px-2 py-2">
+            {[
+              { step: -1, label: "-1.00", color: "text-[#E13947]" },
+              { step: -0.1, label: "-0.10", color: "text-[#E13947]" },
+            ].map(({ step, label, color }) => (
               <button
-                key={step}
+                key={label}
                 type="button"
                 onClick={() => {
                   const cur = parseFloat(tradeVolume) || 0;
                   const next = Math.max(0.01, +(cur + step).toFixed(2));
-                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(1).replace(/\.0$/, ""));
+                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(2));
+                  vibrate("light");
                 }}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.05] px-2 py-1.5 text-[11px] font-bold text-white/90"
+                className={`flex-1 py-1.5 text-center font-mono text-[14px] font-bold ${color} active:opacity-60`}
               >
-                <Plus className="h-3 w-3" />
-                {step}
+                {label}
               </button>
             ))}
-          </div>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-            {[0.01, 0.1, 1].map((step) => (
+            <div className="mx-2 h-5 w-px bg-white/[0.08]" />
+            {[
+              { step: 0.1, label: "+0.10", color: "text-[#4ECBA0]" },
+              { step: 1, label: "+1.00", color: "text-[#4ECBA0]" },
+            ].map(({ step, label, color }) => (
               <button
-                key={`m-${step}`}
+                key={label}
                 type="button"
                 onClick={() => {
                   const cur = parseFloat(tradeVolume) || 0;
-                  const next = Math.max(0.01, +(cur - step).toFixed(2));
-                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(1).replace(/\.0$/, ""));
+                  const next = Math.max(0.01, +(cur + step).toFixed(2));
+                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(2));
+                  vibrate("light");
                 }}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-[11px] font-bold text-tos-muted"
+                className={`flex-1 py-1.5 text-center font-mono text-[14px] font-bold ${color} active:opacity-60`}
               >
-                <Minus className="h-3 w-3" />
-                {step}
+                {label}
               </button>
             ))}
           </div>
