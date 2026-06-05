@@ -7,14 +7,14 @@
  * Icon wells: 40×40 px, border-radius 12 px, inset shadows.
  * Active tab: deeper inset + cyan glow dot (4 px, #00d4f5).
  *
- * Tabs: Quotes · Chart · Trade · AXE · History + conditional 6th:
+ * Tabs: AXE · Quotes · Chart · Trade · History + conditional 6th:
  *   – AXE view  → Upgrade (gold star ★ #d4af37)
  *   – Otherwise → Settings (gear)
  *
  * Label: 8 px uppercase, letter-spacing 0.06 em.
  */
 
-import { useRef, useLayoutEffect, useCallback } from "react";
+import { useRef, useLayoutEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -32,91 +32,29 @@ const CYAN = "#00d4f5";
 const GOLD = "#d4af37";
 
 const CORE_TABS = [
+  { href: "/chat",       label: "AXE",     Icon: MessageSquare },
   { href: "/watchlist",  label: "Quotes",  Icon: BarChart3 },
   { href: "/chart",      label: "Chart",   Icon: LineChart },
   { href: "/positions",  label: "Trade",   Icon: Repeat2 },
-  { href: "/chat",       label: "AXE",     Icon: MessageSquare },
   { href: "/history",    label: "History",  Icon: Clock },
 ] as const;
-
-/**
- * Probe the *real* env(safe-area-inset-bottom) from a disposable hidden
- * element.  We can't read it from BottomNav itself because our inline
- * style override (paddingBottom: Npx) masks the CSS env() value.
- */
-function probeSafeAreaBottom(): number {
-  const d = document.createElement("div");
-  d.style.cssText =
-    "position:fixed;bottom:0;left:0;width:0;height:0;" +
-    "padding-bottom:env(safe-area-inset-bottom);" +
-    "visibility:hidden;pointer-events:none";
-  document.body.appendChild(d);
-  const v = parseFloat(getComputedStyle(d).paddingBottom) || 0;
-  d.remove();
-  return v;
-}
 
 export function BottomNav() {
   const pathname = usePathname();
   const { playSound, vibrate } = useAmbient();
   const navRef = useRef<HTMLElement>(null);
-  const safeBottomRef = useRef(0);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
-  // ── Sync safe-area padding ──────────────────────────────────────────
-  // Reads env(safe-area-inset-bottom) from a probe element (not the nav
-  // itself, whose inline style would mask the CSS value).  Keeps the MAX
-  // value ever observed so the nav never jumps smaller.
-  const syncSafeArea = useCallback(() => {
-    const el = navRef.current;
-    if (!el) return;
-    const env = probeSafeAreaBottom();
-    const best = Math.max(env, safeBottomRef.current, 20);
-    if (best !== safeBottomRef.current) {
-      safeBottomRef.current = best;
-      el.style.paddingBottom = `${best}px`;
-    }
-  }, []);
-
-  // Re-probe on every navigation — some pages trigger different iOS
-  // safe-area resolution depending on scroll state.
-  useLayoutEffect(() => {
-    syncSafeArea();
-  }, [pathname, syncSafeArea]);
-
-  // On mount, poll for a few frames in case env() hasn't resolved yet.
-  // iOS can take 1-3 frames after first paint to report the real value.
-  useLayoutEffect(() => {
-    let raf = 0;
-    let attempts = 0;
-    const poll = () => {
-      const env = probeSafeAreaBottom();
-      if (env > safeBottomRef.current) {
-        safeBottomRef.current = env;
-        if (navRef.current) {
-          navRef.current.style.paddingBottom = `${env}px`;
-        }
-      }
-      // Keep polling until env resolves (>0) or we've tried ~1 second
-      if (env === 0 && attempts < 60) {
-        attempts++;
-        raf = requestAnimationFrame(poll);
-      }
-    };
-    raf = requestAnimationFrame(poll);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
   // ── ResizeObserver for --tos-nav-h / --tos-nav-offset ────────────────
+  // The nav uses pure CSS `env(safe-area-inset-bottom)` for padding —
+  // no JS probing needed. The ResizeObserver just syncs the *measured*
+  // height into CSS variables so other layout elements can offset.
   useLayoutEffect(() => {
     const el = navRef.current;
     if (!el) return;
     const sync = () => {
       const total = el.offsetHeight;
-      const pb = safeBottomRef.current || 20;
-      const navH = total - pb;
-      if (navH > 0) {
-        document.documentElement.style.setProperty("--tos-nav-h", `${navH}px`);
+      if (total > 0) {
         document.documentElement.style.setProperty("--tos-nav-offset", `${total}px`);
       }
     };
