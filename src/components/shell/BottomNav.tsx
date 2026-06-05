@@ -14,7 +14,7 @@
  * Label: 8 px uppercase, letter-spacing 0.06 em.
  */
 
-import { useRef, useEffect, useLayoutEffect } from "react";
+import { useRef, useLayoutEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -43,24 +43,44 @@ export function BottomNav() {
   const pathname = usePathname();
   const { playSound, vibrate } = useAmbient();
   const navRef = useRef<HTMLElement>(null);
+  const safeBottomRef = useRef(0);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
-  // Keep --tos-nav-h in sync with the real rendered height (minus safe-area padding).
-  // useLayoutEffect fires before paint → no first-frame height jump.
+  // ── Safe-area lock ───────────────────────────────────────────────────
+  // On iOS, env(safe-area-inset-bottom) can under-report when the page
+  // has no scrollable content (chart = fixed layout, trade with zero
+  // positions, AXE chat).  We re-measure on every navigation and keep
+  // the MAX value ever observed.  Once we see the full inset (typically
+  // 34 px on notch/DI iPhones) it never regresses.
+  useLayoutEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const live = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+    const best = Math.max(live, safeBottomRef.current, 20);
+    safeBottomRef.current = best;
+    el.style.paddingBottom = `${best}px`;
+  }, [pathname]);
+
+  // ── ResizeObserver for --tos-nav-h / --tos-nav-offset ────────────────
+  // Uses the locked safe-bottom value so the CSS variables stay
+  // consistent regardless of which page is active.
   useLayoutEffect(() => {
     const el = navRef.current;
     if (!el) return;
     const sync = () => {
       const total = el.offsetHeight;
-      const safeArea = parseFloat(getComputedStyle(el).paddingBottom) || 0;
-      const navH = total - safeArea;
+      const pb = safeBottomRef.current || parseFloat(getComputedStyle(el).paddingBottom) || 20;
+      const navH = total - pb;
       if (navH > 0) {
         document.documentElement.style.setProperty("--tos-nav-h", `${navH}px`);
+        // Lock --tos-nav-offset from JS too — the CSS calc() uses env()
+        // which suffers the same under-report issue.
+        document.documentElement.style.setProperty("--tos-nav-offset", `${total}px`);
       }
     };
     const ro = new ResizeObserver(sync);
     ro.observe(el);
-    sync(); // immediate first sync
+    sync();
     return () => ro.disconnect();
   }, []);
 
