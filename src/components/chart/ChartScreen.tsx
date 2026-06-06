@@ -490,6 +490,7 @@ const TradePlanLine = memo(function TradePlanLine({
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const groupRef = useRef<SVGGElement | null>(null);
+  const priceTextRef = useRef<SVGTextElement | null>(null);
   const labelTextRef = useRef<SVGTextElement | null>(null);
   const circleRef = useRef<SVGCircleElement | null>(null);
   const handleDivRef = useRef<HTMLDivElement | null>(null);
@@ -600,17 +601,16 @@ const TradePlanLine = memo(function TradePlanLine({
           handleDivRef.current.style.top = `${newY - 28}px`;
         }
 
-        // Update left label — includes price (MT5-style, no right block)
-        if (labelTextRef.current) {
-          const pStr = newPrice.toFixed(digitsRef.current);
-          if (dashedRef.current) {
-            const info = slTpInfo(entryPriceRef.current, newPrice, volumeRef.current, sideRef.current, digitsRef.current);
-            labelTextRef.current.textContent = info
-              ? `${labelPropRef.current.toUpperCase()} ${pStr}, ${info.label}`
-              : `${labelPropRef.current.toUpperCase()}, ${pStr}`;
-          } else {
-            labelTextRef.current.textContent = `${labelPropRef.current.toUpperCase()}, ${pStr}`;
-          }
+        // Update right-axis price text
+        if (priceTextRef.current) {
+          priceTextRef.current.textContent = newPrice.toFixed(digitsRef.current);
+        }
+        // Update left label (SL/TP get USD P&L)
+        if (labelTextRef.current && dashedRef.current) {
+          const info = slTpInfo(entryPriceRef.current, newPrice, volumeRef.current, sideRef.current, digitsRef.current);
+          labelTextRef.current.textContent = info
+            ? `${labelPropRef.current.toUpperCase()}, ${info.label}`
+            : labelPropRef.current.toUpperCase();
         }
       });
     };
@@ -650,12 +650,11 @@ const TradePlanLine = memo(function TradePlanLine({
 
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
   const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits) : null;
-  const priceStr = price.toFixed(digits);
-  // MT5-style: everything on the left, no right-axis blocks
-  const labelText = info
-    ? `${label.toUpperCase()} ${priceStr}, ${info.label}`
-    : `${label.toUpperCase()}, ${priceStr}`;
+  const labelText = info ? `${label.toUpperCase()}, ${info.label}` : label.toUpperCase();
+  const priceText = price.toFixed(digits);
   const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
+  const priceWidth = Math.max(58, axisWidth - 4);
+  const priceX = size.w - priceWidth - 2;
   const handleCx = (labelPixels + 4 + plotRight) / 2;
 
   return (
@@ -709,7 +708,21 @@ const TradePlanLine = memo(function TradePlanLine({
             style={{ pointerEvents: "none" }}
           />
 
-          {/* Right-side price block removed — price is in the left label (MT5-style) */}
+          <g style={{ pointerEvents: "none" }}>
+            <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
+            <text
+              ref={priceTextRef}
+              x={priceX + priceWidth / 2}
+              y={4}
+              textAnchor="middle"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize={10}
+              fontWeight={700}
+              fill="#000"
+            >
+              {priceText}
+            </text>
+          </g>
         </g>
       </svg>
 
