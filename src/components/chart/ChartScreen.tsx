@@ -755,7 +755,8 @@ const TradePlanLine = memo(function TradePlanLine({
   prev.entryPrice === next.entryPrice &&
   prev.volume === next.volume &&
   prev.side === next.side &&
-  prev.canvasRef === next.canvasRef,
+  prev.canvasRef === next.canvasRef &&
+  prev.symbol === next.symbol,
 );
 
 export function ChartScreen({ data, initialAction, liveTradingEnabled = false }: Props) {
