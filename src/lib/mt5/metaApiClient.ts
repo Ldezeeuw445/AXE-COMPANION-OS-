@@ -592,6 +592,69 @@ export async function clientPlaceOrder(input: PlaceOrderInput): Promise<PlaceOrd
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+//   POSITION MODIFY (SL/TP drag)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ModifyPositionInput = {
+  accountId: string;
+  /** MT5 position id (string). */
+  positionId: string;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+  region?: string | null;
+};
+
+/**
+ * Modify an open position's SL / TP via MetaApi.
+ * Uses the same `/trade` endpoint as order placement, with
+ * `actionType: "POSITION_MODIFY"`.
+ */
+export async function clientModifyPosition(
+  input: ModifyPositionInput,
+): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl(input.region);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body: Record<string, unknown> = {
+    actionType: "POSITION_MODIFY",
+    positionId: input.positionId,
+  };
+  if (input.stopLoss != null && Number.isFinite(input.stopLoss)) {
+    body.stopLoss = input.stopLoss;
+  }
+  if (input.takeProfit != null && Number.isFinite(input.takeProfit)) {
+    body.takeProfit = input.takeProfit;
+  }
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Modify position failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 //   MARKET DATA
 // ────────────────────────────────────────────────────────────────────────────
 
