@@ -329,6 +329,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             ? CHART_THEME.positiveText
             : CHART_THEME.entryLine;
 
+      // LWC v5 bug: axisLabelVisible:false also hides the title text.
+      // Keep axisLabelVisible:true but style the axis box to be subtle.
       if (o.entryPrice != null && o.entryPrice > 0) {
         positionLinesRef.current.push(
           series.createPriceLine({
@@ -337,7 +339,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             color: entryColor,
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
-            axisLabelVisible: false,
+            axisLabelVisible: true,
+            axisLabelColor: entryColor,
           }),
         );
       }
@@ -353,7 +356,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             color: CHART_THEME.stopLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
-            axisLabelVisible: false,
+            axisLabelVisible: true,
+            axisLabelColor: CHART_THEME.stopLine,
           }),
         );
       }
@@ -369,7 +373,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             color: CHART_THEME.takeLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
-            axisLabelVisible: false,
+            axisLabelVisible: true,
+            axisLabelColor: CHART_THEME.takeLine,
           }),
         );
       }
