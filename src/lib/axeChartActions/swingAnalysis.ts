@@ -300,7 +300,7 @@ export function buildTrendlineActionFromCandles(input: {
       direction: trend.direction,
       // Render the line all the way to the right edge of the chart.
       // The annotation layer reads `extendRight` from settings.
-      settings: { extendRight: true, source: input.source, sourceTimeframe: trend.sourceTf },
+      settings: { extendRight: true, direction: trend.direction, source: input.source, sourceTimeframe: trend.sourceTf },
       explanation:
         trend.direction === "up"
           ? `AXE drew a rising ${trend.sourceTf.toUpperCase()} trendline through the two most recent swing lows.`
@@ -351,7 +351,7 @@ export function buildTrendlinePairFromCandles(input: {
           { time: pair.lower.later.time, price: pair.lower.later.price },
         ],
         direction: "up",
-        settings: { extendRight: true, source: input.source, sourceTimeframe: pair.lower.sourceTf },
+        settings: { extendRight: true, direction: "up", source: input.source, sourceTimeframe: pair.lower.sourceTf },
         explanation: `AXE drew a rising ${pair.lower.sourceTf.toUpperCase()} trendline through the two most recent swing lows.`,
       },
     });
@@ -372,7 +372,7 @@ export function buildTrendlinePairFromCandles(input: {
           { time: pair.upper.later.time, price: pair.upper.later.price },
         ],
         direction: "down",
-        settings: { extendRight: true, source: input.source, sourceTimeframe: pair.upper.sourceTf },
+        settings: { extendRight: true, direction: "down", source: input.source, sourceTimeframe: pair.upper.sourceTf },
         explanation: `AXE drew a falling ${pair.upper.sourceTf.toUpperCase()} trendline through the two most recent swing highs.`,
       },
     });
