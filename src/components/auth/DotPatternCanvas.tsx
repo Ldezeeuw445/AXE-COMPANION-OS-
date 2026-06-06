@@ -65,8 +65,9 @@ export function DotPatternCanvas() {
     if (!canvas) return;
     const container = canvas.parentElement;
     if (!container) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const _ctx = canvas.getContext("2d");
+    if (!_ctx) return;
+    const ctx: CanvasRenderingContext2D = _ctx;
 
     const rect = container.getBoundingClientRect();
     const DPR = window.devicePixelRatio || 2;
