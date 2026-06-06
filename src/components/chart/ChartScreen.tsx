@@ -91,6 +91,7 @@ import { useDemoPositions } from "@/components/chart/useDemoPositions";
 import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
+import { writeCachedChart, prefetchTimeframes } from "@/lib/chart/clientChartCache";
 
 const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 10_000;
@@ -903,6 +904,27 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       /* localStorage may be blocked */
     }
   }, []);
+
+  // ── Cache candles to localStorage so the next visit renders instantly ──
+  useEffect(() => {
+    if (data.candles.length > 0 && data.failure === "ok") {
+      writeCachedChart(data);
+    }
+  }, [data]);
+
+  // ── Prefetch adjacent timeframes for instant TF switches ──
+  useEffect(() => {
+    if (data.failure !== "ok" || data.candles.length === 0) return;
+    // Wait until after first paint, then prefetch adjacent TF routes
+    const id = requestAnimationFrame(() => {
+      const uncached = prefetchTimeframes(data.timeframeKey, data.symbol);
+      for (const tf of uncached) {
+        router.prefetch(buildHref(accountId, data.symbol, tf));
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [data.timeframeKey, data.symbol, data.failure, data.candles.length, router, accountId]);
+
   const updateOrderBlockCount = useCallback((next: 1 | 2 | 3) => {
     setOrderBlockCount(next);
     try {
