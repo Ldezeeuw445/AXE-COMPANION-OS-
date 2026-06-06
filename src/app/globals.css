@@ -79,7 +79,7 @@
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
   --tos-nav-h: 4.25rem;
-  --tos-nav-offset: calc(var(--tos-nav-h) + max(env(safe-area-inset-bottom), 20px));
+  --tos-nav-offset: calc(var(--tos-nav-h) + 12px);
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
 }
 

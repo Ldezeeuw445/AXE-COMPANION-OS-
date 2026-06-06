@@ -46,18 +46,20 @@ export function BottomNav() {
   const navRef = useRef<HTMLElement>(null);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
-  // ── ResizeObserver for --tos-nav-h / --tos-nav-offset ────────────────
+  // ── ResizeObserver for --tos-nav-offset ─────────────────────────────
+  // Offset = pill height + bottom position (4px) + breathing gap (4px)
+  // This tells full-screen pages (chart, chat) where to stop content.
   useLayoutEffect(() => {
     const el = navRef.current;
     if (!el) return;
     const sync = () => {
       const total = el.offsetHeight;
       if (total > 0) {
-        // Offset includes the floating gap below the pill
-        const gap = 10;
+        const bottomPos = 4; // matches inline style bottom: 4px
+        const gap = 4;
         document.documentElement.style.setProperty(
           "--tos-nav-offset",
-          `${total + gap}px`,
+          `${total + bottomPos + gap}px`,
         );
       }
     };
@@ -79,7 +81,7 @@ export function BottomNav() {
       ref={navRef}
       className="fixed z-50"
       style={{
-        bottom: "max(env(safe-area-inset-bottom, 0px), 8px)",
+        bottom: "4px",
         left: "50%",
         transform: "translateX(-50%)",
         width: "calc(100% - 24px)",
