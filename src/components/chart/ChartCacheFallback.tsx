@@ -13,7 +13,6 @@
 import { useEffect, useRef, useState, memo } from "react";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import { readCachedChart, type CachedChartSnapshot } from "@/lib/chart/clientChartCache";
-import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import { CHART_THEME } from "@/components/chart/chartTheme";
@@ -97,10 +96,10 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
             {tfLabel}
           </span>
         </div>
-        <AxeBreatheLoader
-          label="Loading chart data"
-          size="md"
-        />
+        <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400/70" />
+          <span className="text-[11px] font-medium text-white/40">Loading chart data…</span>
+        </div>
       </div>
     </div>
   );

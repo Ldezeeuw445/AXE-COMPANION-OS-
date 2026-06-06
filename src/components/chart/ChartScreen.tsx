@@ -36,7 +36,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
-import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
@@ -3076,21 +3075,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         {/* Failure overlay sits on top of the chart frame so layout stays stable */}
         {failureCopy ? (
           <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-b from-[#04070C]/35 via-[#04070C]/72 to-[#04070C]/96 p-4 sm:items-center">
-            <GlassPanel className="w-full max-w-md p-4 sm:p-5" glow="warm">
+            <GlassPanel className="w-full max-w-md p-4 sm:p-5" glow="none">
               {data.candles.length === 0 ? (
-                <div className="mb-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                  <AxeBreatheLoader
-                    label={
-                      data.failure === "broker_symbol_not_found"
-                        ? "Mapping symbol"
-                        : data.failure === "market_data_unavailable"
-                          ? "Checking market data"
-                          : data.failure === "metaapi_timeout"
-                            ? "MetaAPI timed out"
-                          : "Checking broker data"
-                    }
-                    size="sm"
-                  />
+                <div className="mb-3 flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400/70" />
+                  <span className="text-[11px] font-medium uppercase tracking-widest text-white/40">
+                    {data.failure === "broker_symbol_not_found"
+                      ? "Mapping symbol"
+                      : data.failure === "market_data_unavailable"
+                        ? "Checking market data"
+                        : data.failure === "metaapi_timeout"
+                          ? "MetaAPI timed out"
+                        : "Checking broker data"}
+                  </span>
                 </div>
               ) : null}
               <p className="text-sm font-semibold text-tos-text">{failureCopy.title}</p>
