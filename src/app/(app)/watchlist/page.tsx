@@ -99,5 +99,5 @@ export default async function WatchlistPage() {
     };
   });
 
-  return <WatchlistPageScreen items={enriched} />;
+  return <WatchlistPageScreen items={enriched} brokerUniverse={universe} />;
 }
