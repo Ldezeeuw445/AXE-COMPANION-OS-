@@ -313,19 +313,20 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     positionLinesRef.current = [];
 
     overlays.forEach((o) => {
-      // MT5-style: "BUY 1, +391.00 USD" — side, volume, live P&L
+      // MT5-style: "SELL 0.01, -0.68 USD" — side, volume, live P&L
       const sideLabel = o.side?.toUpperCase() ?? "TRADE";
       const profitStr =
         o.profit != null
           ? `, ${o.profit >= 0 ? "+" : ""}${o.profit.toFixed(2)} USD`
           : "";
       const entryTitle = `${sideLabel} ${o.volume}${profitStr}`;
-      // Color shifts green/red based on live P&L (MT5 behavior)
+      // Color follows SIDE — red for sell, green for buy (MT5 convention).
+      // P&L sign is already visible in the title text.
       const entryColor =
-        o.profit != null && o.profit >= 0
-          ? CHART_THEME.positiveText
-          : o.profit != null && o.profit < 0
-            ? CHART_THEME.negativeText
+        o.side === "sell"
+          ? CHART_THEME.negativeText
+          : o.side === "buy"
+            ? CHART_THEME.positiveText
             : CHART_THEME.entryLine;
 
       if (o.entryPrice != null && o.entryPrice > 0) {
@@ -336,7 +337,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             color: entryColor,
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
-            axisLabelVisible: true,
+            axisLabelVisible: false,
           }),
         );
       }

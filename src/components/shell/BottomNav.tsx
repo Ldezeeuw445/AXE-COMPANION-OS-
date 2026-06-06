@@ -57,13 +57,15 @@ export function BottomNav() {
   const tabs = [...CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined })), sixthTab];
 
   return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-50 pointer-events-none"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
     <nav
       ref={navRef}
-      className="fixed z-50"
+      className="pointer-events-auto"
       style={{
-        bottom: "calc(4px + env(safe-area-inset-bottom, 0px))",
-        left: "50%",
-        transform: "translateX(-50%)",
+        margin: "0 auto 4px",
         width: "calc(100% - 24px)",
         maxWidth: "420px",
         background: "linear-gradient(180deg, #131318 0%, #0a0a0e 100%)",
@@ -146,5 +148,6 @@ export function BottomNav() {
         })}
       </div>
     </nav>
+    </div>
   );
 }
