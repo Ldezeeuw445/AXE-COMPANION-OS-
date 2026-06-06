@@ -308,6 +308,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             color: entryColor,
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
+            axisLabelVisible: false,
           }),
         );
       }
@@ -319,6 +320,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             color: CHART_THEME.stopLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
+            axisLabelVisible: false,
           }),
         );
       }
@@ -330,6 +332,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             color: CHART_THEME.takeLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
+            axisLabelVisible: false,
           }),
         );
       }

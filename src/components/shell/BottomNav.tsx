@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * SkeuNavBar — bottom navigation carved into brushed metal.
+ * SkeuNavBar — floating pill navbar at the bottom of the screen.
  *
+ * Floating pill shape: fully rounded sides (border-radius 9999px).
  * Background: linear-gradient(180deg, #101016, #0a0a0e).
- * Icon wells: 40×40 px, border-radius 12 px, inset shadows.
+ * Icon wells: 38×38 px, border-radius 12 px, inset shadows.
  * Active tab: deeper inset + cyan glow dot (4 px, #00d4f5).
  *
  * Tabs: AXE · Quotes · Chart · Trade · History + conditional 6th:
@@ -46,16 +47,18 @@ export function BottomNav() {
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
   // ── ResizeObserver for --tos-nav-h / --tos-nav-offset ────────────────
-  // The nav uses pure CSS `env(safe-area-inset-bottom)` for padding —
-  // no JS probing needed. The ResizeObserver just syncs the *measured*
-  // height into CSS variables so other layout elements can offset.
   useLayoutEffect(() => {
     const el = navRef.current;
     if (!el) return;
     const sync = () => {
       const total = el.offsetHeight;
       if (total > 0) {
-        document.documentElement.style.setProperty("--tos-nav-offset", `${total}px`);
+        // Offset includes the floating gap below the pill
+        const gap = 10;
+        document.documentElement.style.setProperty(
+          "--tos-nav-offset",
+          `${total + gap}px`,
+        );
       }
     };
     const ro = new ResizeObserver(sync);
@@ -74,17 +77,31 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className="fixed bottom-0 left-0 right-0 z-50"
+      className="fixed z-50"
       style={{
-        background: "linear-gradient(180deg, #101016, #0a0a0e)",
-        paddingBottom: "max(env(safe-area-inset-bottom), 20px)",
+        bottom: "max(env(safe-area-inset-bottom, 0px), 8px)",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "calc(100% - 24px)",
+        maxWidth: "420px",
+        background: "linear-gradient(180deg, #131318 0%, #0a0a0e 100%)",
+        borderRadius: "9999px",
+        boxShadow:
+          "0 8px 32px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 rgba(255,255,255,0.04) inset",
+        padding: "6px 4px",
       }}
       aria-label="Primary"
     >
-      {/* Top edge — subtle bevel highlight */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
+      {/* Inner glow highlight along top edge */}
+      <div
+        className="pointer-events-none absolute inset-x-4 top-0 h-px"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.08) 70%, transparent 100%)",
+        }}
+      />
 
-      <div className="mx-auto flex max-w-lg items-center justify-around px-1 py-1.5">
+      <div className="flex items-center justify-around">
         {tabs.map(({ href, label, Icon, accent }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const color = active ? (accent ?? CYAN) : undefined;
@@ -97,11 +114,12 @@ export function BottomNav() {
                 vibrate("light");
                 playSound("tap");
               }}
-              className="group relative flex flex-col items-center gap-[3px] active:scale-95 transition-transform"
+              className="group relative flex flex-col items-center gap-[2px] active:scale-95 transition-transform"
+              style={{ minWidth: 0, flex: "1 1 0%" }}
             >
               {/* Icon well */}
               <div
-                className="relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-150"
+                className="relative flex h-[38px] w-[38px] items-center justify-center rounded-xl transition-all duration-150"
                 style={
                   active
                     ? {
@@ -125,7 +143,7 @@ export function BottomNav() {
                 {/* Active cyan (or gold) glow dot */}
                 {active && (
                   <span
-                    className="absolute -bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
+                    className="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
                     style={{
                       background: color,
                       boxShadow: `0 0 6px ${color}, 0 0 12px ${color}66`,
@@ -136,7 +154,7 @@ export function BottomNav() {
 
               {/* Label */}
               <span
-                className="text-[8px] font-medium tracking-[0.06em] uppercase transition-colors duration-200"
+                className="text-[7px] font-medium tracking-[0.06em] uppercase transition-colors duration-200"
                 style={{ color: active ? color : "rgba(255,255,255,0.22)" }}
               >
                 {label}

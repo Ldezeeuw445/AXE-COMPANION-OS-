@@ -2637,12 +2637,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-[36%] z-30 w-[13.75rem] max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-[36%] z-30 max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
+          style={{ width: "calc(100% - 80px)" }}
         >
           <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/70">Chart tools</div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5">
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
             {
@@ -2715,7 +2716,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               Lets the user choose how many bullish + bearish blocks to
               show (1 each = cleanest, up to 3 each for context). */}
           {activeToolFlags.orderBlocks ? (
-            <div className="col-span-3 mt-1 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+            <div className="col-span-4 mt-1 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
               <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
                 OB · per side
               </span>
@@ -2746,7 +2747,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           {/* FVG count picker — mirrors OB / iFVG. Latest N bullish + N
               bearish unmitigated gaps. Only visible while FVG is on. */}
           {activeToolFlags.fvg ? (
-            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+            <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
               <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
                 FVG · per side
               </span>
@@ -2779,7 +2780,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               to the future-projection cursor; reclaimed ones stop at
               the inversion candle. */}
           {activeToolFlags.ifvg ? (
-            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+            <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
               <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
                 iFVG · per side
               </span>
@@ -2812,7 +2813,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               extend forward to the projection cursor. 1 = only the
               latest, 2 / 3 = latest two / three. */}
           {futureCursorEnabled ? (
-            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+            <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
               <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
                 Project · per side
               </span>
@@ -2849,7 +2850,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               snap to the same levels). */}
           {hasFibAnnotation ? (
             <>
-              <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+              <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
                   Fib · source
                 </span>
@@ -2887,7 +2888,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   side independently to widen or tighten the rendered fib
                   without touching the underlying anchors. Persisted on
                   every fib annotation via setFibExtendOnAll. */}
-              <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+              <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
                   Fib · extend
                 </span>
@@ -2922,7 +2923,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               </div>
 
               {fibMode === "swing" ? (
-                <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
+                <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
                   <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
                     Swing leg
                   </span>
@@ -2973,14 +2974,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-[70%] z-30 w-[13.75rem] -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-[70%] z-30 -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
             indicatorRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
+          style={{ width: "calc(100% - 80px)" }}
         >
           <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-100/85">
             Indicators
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5">
             {[
               { id: "volume", label: "VOL", icon: BarChart3 },
               { id: "ma", label: "MA", icon: LineChart },
