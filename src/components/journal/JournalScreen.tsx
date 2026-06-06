@@ -69,6 +69,9 @@ const TAG_COLORS: Record<string, string> = {
   Emotional: "bg-rose-500/20 text-rose-400 border-rose-500/30",
 };
 
+/** AXE tag badge — slightly different style (cyan accent) */
+const AXE_TAG_STYLE = "bg-cyan-500/10 text-cyan-400/80 border-cyan-500/20";
+
 type FilterMode = "all" | "tagged" | "untagged" | "winners" | "losers";
 
 /* ── Inline Trade Row ───────────────────────────────────────────── */
@@ -138,12 +141,19 @@ function TradeRow({
           </span>
         </div>
 
-        {/* Tag badge */}
-        {selectedTag && (
-          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${tagColor}`}>
-            {selectedTag}
-          </span>
-        )}
+        {/* Tag badges — user + AXE dual scoring */}
+        <div className="flex items-center gap-1">
+          {selectedTag && (
+            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${tagColor}`}>
+              {selectedTag}
+            </span>
+          )}
+          {trade.axe_label && (
+            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${AXE_TAG_STYLE}`} title={trade.axe_note ?? "AXE score"}>
+              ⚡{trade.axe_label}
+            </span>
+          )}
+        </div>
 
         {/* PnL */}
         <span className={`min-w-[60px] text-right font-mono text-[12px] font-semibold tabular-nums ${
@@ -158,9 +168,26 @@ function TradeRow({
         </span>
       </button>
 
-      {/* Expanded: tag selector + note */}
+      {/* Expanded: tag selector + note + AXE score */}
       {expanded && (
         <div className="space-y-3 px-4 pb-4 pl-10">
+          {/* AXE auto-score (if available) */}
+          {trade.axe_label && (
+            <div className="rounded-lg border border-cyan-500/10 bg-cyan-500/[0.03] px-3 py-2">
+              <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-cyan-400/40">
+                ⚡ AXE Score
+              </p>
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${AXE_TAG_STYLE}`}>
+                  {trade.axe_label}
+                </span>
+                {trade.axe_note && (
+                  <span className="text-[11px] text-white/40">{trade.axe_note}</span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Tag buttons */}
           <div>
             <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-widest text-white/25">
