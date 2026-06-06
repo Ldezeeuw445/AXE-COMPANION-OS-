@@ -52,6 +52,7 @@ import type {
   ChartActionResult,
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { PositionLabelsOverlay } from "@/components/chart/PositionLabelsOverlay";
 import {
   useLiveChart,
   type LivePosition,
@@ -2499,6 +2500,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           drawingMode={drawingMode}
           navigationLocked={pendingOrderVisible && executionMode === "pending"}
           onPointClick={handlePointClick}
+        />
+
+        {/* Left-side position labels (entry / SL / TP) — no box, just text */}
+        <PositionLabelsOverlay
+          canvasRef={canvasRef}
+          overlays={overlays}
+          symbol={data.brokerSymbol}
         />
 
         <ChartIndicatorLayer
