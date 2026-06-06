@@ -1,29 +1,38 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
-import Link from "next/link";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Copy, Check, ChevronDown, LineChart } from "lucide-react";
+import {
+  ChevronRight,
+  MoreVertical,
+  Wifi,
+  WifiOff,
+  Zap,
+
+  Trash2,
+  Shield,
+  RefreshCw,
+  TestTube,
+  Unplug,
+  ArrowLeft,
+} from "lucide-react";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
-import { GlassPanel } from "@/components/ui/GlassPanel";
-import { Badge } from "@/components/ui/Badge";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
+import { setActiveAccountAction, deleteBrokerAccountAction } from "@/app/actions/brokerAccounts";
 import {
-  createBrokerAccountAction,
-  deleteBrokerAccountAction,
-  setActiveAccountAction,
-  type CreateBrokerResult,
-} from "@/app/actions/brokerAccounts";
-import { Mt5InAppConnectionTest } from "@/components/accounts/Mt5InAppConnectionTest";
-import { Mt5LiveProofChecklist } from "@/components/accounts/Mt5LiveProofChecklist";
-import { Mt5CloudConnectForm } from "@/components/accounts/Mt5CloudConnectForm";
-import { Mt5CloudAccountActions } from "@/components/accounts/Mt5CloudAccountActions";
+  createCloudMt5ConnectionAction,
+  testCloudMt5ConnectionAction,
+  syncCloudMt5AccountAction,
+  recoverCloudMt5AccountAction,
+  disconnectCloudMt5AccountAction,
+} from "@/app/actions/mt5Cloud";
 import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAutoPoll";
-import { LEGAL_COPY } from "@/lib/legal/constants";
-import { accountMethodLabel, friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
+import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
-import type { Mt5DoctorOverallStatus, Mt5DoctorReport } from "@/types/mt5Doctor";
+
+/* ── Helpers ─────────────────────────────────────────────────────────── */
 
 type Props = {
   initialAccounts: BrokerAccountRow[];
@@ -32,657 +41,597 @@ type Props = {
   defaultMetaApiRegion: string;
 };
 
-function formatDate(iso: string) {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
+function statusDot(a: BrokerAccountRow): { color: string; label: string } {
+  const s = (a.provider_status ?? a.status ?? "").toLowerCase();
+  if (s === "connected" || s === "provisioned")
+    return { color: "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]", label: "Connected" };
+  if (["provisioning", "connecting", "syncing", "deploying", "created"].includes(s))
+    return { color: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]", label: "Syncing" };
+  if (["recovering", "orphaned"].includes(s))
+    return { color: "bg-amber-400/70", label: "Reconnecting" };
+  if (s.includes("credential") || s.includes("fail") || s.includes("error"))
+    return { color: "bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.5)]", label: "Needs attention" };
+  return { color: "bg-white/30", label: friendlyProviderStatus(s) };
+}
+
+function isValidRegion(r: string): r is "london" | "new-york" | "singapore" {
+  return r === "london" || r === "new-york" || r === "singapore";
+}
+
+const REGION_OPTIONS = [
+  { value: "london" as const, label: "London", hint: "EU / ME / Africa" },
+  { value: "new-york" as const, label: "New York", hint: "Americas" },
+  { value: "singapore" as const, label: "Singapore", hint: "Asia-Pacific" },
+];
+
+/* ── Account Card ────────────────────────────────────────────────────── */
+
+function AccountCard({
+  account,
+  isActive,
+  pending,
+  onActivate,
+  onRemove,
+}: {
+  account: BrokerAccountRow;
+  isActive: boolean;
+  pending: boolean;
+  onActivate: () => void;
+  onRemove: () => void;
+}) {
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const isDemo = isDemoAccount(account);
+  const isCloud = account.connection_method === "cloud_mt5" && account.external_connection_id;
+  const dot = statusDot(account);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    function close(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  async function runAction(
+    fn: (id: string) => Promise<{ ok: boolean; code?: string; message?: string; data?: unknown }>,
+    label: string,
+  ) {
+    setMenuOpen(false);
+    setActionBusy(label);
+    setActionMsg(null);
+    try {
+      const r = await Promise.race([
+        fn(account.id),
+        new Promise<{ ok: false; message: string }>((resolve) =>
+          setTimeout(() => resolve({ ok: false, message: "Still working in the background…" }), 30_000),
+        ),
+      ]);
+      setActionMsg(r.ok ? `${label} ✓` : r.message ?? "Failed");
+      router.refresh();
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setActionBusy(null);
+    }
   }
+
+  return (
+    <div
+      className={`relative rounded-2xl border px-4 py-3.5 transition-all ${
+        isActive
+          ? "border-white/[0.12] bg-white/[0.04] ring-1 ring-white/[0.06]"
+          : "border-white/[0.06] bg-white/[0.02] active:scale-[0.985]"
+      }`}
+      onClick={() => {
+        if (!isActive && !pending) onActivate();
+      }}
+      role={isActive ? undefined : "button"}
+      tabIndex={isActive ? undefined : 0}
+    >
+      {/* Header row */}
+      <div className="flex items-center gap-3">
+        {/* Status dot */}
+        <span className={`h-2 w-2 shrink-0 rounded-full ${dot.color}`} title={dot.label} />
+
+        {/* Label + login */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-semibold text-white">{account.label}</span>
+            {isActive && (
+              <span className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyan-300">
+                Active
+              </span>
+            )}
+            {isDemo && (
+              <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/50">
+                Demo
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 font-mono text-[11px] text-white/35">
+            {account.masked_login ?? account.mt5_login ?? "—"}
+            {account.mt5_server ? ` · ${account.mt5_server}` : ""}
+          </p>
+        </div>
+
+        {/* ⋮ menu */}
+        <div ref={menuRef} className="relative">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((p) => !p);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/30 hover:bg-white/[0.06] hover:text-white/60"
+            aria-label="Account actions"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+
+          {menuOpen && (
+            <div
+              className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border border-white/[0.10] bg-[#0c0c10]/95 shadow-[0_12px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {isCloud && (
+                <>
+                  <MenuButton
+                    icon={<TestTube className="h-3.5 w-3.5" />}
+                    label="Test connection"
+                    onClick={() => void runAction(testCloudMt5ConnectionAction, "Test")}
+                  />
+                  <MenuButton
+                    icon={<RefreshCw className="h-3.5 w-3.5" />}
+                    label="Sync trades"
+                    onClick={() => void runAction(syncCloudMt5AccountAction, "Sync")}
+                  />
+                  <MenuButton
+                    icon={<Zap className="h-3.5 w-3.5" />}
+                    label="Redeploy terminal"
+                    onClick={() => void runAction(recoverCloudMt5AccountAction, "Redeploy")}
+                  />
+                  <MenuButton
+                    icon={<Unplug className="h-3.5 w-3.5" />}
+                    label="Disconnect"
+                    onClick={() => {
+                      if (!confirm("Disconnect this MT5 Cloud account? Trade history in AXE is kept.")) return;
+                      void runAction(disconnectCloudMt5AccountAction, "Disconnect");
+                    }}
+                    variant="warn"
+                  />
+                  <div className="mx-3 border-t border-white/[0.06]" />
+                </>
+              )}
+              {isActive && (
+                <MenuButton
+                  icon={<WifiOff className="h-3.5 w-3.5" />}
+                  label="Set inactive"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void onActivate(); // toggles off
+                  }}
+                />
+              )}
+              <MenuButton
+                icon={<Trash2 className="h-3.5 w-3.5" />}
+                label="Remove account"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onRemove();
+                }}
+                variant="danger"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Tap to activate hint */}
+        {!isActive && (
+          <ChevronRight className="h-4 w-4 shrink-0 text-white/15" />
+        )}
+      </div>
+
+      {/* Status feedback */}
+      {actionBusy && (
+        <p className="mt-2 text-[10px] text-amber-300/80">
+          ⏳ {actionBusy}…
+        </p>
+      )}
+      {!actionBusy && actionMsg && (
+        <p className="mt-2 text-[10px] text-white/50">
+          {actionMsg}
+        </p>
+      )}
+    </div>
+  );
 }
 
-function connectionKind(a: BrokerAccountRow): "demo" | "cloud" | "cloud_off" | "token" {
-  if (isDemoAccount(a)) return "demo";
-  if (a.connection_method === "cloud_mt5" && a.external_connection_id) return "cloud";
-  if (a.connection_method === "cloud_mt5_disconnected" || (a.connection_method === "cloud_mt5" && !a.external_connection_id))
-    return "cloud_off";
-  return "token";
-}
-
-function statusBadgeVariant(s: string | null | undefined): "warm" | "neutral" | "long" {
-  const friendly = friendlyProviderStatus(s);
-  if (friendly === "Fresh" || friendly === "Recently synced") return "long";
-  if (friendly === "Connection issue" || friendly === "Credentials issue" || friendly === "Syncing") return "warm";
-  return "neutral";
-}
-
-function syncFreshness(iso: string | null | undefined): {
+function MenuButton({
+  icon,
+  label,
+  onClick,
+  variant = "normal",
+}: {
+  icon: React.ReactNode;
   label: string;
-  detail: string;
-  tone: string;
-  dot: string;
-} {
-  if (!iso) {
-    return {
-      label: "No sync yet",
-      detail: "Run Sync after Test passes",
-      tone: "border-white/10 bg-white/[0.03] text-tos-dim",
-      dot: "bg-white/30",
-    };
-  }
-  const time = Date.parse(iso);
-  if (!Number.isFinite(time)) {
-    return {
-      label: "Sync unknown",
-      detail: iso,
-      tone: "border-white/10 bg-white/[0.03] text-tos-dim",
-      dot: "bg-white/30",
-    };
-  }
-  const minutes = Math.max(0, Math.round((Date.now() - time) / 60_000));
-  const ageLabel = minutes < 1 ? "just now" : minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
-  if (minutes <= 20) {
-    return {
-      label: "Fresh",
-      detail: `Synced ${ageLabel}`,
-      tone: "border-emerald-400/25 bg-emerald-400/10 text-emerald-100/90",
-      dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.6)]",
-    };
-  }
-  if (minutes <= 180) {
-    return {
-      label: "Recently synced",
-      detail: `Synced ${ageLabel}`,
-      tone: "border-amber-400/25 bg-amber-400/10 text-amber-100/90",
-      dot: "bg-amber-300/85",
-    };
-  }
-  return {
-    label: "Data stale",
-    detail: `Synced ${ageLabel}`,
-    tone: "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/85",
-    dot: "bg-amber-300/70",
-  };
+  onClick: () => void;
+  variant?: "normal" | "warn" | "danger";
+}) {
+  const color =
+    variant === "danger"
+      ? "text-rose-300/85 hover:bg-rose-500/10"
+      : variant === "warn"
+        ? "text-amber-300/85 hover:bg-amber-500/10"
+        : "text-white/70 hover:bg-white/[0.06]";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[11px] font-medium transition-colors ${color}`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
 }
 
-function readLastDoctor(meta: Record<string, unknown> | null | undefined): Mt5DoctorReport | null {
-  const value = meta?.lastDoctor;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const report = value as Partial<Mt5DoctorReport>;
-  if (!report.checkedAt || !report.overallStatus || !report.headline) return null;
-  return report as Mt5DoctorReport;
+/* ── 3-Step Connect Wizard ───────────────────────────────────────────── */
+
+type WizardStep = 1 | 2 | 3;
+
+function ConnectWizard({ defaultRegion }: { defaultRegion: string }) {
+  const router = useRouter();
+  const [step, setStep] = useState<WizardStep>(1);
+  const [server, setServer] = useState("");
+  const [region, setRegion] = useState<"london" | "new-york" | "singapore">(
+    isValidRegion(defaultRegion) ? defaultRegion : "london",
+  );
+  const [state, action] = useActionState(createCloudMt5ConnectionAction, undefined);
+
+  // After successful creation, go to step 3
+  useEffect(() => {
+    if (state?.ok) {
+      setStep(3);
+      router.refresh();
+    }
+  }, [state, router]);
+
+  const err = state && !state.ok ? state : null;
+
+  function resetWizard() {
+    setStep(1);
+    setServer("");
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.03] to-transparent p-5">
+      {/* Step indicator */}
+      <div className="mb-5 flex items-center gap-2">
+        {[1, 2, 3].map((s) => (
+          <div key={s} className="flex items-center gap-2">
+            <div
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
+                s === step
+                  ? "bg-cyan-400/20 text-cyan-300 ring-1 ring-cyan-400/30"
+                  : s < step
+                    ? "bg-emerald-400/15 text-emerald-300/80"
+                    : "bg-white/[0.04] text-white/20"
+              }`}
+            >
+              {s < step ? "✓" : s}
+            </div>
+            {s < 3 && (
+              <div
+                className={`h-px w-8 transition-colors ${
+                  s < step ? "bg-emerald-400/30" : "bg-white/[0.06]"
+                }`}
+              />
+            )}
+          </div>
+        ))}
+        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+          {step === 1 ? "Server" : step === 2 ? "Login" : "Done"}
+        </span>
+      </div>
+
+      {/* Step 1: Server + Region */}
+      {step === 1 && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Which MT5 server?</h3>
+            <p className="mt-1 text-[11px] text-white/40">
+              Copy the exact name from MT5 → File → Login to Trade Account.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30" htmlFor="wiz-server">
+              Server name
+            </label>
+            <input
+              id="wiz-server"
+              value={server}
+              onChange={(e) => setServer(e.target.value)}
+              placeholder="e.g. ICMarketsSC-Live02"
+              className="tos-neu-inset mt-1 w-full rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/20"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30" htmlFor="wiz-region">
+              Region
+            </label>
+            <div className="mt-1.5 flex gap-2">
+              {REGION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setRegion(opt.value)}
+                  className={`flex-1 rounded-xl border px-2 py-2 text-center transition-all ${
+                    region === opt.value
+                      ? "border-cyan-400/25 bg-cyan-400/10 text-cyan-200"
+                      : "border-white/[0.06] bg-white/[0.02] text-white/40 hover:border-white/[0.10]"
+                  }`}
+                >
+                  <span className="block text-[11px] font-semibold">{opt.label}</span>
+                  <span className="block text-[9px] opacity-60">{opt.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={!server.trim()}
+            onClick={() => setStep(2)}
+            className="tos-btn-cyan w-full rounded-xl py-3 text-sm font-semibold disabled:opacity-30"
+          >
+            Next — Login details
+          </button>
+        </div>
+      )}
+
+      {/* Step 2: Login + Password + Label */}
+      {step === 2 && (
+        <form action={action} className="space-y-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-white/30 hover:bg-white/[0.06] hover:text-white/60"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+            </button>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Login credentials</h3>
+              <p className="text-[10px] text-white/30">
+                Server: <span className="font-mono text-white/50">{server}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Hidden fields for the action */}
+          <input type="hidden" name="mt5Server" value={server} />
+          <input type="hidden" name="region" value={region} />
+
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30" htmlFor="wiz-label">
+              Account label
+            </label>
+            <input
+              id="wiz-label"
+              name="label"
+              required
+              placeholder="e.g. Main FTMO"
+              className="tos-neu-inset mt-1 w-full rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/20"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30" htmlFor="wiz-login">
+              MT5 login (digits)
+            </label>
+            <input
+              id="wiz-login"
+              name="mt5Login"
+              required
+              inputMode="numeric"
+              autoComplete="off"
+              className="tos-neu-inset mt-1 w-full rounded-xl px-3 py-2.5 text-sm text-white"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30" htmlFor="wiz-password">
+              Investor (read-only) password
+            </label>
+            <input
+              id="wiz-password"
+              name="investorPassword"
+              type="password"
+              required
+              autoComplete="new-password"
+              className="tos-neu-inset mt-1 w-full rounded-xl px-3 py-2.5 text-sm text-white"
+            />
+            <p className="mt-1 text-[10px] text-white/25">
+              Sent once over TLS. Never stored in your database.
+            </p>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-[11px] text-white/50">
+            <input type="checkbox" name="readOnlyConfirm" required className="mt-0.5 rounded border-white/20" />
+            <span>
+              I confirm this is my <strong className="text-white/70">read-only investor</strong> password.
+              AXE won&apos;t place trades unless I explicitly enable Live Trading.
+            </span>
+          </label>
+
+          {err && (
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2.5 text-[11px] text-rose-200/90">
+              <p className="font-medium">{err.message}</p>
+              {err.code && (
+                <p className="mt-1 font-mono text-[9px] text-rose-300/60">{err.code}</p>
+              )}
+            </div>
+          )}
+
+          <SubmitStep2 />
+        </form>
+      )}
+
+      {/* Step 3: Done */}
+      {step === 3 && (
+        <div className="space-y-4 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/15">
+            <Wifi className="h-5 w-5 text-emerald-300" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-white">Connection started</h3>
+            <p className="mt-1 text-[11px] text-white/40">
+              AXE is provisioning your MT5 terminal. It should appear below in a few seconds.
+              Use the ⋮ menu to Test and Sync once it&apos;s ready.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={resetWizard}
+            className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-[11px] font-semibold text-white/60 hover:bg-white/[0.06]"
+          >
+            Add another account
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function doctorStatusLabel(status: Mt5DoctorOverallStatus): string {
-  const labels: Record<Mt5DoctorOverallStatus, string> = {
-    connected: "Connected",
-    syncing: "Syncing",
-    reconnecting: "Reconnecting",
-    needs_attention: "Needs attention",
-    read_only: "Read-only",
-    server_issue: "Server issue",
-    credentials_issue: "Credentials issue",
-    provisioning_pending: "Provisioning pending",
-  };
-  return labels[status];
+function SubmitStep2() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="tos-btn-cyan w-full rounded-xl py-3 text-sm font-semibold disabled:opacity-50"
+    >
+      {pending ? (
+        <span className="flex items-center justify-center gap-2">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/80" />
+          Connecting to MT5…
+        </span>
+      ) : (
+        "Connect account"
+      )}
+    </button>
+  );
 }
 
-function compactDiagnosticStatus(a: BrokerAccountRow): {
-  label: string;
-  detail: string;
-  tone: string;
-  dot: string;
-} {
-  const doctor = readLastDoctor(a.metadata);
-  if (doctor) {
-    const status = doctor.overallStatus;
-    const critical = status === "server_issue" || status === "credentials_issue" || status === "needs_attention";
-    const warm = status === "syncing" || status === "reconnecting" || status === "provisioning_pending";
-    return {
-      label: doctorStatusLabel(status),
-      detail: doctor.summary,
-      tone: critical
-        ? "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90"
-        : warm
-          ? "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90"
-          : "border-white/[0.08] bg-white/[0.04] text-white/85",
-      dot: critical ? "bg-rose-300" : warm ? "bg-amber-300" : "bg-emerald-300",
-    };
-  }
-  const provider = (a.provider_status ?? a.status ?? "").toLowerCase();
-  if (provider.includes("credential")) {
-    return {
-      label: "Credentials issue",
-      detail: "Run Doctor to confirm the failing step.",
-      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
-      dot: "bg-rose-300",
-    };
-  }
-  if (provider === "provisioning" || provider === "created" || provider === "deploying") {
-    return {
-      label: "Provisioning pending",
-      detail: "AXE MT5 Cloud terminal is still starting.",
-      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
-      dot: "bg-amber-300",
-    };
-  }
-  if (provider === "syncing" || provider === "connecting") {
-    return {
-      label: "Syncing",
-      detail: "Broker connection is in progress.",
-      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
-      dot: "bg-amber-300",
-    };
-  }
-  if (provider === "recovering") {
-    return {
-      label: "Reconnecting",
-      detail: "AXE is redeploying the MT5 Cloud terminal.",
-      tone: "border-amber-400/25 bg-amber-400/[0.08] text-amber-100/90",
-      dot: "bg-amber-300",
-    };
-  }
-  if (provider === "orphaned") {
-    return {
-      label: "Server issue",
-      detail: "Stored cloud account link is stale. Redeploy will confirm; reconnect may be required.",
-      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
-      dot: "bg-rose-300",
-    };
-  }
-  if (provider.includes("fail") || provider.includes("error") || provider === "metaapi_region_error") {
-    return {
-      label: "Needs attention",
-      detail: "Run Doctor to isolate the failed MT5 step.",
-      tone: "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90",
-      dot: "bg-rose-300",
-    };
-  }
-  if (provider === "connected" || provider === "provisioned") {
-    return {
-      label: "Read-only",
-      detail: "Connected for account data. Live trading remains separately gated.",
-      tone: "border-white/[0.08] bg-white/[0.04] text-white/85",
-      dot: "bg-emerald-300",
-    };
-  }
-  return {
-    label: "Needs attention",
-    detail: "Run Doctor for a full connection read.",
-    tone: "border-white/10 bg-white/[0.03] text-tos-dim",
-    dot: "bg-white/30",
-  };
-}
-
-function accountRuntimeHealth(accounts: BrokerAccountRow[], loadError: string | null): Array<{
-  label: string;
-  value: string;
-  tone: string;
-  dot: string;
-}> {
-  const cloudAccounts = accounts.filter((a) => connectionKind(a) === "cloud");
-  const provisioning = cloudAccounts.filter((a) =>
-    ["provisioning", "created", "deploying", "connecting", "syncing"].includes((a.provider_status ?? "").toLowerCase()),
-  ).length;
-  const needsAttention = cloudAccounts.filter((a) => {
-    const d = compactDiagnosticStatus(a).label.toLowerCase();
-    return d.includes("attention") || d.includes("issue") || d.includes("credential");
-  }).length;
-  const freshSync = cloudAccounts.filter((a) => syncFreshness(a.last_sync_at).label === "Fresh").length;
-  const positive = "border-white/[0.08] bg-white/[0.04] text-white/85";
-  const amber = "border-amber-400/22 bg-amber-400/[0.07] text-amber-100/90";
-  const rose = "border-rose-400/22 bg-rose-400/[0.08] text-rose-100/90";
-  const neutral = "border-white/10 bg-white/[0.035] text-tos-dim";
-
-  return [
-    {
-      label: "Supabase",
-      value: loadError ? "Degraded" : "Account truth live",
-      tone: loadError ? rose : positive,
-      dot: loadError ? "bg-rose-300" : "bg-emerald-300",
-    },
-    {
-      label: "MetaAPI",
-      value: cloudAccounts.length ? `${cloudAccounts.length} cloud linked` : "Ready to connect",
-      tone: cloudAccounts.length ? positive : neutral,
-      dot: cloudAccounts.length ? "bg-emerald-300" : "bg-white/30",
-    },
-    {
-      label: "Recovery",
-      value: needsAttention ? `${needsAttention} needs Doctor` : provisioning ? `${provisioning} settling` : "No blockers",
-      tone: needsAttention ? rose : provisioning ? amber : positive,
-      dot: needsAttention ? "bg-rose-300" : provisioning ? "bg-amber-300" : "bg-emerald-300",
-    },
-    {
-      label: "Sync",
-      value: cloudAccounts.length ? `${freshSync}/${cloudAccounts.length} fresh` : "No real account yet",
-      tone: cloudAccounts.length && freshSync === 0 ? amber : cloudAccounts.length ? positive : neutral,
-      dot: cloudAccounts.length && freshSync === 0 ? "bg-amber-300" : cloudAccounts.length ? "bg-emerald-300" : "bg-white/30",
-    },
-  ];
-}
-
-const detailsSummaryClass =
-  "flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-xs font-medium text-tos-text outline-none [&::-webkit-details-marker]:hidden";
+/* ── Main Screen ─────────────────────────────────────────────────────── */
 
 export function AccountsScreen({ initialAccounts, initialActiveId, loadError, defaultMetaApiRegion }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [createState, createAction] = useActionState<CreateBrokerResult | undefined, FormData>(
-    createBrokerAccountAction,
-    undefined,
+
+  const cloudAccounts = initialAccounts.filter(
+    (a) => a.connection_method === "cloud_mt5" && a.external_connection_id,
   );
-  const [copied, setCopied] = useState(false);
+  const connectedCount = cloudAccounts.filter((a) =>
+    ["connected", "provisioned"].includes((a.provider_status ?? "").toLowerCase()),
+  ).length;
 
-  const showToken = createState?.linkToken;
-  const createErr = createState?.error;
+  const provisioningTargets = initialAccounts
+    .filter((a) => a.connection_method === "cloud_mt5" && a.external_connection_id)
+    .map((a) => ({ id: a.id, providerStatus: a.provider_status ?? null }));
 
-  async function onSetActive(id: string | null) {
+  async function onActivate(id: string) {
     startTransition(async () => {
-      const r = await setActiveAccountAction(id);
-      if (!r.error) router.refresh();
-      else alert(r.error);
+      const r = await setActiveAccountAction(id === initialActiveId ? null : id);
+      if (!r.error) {
+        if (id !== initialActiveId) {
+          router.push(`/chart?account=${encodeURIComponent(id)}&symbol=XAUUSD&tf=h1`);
+        }
+        router.refresh();
+      }
     });
   }
 
-  async function onRemoveAccount(id: string) {
-    if (
-      !confirm(
-        "Remove this account from AXE? This deletes synced trades and journal tags for this account. AXE MT5 Cloud is removed if still linked.",
-      )
-    ) {
-      return;
-    }
+  async function onRemove(id: string) {
+    if (!confirm("Remove this account? Synced trades and journal tags for it will be deleted.")) return;
     startTransition(async () => {
       const r = await deleteBrokerAccountAction(id);
       if (!r.error) router.refresh();
-      else alert(r.error);
     });
   }
 
-  async function copyToken() {
-    if (!showToken) return;
-    await navigator.clipboard.writeText(showToken);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
+  const onlyDemo = initialAccounts.length > 0 && initialAccounts.every((a) => isDemoAccount(a));
 
-  const empty = initialAccounts.length === 0;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
-  const ingestUrl = supabaseUrl ? `${supabaseUrl}/functions/v1/axe-mt5-ingest` : "";
-  const provisioningTargets = initialAccounts
-    .filter((a) => a.connection_method === "cloud_mt5" && a.external_connection_id)
-    .map((a) => ({ id: a.id as string, providerStatus: a.provider_status ?? null }));
-  // Demo-only state: every row is the seeded AXE Demo. Surface a soft nudge
-  // so a brand-new user understands they're on virtual data without it
-  // feeling like a sales banner.
-  const onlyDemo =
-    initialAccounts.length > 0 &&
-    initialAccounts.every((a) => isDemoAccount(a));
-  const runtimeHealth = accountRuntimeHealth(initialAccounts, loadError);
-  const cloudAccounts = initialAccounts.filter((a) => connectionKind(a) === "cloud");
-  const freshCloudAccounts = cloudAccounts.filter((a) => {
-    const status = (a.provider_status ?? "").toLowerCase();
-    return status === "connected" && syncFreshness(a.last_sync_at).label === "Fresh";
-  });
-
-  // The pulse is honest here: green only when a real AXE MT5 Cloud
-  // account is connected with a fresh sync. A plain Supabase account
-  // list is useful truth, but it is not a live broker connection.
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 pb-4">
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
-        liveCount={freshCloudAccounts.length}
+        liveCount={connectedCount}
         totalCount={cloudAccounts.length || 1}
-        label={`Accounts · ${initialAccounts.length} connected`}
-        allLiveOverride={
+        label={`Accounts · ${initialAccounts.length} linked`}
+        allLiveOverride={loadError ? false : connectedCount > 0 ? true : null}
+        severity={loadError ? "degraded" : connectedCount > 0 ? "fresh" : "inactive"}
+        reason={
           loadError
-            ? false
-            : cloudAccounts.length > 0
-              ? freshCloudAccounts.length === cloudAccounts.length
-              : null
+            ? "Account data could not load."
+            : connectedCount > 0
+              ? `${connectedCount} MT5 Cloud account${connectedCount > 1 ? "s" : ""} connected.`
+              : "No live MT5 connection yet."
         }
+        scope="accounts"
       />
       <PageTitleInjector title="Accounts" />
 
-      {loadError ? (
-        <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">{loadError}</p>
-      ) : null}
+      {loadError && (
+        <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300">
+          {loadError}
+        </p>
+      )}
 
-      {onlyDemo ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-[12px] leading-relaxed text-tos-muted">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-white/60 shadow-[0_0_0_3px_rgba(255,255,255,0.08)]" aria-hidden />
-            <p className="font-medium text-tos-text">You&apos;re on AXE Demo</p>
-          </div>
-          <p className="mt-1.5 text-tos-muted">
-            Virtual $100,000 — perfect for trying the chart, AXE chat and journal. Connect your real MT5
-            account below to unlock live price, your actual positions and full trade history.
+      {/* Demo nudge */}
+      {onlyDemo && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-2.5 text-[11px] text-white/50">
+          <Shield className="h-4 w-4 shrink-0 text-white/30" />
+          <span>
+            You&apos;re on <strong className="text-white/70">AXE Demo</strong> — connect a real MT5 account below for live data.
+          </span>
+        </div>
+      )}
+
+      {/* Account list */}
+      {initialAccounts.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20">
+            Your accounts
           </p>
-        </div>
-      ) : null}
-
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Runtime health</span>
-          <span className="text-[10px] text-tos-dim">Account truth, AXE MT5 Cloud, sync freshness and recovery readiness.</span>
-        </div>
-        <div className="mt-2 grid gap-2 sm:grid-cols-4">
-          {runtimeHealth.map((item) => (
-            <div key={item.label} className={`rounded-xl border px-2.5 py-2 ${item.tone}`}>
-              <div className="flex items-center gap-1.5">
-                <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} aria-hidden />
-                <p className="text-[9px] font-semibold uppercase tracking-wider opacity-80">{item.label}</p>
-              </div>
-              <p className="mt-1 text-[10.5px] font-medium">{item.value}</p>
-            </div>
+          {initialAccounts.map((a) => (
+            <AccountCard
+              key={a.id}
+              account={a}
+              isActive={a.id === initialActiveId}
+              pending={pending}
+              onActivate={() => void onActivate(a.id)}
+              onRemove={() => void onRemove(a.id)}
+            />
           ))}
         </div>
+      )}
+
+      {/* Connect wizard */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20">
+          Connect MT5 account
+        </p>
+        <ConnectWizard defaultRegion={defaultMetaApiRegion} />
       </div>
-
-      {/* A — Intro */}
-      <div className="space-y-2 text-sm leading-relaxed text-tos-muted">
-        <p>
-          Connect your MT5 account so AXE can read account status, open positions, trade history and journal context.
-        </p>
-        <p className="text-xs text-tos-dim">{LEGAL_COPY.mt5Connect}</p>
-        <p className="text-[11px] text-tos-dim">
-          More on data use:{" "}
-          <Link href="/privacy" className="text-white/70 hover:underline">
-            Privacy
-          </Link>
-          .
-        </p>
-      </div>
-
-      {/* B — Recommended AXE MT5 Cloud */}
-      <GlassPanel glow="none" className="border-white/[0.06] p-5 sm:p-6">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80">Recommended — Connect MT5 account</h2>
-        <p className="mt-2 text-sm text-tos-muted">
-          Secure AXE MT5 Cloud link from this app. Use your <strong className="text-tos-text/95">investor / read-only</strong> password.
-          Nothing executes from AXE by default.
-        </p>
-
-        <details className="group mt-4 overflow-hidden rounded-xl border border-white/[0.07] bg-[#0a0a0d]/90">
-          <summary className={detailsSummaryClass}>
-            <span>How it works</span>
-            <ChevronDown className="h-4 w-4 shrink-0 text-tos-dim transition-transform group-open:rotate-180" aria-hidden />
-          </summary>
-          <div className="space-y-2 border-t border-white/[0.06] px-3 py-3 text-[11px] leading-relaxed text-tos-muted">
-            <ul className="list-disc space-y-1.5 pl-4">
-              <li>You sign in with MT5 login, broker server and investor (read-only) password.</li>
-              <li>AXE provisions a secure cloud connection from the server — passwords are not stored in the database.</li>
-              <li>After you run <strong className="text-tos-text/95">Test</strong> and <strong className="text-tos-text/95">Sync</strong>, account summary, positions and history feed Chat, Chart, History and Journal.</li>
-              <li>Order placement from AXE remains disabled unless you explicitly enable it later.</li>
-            </ul>
-            <p className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5 text-[10px] text-tos-dim">
-              Server requirement: your deployment must have a MetaApi token configured so provisioning can run. If
-              something fails, use <span className="font-medium text-tos-muted">Technical details</span> on the form
-              error.
-            </p>
-          </div>
-        </details>
-
-        <div className="mt-5">
-          <Mt5CloudConnectForm defaultRegion={defaultMetaApiRegion} />
-        </div>
-      </GlassPanel>
-
-      {/* C — Linked accounts */}
-      <section aria-labelledby="accounts-linked-heading">
-        <h2 id="accounts-linked-heading" className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-tos-dim">
-          Your accounts
-        </h2>
-
-        {empty && !loadError ? (
-          <GlassPanel className="p-6 text-center">
-            <p className="text-sm font-medium text-tos-text">No accounts yet</p>
-            <p className="mt-2 text-xs text-tos-muted">
-              Start with <strong className="text-tos-text/95">Recommended — Connect MT5 account</strong> above, or use
-              Advanced if you run a local bridge.
-            </p>
-          </GlassPanel>
-        ) : null}
-
-        {!empty ? (
-          <div className="space-y-3">
-            {initialAccounts.map((a) => {
-              const active = a.id === initialActiveId;
-              const kind = connectionKind(a);
-              const loginDisp = a.masked_login ?? a.mt5_login ?? "—";
-              const method = accountMethodLabel(a.connection_method, Boolean(a.external_connection_id));
-              const syncLabel = friendlyProviderStatus(a.provider_status ?? a.status);
-              const freshness = syncFreshness(a.last_sync_at);
-              const diagnostic = compactDiagnosticStatus(a);
-
-              /** Tap a non-active account → auto-activate + open chart. */
-              async function activateAndOpen() {
-                if (active || pending) return;
-                startTransition(async () => {
-                  const r = await setActiveAccountAction(a.id);
-                  if (!r.error) {
-                    router.push(
-                      `/chart?account=${encodeURIComponent(a.id)}&symbol=XAUUSD&tf=h1`,
-                    );
-                    router.refresh();
-                  } else {
-                    alert(r.error);
-                  }
-                });
-              }
-
-              return (
-                <GlassPanel
-                  key={a.id}
-                  className={`p-4 sm:p-5 transition-transform ${active ? "border-white/[0.10] ring-1 ring-white/[0.08] " : "cursor-pointer active:scale-[0.985]"}`}
-                  {...(!active ? { onClick: () => void activateAndOpen() } : {})}
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="truncate text-base font-semibold text-tos-text">{a.label}</span>
-                        {active ? (
-                          <span className="rounded-md border border-white/[0.10] bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/90">
-                            Active
-                          </span>
-                        ) : null}
-                        <Badge variant={kind === "cloud" || kind === "demo" ? "long" : "neutral"}>
-                          {kind === "demo" ? "Demo" : method}
-                        </Badge>
-                        <Badge variant={statusBadgeVariant(a.provider_status ?? a.status)}>{syncLabel}</Badge>
-                      </div>
-                      <p className="mt-2 font-mono text-[11px] text-tos-dim">
-                        Login {loginDisp}
-                        {a.mt5_server ? ` · ${a.mt5_server}` : ""}
-                      </p>
-                      {a.last_sync_at ? (
-                        <p className="mt-1 text-[10px] text-tos-dim/90">Last sync · {formatDate(a.last_sync_at)}</p>
-                      ) : (
-                        <p className="mt-1 text-[10px] text-tos-dim/90">Last sync · —</p>
-                      )}
-                      <div
-                        className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${freshness.tone}`}
-                        title={a.last_sync_at ? formatDate(a.last_sync_at) : freshness.detail}
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${freshness.dot}`} aria-hidden />
-                        {freshness.label}
-                        <span className="border-l border-current/20 pl-1.5 font-normal normal-case tracking-normal opacity-75">
-                          {freshness.detail}
-                        </span>
-                      </div>
-                      {kind === "cloud" ? (
-                        <div
-                          className={`mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${diagnostic.tone}`}
-                          title={diagnostic.detail}
-                        >
-                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${diagnostic.dot}`} aria-hidden />
-                          {diagnostic.label}
-                          <span className="truncate border-l border-current/20 pl-1.5 font-normal normal-case tracking-normal opacity-75">
-                            {diagnostic.detail}
-                          </span>
-                        </div>
-                      ) : null}
-                      <p className="mt-1 text-[10px] text-tos-dim/70">Added {formatDate(a.created_at)}</p>
-                      {active ? (
-                        <p className="mt-2 text-[11px] leading-relaxed text-white/60">
-                          {kind === "demo"
-                            ? "Virtual paper account. Used for chart practice and demo execution only."
-                            : "Used for chat, journal, chart and alerts."}
-                        </p>
-                      ) : (
-                        <p className="mt-2 flex items-center gap-1 text-[10px] text-tos-dim">
-                          <LineChart className="h-3 w-3" aria-hidden />
-                          Tap to activate &amp; open chart
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:min-w-[9.5rem] sm:items-end">
-                      {active ? (
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={(e) => { e.stopPropagation(); void onSetActive(null); }}
-                          className="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-tos-muted hover:border-white/[0.10] hover:bg-white/[0.06] hover:text-white/85 disabled:opacity-50"
-                        >
-                          Set inactive
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={(e) => { e.stopPropagation(); void onRemoveAccount(a.id); }}
-                        className="rounded-lg border border-red-500/20 px-2 py-1.5 text-[10px] font-medium text-red-300/85 hover:bg-red-500/10 disabled:opacity-50"
-                      >
-                        Remove account
-                      </button>
-                    </div>
-                  </div>
-                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions */}
-                  {kind === "cloud" ? <div onClick={(e) => e.stopPropagation()}><Mt5CloudAccountActions accountId={a.id} /></div> : null}
-                </GlassPanel>
-              );
-            })}
-          </div>
-        ) : null}
-      </section>
-
-      {createErr ? (
-        <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-200/95">
-          <p className="font-medium">Could not create bridge token</p>
-          <p className="mt-1 text-xs text-red-200/80">{createErr}</p>
-        </div>
-      ) : null}
-
-      {showToken ? (
-        <GlassPanel className="border-emerald-500/15 p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-300/90">Link token (shown once)</p>
-          <p className="mt-2 text-xs text-tos-muted">
-            Copy into your MT5 EA or bridge only — not into Companion settings. Store it safely; only a hash is kept
-            server-side.
-          </p>
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-white/10 bg-[#0e0f12]/95 p-3">
-            <code className="min-w-0 flex-1 break-all text-[11px] text-tos-text">{showToken}</code>
-            <button
-              type="button"
-              onClick={() => void copyToken()}
-              className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-2 text-tos-muted hover:bg-white/10"
-              aria-label="Copy token"
-            >
-              {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-            </button>
-          </div>
-          <p className="mt-2 text-[10px] text-tos-dim">
-            POST JSON to your ingest endpoint with field <span className="font-mono text-tos-muted">token</span>
-            {ingestUrl ? (
-              <>
-                {" "}
-                — base URL configured for this app.
-              </>
-            ) : (
-              <>.</>
-            )}
-          </p>
-        </GlassPanel>
-      ) : null}
-
-      {/* D — Advanced bridge (collapsed) */}
-      <details className="group overflow-hidden rounded-[1.35rem] border border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-xl">
-        <summary className={`${detailsSummaryClass} px-4 py-3.5 sm:px-5`}>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-tos-muted">Advanced — Local MT5 Bridge Token</span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-tos-dim transition-transform group-open:rotate-180" aria-hidden />
-        </summary>
-        <div className="space-y-4 border-t border-white/[0.06] px-4 pb-5 pt-3 sm:px-5">
-          <p className="text-xs leading-relaxed text-tos-muted">
-            Creates a broker account row and a one-time link token (hashed at rest). Use when an EA or custom bridge
-            POSTs closed fills to your secure ingest endpoint — same ledger as History and chat context after the first
-            successful post.
-          </p>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-dim">Optional — verify token</p>
-            <Mt5InAppConnectionTest className="mt-2" />
-            <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
-              Sends one minimal test from the browser to confirm CORS and ingest before you run a full EA.
-            </p>
-          </div>
-          <form action={createAction} className="space-y-3">
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-tos-dim" htmlFor="label">
-                Label
-              </label>
-              <input
-                id="label"
-                name="label"
-                placeholder="e.g. Funded FTMO"
-                className="tos-neu-inset mt-1 w-full rounded-2xl px-3 py-2.5 text-sm text-tos-text placeholder:text-tos-dim"
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-tos-dim" htmlFor="mt5Login">
-                  MT5 login
-                </label>
-                <input
-                  id="mt5Login"
-                  name="mt5Login"
-                  className="tos-neu-inset mt-1 w-full rounded-2xl px-3 py-2.5 text-sm text-tos-text"
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-tos-dim" htmlFor="mt5Server">
-                  Server
-                </label>
-                <input
-                  id="mt5Server"
-                  name="mt5Server"
-                  className="tos-neu-inset mt-1 w-full rounded-2xl px-3 py-2.5 text-sm text-tos-text"
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="tos-btn-cyan w-full rounded-2xl py-3 text-sm font-semibold disabled:opacity-50"
-            >
-              Create link token
-            </button>
-          </form>
-        </div>
-      </details>
-
-      {/* E — Checklist (collapsed) */}
-      <details className="group overflow-hidden rounded-[1.35rem] border border-white/[0.07] bg-[#0a0a0d]/90">
-        <summary className={`${detailsSummaryClass} px-4 py-3.5 sm:px-5`}>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-tos-dim">Verify your setup</span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-tos-dim transition-transform group-open:rotate-180" aria-hidden />
-        </summary>
-        <div className="border-t border-white/[0.06] px-4 py-4 sm:px-5">
-          <Mt5LiveProofChecklist embedded />
-        </div>
-      </details>
     </div>
   );
 }
