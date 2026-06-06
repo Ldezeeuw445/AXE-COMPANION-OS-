@@ -1755,7 +1755,6 @@ function findErcZone(
     // The stricter 50% rule invalidated most zones on volatile
     // instruments like BTC — giving the zone more breathing room
     // keeps meaningful S/D visible on the chart.
-    const height = top - bottom;
     const mitigationLine = direction === "supply"
       ? bottom + height * 0.25   // supply: invalidate if price drops to bottom quarter
       : top - height * 0.25;     // demand: invalidate if price rises to top quarter
