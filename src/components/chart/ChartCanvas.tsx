@@ -21,7 +21,7 @@ import type {
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartOverlayRow } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME } from "@/components/chart/chartTheme";
-import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
+import { priceDigitsForSymbol, pointValueForSymbol } from "@/lib/broker/symbolFormat";
 import {
   type AnnotationPoint,
   type ChartAnnotation,
@@ -284,6 +284,28 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     }
     positionLinesRef.current = [];
 
+    // Helper: compute potential USD P&L for SL/TP levels
+    const digits = priceDigitsForSymbol(symbol);
+    const pointSize = Math.pow(10, -digits);
+    const pv = pointValueForSymbol(symbol);
+
+    function slTpLabel(
+      tag: string,
+      entry: number,
+      level: number,
+      volume: number,
+      side: string,
+    ): string {
+      const dist = level - entry;
+      const pointsRaw = Math.round(dist / pointSize);
+      const signed = side === "buy" ? pointsRaw : -pointsRaw;
+      const usd = signed * volume * pv;
+      const sign = usd >= 0 ? "+" : "-";
+      const abs = Math.abs(usd);
+      const fmt = abs >= 10 ? Math.round(abs).toLocaleString("en-US") : abs.toFixed(2);
+      return `${tag}, ${sign}$${fmt}`;
+    }
+
     overlays.forEach((o) => {
       // MT5-style: "BUY 1, +391.00 USD" — side, volume, live P&L
       const sideLabel = o.side?.toUpperCase() ?? "TRADE";
@@ -313,31 +335,39 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         );
       }
       if (o.stopLoss != null && o.stopLoss > 0) {
+        const slTitle =
+          o.entryPrice != null
+            ? slTpLabel("SL", o.entryPrice, o.stopLoss, o.volume, o.side)
+            : "SL";
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.stopLoss,
-            title: "SL",
+            title: slTitle,
             color: CHART_THEME.stopLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
-            axisLabelVisible: true,
+            axisLabelVisible: false,
           }),
         );
       }
       if (o.takeProfit != null && o.takeProfit > 0) {
+        const tpTitle =
+          o.entryPrice != null
+            ? slTpLabel("TP", o.entryPrice, o.takeProfit, o.volume, o.side)
+            : "TP";
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.takeProfit,
-            title: "TP",
+            title: tpTitle,
             color: CHART_THEME.takeLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
-            axisLabelVisible: true,
+            axisLabelVisible: false,
           }),
         );
       }
     });
-  }, [overlays]);
+  }, [overlays, symbol]);
 
   // Render user annotations (trendline + horizontal levels). Fib retracement
   // is rendered as an interactive SVG overlay outside the canvas.

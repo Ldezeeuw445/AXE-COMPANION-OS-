@@ -61,7 +61,7 @@ export function BottomNav() {
       ref={navRef}
       className="fixed z-50"
       style={{
-        bottom: "4px",
+        bottom: "calc(4px + env(safe-area-inset-bottom, 0px))",
         left: "50%",
         transform: "translateX(-50%)",
         width: "calc(100% - 24px)",

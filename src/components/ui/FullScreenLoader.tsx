@@ -86,6 +86,78 @@ interface Orb {
   opacity: number;
 }
 
+// ── Typewriter ──────────────────────────────────────────────────────────
+
+/** Military-intel typewriter — reveals text character-by-character in cyan. */
+function TypewriterTagline({
+  text,
+  delayMs = 800,
+  charMs = 45,
+}: {
+  text: string;
+  delayMs?: number;
+  charMs?: number;
+}) {
+  const [count, setCount] = useState(0);
+  const total = text.length;
+
+  useEffect(() => {
+    const start = performance.now();
+    let raf = 0;
+    const tick = () => {
+      const elapsed = performance.now() - start;
+      if (elapsed < delayMs) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      const chars = Math.min(Math.floor((elapsed - delayMs) / charMs) + 1, total);
+      setCount(chars);
+      if (chars < total) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [delayMs, charMs, total]);
+
+  const visible = text.slice(0, count);
+  const showCursor = count < total;
+
+  return (
+    <p
+      className="relative z-10 select-none"
+      style={{
+        position: "absolute",
+        top: "62%",
+        left: "50%",
+        transform: "translateX(-50%)",
+        color: "#00d4f5",
+        fontSize: 13,
+        letterSpacing: "0.18em",
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        textTransform: "uppercase",
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        textShadow: "0 0 12px rgba(0,212,245,0.5), 0 0 24px rgba(0,212,245,0.2)",
+      }}
+    >
+      {visible}
+      {showCursor && (
+        <span
+          style={{
+            display: "inline-block",
+            width: 2,
+            height: "1em",
+            background: "#00d4f5",
+            marginLeft: 2,
+            verticalAlign: "text-bottom",
+            animation: "blink-cursor 0.6s step-end infinite",
+          }}
+        />
+      )}
+      <style>{`@keyframes blink-cursor { 50% { opacity: 0; } }`}</style>
+    </p>
+  );
+}
+
 // ── Component ───────────────────────────────────────────────────────────
 
 export function FullScreenLoader({
@@ -266,7 +338,14 @@ export function FullScreenLoader({
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
 
-      {/* Tagline */}
+      {/* Intel tagline — typewriter letter-by-letter in triangle cyan */}
+      <TypewriterTagline
+        text="SECURE, INTELLIGENT, ENCRYPTED"
+        delayMs={FORM_DURATION * 0.6}
+        charMs={45}
+      />
+
+      {/* Bottom label */}
       <p
         className="relative z-10 mb-[max(env(safe-area-inset-bottom,0px),2rem)] select-none"
         style={{
