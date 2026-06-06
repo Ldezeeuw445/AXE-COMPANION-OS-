@@ -13,6 +13,26 @@ export function priceDigitsForSymbol(symbol: string): number {
   return 5;
 }
 
+/**
+ * Estimate the $ value of one point move per standard lot for a symbol.
+ *
+ * For most MT5 brokers:
+ *   Forex *USD — 100k units, point=0.00001 → $1/point/lot
+ *   XAUUSD     — 100 oz,     point=0.01    → $1/point/lot
+ *   BTCUSD     — 1 BTC,      point=0.01    → $0.01/point/lot
+ *   ETHUSD     — 1 ETH,      point=0.01    → $0.01/point/lot
+ *
+ * This is an estimate — exact values depend on broker contract specs.
+ */
+export function pointValueForSymbol(symbol: string): number {
+  const s = (symbol ?? "").toUpperCase();
+  const base = s.replace(/^[#.]/, "").replace(/([._-](X|S|M|R|P|C|PRO|RAW|ECN|STD|MICRO|CASH)|[MRZ#])$/i, "");
+  // Crypto: contract size = 1 unit, point = 0.01 → $0.01/point/lot
+  if (base.startsWith("BTC") || base.startsWith("ETH") || base.includes("USDT")) return 0.01;
+  // Default: ~$1/point/lot (forex, gold, most indices)
+  return 1;
+}
+
 export function formatBrokerPrice(symbol: string, price: number | null | undefined): string {
   if (price == null || Number.isNaN(price)) return "—";
   const digits = priceDigitsForSymbol(symbol);
