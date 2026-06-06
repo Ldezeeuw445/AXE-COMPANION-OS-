@@ -2502,11 +2502,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           onPointClick={handlePointClick}
         />
 
-        {/* Left-side position labels (entry / SL / TP) — no box, just text */}
+        {/* Left-side position labels (entry / SL / TP) — drag SL/TP to modify */}
         <PositionLabelsOverlay
           canvasRef={canvasRef}
           overlays={overlays}
           symbol={data.brokerSymbol}
+          brokerAccountId={data.account?.brokerAccountId}
+          liveTradingEnabled={liveTrading.enabled}
         />
 
         <ChartIndicatorLayer
