@@ -25,23 +25,39 @@ type KeywordTier = {
   style?: CSSProperties;
 };
 
+/** Pre-sorted known terms — longest first so we match the most specific term. */
+const KNOWN_TERMS_DESC = Object.keys(AXE_TERM_COLORS).sort(
+  (a, b) => b.length - a.length,
+);
+
 function classifyKeyword(text: string): KeywordTier | null {
   const lower = text.toLowerCase().replace(/:$/, "").trim();
 
-  // Tier 3 — semantic colour lookup (includes section headers)
+  // Tier 3 — exact match first (fastest path)
   const hex = AXE_TERM_COLORS[lower];
   if (hex) {
-    // Section headers (purple) → tier 1 styling: bold
     if (hex === AXE_COLORS.sectionPurple) {
       return { tier: 1, cls: "font-bold", style: { color: hex } };
     }
-    // Regular semantic keyword → tier 3: semibold + colour
     return { tier: 3, cls: "font-semibold", style: { color: hex } };
   }
 
   // Tier 2 — sub-labels: white bold, no colour
   if (AXE_SUBLABEL_TERMS.has(lower)) {
     return { tier: 2, cls: "font-semibold text-white" };
+  }
+
+  // Tier 3 fallback — check if the bold text *contains* a known term
+  // e.g. "ISM Manufacturing PMI" contains "ism" → amber
+  for (const term of KNOWN_TERMS_DESC) {
+    if (term.length < 2) continue; // skip single-char abbreviations
+    if (lower.includes(term)) {
+      const h = AXE_TERM_COLORS[term];
+      if (h === AXE_COLORS.sectionPurple) {
+        return { tier: 1, cls: "font-bold", style: { color: h } };
+      }
+      return { tier: 3, cls: "font-semibold", style: { color: h } };
+    }
   }
 
   return null;

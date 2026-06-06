@@ -39,7 +39,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
-import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
+import { formatBrokerPrice, priceDigitsForSymbol, pointValueForSymbol } from "@/lib/broker/symbolFormat";
 import type { ChartOverlayRow, ChartPageData } from "@/lib/broker/loadChartPageData";
 import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
 import {
@@ -431,13 +431,12 @@ function ResizablePane({
 /**
  * Compute estimated USD profit/loss for TP/SL labels.
  *
- * Uses the fact that for most MT5 brokers, the tick value (minimum price
- * increment per standard lot) is ~$1 for common instruments:
- * - XAUUSD: 100 oz, tick=0.01 → $1/tick/lot
- * - Forex *USD pairs: 100k units, tick=0.00001 → $1/tick/lot
- * - JPY pairs: ~$0.67/tick/lot (close enough)
+ * Uses `pointValueForSymbol()` for the per-point-per-lot dollar value:
+ *   Forex *USD — $1/point/lot   (100k × 0.00001)
+ *   XAUUSD     — $1/point/lot   (100 oz × 0.01)
+ *   BTCUSD     — $0.01/point/lot (1 BTC × 0.01)
  *
- * This gives a useful on-chart estimate without needing contract specs.
+ * This gives a useful on-chart estimate without needing full contract specs.
  */
 function slTpInfo(
   entryPrice: number | null,
@@ -445,6 +444,7 @@ function slTpInfo(
   volume: string | number,
   side: "buy" | "sell",
   digits: number,
+  symbol: string,
 ): { label: string } | null {
   if (entryPrice == null || levelPrice == null) return null;
   const pointSize = Math.pow(10, -digits);
@@ -452,8 +452,8 @@ function slTpInfo(
   const pointsRaw = Math.round(dist / pointSize);
   const signedPoints = side === "buy" ? pointsRaw : -pointsRaw;
   const vol = typeof volume === "string" ? parseFloat(volume) || 0 : volume;
-  // ~$1 per point per lot for most *USD pairs + gold
-  const usd = signedPoints * vol;
+  const pv = pointValueForSymbol(symbol);
+  const usd = signedPoints * vol * pv;
   const sign = usd >= 0 ? "+" : "-";
   const absUsd = Math.abs(usd);
   // Show as integer if >= $10, 2 decimals if < $10
@@ -467,6 +467,7 @@ const TradePlanLine = memo(function TradePlanLine({
   label,
   color,
   digits,
+  symbol = "",
   onChange,
   dashed = false,
   entryPrice = null,
@@ -480,6 +481,7 @@ const TradePlanLine = memo(function TradePlanLine({
   label: string;
   color: string;
   digits: number;
+  symbol?: string;
   onChange: (price: number) => void;
   dashed?: boolean;
   entryPrice?: number | null;
@@ -517,6 +519,7 @@ const TradePlanLine = memo(function TradePlanLine({
   const volumeRef = useRef(volume);  volumeRef.current = volume;
   const sideRef = useRef(side);  sideRef.current = side;
   const labelPropRef = useRef(label);  labelPropRef.current = label;
+  const symbolRef = useRef(symbol);  symbolRef.current = symbol;
 
   // Size observer
   useEffect(() => {
@@ -607,7 +610,7 @@ const TradePlanLine = memo(function TradePlanLine({
         }
         // Update left label (SL/TP get USD P&L)
         if (labelTextRef.current && dashedRef.current) {
-          const info = slTpInfo(entryPriceRef.current, newPrice, volumeRef.current, sideRef.current, digitsRef.current);
+          const info = slTpInfo(entryPriceRef.current, newPrice, volumeRef.current, sideRef.current, digitsRef.current, symbolRef.current);
           labelTextRef.current.textContent = info
             ? `${labelPropRef.current.toUpperCase()}, ${info.label}`
             : labelPropRef.current.toUpperCase();
@@ -649,7 +652,7 @@ const TradePlanLine = memo(function TradePlanLine({
   }
 
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
-  const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits) : null;
+  const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits, symbol) : null;
   const labelText = info ? `${label.toUpperCase()}, ${info.label}` : label.toUpperCase();
   const priceText = price.toFixed(digits);
   const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
@@ -2531,6 +2534,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               label={`${orderTypeLabel(pendingOrderType)} ${tradeVolume}`}
               color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
+              symbol={data.brokerSymbol}
               onChange={handlePendingEntryPriceChange}
               onDragStart={() => vibrate("light")}
               onDragEnd={() => vibrate("light")}
@@ -2541,6 +2545,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               label="SL"
               color="#E13947"
               digits={priceDigitsForSymbol(data.brokerSymbol)}
+              symbol={data.brokerSymbol}
               onChange={setPendingStopLossPrice}
               dashed
               entryPrice={pendingOrderPrice}
@@ -2555,6 +2560,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               label="TP"
               color="#1F9C7B"
               digits={priceDigitsForSymbol(data.brokerSymbol)}
+              symbol={data.brokerSymbol}
               onChange={setPendingTakeProfitPrice}
               dashed
               entryPrice={pendingOrderPrice}
