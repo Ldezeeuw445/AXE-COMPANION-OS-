@@ -14,7 +14,7 @@ import { useEffect, useRef, useState, memo } from "react";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import { readCachedChart, type CachedChartSnapshot } from "@/lib/chart/clientChartCache";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
-import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
+import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 import { CHART_THEME } from "@/components/chart/chartTheme";
 
 type Props = {
@@ -40,7 +40,7 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
 
   // ── Cached candles available → render static chart ───────────────
   if (cache && cache.candles.length > 0) {
-    const digits = priceDigitsForSymbol(cache.symbol);
+
     const lastPrice = cache.lastPrice ?? cache.candles.at(-1)?.close ?? null;
     const age = Math.round((Date.now() - cache.savedAt) / 60_000);
 
@@ -57,7 +57,7 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
           <div className="flex items-center gap-2">
             {lastPrice != null && (
               <span className="font-mono text-sm font-semibold text-white/80">
-                {formatBrokerPrice(lastPrice, digits)}
+                {formatBrokerPrice(cache.symbol, lastPrice)}
               </span>
             )}
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400/60" />
