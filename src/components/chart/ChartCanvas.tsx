@@ -21,7 +21,7 @@ import type {
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartOverlayRow } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME } from "@/components/chart/chartTheme";
-import { priceDigitsForSymbol, pointValueForSymbol } from "@/lib/broker/symbolFormat";
+import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import {
   type AnnotationPoint,
   type ChartAnnotation,
@@ -75,29 +75,6 @@ const PRESET_RIGHT_OFFSET = [3, 5, 8];
  *   "SL, -1 123.69 USD"  /  "TP, 5 711.01 USD"
  * Space as thousands separator, always 2 decimals, no "+" on positive.
  */
-function slTpLabel(
-  entryPrice: number | null | undefined,
-  levelPrice: number,
-  volume: number,
-  side: "buy" | "sell",
-  symbol: string,
-  tag: "SL" | "TP",
-): string {
-  if (entryPrice == null || entryPrice <= 0) return tag;
-  const digits = priceDigitsForSymbol(symbol);
-  const pointSize = Math.pow(10, -digits);
-  const dist = levelPrice - entryPrice;
-  const pointsRaw = Math.round(dist / pointSize);
-  const signedPoints = side === "buy" ? pointsRaw : -pointsRaw;
-  const pv = pointValueForSymbol(symbol);
-  const usd = signedPoints * volume * pv;
-  const sign = usd < 0 ? "-" : "";
-  const abs = Math.abs(usd);
-  const [intPart, decPart] = abs.toFixed(2).split(".");
-  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${tag}, ${sign}${withSpaces}.${decPart} USD`;
-}
-
 function toUtcTimestamp(iso: string): UTCTimestamp | null {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return null;
@@ -313,15 +290,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     positionLinesRef.current = [];
 
     overlays.forEach((o) => {
-      // MT5-style: "SELL 0.01, -0.68 USD" — side, volume, live P&L
-      const sideLabel = o.side?.toUpperCase() ?? "TRADE";
-      const profitStr =
-        o.profit != null
-          ? `, ${o.profit >= 0 ? "+" : ""}${o.profit.toFixed(2)} USD`
-          : "";
-      const entryTitle = `${sideLabel} ${o.volume}${profitStr}`;
-      // Color follows SIDE — red for sell, green for buy (MT5 convention).
-      // P&L sign is already visible in the title text.
+      // Side-based color — red for sell, green for buy.
       const entryColor =
         o.side === "sell"
           ? CHART_THEME.negativeText
@@ -329,52 +298,40 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             ? CHART_THEME.positiveText
             : CHART_THEME.entryLine;
 
-      // LWC v5 bug: axisLabelVisible:false also hides the title text.
-      // Keep axisLabelVisible:true but style the axis box to be subtle.
+      // Lines only — labels rendered by PositionLabelsOverlay (left-side text, no box).
       if (o.entryPrice != null && o.entryPrice > 0) {
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.entryPrice,
-            title: entryTitle,
             color: entryColor,
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
-            axisLabelVisible: true,
-            axisLabelColor: entryColor,
+            axisLabelVisible: false,
+            title: "",
           }),
         );
       }
       if (o.stopLoss != null && o.stopLoss > 0) {
-        const slLabel = slTpLabel(
-          o.entryPrice, o.stopLoss, o.volume,
-          o.side as "buy" | "sell", symbol, "SL",
-        );
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.stopLoss,
-            title: slLabel,
             color: CHART_THEME.stopLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
-            axisLabelVisible: true,
-            axisLabelColor: CHART_THEME.stopLine,
+            axisLabelVisible: false,
+            title: "",
           }),
         );
       }
       if (o.takeProfit != null && o.takeProfit > 0) {
-        const tpLabel = slTpLabel(
-          o.entryPrice, o.takeProfit, o.volume,
-          o.side as "buy" | "sell", symbol, "TP",
-        );
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.takeProfit,
-            title: tpLabel,
             color: CHART_THEME.takeLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
-            axisLabelVisible: true,
-            axisLabelColor: CHART_THEME.takeLine,
+            axisLabelVisible: false,
+            title: "",
           }),
         );
       }
