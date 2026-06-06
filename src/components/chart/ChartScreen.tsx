@@ -438,6 +438,18 @@ function ResizablePane({
  *
  * This gives a useful on-chart estimate without needing full contract specs.
  */
+/**
+ * Format a number with space as thousands separator and always 2 decimal
+ * places, matching the MT5 SL/TP label style: `1 123.69`
+ */
+function fmtUsdMt5(value: number): string {
+  const abs = Math.abs(value);
+  const [intPart, decPart] = abs.toFixed(2).split(".");
+  // Insert spaces as thousands separator (MT5 uses thin space / regular space)
+  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${withSpaces}.${decPart}`;
+}
+
 function slTpInfo(
   entryPrice: number | null,
   levelPrice: number | null,
@@ -454,11 +466,12 @@ function slTpInfo(
   const vol = typeof volume === "string" ? parseFloat(volume) || 0 : volume;
   const pv = pointValueForSymbol(symbol);
   const usd = signedPoints * vol * pv;
-  const sign = usd >= 0 ? "+" : "-";
-  const absUsd = Math.abs(usd);
-  // Show as integer if >= $10, 2 decimals if < $10
-  const fmt = absUsd >= 10 ? Math.round(absUsd).toLocaleString("en-US") : absUsd.toFixed(2);
-  return { label: `${sign}$${fmt}` };
+  // MT5 format: negative gets "-", positive has no sign
+  //   SL, -1 123.69 USD
+  //   TP, 5 711.01 USD
+  const sign = usd < 0 ? "-" : "";
+  const formatted = fmtUsdMt5(usd);
+  return { label: `${sign}${formatted} USD` };
 }
 
 const TradePlanLine = memo(function TradePlanLine({

@@ -28,7 +28,32 @@ type TrendGeom = {
   rx: number;
   ry: number;
   extend: boolean;
+  /** "up" = lower trendline (through swing lows), "down" = upper (through swing highs). */
+  direction: "up" | "down" | null;
 };
+
+/**
+ * Derive the line colour from the trendline direction.
+ *   • Upper line (through swing highs, direction="down") → dark red
+ *   • Lower line (through swing lows, direction="up") → blue/cyan (original)
+ *   • No direction → fallback blue
+ */
+function lineColor(direction: "up" | "down" | null, isActive: boolean): string {
+  if (direction === "down") {
+    return isActive ? "rgba(220,38,38,0.92)" : "rgba(185,28,28,0.78)";
+  }
+  return isActive ? "rgba(34,211,238,0.92)" : "rgba(110,178,252,0.78)";
+}
+function projectionColor(direction: "up" | "down" | null, isActive: boolean): string {
+  if (direction === "down") {
+    return isActive ? "rgba(220,38,38,0.55)" : "rgba(185,28,28,0.45)";
+  }
+  return isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)";
+}
+function handleColor(direction: "up" | "down" | null): string {
+  if (direction === "down") return "rgba(248,113,113,0.95)";
+  return "rgba(34,211,238,0.95)";
+}
 
 export function TrendlineAnnotationLayer({
   annotations,
@@ -82,8 +107,11 @@ export function TrendlineAnnotationLayer({
 
   const dragRef = useRef<{
     annotationId: string;
-    handle: 0 | 1;
+    handle: 0 | 1 | "body";
     pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    originPoints: AnnotationPoint[];
   } | null>(null);
 
   useEffect(() => {
@@ -122,14 +150,12 @@ export function TrendlineAnnotationLayer({
         const yB = h.priceToCoordinate(b.price);
         if (xA == null || xB == null || yA == null || yB == null) continue;
 
+        const settings = (ann.settings ?? {}) as Record<string, unknown>;
+        const extend = Boolean(settings.extendRight);
+        const direction = (settings.direction ?? null) as "up" | "down" | null;
         // Honour `settings.extendRight`: project the slope forward so the
         // line keeps going past the second swing all the way to the chart's
         // right edge (or to the future-projection cursor when supplied).
-        // Without this the auto-trendline visually "stops" between the two
-        // swings — way too short for trade planning.
-        const extend = Boolean(
-          ann.settings && (ann.settings as Record<string, unknown>).extendRight,
-        );
         let rx = xB;
         let ry = yB;
         if (extend) {
@@ -142,7 +168,7 @@ export function TrendlineAnnotationLayer({
             ry = yB + slope * (targetX - xB);
           }
         }
-        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB, rx, ry, extend });
+        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB, rx, ry, extend, direction });
       }
       setGeoms(next);
     }
@@ -152,11 +178,30 @@ export function TrendlineAnnotationLayer({
     return unsubscribe;
   }, [annotations, canvasRef, futureProjectionX]);
 
-  function startDrag(e: React.PointerEvent<SVGCircleElement>, annotationId: string, handleIdx: 0 | 1) {
+  // ── Drag handling (supports endpoint + body drag) ──────────────────────
+  function stopChartPointer(e: React.PointerEvent<SVGElement>) {
     e.stopPropagation();
     e.preventDefault();
+    e.nativeEvent.stopImmediatePropagation?.();
+  }
+
+  function startDrag(
+    e: React.PointerEvent<SVGElement>,
+    annotationId: string,
+    handleIdx: 0 | 1 | "body",
+  ) {
+    stopChartPointer(e);
+    const ann = annotations.find((a) => a.id === annotationId);
+    if (!ann || ann.type !== "trendline") return;
     svgRef.current?.setPointerCapture(e.pointerId);
-    dragRef.current = { annotationId, handle: handleIdx, pointerId: e.pointerId };
+    dragRef.current = {
+      annotationId,
+      handle: handleIdx,
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      originPoints: ann.points.map((p) => ({ ...p })),
+    };
     setActiveId(annotationId);
     setIsDragging(true);
   }
@@ -164,8 +209,7 @@ export function TrendlineAnnotationLayer({
   function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    e.stopPropagation();
-    e.preventDefault();
+    stopChartPointer(e);
     const handle = canvasRef.current;
     const host = hostRef.current;
     if (!handle || !host) return;
@@ -179,16 +223,33 @@ export function TrendlineAnnotationLayer({
     const ann = annotations.find((a) => a.id === drag.annotationId);
     if (!ann || ann.type !== "trendline") return;
 
-    const nextPoints: AnnotationPoint[] = [...ann.points] as AnnotationPoint[];
-    nextPoints[drag.handle] = { time, price };
+    let nextPoints: AnnotationPoint[];
+    if (drag.handle === "body") {
+      // Body drag — move both endpoints by the same pixel delta, then
+      // project back to time/price. Same approach as FibAnnotationLayer.
+      const dx = e.clientX - drag.startClientX;
+      const dy = e.clientY - drag.startClientY;
+      nextPoints = drag.originPoints.map((point) => {
+        const originalX = handle.timeToCoordinate(point.time);
+        const originalY = handle.priceToCoordinate(point.price);
+        if (originalX == null || originalY == null) return point;
+        const nextTime = handle.coordinateToTime(originalX + dx);
+        const nextPrice = handle.coordinateToPrice(originalY + dy);
+        if (nextTime == null || nextPrice == null) return point;
+        return { time: nextTime, price: nextPrice };
+      });
+    } else {
+      nextPoints = [...ann.points] as AnnotationPoint[];
+      nextPoints[drag.handle] = { time, price };
+    }
+
     onUpdate({ ...ann, points: nextPoints, updatedAt: new Date().toISOString() });
   }
 
   function endDrag(e: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    e.stopPropagation();
-    e.preventDefault();
+    stopChartPointer(e);
     dragRef.current = null;
     setIsDragging(false);
   }
@@ -217,15 +278,40 @@ export function TrendlineAnnotationLayer({
           const isActive = activeId === g.id;
           const mx = (g.ax + g.bx) / 2;
           const my = (g.ay + g.by) / 2;
+          const color = lineColor(g.direction, isActive);
+          const projColor = projectionColor(g.direction, isActive);
+          const dotColor = handleColor(g.direction);
           return (
             <g key={g.id}>
+              {/* Invisible fat hit-line for body drag (when active) or
+                  re-selection (when locked). Covers entire line incl.
+                  extension so it's easy to grab on mobile. */}
+              <line
+                x1={g.ax}
+                y1={g.ay}
+                x2={g.rx}
+                y2={g.ry}
+                stroke="transparent"
+                strokeWidth={22}
+                pointerEvents="stroke"
+                onPointerDown={(e) => {
+                  if (isActive) {
+                    startDrag(e, g.id, "body");
+                  } else {
+                    e.stopPropagation();
+                    setActiveId(g.id);
+                  }
+                }}
+                style={{ cursor: isActive ? "move" : "pointer", touchAction: "none" }}
+              />
+
               {/* Solid segment between the two anchor swings */}
               <line
                 x1={g.ax}
                 y1={g.ay}
                 x2={g.bx}
                 y2={g.by}
-                stroke={isActive ? "rgba(34,211,238,0.92)" : "rgba(110,178,252,0.78)"}
+                stroke={color}
                 strokeWidth={isActive ? 2.4 : 2}
                 strokeLinecap="round"
                 pointerEvents="none"
@@ -240,7 +326,7 @@ export function TrendlineAnnotationLayer({
                   y1={g.by}
                   x2={g.rx}
                   y2={g.ry}
-                  stroke={isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)"}
+                  stroke={projColor}
                   strokeWidth={isActive ? 1.8 : 1.5}
                   strokeLinecap="round"
                   strokeDasharray="2 4"
@@ -256,49 +342,30 @@ export function TrendlineAnnotationLayer({
                     cx={g.ax}
                     cy={g.ay}
                     r={8}
-                    fill="rgba(34,211,238,0.95)"
+                    fill={dotColor}
                     stroke="rgba(255,255,255,0.85)"
                     strokeWidth={1.5}
                     onPointerDown={(e) => startDrag(e, g.id, 0)}
-                    style={{ cursor: "grab" }}
+                    style={{ cursor: "grab", touchAction: "none" }}
                   />
                   <circle
                     cx={g.bx}
                     cy={g.by}
                     r={8}
-                    fill="rgba(34,211,238,0.95)"
+                    fill={dotColor}
                     stroke="rgba(255,255,255,0.85)"
                     strokeWidth={1.5}
                     onPointerDown={(e) => startDrag(e, g.id, 1)}
-                    style={{ cursor: "grab" }}
+                    style={{ cursor: "grab", touchAction: "none" }}
                   />
                 </g>
               ) : null}
-
-              {/* Invisible hit-line so the user can re-select the trendline
-                  by tapping it after it has been locked. Hit area covers the
-                  extension as well so the projection ray is also tappable. */}
-              <line
-                x1={g.ax}
-                y1={g.ay}
-                x2={g.rx}
-                y2={g.ry}
-                stroke="transparent"
-                strokeWidth={18}
-                pointerEvents="stroke"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  setActiveId(g.id);
-                }}
-                style={{ cursor: "pointer" }}
-              />
 
               {onRemove && isActive ? (
                 <g
                   style={{ pointerEvents: "auto", cursor: "pointer" }}
                   onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
+                    stopChartPointer(e);
                     onRemove(g.id);
                   }}
                 >
@@ -330,4 +397,3 @@ export function TrendlineAnnotationLayer({
     </div>
   );
 }
-

@@ -421,101 +421,7 @@ export function ChartIndicatorLayer({
             under those lines in z-order — exactly per spec, since SD
             is contextual background and PDH/PDL/PDQ are tactical. */}
         {active.supplyDemand && geometry.supplyDemand ? (
-          <g pointerEvents="none">
-            {/* Supply (top 25%) band */}
-            <rect
-              x={LEFT_RAIL_OFFSET}
-              y={geometry.supplyDemand.supplyTop.y}
-              width={Math.max(0, size.w - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET)}
-              height={Math.max(
-                1,
-                geometry.supplyDemand.supplyBottom.y - geometry.supplyDemand.supplyTop.y,
-              )}
-              fill="rgba(244,63,94,0.06)"
-              stroke="rgba(244,63,94,0.34)"
-              strokeWidth={0.6}
-              strokeDasharray="3 3"
-            />
-            {/* Demand (bottom 25%) band */}
-            <rect
-              x={LEFT_RAIL_OFFSET}
-              y={geometry.supplyDemand.demandTop.y}
-              width={Math.max(0, size.w - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET)}
-              height={Math.max(
-                1,
-                geometry.supplyDemand.demandBottom.y - geometry.supplyDemand.demandTop.y,
-              )}
-              fill="rgba(45,212,191,0.06)"
-              stroke="rgba(45,212,191,0.34)"
-              strokeWidth={0.6}
-              strokeDasharray="3 3"
-            />
-            {/* EQ midline — single thin dashed line. */}
-            <line
-              x1={LEFT_RAIL_OFFSET}
-              x2={size.w - RIGHT_RAIL_OFFSET}
-              y1={geometry.supplyDemand.eq.y}
-              y2={geometry.supplyDemand.eq.y}
-              stroke="rgba(148,163,184,0.55)"
-              strokeWidth={0.85}
-              strokeDasharray="2 5"
-            />
-            {/* SUPPLY label — left rail, centered on the band. */}
-            <text
-              x={LEFT_RAIL_OFFSET}
-              y={
-                (geometry.supplyDemand.supplyTop.y + geometry.supplyDemand.supplyBottom.y) / 2 +
-                3
-              }
-              textAnchor="start"
-              fontFamily="ui-sans-serif, system-ui, -apple-system"
-              fontSize="9"
-              fontWeight={700}
-              letterSpacing="0.5"
-              fill="rgba(252,165,165,0.88)"
-              stroke="rgba(0,0,0,0.6)"
-              strokeWidth={2}
-              paintOrder="stroke"
-            >
-              SUPPLY
-            </text>
-            {/* DEMAND label */}
-            <text
-              x={LEFT_RAIL_OFFSET}
-              y={
-                (geometry.supplyDemand.demandTop.y + geometry.supplyDemand.demandBottom.y) / 2 +
-                3
-              }
-              textAnchor="start"
-              fontFamily="ui-sans-serif, system-ui, -apple-system"
-              fontSize="9"
-              fontWeight={700}
-              letterSpacing="0.5"
-              fill="rgba(167,243,208,0.88)"
-              stroke="rgba(0,0,0,0.6)"
-              strokeWidth={2}
-              paintOrder="stroke"
-            >
-              DEMAND
-            </text>
-            {/* EQ label sits 4px above the EQ line so it doesn't clip
-                the line stroke. */}
-            <text
-              x={LEFT_RAIL_OFFSET}
-              y={geometry.supplyDemand.eq.y - 3}
-              textAnchor="start"
-              fontFamily="ui-sans-serif, system-ui, -apple-system"
-              fontSize="8.5"
-              fontWeight={600}
-              letterSpacing="0.4"
-              fill="rgba(148,163,184,0.88)"
-              stroke="rgba(0,0,0,0.6)"
-              strokeWidth={2}
-              paintOrder="stroke"
-            >
-              EQ
-            </text>
-          </g>
+          <SupplyDemandOverlay sd={geometry.supplyDemand} width={size.w} />
         ) : null}
 
         {/* Previous Day High / Low / Equilibrium — thin SOLID lines
@@ -832,6 +738,105 @@ export function ChartIndicatorLayer({
  * 11_234 → "11.2K"
  * 1.2M   → "1.20M"
  */
+/**
+ * Extracted Supply / Demand overlay so TypeScript can narrow nullable
+ * fields cleanly — JSX ternaries on struct fields don't narrow through
+ * boolean variables.
+ */
+function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: number }) {
+  const bandW = Math.max(0, width - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET);
+  return (
+    <g pointerEvents="none">
+      {sd.supplyTop && sd.supplyBottom ? (
+        <>
+          <rect
+            x={LEFT_RAIL_OFFSET}
+            y={sd.supplyTop.y}
+            width={bandW}
+            height={Math.max(1, sd.supplyBottom.y - sd.supplyTop.y)}
+            fill="rgba(244,63,94,0.06)"
+            stroke="rgba(244,63,94,0.34)"
+            strokeWidth={0.6}
+            strokeDasharray="3 3"
+          />
+          <text
+            x={LEFT_RAIL_OFFSET}
+            y={(sd.supplyTop.y + sd.supplyBottom.y) / 2 + 3}
+            textAnchor="start"
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+            fontSize="9"
+            fontWeight={700}
+            letterSpacing="0.5"
+            fill="rgba(252,165,165,0.88)"
+            stroke="rgba(0,0,0,0.6)"
+            strokeWidth={2}
+            paintOrder="stroke"
+          >
+            SUPPLY
+          </text>
+        </>
+      ) : null}
+      {sd.demandTop && sd.demandBottom ? (
+        <>
+          <rect
+            x={LEFT_RAIL_OFFSET}
+            y={sd.demandTop.y}
+            width={bandW}
+            height={Math.max(1, sd.demandBottom.y - sd.demandTop.y)}
+            fill="rgba(45,212,191,0.06)"
+            stroke="rgba(45,212,191,0.34)"
+            strokeWidth={0.6}
+            strokeDasharray="3 3"
+          />
+          <text
+            x={LEFT_RAIL_OFFSET}
+            y={(sd.demandTop.y + sd.demandBottom.y) / 2 + 3}
+            textAnchor="start"
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+            fontSize="9"
+            fontWeight={700}
+            letterSpacing="0.5"
+            fill="rgba(167,243,208,0.88)"
+            stroke="rgba(0,0,0,0.6)"
+            strokeWidth={2}
+            paintOrder="stroke"
+          >
+            DEMAND
+          </text>
+        </>
+      ) : null}
+      {sd.eq ? (
+        <>
+          <line
+            x1={LEFT_RAIL_OFFSET}
+            x2={width - RIGHT_RAIL_OFFSET}
+            y1={sd.eq.y}
+            y2={sd.eq.y}
+            stroke="rgba(148,163,184,0.55)"
+            strokeWidth={0.85}
+            strokeDasharray="2 5"
+          />
+          <text
+            x={LEFT_RAIL_OFFSET}
+            y={sd.eq.y - 3}
+            textAnchor="start"
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+            fontSize="8.5"
+            fontWeight={600}
+            letterSpacing="0.4"
+            fill="rgba(148,163,184,0.88)"
+            stroke="rgba(0,0,0,0.6)"
+            strokeWidth={2}
+            paintOrder="stroke"
+          >
+            EQ
+          </text>
+        </>
+      ) : null}
+    </g>
+  );
+}
+
 function formatVolume(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -1036,6 +1041,22 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           strokeDasharray="2 3"
           opacity={0.85}
         />
+        {/* Small "OB" label at top-left of the zone, same colour as the
+            OB direction fill so it blends in calmly. */}
+        <text
+          x={zone.x + 4}
+          y={zone.y + 10}
+          textAnchor="start"
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+          fontSize="8"
+          fontWeight="600"
+          fill={zone.direction === "up" ? "rgba(167,243,208,0.65)" : "rgba(252,165,165,0.65)"}
+          stroke="rgba(0,0,0,0.55)"
+          strokeWidth="2"
+          paintOrder="stroke"
+        >
+          OB
+        </text>
         <ObInnerVolumeLabel zone={zone} obRightX={obRightX} />
       </g>
     );
@@ -1072,6 +1093,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             width={leftWidth}
             height={zone.height}
             fill={originalFill}
+            rx={2}
           />
         ) : null}
         {rightWidth > 0 ? (
@@ -1081,6 +1103,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             width={rightWidth}
             height={zone.height}
             fill={zone.fill}
+            rx={2}
           />
         ) : null}
         <line
@@ -1088,13 +1111,14 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           x2={rightEndX}
           y1={zone.midY}
           y2={zone.midY}
-          stroke="rgba(120,123,134,0.85)"
-          strokeWidth={0.9}
-          strokeDasharray="4 3"
+          stroke="rgba(120,123,134,0.65)"
+          strokeWidth={0.7}
+          strokeDasharray="3 4"
         />
         {/* Tiny trigger marker at the inversion candle so the trader
             sees the flip moment clearly. ▲ for bullish flip (originalDir
-            = down, now support), ▼ for bearish flip. */}
+            = down, now support), ▼ for bearish flip. Colour matches the
+            inverted fill for a calm, integrated look. */}
         <text
           x={inversionX}
           y={originalIsBull ? zone.y - 4 : zone.y + zone.height + 10}
@@ -1102,7 +1126,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
           fontSize="9"
           fontWeight="700"
-          fill={zone.stroke}
+          fill={zone.fill.replace(/[\d.]+\)$/, "0.75)")}
           stroke="rgba(0,0,0,0.78)"
           strokeWidth="2.4"
           paintOrder="stroke"
@@ -1112,7 +1136,8 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         {/* Label is centred inside the LATEST (right / inverted) half
             so when the FVG flips, the marker tracks the active state
             the trader cares about right now. Falls back to the whole
-            zone centre when the right half is too thin to fit. */}
+            zone centre when the right half is too thin to fit. Colour
+            matches the inverted fill so text sits calmly. */}
         <text
           x={
             rightWidth > 18
@@ -1124,7 +1149,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
           fontSize="9"
           fontWeight="700"
-          fill={zone.stroke}
+          fill={zone.fill.replace(/[\d.]+\)$/, "0.75)")}
           stroke="rgba(0,0,0,0.78)"
           strokeWidth="2.4"
           paintOrder="stroke"
@@ -1136,9 +1161,14 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   }
 
   // FVG → only the dense filled block in its own colour. No forward
-  // bleed, no dashed midline, nothing extending past the box. Colour
-  // is amber/gold so FVGs are visually distinct from iFVG (teal/red)
-  // and OB (teal/red). Label is centred inside the block.
+  // bleed, no dashed midline, nothing extending past the box. Bullish
+  // FVG is light blue, bearish is amber — visually distinct from iFVG
+  // (teal/red) and OB (teal/red). Label colour matches the zone fill
+  // so text sits calmly inside the box.
+  const fvgLabelColor =
+    zone.direction === "up"
+      ? "rgba(96,165,250,0.75)"
+      : "rgba(217,119,6,0.75)";
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -1158,7 +1188,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
         fontSize="9"
         fontWeight="700"
-        fill={zone.stroke}
+        fill={fvgLabelColor}
         stroke="rgba(0,0,0,0.78)"
         strokeWidth="2.4"
         paintOrder="stroke"
@@ -1524,8 +1554,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(250,204,21,0.95)",
-              fill: "rgba(250,204,21,0.22)",
+              stroke: "rgba(96,165,250,0.95)",
+              fill: "rgba(96,165,250,0.22)",
               direction: "up",
               extend: !mitigated,
               mitigated,
@@ -1654,11 +1684,11 @@ function pickLatestZonesPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
  * close, demand below).
  */
 type SupplyDemandGeom = {
-  supplyTop: { y: number; price: number };
-  supplyBottom: { y: number; price: number };
-  demandTop: { y: number; price: number };
-  demandBottom: { y: number; price: number };
-  eq: { y: number; price: number };
+  supplyTop: { y: number; price: number } | null;
+  supplyBottom: { y: number; price: number } | null;
+  demandTop: { y: number; price: number } | null;
+  demandBottom: { y: number; price: number } | null;
+  eq: { y: number; price: number } | null;
 };
 
 function isErcCandle(body: number, avgBody: number): boolean {
@@ -1720,13 +1750,19 @@ function findErcZone(
     // Wrong-side guard.
     if (direction === "supply" && top <= latestClose) continue;
     if (direction === "demand" && bottom >= latestClose) continue;
-    // 50% mitigation check: did any later candle penetrate past the
-    // zone midline?
-    const mid = (top + bottom) / 2;
+    // 75% mitigation check: zone is invalidated only when price
+    // penetrates 75% through the zone body (not just the midline).
+    // The stricter 50% rule invalidated most zones on volatile
+    // instruments like BTC — giving the zone more breathing room
+    // keeps meaningful S/D visible on the chart.
+    const height = top - bottom;
+    const mitigationLine = direction === "supply"
+      ? bottom + height * 0.25   // supply: invalidate if price drops to bottom quarter
+      : top - height * 0.25;     // demand: invalidate if price rises to top quarter
     let mitigated = false;
     for (let k = i + 1; k < candles.length; k += 1) {
-      if (direction === "supply" && candles[k].low < mid) { mitigated = true; break; }
-      if (direction === "demand" && candles[k].high > mid) { mitigated = true; break; }
+      if (direction === "supply" && candles[k].low < mitigationLine) { mitigated = true; break; }
+      if (direction === "demand" && candles[k].high > mitigationLine) { mitigated = true; break; }
     }
     if (mitigated) continue;
     return { top, bottom };
@@ -1741,35 +1777,41 @@ function buildSupplyDemandBands(
   if (candles.length < 20) return null;
   const supply = findErcZone(candles, "supply");
   const demand = findErcZone(candles, "demand");
-  if (!supply || !demand) return null;
-  const highPrice = supply.top;
-  const lowPrice = demand.bottom;
-  if (!(highPrice > lowPrice)) return null;
-  // Render the ACTUAL ERC zones as the supply / demand bands (top edge
-  // = supply.top, bottom edge of supply = supply.bottom — likewise for
-  // demand). EQ is the midline between supply.bottom and demand.top
-  // (the "fair value" range traders treat as neutral).
-  const eqPrice = (supply.bottom + demand.top) / 2;
-  const supplyTopY = handle.priceToCoordinate(supply.top);
-  const supplyBottomY = handle.priceToCoordinate(supply.bottom);
-  const demandTopY = handle.priceToCoordinate(demand.top);
-  const demandBottomY = handle.priceToCoordinate(demand.bottom);
-  const eqY = handle.priceToCoordinate(eqPrice);
-  if (
-    supplyTopY == null ||
-    supplyBottomY == null ||
-    demandTopY == null ||
-    demandBottomY == null ||
-    eqY == null
-  ) {
-    return null;
-  }
+  // Render whichever zone(s) exist — don't require both. EQ line only
+  // shows when both are present (it's the midpoint between them).
+  if (!supply && !demand) return null;
+
+  // Project each zone that exists; null-safe wrappers.
+  const supplyTopY = supply ? handle.priceToCoordinate(supply.top) : null;
+  const supplyBottomY = supply ? handle.priceToCoordinate(supply.bottom) : null;
+  const demandTopY = demand ? handle.priceToCoordinate(demand.top) : null;
+  const demandBottomY = demand ? handle.priceToCoordinate(demand.bottom) : null;
+
+  const eqPrice =
+    supply && demand ? (supply.bottom + demand.top) / 2 : null;
+  const eqY = eqPrice != null ? handle.priceToCoordinate(eqPrice) : null;
+
   return {
-    supplyTop: { y: supplyTopY, price: supply.top },
-    supplyBottom: { y: supplyBottomY, price: supply.bottom },
-    demandTop: { y: demandTopY, price: demand.top },
-    demandBottom: { y: demandBottomY, price: demand.bottom },
-    eq: { y: eqY, price: eqPrice },
+    supplyTop:
+      supply && supplyTopY != null
+        ? { y: supplyTopY, price: supply.top }
+        : null,
+    supplyBottom:
+      supply && supplyBottomY != null
+        ? { y: supplyBottomY, price: supply.bottom }
+        : null,
+    demandTop:
+      demand && demandTopY != null
+        ? { y: demandTopY, price: demand.top }
+        : null,
+    demandBottom:
+      demand && demandBottomY != null
+        ? { y: demandBottomY, price: demand.bottom }
+        : null,
+    eq:
+      eqPrice != null && eqY != null
+        ? { y: eqY, price: eqPrice }
+        : null,
   };
 }
 
