@@ -252,14 +252,14 @@ function TradeRow({
 
 function AnalyticsMini({ analytics }: { analytics: JournalAnalytics }) {
   const a = analytics;
-  if (a.totalTrades < 3 || a.journaledWithTagCount < 3) {
+  if (a.totalTrades === 0) {
     return (
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/25">
           Analytics
         </p>
         <p className="mt-2 text-[12px] text-white/40">
-          Tag at least 3 trades to unlock analytics. Current: {a.journaledWithTagCount}/{a.totalTrades}
+          Close your first trade to see analytics here.
         </p>
       </div>
     );

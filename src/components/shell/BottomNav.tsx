@@ -15,7 +15,7 @@
  * Label: 8 px uppercase, letter-spacing 0.06 em.
  */
 
-import { useRef, useLayoutEffect } from "react";
+import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -46,28 +46,8 @@ export function BottomNav() {
   const navRef = useRef<HTMLElement>(null);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
-  // ── ResizeObserver for --tos-nav-offset ─────────────────────────────
-  // Offset = pill height + bottom position (4px) + breathing gap (4px)
-  // This tells full-screen pages (chart, chat) where to stop content.
-  useLayoutEffect(() => {
-    const el = navRef.current;
-    if (!el) return;
-    const sync = () => {
-      const total = el.offsetHeight;
-      if (total > 0) {
-        const bottomPos = 4; // matches inline style bottom: 4px
-        const gap = 4;
-        document.documentElement.style.setProperty(
-          "--tos-nav-offset",
-          `${total + bottomPos + gap}px`,
-        );
-      }
-    };
-    const ro = new ResizeObserver(sync);
-    ro.observe(el);
-    sync();
-    return () => ro.disconnect();
-  }, []);
+  // No ResizeObserver — navbar height is deterministic. --tos-nav-offset
+  // is defined in globals.css as a static calc so there's zero layout shift.
 
   // Conditional 6th tab
   const sixthTab = isAxeView
