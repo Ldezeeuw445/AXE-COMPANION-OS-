@@ -19,6 +19,10 @@ export type TradeHighlight = {
   close_time: string | null;
   label: string | null;
   note: string | null;
+  /** AXE Core auto-generated tag (null until AXE scores the trade) */
+  axe_label: string | null;
+  /** AXE Core reasoning for the tag */
+  axe_note: string | null;
 };
 
 export type JournalPageData = {
@@ -101,7 +105,7 @@ export async function loadJournalPageData(opts: {
 
     const { data: lbl } = await sb
       .from("trade_journal_labels")
-      .select("label,note")
+      .select("label,note,axe_label,axe_note")
       .eq("user_id", userId)
       .eq("trade_id", tradeId)
       .maybeSingle();
@@ -115,6 +119,8 @@ export async function loadJournalPageData(opts: {
       close_time: (tr.close_time as string | null) ?? null,
       label: (lbl?.label as string | undefined) ?? null,
       note: (lbl?.note as string | undefined) ?? null,
+      axe_label: (lbl?.axe_label as string | undefined) ?? null,
+      axe_note: (lbl?.axe_note as string | undefined) ?? null,
     };
   }
 
@@ -146,18 +152,34 @@ export async function loadJournalPageData(opts: {
 
     const rows = tradeRows ?? [];
     const ids = rows.map((r) => r.id as string);
-    const labelByTrade = new Map<string, { label: string | null; note: string | null }>();
+    const labelByTrade = new Map<string, {
+      label: string | null;
+      note: string | null;
+      axe_label: string | null;
+      axe_note: string | null;
+    }>();
 
     if (ids.length > 0) {
       const { data: labRows } = await sb
         .from("trade_journal_labels")
-        .select("trade_id,label,note")
+        .select("trade_id,label,note,axe_label,axe_note")
         .eq("user_id", userId)
         .in("trade_id", ids);
 
       for (const row of labRows ?? []) {
-        const r = row as { trade_id: string; label: string | null; note: string | null };
-        labelByTrade.set(r.trade_id, { label: r.label, note: r.note });
+        const r = row as {
+          trade_id: string;
+          label: string | null;
+          note: string | null;
+          axe_label: string | null;
+          axe_note: string | null;
+        };
+        labelByTrade.set(r.trade_id, {
+          label: r.label,
+          note: r.note,
+          axe_label: r.axe_label,
+          axe_note: r.axe_note,
+        });
       }
     }
 
@@ -173,6 +195,8 @@ export async function loadJournalPageData(opts: {
         close_time: (tr.close_time as string | null) ?? null,
         label: lb?.label ?? null,
         note: lb?.note ?? null,
+        axe_label: lb?.axe_label ?? null,
+        axe_note: lb?.axe_note ?? null,
       });
     }
 
