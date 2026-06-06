@@ -23,6 +23,15 @@ const HEADER_KEYWORDS = new Set([
   "fundamental analysis",
   "sentiment",
   "price action",
+  "macro overview",
+  "risk assessment",
+  "weekly outlook",
+  "daily outlook",
+  "session recap",
+  "trading plan",
+  "setup review",
+  "journal review",
+  "performance review",
 ]);
 
 /** Tier 2 — Sub-labels → white bold, no colour (keeps it calm) */
@@ -37,32 +46,118 @@ const SUBLABEL_KEYWORDS = new Set([
   "context",
   "note",
   "notes",
+  "conclusion",
+  "recommendation",
+  "invalidation",
+  "confirmation",
+  "execution",
+  "session",
+  "day range",
+  "range",
+  "structure",
+  "momentum",
+  "volatility",
+  "volume",
+  "liquidity",
 ]);
 
-/** Tier 3 — Key detail keywords → matte semantic colour per concept */
+/** Tier 3 — Key detail keywords → matte semantic colour per concept.
+ *  7 colour groups · 55+ terms for full trading vocabulary. */
 const SEMANTIC_KEYWORDS: Record<string, string> = {
-  // Resistance / risk side → rose
+  // ── Rose: risk / resistance / bearish ──
   resistance: "text-rose-300/85",
   "stop loss": "text-rose-300/85",
   sl: "text-rose-300/85",
   risk: "text-rose-300/85",
   bearish: "text-rose-300/85",
-  // Support / entry side → emerald
+  sell: "text-rose-300/85",
+  short: "text-rose-300/85",
+  "supply zone": "text-rose-300/85",
+  supply: "text-rose-300/85",
+  rejection: "text-rose-300/85",
+  distribution: "text-rose-300/85",
+  overbought: "text-rose-300/85",
+  "lower high": "text-rose-300/85",
+  "lower low": "text-rose-300/85",
+  lh: "text-rose-300/85",
+  ll: "text-rose-300/85",
+
+  // ── Emerald: support / entry / bullish ──
   support: "text-emerald-300/85",
   "take profit": "text-emerald-300/85",
   tp: "text-emerald-300/85",
   entry: "text-emerald-300/85",
   bullish: "text-emerald-300/85",
-  // Patterns → indigo/sky
+  buy: "text-emerald-300/85",
+  long: "text-emerald-300/85",
+  "demand zone": "text-emerald-300/85",
+  demand: "text-emerald-300/85",
+  accumulation: "text-emerald-300/85",
+  oversold: "text-emerald-300/85",
+  "higher high": "text-emerald-300/85",
+  "higher low": "text-emerald-300/85",
+  hh: "text-emerald-300/85",
+  hl: "text-emerald-300/85",
+
+  // ── Sky / Indigo: patterns & formations ──
   consolidation: "text-sky-300/80",
   "breakout watch": "text-indigo-300/85",
   breakout: "text-indigo-300/85",
+  "break of structure": "text-indigo-300/85",
+  bos: "text-indigo-300/85",
+  "change of character": "text-indigo-300/85",
+  choch: "text-indigo-300/85",
+  "market shift": "text-indigo-300/85",
+  mss: "text-indigo-300/85",
+  "fair value gap": "text-sky-300/80",
+  fvg: "text-sky-300/80",
+  imbalance: "text-sky-300/80",
+  "order block": "text-sky-300/80",
+  ob: "text-sky-300/80",
+  confluence: "text-sky-300/80",
+  divergence: "text-sky-300/80",
+
+  // ── Pink: reversals & turning points ──
   reversal: "text-pink-300/80",
-  // Catalysts & levels → amber
+  "swing failure": "text-pink-300/80",
+  sfp: "text-pink-300/80",
+  "liquidity sweep": "text-pink-300/80",
+  sweep: "text-pink-300/80",
+  "stop hunt": "text-pink-300/80",
+  manipulation: "text-pink-300/80",
+
+  // ── Amber: catalysts & ratios ──
   catalysts: "text-amber-300/85",
   catalyst: "text-amber-300/85",
   "risk/reward": "text-amber-300/85",
   "r:r": "text-amber-300/85",
+  nfp: "text-amber-300/85",
+  fomc: "text-amber-300/85",
+  cpi: "text-amber-300/85",
+  ppi: "text-amber-300/85",
+  gdp: "text-amber-300/85",
+  "interest rate": "text-amber-300/85",
+  fed: "text-amber-300/85",
+  ecb: "text-amber-300/85",
+
+  // ── Violet: indicators & tools ──
+  fibonacci: "text-violet-300/80",
+  fib: "text-violet-300/80",
+  ema: "text-violet-300/80",
+  sma: "text-violet-300/80",
+  vwap: "text-violet-300/80",
+  rsi: "text-violet-300/80",
+  macd: "text-violet-300/80",
+  atr: "text-violet-300/80",
+  bollinger: "text-violet-300/80",
+
+  // ── Teal: session & timing ──
+  "london open": "text-teal-300/80",
+  "new york open": "text-teal-300/80",
+  "asian session": "text-teal-300/80",
+  "london session": "text-teal-300/80",
+  "new york session": "text-teal-300/80",
+  killzone: "text-teal-300/80",
 };
 
 type KeywordTier = { tier: 1 | 2 | 3; cls: string };
