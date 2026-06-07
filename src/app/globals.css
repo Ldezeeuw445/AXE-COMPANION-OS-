@@ -266,16 +266,14 @@ body {
    - Inner top highlight simulates edge-lit glass
    - Deep outer shadow grounds the bar to the screen edge
    - Subtle inner shadow gives a concave "tray" feel */
-/* Fixed dock that hugs the screen bottom, padding the safe-area
-   via CSS (not inline style) so env() resolves on first paint. */
-.tos-nav-dock {
+/* Floating pill navbar — fixed directly, no wrapper.
+   bottom = safe-area + small gap so the pill clears the home indicator. */
+.tos-nav-pill {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
   z-index: 50;
-  pointer-events: none;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Subtle ambient glow — ultra-faint radial light behind key content.
@@ -354,7 +352,7 @@ nav,
 .tos-card-premium-subtle,
 .tos-linear-card,
 .tos-watchlist-row,
-.tos-nav-dock,
+.tos-nav-pill,
 .tos-asset-pill,
 .tos-inset-panel,
 .tos-neu-composer,
