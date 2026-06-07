@@ -5,13 +5,13 @@ import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 /**
  * POST /api/intel-chat
  *
- * Dedicated streaming endpoint for the AXE Intel AI chat panel.
+ * Dedicated streaming endpoint for the AXE INTELLIGENT AGENT chat panel.
  * Fetches the latest intel snapshot, builds a focused system prompt,
  * and streams GPT-4o's response back as text/event-stream so the
  * client gets tokens in real-time.
  */
 
-const INTEL_SYSTEM_PROMPT = `You are AXE Intel AI — the intelligent analysis layer of AXE Companion OS.
+const INTEL_SYSTEM_PROMPT = `You are AXE INTELLIGENT AGENT — the intelligent analysis layer of AXE Companion OS.
 
 ROLE: You are a senior institutional flow analyst with access to real-time smart-money intelligence feeds. Your job is to find *actionable correlations* across insider trades, congressional activity, dark-pool block prints, unusual options flow, and broad market tide — then translate them into clear trading signals or risk warnings.
 
