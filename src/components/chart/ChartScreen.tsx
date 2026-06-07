@@ -40,7 +40,7 @@ import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol, pointValueForSymbol } from "@/lib/broker/symbolFormat";
-import type { ChartOverlayRow, ChartPageData } from "@/lib/broker/loadChartPageData";
+import type { ChartOverlayRow, ChartPageData, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
 import {
   buildFibonacciActionFromCandles,
@@ -56,6 +56,7 @@ import { PositionLabelsOverlay } from "@/components/chart/PositionLabelsOverlay"
 import {
   useLiveChart,
   type LivePosition,
+  type LivePendingOrder,
   type LiveTransport,
   type LiveUiStatus,
 } from "@/components/chart/useLiveChart";
@@ -790,6 +791,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [lastTickAt, setLastTickAt] = useState<string | null>(data.lastTickAt);
   const [overlays, setOverlays] = useState<ChartOverlayRow[]>(data.positionsOnSymbol);
   const [livePositionsCount, setLivePositionsCount] = useState<number>(data.totalPositions);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
   const isVisible = usePageVisible();
@@ -1588,6 +1590,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setOverlays((prev) => (sameOverlayRows(prev, next) ? prev : next));
   }, []);
 
+  const onOrders = useCallback(({ onSymbol }: { total: number; onSymbol: LivePendingOrder[] }) => {
+    const next: PendingOrderOverlay[] = onSymbol.map((o) => ({
+      id: o.id,
+      symbol: o.symbol,
+      type: o.type,
+      side: o.side,
+      volume: o.volume,
+      openPrice: o.openPrice,
+      currentPrice: o.currentPrice,
+      stopLoss: o.stopLoss,
+      takeProfit: o.takeProfit,
+      openTime: o.openTime,
+    }));
+    setPendingOrders((prev) => {
+      if (prev.length === next.length && prev.every((p, i) => p.id === next[i]?.id && p.openPrice === next[i]?.openPrice && p.stopLoss === next[i]?.stopLoss && p.takeProfit === next[i]?.takeProfit)) return prev;
+      return next;
+    });
+  }, []);
+
   const {
     status: liveStatus,
     transport: liveTransport,
@@ -1603,6 +1624,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     onTick,
     onCandleUpdate,
     onPositions,
+    onOrders,
   });
 
   // Canonical chart runtime snapshot. Chat, Watchlist and Alerts read this
@@ -1680,6 +1702,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       setLiveAsk(data.lastAsk);
       setOverlays(data.positionsOnSymbol);
       setLivePositionsCount(data.totalPositions);
+      setPendingOrders(data.pendingOrdersOnSymbol);
       setLastTickAt(data.lastTickAt);
     });
   }, [
@@ -2495,6 +2518,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           ref={canvasRef}
           candles={data.candles}
           overlays={overlays}
+          pendingOrders={pendingOrders}
           symbol={data.brokerSymbol}
           annotations={annotations}
           drawingMode={drawingMode}
@@ -2506,6 +2530,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <PositionLabelsOverlay
           canvasRef={canvasRef}
           overlays={overlays}
+          pendingOrders={pendingOrders}
           symbol={data.brokerSymbol}
           brokerAccountId={data.account?.brokerAccountId}
           liveTradingEnabled={liveTrading.enabled}

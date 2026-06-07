@@ -6,6 +6,7 @@ import {
   clientGetSymbolPrice,
   clientListSymbols,
   clientGetPositions,
+  clientGetOrders,
   MetaApiRequestError,
   type MetaApiCandle,
 } from "@/lib/mt5/metaApiClient";
@@ -73,6 +74,21 @@ export type ChartOverlayRow = {
   currentPrice: number | null;
 };
 
+export type PendingOrderOverlay = {
+  id: string;
+  symbol: string;
+  /** e.g. "buy_limit", "sell_limit", "buy_stop", "sell_stop" */
+  type: string;
+  side: string;
+  volume: number;
+  /** Trigger price for the pending order. */
+  openPrice: number;
+  currentPrice: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  openTime: string | null;
+};
+
 export type AccountSummary = {
   brokerAccountId: string;
   metaApiAccountId: string;
@@ -107,6 +123,8 @@ export type ChartPageData = {
   positionsOnSymbol: ChartOverlayRow[];
   positionsOnSymbolCount: number;
   totalPositions: number;
+  pendingOrdersOnSymbol: PendingOrderOverlay[];
+  totalPendingOrders: number;
   lastPrice: number | null;
   lastBid: number | null;
   lastAsk: number | null;
@@ -262,6 +280,41 @@ function toOverlay(p: OpenPositionRow): ChartOverlayRow {
   };
 }
 
+function mapOrderType(t: string | undefined): string {
+  const raw = (t ?? "").toLowerCase().replace(/_/g, " ");
+  if (raw.includes("buy") && raw.includes("limit")) return "buy_limit";
+  if (raw.includes("sell") && raw.includes("limit")) return "sell_limit";
+  if (raw.includes("buy") && raw.includes("stop")) return "buy_stop";
+  if (raw.includes("sell") && raw.includes("stop")) return "sell_stop";
+  return raw.trim() || "pending";
+}
+
+function mapOrderSide(type: string): string {
+  if (type.startsWith("buy")) return "buy";
+  if (type.startsWith("sell")) return "sell";
+  return "unknown";
+}
+
+function mapPendingOrders(raw: Record<string, unknown>[]): PendingOrderOverlay[] {
+  return raw.map((o, i) => {
+    const id = String(o.id ?? o.orderId ?? i);
+    const symbol = String(o.symbol ?? "");
+    const type = mapOrderType(typeof o.type === "string" ? (o.type as string) : undefined);
+    return {
+      id,
+      symbol,
+      type,
+      side: mapOrderSide(type),
+      volume: Number(o.volume ?? 0) || 0,
+      openPrice: Number(o.openPrice ?? o.price ?? 0),
+      currentPrice: o.currentPrice != null ? Number(o.currentPrice) : null,
+      stopLoss: o.stopLoss != null ? Number(o.stopLoss) : null,
+      takeProfit: o.takeProfit != null ? Number(o.takeProfit) : null,
+      openTime: (o.time as string) ?? (o.doneTime as string) ?? null,
+    };
+  });
+}
+
 async function withRenderBudget<T>(
   operation: string,
   promise: Promise<T>,
@@ -363,6 +416,8 @@ function emptyData(
     positionsOnSymbol: [],
     positionsOnSymbolCount: 0,
     totalPositions: 0,
+    pendingOrdersOnSymbol: [],
+    totalPendingOrders: 0,
     lastPrice: null,
     lastBid: null,
     lastAsk: null,
@@ -492,6 +547,8 @@ export async function loadChartPageData(
       positionsOnSymbol: [],
       positionsOnSymbolCount: 0,
       totalPositions: 0,
+      pendingOrdersOnSymbol: [],
+      totalPendingOrders: 0,
       lastPrice: last,
       lastBid: null,
       lastAsk: null,
@@ -575,9 +632,24 @@ export async function loadChartPageData(
       ).catch(() => [] as string[])
     : Promise.resolve([] as string[]);
 
-  const [posResult, discoveredSymbols] = await Promise.all([positionsPromise, symbolsPromise]);
+  // Fetch pending orders in parallel with positions (same timeout budget).
+  const ordersPromise = withRenderBudget(
+    "orders",
+    clientGetOrders(
+      account.metaApiAccountId,
+      false,
+      account.metaApiRegion ?? null,
+    ),
+    POSITIONS_RENDER_BUDGET_MS,
+  ).then(
+    (raw) => ({ orders: mapPendingOrders(raw as Record<string, unknown>[]) }),
+    () => ({ orders: [] as PendingOrderOverlay[] }),
+  );
+
+  const [posResult, discoveredSymbols, ordResult] = await Promise.all([positionsPromise, symbolsPromise, ordersPromise]);
   let allPositions = posResult.positions;
   let positionsTimedOut = posResult.timedOut;
+  const allPendingOrders = ordResult.orders;
 
   const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);
   let knownAccountSymbols = Array.from(new Set([
@@ -663,6 +735,8 @@ export async function loadChartPageData(
       positionsOnSymbol: [],
       positionsOnSymbolCount: 0,
       totalPositions: allPositions.length,
+      pendingOrdersOnSymbol: [],
+      totalPendingOrders: allPendingOrders.length,
       lastPrice: null,
       lastBid: null,
       lastAsk: null,
@@ -694,6 +768,9 @@ export async function loadChartPageData(
   const positionsOnSymbol = allPositions
     .filter((p) => p.symbol === resolution.brokerSymbol || cleanDisplaySymbol(p.symbol) === requested)
     .map(toOverlay);
+
+  const pendingOrdersOnSymbol = allPendingOrders
+    .filter((o) => o.symbol === resolution.brokerSymbol || cleanDisplaySymbol(o.symbol) === requested);
 
   const rawCandidates = Array.from(new Set([
     ...(cachedBroker ? [cachedBroker] : []),
@@ -790,6 +867,8 @@ export async function loadChartPageData(
         positionsOnSymbol,
         positionsOnSymbolCount: positionsOnSymbol.length,
         totalPositions: allPositions.length,
+        pendingOrdersOnSymbol,
+        totalPendingOrders: allPendingOrders.length,
         lastPrice: null,
         lastBid: null,
         lastAsk: null,
@@ -816,6 +895,8 @@ export async function loadChartPageData(
       positionsOnSymbol,
       positionsOnSymbolCount: positionsOnSymbol.length,
       totalPositions: allPositions.length,
+      pendingOrdersOnSymbol,
+      totalPendingOrders: allPendingOrders.length,
       lastPrice:
         quote?.mid != null && Number.isFinite(quote.mid)
           ? quote.mid
@@ -857,6 +938,8 @@ export async function loadChartPageData(
           positionsOnSymbol,
           positionsOnSymbolCount: positionsOnSymbol.length,
           totalPositions: allPositions.length,
+          pendingOrdersOnSymbol,
+          totalPendingOrders: allPendingOrders.length,
           lastPrice: cached.candles.at(-1)?.close ?? null,
           lastBid: null,
           lastAsk: null,
@@ -882,6 +965,8 @@ export async function loadChartPageData(
         positionsOnSymbol,
         positionsOnSymbolCount: positionsOnSymbol.length,
         totalPositions: allPositions.length,
+        pendingOrdersOnSymbol,
+        totalPendingOrders: allPendingOrders.length,
         lastPrice: null,
         lastBid: null,
         lastAsk: null,
@@ -916,6 +1001,8 @@ export async function loadChartPageData(
       positionsOnSymbol,
       positionsOnSymbolCount: positionsOnSymbol.length,
       totalPositions: allPositions.length,
+      pendingOrdersOnSymbol,
+      totalPendingOrders: allPendingOrders.length,
       lastPrice: null,
       lastBid: null,
       lastAsk: null,

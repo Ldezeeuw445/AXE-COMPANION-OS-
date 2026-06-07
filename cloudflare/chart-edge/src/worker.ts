@@ -19,7 +19,7 @@
  */
 
 import { verifyChartSessionToken } from "./sessionToken";
-import type { ChartLiveEvent, ChartLiveStatus, LiveCandle, LivePositionPayload } from "./liveContract";
+import type { ChartLiveEvent, ChartLiveStatus, LiveCandle, LivePositionPayload, LivePendingOrderPayload } from "./liveContract";
 
 export interface Env {
   CHART_LIVE_ROOM: DurableObjectNamespace;
@@ -205,6 +205,7 @@ export class ChartLiveRoom implements DurableObject {
   private lastTickAt = 0;
   private lastCandleAt = 0;
   private lastPositionsAt = 0;
+  private lastOrdersAt = 0;
   private consecutiveTickFailures = 0;
   private status: ChartLiveStatus = "reconnecting";
   private idleSince: number | null = null;
@@ -247,6 +248,7 @@ export class ChartLiveRoom implements DurableObject {
       this.lastTickAt = 0;
       this.lastCandleAt = 0;
       this.lastPositionsAt = 0;
+      this.lastOrdersAt = 0;
       this.consecutiveTickFailures = 0;
       this.status = "reconnecting";
       await this.state.storage.put(ROOM_STORAGE_KEY, this.room);
@@ -482,6 +484,55 @@ export class ChartLiveRoom implements DurableObject {
             }));
           this.broadcast({
             type: "positions_update",
+            userId: r.userId,
+            accountId: r.accountId,
+            total: arr.length,
+            onSymbol,
+            source: "metaapi_mt5",
+          });
+        }
+      } catch {
+        /* tolerate */
+      }
+    }
+
+    // ── Pending orders poll (same interval, offset by 2s from positions) ──
+    if (now - this.lastOrdersAt >= POSITIONS_INTERVAL_MS) {
+      this.lastOrdersAt = now;
+      try {
+        const url = `${clientBase}/users/current/accounts/${encodeURIComponent(r.metaApiAccountId)}/orders`;
+        const res = await fetchWithTimeout(
+          url,
+          { headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN } },
+          METAAPI_POSITIONS_TIMEOUT_MS,
+        );
+        if (res.ok) {
+          const arr = (await res.json()) as Array<Record<string, unknown>>;
+          const onSymbol: LivePendingOrderPayload[] = arr
+            .filter((q) => String(q.symbol ?? "") === r.brokerSymbol)
+            .map((q, i) => {
+              const rawType = (String(q.type ?? "")).toLowerCase().replace(/_/g, " ");
+              let type = rawType.trim() || "pending";
+              if (rawType.includes("buy") && rawType.includes("limit")) type = "buy_limit";
+              else if (rawType.includes("sell") && rawType.includes("limit")) type = "sell_limit";
+              else if (rawType.includes("buy") && rawType.includes("stop")) type = "buy_stop";
+              else if (rawType.includes("sell") && rawType.includes("stop")) type = "sell_stop";
+              const side = type.startsWith("buy") ? "buy" : type.startsWith("sell") ? "sell" : "unknown";
+              return {
+                id: String(q.id ?? q.orderId ?? i),
+                symbol: String(q.symbol ?? ""),
+                type,
+                side,
+                volume: Number(q.volume ?? 0) || 0,
+                openPrice: Number(q.openPrice ?? q.price ?? 0),
+                currentPrice: q.currentPrice != null ? Number(q.currentPrice) : null,
+                stopLoss: q.stopLoss != null ? Number(q.stopLoss) : null,
+                takeProfit: q.takeProfit != null ? Number(q.takeProfit) : null,
+                openTime: (q.time as string) ?? (q.doneTime as string) ?? null,
+              };
+            });
+          this.broadcast({
+            type: "orders_update",
             userId: r.userId,
             accountId: r.accountId,
             total: arr.length,
