@@ -15,7 +15,7 @@
  * Label: 8 px uppercase, letter-spacing 0.06 em.
  */
 
-import { useRef, useEffect, useState } from "react";
+import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -46,49 +46,6 @@ export function BottomNav() {
   const navRef = useRef<HTMLElement>(null);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
-  // ── DEBUG: measure actual navbar position ──
-  const [dbg, setDbg] = useState("");
-  useEffect(() => {
-    const measure = () => {
-      const el = navRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const vh = window.innerHeight;
-      const dvh = window.visualViewport?.height ?? vh;
-      // Probe env(safe-area-inset-bottom)
-      const probe = document.createElement("div");
-      probe.style.cssText = "position:fixed;bottom:0;left:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden";
-      document.body.appendChild(probe);
-      const sab = probe.getBoundingClientRect().height;
-      document.body.removeChild(probe);
-      // Check ancestors for transform/will-change/filter
-      let ancestor = el.parentElement;
-      const ancestorInfo: string[] = [];
-      while (ancestor && ancestor !== document.documentElement) {
-        const cs = getComputedStyle(ancestor);
-        if (cs.transform !== "none" || cs.willChange !== "auto" || cs.filter !== "none" || cs.backdropFilter !== "none") {
-          ancestorInfo.push(`${ancestor.tagName}.${ancestor.className.split(" ")[0]}: t=${cs.transform} wc=${cs.willChange} f=${cs.filter}`);
-        }
-        ancestor = ancestor.parentElement;
-      }
-      const info = [
-        `nav.bottom=${Math.round(rect.bottom)}`,
-        `gap=${Math.round(vh - rect.bottom)}`,
-        `vh=${vh} dvh=${Math.round(dvh)}`,
-        `sab=${sab}`,
-        `navH=${Math.round(rect.height)}`,
-        `path=${pathname}`,
-        ancestorInfo.length ? `ancestors: ${ancestorInfo.join("; ")}` : "no ancestor transform",
-      ].join(" | ");
-      setDbg(info);
-    };
-    // Measure after mount + a delay for env() to resolve
-    const t1 = requestAnimationFrame(measure);
-    const t2 = setTimeout(measure, 500);
-    const t3 = setTimeout(measure, 2000);
-    return () => { cancelAnimationFrame(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [pathname]);
-
   // Conditional 6th tab
   const sixthTab = isAxeView
     ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
@@ -97,17 +54,6 @@ export function BottomNav() {
   const tabs = [...CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined })), sixthTab];
 
   return (
-    <>
-    {dbg && (
-      <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999,
-        background: "rgba(255,0,0,0.85)", color: "#fff", fontSize: "9px",
-        padding: "4px 6px", fontFamily: "monospace", lineHeight: 1.3,
-        wordBreak: "break-all", pointerEvents: "none",
-      }}>
-        {dbg}
-      </div>
-    )}
     <nav
       ref={navRef}
       className="tos-nav-pill pointer-events-auto"
@@ -194,6 +140,5 @@ export function BottomNav() {
         })}
       </div>
     </nav>
-    </>
   );
 }

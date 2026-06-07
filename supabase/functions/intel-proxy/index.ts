@@ -1,20 +1,27 @@
 // supabase/functions/intel-proxy/index.ts
 // ─────────────────────────────────────────────────────────────────────
-// AXE Intel Proxy — Supabase Edge Function (v2)
-// 
+// AXE Intel Proxy — Supabase Edge Function (v3)
+//
+// Now persists all data to Supabase tables so the Intel tab can query
+// structured data directly. Falls back to external APIs only when
+// cached data is stale (>15 min).
+//
 // Providers:
 //   • Insider trades   → SEC EDGAR (free, no API key)
-//   • Congress trades   → FMP /stable/ (paid plan) → graceful fallback
-//   • Dark pool prints  → Finnhub volume anomaly detection (free)
-//   • Unusual options   → Finnhub recommendation trends (free)
-//   • Market tide       → Finnhub aggregate sentiment (free)
+//   • Congress trades  → Quiver Quantitative (free API key)
+//                        → FMP /stable/ (paid plan, fallback)
+//   • Dark pool prints → Finnhub volume anomaly detection (free)
+//   • Unusual options  → Finnhub recommendation trends (free)
+//   • Market tide      → Finnhub aggregate sentiment (free)
 //
 // Deploy:  supabase functions deploy intel-proxy --no-verify-jwt
-// Secrets: FINNHUB_API_KEY (required)
-//          FMP_API_KEY (optional — enables congress feed)
+// Secrets: FINNHUB_API_KEY   (required)
+//          QUIVER_API_KEY    (optional — enables congress feed via Quiver)
+//          FMP_API_KEY       (optional — fallback congress feed)
 // ─────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -29,10 +36,49 @@ function json(data: unknown, status = 200) {
   });
 }
 
+// ── Supabase client (service role for writes) ──────────────────────
+function getSupabase() {
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(url, key);
+}
+
+// ── Sync staleness check ───────────────────────────────────────────
+const STALE_MINUTES = 15;
+
+async function isFeedFresh(feedId: string): Promise<boolean> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb
+      .from("intel_sync_log")
+      .select("last_sync_at")
+      .eq("feed_id", feedId)
+      .single();
+    if (!data?.last_sync_at) return false;
+    const age = Date.now() - new Date(data.last_sync_at).getTime();
+    return age < STALE_MINUTES * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+async function markSynced(feedId: string, rowCount: number, source?: string, error?: string) {
+  try {
+    const sb = getSupabase();
+    await sb.from("intel_sync_log").upsert({
+      feed_id: feedId,
+      last_sync_at: new Date().toISOString(),
+      rows_synced: rowCount,
+      last_error: error ?? null,
+      source: source ?? null,
+    });
+  } catch { /* best effort */ }
+}
+
 // ── In-memory cache (persists while function instance is warm) ──────
 type CacheEntry = { data: unknown; ts: number };
 const cache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 15 * 60 * 1000; // 15 min
+const CACHE_TTL_MS = 15 * 60 * 1000;
 
 function cached<T>(key: string): T | null {
   const entry = cache.get(key);
@@ -52,43 +98,31 @@ async function fetchWithTimeout(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    return await fetch(url, {
-      signal: ctrl.signal,
-      headers: headers ?? {},
-    });
+    return await fetch(url, { signal: ctrl.signal, headers: headers ?? {} });
   } finally {
     clearTimeout(timer);
   }
 }
 
-// SEC EDGAR requires a User-Agent header with contact info
 const SEC_HEADERS = {
   "User-Agent": "AXE-Companion-OS support@axecompanion.com",
   Accept: "application/json",
 };
 
-// ── XML helper: extract text between tags ──────────────────────────
+// ── XML helper ─────────────────────────────────────────────────────
 function xmlVal(xml: string, tag: string): string {
-  // Match <tag>...<value>X</value>...</tag> or <tag>X</tag>
   const outerRe = new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "i");
   const outerMatch = xml.match(outerRe);
   if (!outerMatch) return "";
   const inner = outerMatch[0];
-  // Try <value>X</value> first (Form 4 nesting)
   const valMatch = inner.match(/<value>([\s\S]*?)<\/value>/i);
   if (valMatch) return valMatch[1].trim();
-  // Fallback: direct text content
-  const directMatch = inner.match(
-    new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"),
-  );
+  const directMatch = inner.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
   return directMatch ? directMatch[1].trim() : "";
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // 1. INSIDER TRADES — SEC EDGAR (free, no API key)
-// ═══════════════════════════════════════════════════════════════════
-// Flow: EFTS search for recent Form 4 filings → fetch individual
-// Form 4 XMLs → parse transaction details.
 // ═══════════════════════════════════════════════════════════════════
 type InsiderTrade = {
   ticker: string;
@@ -100,161 +134,177 @@ type InsiderTrade = {
   date: string;
 };
 
-async function handleInsiderTrades(
-  symbol?: string,
-): Promise<Response> {
+async function handleInsiderTrades(symbol?: string): Promise<Response> {
   const cacheKey = `insider:${symbol ?? "all"}`;
   const hit = cached<InsiderTrade[]>(cacheKey);
   if (hit) return json({ ok: true, data: hit });
 
+  // Try Supabase first
+  if (await isFeedFresh("insiderTrades")) {
+    const result = await readInsidersFromDb(symbol);
+    if (result.length > 0) {
+      setCache(cacheKey, result);
+      return json({ ok: true, data: result });
+    }
+  }
+
+  // Fetch from SEC EDGAR
   try {
-    // Step 1: Search EDGAR EFTS for recent Form 4 filings
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 86400 * 1000);
-    const endDt = now.toISOString().slice(0, 10);
-    const startDt = weekAgo.toISOString().slice(0, 10);
-
-    // If symbol provided, search for it; otherwise get recent filings
-    const query = symbol
-      ? encodeURIComponent(`"${symbol}"`)
-      : "%22%22";
-
-    const eftsUrl =
-      `https://efts.sec.gov/LATEST/search-index?q=${query}&forms=4` +
-      `&dateRange=custom&startdt=${startDt}&enddt=${endDt}&from=0&size=12`;
-
-    const eftsRes = await fetchWithTimeout(eftsUrl, 8000, SEC_HEADERS);
-    if (!eftsRes.ok) {
-      return json(
-        { ok: false, error: `edgar_efts_${eftsRes.status}` },
-        502,
-      );
+    const trades = await fetchInsiderTradesFromEdgar(symbol);
+    if (trades.length > 0) {
+      await persistInsiderTrades(trades);
+      await markSynced("insiderTrades", trades.length, "sec_edgar");
     }
-
-    const eftsData = await eftsRes.json();
-    const hits = eftsData?.hits?.hits;
-    if (!Array.isArray(hits) || hits.length === 0) {
-      return json({ ok: true, data: [] });
-    }
-
-    // Step 2: Build XML URLs from EFTS hits
-    type FilingRef = { xmlUrl: string; displayNames: string[] };
-    const filingRefs: FilingRef[] = [];
-
-    for (const hit of hits.slice(0, 10)) {
-      const src = hit._source;
-      const id = hit._id as string; // "ADSH:filename.xml"
-      const [adsh, filename] = id.split(":");
-      if (!adsh || !filename) continue;
-
-      const ciks = src?.ciks as string[] | undefined;
-      if (!ciks || ciks.length === 0) continue;
-
-      // Use first CIK (reporting owner) — strip leading zeros for URL
-      const cik = ciks[0].replace(/^0+/, "");
-      const adshNoDash = adsh.replace(/-/g, "");
-
-      filingRefs.push({
-        xmlUrl: `https://www.sec.gov/Archives/edgar/data/${cik}/${adshNoDash}/${filename}`,
-        displayNames: (src?.display_names as string[]) ?? [],
-      });
-    }
-
-    // Step 3: Fetch Form 4 XMLs in parallel (max 8 concurrent)
-    const xmlPromises = filingRefs.map(async (ref) => {
-      try {
-        const res = await fetchWithTimeout(ref.xmlUrl, 6000, SEC_HEADERS);
-        if (!res.ok) return null;
-        const xml = await res.text();
-        return { xml, ref };
-      } catch {
-        return null;
-      }
-    });
-
-    const xmlResults = await Promise.all(xmlPromises);
-
-    // Step 4: Parse each Form 4 XML
-    const trades: InsiderTrade[] = [];
-
-    for (const result of xmlResults) {
-      if (!result) continue;
-      const { xml } = result;
-
-      // Extract issuer info
-      const ticker = xmlVal(xml, "issuerTradingSymbol")
-        .split(/[\s,]+/)[0] // Take first ticker if multiple
-        .toUpperCase();
-      const insiderName = xmlVal(xml, "rptOwnerName");
-      const officerTitle = xmlVal(xml, "officerTitle") || undefined;
-      const txDate =
-        xmlVal(xml, "periodOfReport") ||
-        xmlVal(xml, "transactionDate");
-
-      // Parse all nonDerivativeTransactions
-      const txRegex =
-        /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/gi;
-      let txMatch;
-      while ((txMatch = txRegex.exec(xml)) !== null) {
-        const txXml = txMatch[1];
-        const code = xmlVal(txXml, "transactionCode").toUpperCase();
-        // P = Purchase, S = Sale — skip awards (A), gifts (G), etc.
-        if (code !== "P" && code !== "S") continue;
-
-        const shares = Math.round(
-          Number(xmlVal(txXml, "transactionShares")) || 0,
-        );
-        const price = Number(xmlVal(txXml, "transactionPricePerShare")) || 0;
-        const value = Math.round(shares * price);
-
-        if (value <= 0 && shares <= 0) continue;
-
-        trades.push({
-          ticker: ticker || "N/A",
-          insider: insiderName || "Unknown",
-          role: officerTitle,
-          type: code === "P" ? "BUY" : "SELL",
-          shares: shares > 0 ? shares : undefined,
-          value,
-          date: txDate,
-        });
-      }
-    }
-
-    // De-duplicate (same insider + same ticker + same date = one entry)
-    const seen = new Set<string>();
-    const uniqueTrades = trades.filter((t) => {
-      const key = `${t.insider}:${t.ticker}:${t.date}:${t.type}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    // Sort by value descending
-    uniqueTrades.sort((a, b) => b.value - a.value);
-
-    // If symbol filter was set, double-check that results match
-    const filtered = symbol
-      ? uniqueTrades.filter(
-          (t) =>
-            t.ticker === symbol ||
-            t.ticker.startsWith(symbol),
-        )
-      : uniqueTrades;
-
-    const result = filtered.slice(0, 25);
-    setCache(cacheKey, result);
-    return json({ ok: true, data: result });
+    setCache(cacheKey, trades);
+    return json({ ok: true, data: trades });
   } catch (e) {
-    return json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      500,
-    );
+    // Fallback to DB even if stale
+    const fallback = await readInsidersFromDb(symbol);
+    if (fallback.length > 0) return json({ ok: true, data: fallback });
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
 }
 
+async function readInsidersFromDb(symbol?: string): Promise<InsiderTrade[]> {
+  try {
+    const sb = getSupabase();
+    let query = sb
+      .from("intel_insider_trades")
+      .select("*")
+      .order("trade_date", { ascending: false })
+      .limit(25);
+    if (symbol) query = query.eq("ticker", symbol);
+    const { data } = await query;
+    if (!data) return [];
+    return data.map((r: Record<string, unknown>) => ({
+      ticker: String(r.ticker),
+      insider: String(r.insider_name),
+      role: r.insider_role ? String(r.insider_role) : undefined,
+      type: String(r.trade_type) as "BUY" | "SELL",
+      shares: r.shares ? Number(r.shares) : undefined,
+      value: Number(r.total_value),
+      date: String(r.trade_date),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function persistInsiderTrades(trades: InsiderTrade[]) {
+  try {
+    const sb = getSupabase();
+    const rows = trades.map((t) => ({
+      ticker: t.ticker,
+      insider_name: t.insider,
+      insider_role: t.role ?? null,
+      trade_type: t.type,
+      shares: t.shares ?? null,
+      total_value: t.value,
+      trade_date: t.date,
+    }));
+    await sb.from("intel_insider_trades").upsert(rows, {
+      onConflict: "ticker,insider_name,trade_date,trade_type",
+      ignoreDuplicates: true,
+    });
+  } catch { /* best effort */ }
+}
+
+async function fetchInsiderTradesFromEdgar(symbol?: string): Promise<InsiderTrade[]> {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 86400 * 1000);
+  const endDt = now.toISOString().slice(0, 10);
+  const startDt = weekAgo.toISOString().slice(0, 10);
+
+  const query = symbol ? encodeURIComponent(`"${symbol}"`) : "%22%22";
+  const eftsUrl =
+    `https://efts.sec.gov/LATEST/search-index?q=${query}&forms=4` +
+    `&dateRange=custom&startdt=${startDt}&enddt=${endDt}&from=0&size=12`;
+
+  const eftsRes = await fetchWithTimeout(eftsUrl, 8000, SEC_HEADERS);
+  if (!eftsRes.ok) throw new Error(`edgar_efts_${eftsRes.status}`);
+
+  const eftsData = await eftsRes.json();
+  const hits = eftsData?.hits?.hits;
+  if (!Array.isArray(hits) || hits.length === 0) return [];
+
+  type FilingRef = { xmlUrl: string; displayNames: string[] };
+  const filingRefs: FilingRef[] = [];
+
+  for (const hit of hits.slice(0, 10)) {
+    const src = hit._source;
+    const id = hit._id as string;
+    const [adsh, filename] = id.split(":");
+    if (!adsh || !filename) continue;
+    const ciks = src?.ciks as string[] | undefined;
+    if (!ciks || ciks.length === 0) continue;
+    const cik = ciks[0].replace(/^0+/, "");
+    const adshNoDash = adsh.replace(/-/g, "");
+    filingRefs.push({
+      xmlUrl: `https://www.sec.gov/Archives/edgar/data/${cik}/${adshNoDash}/${filename}`,
+      displayNames: (src?.display_names as string[]) ?? [],
+    });
+  }
+
+  const xmlResults = await Promise.all(
+    filingRefs.map(async (ref) => {
+      try {
+        const res = await fetchWithTimeout(ref.xmlUrl, 6000, SEC_HEADERS);
+        if (!res.ok) return null;
+        return { xml: await res.text(), ref };
+      } catch { return null; }
+    }),
+  );
+
+  const trades: InsiderTrade[] = [];
+  for (const result of xmlResults) {
+    if (!result) continue;
+    const { xml } = result;
+    const ticker = xmlVal(xml, "issuerTradingSymbol").split(/[\s,]+/)[0].toUpperCase();
+    const insiderName = xmlVal(xml, "rptOwnerName");
+    const officerTitle = xmlVal(xml, "officerTitle") || undefined;
+    const txDate = xmlVal(xml, "periodOfReport") || xmlVal(xml, "transactionDate");
+
+    const txRegex = /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/gi;
+    let txMatch;
+    while ((txMatch = txRegex.exec(xml)) !== null) {
+      const txXml = txMatch[1];
+      const code = xmlVal(txXml, "transactionCode").toUpperCase();
+      if (code !== "P" && code !== "S") continue;
+      const shares = Math.round(Number(xmlVal(txXml, "transactionShares")) || 0);
+      const price = Number(xmlVal(txXml, "transactionPricePerShare")) || 0;
+      const value = Math.round(shares * price);
+      if (value <= 0 && shares <= 0) continue;
+      trades.push({
+        ticker: ticker || "N/A",
+        insider: insiderName || "Unknown",
+        role: officerTitle,
+        type: code === "P" ? "BUY" : "SELL",
+        shares: shares > 0 ? shares : undefined,
+        value,
+        date: txDate,
+      });
+    }
+  }
+
+  // De-duplicate and sort
+  const seen = new Set<string>();
+  const unique = trades.filter((t) => {
+    const key = `${t.insider}:${t.ticker}:${t.date}:${t.type}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  unique.sort((a, b) => b.value - a.value);
+
+  const filtered = symbol
+    ? unique.filter((t) => t.ticker === symbol || t.ticker.startsWith(symbol))
+    : unique;
+  return filtered.slice(0, 25);
+}
+
+
 // ═══════════════════════════════════════════════════════════════════
-// 2. SENATE / CONGRESS TRADES — FMP /stable/ (paid) with fallback
+// 2. CONGRESS TRADES — Quiver Quantitative (free) → FMP (fallback)
 // ═══════════════════════════════════════════════════════════════════
 type SenateTrade = {
   politician: string;
@@ -270,84 +320,149 @@ async function handleSenateTrades(): Promise<Response> {
   const hit = cached<SenateTrade[]>(cacheKey);
   if (hit) return json({ ok: true, data: hit });
 
+  // Try Supabase first
+  if (await isFeedFresh("congressTrades")) {
+    const result = await readCongressFromDb();
+    if (result.length > 0) {
+      setCache(cacheKey, result);
+      return json({ ok: true, data: result });
+    }
+  }
+
+  // Try Quiver Quantitative first (free API key)
+  const quiverKey = Deno.env.get("QUIVER_API_KEY");
+  if (quiverKey) {
+    try {
+      const trades = await fetchCongressFromQuiver(quiverKey);
+      if (trades.length > 0) {
+        await persistCongressTrades(trades, "quiver");
+        await markSynced("congressTrades", trades.length, "quiver");
+        setCache(cacheKey, trades);
+        return json({ ok: true, data: trades });
+      }
+    } catch { /* fall through to FMP */ }
+  }
+
+  // Try FMP fallback (paid)
   const fmpKey = Deno.env.get("FMP_API_KEY");
-  if (!fmpKey) {
-    return json({
-      ok: false,
-      error: "FMP_API_KEY not configured — congress feed requires FMP Starter plan ($22/mo) at financialmodelingprep.com",
-    }, 503);
+  if (fmpKey) {
+    try {
+      const trades = await fetchCongressFromFmp(fmpKey);
+      if (trades.length > 0) {
+        await persistCongressTrades(trades, "fmp");
+        await markSynced("congressTrades", trades.length, "fmp");
+        setCache(cacheKey, trades);
+        return json({ ok: true, data: trades });
+      }
+    } catch { /* fall through */ }
   }
 
-  try {
-    // Use the new /stable/ base URL (replaces legacy /api/v4/)
-    const params = new URLSearchParams({ page: "0", apikey: fmpKey });
-    const res = await fetchWithTimeout(
-      `https://financialmodelingprep.com/stable/senate-trading?${params}`,
-    );
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      // Check for legacy/paid-only error
-      if (
-        body.includes("Legacy") ||
-        body.includes("not available") ||
-        body.includes("Upgrade") ||
-        res.status === 403 ||
-        res.status === 402
-      ) {
-        return json({
-          ok: false,
-          error: "congress_feed_requires_paid_plan",
-          message: "Congress trading data requires FMP Starter plan or higher. Visit financialmodelingprep.com to upgrade.",
-        }, 402);
-      }
-      return json(
-        { ok: false, error: `fmp_senate_${res.status}` },
-        502,
-      );
-    }
-
-    const raw = (await res.json()) as Array<Record<string, unknown>>;
-
-    // Check for error response in JSON body
-    if (!Array.isArray(raw)) {
-      const errMsg = (raw as Record<string, unknown>)?.["Error Message"];
-      if (errMsg && String(errMsg).includes("Legacy")) {
-        return json({
-          ok: false,
-          error: "congress_feed_requires_paid_plan",
-          message: "Congress trading data requires FMP Starter plan or higher. Visit financialmodelingprep.com to upgrade.",
-        }, 402);
-      }
-      return json({ ok: false, error: "fmp_senate_bad_response" }, 502);
-    }
-
-    const trades: SenateTrade[] = raw.slice(0, 25).map((r) => {
-      const type = String(r.type ?? "").toLowerCase();
-      const isPurchase =
-        type.includes("purchase") || type.includes("buy");
-      return {
-        politician: `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() ||
-          "Unknown",
-        chamber: String(r.office ?? "Senate"),
-        ticker: String(r.symbol ?? r.assetDescription ?? ""),
-        direction: isPurchase ? "BUY" as const : "SELL" as const,
-        size: String(r.amount ?? "N/A"),
-        date: String(
-          r.transactionDate ?? r.dateRecieved ?? "",
-        ),
-      };
-    }).filter((t) => t.ticker);
-
-    setCache(cacheKey, trades);
-    return json({ ok: true, data: trades });
-  } catch (e) {
-    return json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      500,
-    );
+  // Fallback to DB even if stale
+  const fallback = await readCongressFromDb();
+  if (fallback.length > 0) {
+    setCache(cacheKey, fallback);
+    return json({ ok: true, data: fallback });
   }
+
+  return json({
+    ok: false,
+    error: "congress_no_provider",
+    message: "Congress trades require either QUIVER_API_KEY (free at quiverquant.com) or FMP_API_KEY (paid). No cached data available.",
+  }, 503);
 }
+
+async function readCongressFromDb(): Promise<SenateTrade[]> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb
+      .from("intel_congress_trades")
+      .select("*")
+      .order("trade_date", { ascending: false })
+      .limit(25);
+    if (!data) return [];
+    return data.map((r: Record<string, unknown>) => ({
+      politician: String(r.politician),
+      chamber: String(r.chamber),
+      ticker: String(r.ticker),
+      direction: String(r.trade_type) as "BUY" | "SELL",
+      size: String(r.amount_range ?? "N/A"),
+      date: String(r.trade_date),
+    }));
+  } catch { return []; }
+}
+
+async function persistCongressTrades(trades: SenateTrade[], source: string) {
+  try {
+    const sb = getSupabase();
+    const rows = trades.map((t) => ({
+      politician: t.politician,
+      chamber: t.chamber,
+      ticker: t.ticker,
+      trade_type: t.direction,
+      amount_range: t.size,
+      trade_date: t.date,
+      source,
+    }));
+    await sb.from("intel_congress_trades").upsert(rows, {
+      onConflict: "politician,ticker,trade_date,trade_type,coalesce(amount_range, '')",
+      ignoreDuplicates: true,
+    });
+  } catch { /* best effort */ }
+}
+
+async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
+  const res = await fetchWithTimeout(
+    "https://api.quiverquant.com/beta/live/congresstrading",
+    10_000,
+    { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+  );
+  if (!res.ok) throw new Error(`quiver_${res.status}`);
+  const raw = await res.json();
+  if (!Array.isArray(raw)) throw new Error("quiver_bad_response");
+
+  return raw.slice(0, 25).map((r: Record<string, unknown>) => {
+    const txType = String(r.Transaction ?? r.transaction ?? "").toLowerCase();
+    const isPurchase = txType.includes("purchase") || txType.includes("buy");
+    return {
+      politician: String(r.Representative ?? r.representative ?? "Unknown"),
+      chamber: String(r.House ?? r.house ?? "Congress"),
+      ticker: String(r.Ticker ?? r.ticker ?? ""),
+      direction: isPurchase ? "BUY" as const : "SELL" as const,
+      size: String(r.Range ?? r.amount ?? "N/A"),
+      date: String(r.TransactionDate ?? r.transaction_date ?? r.Date ?? ""),
+    };
+  }).filter((t) => t.ticker && t.date);
+}
+
+async function fetchCongressFromFmp(fmpKey: string): Promise<SenateTrade[]> {
+  const params = new URLSearchParams({ page: "0", apikey: fmpKey });
+  const res = await fetchWithTimeout(
+    `https://financialmodelingprep.com/stable/senate-trading?${params}`,
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    if (body.includes("Legacy") || body.includes("not available") || res.status === 403 || res.status === 402) {
+      throw new Error("congress_feed_requires_paid_plan");
+    }
+    throw new Error(`fmp_senate_${res.status}`);
+  }
+  const raw = (await res.json()) as Array<Record<string, unknown>>;
+  if (!Array.isArray(raw)) throw new Error("fmp_senate_bad_response");
+
+  return raw.slice(0, 25).map((r) => {
+    const type = String(r.type ?? "").toLowerCase();
+    const isPurchase = type.includes("purchase") || type.includes("buy");
+    return {
+      politician: `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() || "Unknown",
+      chamber: String(r.office ?? "Senate"),
+      ticker: String(r.symbol ?? r.assetDescription ?? ""),
+      direction: isPurchase ? "BUY" as const : "SELL" as const,
+      size: String(r.amount ?? "N/A"),
+      date: String(r.transactionDate ?? r.dateRecieved ?? ""),
+    };
+  }).filter((t) => t.ticker);
+}
+
 
 // ═══════════════════════════════════════════════════════════════════
 // 3. DARK POOL PRINTS — Finnhub volume anomaly detection
@@ -371,18 +486,21 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
   const hit = cached<DarkPoolPrint[]>(cacheKey);
   if (hit) return json({ ok: true, data: hit });
 
+  // Try Supabase first
+  if (await isFeedFresh("darkPool")) {
+    const result = await readDarkPoolFromDb(symbol);
+    if (result.length > 0) {
+      setCache(cacheKey, result);
+      return json({ ok: true, data: result });
+    }
+  }
+
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  if (!finnhubKey)
-    return json(
-      { ok: false, error: "FINNHUB_API_KEY not configured" },
-      503,
-    );
+  if (!finnhubKey) return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
 
   try {
     const symbols = symbol
-      ? [symbol, "SPY", "QQQ"].filter(
-          (s, i, a) => a.indexOf(s) === i,
-        )
+      ? [symbol, "SPY", "QQQ"].filter((s, i, a) => a.indexOf(s) === i)
       : DARK_POOL_WATCHLIST.slice(0, 8);
 
     const prints: DarkPoolPrint[] = [];
@@ -392,30 +510,21 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
     for (const sym of symbols) {
       try {
         const quoteRes = await fetchWithTimeout(
-          `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${finnhubKey}`,
-          6000,
-        );
+          `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${finnhubKey}`, 6000);
         if (!quoteRes.ok) continue;
         const quote = await quoteRes.json();
         const price = Number(quote?.c ?? 0);
         const volume = Number(quote?.v ?? 0);
-
         if (!price || price <= 0) continue;
 
         const candleRes = await fetchWithTimeout(
-          `https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=D&from=${oneMonthAgo}&to=${now}&token=${finnhubKey}`,
-          6000,
-        );
+          `https://finnhub.io/api/v1/stock/candle?symbol=${sym}&resolution=D&from=${oneMonthAgo}&to=${now}&token=${finnhubKey}`, 6000);
         if (!candleRes.ok) continue;
         const candle = await candleRes.json();
-
         if (candle.s !== "ok" || !Array.isArray(candle.v)) continue;
 
         const volumes = candle.v as number[];
-        const avgVol =
-          volumes.reduce((a: number, b: number) => a + b, 0) /
-          Math.max(volumes.length, 1);
-
+        const avgVol = volumes.reduce((a: number, b: number) => a + b, 0) / Math.max(volumes.length, 1);
         const lastVol = volumes[volumes.length - 1] ?? 0;
         const effectiveVol = volume > 0 ? volume : lastVol;
         const ratio = avgVol > 0 ? effectiveVol / avgVol : 0;
@@ -424,17 +533,9 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
           const prevClose = Number(quote?.pc ?? price);
           const change = price - prevClose;
           const side: "buy" | "sell" | "neutral" =
-            change > 0.001 * price
-              ? "buy"
-              : change < -0.001 * price
-                ? "sell"
-                : "neutral";
-
-          const anomalySize = Math.round(
-            (effectiveVol - avgVol) * (ratio > 2 ? 0.4 : 0.25),
-          );
+            change > 0.001 * price ? "buy" : change < -0.001 * price ? "sell" : "neutral";
+          const anomalySize = Math.round((effectiveVol - avgVol) * (ratio > 2 ? 0.4 : 0.25));
           const blockSize = Math.max(anomalySize, 10000);
-
           prints.push({
             symbol: sym,
             price: Math.round(price * 100) / 100,
@@ -444,22 +545,60 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
             time: new Date().toISOString().slice(11, 16),
           });
         }
-      } catch {
-        continue;
-      }
+      } catch { continue; }
     }
 
     prints.sort((a, b) => b.notional - a.notional);
 
+    if (prints.length > 0) {
+      await persistDarkPool(prints);
+      await markSynced("darkPool", prints.length, "finnhub");
+    }
+
     setCache(cacheKey, prints);
     return json({ ok: true, data: prints });
   } catch (e) {
-    return json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      500,
-    );
+    const fallback = await readDarkPoolFromDb(symbol);
+    if (fallback.length > 0) return json({ ok: true, data: fallback });
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
 }
+
+async function readDarkPoolFromDb(symbol?: string): Promise<DarkPoolPrint[]> {
+  try {
+    const sb = getSupabase();
+    let query = sb.from("intel_dark_pool").select("*")
+      .order("snapshot_time", { ascending: false }).limit(25);
+    if (symbol) query = query.eq("symbol", symbol);
+    const { data } = await query;
+    if (!data) return [];
+    return data.map((r: Record<string, unknown>) => ({
+      symbol: String(r.symbol),
+      price: Number(r.price),
+      size: Number(r.block_size),
+      notional: Number(r.notional),
+      side: r.side ? String(r.side) as "buy" | "sell" | "neutral" : undefined,
+      time: r.snapshot_time ? new Date(String(r.snapshot_time)).toISOString().slice(11, 16) : undefined,
+    }));
+  } catch { return []; }
+}
+
+async function persistDarkPool(prints: DarkPoolPrint[]) {
+  try {
+    const sb = getSupabase();
+    const now = new Date().toISOString();
+    const rows = prints.map((p) => ({
+      symbol: p.symbol,
+      price: p.price,
+      block_size: p.size,
+      notional: p.notional,
+      side: p.side ?? null,
+      snapshot_time: now,
+    }));
+    await sb.from("intel_dark_pool").insert(rows);
+  } catch { /* best effort */ }
+}
+
 
 // ═══════════════════════════════════════════════════════════════════
 // 4. UNUSUAL OPTIONS — Finnhub recommendation trends
@@ -481,12 +620,16 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
   const hit = cached<UnusualOption[]>(cacheKey);
   if (hit) return json({ ok: true, data: hit });
 
+  if (await isFeedFresh("unusualOptions")) {
+    const result = await readOptionsFromDb(symbol);
+    if (result.length > 0) {
+      setCache(cacheKey, result);
+      return json({ ok: true, data: result });
+    }
+  }
+
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  if (!finnhubKey)
-    return json(
-      { ok: false, error: "FINNHUB_API_KEY not configured" },
-      503,
-    );
+  if (!finnhubKey) return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
 
   try {
     const symbols = symbol
@@ -498,42 +641,29 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
     for (const sym of symbols) {
       try {
         const recRes = await fetchWithTimeout(
-          `https://finnhub.io/api/v1/stock/recommendation?symbol=${sym}&token=${finnhubKey}`,
-          6000,
-        );
+          `https://finnhub.io/api/v1/stock/recommendation?symbol=${sym}&token=${finnhubKey}`, 6000);
         if (!recRes.ok) continue;
         const recs = (await recRes.json()) as Array<Record<string, number>>;
         if (!Array.isArray(recs) || recs.length < 2) continue;
 
         const latest = recs[0];
         const prev = recs[1];
-
-        const buyChange =
-          (Number(latest.strongBuy ?? 0) + Number(latest.buy ?? 0)) -
+        const buyChange = (Number(latest.strongBuy ?? 0) + Number(latest.buy ?? 0)) -
           (Number(prev.strongBuy ?? 0) + Number(prev.buy ?? 0));
-        const sellChange =
-          (Number(latest.strongSell ?? 0) + Number(latest.sell ?? 0)) -
+        const sellChange = (Number(latest.strongSell ?? 0) + Number(latest.sell ?? 0)) -
           (Number(prev.strongSell ?? 0) + Number(prev.sell ?? 0));
 
         if (Math.abs(buyChange) < 2 && Math.abs(sellChange) < 2) continue;
 
         const quoteRes = await fetchWithTimeout(
-          `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${finnhubKey}`,
-          6000,
-        );
+          `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${finnhubKey}`, 6000);
         const quote = quoteRes.ok ? await quoteRes.json() : null;
         const price = Number(quote?.c ?? 100);
 
         const isBullish = buyChange > sellChange;
         const magnitude = Math.max(Math.abs(buyChange), Math.abs(sellChange));
-
-        const strike =
-          Math.round(
-            (isBullish ? price * 1.05 : price * 0.95) / 5,
-          ) * 5;
-        const exp = new Date(Date.now() + 30 * 86400 * 1000)
-          .toISOString()
-          .slice(0, 10);
+        const strike = Math.round((isBullish ? price * 1.05 : price * 0.95) / 5) * 5;
+        const exp = new Date(Date.now() + 30 * 86400 * 1000).toISOString().slice(0, 10);
 
         options.push({
           symbol: sym,
@@ -546,22 +676,67 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
           sweep: magnitude >= 4,
           rule: "analyst_momentum",
         });
-      } catch {
-        continue;
-      }
+      } catch { continue; }
     }
 
     options.sort((a, b) => b.premium - a.premium);
 
+    if (options.length > 0) {
+      await persistOptions(options);
+      await markSynced("unusualOptions", options.length, "finnhub");
+    }
+
     setCache(cacheKey, options);
     return json({ ok: true, data: options });
   } catch (e) {
-    return json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      500,
-    );
+    const fallback = await readOptionsFromDb(symbol);
+    if (fallback.length > 0) return json({ ok: true, data: fallback });
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
 }
+
+async function readOptionsFromDb(symbol?: string): Promise<UnusualOption[]> {
+  try {
+    const sb = getSupabase();
+    let query = sb.from("intel_unusual_options").select("*")
+      .order("snapshot_time", { ascending: false }).limit(25);
+    if (symbol) query = query.eq("symbol", symbol);
+    const { data } = await query;
+    if (!data) return [];
+    return data.map((r: Record<string, unknown>) => ({
+      symbol: String(r.symbol),
+      strike: Number(r.strike),
+      exp: String(r.expiry),
+      vol: Number(r.volume),
+      oi: Number(r.open_interest),
+      side: String(r.side) as "CALL" | "PUT",
+      premium: Number(r.premium),
+      sweep: Boolean(r.is_sweep),
+      rule: r.rule ? String(r.rule) : null,
+    }));
+  } catch { return []; }
+}
+
+async function persistOptions(options: UnusualOption[]) {
+  try {
+    const sb = getSupabase();
+    const now = new Date().toISOString();
+    const rows = options.map((o) => ({
+      symbol: o.symbol,
+      strike: o.strike,
+      expiry: o.exp,
+      volume: o.vol,
+      open_interest: o.oi,
+      side: o.side,
+      premium: o.premium,
+      is_sweep: o.sweep,
+      rule: o.rule ?? null,
+      snapshot_time: now,
+    }));
+    await sb.from("intel_unusual_options").insert(rows);
+  } catch { /* best effort */ }
+}
+
 
 // ═══════════════════════════════════════════════════════════════════
 // 5. MARKET TIDE — Finnhub aggregate sentiment
@@ -579,34 +754,29 @@ async function handleMarketTide(): Promise<Response> {
   const hit = cached<MarketTide>(cacheKey);
   if (hit) return json({ ok: true, data: hit });
 
+  if (await isFeedFresh("marketTide")) {
+    const result = await readTideFromDb();
+    if (result) {
+      setCache(cacheKey, result);
+      return json({ ok: true, data: result });
+    }
+  }
+
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  if (!finnhubKey)
-    return json(
-      { ok: false, error: "FINNHUB_API_KEY not configured" },
-      503,
-    );
+  if (!finnhubKey) return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
 
   try {
     const [quoteRes, recRes] = await Promise.all([
-      fetchWithTimeout(
-        `https://finnhub.io/api/v1/quote?symbol=SPY&token=${finnhubKey}`,
-        6000,
-      ),
-      fetchWithTimeout(
-        `https://finnhub.io/api/v1/stock/recommendation?symbol=SPY&token=${finnhubKey}`,
-        6000,
-      ),
+      fetchWithTimeout(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${finnhubKey}`, 6000),
+      fetchWithTimeout(`https://finnhub.io/api/v1/stock/recommendation?symbol=SPY&token=${finnhubKey}`, 6000),
     ]);
 
     const quote = quoteRes.ok ? await quoteRes.json() : null;
-    const recs = recRes.ok
-      ? ((await recRes.json()) as Array<Record<string, number>>)
-      : [];
+    const recs = recRes.ok ? ((await recRes.json()) as Array<Record<string, number>>) : [];
 
     const spyPrice = Number(quote?.c ?? 0);
     const spyPrevClose = Number(quote?.pc ?? spyPrice);
-    const spyChangePct =
-      spyPrevClose > 0 ? (spyPrice - spyPrevClose) / spyPrevClose : 0;
+    const spyChangePct = spyPrevClose > 0 ? (spyPrice - spyPrevClose) / spyPrevClose : 0;
 
     let analystScore = 0;
     if (Array.isArray(recs) && recs.length > 0) {
@@ -617,29 +787,20 @@ async function handleMarketTide(): Promise<Response> {
       const sell = Number(latest.sell ?? 0);
       const strongSell = Number(latest.strongSell ?? 0);
       const total = strongBuy + buy + hold + sell + strongSell || 1;
-      analystScore =
-        (strongBuy * 2 + buy * 1 + hold * 0 + sell * -1 + strongSell * -2) /
-        (total * 2);
+      analystScore = (strongBuy * 2 + buy * 1 + hold * 0 + sell * -1 + strongSell * -2) / (total * 2);
     }
 
     const combinedScore = spyChangePct * 50 + analystScore * 0.5;
     const bias: "bullish" | "bearish" | "neutral" =
-      combinedScore > 0.15
-        ? "bullish"
-        : combinedScore < -0.15
-          ? "bearish"
-          : "neutral";
+      combinedScore > 0.15 ? "bullish" : combinedScore < -0.15 ? "bearish" : "neutral";
 
     const basePremium = 2_000_000_000;
     const skew = 1 + combinedScore;
     const netCallPremium = Math.round(basePremium * Math.max(skew, 0.3));
-    const netPutPremium = Math.round(
-      basePremium * Math.max(2 - skew, 0.3),
-    );
-    const callPutRatio =
-      netPutPremium > 0
-        ? Math.round((netCallPremium / netPutPremium) * 100) / 100
-        : 1.0;
+    const netPutPremium = Math.round(basePremium * Math.max(2 - skew, 0.3));
+    const callPutRatio = netPutPremium > 0
+      ? Math.round((netCallPremium / netPutPremium) * 100) / 100
+      : 1.0;
 
     const tide: MarketTide = {
       timestamp: new Date().toISOString(),
@@ -649,15 +810,47 @@ async function handleMarketTide(): Promise<Response> {
       bias,
     };
 
+    await persistTide(tide);
+    await markSynced("marketTide", 1, "finnhub");
+
     setCache(cacheKey, tide);
     return json({ ok: true, data: tide });
   } catch (e) {
-    return json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      500,
-    );
+    const fallback = await readTideFromDb();
+    if (fallback) return json({ ok: true, data: fallback });
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
 }
+
+async function readTideFromDb(): Promise<MarketTide | null> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb.from("intel_market_tide").select("*")
+      .order("snapshot_time", { ascending: false }).limit(1).single();
+    if (!data) return null;
+    return {
+      timestamp: String(data.snapshot_time),
+      netCallPremium: Number(data.net_call_premium),
+      netPutPremium: Number(data.net_put_premium),
+      callPutRatio: Number(data.call_put_ratio),
+      bias: String(data.bias) as "bullish" | "bearish" | "neutral",
+    };
+  } catch { return null; }
+}
+
+async function persistTide(tide: MarketTide) {
+  try {
+    const sb = getSupabase();
+    await sb.from("intel_market_tide").insert({
+      net_call_premium: tide.netCallPremium,
+      net_put_premium: tide.netPutPremium,
+      call_put_ratio: tide.callPutRatio,
+      bias: tide.bias,
+      snapshot_time: tide.timestamp,
+    });
+  } catch { /* best effort */ }
+}
+
 
 // ── Handler ────────────────────────────────────────────────────────
 serve(async (req: Request) => {
@@ -685,9 +878,6 @@ serve(async (req: Request) => {
         return json({ ok: false, error: `unknown action: ${action}` }, 400);
     }
   } catch (e) {
-    return json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
-      400,
-    );
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 400);
   }
 });
