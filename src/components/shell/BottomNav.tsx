@@ -57,10 +57,7 @@ export function BottomNav() {
   const tabs = [...CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined })), sixthTab];
 
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-50 pointer-events-none"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-    >
+    <div className="tos-nav-dock">
     <nav
       ref={navRef}
       className="pointer-events-auto"
