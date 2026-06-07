@@ -300,12 +300,12 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     positionLinesRef.current = [];
 
     overlays.forEach((o) => {
-      // Side-based color — red for sell, green for buy.
+      // Side-based color — red for sell, cyan for buy.
       const entryColor =
         o.side === "sell"
           ? CHART_THEME.negativeText
           : o.side === "buy"
-            ? CHART_THEME.positiveText
+            ? CHART_THEME.cyanAccent
             : CHART_THEME.entryLine;
 
       // Lines only — labels rendered by PositionLabelsOverlay (left-side text, no box).
@@ -363,12 +363,12 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     pendingOrderLinesRef.current = [];
 
     pendingOrders.forEach((o) => {
-      // Pending orders use a distinctive amber/orange dashed line
+      // Side-based color — red for sell, cyan for buy (matches positions).
       const orderColor = o.side === "sell"
-        ? "rgba(239,68,68,0.7)"   // red-ish for sell
+        ? CHART_THEME.negativeText   // red for sell
         : o.side === "buy"
-          ? "rgba(34,197,94,0.7)"  // green-ish for buy
-          : "rgba(251,191,36,0.8)"; // amber fallback
+          ? CHART_THEME.cyanAccent   // cyan for buy
+          : "rgba(251,191,36,0.8)";  // amber fallback
 
       // Entry / trigger price
       if (o.openPrice != null && o.openPrice > 0) {
