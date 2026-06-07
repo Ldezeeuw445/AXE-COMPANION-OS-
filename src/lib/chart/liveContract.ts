@@ -29,6 +29,21 @@ export type LivePositionPayload = {
   openTime: string | null;
 };
 
+export type LivePendingOrderPayload = {
+  id: string;
+  symbol: string;
+  /** e.g. "buy_limit", "sell_limit", "buy_stop", "sell_stop" */
+  type: string;
+  side: "buy" | "sell" | string;
+  volume: number;
+  /** Trigger price for the pending order. */
+  openPrice: number;
+  currentPrice: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  openTime: string | null;
+};
+
 export type ChartLiveStatus = "live" | "delayed" | "reconnecting" | "offline" | "error";
 
 export type ChartLiveSource = "metaapi_mt5";
@@ -72,6 +87,14 @@ export type ChartLiveEvent =
       accountId: string;
       total: number;
       onSymbol: LivePositionPayload[];
+      source: ChartLiveSource;
+    }
+  | {
+      type: "orders_update";
+      userId?: string;
+      accountId: string;
+      total: number;
+      onSymbol: LivePendingOrderPayload[];
       source: ChartLiveSource;
     }
   | {

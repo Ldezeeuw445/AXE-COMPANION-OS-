@@ -17,7 +17,7 @@ import {
   type RefObject,
 } from "react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
-import type { ChartOverlayRow } from "@/lib/broker/loadChartPageData";
+import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME } from "@/components/chart/chartTheme";
 import {
   priceDigitsForSymbol,
@@ -115,12 +115,14 @@ async function callModifyPosition(
 export function PositionLabelsOverlay({
   canvasRef,
   overlays,
+  pendingOrders = [],
   symbol,
   brokerAccountId,
   liveTradingEnabled = false,
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
   overlays: ChartOverlayRow[];
+  pendingOrders?: PendingOrderOverlay[];
   symbol: string;
   /** Required for modify-position API calls. */
   brokerAccountId?: string | null;
@@ -130,6 +132,8 @@ export function PositionLabelsOverlay({
   const [labels, setLabels] = useState<LabelItem[]>([]);
   const overlaysRef = useRef(overlays);
   overlaysRef.current = overlays;
+  const pendingOrdersRef = useRef(pendingOrders);
+  pendingOrdersRef.current = pendingOrders;
   const symbolRef = useRef(symbol);
   symbolRef.current = symbol;
 
@@ -234,6 +238,56 @@ export function PositionLabelsOverlay({
       }
     }
 
+    // ── Pending orders (limit / stop) ──
+    for (const o of pendingOrdersRef.current) {
+      const side = o.side as "buy" | "sell";
+      const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
+
+      // Entry / trigger price
+      if (o.openPrice != null && o.openPrice > 0) {
+        const y = canvas.priceToCoordinate(o.openPrice);
+        if (y != null) {
+          next.push({
+            key: `pend-entry-${o.id}`,
+            y,
+            text: `${typeLabel} ${o.volume}`,
+            color: side === "sell" ? "rgba(239,68,68,0.85)" : side === "buy" ? "rgba(34,197,94,0.85)" : "rgba(251,191,36,0.85)",
+            draggable: false,
+          });
+        }
+      }
+
+      // SL (not draggable — pending orders modify is a different API)
+      if (o.stopLoss != null && o.stopLoss > 0) {
+        const y = canvas.priceToCoordinate(o.stopLoss);
+        if (y != null) {
+          const pnl = slTpPnl(o.openPrice, o.stopLoss, o.volume, side, symbolRef.current);
+          next.push({
+            key: `pend-sl-${o.id}`,
+            y,
+            text: `SL${pnl ? `, ${pnl}` : ""}`,
+            color: CHART_THEME.stopLine,
+            draggable: false,
+          });
+        }
+      }
+
+      // TP
+      if (o.takeProfit != null && o.takeProfit > 0) {
+        const y = canvas.priceToCoordinate(o.takeProfit);
+        if (y != null) {
+          const pnl = slTpPnl(o.openPrice, o.takeProfit, o.volume, side, symbolRef.current);
+          next.push({
+            key: `pend-tp-${o.id}`,
+            y,
+            text: `TP${pnl ? `, ${pnl}` : ""}`,
+            color: CHART_THEME.takeLine,
+            draggable: false,
+          });
+        }
+      }
+    }
+
     setLabels(next);
   }, [canvasRef, liveTradingEnabled, brokerAccountId]);
 
@@ -243,7 +297,7 @@ export function PositionLabelsOverlay({
     const canvas = canvasRef.current;
     if (!canvas) return;
     return canvas.subscribeViewport(computeLabels);
-  }, [canvasRef, computeLabels, overlays]);
+  }, [canvasRef, computeLabels, overlays, pendingOrders]);
 
   // Also recompute when overlays change (new profit values etc)
   useEffect(() => {

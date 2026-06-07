@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   ChartLiveEvent,
   LivePositionPayload,
+  LivePendingOrderPayload,
   LiveCandle,
 } from "@/lib/chart/liveContract";
 
@@ -25,11 +26,13 @@ export type LiveUiStatus =
   | "failed";
 
 export type LivePosition = LivePositionPayload;
+export type LivePendingOrder = LivePendingOrderPayload;
 
 export type LiveChartHandlers = {
   onTick?: (tick: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => void;
   onCandleUpdate?: (candle: LiveCandle) => void;
   onPositions?: (p: { total: number; onSymbol: LivePosition[] }) => void;
+  onOrders?: (p: { total: number; onSymbol: LivePendingOrder[] }) => void;
 };
 
 type Args = LiveChartHandlers & {
@@ -265,6 +268,12 @@ export function useLiveChart({
             onSymbol: Array.isArray(evt.onSymbol) ? evt.onSymbol : [],
           });
           markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          return;
+        case "orders_update":
+          handlersRef.current.onOrders?.({
+            total: typeof evt.total === "number" ? evt.total : 0,
+            onSymbol: Array.isArray(evt.onSymbol) ? evt.onSymbol : [],
+          });
           return;
         case "live_status":
           if (evt.status === "live") {

@@ -4,6 +4,7 @@ import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetHistoricalCandles,
   clientGetPositions,
+  clientGetOrders,
   clientGetSymbolPrice,
   MetaApiRequestError,
 } from "@/lib/mt5/metaApiClient";
@@ -12,6 +13,7 @@ import type {
   ChartLiveEvent,
   ChartLiveStatus,
   LivePositionPayload,
+  LivePendingOrderPayload,
 } from "@/lib/chart/liveContract";
 import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
 
@@ -45,6 +47,21 @@ function mapSide(t: string | undefined): string {
   if (u.includes("BUY")) return "buy";
   if (u.includes("SELL")) return "sell";
   return (t ?? "").toLowerCase();
+}
+
+function mapOrderType(t: string | undefined): string {
+  const raw = (t ?? "").toLowerCase().replace(/_/g, " ");
+  if (raw.includes("buy") && raw.includes("limit")) return "buy_limit";
+  if (raw.includes("sell") && raw.includes("limit")) return "sell_limit";
+  if (raw.includes("buy") && raw.includes("stop")) return "buy_stop";
+  if (raw.includes("sell") && raw.includes("stop")) return "sell_stop";
+  return raw.trim() || "pending";
+}
+
+function mapOrderSide(type: string): string {
+  if (type.startsWith("buy")) return "buy";
+  if (type.startsWith("sell")) return "sell";
+  return "unknown";
 }
 
 export async function GET(request: NextRequest) {
@@ -288,6 +305,48 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      async function ordersLoop() {
+        // Slightly offset from positions to avoid concurrent MetaAPI hits
+        await new Promise((r) => setTimeout(r, 5_000));
+        while (!closed && Date.now() - startedAt < MAX_DURATION_MS) {
+          try {
+            const raw = (await clientGetOrders(
+              metaAccountId,
+              false,
+              accountRegion,
+            )) as Record<string, unknown>[];
+            const onSymbol: LivePendingOrderPayload[] = raw
+              .filter((o) => String(o.symbol ?? "") === brokerSymbol)
+              .map((o, i) => {
+                const type = mapOrderType(typeof o.type === "string" ? (o.type as string) : undefined);
+                return {
+                  id: String(o.id ?? o.orderId ?? i),
+                  symbol: String(o.symbol ?? ""),
+                  type,
+                  side: mapOrderSide(type),
+                  volume: Number(o.volume ?? 0) || 0,
+                  openPrice: Number(o.openPrice ?? o.price ?? 0),
+                  currentPrice: o.currentPrice != null ? Number(o.currentPrice) : null,
+                  stopLoss: o.stopLoss != null ? Number(o.stopLoss) : null,
+                  takeProfit: o.takeProfit != null ? Number(o.takeProfit) : null,
+                  openTime: (o.time as string) ?? (o.doneTime as string) ?? null,
+                };
+              });
+            send({
+              type: "orders_update",
+              userId,
+              accountId,
+              total: raw.length,
+              onSymbol,
+              source: "metaapi_mt5",
+            });
+          } catch {
+            /* keep stream alive */
+          }
+          await new Promise((r) => setTimeout(r, POSITIONS_INTERVAL_MS));
+        }
+      }
+
       async function heartbeatLoop() {
         while (!closed && Date.now() - startedAt < MAX_DURATION_MS) {
           await new Promise((r) => setTimeout(r, HEARTBEAT_INTERVAL_MS));
@@ -300,6 +359,7 @@ export async function GET(request: NextRequest) {
         tickLoop(),
         candleLoop(),
         positionsLoop(),
+        ordersLoop(),
         heartbeatLoop(),
       ]);
 

@@ -19,7 +19,7 @@ import type {
   UTCTimestamp,
 } from "lightweight-charts";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
-import type { ChartOverlayRow } from "@/lib/broker/loadChartPageData";
+import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME } from "@/components/chart/chartTheme";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import {
@@ -33,6 +33,7 @@ type Props = {
   /** Initial OHLC dataset; replaced on symbol/timeframe change. */
   candles: MetaApiCandle[];
   overlays: ChartOverlayRow[];
+  pendingOrders?: PendingOrderOverlay[];
   /** Used to format right-axis prices (digits) and entry/SL/TP price labels. */
   symbol: string;
   annotations?: ChartAnnotation[];
@@ -93,7 +94,7 @@ function buildSeriesData(candles: MetaApiCandle[]): CandlestickData[] {
 }
 
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
-  { candles, overlays, symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick },
+  { candles, overlays, pendingOrders = [], symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -101,6 +102,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const lastBarRef = useRef<CandlestickData | null>(null);
   const positionLinesRef = useRef<IPriceLine[]>([]);
+  const pendingOrderLinesRef = useRef<IPriceLine[]>([]);
   const annotationLineSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
   const annotationPriceLinesRef = useRef<IPriceLine[]>([]);
   const drawingModeRef = useRef<DrawingMode>(drawingMode);
@@ -239,6 +241,14 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         }
       }
       positionLinesRef.current = [];
+      for (const pl of pendingOrderLinesRef.current) {
+        try {
+          series.removePriceLine(pl);
+        } catch {
+          /* ignore */
+        }
+      }
+      pendingOrderLinesRef.current = [];
       for (const pl of annotationPriceLinesRef.current) {
         try {
           series.removePriceLine(pl);
@@ -337,6 +347,70 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       }
     });
   }, [overlays, symbol]);
+
+  // Render pending-order overlays (limit & stop orders on chart).
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    for (const pl of pendingOrderLinesRef.current) {
+      try {
+        series.removePriceLine(pl);
+      } catch {
+        /* ignore */
+      }
+    }
+    pendingOrderLinesRef.current = [];
+
+    pendingOrders.forEach((o) => {
+      // Pending orders use a distinctive amber/orange dashed line
+      const orderColor = o.side === "sell"
+        ? "rgba(239,68,68,0.7)"   // red-ish for sell
+        : o.side === "buy"
+          ? "rgba(34,197,94,0.7)"  // green-ish for buy
+          : "rgba(251,191,36,0.8)"; // amber fallback
+
+      // Entry / trigger price
+      if (o.openPrice != null && o.openPrice > 0) {
+        pendingOrderLinesRef.current.push(
+          series.createPriceLine({
+            price: o.openPrice,
+            color: orderColor,
+            lineWidth: 1,
+            lineStyle: LineStyle.SparseDotted,
+            axisLabelVisible: false,
+            title: "",
+          }),
+        );
+      }
+      // SL
+      if (o.stopLoss != null && o.stopLoss > 0) {
+        pendingOrderLinesRef.current.push(
+          series.createPriceLine({
+            price: o.stopLoss,
+            color: CHART_THEME.stopLine,
+            lineWidth: 1,
+            lineStyle: LineStyle.SparseDotted,
+            axisLabelVisible: false,
+            title: "",
+          }),
+        );
+      }
+      // TP
+      if (o.takeProfit != null && o.takeProfit > 0) {
+        pendingOrderLinesRef.current.push(
+          series.createPriceLine({
+            price: o.takeProfit,
+            color: CHART_THEME.takeLine,
+            lineWidth: 1,
+            lineStyle: LineStyle.SparseDotted,
+            axisLabelVisible: false,
+            title: "",
+          }),
+        );
+      }
+    });
+  }, [pendingOrders, symbol]);
 
   // Render user annotations (trendline + horizontal levels). Fib retracement
   // is rendered as an interactive SVG overlay outside the canvas.
