@@ -36,8 +36,10 @@ interface LabelItem {
   draggable: boolean;
   /** "sl" | "tp" — used to know which field to modify */
   field?: "sl" | "tp";
-  /** position id for the MetaAPI call */
+  /** position id for the MetaAPI call (open positions) */
   positionId?: string;
+  /** order id for pending order modify (pending limit/stop orders) */
+  orderId?: string;
   /** current SL price (to preserve when only TP changes) */
   currentSl?: number | null;
   /** current TP price (to preserve when only SL changes) */
@@ -78,7 +80,7 @@ function slTpPnl(
 
 function entryColor(side: string | null): string {
   if (side === "sell") return CHART_THEME.negativeText;
-  if (side === "buy") return CHART_THEME.positiveText;
+  if (side === "buy") return CHART_THEME.cyanAccent;
   return CHART_THEME.entryLine;
 }
 
@@ -97,6 +99,32 @@ async function callModifyPosition(
     if (stopLoss != null) body.stopLoss = stopLoss;
     if (takeProfit != null) body.takeProfit = takeProfit;
     const res = await fetch("/api/mt5/modify-position", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as { ok?: boolean; message?: string };
+    return { ok: !!json.ok, message: json.message };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Network error" };
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Modify-order API call (pending limit/stop orders)                  */
+/* ------------------------------------------------------------------ */
+
+async function callModifyOrder(
+  brokerAccountId: string,
+  orderId: string,
+  stopLoss: number | null | undefined,
+  takeProfit: number | null | undefined,
+): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const body: Record<string, unknown> = { brokerAccountId, orderId };
+    if (stopLoss != null) body.stopLoss = stopLoss;
+    if (takeProfit != null) body.takeProfit = takeProfit;
+    const res = await fetch("/api/mt5/modify-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -149,7 +177,8 @@ export function PositionLabelsOverlay({
   const dragDataRef = useRef<{
     key: string;
     field: "sl" | "tp";
-    positionId: string;
+    positionId?: string;
+    orderId?: string;
     currentSl: number | null;
     currentTp: number | null;
     originPointerY: number;
@@ -242,8 +271,9 @@ export function PositionLabelsOverlay({
     for (const o of pendingOrdersRef.current) {
       const side = o.side as "buy" | "sell";
       const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
+      const canDragOrder = liveTradingEnabled && !!brokerAccountId;
 
-      // Entry / trigger price
+      // Entry / trigger price (not draggable — entry price modification is complex)
       if (o.openPrice != null && o.openPrice > 0) {
         const y = canvas.priceToCoordinate(o.openPrice);
         if (y != null) {
@@ -251,13 +281,13 @@ export function PositionLabelsOverlay({
             key: `pend-entry-${o.id}`,
             y,
             text: `${typeLabel} ${o.volume}`,
-            color: side === "sell" ? "rgba(239,68,68,0.85)" : side === "buy" ? "rgba(34,197,94,0.85)" : "rgba(251,191,36,0.85)",
+            color: entryColor(side),
             draggable: false,
           });
         }
       }
 
-      // SL (not draggable — pending orders modify is a different API)
+      // SL (draggable)
       if (o.stopLoss != null && o.stopLoss > 0) {
         const y = canvas.priceToCoordinate(o.stopLoss);
         if (y != null) {
@@ -267,12 +297,16 @@ export function PositionLabelsOverlay({
             y,
             text: `SL${pnl ? `, ${pnl}` : ""}`,
             color: CHART_THEME.stopLine,
-            draggable: false,
+            draggable: canDragOrder,
+            field: "sl",
+            orderId: o.id,
+            currentSl: o.stopLoss,
+            currentTp: o.takeProfit,
           });
         }
       }
 
-      // TP
+      // TP (draggable)
       if (o.takeProfit != null && o.takeProfit > 0) {
         const y = canvas.priceToCoordinate(o.takeProfit);
         if (y != null) {
@@ -282,7 +316,11 @@ export function PositionLabelsOverlay({
             y,
             text: `TP${pnl ? `, ${pnl}` : ""}`,
             color: CHART_THEME.takeLine,
-            draggable: false,
+            draggable: canDragOrder,
+            field: "tp",
+            orderId: o.id,
+            currentSl: o.stopLoss,
+            currentTp: o.takeProfit,
           });
         }
       }
@@ -307,7 +345,7 @@ export function PositionLabelsOverlay({
   // ── Drag handlers ──
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, label: LabelItem) => {
-      if (!label.draggable || !label.field || !label.positionId) return;
+      if (!label.draggable || !label.field || (!label.positionId && !label.orderId)) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -315,20 +353,26 @@ export function PositionLabelsOverlay({
       el.setPointerCapture(e.pointerId);
       isDraggingRef.current = true;
 
-      // Find the overlay for this position to get entry/volume/side
-      const overlay = overlaysRef.current.find((o) => o.id === label.positionId);
+      // Find the overlay for this position/order to get entry/volume/side
+      const overlay = label.positionId
+        ? overlaysRef.current.find((o) => o.id === label.positionId)
+        : null;
+      const pendingOrder = label.orderId
+        ? pendingOrdersRef.current.find((o) => o.id === label.orderId)
+        : null;
 
       dragDataRef.current = {
         key: label.key,
         field: label.field,
         positionId: label.positionId,
+        orderId: label.orderId,
         currentSl: label.currentSl ?? null,
         currentTp: label.currentTp ?? null,
         originPointerY: e.clientY,
         originLabelY: label.y,
-        entryPrice: overlay?.entryPrice ?? null,
-        volume: overlay?.volume ?? 0,
-        side: (overlay?.side as "buy" | "sell") ?? "buy",
+        entryPrice: overlay?.entryPrice ?? pendingOrder?.openPrice ?? null,
+        volume: overlay?.volume ?? pendingOrder?.volume ?? 0,
+        side: (overlay?.side ?? pendingOrder?.side ?? "buy") as "buy" | "sell",
         color: label.color,
       };
 
@@ -406,12 +450,17 @@ export function PositionLabelsOverlay({
       const newSl = drag.field === "sl" ? newPrice : (drag.currentSl ?? undefined);
       const newTp = drag.field === "tp" ? newPrice : (drag.currentTp ?? undefined);
 
-      const result = await callModifyPosition(
-        brokerAccountId,
-        drag.positionId,
-        newSl,
-        newTp,
-      );
+      let result: { ok: boolean; message?: string };
+
+      if (drag.orderId) {
+        // Pending order — use modify-order API
+        result = await callModifyOrder(brokerAccountId, drag.orderId, newSl, newTp);
+      } else if (drag.positionId) {
+        // Open position — use modify-position API
+        result = await callModifyPosition(brokerAccountId, drag.positionId, newSl, newTp);
+      } else {
+        return;
+      }
 
       if (!result.ok) {
         console.warn("[PositionLabelsOverlay] Modify failed:", result.message);
