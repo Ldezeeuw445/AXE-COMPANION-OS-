@@ -6,6 +6,7 @@ import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot } from "@/lib/intel/intelClient";
+import { IntelAiChat } from "@/components/intel/IntelAiChat";
 
 const DEFAULT_SYMBOL = "XAUUSD";
 
@@ -343,6 +344,9 @@ export default async function IntelPage({ searchParams }: PageProps) {
         AXE Intel runs through the Supabase intel-proxy. AXE serializes requests and reuses cached snapshots so one app
         session cannot overload the runtime with repeated refreshes. Nothing here is fabricated.
       </p>
+
+      {/* AXE Intel AI — floating chat panel + FAB */}
+      <IntelAiChat symbol={symbol} />
     </div>
   );
 }
