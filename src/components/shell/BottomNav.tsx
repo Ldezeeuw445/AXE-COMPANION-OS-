@@ -57,12 +57,10 @@ export function BottomNav() {
   const tabs = [...CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined })), sixthTab];
 
   return (
-    <div className="tos-nav-dock">
     <nav
       ref={navRef}
-      className="pointer-events-auto"
+      className="tos-nav-pill pointer-events-auto"
       style={{
-        margin: "0 auto 4px",
         width: "calc(100% - 24px)",
         maxWidth: "420px",
         background: "linear-gradient(180deg, #131318 0%, #0a0a0e 100%)",
@@ -145,6 +143,5 @@ export function BottomNav() {
         })}
       </div>
     </nav>
-    </div>
   );
 }
