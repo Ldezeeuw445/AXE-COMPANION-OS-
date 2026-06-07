@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * IntelAiChat — Floating AXE Intel AI chat panel for the Intel tab.
+ * IntelAiChat — Floating AXE INTELLIGENT AGENT chat panel for the Intel tab.
  *
  * FAB: Square button with cyan triangle (AXE logo) — toggles chat open/closed.
- * Panel: Full-height overlay with "AXE Intel AI" header, scrolling message area,
+ * Panel: Full-height overlay with "AXE INTELLIGENT AGENT" header, scrolling message area,
  *        and "Query intelligence..." input with cyan send button.
  *
  * Streams responses from /api/intel-chat using SSE for real-time token display.
@@ -263,7 +263,7 @@ export function IntelAiChat({ symbol }: { symbol?: string }) {
         onClick={() => setOpen((p) => !p)}
         className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+90px)] right-4 z-[60] flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-white/[0.12] bg-[#0a0a0d]/95 shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md active:scale-95"
         style={{ transition: "transform 0.12s ease" }}
-        aria-label={open ? "Close Intel AI" : "Open Intel AI"}
+        aria-label={open ? "Close AXE Agent" : "Open AXE Agent"}
       >
         {open ? (
           <X className="h-5 w-5 text-white/70" />
@@ -298,7 +298,7 @@ export function IntelAiChat({ symbol }: { symbol?: string }) {
             <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-5 py-4">
               <div className="flex items-center gap-2.5">
                 <h2 className="text-[15px] font-bold tracking-tight text-white">
-                  AXE Intel AI
+                  AXE INTELLIGENT AGENT
                 </h2>
                 <span className="h-2 w-2 rounded-full bg-[#00d4f5] shadow-[0_0_6px_rgba(0,212,245,0.6)]" />
               </div>
@@ -412,7 +412,7 @@ function MessageBubble({ message }: { message: Message }) {
         <div className="mb-1 flex items-center gap-1.5 px-0.5">
           <span className="h-1 w-1 rounded-full bg-[#00d4f5]/70" />
           <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
-            AXE Intel
+            AXE AGENT
           </span>
         </div>
         <div className="rounded-2xl rounded-tl-md bg-white/[0.03] border border-white/[0.06] px-4 py-3">
