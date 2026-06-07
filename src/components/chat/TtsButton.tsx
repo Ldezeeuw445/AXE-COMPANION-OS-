@@ -66,7 +66,7 @@ export function TtsButton({ text }: TtsButtonProps) {
       type="button"
       onClick={toggle}
       title={speaking ? "Stop" : "Read aloud"}
-      className="flex h-6 w-6 items-center justify-center rounded-md text-tos-dim opacity-0 transition-all group-hover:opacity-100 hover:text-tos-muted"
+      className="flex h-6 w-6 items-center justify-center rounded-md text-tos-dim transition-colors hover:text-tos-muted active:text-tos-muted"
       aria-label={speaking ? "Stop reading" : "Read aloud"}
     >
       {speaking ? (

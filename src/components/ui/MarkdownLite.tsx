@@ -129,12 +129,20 @@ export function MarkdownLite({
         const heading =
           lines.length === 1 ? lines[0].match(/^#{1,3}\s+(.+)$/) : null;
         if (heading) {
+          // Strip any wrapping bold markers so "**Summary**" and "Summary"
+          // both classify the same way.
+          const rawHeading = heading[1].replace(/^\*\*(.+)\*\*$/, "$1");
+          const kw = classifyKeyword(rawHeading);
+
           return (
             <h3
               key={`h-${blockIndex}`}
-              className="text-[13px] font-semibold uppercase tracking-[0.14em] text-white/90"
+              className={`text-[13px] font-semibold uppercase tracking-[0.14em] ${kw ? "" : "text-white/90"}`}
+              style={kw?.style}
             >
-              {renderMarkdownInline(heading[1])}
+              {kw
+                ? rawHeading
+                : renderMarkdownInline(heading[1])}
             </h3>
           );
         }

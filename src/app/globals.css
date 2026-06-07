@@ -78,8 +78,8 @@
 
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
-  --tos-nav-h: 4.25rem;
-  --tos-nav-offset: calc(var(--tos-nav-h) + 8px + env(safe-area-inset-bottom, 0px));
+  --tos-nav-h: 3.875rem;
+  --tos-nav-offset: calc(var(--tos-nav-h) + 4px + env(safe-area-inset-bottom, 0px));
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
 }
 
@@ -266,18 +266,16 @@ body {
    - Inner top highlight simulates edge-lit glass
    - Deep outer shadow grounds the bar to the screen edge
    - Subtle inner shadow gives a concave "tray" feel */
-.tos-bottom-nav {
-  position: relative;
-  border-radius: 0;
-  border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: transparent;
-  backdrop-filter: blur(48px) saturate(170%);
-  -webkit-backdrop-filter: blur(48px) saturate(170%);
-  box-shadow:
-    /* top shadow for subtle depth separation */
-    0 -2px 16px rgba(0, 0, 0, 0.40),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+/* Fixed dock that hugs the screen bottom, padding the safe-area
+   via CSS (not inline style) so env() resolves on first paint. */
+.tos-nav-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  pointer-events: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Subtle ambient glow — ultra-faint radial light behind key content.
@@ -356,7 +354,7 @@ nav,
 .tos-card-premium-subtle,
 .tos-linear-card,
 .tos-watchlist-row,
-.tos-bottom-nav,
+.tos-nav-dock,
 .tos-asset-pill,
 .tos-inset-panel,
 .tos-neu-composer,
