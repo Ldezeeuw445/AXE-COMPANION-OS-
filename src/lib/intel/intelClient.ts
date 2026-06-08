@@ -80,6 +80,8 @@ export type CorporateJet = {
   icao24: string;
   callsign: string;
   company: string;
+  ticker: string;
+  tailNumber: string;
   originCountry: string;
   latitude: number | null;
   longitude: number | null;
@@ -92,12 +94,32 @@ export type VesselTrack = {
   mmsi: string;
   vesselName: string;
   vesselType: string;
-  latitude: number | null;
-  longitude: number | null;
-  speed: number | null;
-  course: number | null;
-  destination: string;
+  owner: string;
+  ownerType: "corporate" | "state" | "oligarch" | "unknown";
+  significance: string;
+  isTracked: boolean;
+  lastSeen: string | null;
+  lastLatitude: number | null;
+  lastLongitude: number | null;
+  speedKnots: number | null;
+  heading: number | null;
+  destination: string | null;
+  nearChokepoint: string | null;
+  alertLevel: "normal" | "warning" | "critical";
+};
+
+export type Chokepoint = {
+  id: number;
+  name: string;
   region: string;
+  latitude: number;
+  longitude: number;
+  radiusNm: number;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  riskFactors: string;
+  dailyShipCount: number;
+  percentageGlobalTrade: number;
+  updatedAt: string;
 };
 
 export type ConflictEvent = {
@@ -154,6 +176,7 @@ export type IntelSnapshot = {
   /* Alt-data feeds */
   jets: CorporateJet[];
   vessels: VesselTrack[];
+  chokepoints: Chokepoint[];
   conflicts: ConflictEvent[];
   energy: EnergyFlow[];
   cyber: CyberThreat[];
@@ -174,6 +197,7 @@ type IntelAction =
   | "marketTide"
   | "corporateJets"
   | "vesselTracking"
+  | "chokepoints"
   | "conflictEvents"
   | "energyFlows"
   | "cyberThreats";
@@ -308,6 +332,7 @@ async function fetchIntelSnapshot(
   // don't block the rest. Each has its own fallback chain (API → DB → empty).
   const jetsRes = await callIntelProxy<CorporateJet[]>("corporateJets", {});
   const vesselRes = await callIntelProxy<VesselTrack[]>("vesselTracking", {});
+  const chokepointRes = await callIntelProxy<Chokepoint[]>("chokepoints", {});
   const conflictRes = await callIntelProxy<ConflictEvent[]>("conflictEvents", {});
   const energyRes = await callIntelProxy<EnergyFlow[]>("energyFlows", {});
   const cyberRes = await callIntelProxy<CyberThreat[]>("cyberThreats", {});
@@ -320,13 +345,14 @@ async function fetchIntelSnapshot(
 
   const jets = jetsRes.ok && Array.isArray(jetsRes.data) ? jetsRes.data : [];
   const vessels = vesselRes.ok && Array.isArray(vesselRes.data) ? vesselRes.data : [];
+  const chokepoints = chokepointRes.ok && Array.isArray(chokepointRes.data) ? chokepointRes.data : [];
   const conflicts = conflictRes.ok && Array.isArray(conflictRes.data) ? conflictRes.data : [];
   const energy = energyRes.ok && Array.isArray(energyRes.data) ? energyRes.data : [];
   const cyber = cyberRes.ok && Array.isArray(cyberRes.data) ? cyberRes.data : [];
 
-  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, conflictRes, energyRes, cyberRes];
+  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes, energyRes, cyberRes];
   const hadError = allResults.some((r) => !r.ok);
-  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || conflicts.length || energy.length || cyber.length);
+  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energy.length || cyber.length);
 
   if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
     return markCache(
@@ -419,6 +445,7 @@ async function fetchIntelSnapshot(
     tide,
     jets,
     vessels,
+    chokepoints,
     conflicts,
     energy,
     cyber,

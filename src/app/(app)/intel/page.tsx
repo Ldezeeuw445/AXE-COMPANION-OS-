@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Activity, BarChart3, Eye, Landmark, TrendingUp, Plane, Ship, Swords, Zap, Shield } from "lucide-react";
+import { Activity, Anchor, BarChart3, Eye, Landmark, TrendingUp, Plane, Ship, Swords, Zap, Shield } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
-import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot } from "@/lib/intel/intelClient";
+import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot, type Chokepoint } from "@/lib/intel/intelClient";
 import { IntelAiChat } from "@/components/intel/IntelAiChat";
 import { CorrelateButton } from "@/components/intel/CorrelateButton";
 
@@ -116,7 +116,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
           <div className="flex items-center gap-2">
             <Activity className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-              Market tide
+              AXE Intel Tide
             </h2>
           </div>
           <span className="text-[10px] text-tos-dim">
@@ -161,7 +161,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <Eye className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Insider transactions
+                AXE Insider Flow
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -205,7 +205,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <Landmark className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Congress
+                AXE Policy Flow
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -250,7 +250,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <BarChart3 className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Dark pool prints
+                AXE Dark Pool
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -294,7 +294,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <TrendingUp className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Unusual options
+                AXE Options Flow
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -336,7 +336,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
           <div className="flex items-center gap-2">
             <Plane className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-              Corporate jet tracking
+              AXE Jet Tracker
             </h2>
           </div>
           <span className="text-[10px] text-tos-dim">
@@ -353,9 +353,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   key={`${jet.icao24}-${i}`}
                   className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
-                  <span className="font-mono text-[11px] font-semibold text-tos-text">{jet.callsign || jet.icao24}</span>
+                  <span className="font-mono text-[11px] font-semibold text-emerald-200/90">{jet.ticker || jet.icao24}</span>
                   <span className="min-w-0 flex-1 truncate text-[11px] text-tos-text" title={jet.company}>
                     {jet.company}
+                    {jet.tailNumber && <span className="ml-1 text-[10px] text-tos-dim">· {jet.tailNumber}</span>}
                   </span>
                   <span className="font-mono text-[10px] text-emerald-300">AIRBORNE</span>
                   {jet.altitude != null && (
@@ -386,7 +387,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <Ship className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Supply chain & vessels
+                AXE Vessel Intel
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -420,7 +421,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <Zap className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Energy flows
+                AXE Energy Flow
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -451,6 +452,55 @@ export default async function IntelPage({ searchParams }: PageProps) {
         </GlassPanel>
       </div>
 
+      {/* ─── ALT-DATA: CHOKEPOINTS ──────────────────────────── */}
+      {intel.chokepoints && intel.chokepoints.length > 0 && (
+        <GlassPanel className="p-4" glow="none">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Anchor className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+                Global Chokepoints
+              </h2>
+            </div>
+            <span className="text-[10px] text-tos-dim">
+              {intel.chokepoints.filter((cp) => cp.riskLevel === "critical").length} critical · {intel.chokepoints.length} monitored
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {intel.chokepoints.map((cp) => (
+              <div
+                key={cp.id}
+                className={`rounded-lg border px-3 py-2 ${
+                  cp.riskLevel === "critical" ? "border-rose-400/25 bg-rose-400/[0.06]" :
+                  cp.riskLevel === "high" ? "border-amber-400/20 bg-amber-400/[0.04]" :
+                  "border-white/[0.05] bg-[#0a0a0d]/90"
+                }`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-[11px] font-semibold text-tos-text">{cp.name}</span>
+                  <span className={`font-mono text-[10px] font-semibold uppercase ${
+                    cp.riskLevel === "critical" ? "text-rose-300" :
+                    cp.riskLevel === "high" ? "text-amber-200" :
+                    cp.riskLevel === "medium" ? "text-yellow-200/60" :
+                    "text-tos-dim"
+                  }`}>
+                    {cp.riskLevel}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-baseline gap-3 text-[10px] text-tos-dim">
+                  <span>{cp.region}</span>
+                  <span className="font-mono">{cp.dailyShipCount} ships/day</span>
+                  <span className="font-mono">{cp.percentageGlobalTrade}% trade</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-[9px] leading-relaxed text-tos-muted">
+                  {cp.riskFactors}
+                </p>
+              </div>
+            ))}
+          </div>
+        </GlassPanel>
+      )}
+
       {/* ─── ALT-DATA: CONFLICTS + CYBER ───────────────────────── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <GlassPanel className="p-4">
@@ -458,7 +508,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <Swords className="h-3.5 w-3.5 text-rose-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Conflict & geopolitical events
+                AXE Conflict Feed
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -498,7 +548,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <Shield className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                Cyber threat intel
+                AXE Cyber Intel
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
