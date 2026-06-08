@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, BarChart3, Eye, Landmark, TrendingUp } from "lucide-react";
+import { Activity, BarChart3, Eye, Landmark, TrendingUp, Plane, Ship, Swords, Zap, Shield } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
@@ -7,6 +7,7 @@ import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot } from "@/lib/intel/intelClient";
 import { IntelAiChat } from "@/components/intel/IntelAiChat";
+import { CorrelateButton } from "@/components/intel/CorrelateButton";
 
 const DEFAULT_SYMBOL = "XAUUSD";
 
@@ -55,6 +56,12 @@ export default async function IntelPage({ searchParams }: PageProps) {
       id: "actions",
       title: "Actions",
       items: [
+        {
+          id: "correlate",
+          label: "Make Intel Correlation",
+          description: "AI cross-feed analysis",
+          href: "#correlate",
+        },
         {
           id: "chart",
           label: "Open chart",
@@ -323,6 +330,218 @@ export default async function IntelPage({ searchParams }: PageProps) {
         </GlassPanel>
       </div>
 
+      {/* ─── ALT-DATA: CORPORATE JETS ─────────────────────────── */}
+      <GlassPanel className="p-4" glow="none">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Plane className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+              Corporate jet tracking
+            </h2>
+          </div>
+          <span className="text-[10px] text-tos-dim">
+            {intel.jets.length > 0 ? `${intel.jets.filter((j) => !j.onGround).length} airborne · ${intel.jets.length} tracked` : "Feed warming"}
+          </span>
+        </div>
+        {intel.jets.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {intel.jets
+              .filter((j) => !j.onGround)
+              .slice(0, 8)
+              .map((jet, i) => (
+                <li
+                  key={`${jet.icao24}-${i}`}
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                >
+                  <span className="font-mono text-[11px] font-semibold text-tos-text">{jet.callsign || jet.icao24}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-tos-text" title={jet.company}>
+                    {jet.company}
+                  </span>
+                  <span className="font-mono text-[10px] text-emerald-300">AIRBORNE</span>
+                  {jet.altitude != null && (
+                    <span className="font-mono text-[10px] text-tos-dim">{Math.round(jet.altitude)}m</span>
+                  )}
+                  {jet.velocity != null && (
+                    <span className="font-mono text-[10px] text-tos-dim">{Math.round(jet.velocity)}m/s</span>
+                  )}
+                </li>
+              ))}
+            {intel.jets.filter((j) => !j.onGround).length === 0 && (
+              <li className="px-1 text-xs text-tos-muted">
+                All tracked executive jets currently grounded.
+              </li>
+            )}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-tos-muted">
+            {intel.providers.find((p) => p.id === "corporateJets")?.description ?? "No corporate jet data yet."}
+          </p>
+        )}
+      </GlassPanel>
+
+      {/* ─── ALT-DATA: VESSEL TRACKING + ENERGY ────────────────── */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <GlassPanel className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Ship className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+                Supply chain & vessels
+              </h2>
+            </div>
+            <span className="text-[10px] text-tos-dim">
+              {intel.vessels.length > 0 ? `${intel.vessels.length} tracked` : "—"}
+            </span>
+          </div>
+          {intel.vessels.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {intel.vessels.slice(0, 8).map((v, i) => (
+                <li
+                  key={`${v.mmsi}-${i}`}
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                >
+                  <span className="font-mono text-[11px] font-semibold text-tos-text">
+                    {v.vesselName || v.mmsi}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[10px] text-tos-dim">{v.vesselType}</span>
+                  <span className="font-mono text-[10px] text-tos-muted">{v.region || v.destination || "—"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-tos-muted">
+              {intel.providers.find((p) => p.id === "vesselTracking")?.description ?? "No vessel data yet."}
+            </p>
+          )}
+        </GlassPanel>
+
+        <GlassPanel className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+                Energy flows
+              </h2>
+            </div>
+            <span className="text-[10px] text-tos-dim">
+              {intel.energy.length > 0 ? `${intel.energy.length} data points` : "—"}
+            </span>
+          </div>
+          {intel.energy.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {/* Deduplicate by seriesId, show latest period per series */}
+              {deduplicateEnergy(intel.energy).map((e, i) => (
+                <li
+                  key={`${e.seriesId}-${i}`}
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-tos-text">{e.seriesName}</span>
+                  <span className="font-mono text-[10px] font-semibold text-white/90">
+                    {e.value != null ? formatEnergyValue(e.value, e.unit) : "—"}
+                  </span>
+                  <span className="font-mono text-[10px] text-tos-dim">{e.period}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-tos-muted">
+              {intel.providers.find((p) => p.id === "energyFlows")?.description ?? "No energy data yet."}
+            </p>
+          )}
+        </GlassPanel>
+      </div>
+
+      {/* ─── ALT-DATA: CONFLICTS + CYBER ───────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <GlassPanel className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Swords className="h-3.5 w-3.5 text-rose-300/85" aria-hidden />
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+                Conflict & geopolitical events
+              </h2>
+            </div>
+            <span className="text-[10px] text-tos-dim">
+              {intel.conflicts.length > 0 ? `${intel.conflicts.length} events` : "—"}
+            </span>
+          </div>
+          {intel.conflicts.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {intel.conflicts.slice(0, 8).map((c, i) => (
+                <li
+                  key={`${c.eventId}-${i}`}
+                  className="flex flex-col gap-1 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                >
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-mono text-[11px] font-semibold text-tos-text">{c.country}</span>
+                    <span className="text-[10px] text-tos-dim">{c.eventDate}</span>
+                    <span className={`ml-auto font-mono text-[10px] font-semibold uppercase ${c.fatalities > 0 ? "text-rose-300" : "text-amber-200/70"}`}>
+                      {c.eventType}
+                    </span>
+                  </div>
+                  <p className="line-clamp-2 text-[10px] leading-relaxed text-tos-muted">
+                    {c.actor1 ? `${c.actor1} — ` : ""}{c.notes || c.subEventType}
+                    {c.fatalities > 0 && <span className="ml-1 text-rose-300/80">({c.fatalities} fatalities)</span>}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-tos-muted">
+              {intel.providers.find((p) => p.id === "conflictEvents")?.description ?? "No conflict data yet."}
+            </p>
+          )}
+        </GlassPanel>
+
+        <GlassPanel className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+                Cyber threat intel
+              </h2>
+            </div>
+            <span className="text-[10px] text-tos-dim">
+              {intel.cyber.length > 0 ? `${intel.cyber.length} signals` : "—"}
+            </span>
+          </div>
+          {intel.cyber.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {intel.cyber.slice(0, 8).map((t, i) => (
+                <li
+                  key={`${t.ip}-${i}`}
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                >
+                  <span className="font-mono text-[11px] font-semibold text-tos-text">{t.ip}</span>
+                  <span className="min-w-0 flex-1 truncate text-[10px] text-tos-dim">
+                    {t.name || t.category}
+                  </span>
+                  <span
+                    className={`font-mono text-[10px] font-semibold uppercase ${
+                      t.classification === "malicious" ? "text-rose-300" :
+                      t.classification === "benign" ? "text-emerald-300" :
+                      "text-amber-200/70"
+                    }`}
+                  >
+                    {t.classification || "unknown"}
+                  </span>
+                  {t.tags.length > 0 && (
+                    <span className="font-mono text-[10px] text-tos-dim">{t.tags[0]}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-tos-muted">
+              {intel.providers.find((p) => p.id === "cyberThreats")?.description ?? "No cyber threat data yet."}
+            </p>
+          )}
+        </GlassPanel>
+      </div>
+
+      {/* ─── CORRELATION ENGINE ─────────────────────────────────── */}
+      <CorrelateButton symbol={symbol} />
+
       <div className="flex flex-wrap gap-2 px-1 text-[11px]">
         <Link
           href={chatQ(
@@ -333,6 +552,14 @@ export default async function IntelPage({ searchParams }: PageProps) {
           Ask AXE about smart money
         </Link>
         <Link
+          href={chatQ(
+            `[AXE · intel]\nAnalyze all alt-data feeds: executive jets, supply chain, energy flows, conflict events and cyber threats. Find any cross-feed correlations that could affect ${symbol} or broader markets.`,
+          )}
+          className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
+        >
+          Ask AXE about alt-data
+        </Link>
+        <Link
           href="/alerts"
           className="rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 font-semibold text-tos-muted hover:bg-white/[0.08]"
         >
@@ -341,8 +568,9 @@ export default async function IntelPage({ searchParams }: PageProps) {
       </div>
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
-        AXE Intel runs through the Supabase intel-proxy. AXE serializes requests and reuses cached snapshots so one app
-        session cannot overload the runtime with repeated refreshes. Nothing here is fabricated.
+        AXE Intel runs 10 feeds through the Supabase intel-proxy — smart money (insider, congress, dark pool, options, tide)
+        and alt-data (corporate jets, vessels, conflict, energy, cyber). AXE serializes requests and reuses cached snapshots.
+        Nothing here is fabricated.
       </p>
 
       {/* AXE Intel AI — floating chat panel + FAB */}
@@ -422,6 +650,11 @@ function intelHealthLabel(id: string): string {
     senateTrades: "AXE Policy Flow",
     darkPoolPrints: "AXE Dark Pool",
     unusualOptions: "AXE Options Flow",
+    corporateJets: "AXE Jet Tracker",
+    vesselTracking: "AXE Vessel Intel",
+    conflictEvents: "AXE Conflict Feed",
+    energyFlows: "AXE Energy Flow",
+    cyberThreats: "AXE Cyber Intel",
   };
   return labels[id] ?? "AXE Intel";
 }
@@ -470,4 +703,22 @@ function formatAge(seconds: number): string {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours}h`;
   return `${Math.round(hours / 24)}d`;
+}
+
+type EnergyFlowItem = { seriesId: string; seriesName: string; period: string; value: number | null; unit: string };
+
+function deduplicateEnergy(items: EnergyFlowItem[]): EnergyFlowItem[] {
+  const seen = new Map<string, EnergyFlowItem>();
+  for (const item of items) {
+    if (!seen.has(item.seriesId)) seen.set(item.seriesId, item);
+  }
+  return Array.from(seen.values());
+}
+
+function formatEnergyValue(value: number, unit: string): string {
+  if (!Number.isFinite(value)) return "—";
+  if (unit.includes("$")) return `$${value.toFixed(2)}`;
+  if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+  if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+  return value.toFixed(1);
 }

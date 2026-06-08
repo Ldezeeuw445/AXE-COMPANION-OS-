@@ -13,7 +13,21 @@ import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 
 const INTEL_SYSTEM_PROMPT = `You are AXE INTELLIGENT AGENT — the intelligent analysis layer of AXE Companion OS.
 
-ROLE: You are a senior institutional flow analyst with access to real-time smart-money intelligence feeds. Your job is to find *actionable correlations* across insider trades, congressional activity, dark-pool block prints, unusual options flow, and broad market tide — then translate them into clear trading signals or risk warnings.
+ROLE: You are a senior institutional flow analyst with access to 10 real-time intelligence feeds — both smart-money flow and alternative data. Your job is to find *actionable correlations* across all feeds and translate them into clear trading signals or risk warnings.
+
+FEEDS (Smart Money):
+- Insider trades (Form 4 filings) — executive buying/selling
+- Congressional trades — political disclosure feeds
+- Dark-pool prints — off-exchange block trades
+- Unusual options flow — sweeps, blocks, unusual OI
+- Market tide — net call vs put premium for macro bias
+
+FEEDS (Alternative Data):
+- Corporate jet tracking (OpenSky) — executive travel patterns for top 50 C-suite jets
+- Supply chain & vessel tracking — chokepoint monitoring, Finnhub supply chain data
+- Conflict & geopolitical events (ACLED/GDELT) — armed conflicts, sanctions, military activity
+- Energy flows (EIA) — crude oil inventories, natural gas storage, WTI/Brent pricing
+- Cyber threat intelligence (GreyNoise) — network scanning, financial sector attack signals
 
 CAPABILITIES:
 - Cross-reference insider buys/sells with dark-pool volume to spot accumulation or distribution
@@ -21,6 +35,10 @@ CAPABILITIES:
 - Read options flow (sweeps, blocks, unusual OI) for directional conviction
 - Synthesize market tide (net call vs put premium) for macro bias
 - Identify ticker convergence: when multiple feeds light up the same name
+- Detect executive travel patterns that precede M&A or major announcements
+- Connect geopolitical events to energy prices and defense/commodity sector moves
+- Link supply chain disruptions to affected company flows
+- Assess cyber threats to financial infrastructure for systemic risk
 
 STYLE:
 - Concise, structured, professional. Use bullet points and headers.
@@ -30,7 +48,7 @@ STYLE:
 - Use trading shorthand: long/short, risk-on/off, accumulation/distribution.
 - Format numbers cleanly: $1.2M not $1234567.
 
-CONTEXT: The intel data below is the latest live snapshot from AXE's intel-proxy. Treat it as the ground truth.`;
+CONTEXT: The intel data below is the latest live snapshot from AXE's intel-proxy (10 feeds). Treat it as the ground truth.`;
 
 function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>): string {
   const sections: string[] = [];
@@ -85,6 +103,50 @@ function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>)
       )
       .join("\n");
     sections.push(`## UNUSUAL OPTIONS FLOW\n${rows}`);
+  }
+
+  // Alt-data feeds
+  if (intel.jets?.length > 0) {
+    const airborne = intel.jets.filter((j) => !j.onGround);
+    const rows = airborne.length > 0
+      ? airborne.slice(0, 10).map(
+          (j) => `- ${j.company}: ${j.callsign || j.icao24} | alt: ${j.altitude ? Math.round(j.altitude) + "m" : "?"} | vel: ${j.velocity ? Math.round(j.velocity) + "m/s" : "?"} | from: ${j.originCountry || "?"}`
+        ).join("\n")
+      : `- All ${intel.jets.length} tracked executive jets are currently grounded`;
+    sections.push(`## CORPORATE JET TRACKING (${airborne.length} airborne / ${intel.jets.length} tracked)\n${rows}`);
+  }
+
+  if (intel.vessels?.length > 0) {
+    const rows = intel.vessels.slice(0, 10).map(
+      (v) => `- ${v.vesselName}: ${v.vesselType} | region: ${v.region || v.destination || "unknown"}`
+    ).join("\n");
+    sections.push(`## SUPPLY CHAIN & VESSEL TRACKING (${intel.vessels.length} entries)\n${rows}`);
+  }
+
+  if (intel.conflicts?.length > 0) {
+    const rows = intel.conflicts.slice(0, 10).map(
+      (c) => `- ${c.country} (${c.eventDate}): ${c.eventType} — ${c.actor1 ? c.actor1 + ": " : ""}${c.notes.slice(0, 150)}${c.fatalities > 0 ? ` [${c.fatalities} fatalities]` : ""}`
+    ).join("\n");
+    sections.push(`## CONFLICT & GEOPOLITICAL (${intel.conflicts.length} events)\n${rows}`);
+  }
+
+  if (intel.energy?.length > 0) {
+    const seen = new Set<string>();
+    const rows = intel.energy.filter((e) => {
+      if (seen.has(e.seriesId)) return false;
+      seen.add(e.seriesId);
+      return true;
+    }).map(
+      (e) => `- ${e.seriesName}: ${e.value != null ? e.value.toFixed(2) : "?"} ${e.unit} (${e.period})`
+    ).join("\n");
+    sections.push(`## ENERGY FLOWS (EIA)\n${rows}`);
+  }
+
+  if (intel.cyber?.length > 0) {
+    const rows = intel.cyber.slice(0, 10).map(
+      (t) => `- ${t.ip}: ${t.classification} — ${t.name || t.category}${t.tags.length > 0 ? ` [${t.tags.join(", ")}]` : ""}`
+    ).join("\n");
+    sections.push(`## CYBER THREAT INTELLIGENCE (${intel.cyber.length} signals)\n${rows}`);
   }
 
   if (sections.length === 0) {
