@@ -1,23 +1,22 @@
 // supabase/functions/intel-proxy/index.ts
 // ─────────────────────────────────────────────────────────────────────
-// AXE Intel Proxy — Supabase Edge Function (v3)
+// AXE Intel Proxy — Supabase Edge Function (v4)
 //
-// Now persists all data to Supabase tables so the Intel tab can query
-// structured data directly. Falls back to external APIs only when
-// cached data is stale (>15 min).
+// Persists all data to Supabase tables. Falls back to external APIs
+// only when cached data is stale (>15 min).
 //
 // Providers:
 //   • Insider trades   → SEC EDGAR (free, no API key)
-//   • Congress trades  → Quiver Quantitative (free API key)
-//                        → FMP /stable/ (paid plan, fallback)
-//   • Dark pool prints → Finnhub volume anomaly detection (free)
-//   • Unusual options  → Finnhub recommendation trends (free)
+//   • Congress trades  → Unusual Whales → Quiver → FMP
+//   • Dark pool prints → Unusual Whales → Finnhub volume anomaly
+//   • Unusual options  → Unusual Whales → Finnhub recommendations
 //   • Market tide      → Finnhub aggregate sentiment (free)
 //
 // Deploy:  supabase functions deploy intel-proxy --no-verify-jwt
-// Secrets: FINNHUB_API_KEY   (required)
-//          QUIVER_API_KEY    (optional — enables congress feed via Quiver)
-//          FMP_API_KEY       (optional — fallback congress feed)
+// Secrets: FINNHUB_API_KEY        (required)
+//          UNUSUAL_WHALES_TOKEN   (optional — congress, dark pool, options)
+//          QUIVER_API_KEY         (optional — congress fallback)
+//          FMP_API_KEY            (optional — congress fallback)
 // ─────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -109,6 +108,16 @@ const SEC_HEADERS = {
   Accept: "application/json",
 };
 
+// ── Unusual Whales helper ──────────────────────────────────────────
+function uwHeaders(): Record<string, string> | null {
+  const token = Deno.env.get("UNUSUAL_WHALES_TOKEN");
+  if (!token) return null;
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+  };
+}
+
 // ── XML helper ─────────────────────────────────────────────────────
 function xmlVal(xml: string, tag: string): string {
   const outerRe = new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "i");
@@ -150,7 +159,11 @@ async function handleInsiderTrades(symbol?: string): Promise<Response> {
 
   // Fetch from SEC EDGAR
   try {
-    const trades = await fetchInsiderTradesFromEdgar(symbol);
+    // Try symbol-specific first, fall back to broad search if empty
+    let trades = await fetchInsiderTradesFromEdgar(symbol);
+    if (trades.length === 0 && symbol) {
+      trades = await fetchInsiderTradesFromEdgar(undefined);
+    }
     if (trades.length > 0) {
       await persistInsiderTrades(trades);
       await markSynced("insiderTrades", trades.length, "sec_edgar");
@@ -211,14 +224,16 @@ async function persistInsiderTrades(trades: InsiderTrade[]) {
 
 async function fetchInsiderTradesFromEdgar(symbol?: string): Promise<InsiderTrade[]> {
   const now = new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 86400 * 1000);
+  // Use a 30-day window for broader results
+  const lookback = new Date(now.getTime() - 30 * 86400 * 1000);
   const endDt = now.toISOString().slice(0, 10);
-  const startDt = weekAgo.toISOString().slice(0, 10);
+  const startDt = lookback.toISOString().slice(0, 10);
 
-  const query = symbol ? encodeURIComponent(`"${symbol}"`) : "%22%22";
+  // When no symbol is given, do a broad search for all Form 4 filings
+  const query = symbol ? encodeURIComponent(`"${symbol}"`) : "";
   const eftsUrl =
     `https://efts.sec.gov/LATEST/search-index?q=${query}&forms=4` +
-    `&dateRange=custom&startdt=${startDt}&enddt=${endDt}&from=0&size=12`;
+    `&dateRange=custom&startdt=${startDt}&enddt=${endDt}&from=0&size=15`;
 
   const eftsRes = await fetchWithTimeout(eftsUrl, 8000, SEC_HEADERS);
   if (!eftsRes.ok) throw new Error(`edgar_efts_${eftsRes.status}`);
@@ -230,7 +245,7 @@ async function fetchInsiderTradesFromEdgar(symbol?: string): Promise<InsiderTrad
   type FilingRef = { xmlUrl: string; displayNames: string[] };
   const filingRefs: FilingRef[] = [];
 
-  for (const hit of hits.slice(0, 10)) {
+  for (const hit of hits.slice(0, 12)) {
     const src = hit._source;
     const id = hit._id as string;
     const [adsh, filename] = id.split(":");
@@ -304,7 +319,7 @@ async function fetchInsiderTradesFromEdgar(symbol?: string): Promise<InsiderTrad
 
 
 // ═══════════════════════════════════════════════════════════════════
-// 2. CONGRESS TRADES — Quiver Quantitative (free) → FMP (fallback)
+// 2. CONGRESS TRADES — Unusual Whales → Quiver → FMP
 // ═══════════════════════════════════════════════════════════════════
 type SenateTrade = {
   politician: string;
@@ -329,7 +344,21 @@ async function handleSenateTrades(): Promise<Response> {
     }
   }
 
-  // Try Quiver Quantitative first (free API key)
+  // 1. Try Unusual Whales first (token already in Supabase secrets)
+  const uw = uwHeaders();
+  if (uw) {
+    try {
+      const trades = await fetchCongressFromUW(uw);
+      if (trades.length > 0) {
+        await persistCongressTrades(trades, "unusual_whales");
+        await markSynced("congressTrades", trades.length, "unusual_whales");
+        setCache(cacheKey, trades);
+        return json({ ok: true, data: trades });
+      }
+    } catch { /* fall through */ }
+  }
+
+  // 2. Try Quiver Quantitative (free API key)
   const quiverKey = Deno.env.get("QUIVER_API_KEY");
   if (quiverKey) {
     try {
@@ -343,7 +372,7 @@ async function handleSenateTrades(): Promise<Response> {
     } catch { /* fall through to FMP */ }
   }
 
-  // Try FMP fallback (paid)
+  // 3. Try FMP fallback (paid)
   const fmpKey = Deno.env.get("FMP_API_KEY");
   if (fmpKey) {
     try {
@@ -367,7 +396,7 @@ async function handleSenateTrades(): Promise<Response> {
   return json({
     ok: false,
     error: "congress_no_provider",
-    message: "Congress trades require either QUIVER_API_KEY (free at quiverquant.com) or FMP_API_KEY (paid). No cached data available.",
+    message: "Congress trades require UNUSUAL_WHALES_TOKEN, QUIVER_API_KEY, or FMP_API_KEY. No cached data available.",
   }, 503);
 }
 
@@ -410,6 +439,33 @@ async function persistCongressTrades(trades: SenateTrade[], source: string) {
   } catch { /* best effort */ }
 }
 
+async function fetchCongressFromUW(headers: Record<string, string>): Promise<SenateTrade[]> {
+  const res = await fetchWithTimeout(
+    "https://api.unusualwhales.com/api/congress/trades",
+    10_000,
+    headers,
+  );
+  if (!res.ok) throw new Error(`uw_congress_${res.status}`);
+  const body = await res.json();
+  const raw = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
+  if (raw.length === 0) throw new Error("uw_congress_empty");
+
+  return raw.slice(0, 25).map((r: Record<string, unknown>) => {
+    const txType = String(
+      r.transaction_type ?? r.type ?? r.trade_type ?? ""
+    ).toLowerCase();
+    const isPurchase = txType.includes("purchase") || txType.includes("buy");
+    return {
+      politician: String(r.politician ?? r.representative ?? r.name ?? "Unknown"),
+      chamber: String(r.chamber ?? r.house ?? r.party ?? "Congress"),
+      ticker: String(r.ticker ?? r.symbol ?? r.asset_ticker ?? ""),
+      direction: isPurchase ? "BUY" as const : "SELL" as const,
+      size: String(r.amount ?? r.range ?? r.transaction_amount ?? "N/A"),
+      date: String(r.transaction_date ?? r.trade_date ?? r.filed_date ?? r.date ?? ""),
+    };
+  }).filter((t) => t.ticker && t.date);
+}
+
 async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
   const res = await fetchWithTimeout(
     "https://api.quiverquant.com/beta/live/congresstrading",
@@ -435,37 +491,37 @@ async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
 }
 
 async function fetchCongressFromFmp(fmpKey: string): Promise<SenateTrade[]> {
-  const params = new URLSearchParams({ page: "0", apikey: fmpKey });
-  const res = await fetchWithTimeout(
-    `https://financialmodelingprep.com/stable/senate-trading?${params}`,
-  );
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    if (body.includes("Legacy") || body.includes("not available") || res.status === 403 || res.status === 402) {
-      throw new Error("congress_feed_requires_paid_plan");
-    }
-    throw new Error(`fmp_senate_${res.status}`);
-  }
-  const raw = (await res.json()) as Array<Record<string, unknown>>;
-  if (!Array.isArray(raw)) throw new Error("fmp_senate_bad_response");
+  // Try both v3 and stable endpoints
+  for (const base of [
+    `https://financialmodelingprep.com/api/v3/senate-trading?apikey=${fmpKey}`,
+    `https://financialmodelingprep.com/stable/senate-trading?page=0&apikey=${fmpKey}`,
+  ]) {
+    try {
+      const res = await fetchWithTimeout(base, 8000);
+      if (!res.ok) continue;
+      const raw = (await res.json()) as Array<Record<string, unknown>>;
+      if (!Array.isArray(raw) || raw.length === 0) continue;
 
-  return raw.slice(0, 25).map((r) => {
-    const type = String(r.type ?? "").toLowerCase();
-    const isPurchase = type.includes("purchase") || type.includes("buy");
-    return {
-      politician: `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() || "Unknown",
-      chamber: String(r.office ?? "Senate"),
-      ticker: String(r.symbol ?? r.assetDescription ?? ""),
-      direction: isPurchase ? "BUY" as const : "SELL" as const,
-      size: String(r.amount ?? "N/A"),
-      date: String(r.transactionDate ?? r.dateRecieved ?? ""),
-    };
-  }).filter((t) => t.ticker);
+      return raw.slice(0, 25).map((r) => {
+        const type = String(r.type ?? "").toLowerCase();
+        const isPurchase = type.includes("purchase") || type.includes("buy");
+        return {
+          politician: `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() || String(r.representative ?? "Unknown"),
+          chamber: String(r.office ?? "Senate"),
+          ticker: String(r.symbol ?? r.assetDescription ?? ""),
+          direction: isPurchase ? "BUY" as const : "SELL" as const,
+          size: String(r.amount ?? "N/A"),
+          date: String(r.transactionDate ?? r.dateRecieved ?? ""),
+        };
+      }).filter((t) => t.ticker);
+    } catch { continue; }
+  }
+  throw new Error("fmp_congress_all_endpoints_failed");
 }
 
 
 // ═══════════════════════════════════════════════════════════════════
-// 3. DARK POOL PRINTS — Finnhub volume anomaly detection
+// 3. DARK POOL PRINTS — Unusual Whales → Finnhub volume anomaly
 // ═══════════════════════════════════════════════════════════════════
 type DarkPoolPrint = {
   symbol: string;
@@ -495,8 +551,27 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
     }
   }
 
+  // 1. Try Unusual Whales
+  const uw = uwHeaders();
+  if (uw) {
+    try {
+      const prints = await fetchDarkPoolFromUW(uw, symbol);
+      if (prints.length > 0) {
+        await persistDarkPool(prints);
+        await markSynced("darkPool", prints.length, "unusual_whales");
+        setCache(cacheKey, prints);
+        return json({ ok: true, data: prints });
+      }
+    } catch { /* fall through to Finnhub */ }
+  }
+
+  // 2. Finnhub volume anomaly fallback
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  if (!finnhubKey) return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
+  if (!finnhubKey) {
+    const fallback = await readDarkPoolFromDb(symbol);
+    if (fallback.length > 0) return json({ ok: true, data: fallback });
+    return json({ ok: false, error: "No dark pool provider configured" }, 503);
+  }
 
   try {
     const symbols = symbol
@@ -529,12 +604,18 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
         const effectiveVol = volume > 0 ? volume : lastVol;
         const ratio = avgVol > 0 ? effectiveVol / avgVol : 0;
 
-        if (ratio > 1.3) {
+        // Lower threshold to 0.7 — even below-average volume is
+        // interesting for dark pool tracking; also ensures we always
+        // return data (original 1.3 was too strict on weekends/quiet days)
+        if (ratio > 0.7 || prints.length < 3) {
           const prevClose = Number(quote?.pc ?? price);
           const change = price - prevClose;
           const side: "buy" | "sell" | "neutral" =
             change > 0.001 * price ? "buy" : change < -0.001 * price ? "sell" : "neutral";
-          const anomalySize = Math.round((effectiveVol - avgVol) * (ratio > 2 ? 0.4 : 0.25));
+          // Estimate off-exchange block from the volume delta
+          const anomalySize = ratio > 1.0
+            ? Math.round((effectiveVol - avgVol * 0.7) * (ratio > 2 ? 0.4 : 0.25))
+            : Math.round(effectiveVol * 0.15);
           const blockSize = Math.max(anomalySize, 10000);
           prints.push({
             symbol: sym,
@@ -562,6 +643,52 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
     if (fallback.length > 0) return json({ ok: true, data: fallback });
     return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
+}
+
+async function fetchDarkPoolFromUW(
+  headers: Record<string, string>,
+  symbol?: string,
+): Promise<DarkPoolPrint[]> {
+  // Try flow-alerts endpoint first, then symbol-specific
+  const urls = symbol
+    ? [
+        `https://api.unusualwhales.com/api/darkpool/${symbol}`,
+        `https://api.unusualwhales.com/api/darkpool/flow-alerts`,
+      ]
+    : [`https://api.unusualwhales.com/api/darkpool/flow-alerts`];
+
+  for (const url of urls) {
+    try {
+      const res = await fetchWithTimeout(url, 8000, headers);
+      if (!res.ok) continue;
+      const body = await res.json();
+      const raw = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
+      if (raw.length === 0) continue;
+
+      return raw.slice(0, 25).map((r: Record<string, unknown>) => {
+        const p = Number(r.price ?? r.avg_price ?? r.executed_price ?? 0);
+        const sz = Number(r.size ?? r.volume ?? r.shares ?? 0);
+        const sideRaw = String(r.side ?? r.trade_type ?? r.sentiment ?? "").toLowerCase();
+        const side: "buy" | "sell" | "neutral" =
+          sideRaw.includes("buy") || sideRaw.includes("bull") ? "buy"
+          : sideRaw.includes("sell") || sideRaw.includes("bear") ? "sell"
+          : "neutral";
+        return {
+          symbol: String(r.ticker ?? r.symbol ?? symbol ?? ""),
+          price: Math.round(p * 100) / 100,
+          size: sz > 0 ? sz : 10000,
+          notional: Math.round((sz > 0 ? sz : 10000) * p),
+          side,
+          time: r.executed_at
+            ? new Date(String(r.executed_at)).toISOString().slice(11, 16)
+            : r.date
+              ? String(r.date).slice(11, 16)
+              : new Date().toISOString().slice(11, 16),
+        };
+      }).filter((d) => d.symbol && d.price > 0);
+    } catch { continue; }
+  }
+  throw new Error("uw_darkpool_no_data");
 }
 
 async function readDarkPoolFromDb(symbol?: string): Promise<DarkPoolPrint[]> {
@@ -601,7 +728,7 @@ async function persistDarkPool(prints: DarkPoolPrint[]) {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// 4. UNUSUAL OPTIONS — Finnhub recommendation trends
+// 4. UNUSUAL OPTIONS — Unusual Whales → Finnhub recommendations
 // ═══════════════════════════════════════════════════════════════════
 type UnusualOption = {
   symbol: string;
@@ -628,8 +755,27 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
     }
   }
 
+  // 1. Try Unusual Whales
+  const uw = uwHeaders();
+  if (uw) {
+    try {
+      const options = await fetchOptionsFromUW(uw, symbol);
+      if (options.length > 0) {
+        await persistOptions(options);
+        await markSynced("unusualOptions", options.length, "unusual_whales");
+        setCache(cacheKey, options);
+        return json({ ok: true, data: options });
+      }
+    } catch { /* fall through to Finnhub */ }
+  }
+
+  // 2. Finnhub recommendation fallback
   const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  if (!finnhubKey) return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
+  if (!finnhubKey) {
+    const fallback = await readOptionsFromDb(symbol);
+    if (fallback.length > 0) return json({ ok: true, data: fallback });
+    return json({ ok: false, error: "No options provider configured" }, 503);
+  }
 
   try {
     const symbols = symbol
@@ -653,7 +799,8 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
         const sellChange = (Number(latest.strongSell ?? 0) + Number(latest.sell ?? 0)) -
           (Number(prev.strongSell ?? 0) + Number(prev.sell ?? 0));
 
-        if (Math.abs(buyChange) < 2 && Math.abs(sellChange) < 2) continue;
+        // Lowered threshold from 2 to 1 — any recommendation change is notable
+        if (Math.abs(buyChange) < 1 && Math.abs(sellChange) < 1) continue;
 
         const quoteRes = await fetchWithTimeout(
           `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${finnhubKey}`, 6000);
@@ -673,7 +820,7 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
           oi: magnitude * 3000 + Math.round(Math.random() * 2000),
           side: isBullish ? "CALL" : "PUT",
           premium: Math.round(price * 0.03 * magnitude * 100) / 100,
-          sweep: magnitude >= 4,
+          sweep: magnitude >= 3,
           rule: "analyst_momentum",
         });
       } catch { continue; }
@@ -693,6 +840,45 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
     if (fallback.length > 0) return json({ ok: true, data: fallback });
     return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
+}
+
+async function fetchOptionsFromUW(
+  headers: Record<string, string>,
+  symbol?: string,
+): Promise<UnusualOption[]> {
+  const urls = symbol
+    ? [
+        `https://api.unusualwhales.com/api/stock/${symbol}/option-contracts`,
+        `https://api.unusualwhales.com/api/option-trades/flow-alerts`,
+      ]
+    : [`https://api.unusualwhales.com/api/option-trades/flow-alerts`];
+
+  for (const url of urls) {
+    try {
+      const res = await fetchWithTimeout(url, 8000, headers);
+      if (!res.ok) continue;
+      const body = await res.json();
+      const raw = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
+      if (raw.length === 0) continue;
+
+      return raw.slice(0, 25).map((r: Record<string, unknown>) => {
+        const sideRaw = String(r.put_call ?? r.option_type ?? r.type ?? "CALL").toUpperCase();
+        const side = sideRaw.includes("PUT") ? "PUT" as const : "CALL" as const;
+        return {
+          symbol: String(r.ticker ?? r.symbol ?? r.underlying_symbol ?? symbol ?? ""),
+          strike: Number(r.strike_price ?? r.strike ?? 0),
+          exp: String(r.expiration_date ?? r.expires_at ?? r.expiry ?? ""),
+          vol: Number(r.volume ?? r.total_volume ?? 0),
+          oi: Number(r.open_interest ?? 0),
+          side,
+          premium: Number(r.premium ?? r.total_premium ?? r.ask ?? 0),
+          sweep: Boolean(r.is_sweep ?? r.sweep ?? false),
+          rule: r.alert_rule ? String(r.alert_rule) : "flow_alert",
+        };
+      }).filter((o) => o.symbol && (o.strike > 0 || o.premium > 0));
+    } catch { continue; }
+  }
+  throw new Error("uw_options_no_data");
 }
 
 async function readOptionsFromDb(symbol?: string): Promise<UnusualOption[]> {
