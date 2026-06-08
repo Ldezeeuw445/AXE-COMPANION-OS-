@@ -14,7 +14,12 @@ export type IntelProviderStatus = {
     | "senateTrades"
     | "darkPoolPrints"
     | "unusualOptions"
-    | "marketTide";
+    | "marketTide"
+    | "corporateJets"
+    | "vesselTracking"
+    | "conflictEvents"
+    | "energyFlows"
+    | "cyberThreats";
   label: string;
   state: IntelProviderState;
   description?: string;
@@ -69,6 +74,76 @@ export type MarketTide = {
   bias: "bullish" | "bearish" | "neutral";
 };
 
+/* ── Alt-Data Types ───────────────────────────────────────────────── */
+
+export type CorporateJet = {
+  icao24: string;
+  callsign: string;
+  company: string;
+  originCountry: string;
+  latitude: number | null;
+  longitude: number | null;
+  altitude: number | null;
+  velocity: number | null;
+  onGround: boolean;
+};
+
+export type VesselTrack = {
+  mmsi: string;
+  vesselName: string;
+  vesselType: string;
+  latitude: number | null;
+  longitude: number | null;
+  speed: number | null;
+  course: number | null;
+  destination: string;
+  region: string;
+};
+
+export type ConflictEvent = {
+  eventId: string;
+  eventDate: string;
+  country: string;
+  region: string;
+  eventType: string;
+  subEventType: string;
+  actor1: string;
+  fatalities: number;
+  notes: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+export type EnergyFlow = {
+  seriesId: string;
+  seriesName: string;
+  period: string;
+  value: number | null;
+  unit: string;
+};
+
+export type CyberThreat = {
+  ip: string;
+  classification: string;
+  name: string;
+  noise: boolean;
+  riot: boolean;
+  lastSeen: string;
+  tags: string[];
+  category: string;
+};
+
+export type IntelCorrelation = {
+  id: string;
+  title: string;
+  summary: string;
+  confidence: "high" | "medium" | "low";
+  signal: string | null;
+  feedsUsed: string[];
+  symbols: string[];
+  createdAt: string;
+};
+
 export type IntelSnapshot = {
   generatedAt: string;
   insiders: InsiderTrade[];
@@ -76,6 +151,12 @@ export type IntelSnapshot = {
   darkPool: DarkPoolPrint[];
   options: UnusualOption[];
   tide: MarketTide | null;
+  /* Alt-data feeds */
+  jets: CorporateJet[];
+  vessels: VesselTrack[];
+  conflicts: ConflictEvent[];
+  energy: EnergyFlow[];
+  cyber: CyberThreat[];
   providers: IntelProviderStatus[];
   hasLiveData: boolean;
   cache: {
@@ -90,7 +171,12 @@ type IntelAction =
   | "senateTrades"
   | "darkPoolPrints"
   | "unusualOptions"
-  | "marketTide";
+  | "marketTide"
+  | "corporateJets"
+  | "vesselTracking"
+  | "conflictEvents"
+  | "energyFlows"
+  | "cyberThreats";
 
 type IntelEnvelope<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -218,13 +304,29 @@ async function fetchIntelSnapshot(
   const optionsRes = await callIntelProxy<UnusualOption[]>("unusualOptions", args);
   const tideRes = await callIntelProxy<MarketTide | null>("marketTide", {});
 
+  // Alt-data feeds — these are independent of each other so failures in one
+  // don't block the rest. Each has its own fallback chain (API → DB → empty).
+  const jetsRes = await callIntelProxy<CorporateJet[]>("corporateJets", {});
+  const vesselRes = await callIntelProxy<VesselTrack[]>("vesselTracking", {});
+  const conflictRes = await callIntelProxy<ConflictEvent[]>("conflictEvents", {});
+  const energyRes = await callIntelProxy<EnergyFlow[]>("energyFlows", {});
+  const cyberRes = await callIntelProxy<CyberThreat[]>("cyberThreats", {});
+
   const insiders = insiderRes.ok && Array.isArray(insiderRes.data) ? insiderRes.data : [];
   const senate = senateRes.ok && Array.isArray(senateRes.data) ? senateRes.data : [];
   const darkPool = darkPoolRes.ok && Array.isArray(darkPoolRes.data) ? darkPoolRes.data : [];
   const options = optionsRes.ok && Array.isArray(optionsRes.data) ? optionsRes.data : [];
   const tide = tideRes.ok && tideRes.data ? tideRes.data : null;
-  const hadError = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes].some((r) => !r.ok);
-  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide);
+
+  const jets = jetsRes.ok && Array.isArray(jetsRes.data) ? jetsRes.data : [];
+  const vessels = vesselRes.ok && Array.isArray(vesselRes.data) ? vesselRes.data : [];
+  const conflicts = conflictRes.ok && Array.isArray(conflictRes.data) ? conflictRes.data : [];
+  const energy = energyRes.ok && Array.isArray(energyRes.data) ? energyRes.data : [];
+  const cyber = cyberRes.ok && Array.isArray(cyberRes.data) ? cyberRes.data : [];
+
+  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, conflictRes, energyRes, cyberRes];
+  const hadError = allResults.some((r) => !r.ok);
+  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || conflicts.length || energy.length || cyber.length);
 
   if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
     return markCache(
@@ -271,6 +373,41 @@ async function fetchIntelSnapshot(
       tideRes.ok && tide != null,
       tideRes.ok ? undefined : tideRes.error,
     ),
+    toStatus(
+      "corporateJets",
+      "Corporate jets",
+      "AXE Intel executive jet tracking (OpenSky)",
+      jetsRes.ok && jets.length > 0,
+      jetsRes.ok ? undefined : jetsRes.error,
+    ),
+    toStatus(
+      "vesselTracking",
+      "Vessel tracking",
+      "AXE Intel supply chain & chokepoint monitoring",
+      vesselRes.ok && vessels.length > 0,
+      vesselRes.ok ? undefined : vesselRes.error,
+    ),
+    toStatus(
+      "conflictEvents",
+      "Conflict events",
+      "AXE Intel geopolitical conflict feed (ACLED/GDELT)",
+      conflictRes.ok && conflicts.length > 0,
+      conflictRes.ok ? undefined : conflictRes.error,
+    ),
+    toStatus(
+      "energyFlows",
+      "Energy flows",
+      "AXE Intel oil/gas inventory & pricing (EIA)",
+      energyRes.ok && energy.length > 0,
+      energyRes.ok ? undefined : energyRes.error,
+    ),
+    toStatus(
+      "cyberThreats",
+      "Cyber threats",
+      "AXE Intel network scanning intelligence (GreyNoise)",
+      cyberRes.ok && cyber.length > 0,
+      cyberRes.ok ? undefined : cyberRes.error,
+    ),
   ];
 
   const snapshot: IntelSnapshot = {
@@ -280,6 +417,11 @@ async function fetchIntelSnapshot(
     darkPool,
     options,
     tide,
+    jets,
+    vessels,
+    conflicts,
+    energy,
+    cyber,
     providers,
     hasLiveData,
     cache: {

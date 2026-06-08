@@ -19,7 +19,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { X, Send } from "lucide-react";
+import { X, Send, Save } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -417,6 +417,9 @@ function MessageBubble({ message }: { message: Message }) {
         </div>
         <div className="rounded-2xl rounded-tl-md bg-white/[0.03] border border-white/[0.06] px-4 py-3">
           <AssistantContent content={message.content} />
+          {message.content.length > 20 && (
+            <SaveToVaultButton content={message.content} />
+          )}
         </div>
       </div>
     </div>
@@ -486,6 +489,49 @@ function AssistantContent({ content }: { content: string }) {
         );
       })}
     </div>
+  );
+}
+
+/* ── Save to Vault button for assistant messages ─────────────────── */
+
+function SaveToVaultButton({ content }: { content: string }) {
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = useCallback(async () => {
+    if (saving || saved) return;
+    setSaving(true);
+
+    try {
+      const res = await fetch("/api/vault/save-axe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content,
+          title: "AXE Intel Analysis",
+        }),
+      });
+      if (res.ok) setSaved(true);
+    } catch {
+      /* silent */
+    } finally {
+      setSaving(false);
+    }
+  }, [content, saving, saved]);
+
+  return (
+    <button
+      onClick={handleSave}
+      disabled={saving || saved}
+      className={`mt-2 flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider transition-all ${
+        saved
+          ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+          : "border-white/[0.08] bg-white/[0.03] text-white/40 hover:bg-white/[0.06] hover:text-white/60"
+      }`}
+    >
+      <Save className="h-3 w-3" />
+      {saved ? "Saved to Vault" : saving ? "Saving..." : "Save to Vault"}
+    </button>
   );
 }
 
