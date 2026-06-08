@@ -1,22 +1,33 @@
 -- AXE Companion: MetaApi cloud MT5 columns + broker_trades dedupe key.
 -- Apply in Supabase SQL editor or via CLI. Safe to re-run (IF NOT EXISTS).
+-- Wrapped in DO blocks: skips gracefully if tables don't exist yet.
 
-alter table public.user_broker_accounts
-  add column if not exists connection_method text,
-  add column if not exists external_connection_id text,
-  add column if not exists provider_status text,
-  add column if not exists last_sync_at timestamptz,
-  add column if not exists masked_login text,
-  add column if not exists metadata jsonb default '{}'::jsonb;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_broker_accounts') THEN
+    ALTER TABLE public.user_broker_accounts
+      ADD COLUMN IF NOT EXISTS connection_method text,
+      ADD COLUMN IF NOT EXISTS external_connection_id text,
+      ADD COLUMN IF NOT EXISTS provider_status text,
+      ADD COLUMN IF NOT EXISTS last_sync_at timestamptz,
+      ADD COLUMN IF NOT EXISTS masked_login text,
+      ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;
 
-comment on column public.user_broker_accounts.connection_method is 'e.g. cloud_mt5, token_ingest';
-comment on column public.user_broker_accounts.external_connection_id is 'MetaApi trading account id (server-side only in env)';
+    COMMENT ON COLUMN public.user_broker_accounts.connection_method IS 'e.g. cloud_mt5, token_ingest';
+    COMMENT ON COLUMN public.user_broker_accounts.external_connection_id IS 'MetaApi trading account id (server-side only in env)';
+  END IF;
+END $$;
 
-alter table public.broker_trades
-  add column if not exists external_trade_id text,
-  add column if not exists raw jsonb;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'broker_trades') THEN
+    ALTER TABLE public.broker_trades
+      ADD COLUMN IF NOT EXISTS external_trade_id text,
+      ADD COLUMN IF NOT EXISTS raw jsonb;
 
--- Dedupe MetaApi sync rows per companion account (partial: nulls allowed for legacy ingest).
-create unique index if not exists broker_trades_account_id_external_trade_id_uidx
-  on public.broker_trades (account_id, external_trade_id)
-  where external_trade_id is not null;
+    -- Dedupe MetaApi sync rows per companion account (partial: nulls allowed for legacy ingest).
+    CREATE UNIQUE INDEX IF NOT EXISTS broker_trades_account_id_external_trade_id_uidx
+      ON public.broker_trades (account_id, external_trade_id)
+      WHERE external_trade_id IS NOT NULL;
+  END IF;
+END $$;

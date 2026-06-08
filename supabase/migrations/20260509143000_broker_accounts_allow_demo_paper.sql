@@ -5,13 +5,19 @@
 -- (connection_method='demo_paper'). This loosens the constraint so the
 -- ensureDemoAccount() insert in src/lib/broker/demoAccount.ts succeeds for
 -- every authenticated user.
+-- Wrapped in DO block: skips gracefully if table doesn't exist yet.
 
-alter table public.user_broker_accounts
-  drop constraint if exists user_broker_accounts_connection_method_check;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_broker_accounts') THEN
+    ALTER TABLE public.user_broker_accounts
+      DROP CONSTRAINT IF EXISTS user_broker_accounts_connection_method_check;
 
-alter table public.user_broker_accounts
-  add constraint user_broker_accounts_connection_method_check
-  check (connection_method = any (array['cloud_mt5'::text, 'local_bridge'::text, 'demo_paper'::text]));
+    ALTER TABLE public.user_broker_accounts
+      ADD CONSTRAINT user_broker_accounts_connection_method_check
+      CHECK (connection_method = ANY (ARRAY['cloud_mt5'::text, 'local_bridge'::text, 'demo_paper'::text]));
 
-comment on column public.user_broker_accounts.connection_method is
-  'cloud_mt5 (MetaApi), local_bridge (legacy ingest), demo_paper (AXE virtual paper)';
+    COMMENT ON COLUMN public.user_broker_accounts.connection_method IS
+      'cloud_mt5 (MetaApi), local_bridge (legacy ingest), demo_paper (AXE virtual paper)';
+  END IF;
+END $$;
