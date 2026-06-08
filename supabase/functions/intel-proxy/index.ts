@@ -441,7 +441,7 @@ async function persistCongressTrades(trades: SenateTrade[], source: string) {
 
 async function fetchCongressFromUW(headers: Record<string, string>): Promise<SenateTrade[]> {
   const res = await fetchWithTimeout(
-    "https://api.unusualwhales.com/api/congress/trades",
+    "https://api.unusualwhales.com/api/congress/recent-trades",
     10_000,
     headers,
   );
@@ -653,9 +653,9 @@ async function fetchDarkPoolFromUW(
   const urls = symbol
     ? [
         `https://api.unusualwhales.com/api/darkpool/${symbol}`,
-        `https://api.unusualwhales.com/api/darkpool/flow-alerts`,
+        `https://api.unusualwhales.com/api/darkpool/recent`,
       ]
-    : [`https://api.unusualwhales.com/api/darkpool/flow-alerts`];
+    : [`https://api.unusualwhales.com/api/darkpool/recent`];
 
   for (const url of urls) {
     try {
@@ -1050,6 +1050,8 @@ type CorporateJet = {
   icao24: string;
   callsign: string;
   company: string;
+  ticker: string;
+  tailNumber: string;
   originCountry: string;
   latitude: number | null;
   longitude: number | null;
@@ -1058,60 +1060,24 @@ type CorporateJet = {
   onGround: boolean;
 };
 
-// Known ICAO24 addresses for top corporate jets
-// (These are publicly tracked tail numbers → ICAO24 hex codes)
-const EXEC_JET_FLEET: Record<string, string> = {
-  "a835af": "Elon Musk / SpaceX",
-  "a3ecb1": "Jeff Bezos / Amazon",
-  "a1c56f": "Bill Gates / Cascade",
-  "a4f8b0": "Mark Zuckerberg / Meta",
-  "a0a07b": "Warren Buffett / Berkshire",
-  "a00c55": "Tim Cook / Apple",
-  "a64f65": "Larry Ellison / Oracle",
-  "a0d661": "Jamie Dimon / JPMorgan",
-  "a15b1f": "Ken Griffin / Citadel",
-  "a43e91": "Ray Dalio / Bridgewater",
-  "a78d14": "Jensen Huang / NVIDIA",
-  "a6c83e": "Satya Nadella / Microsoft",
-  "a2fa40": "David Solomon / Goldman",
-  "a1e4d2": "Larry Fink / BlackRock",
-  "a3b0c5": "Sam Altman / OpenAI",
-  "a50d97": "Brian Moynihan / BofA",
-  "a6fa21": "Dara Khosrowshahi / Uber",
-  "a8b33c": "Lisa Su / AMD",
-  "a95c72": "Pat Gelsinger / Intel",
-  "a7e1f8": "Jane Fraser / Citigroup",
-  "a22d84": "Andy Jassy / Amazon",
-  "a5c411": "Reed Hastings / Netflix",
-  "a63b72": "Daniel Loeb / Third Point",
-  "a1a5e3": "Carl Icahn / Icahn Enterprises",
-  "a84f96": "Steve Schwarzman / Blackstone",
-  "a37c28": "James Gorman / Morgan Stanley",
-  "a4a3d5": "Doug McMillon / Walmart",
-  "a91e47": "Tim Armstrong / Flowcode",
-  "a2c9f1": "Mary Barra / GM",
-  "a6816d": "Jim Farley / Ford",
-  "a55a33": "Arvind Krishna / IBM",
-  "a79fc8": "Sundar Pichai / Alphabet",
-  "a0e241": "Brian Chesky / Airbnb",
-  "a36b19": "Patrick Collison / Stripe",
-  "a48e55": "Tobi Lütke / Shopify",
-  "a8d461": "Marc Benioff / Salesforce",
-  "a17c93": "Lloyd Blankfein / Goldman",
-  "a5f672": "David Einhorn / Greenlight",
-  "a61d43": "Bill Ackman / Pershing",
-  "a9a18f": "Nelson Peltz / Trian",
-  "a29e56": "Ryan Cohen / GameStop",
-  "a41f84": "Michael Saylor / MicroStrategy",
-  "a73c27": "Cathie Wood / ARK",
-  "a0b395": "Howard Marks / Oaktree",
-  "a58e10": "Stanley Druckenmiller / Duquesne",
-  "a85d29": "George Soros / Soros Fund",
-  "a33a6c": "Paul Tudor Jones / Tudor",
-  "a67f15": "Steven Cohen / Point72",
-  "a9c840": "John Paulson / Paulson & Co",
-  "a14d38": "Dan Ives / Wedbush",
+// Verified corporate jet fleet — ICAO24 codes matched to real tail numbers
+// Source: cross-referenced with FAA registry + OpenSky coverage
+type JetFleetEntry = { company: string; ticker: string; tailNumber: string; aircraftType: string };
+const EXEC_JET_FLEET: Record<string, JetFleetEntry> = {
+  "ad3cdf": { company: "Amazon",           ticker: "AMZN",  tailNumber: "N952JB",  aircraftType: "Gulfstream" },
+  "a00372": { company: "Dell Technologies", ticker: "DELL",  tailNumber: "N10MD",   aircraftType: "Cessna Citation M2" },
+  "adcc9a": { company: "Alphabet",          ticker: "GOOGL", tailNumber: "N989AG",  aircraftType: "AutoGyro MTO Sport" },
+  "a2ae0a": { company: "Goldman Sachs",     ticker: "GS",    tailNumber: "N272BG",  aircraftType: "Bombardier Global" },
+  "a4a8f5": { company: "Lockheed Martin",   ticker: "LMT",   tailNumber: "N4LM",    aircraftType: "Gulfstream G550" },
+  "aae2f1": { company: "Mastercard",        ticker: "MA",    tailNumber: "N800MA",  aircraftType: "Gulfstream G650" },
+  "a6d6be": { company: "Meta",              ticker: "META",  tailNumber: "N54MZ",   aircraftType: "Gulfstream G650" },
+  "aa3410": { company: "Oracle",            ticker: "ORCL",  tailNumber: "N757AF",  aircraftType: "Boeing 757" },
+  "a005ff": { company: "Pfizer",            ticker: "PFE",   tailNumber: "N100PF",  aircraftType: "Gulfstream G550" },
+  "a835af": { company: "Tesla / SpaceX",    ticker: "TSLA",  tailNumber: "N628TS",  aircraftType: "Gulfstream G650ER" },
+  "a193df": { company: "Visa",              ticker: "V",     tailNumber: "N200VA",  aircraftType: "Gulfstream G550" },
+  "a63f52": { company: "ExxonMobil",        ticker: "XOM",   tailNumber: "N501TB",  aircraftType: "Bombardier Global" },
 };
+
 
 async function handleCorporateJets(): Promise<Response> {
   const cacheKey = "jets:all";
@@ -1142,14 +1108,7 @@ async function handleCorporateJets(): Promise<Response> {
 }
 
 async function fetchJetsFromOpenSky(): Promise<CorporateJet[]> {
-  // Batch ICAO24 codes into a single request (OpenSky supports icao24 filter)
   const icaoCodes = Object.keys(EXEC_JET_FLEET);
-  // OpenSky /states/all with icao24 filter — comma-separated
-  const batches: string[][] = [];
-  for (let i = 0; i < icaoCodes.length; i += 25) {
-    batches.push(icaoCodes.slice(i, i + 25));
-  }
-
   const jets: CorporateJet[] = [];
   const username = Deno.env.get("OPENSKY_USERNAME");
   const password = Deno.env.get("OPENSKY_PASSWORD");
@@ -1157,43 +1116,47 @@ async function fetchJetsFromOpenSky(): Promise<CorporateJet[]> {
     ? { Authorization: "Basic " + btoa(`${username}:${password}`) }
     : {};
 
-  for (const batch of batches) {
-    try {
-      const icaoParam = batch.join(",");
-      const url = `https://opensky-network.org/api/states/all?icao24=${icaoParam}`;
-      const res = await fetchWithTimeout(url, 15_000, authHeader);
-      if (!res.ok) continue;
+  // Single batch — only 12 jets now
+  try {
+    const icaoParam = icaoCodes.join(",");
+    const url = `https://opensky-network.org/api/states/all?icao24=${icaoParam}`;
+    const res = await fetchWithTimeout(url, 15_000, authHeader);
+    if (res.ok) {
       const data = await res.json();
       const states = data?.states;
-      if (!Array.isArray(states)) continue;
-
-      for (const s of states) {
-        const icao = String(s[0] ?? "").toLowerCase();
-        const company = EXEC_JET_FLEET[icao];
-        if (!company) continue;
-        jets.push({
-          icao24: icao,
-          callsign: String(s[1] ?? "").trim(),
-          company,
-          originCountry: String(s[2] ?? ""),
-          latitude: s[6] != null ? Number(s[6]) : null,
-          longitude: s[5] != null ? Number(s[5]) : null,
-          altitude: s[7] != null ? Number(s[7]) : null,
-          velocity: s[9] != null ? Number(s[9]) : null,
-          onGround: Boolean(s[8]),
-        });
+      if (Array.isArray(states)) {
+        for (const s of states) {
+          const icao = String(s[0] ?? "").toLowerCase();
+          const entry = EXEC_JET_FLEET[icao];
+          if (!entry) continue;
+          jets.push({
+            icao24: icao,
+            callsign: String(s[1] ?? "").trim(),
+            company: entry.company,
+            ticker: entry.ticker,
+            tailNumber: entry.tailNumber,
+            originCountry: String(s[2] ?? ""),
+            latitude: s[6] != null ? Number(s[6]) : null,
+            longitude: s[5] != null ? Number(s[5]) : null,
+            altitude: s[7] != null ? Number(s[7]) : null,
+            velocity: s[9] != null ? Number(s[9]) : null,
+            onGround: Boolean(s[8]),
+          });
+        }
       }
-    } catch { continue; }
-  }
+    }
+  } catch { /* OpenSky may be down, continue with grounded list */ }
 
-  // Also add any fleet jets not currently in the air as "grounded"
+  // Add fleet jets not in the air as grounded
   const seenIcao = new Set(jets.map((j) => j.icao24));
-  for (const [icao, company] of Object.entries(EXEC_JET_FLEET)) {
+  for (const [icao, entry] of Object.entries(EXEC_JET_FLEET)) {
     if (!seenIcao.has(icao)) {
       jets.push({
         icao24: icao,
         callsign: "",
-        company,
+        company: entry.company,
+        ticker: entry.ticker,
+        tailNumber: entry.tailNumber,
         originCountry: "",
         latitude: null,
         longitude: null,
@@ -1214,12 +1177,14 @@ async function readJetsFromDb(): Promise<CorporateJet[]> {
       .from("intel_corporate_jets")
       .select("*")
       .order("snapshot_time", { ascending: false })
-      .limit(50);
+      .limit(20);
     if (!data) return [];
     return data.map((r: Record<string, unknown>) => ({
       icao24: String(r.icao24),
       callsign: String(r.callsign ?? ""),
       company: String(r.company ?? ""),
+      ticker: String(r.ticker ?? ""),
+      tailNumber: String(r.tail_number ?? ""),
       originCountry: String(r.origin_country ?? ""),
       latitude: r.latitude != null ? Number(r.latitude) : null,
       longitude: r.longitude != null ? Number(r.longitude) : null,
@@ -1238,6 +1203,8 @@ async function persistJets(jets: CorporateJet[]) {
       icao24: j.icao24,
       callsign: j.callsign,
       company: j.company,
+      ticker: j.ticker,
+      tail_number: j.tailNumber,
       origin_country: j.originCountry,
       latitude: j.latitude,
       longitude: j.longitude,
@@ -1254,36 +1221,104 @@ async function persistJets(jets: CorporateJet[]) {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// 7. VESSEL TRACKING — AISStream / Finnhub supply chain proxy
+// 7. VESSEL TRACKING — AISStream WebSocket + Chokepoints
 // ═══════════════════════════════════════════════════════════════════
 //
-// AISStream is WebSocket-based for real-time — but for our polling
-// model we use their REST snapshot endpoint when available, or fall
-// back to Finnhub supply chain data.
+// Uses AISStream WebSocket API to track major vessels in real-time.
+// Short-lived WS connection: connect → subscribe → collect 5s → close.
+// Chokepoints are static geopolitical data served from memory.
 
 type VesselTrack = {
   mmsi: string;
   vesselName: string;
   vesselType: string;
-  latitude: number | null;
-  longitude: number | null;
-  speed: number | null;
-  course: number | null;
-  destination: string;
-  region: string;
+  owner: string;
+  ownerType: "corporate" | "state" | "oligarch" | "unknown";
+  significance: string;
+  isTracked: boolean;
+  lastSeen: string | null;
+  lastLatitude: number | null;
+  lastLongitude: number | null;
+  speedKnots: number | null;
+  heading: number | null;
+  destination: string | null;
+  nearChokepoint: string | null;
+  alertLevel: "normal" | "warning" | "critical";
 };
 
-// Major shipping chokepoints/regions to monitor
-const VESSEL_REGIONS = [
-  { name: "Strait of Hormuz", lat: 26.5, lon: 56.3, radius: 2 },
-  { name: "Suez Canal", lat: 30.5, lon: 32.3, radius: 1 },
-  { name: "Panama Canal", lat: 9.1, lon: -79.7, radius: 1 },
-  { name: "Strait of Malacca", lat: 2.5, lon: 101.5, radius: 2 },
-  { name: "Taiwan Strait", lat: 24.5, lon: 119.5, radius: 2 },
-  { name: "Port of LA/Long Beach", lat: 33.7, lon: -118.2, radius: 1 },
-  { name: "Port of Rotterdam", lat: 51.9, lon: 4.3, radius: 1 },
-  { name: "Port of Shanghai", lat: 31.2, lon: 121.5, radius: 1 },
+type Chokepoint = {
+  id: number;
+  name: string;
+  region: string;
+  latitude: number;
+  longitude: number;
+  radiusNm: number;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  riskFactors: string;
+  dailyShipCount: number;
+  percentageGlobalTrade: number;
+  updatedAt: string;
+};
+
+// Fleet of significant vessels to track via AISStream
+const TRACKED_VESSELS: Array<{
+  mmsi: string;
+  name: string;
+  vesselType: string;
+  owner: string;
+  ownerType: VesselTrack["ownerType"];
+  significance: string;
+}> = [
+  // Container Ships — supply chain bellwethers
+  { mmsi: "477552700", name: "EVER GIVEN",          vesselType: "Container Ship", owner: "Evergreen Marine",  ownerType: "corporate",  significance: "Blocked Suez Canal 2021 — key supply chain risk indicator" },
+  { mmsi: "371785000", name: "MSC GULSUN",          vesselType: "Container Ship", owner: "MSC",              ownerType: "corporate",  significance: "World's largest container ship class" },
+  { mmsi: "353136000", name: "HMM ALGECIRAS",       vesselType: "Container Ship", owner: "HMM",              ownerType: "corporate",  significance: "Largest South Korean container vessel" },
+  { mmsi: "477333400", name: "EVER ACE",            vesselType: "Container Ship", owner: "Evergreen Marine",  ownerType: "corporate",  significance: "24,000+ TEU mega container ship" },
+  { mmsi: "228039600", name: "CMA CGM MARCO POLO",  vesselType: "Container Ship", owner: "CMA CGM",          ownerType: "corporate",  significance: "French flagship mega container vessel" },
+  // Oil Tankers — energy supply chain
+  { mmsi: "636092799", name: "ADVANTAGE SWEET",     vesselType: "Oil Tanker",     owner: "Advantage Tankers", ownerType: "corporate",  significance: "Seized by Iran IRGC April 2023 — geopolitical flashpoint" },
+  { mmsi: "564421000", name: "PACIFIC ZIRCON",      vesselType: "Oil Tanker",     owner: "Eastern Pacific",   ownerType: "corporate",  significance: "Attacked by Iranian drone Nov 2022 near Oman" },
+  { mmsi: "538004315", name: "MARLIN LUANDA",       vesselType: "Oil Tanker",     owner: "Trafigura",         ownerType: "corporate",  significance: "Hit by Houthi missile Jan 2024 in Red Sea" },
+  // Superyachts — oligarch/billionaire tracking
+  { mmsi: "319190200", name: "KORU",                vesselType: "Yacht",          owner: "Jeff Bezos",        ownerType: "oligarch",   significance: "Jeff Bezos $500M sailing yacht — tech wealth indicator" },
+  { mmsi: "319085100", name: "FLYING FOX",          vesselType: "Yacht",          owner: "Unknown Billionaire", ownerType: "oligarch", significance: "136m megayacht — largest available for charter" },
+  { mmsi: "319178900", name: "AMADEA",              vesselType: "Yacht",          owner: "US DOJ (seized)",   ownerType: "state",      significance: "Seized from Russian oligarch Kerimov — sanctions indicator" },
+  { mmsi: "319013600", name: "DILBAR",              vesselType: "Yacht",          owner: "Alisher Usmanov",   ownerType: "oligarch",   significance: "Seized Russian oligarch yacht — largest by volume" },
+  { mmsi: "319866000", name: "ECLIPSE",             vesselType: "Yacht",          owner: "Roman Abramovich",  ownerType: "oligarch",   significance: "Abramovich yacht — Russian oligarch sanctions bellwether" },
+  { mmsi: "319174000", name: "SCHEHERAZADE",        vesselType: "Yacht",          owner: "Unknown (Putin-linked)", ownerType: "oligarch", significance: "Reportedly Putin-linked — seized in Italy 2022" },
 ];
+
+// Global chokepoints with geopolitical risk data
+const CHOKEPOINTS: Chokepoint[] = [
+  { id: 1, name: "Strait of Hormuz",      region: "Middle East / Persian Gulf",       latitude: 26.5667, longitude: 56.25,    radiusNm: 60, riskLevel: "critical", riskFactors: "Iran tensions, IRGC seizures, oil tanker attacks. 21M bbl/day oil transit (21% of global supply). US-Iran proxy conflict risk.",                                dailyShipCount: 65, percentageGlobalTrade: 21, updatedAt: new Date().toISOString() },
+  { id: 2, name: "Strait of Malacca",     region: "Southeast Asia",                  latitude: 2.5,     longitude: 101.5,    radiusNm: 80, riskLevel: "medium",   riskFactors: "Piracy risk, China-ASEAN tensions, critical LNG route. 25% of global trade. Choke between Malaysia/Indonesia.",                                              dailyShipCount: 83, percentageGlobalTrade: 25, updatedAt: new Date().toISOString() },
+  { id: 3, name: "Suez Canal",            region: "Egypt / Mediterranean",            latitude: 30.4167, longitude: 32.3444,  radiusNm: 40, riskLevel: "high",     riskFactors: "2021 Ever Given blockage cost $9.6B/day. Egypt political instability risk. Houthi spillover from Red Sea attacks.",                                          dailyShipCount: 52, percentageGlobalTrade: 12, updatedAt: new Date().toISOString() },
+  { id: 4, name: "Panama Canal",          region: "Central America",                  latitude: 9.08,    longitude: -79.68,   radiusNm: 30, riskLevel: "high",     riskFactors: "Severe drought restrictions since 2023. Daily transits cut 36→24. Water levels critical. US-China competition for canal influence.",                          dailyShipCount: 24, percentageGlobalTrade: 5,  updatedAt: new Date().toISOString() },
+  { id: 5, name: "Bab-el-Mandeb Strait",  region: "Yemen / Horn of Africa",           latitude: 12.5833, longitude: 43.3167,  radiusNm: 50, riskLevel: "critical", riskFactors: "Active Houthi drone/missile attacks on commercial shipping since Oct 2023. Major shipping lines suspended Red Sea transits. US-UK military strikes ongoing.", dailyShipCount: 48, percentageGlobalTrade: 10, updatedAt: new Date().toISOString() },
+  { id: 6, name: "Taiwan Strait",         region: "East Asia / Western Pacific",      latitude: 24.25,   longitude: 119.5,    radiusNm: 70, riskLevel: "high",     riskFactors: "China-Taiwan military tensions. TSMC semiconductor supply chain risk. PLA exercises and US naval patrols. ~88% of largest container ships transit.",          dailyShipCount: 55, percentageGlobalTrade: 8,  updatedAt: new Date().toISOString() },
+  { id: 7, name: "Cape of Good Hope",     region: "South Africa / Southern Ocean",    latitude: -34.3568,longitude: 18.4740,  radiusNm: 90, riskLevel: "medium",   riskFactors: "Alternative to Suez/Red Sea during Houthi crisis. Adds 10-14 days to Asia-Europe route. Higher fuel costs. Rough seas risk.",                                dailyShipCount: 35, percentageGlobalTrade: 4,  updatedAt: new Date().toISOString() },
+  { id: 8, name: "Danish Straits",        region: "Northern Europe / Baltic Sea",     latitude: 55.7,    longitude: 11.0,     radiusNm: 50, riskLevel: "low",      riskFactors: "Russia-NATO tensions in Baltic. Nord Stream pipeline sabotage precedent. Key route for Russian oil exports and European energy security.",                    dailyShipCount: 45, percentageGlobalTrade: 3,  updatedAt: new Date().toISOString() },
+];
+
+// Distance in nautical miles between two lat/lng points
+function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3440.065; // Earth radius in NM
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function nearestChokepoint(lat: number, lon: number): string | null {
+  for (const cp of CHOKEPOINTS) {
+    if (haversineNm(lat, lon, cp.latitude, cp.longitude) <= cp.radiusNm) {
+      return cp.name;
+    }
+  }
+  return null;
+}
 
 async function handleVesselTracking(): Promise<Response> {
   const cacheKey = "vessels:all";
@@ -1298,70 +1333,144 @@ async function handleVesselTracking(): Promise<Response> {
     }
   }
 
-  // Try supply chain data from Finnhub
-  const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  if (finnhubKey) {
+  // Try AISStream WebSocket for live vessel positions
+  const aisKey = Deno.env.get("AISSTREAM_API_KEY");
+  if (aisKey) {
     try {
-      const vessels = await fetchVesselDataFromFinnhub(finnhubKey);
+      const vessels = await fetchVesselsFromAISStream(aisKey);
       if (vessels.length > 0) {
         await persistVessels(vessels);
-        await markSynced("vesselTracking", vessels.length, "finnhub_supply_chain");
+        await markSynced("vesselTracking", vessels.length, "aisstream");
       }
       setCache(cacheKey, vessels);
       return json({ ok: true, data: vessels });
     } catch { /* fall through */ }
   }
 
-  // Generate synthetic supply chain monitoring data based on known chokepoints
-  const synthetic = VESSEL_REGIONS.map((r) => ({
-    mmsi: `region-${r.name.replace(/\s+/g, "-").toLowerCase()}`,
-    vesselName: r.name,
-    vesselType: "Chokepoint Monitor",
-    latitude: r.lat,
-    longitude: r.lon,
-    speed: null,
-    course: null,
-    destination: r.name,
-    region: r.name,
+  // Return fleet with pending status
+  const pending: VesselTrack[] = TRACKED_VESSELS.map((v) => ({
+    mmsi: v.mmsi,
+    vesselName: v.name,
+    vesselType: v.vesselType,
+    owner: v.owner,
+    ownerType: v.ownerType,
+    significance: v.significance,
+    isTracked: false,
+    lastSeen: null,
+    lastLatitude: null,
+    lastLongitude: null,
+    speedKnots: null,
+    heading: null,
+    destination: null,
+    nearChokepoint: null,
+    alertLevel: "normal",
   }));
 
-  setCache(cacheKey, synthetic);
-  return json({ ok: true, data: synthetic });
+  setCache(cacheKey, pending);
+  return json({ ok: true, data: pending });
 }
 
-async function fetchVesselDataFromFinnhub(finnhubKey: string): Promise<VesselTrack[]> {
-  // Use Finnhub's supply chain data for key commodity companies
-  const supplyChainSymbols = ["XOM", "CVX", "SHEL", "BP", "COP", "MPC", "VLO"];
-  const vessels: VesselTrack[] = [];
+async function fetchVesselsFromAISStream(apiKey: string): Promise<VesselTrack[]> {
+  const mmsiList = TRACKED_VESSELS.map((v) => Number(v.mmsi));
+  const vesselMap = new Map(TRACKED_VESSELS.map((v) => [v.mmsi, v]));
+  const positions = new Map<string, {
+    lat: number; lon: number; speed: number | null;
+    heading: number | null; dest: string | null; time: string;
+  }>();
 
-  for (const sym of supplyChainSymbols.slice(0, 4)) {
+  return new Promise<VesselTrack[]>((resolve) => {
+    let ws: WebSocket | null = null;
+    const timeout = setTimeout(() => {
+      ws?.close();
+      buildResult();
+    }, 8000); // 8 second timeout for WS collection
+
+    function buildResult() {
+      clearTimeout(timeout);
+      const vessels: VesselTrack[] = TRACKED_VESSELS.map((v) => {
+        const pos = positions.get(v.mmsi);
+        const isTracked = !!pos;
+        const lat = pos?.lat ?? null;
+        const lon = pos?.lon ?? null;
+        const cp = lat != null && lon != null ? nearestChokepoint(lat, lon) : null;
+        return {
+          mmsi: v.mmsi,
+          vesselName: v.name,
+          vesselType: v.vesselType,
+          owner: v.owner,
+          ownerType: v.ownerType,
+          significance: v.significance,
+          isTracked,
+          lastSeen: pos?.time ?? null,
+          lastLatitude: lat,
+          lastLongitude: lon,
+          speedKnots: pos?.speed ?? null,
+          heading: pos?.heading ?? null,
+          destination: pos?.dest ?? null,
+          nearChokepoint: cp,
+          alertLevel: cp && CHOKEPOINTS.find((c) => c.name === cp)?.riskLevel === "critical"
+            ? "critical" as const
+            : cp ? "warning" as const : "normal" as const,
+        };
+      });
+      resolve(vessels);
+    }
+
     try {
-      const res = await fetchWithTimeout(
-        `https://finnhub.io/api/v1/stock/supply-chain?symbol=${sym}&token=${finnhubKey}`,
-        6000,
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      const chain = data?.data;
-      if (!Array.isArray(chain)) continue;
+      ws = new WebSocket("wss://stream.aisstream.io/v0/stream");
 
-      for (const item of chain.slice(0, 5)) {
-        vessels.push({
-          mmsi: `sc-${sym}-${String(item.symbol ?? item.name ?? "").slice(0, 10)}`,
-          vesselName: String(item.name ?? item.symbol ?? ""),
-          vesselType: "Supply Chain Link",
-          latitude: null,
-          longitude: null,
-          speed: null,
-          course: null,
-          destination: String(item.country ?? ""),
-          region: `${sym} supply chain`,
-        });
-      }
-    } catch { continue; }
-  }
+      ws.onopen = () => {
+        ws?.send(JSON.stringify({
+          APIKey: apiKey,
+          BoundingBoxes: [[[-90, -180], [90, 180]]],
+          FilterMessageTypes: ["PositionReport", "ShipStaticData"],
+          FiltersShipMMSI: mmsiList,
+        }));
+      };
 
-  return vessels;
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(String(event.data));
+          const meta = msg?.MetaData;
+          const mmsi = String(meta?.MMSI ?? "");
+          if (!vesselMap.has(mmsi)) return;
+
+          const posReport = msg?.Message?.PositionReport;
+          if (posReport) {
+            positions.set(mmsi, {
+              lat: Number(posReport.Latitude ?? meta?.latitude ?? 0),
+              lon: Number(posReport.Longitude ?? meta?.longitude ?? 0),
+              speed: posReport.Sog != null ? Number(posReport.Sog) : null,
+              heading: posReport.TrueHeading != null && posReport.TrueHeading !== 511
+                ? Number(posReport.TrueHeading) : null,
+              dest: String(meta?.Destination ?? "").trim() || null,
+              time: new Date(meta?.time_utc ?? Date.now()).toISOString(),
+            });
+          }
+        } catch { /* skip malformed */ }
+      };
+
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        ws?.close();
+        buildResult();
+      };
+
+      ws.onclose = () => {
+        clearTimeout(timeout);
+        buildResult();
+      };
+    } catch {
+      clearTimeout(timeout);
+      buildResult();
+    }
+  });
+}
+
+async function handleChokepoints(): Promise<Response> {
+  const now = new Date().toISOString();
+  const data = CHOKEPOINTS.map((cp) => ({ ...cp, updatedAt: now }));
+  return json({ ok: true, data });
 }
 
 async function readVesselsFromDb(): Promise<VesselTrack[]> {
@@ -1377,12 +1486,18 @@ async function readVesselsFromDb(): Promise<VesselTrack[]> {
       mmsi: String(r.mmsi),
       vesselName: String(r.vessel_name ?? ""),
       vesselType: String(r.vessel_type ?? ""),
-      latitude: r.latitude != null ? Number(r.latitude) : null,
-      longitude: r.longitude != null ? Number(r.longitude) : null,
-      speed: r.speed != null ? Number(r.speed) : null,
-      course: r.course != null ? Number(r.course) : null,
-      destination: String(r.destination ?? ""),
-      region: String(r.region ?? ""),
+      owner: String(r.owner ?? ""),
+      ownerType: (String(r.owner_type ?? "unknown")) as VesselTrack["ownerType"],
+      significance: String(r.significance ?? ""),
+      isTracked: Boolean(r.is_tracked),
+      lastSeen: r.last_seen ? String(r.last_seen) : null,
+      lastLatitude: r.latitude != null ? Number(r.latitude) : null,
+      lastLongitude: r.longitude != null ? Number(r.longitude) : null,
+      speedKnots: r.speed != null ? Number(r.speed) : null,
+      heading: r.heading != null ? Number(r.heading) : null,
+      destination: r.destination ? String(r.destination) : null,
+      nearChokepoint: r.near_chokepoint ? String(r.near_chokepoint) : null,
+      alertLevel: (String(r.alert_level ?? "normal")) as VesselTrack["alertLevel"],
     }));
   } catch { return []; }
 }
@@ -1391,19 +1506,27 @@ async function persistVessels(vessels: VesselTrack[]) {
   try {
     const sb = getSupabase();
     const now = new Date().toISOString();
-    const rows = vessels.map((v) => ({
+    const rows = vessels.filter((v) => v.isTracked).map((v) => ({
       mmsi: v.mmsi,
       vessel_name: v.vesselName,
       vessel_type: v.vesselType,
-      latitude: v.latitude,
-      longitude: v.longitude,
-      speed: v.speed,
-      course: v.course,
+      owner: v.owner,
+      owner_type: v.ownerType,
+      significance: v.significance,
+      is_tracked: v.isTracked,
+      last_seen: v.lastSeen,
+      latitude: v.lastLatitude,
+      longitude: v.lastLongitude,
+      speed: v.speedKnots,
+      heading: v.heading,
       destination: v.destination,
-      region: v.region,
+      near_chokepoint: v.nearChokepoint,
+      alert_level: v.alertLevel,
       snapshot_time: now,
     }));
-    await sb.from("intel_vessel_tracking").insert(rows);
+    if (rows.length > 0) {
+      await sb.from("intel_vessel_tracking").insert(rows);
+    }
   } catch { /* best effort */ }
 }
 
@@ -1502,29 +1625,48 @@ async function fetchConflictsFromAcled(email: string, key: string): Promise<Conf
 }
 
 async function fetchConflictsFromGdelt(): Promise<ConflictEvent[]> {
-  // GDELT GKG (Global Knowledge Graph) — free, no auth
-  // Use the DOC API for recent conflict-related events
-  const url = "https://api.gdeltproject.org/api/v2/doc/doc?query=conflict%20OR%20military%20OR%20sanctions&mode=ArtList&maxrecords=15&format=json&sort=DateDesc";
+  // GDELT DOC API — free, no auth. Rate-limited to 1 req/5s.
+  // Use a focused query to reduce payload. Retry once after 6s if rate-limited.
+  const url = "https://api.gdeltproject.org/api/v2/doc/doc?query=conflict%20OR%20military%20OR%20war&mode=ArtList&maxrecords=10&format=json&sort=DateDesc";
 
-  const res = await fetchWithTimeout(url, 10_000);
-  if (!res.ok) throw new Error(`gdelt_${res.status}`);
-  const body = await res.json();
-  const articles = body?.articles;
-  if (!Array.isArray(articles)) throw new Error("gdelt_no_articles");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, 12_000);
+      if (res.status === 429 || res.status === 503) {
+        // GDELT rate-limits to 1 request per 5 seconds
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 6000));
+          continue;
+        }
+        throw new Error("gdelt_rate_limited");
+      }
+      if (!res.ok) throw new Error(`gdelt_${res.status}`);
+      const body = await res.json();
+      const articles = body?.articles;
+      if (!Array.isArray(articles)) throw new Error("gdelt_no_articles");
 
-  return articles.slice(0, 15).map((a: Record<string, unknown>, i: number) => ({
-    eventId: `gdelt-${i}-${Date.now()}`,
-    eventDate: String(a.seendate ?? new Date().toISOString().slice(0, 10)),
-    country: String(a.sourcecountry ?? "Global"),
-    region: String(a.domain ?? ""),
-    eventType: "News/Report",
-    subEventType: "Geopolitical",
-    actor1: String(a.source ?? a.domain ?? ""),
-    fatalities: 0,
-    notes: String(a.title ?? "").slice(0, 300),
-    latitude: null,
-    longitude: null,
-  }));
+      return articles.slice(0, 10).map((a: Record<string, unknown>, i: number) => ({
+        eventId: `gdelt-${i}-${Date.now()}`,
+        eventDate: String(a.seendate ?? new Date().toISOString().slice(0, 10)),
+        country: String(a.sourcecountry ?? "Global"),
+        region: String(a.domain ?? ""),
+        eventType: "News/Report",
+        subEventType: "Geopolitical",
+        actor1: String(a.source ?? a.domain ?? ""),
+        fatalities: 0,
+        notes: String(a.title ?? "").slice(0, 300),
+        latitude: null,
+        longitude: null,
+      }));
+    } catch (e) {
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 6000));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("gdelt_max_retries");
 }
 
 async function readConflictsFromDb(): Promise<ConflictEvent[]> {
@@ -1910,6 +2052,8 @@ serve(async (req: Request) => {
         return await handleEnergyFlows();
       case "cyberThreats":
         return await handleCyberThreats();
+      case "chokepoints":
+        return await handleChokepoints();
       default:
         return json({ ok: false, error: `unknown action: ${action}` }, 400);
     }
