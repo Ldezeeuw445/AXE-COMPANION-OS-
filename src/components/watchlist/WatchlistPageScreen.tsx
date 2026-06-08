@@ -289,10 +289,11 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
 
   /* ── Tick color class ──────────────────────────────────────────── */
 
-  function tickColor(dir: TickDir | undefined): string {
+  function tickColor(dir: TickDir | undefined, type: "bid" | "ask"): string {
     if (dir === "up") return "text-emerald-400";
     if (dir === "down") return "text-rose-400";
-    return "text-white/70";
+    // Default: bid = green, ask = red (MT5-style)
+    return type === "bid" ? "text-emerald-400/70" : "text-rose-400/70";
   }
 
   /* ── Render ────────────────────────────────────────────────────── */
@@ -473,14 +474,14 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
 
                 {/* Bid */}
                 <span
-                  className={`w-[72px] text-right font-mono text-[12px] font-semibold tabular-nums transition-colors duration-300 ${tickColor(bidDir.get(sym))}`}
+                  className={`w-[72px] text-right font-mono text-[12px] font-semibold tabular-nums transition-colors duration-300 ${tickColor(bidDir.get(sym), "bid")}`}
                 >
                   {bid != null ? formatBrokerPrice(bs, bid) : "—"}
                 </span>
 
                 {/* Ask */}
                 <span
-                  className={`w-[72px] text-right font-mono text-[12px] font-semibold tabular-nums transition-colors duration-300 ${tickColor(askDir.get(sym))}`}
+                  className={`w-[72px] text-right font-mono text-[12px] font-semibold tabular-nums transition-colors duration-300 ${tickColor(askDir.get(sym), "ask")}`}
                 >
                   {ask != null ? formatBrokerPrice(bs, ask) : "—"}
                 </span>

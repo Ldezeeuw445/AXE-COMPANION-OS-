@@ -3,6 +3,7 @@ import { CalendarDays, Newspaper, Sparkles } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
+import { SymbolDropdown } from "@/components/market/SymbolDropdown";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
@@ -11,7 +12,6 @@ import type {
   EconomicEvent,
   MacroSnapshot,
   NewsItem,
-  ProviderStatus,
 } from "@/lib/market/marketTypes";
 
 const DEFAULT_SYMBOL = "XAUUSD";
@@ -104,27 +104,11 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         scope="market"
       />
 
-      <ProviderBadges providers={ctx.providers} macroReady={macroReady} newsReady={newsReady} calendarReady={calendarReady} />
+      <SymbolDropdown symbols={ctx.symbols} current={symbol} />
 
-      {ctx.symbols.length > 1 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {ctx.symbols.map((s) => (
-            <Link
-              key={s}
-              href={`/market?symbol=${encodeURIComponent(s)}`}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                s === symbol
-                  ? "border-white/[0.10] bg-white/[0.06] text-white/90"
-                  : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
-              }`}
-            >
-              {s}
-            </Link>
-          ))}
-        </div>
-      ) : null}
 
       {/* Macro */}
+      <SourceBadge label="AXE Macro" ready={macroReady} configured={hasFred} description="FRED macro observations" />
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Macro snapshot</h2>
@@ -163,6 +147,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       </GlassPanel>
 
       {/* Calendar */}
+      <SourceBadge label="AXE Calendar" ready={calendarReady} configured={ctx.providers.some((p) => p.id === "finnhub" && p.state === "live")} description="Impact-rated economic events" />
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -189,6 +174,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       </GlassPanel>
 
       {/* News */}
+      <SourceBadge label="AXE News" ready={newsReady} configured={ctx.providers.some((p) => ["perigon", "polygon", "finnhub", "eodhd"].includes(p.id) && p.state === "live")} description="Server-side news feeds" />
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -238,66 +224,38 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   );
 }
 
-function ProviderBadges({
-  providers,
-  macroReady,
-  newsReady,
-  calendarReady,
+/* ── Source badge — placed above each section ─────────────────────── */
+function SourceBadge({
+  label,
+  ready,
+  configured,
+  description,
 }: {
-  providers: ProviderStatus[];
-  macroReady: boolean;
-  newsReady: boolean;
-  calendarReady: boolean;
+  label: string;
+  ready: boolean;
+  configured: boolean;
+  description: string;
 }) {
-  const grouped = [
-    {
-      id: "macro",
-      label: "AXE Macro",
-      ready: macroReady,
-      configured: providers.some((p) => p.id === "fred" && p.state === "live"),
-      description: "FRED macro observations.",
-    },
-    {
-      id: "news",
-      label: "AXE News",
-      ready: newsReady,
-      configured: providers.some((p) => ["perigon", "polygon", "finnhub", "eodhd"].includes(p.id) && p.state === "live"),
-      description: "Configured server-side news feeds.",
-    },
-    {
-      id: "calendar",
-      label: "AXE Calendar",
-      ready: calendarReady,
-      configured: providers.some((p) => p.id === "finnhub" && p.state === "live"),
-      description: "Impact-rated economic events.",
-    },
-  ];
-  const liveCount = grouped.filter((p) => p.ready).length;
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-tos-dim">AXE sources</span>
-      {grouped.map((p) => (
-        <span
-          key={p.id}
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-            p.ready
-              ? "border-white/[0.10] bg-white/[0.05] text-white/90"
-              : p.configured
-                ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-100/90"
-                : "border-white/12 bg-white/[0.04] text-tos-dim"
-          }`}
-          title={p.description}
-        >
-          {p.label}
-          {p.ready ? " · fresh" : p.configured ? " · warming" : " · off"}
-        </span>
-      ))}
-      <span className="ml-auto text-[10px] text-tos-dim">
-        {liveCount}/{grouped.length} fresh
+    <div className="flex items-center gap-1.5">
+      <span
+        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+          ready
+            ? "border-white/[0.10] bg-white/[0.05] text-white/90"
+            : configured
+              ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-100/90"
+              : "border-white/12 bg-white/[0.04] text-tos-dim"
+        }`}
+        title={description}
+      >
+        {label}
+        {ready ? " · fresh" : configured ? " · warming" : " · off"}
       </span>
     </div>
   );
 }
+
+
 
 function MacroPoint({ point }: { point: MacroSnapshot["points"][number] }) {
   const formatted =
