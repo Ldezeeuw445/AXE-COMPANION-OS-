@@ -492,16 +492,16 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
 
   // Wrap in Proxy: any SDK callback we haven't explicitly implemented
   // becomes an async no-op instead of crashing with "not a function".
-  const listener = new Proxy(rawListener, {
-    get(target: Record<string, unknown>, prop: string) {
-      if (prop in target && typeof target[prop] === "function") {
-        return target[prop].bind(target);
-      }
-      // Return async no-op for any unimplemented callback
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const listener = new Proxy(rawListener as any, {
+    get(target: any, prop: string | symbol) {
+      const val = target[prop];
+      if (typeof val === "function") return val.bind(target);
+      // Return async no-op for any unimplemented on* callback
       if (typeof prop === "string" && prop.startsWith("on")) {
         return async () => {};
       }
-      return target[prop];
+      return val;
     },
   }) as unknown as Record<string, unknown>;
 
