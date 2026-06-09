@@ -1100,10 +1100,10 @@ async function handleCorporateJets(): Promise<Response> {
   }));
 
   try {
-    const jets = await fetchJetsFromOpenSky();
+    const jets = await fetchJetsCombined();
     if (jets.length > 0) {
       await persistJets(jets).catch(() => {});
-      await markSynced("corporateJets", jets.length, "opensky").catch(() => {});
+      await markSynced("corporateJets", jets.length, "adsb+opensky").catch(() => {});
     }
     const result = jets.length > 0 ? jets : groundedFleet;
     setCache(cacheKey, result);
@@ -1117,6 +1117,70 @@ async function handleCorporateJets(): Promise<Response> {
   }
 }
 
+// ── ADS-B Exchange via RapidAPI (primary) ──────────────────────────
+async function fetchJetsFromADSB(): Promise<CorporateJet[]> {
+  const rapidKey = Deno.env.get("RAPIDAPI_KEY");
+  if (!rapidKey) throw new Error("RAPIDAPI_KEY not set");
+
+  const icaoCodes = Object.keys(EXEC_JET_FLEET);
+  const jets: CorporateJet[] = [];
+
+  // Query all jets in parallel (12 lightweight requests)
+  const results = await Promise.allSettled(
+    icaoCodes.map(async (icao) => {
+      const url = `https://adsbexchange-com1.p.rapidapi.com/v2/hex/${icao}/`;
+      const res = await fetchWithTimeout(url, 10_000, {
+        "Content-Type": "application/json",
+        "x-rapidapi-host": "adsbexchange-com1.p.rapidapi.com",
+        "x-rapidapi-key": rapidKey,
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    })
+  );
+
+  for (const result of results) {
+    if (result.status !== "fulfilled" || !result.value) continue;
+    const d = result.value;
+    const icao = String(d.hex ?? "").toLowerCase();
+    const entry = EXEC_JET_FLEET[icao];
+    if (!entry) continue;
+
+    const altRaw = d.alt_baro;
+    const isGround = altRaw === "ground" || altRaw == null;
+    const lp = d.lastPosition;
+
+    jets.push({
+      icao24: icao,
+      callsign: String(d.flight ?? "").trim(),
+      company: entry.company,
+      ticker: entry.ticker,
+      tailNumber: entry.tailNumber,
+      originCountry: "",
+      latitude: lp?.lat ?? null,
+      longitude: lp?.lon ?? null,
+      altitude: isGround ? null : (typeof altRaw === "number" ? Math.round(altRaw * 0.3048) : null),
+      velocity: d.gs != null ? Math.round(Number(d.gs) * 0.514444) : null,
+      onGround: isGround,
+    });
+  }
+
+  // Fill in any missing fleet members as grounded
+  const seenIcao = new Set(jets.map((j) => j.icao24));
+  for (const [icao, entry] of Object.entries(EXEC_JET_FLEET)) {
+    if (!seenIcao.has(icao)) {
+      jets.push({
+        icao24: icao, callsign: "", company: entry.company, ticker: entry.ticker,
+        tailNumber: entry.tailNumber, originCountry: "", latitude: null,
+        longitude: null, altitude: null, velocity: null, onGround: true,
+      });
+    }
+  }
+
+  return jets;
+}
+
+// ── OpenSky (fallback) ─────────────────────────────────────────────
 async function fetchJetsFromOpenSky(): Promise<CorporateJet[]> {
   const icaoCodes = Object.keys(EXEC_JET_FLEET);
   const jets: CorporateJet[] = [];
@@ -1126,7 +1190,6 @@ async function fetchJetsFromOpenSky(): Promise<CorporateJet[]> {
     ? { Authorization: "Basic " + btoa(`${username}:${password}`) }
     : {};
 
-  // Single batch — only 12 jets now
   try {
     const icaoParam = icaoCodes.join(",");
     const url = `https://opensky-network.org/api/states/all?icao24=${icaoParam}`;
@@ -1142,10 +1205,8 @@ async function fetchJetsFromOpenSky(): Promise<CorporateJet[]> {
           jets.push({
             icao24: icao,
             callsign: String(s[1] ?? "").trim(),
-            company: entry.company,
-            ticker: entry.ticker,
-            tailNumber: entry.tailNumber,
-            originCountry: String(s[2] ?? ""),
+            company: entry.company, ticker: entry.ticker,
+            tailNumber: entry.tailNumber, originCountry: String(s[2] ?? ""),
             latitude: s[6] != null ? Number(s[6]) : null,
             longitude: s[5] != null ? Number(s[5]) : null,
             altitude: s[7] != null ? Number(s[7]) : null,
@@ -1155,29 +1216,32 @@ async function fetchJetsFromOpenSky(): Promise<CorporateJet[]> {
         }
       }
     }
-  } catch { /* OpenSky may be down, continue with grounded list */ }
+  } catch { /* OpenSky down */ }
 
-  // Add fleet jets not in the air as grounded
   const seenIcao = new Set(jets.map((j) => j.icao24));
   for (const [icao, entry] of Object.entries(EXEC_JET_FLEET)) {
     if (!seenIcao.has(icao)) {
       jets.push({
-        icao24: icao,
-        callsign: "",
-        company: entry.company,
-        ticker: entry.ticker,
-        tailNumber: entry.tailNumber,
-        originCountry: "",
-        latitude: null,
-        longitude: null,
-        altitude: null,
-        velocity: null,
-        onGround: true,
+        icao24: icao, callsign: "", company: entry.company, ticker: entry.ticker,
+        tailNumber: entry.tailNumber, originCountry: "", latitude: null,
+        longitude: null, altitude: null, velocity: null, onGround: true,
       });
     }
   }
 
   return jets;
+}
+
+// ── Combined fetch: ADS-B Exchange primary → OpenSky fallback ──────
+async function fetchJetsCombined(): Promise<CorporateJet[]> {
+  // Try ADS-B Exchange first (faster, more reliable, supports ICAO24 hex)
+  try {
+    const jets = await fetchJetsFromADSB();
+    if (jets.length > 0) return jets;
+  } catch { /* ADS-B down, try OpenSky */ }
+
+  // Fallback to OpenSky
+  return await fetchJetsFromOpenSky();
 }
 
 async function readJetsFromDb(): Promise<CorporateJet[]> {
