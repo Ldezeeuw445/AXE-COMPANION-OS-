@@ -169,7 +169,7 @@ function buildIntelContext(
   if (intel.vessels.length > 0) {
     parts.push(`\n## SUPPLY CHAIN & VESSEL TRACKING (${intel.vessels.length} entries)`);
     for (const v of intel.vessels.slice(0, 10)) {
-      parts.push(`- ${v.vesselName}: ${v.vesselType} — region: ${v.region || v.destination || "unknown"}`);
+      parts.push(`- ${v.vesselName}: ${v.vesselType} — ${v.owner} | ${v.nearChokepoint ? `near ${v.nearChokepoint}` : v.destination || "unknown"} | ${v.alertLevel}`);
     }
   }
 

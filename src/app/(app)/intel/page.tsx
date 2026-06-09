@@ -405,7 +405,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
                     {v.vesselName || v.mmsi}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[10px] text-tos-dim">{v.vesselType}</span>
-                  <span className="font-mono text-[10px] text-tos-muted">{v.region || v.destination || "—"}</span>
+                  <span className="font-mono text-[10px] text-tos-muted">{v.destination || v.nearChokepoint || "—"}</span>
                 </li>
               ))}
             </ul>

@@ -118,7 +118,7 @@ function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>)
 
   if (intel.vessels?.length > 0) {
     const rows = intel.vessels.slice(0, 10).map(
-      (v) => `- ${v.vesselName}: ${v.vesselType} | region: ${v.region || v.destination || "unknown"}`
+      (v) => `- ${v.vesselName}: ${v.vesselType} | ${v.owner} | ${v.nearChokepoint ? `near ${v.nearChokepoint}` : v.destination || "unknown"} | ${v.alertLevel}`
     ).join("\n");
     sections.push(`## SUPPLY CHAIN & VESSEL TRACKING (${intel.vessels.length} entries)\n${rows}`);
   }
