@@ -1,44 +1,61 @@
 /**
- * AXE Companion — MetaApi MT5 streaming service.
+ * AXE Companion — MetaApi MT5 streaming service (v2).
  *
- * Subscribes to broker price/quote/candle/positions changes via the official
+ * Dynamically loads account configs and watchlist symbols from Supabase.
+ * Subscribes to broker price/quote/candle/positions/orders via the official
  * `metaapi.cloud-sdk` socket.io SDK and pushes normalized events to the
- * Cloudflare ChartLiveRoom Durable Object. The frontend keeps its existing
- * websocket contract.
+ * Cloudflare ChartLiveRoom Durable Object.
  *
- * Designed for a long-lived Node process (Railway / Fly / Render / a tiny
- * Docker host). Multiple subscriptions per process are supported.
+ * Changes from v1:
+ *   - Dynamic subscriptions from Supabase (no more static SUBSCRIPTIONS env)
+ *   - Multi-symbol per account (all watchlist symbols on one connection)
+ *   - Orders listener (onPendingOrdersUpdated)
+ *   - Periodic reconciliation (new watchlist symbols picked up every 60s)
+ *   - Ticks fan out to ALL timeframe rooms for a symbol
+ *   - Positions/orders broadcast to all rooms for the account
  *
- * NOTE: `metaapi.cloud-sdk` is a Node-only package; that is exactly why this
- * service exists outside the Cloudflare Worker runtime.
+ * Designed for a long-lived Node process (Railway / Fly / Render / Docker).
  */
 
 import { publishEvent } from "./publish.js";
+import {
+  loadAccountConfigs,
+  diffConfigs,
+  RECONCILE_INTERVAL_MS,
+} from "./subscriptionManager.js";
 import { parseSubscriptions } from "./parseSubscriptions.js";
 import {
   TF_MAP,
+  ALL_TF_KEYS,
   roomKey,
   type ChartLiveEvent,
   type LivePositionPayload,
-  type Subscription,
+  type LivePendingOrderPayload,
+  type AccountConfig,
 } from "./types.js";
+
+/* ------------------------------------------------------------------ */
+/*  Environment                                                        */
+/* ------------------------------------------------------------------ */
 
 type Env = {
   METAAPI_TOKEN: string;
-  METAAPI_REGION: string;
   WORKER_URL: string;
   STREAMER_SECRET: string;
+  /** Optional legacy static subscriptions (v1 compat). */
   SUBSCRIPTIONS: string;
+  /** Optional — if set, skip Supabase and use static subscriptions only. */
+  STATIC_MODE: boolean;
   LOG_LEVEL: string;
 };
 
 function readEnv(): Env {
   const e: Env = {
     METAAPI_TOKEN: process.env.METAAPI_TOKEN ?? "",
-    METAAPI_REGION: process.env.METAAPI_REGION ?? "london",
     WORKER_URL: process.env.WORKER_URL ?? "",
     STREAMER_SECRET: process.env.STREAMER_SECRET ?? "",
     SUBSCRIPTIONS: process.env.SUBSCRIPTIONS ?? "",
+    STATIC_MODE: (process.env.STATIC_MODE ?? "").toLowerCase() === "true",
     LOG_LEVEL: process.env.LOG_LEVEL ?? "info",
   };
   for (const k of ["METAAPI_TOKEN", "WORKER_URL", "STREAMER_SECRET"] as const) {
@@ -49,6 +66,10 @@ function readEnv(): Env {
   return e;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Logging                                                            */
+/* ------------------------------------------------------------------ */
+
 function log(level: "error" | "warn" | "info" | "debug", msg: string, ...rest: unknown[]) {
   const order = { error: 0, warn: 1, info: 2, debug: 3 } as const;
   const want = (process.env.LOG_LEVEL ?? "info") as keyof typeof order;
@@ -58,68 +79,37 @@ function log(level: "error" | "warn" | "info" | "debug", msg: string, ...rest: u
   console[level === "debug" ? "log" : level](prefix, msg, ...rest);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
 function mapSide(t: string | undefined): "buy" | "sell" {
   return (t ?? "").toUpperCase().includes("BUY") ? "buy" : "sell";
 }
 
-function broadcastReady(env: Env, sub: Subscription): Promise<boolean> {
-  const evt: ChartLiveEvent = {
-    type: "ready",
-    userId: sub.userId,
-    accountId: sub.accountId,
-    displaySymbol: sub.displaySymbol,
-    brokerSymbol: sub.brokerSymbol,
-    timeframe: TF_MAP[sub.timeframe] ?? "1h",
-    source: "metaapi_mt5",
-  };
-  return publishEvent(
-    { workerUrl: env.WORKER_URL, streamerSecret: env.STREAMER_SECRET },
-    roomKey(sub),
-    evt,
-  );
+function mapOrderType(t: string | undefined): string {
+  const raw = (t ?? "").toLowerCase();
+  if (raw.includes("buy_limit")) return "buy_limit";
+  if (raw.includes("sell_limit")) return "sell_limit";
+  if (raw.includes("buy_stop")) return "buy_stop";
+  if (raw.includes("sell_stop")) return "sell_stop";
+  return raw || "unknown";
 }
 
-function broadcastStatus(env: Env, sub: Subscription, status: "live" | "delayed" | "reconnecting" | "offline" | "error", reason?: string): Promise<boolean> {
-  const evt: ChartLiveEvent = { type: "live_status", status, reason };
-  return publishEvent(
-    { workerUrl: env.WORKER_URL, streamerSecret: env.STREAMER_SECRET },
-    roomKey(sub),
-    evt,
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  Per-account streaming manager                                      */
+/* ------------------------------------------------------------------ */
 
-async function startSubscription(env: Env, sub: Subscription) {
-  log("info", `subscribing ${sub.displaySymbol} (${sub.brokerSymbol}) ${sub.timeframe} on ${sub.metaApiAccountId}`);
+type AccountStream = {
+  config: AccountConfig;
+  connection: StreamingConnection | null;
+  subscribedSymbols: Set<string>;
+  /** Display→broker lookup for this account. */
+  symbolMap: Record<string, string>;
+};
 
-  // Lazy import keeps the SDK out of the bundle when this service is built but
-  // never actually started (e.g. CI typecheck without runtime install).
-  const sdkMod = (await import("metaapi.cloud-sdk")) as unknown as {
-    default: new (token: string, opts?: { region?: string }) => MetaApiInstance;
-  };
-  const MetaApi = sdkMod.default;
-  const api = new MetaApi(env.METAAPI_TOKEN, { region: env.METAAPI_REGION });
-
-  const account = await api.metatraderAccountApi.getAccount(sub.metaApiAccountId);
-  if (account.state !== "DEPLOYED") {
-    log("info", `deploying account ${sub.metaApiAccountId}`);
-    await account.deploy();
-  }
-  await account.waitConnected();
-
-  const connection = account.getStreamingConnection();
-  await connection.connect();
-  await connection.waitSynchronized();
-
-  await connection.subscribeToMarketData(sub.brokerSymbol);
-
-  const listener = new ChartListener(env, sub);
-  connection.addSynchronizationListener(listener as unknown as Record<string, unknown>);
-
-  await broadcastReady(env, sub);
-  await broadcastStatus(env, sub, "live");
-
-  return { account, connection, listener };
-}
+// Track all active account streams
+const activeStreams = new Map<string, AccountStream>();
 
 interface MetaApiInstance {
   metatraderAccountApi: {
@@ -136,7 +126,9 @@ interface StreamingConnection {
   connect: () => Promise<void>;
   waitSynchronized: () => Promise<void>;
   subscribeToMarketData: (symbol: string) => Promise<void>;
+  unsubscribeFromMarketData: (symbol: string) => Promise<void>;
   addSynchronizationListener: (listener: Record<string, unknown>) => void;
+  close: () => Promise<void>;
 }
 
 type SymbolPriceEvent = {
@@ -160,52 +152,112 @@ type CandleEvent = {
 };
 
 type PositionEvent = Record<string, unknown>;
+type OrderEvent = Record<string, unknown>;
 
-class ChartListener {
+/* ------------------------------------------------------------------ */
+/*  Broadcast helpers — fan out to all TF rooms                        */
+/* ------------------------------------------------------------------ */
+
+function broadcastToAllTfRooms(
+  env: Env,
+  config: AccountConfig,
+  brokerSymbol: string,
+  displaySymbol: string,
+  buildEvent: (tf: string) => ChartLiveEvent
+): void {
+  for (const tfKey of ALL_TF_KEYS) {
+    const key = `${config.userId}|${config.accountId}|${brokerSymbol}|${tfKey}`;
+    void publishEvent(
+      { workerUrl: env.WORKER_URL, streamerSecret: env.STREAMER_SECRET },
+      key,
+      buildEvent(TF_MAP[tfKey] ?? "1h")
+    );
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  SynchronizationListener (multi-symbol)                             */
+/* ------------------------------------------------------------------ */
+
+class MultiSymbolListener {
+  /** Reverse map: broker symbol → display symbol */
+  private brokerToDisplay: Map<string, string>;
+
   constructor(
     private readonly env: Env,
-    private readonly sub: Subscription,
-  ) {}
+    private readonly config: AccountConfig
+  ) {
+    this.brokerToDisplay = new Map();
+    this.rebuildReverseMap();
+  }
 
-  // SDK may call any subset of these. We forward what we care about.
+  rebuildReverseMap(): void {
+    this.brokerToDisplay.clear();
+    for (const [display, broker] of Object.entries(this.config.symbolMap)) {
+      this.brokerToDisplay.set(broker, display);
+    }
+    // Also add identity mappings for symbols not in the map
+    for (const sym of this.config.watchlistSymbols) {
+      const broker = this.config.symbolMap[sym] ?? sym;
+      if (!this.brokerToDisplay.has(broker)) {
+        this.brokerToDisplay.set(broker, sym);
+      }
+    }
+  }
+
+  private displayFor(brokerSymbol: string): string {
+    return this.brokerToDisplay.get(brokerSymbol) ?? brokerSymbol;
+  }
+
+  // ── Tick events ──────────────────────────────────────────────────
+
   async onSymbolPriceUpdated(_account: unknown, price: SymbolPriceEvent) {
-    if (!price || price.symbol !== this.sub.brokerSymbol) return;
+    const broker = price?.symbol;
+    if (!broker) return;
+    const display = this.displayFor(broker);
+
     const mid =
       price.bid != null && price.ask != null
         ? (price.bid + price.ask) / 2
         : (price.bid ?? price.ask ?? null);
-    const evt: ChartLiveEvent = {
+
+    broadcastToAllTfRooms(this.env, this.config, broker, display, () => ({
       type: "tick",
-      userId: this.sub.userId,
-      accountId: this.sub.accountId,
-      displaySymbol: this.sub.displaySymbol,
-      brokerSymbol: this.sub.brokerSymbol,
+      userId: this.config.userId,
+      accountId: this.config.accountId,
+      displaySymbol: display,
+      brokerSymbol: broker,
       bid: price.bid ?? null,
       ask: price.ask ?? null,
       price: mid != null ? Number(mid) : null,
       timestamp: price.brokerTime ?? price.time ?? null,
       source: "metaapi_mt5",
-    };
-    void publishEvent(
-      { workerUrl: this.env.WORKER_URL, streamerSecret: this.env.STREAMER_SECRET },
-      roomKey(this.sub),
-      evt,
-    );
+    }));
   }
+
+  // ── Candle events ────────────────────────────────────────────────
 
   async onCandlesUpdated(_account: unknown, candles: CandleEvent[]) {
     if (!Array.isArray(candles)) return;
-    const wantTf = TF_MAP[this.sub.timeframe] ?? "1h";
+
     for (const c of candles) {
-      if (c.symbol !== this.sub.brokerSymbol) continue;
-      if (c.timeframe && c.timeframe !== wantTf) continue;
+      const broker = c.symbol;
+      if (!broker) continue;
+      const display = this.displayFor(broker);
+
+      // Candle events have a specific timeframe — only broadcast to that room
+      const candleTf = c.timeframe ?? "1h";
+      // Find the tf key that matches
+      const tfKey = Object.entries(TF_MAP).find(([, v]) => v === candleTf)?.[0] ?? "h1";
+
+      const key = `${this.config.userId}|${this.config.accountId}|${broker}|${tfKey}`;
       const evt: ChartLiveEvent = {
         type: "candle_update",
-        userId: this.sub.userId,
-        accountId: this.sub.accountId,
-        displaySymbol: this.sub.displaySymbol,
-        brokerSymbol: this.sub.brokerSymbol,
-        timeframe: wantTf,
+        userId: this.config.userId,
+        accountId: this.config.accountId,
+        displaySymbol: display,
+        brokerSymbol: broker,
+        timeframe: candleTf,
         candle: {
           time: String(c.time ?? ""),
           open: Number(c.open ?? 0),
@@ -219,20 +271,27 @@ class ChartListener {
       };
       void publishEvent(
         { workerUrl: this.env.WORKER_URL, streamerSecret: this.env.STREAMER_SECRET },
-        roomKey(this.sub),
-        evt,
+        key,
+        evt
       );
     }
   }
 
+  // ── Position events ──────────────────────────────────────────────
+
   async onPositionsUpdated(_account: unknown, positions: PositionEvent[]) {
     const arr = Array.isArray(positions) ? positions : [];
-    const onSymbol: LivePositionPayload[] = arr
-      .filter((p) => String(p.symbol ?? "") === this.sub.brokerSymbol)
-      .map((p, i) => ({
-        id: String(p.id ?? p.positionId ?? i),
-        symbol: String(p.symbol ?? ""),
-        side: mapSide(typeof p.type === "string" ? (p.type as string) : undefined),
+
+    // Group positions by broker symbol
+    const bySymbol = new Map<string, LivePositionPayload[]>();
+    for (const p of arr) {
+      const broker = String(p.symbol ?? "");
+      if (!broker) continue;
+      const list = bySymbol.get(broker) ?? [];
+      list.push({
+        id: String(p.id ?? p.positionId ?? ""),
+        symbol: broker,
+        side: mapSide(typeof p.type === "string" ? p.type : undefined),
         volume: Number(p.volume ?? 0) || 0,
         entryPrice: p.openPrice != null ? Number(p.openPrice) : null,
         currentPrice:
@@ -250,57 +309,358 @@ class ChartListener {
         stopLoss: p.stopLoss != null ? Number(p.stopLoss) : null,
         takeProfit: p.takeProfit != null ? Number(p.takeProfit) : null,
         openTime: (p.time as string) ?? (p.updateTime as string) ?? null,
+      });
+      bySymbol.set(broker, list);
+    }
+
+    // Broadcast to all rooms for symbols with positions
+    for (const [broker, onSymbol] of bySymbol) {
+      broadcastToAllTfRooms(this.env, this.config, broker, this.displayFor(broker), () => ({
+        type: "positions_update",
+        userId: this.config.userId,
+        accountId: this.config.accountId,
+        total: arr.length,
+        onSymbol,
+        source: "metaapi_mt5",
       }));
-    const evt: ChartLiveEvent = {
-      type: "positions_update",
-      userId: this.sub.userId,
-      accountId: this.sub.accountId,
-      total: arr.length,
-      onSymbol,
-      source: "metaapi_mt5",
-    };
-    void publishEvent(
-      { workerUrl: this.env.WORKER_URL, streamerSecret: this.env.STREAMER_SECRET },
-      roomKey(this.sub),
-      evt,
-    );
-  }
+    }
 
-  async onConnected() {
-    await broadcastStatus(this.env, this.sub, "live");
-  }
-
-  async onDisconnected() {
-    await broadcastStatus(this.env, this.sub, "reconnecting");
-  }
-}
-
-async function main() {
-  const env = readEnv();
-  const subs = parseSubscriptions(env.SUBSCRIPTIONS);
-  if (subs.length === 0) {
-    log("warn", "no SUBSCRIPTIONS configured — process will idle");
-  } else {
-    log("info", `loaded ${subs.length} subscription(s)`);
-  }
-
-  for (const sub of subs) {
-    try {
-      await startSubscription(env, sub);
-    } catch (e) {
-      log("error", `failed to start ${roomKey(sub)}:`, e);
-      await broadcastStatus(env, sub, "error", "subscription_failed");
+    // Also broadcast to symbols WITHOUT positions (empty array = no positions on this symbol)
+    for (const sym of this.config.watchlistSymbols) {
+      const broker = this.config.symbolMap[sym] ?? sym;
+      if (!bySymbol.has(broker)) {
+        broadcastToAllTfRooms(this.env, this.config, broker, sym, () => ({
+          type: "positions_update",
+          userId: this.config.userId,
+          accountId: this.config.accountId,
+          total: arr.length,
+          onSymbol: [],
+          source: "metaapi_mt5",
+        }));
+      }
     }
   }
 
-  process.on("SIGTERM", () => {
-    log("info", "SIGTERM received — flushing");
+  // ── Pending order events ────────────────────────────────────────
+
+  async onPendingOrdersUpdated(_account: unknown, orders: OrderEvent[]) {
+    const arr = Array.isArray(orders) ? orders : [];
+
+    // Group orders by broker symbol
+    const bySymbol = new Map<string, LivePendingOrderPayload[]>();
+    for (const o of arr) {
+      const broker = String(o.symbol ?? "");
+      if (!broker) continue;
+      const list = bySymbol.get(broker) ?? [];
+      list.push({
+        id: String(o.id ?? o.orderId ?? ""),
+        symbol: broker,
+        type: mapOrderType(typeof o.type === "string" ? o.type : undefined),
+        side: mapSide(typeof o.type === "string" ? o.type : undefined),
+        volume: Number(o.volume ?? 0) || 0,
+        openPrice: Number(o.openPrice ?? o.price ?? 0),
+        currentPrice: o.currentPrice != null ? Number(o.currentPrice) : null,
+        stopLoss: o.stopLoss != null ? Number(o.stopLoss) : null,
+        takeProfit: o.takeProfit != null ? Number(o.takeProfit) : null,
+        openTime: (o.time as string) ?? (o.updateTime as string) ?? null,
+      });
+      bySymbol.set(broker, list);
+    }
+
+    // Broadcast to rooms for symbols with orders
+    for (const [broker, onSymbol] of bySymbol) {
+      broadcastToAllTfRooms(this.env, this.config, broker, this.displayFor(broker), () => ({
+        type: "orders_update",
+        userId: this.config.userId,
+        accountId: this.config.accountId,
+        total: arr.length,
+        onSymbol,
+        source: "metaapi_mt5",
+      }));
+    }
+  }
+
+  // ── Connection lifecycle ────────────────────────────────────────
+
+  async onConnected() {
+    log("info", `[${this.config.metaApiAccountId}] MetaAPI connected`);
+    // Broadcast "live" to all subscribed symbols
+    for (const sym of this.config.watchlistSymbols) {
+      const broker = this.config.symbolMap[sym] ?? sym;
+      broadcastToAllTfRooms(this.env, this.config, broker, sym, () => ({
+        type: "live_status",
+        status: "live",
+      }));
+    }
+  }
+
+  async onDisconnected() {
+    log("warn", `[${this.config.metaApiAccountId}] MetaAPI disconnected — will reconnect`);
+    for (const sym of this.config.watchlistSymbols) {
+      const broker = this.config.symbolMap[sym] ?? sym;
+      broadcastToAllTfRooms(this.env, this.config, broker, sym, () => ({
+        type: "live_status",
+        status: "reconnecting",
+        reason: "metaapi_disconnected",
+      }));
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Account stream lifecycle                                           */
+/* ------------------------------------------------------------------ */
+
+let metaApiSingleton: MetaApiInstance | null = null;
+
+async function getMetaApi(token: string, region: string): Promise<MetaApiInstance> {
+  if (metaApiSingleton) return metaApiSingleton;
+  const sdkMod = (await import("metaapi.cloud-sdk")) as unknown as {
+    default: new (token: string, opts?: { region?: string }) => MetaApiInstance;
+  };
+  metaApiSingleton = new sdkMod.default(token, { region });
+  return metaApiSingleton;
+}
+
+async function startAccountStream(env: Env, config: AccountConfig): Promise<AccountStream> {
+  log("info", `Starting stream for account ${config.metaApiAccountId} with ${config.watchlistSymbols.length} symbols`);
+
+  const api = await getMetaApi(env.METAAPI_TOKEN, config.region);
+  const account = await api.metatraderAccountApi.getAccount(config.metaApiAccountId);
+
+  if (account.state !== "DEPLOYED") {
+    log("info", `Deploying account ${config.metaApiAccountId}`);
+    await account.deploy();
+  }
+  await account.waitConnected();
+
+  const connection = account.getStreamingConnection();
+  await connection.connect();
+  await connection.waitSynchronized();
+
+  const listener = new MultiSymbolListener(env, config);
+  connection.addSynchronizationListener(listener as unknown as Record<string, unknown>);
+
+  // Subscribe to ALL watchlist symbols
+  const subscribedSymbols = new Set<string>();
+  for (const displaySymbol of config.watchlistSymbols) {
+    const brokerSymbol = config.symbolMap[displaySymbol] ?? displaySymbol;
+    try {
+      await connection.subscribeToMarketData(brokerSymbol);
+      subscribedSymbols.add(brokerSymbol);
+      log("debug", `  ✓ subscribed ${displaySymbol} → ${brokerSymbol}`);
+    } catch (e) {
+      log("warn", `  ✗ failed to subscribe ${displaySymbol} → ${brokerSymbol}:`, e);
+    }
+  }
+
+  log("info", `Account ${config.metaApiAccountId}: ${subscribedSymbols.size}/${config.watchlistSymbols.length} symbols subscribed`);
+
+  // Broadcast ready + live status for all subscribed symbols
+  for (const displaySymbol of config.watchlistSymbols) {
+    const brokerSymbol = config.symbolMap[displaySymbol] ?? displaySymbol;
+    if (!subscribedSymbols.has(brokerSymbol)) continue;
+    broadcastToAllTfRooms(env, config, brokerSymbol, displaySymbol, (tf) => ({
+      type: "ready",
+      userId: config.userId,
+      accountId: config.accountId,
+      displaySymbol,
+      brokerSymbol,
+      timeframe: tf,
+      source: "metaapi_mt5",
+    }));
+  }
+
+  const stream: AccountStream = {
+    config,
+    connection,
+    subscribedSymbols,
+    symbolMap: config.symbolMap,
+  };
+
+  activeStreams.set(config.metaApiAccountId, stream);
+  return stream;
+}
+
+async function addSymbolsToStream(
+  env: Env,
+  stream: AccountStream,
+  newSymbols: string[],
+  symbolMap: Record<string, string>
+): Promise<void> {
+  if (!stream.connection) return;
+
+  for (const displaySymbol of newSymbols) {
+    const brokerSymbol = symbolMap[displaySymbol] ?? displaySymbol;
+    if (stream.subscribedSymbols.has(brokerSymbol)) continue;
+
+    try {
+      await stream.connection.subscribeToMarketData(brokerSymbol);
+      stream.subscribedSymbols.add(brokerSymbol);
+      log("info", `  + subscribed ${displaySymbol} → ${brokerSymbol} (hot add)`);
+    } catch (e) {
+      log("warn", `  ✗ failed to hot-add ${displaySymbol} → ${brokerSymbol}:`, e);
+    }
+  }
+
+  // Update the stream's config
+  stream.config.watchlistSymbols = [
+    ...new Set([...stream.config.watchlistSymbols, ...newSymbols]),
+  ];
+  stream.symbolMap = { ...stream.symbolMap, ...symbolMap };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Reconciliation loop                                                */
+/* ------------------------------------------------------------------ */
+
+async function reconcile(env: Env, currentConfigs: AccountConfig[]): Promise<AccountConfig[]> {
+  try {
+    const nextConfigs = await loadAccountConfigs();
+    const diff = diffConfigs(currentConfigs, nextConfigs);
+
+    if (diff.added.length > 0) {
+      log("info", `Reconcile: ${diff.added.length} new account(s) found`);
+      for (const config of diff.added) {
+        try {
+          await startAccountStream(env, config);
+        } catch (e) {
+          log("error", `Failed to start stream for new account ${config.metaApiAccountId}:`, e);
+        }
+      }
+    }
+
+    if (diff.removed.length > 0) {
+      log("info", `Reconcile: ${diff.removed.length} account(s) removed`);
+      for (const config of diff.removed) {
+        const stream = activeStreams.get(config.metaApiAccountId);
+        if (stream?.connection) {
+          try {
+            await stream.connection.close();
+          } catch { /* ignore */ }
+        }
+        activeStreams.delete(config.metaApiAccountId);
+      }
+    }
+
+    if (diff.symbolsChanged.length > 0) {
+      for (const change of diff.symbolsChanged) {
+        const stream = activeStreams.get(change.config.metaApiAccountId);
+        if (!stream) continue;
+
+        if (change.addedSymbols.length > 0) {
+          log("info", `Reconcile: +${change.addedSymbols.length} symbols for ${change.config.metaApiAccountId}`);
+          await addSymbolsToStream(env, stream, change.addedSymbols, change.config.symbolMap);
+        }
+        if (change.removedSymbols.length > 0) {
+          log("info", `Reconcile: -${change.removedSymbols.length} symbols for ${change.config.metaApiAccountId}`);
+          // Don't unsubscribe — just stop tracking. MetaAPI handles cleanup.
+          stream.config.watchlistSymbols = stream.config.watchlistSymbols.filter(
+            (s) => !change.removedSymbols.includes(s)
+          );
+        }
+      }
+    }
+
+    return nextConfigs;
+  } catch (e) {
+    log("error", "Reconciliation failed:", e);
+    return currentConfigs;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main                                                               */
+/* ------------------------------------------------------------------ */
+
+async function main() {
+  const env = readEnv();
+
+  // ── Static mode (v1 compatibility) ─────────────────────────────
+  if (env.STATIC_MODE && env.SUBSCRIPTIONS) {
+    const subs = parseSubscriptions(env.SUBSCRIPTIONS);
+    log("info", `STATIC_MODE: loaded ${subs.length} subscription(s) from SUBSCRIPTIONS env`);
+
+    for (const sub of subs) {
+      const config: AccountConfig = {
+        userId: sub.userId,
+        accountId: sub.accountId,
+        metaApiAccountId: sub.metaApiAccountId,
+        region: "london",
+        symbolMap: { [sub.displaySymbol]: sub.brokerSymbol },
+        watchlistSymbols: [sub.displaySymbol],
+      };
+      try {
+        await startAccountStream(env, config);
+      } catch (e) {
+        log("error", `Failed to start static subscription ${sub.displaySymbol}:`, e);
+      }
+    }
+
+    // No reconciliation in static mode — just stay alive
+    log("info", "Static mode active — no reconciliation loop");
+    return;
+  }
+
+  // ── Dynamic mode (v2 — Supabase) ───────────────────────────────
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    log("error", "Dynamic mode requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    log("info", "Set STATIC_MODE=true to use legacy SUBSCRIPTIONS env var");
+    process.exit(1);
+  }
+
+  log("info", "Dynamic mode — loading account configs from Supabase");
+  let configs = await loadAccountConfigs();
+
+  if (configs.length === 0) {
+    log("warn", "No active MT5 cloud accounts found — will retry on reconciliation");
+  } else {
+    log("info", `Found ${configs.length} account(s)`);
+    for (const config of configs) {
+      try {
+        await startAccountStream(env, config);
+      } catch (e) {
+        log("error", `Failed to start stream for ${config.metaApiAccountId}:`, e);
+      }
+    }
+  }
+
+  // ── Reconciliation loop ────────────────────────────────────────
+  const reconcileTimer = setInterval(async () => {
+    log("debug", "Running reconciliation…");
+    configs = await reconcile(env, configs);
+  }, RECONCILE_INTERVAL_MS);
+
+  // ── Heartbeat (keeps process alive + monitors health) ──────────
+  const heartbeatTimer = setInterval(() => {
+    const stats = Array.from(activeStreams.values()).map((s) => ({
+      account: s.config.metaApiAccountId.slice(0, 8) + "…",
+      symbols: s.subscribedSymbols.size,
+      connected: s.connection !== null,
+    }));
+    log("debug", `Heartbeat: ${activeStreams.size} stream(s)`, stats);
+  }, 30_000);
+
+  // ── Graceful shutdown ──────────────────────────────────────────
+  const shutdown = async (signal: string) => {
+    log("info", `${signal} received — shutting down`);
+    clearInterval(reconcileTimer);
+    clearInterval(heartbeatTimer);
+
+    for (const [id, stream] of activeStreams) {
+      if (stream.connection) {
+        try {
+          await stream.connection.close();
+          log("info", `Closed connection for ${id}`);
+        } catch { /* ignore */ }
+      }
+    }
+
     process.exit(0);
-  });
-  process.on("SIGINT", () => {
-    log("info", "SIGINT received — flushing");
-    process.exit(0);
-  });
+  };
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
 main().catch((err) => {
