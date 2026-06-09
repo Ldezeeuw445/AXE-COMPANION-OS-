@@ -43,6 +43,8 @@ type Props = {
   onPointClick?: (point: AnnotationPoint) => void;
   /** Chart color theme key. Defaults to "midnight". */
   themeKey?: ChartThemeKey;
+  /** "grid" shows gridlines, "solid" hides them. Defaults to "grid". */
+  gridStyle?: "grid" | "solid";
 };
 
 export type ChartCanvasHandle = {
@@ -65,6 +67,8 @@ export type ChartCanvasHandle = {
   subscribeViewport: (cb: () => void) => () => void;
   /** Width (px) the right price scale currently occupies, so panes can mirror it. */
   getRightAxisWidth: () => number;
+  /** Scroll the chart time axis by a pixel delta (negative = scroll left / back in time). */
+  scrollByPixels: (deltaX: number) => void;
 };
 
 /** Default native zoom: how many of the most recent bars are visible at first paint
@@ -96,7 +100,7 @@ function buildSeriesData(candles: MetaApiCandle[]): CandlestickData[] {
 }
 
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
-  { candles, overlays, pendingOrders = [], symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick, themeKey },
+  { candles, overlays, pendingOrders = [], symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick, themeKey, gridStyle = "grid" },
   ref,
 ) {
   const theme = getChartTheme(themeKey);
@@ -132,8 +136,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: theme.grid, style: LineStyle.Solid },
-        horzLines: { color: theme.grid, style: LineStyle.Solid },
+        vertLines: { color: gridStyle === "solid" ? "transparent" : theme.grid, style: LineStyle.Solid },
+        horzLines: { color: gridStyle === "solid" ? "transparent" : theme.grid, style: LineStyle.Solid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -600,6 +604,16 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         } catch {
           return 0;
         }
+      },
+      scrollByPixels(deltaX: number) {
+        const chart = chartRef.current;
+        if (!chart) return;
+        try {
+          chart.timeScale().scrollToPosition(
+            chart.timeScale().scrollPosition() + deltaX / 8,
+            false,
+          );
+        } catch { /* ignore */ }
       },
     }),
     [],

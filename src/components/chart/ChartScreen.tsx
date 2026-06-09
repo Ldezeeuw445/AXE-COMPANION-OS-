@@ -61,7 +61,7 @@ import {
   type LiveUiStatus,
 } from "@/components/chart/useLiveChart";
 import { usePageVisible } from "@/components/chart/usePageVisible";
-import { getChartTheme, readChartThemeKey, type ChartThemeKey } from "@/components/chart/chartTheme";
+import { getChartTheme, readChartThemeKey, readGridStyle, type ChartThemeKey, type ChartGridStyle } from "@/components/chart/chartTheme";
 import { seedGlobalsFromAccount, writePref } from "@/lib/accountPreferences";
 import {
   AxeContextToolbar,
@@ -804,8 +804,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     if (accountId && accountId !== prevAccountRef.current) {
       seedGlobalsFromAccount(accountId);
       prevAccountRef.current = accountId;
-      // Re-read chart theme after seeding (may differ per account)
+      // Re-read chart theme + grid after seeding (may differ per account)
       setChartThemeKey(readChartThemeKey());
+      setChartGridStyle(readGridStyle());
     }
   }, [accountId]);
 
@@ -816,6 +817,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   );
 
   const [chartThemeKey, setChartThemeKey] = useState<ChartThemeKey>(() => readChartThemeKey());
+  const [chartGridStyle, setChartGridStyle] = useState<ChartGridStyle>(() => readGridStyle());
   const chartTheme = useMemo(() => getChartTheme(chartThemeKey), [chartThemeKey]);
   const isVisible = usePageVisible();
   const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
@@ -2544,6 +2546,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           navigationLocked={pendingOrderVisible && executionMode === "pending"}
           onPointClick={handlePointClick}
           themeKey={chartThemeKey}
+          gridStyle={chartGridStyle}
         />
 
         {/* Left-side position labels (entry / SL / TP) — drag SL/TP to modify */}
@@ -3256,7 +3259,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           maxHeight={260}
           ariaLabel="Resize volume pane"
         >
-          <IndicatorPane mode="volume" candles={liveCandles} canvasRef={canvasRef} />
+          <IndicatorPane mode="volume" candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
         </ResizablePane>
       ) : null}
       {indicatorToolFlags.rsi ? (
@@ -3267,7 +3270,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           maxHeight={280}
           ariaLabel="Resize RSI pane"
         >
-          <IndicatorPane mode="rsi" candles={liveCandles} canvasRef={canvasRef} />
+          <IndicatorPane mode="rsi" candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
         </ResizablePane>
       ) : null}
       {indicatorToolFlags.macd ? (
@@ -3278,7 +3281,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           maxHeight={280}
           ariaLabel="Resize MACD pane"
         >
-          <IndicatorPane mode="macd" candles={liveCandles} canvasRef={canvasRef} />
+          <IndicatorPane mode="macd" candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
         </ResizablePane>
       ) : null}
 

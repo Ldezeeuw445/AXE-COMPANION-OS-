@@ -5,10 +5,12 @@
  * Paper (light mode). Each preset defines candle, grid, axis, and overlay colors
  * calibrated for legibility on its background.
  *
- * The L-shaped axis separator is always rendered — its color adapts per theme.
+ * Grid style is a per-user preference (solid = no grid, grid = with gridlines),
+ * persisted in localStorage.
  */
 
 export type ChartThemeKey = "midnight" | "charcoal" | "slate" | "paper";
+export type ChartGridStyle = "solid" | "grid";
 
 export interface ChartThemeConfig {
   key: ChartThemeKey;
@@ -48,8 +50,8 @@ export interface ChartThemeConfig {
 const MIDNIGHT: ChartThemeConfig = {
   key: "midnight",
   label: "Midnight",
-  background: "#0c0c0c",
-  chartCanvasBackground: "#0c0c0c",
+  background: "#000000",
+  chartCanvasBackground: "#000000",
   textColor: "rgba(220,230,245,0.90)",
   grid: "rgba(255,255,255,0.03)",
   crosshair: "rgba(0,224,255,0.35)",
@@ -59,7 +61,7 @@ const MIDNIGHT: ChartThemeConfig = {
   bear: "#C95450",
   bullWick: "rgba(31,156,123,0.95)",
   bearWick: "rgba(201,84,80,0.95)",
-  crosshairLabelBg: "#141414",
+  crosshairLabelBg: "#0a0a0a",
   entryLine: "rgba(110,178,252,0.7)",
   stopLine: "rgba(201,84,80,0.7)",
   takeLine: "rgba(31,156,123,0.7)",
@@ -139,10 +141,11 @@ const PAPER: ChartThemeConfig = {
   crosshair: "rgba(0,140,200,0.40)",
   axisSeparator: "rgba(0,0,0,0.14)",
   borderColor: "rgba(0,0,0,0.08)",
-  bull: "#089981",
-  bear: "#f23645",
-  bullWick: "rgba(8,153,129,0.95)",
-  bearWick: "rgba(242,54,69,0.95)",
+  /* Muted TradingView-style candles — calm & clear on light bg */
+  bull: "#2a2e39",
+  bear: "#131722",
+  bullWick: "rgba(42,46,57,0.85)",
+  bearWick: "rgba(19,23,34,0.85)",
   crosshairLabelBg: "#c8c7c2",
   entryLine: "rgba(60,120,220,0.7)",
   stopLine: "rgba(242,54,69,0.7)",
@@ -183,6 +186,7 @@ export const CHART_THEME = MIDNIGHT;
 /* ── localStorage helpers ──────────────────────────────────────── */
 
 const STORAGE_KEY = "axe-chart-theme";
+const GRID_STORAGE_KEY = "axe-chart-grid";
 
 export function readChartThemeKey(): ChartThemeKey {
   if (typeof window === "undefined") return "midnight";
@@ -194,4 +198,16 @@ export function readChartThemeKey(): ChartThemeKey {
 export function writeChartThemeKey(key: ChartThemeKey): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, key);
+}
+
+export function readGridStyle(): ChartGridStyle {
+  if (typeof window === "undefined") return "grid";
+  const stored = localStorage.getItem(GRID_STORAGE_KEY);
+  if (stored === "solid" || stored === "grid") return stored;
+  return "grid";
+}
+
+export function writeGridStyle(style: ChartGridStyle): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(GRID_STORAGE_KEY, style);
 }

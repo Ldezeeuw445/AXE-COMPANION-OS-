@@ -26,6 +26,7 @@ export const PREF_KEYS = [
   "axe.chart.paneHeight.rsi",
   "axe.chart.paneHeight.macd",
   "axe-chart-theme",
+  "axe-chart-grid",
 ] as const;
 
 export type PrefKey = (typeof PREF_KEYS)[number];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import { macdSeries } from "@/lib/chart/indicatorMath";
@@ -19,13 +19,17 @@ type Props = {
   mode: Mode;
   candles: MetaApiCandle[];
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
+  /** Match the main chart background so indicator panes look seamless. */
+  background?: string;
+  /** Whether the theme is dark (adjusts separator/label colors). */
+  isDark?: boolean;
 };
 
 type Size = { w: number; h: number };
 
 const MIN_AXIS_WIDTH = 56;
 
-export function IndicatorPane({ mode, candles, canvasRef }: Props) {
+export function IndicatorPane({ mode, candles, canvasRef, background, isDark = true }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState<number>(MIN_AXIS_WIDTH);
@@ -231,12 +235,44 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
           ];
         })();
 
+  /* ── Touch/pointer pan: dragging in indicator pane scrolls the main chart ── */
+  const panRef = useRef<{ startX: number; pointerId: number } | null>(null);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Only start pan on the plot area (not the axis gutter)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const localX = e.clientX - rect.left;
+    if (localX > plotWidth) return; // tapped in axis gutter
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    panRef.current = { startX: e.clientX, pointerId: e.pointerId };
+  }, [plotWidth]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const pan = panRef.current;
+    if (!pan || e.pointerId !== pan.pointerId) return;
+    const dx = pan.startX - e.clientX; // positive = dragged left = scroll right (back in time)
+    pan.startX = e.clientX;
+    canvasRef.current?.scrollByPixels(dx);
+  }, [canvasRef]);
+
+  const onPointerEnd = useCallback((e: React.PointerEvent) => {
+    if (!panRef.current || e.pointerId !== panRef.current.pointerId) return;
+    panRef.current = null;
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
+  }, []);
+
   return (
     <div
       ref={hostRef}
-      className="tos-indicator-pane relative h-full w-full overflow-hidden"
+      className="tos-indicator-pane relative h-full w-full overflow-hidden touch-none"
+      style={background ? { background } : undefined}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
     >
-      <span className="pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] text-white/70">
+      <span className={`pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] ${isDark ? "text-white/70" : "text-black/60"}`}>
         {mode === "rsi"
           ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
           : mode === "macd"
@@ -259,7 +295,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
             x2={plotWidth}
             y1={0}
             y2={size.h}
-            stroke="rgba(255,255,255,0.04)"
+            stroke={isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)"}
             strokeWidth={1}
           />
 
@@ -275,8 +311,8 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
                     y2={y}
                     stroke={
                       level === 50
-                        ? "rgba(255,255,255,0.16)"
-                        : "rgba(255,255,255,0.08)"
+                        ? isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.14)"
+                        : isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"
                     }
                     strokeDasharray="4 4"
                   />
@@ -290,7 +326,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
               x2={plotWidth}
               y1={top + usable / 2}
               y2={top + usable / 2}
-              stroke="rgba(255,255,255,0.16)"
+              stroke={isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.14)"}
               strokeDasharray="4 4"
             />
           ) : null}
@@ -358,7 +394,10 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
               textAnchor="start"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="10"
-              fill={label.emphasis ? "rgba(232,238,246,0.85)" : "rgba(168,180,196,0.7)"}
+              fill={label.emphasis
+                ? isDark ? "rgba(232,238,246,0.85)" : "rgba(30,35,45,0.85)"
+                : isDark ? "rgba(168,180,196,0.7)" : "rgba(80,85,95,0.7)"
+              }
             >
               {label.text}
             </text>
