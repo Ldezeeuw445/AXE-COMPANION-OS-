@@ -508,7 +508,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
             <div className="flex items-center gap-2">
               <Swords className="h-3.5 w-3.5 text-rose-300/85" aria-hidden />
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-                AXE Conflict Feed
+                AXE Seismic Events
               </h2>
             </div>
             <span className="text-[10px] text-tos-dim">
@@ -702,7 +702,7 @@ function intelHealthLabel(id: string): string {
     unusualOptions: "AXE Options Flow",
     corporateJets: "AXE Jet Tracker",
     vesselTracking: "AXE Vessel Intel",
-    conflictEvents: "AXE Conflict Feed",
+    conflictEvents: "AXE Seismic Events",
     energyFlows: "AXE Energy Flow",
     cyberThreats: "AXE Cyber Intel",
   };

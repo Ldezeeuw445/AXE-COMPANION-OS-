@@ -1532,11 +1532,15 @@ async function persistVessels(vessels: VesselTrack[]) {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// 8. CONFLICT EVENTS — ACLED (Armed Conflict Location & Event Data)
+// 8. CONFLICT & GEOSEISMIC EVENTS — ACLED + NASA EONET + USGS
 // ═══════════════════════════════════════════════════════════════════
 //
-// ACLED provides global conflict event data. Uses email/key auth.
-// Falls back to recent cached events if API is down.
+// Three free sources combined into one feed:
+//   1. ACLED — armed conflict events (requires email/key auth)
+//   2. NASA EONET — natural events: wildfires, volcanoes, storms, icebergs
+//   3. USGS FDSNWS — earthquakes M4.5+
+//
+// All three fire in parallel. No single source failing kills the feed.
 
 type ConflictEvent = {
   eventId: string;
@@ -1565,31 +1569,42 @@ async function handleConflictEvents(): Promise<Response> {
     }
   }
 
+  // Fire all three sources in parallel — any one succeeding is enough
   const acledEmail = Deno.env.get("ACLED_MAIL");
   const acledKey = Deno.env.get("ACLED_PASSWORD");
 
-  if (acledEmail && acledKey) {
-    try {
-      const events = await fetchConflictsFromAcled(acledEmail, acledKey);
-      if (events.length > 0) {
-        await persistConflicts(events);
-        await markSynced("conflictEvents", events.length, "acled");
-      }
-      setCache(cacheKey, events);
-      return json({ ok: true, data: events });
-    } catch { /* fall through */ }
+  const [acledResult, eonetResult, usgsResult] = await Promise.allSettled([
+    acledEmail && acledKey
+      ? fetchConflictsFromAcled(acledEmail, acledKey)
+      : Promise.reject("no_creds"),
+    fetchEventsFromEonet(),
+    fetchEarthquakesFromUsgs(),
+  ]);
+
+  const events: ConflictEvent[] = [];
+  const sources: string[] = [];
+
+  if (acledResult.status === "fulfilled" && acledResult.value.length > 0) {
+    events.push(...acledResult.value);
+    sources.push("acled");
+  }
+  if (eonetResult.status === "fulfilled" && eonetResult.value.length > 0) {
+    events.push(...eonetResult.value);
+    sources.push("eonet");
+  }
+  if (usgsResult.status === "fulfilled" && usgsResult.value.length > 0) {
+    events.push(...usgsResult.value);
+    sources.push("usgs");
   }
 
-  // Fallback: GDELT (free, no auth) for geopolitical events
-  try {
-    const events = await fetchConflictsFromGdelt();
-    if (events.length > 0) {
-      await persistConflicts(events);
-      await markSynced("conflictEvents", events.length, "gdelt");
-    }
+  if (events.length > 0) {
+    // Sort by date descending
+    events.sort((a, b) => (b.eventDate > a.eventDate ? 1 : -1));
+    await persistConflicts(events);
+    await markSynced("conflictEvents", events.length, sources.join("+"));
     setCache(cacheKey, events);
     return json({ ok: true, data: events });
-  } catch { /* fall through */ }
+  }
 
   const fallback = await readConflictsFromDb();
   if (fallback.length > 0) return json({ ok: true, data: fallback });
@@ -1624,49 +1639,72 @@ async function fetchConflictsFromAcled(email: string, key: string): Promise<Conf
   }));
 }
 
-async function fetchConflictsFromGdelt(): Promise<ConflictEvent[]> {
-  // GDELT DOC API — free, no auth. Rate-limited to 1 req/5s.
-  // Use a focused query to reduce payload. Retry once after 6s if rate-limited.
-  const url = "https://api.gdeltproject.org/api/v2/doc/doc?query=conflict%20OR%20military%20OR%20war&mode=ArtList&maxrecords=10&format=json&sort=DateDesc";
+// ── NASA EONET — wildfires, storms, volcanoes, icebergs ────────────
+// Free, no auth. https://eonet.gsfc.nasa.gov/docs/v3
+async function fetchEventsFromEonet(): Promise<ConflictEvent[]> {
+  const url = "https://eonet.gsfc.nasa.gov/api/v3/events?limit=15&status=open";
+  const res = await fetchWithTimeout(url, 12_000);
+  if (!res.ok) throw new Error(`eonet_${res.status}`);
+  const body = await res.json();
+  const events = body?.events;
+  if (!Array.isArray(events)) throw new Error("eonet_no_events");
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const res = await fetchWithTimeout(url, 12_000);
-      if (res.status === 429 || res.status === 503) {
-        // GDELT rate-limits to 1 request per 5 seconds
-        if (attempt === 0) {
-          await new Promise((r) => setTimeout(r, 6000));
-          continue;
-        }
-        throw new Error("gdelt_rate_limited");
-      }
-      if (!res.ok) throw new Error(`gdelt_${res.status}`);
-      const body = await res.json();
-      const articles = body?.articles;
-      if (!Array.isArray(articles)) throw new Error("gdelt_no_articles");
+  return events.slice(0, 15).map((e: Record<string, unknown>) => {
+    const cats = Array.isArray(e.categories) ? e.categories : [];
+    const cat = cats[0] as Record<string, unknown> | undefined;
+    const geo = Array.isArray(e.geometry) ? e.geometry : [];
+    const latest = geo[geo.length - 1] as Record<string, unknown> | undefined;
+    const coords = Array.isArray(latest?.coordinates) ? latest!.coordinates as number[] : [];
 
-      return articles.slice(0, 10).map((a: Record<string, unknown>, i: number) => ({
-        eventId: `gdelt-${i}-${Date.now()}`,
-        eventDate: String(a.seendate ?? new Date().toISOString().slice(0, 10)),
-        country: String(a.sourcecountry ?? "Global"),
-        region: String(a.domain ?? ""),
-        eventType: "News/Report",
-        subEventType: "Geopolitical",
-        actor1: String(a.source ?? a.domain ?? ""),
-        fatalities: 0,
-        notes: String(a.title ?? "").slice(0, 300),
-        latitude: null,
-        longitude: null,
-      }));
-    } catch (e) {
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 6000));
-        continue;
-      }
-      throw e;
-    }
-  }
-  throw new Error("gdelt_max_retries");
+    return {
+      eventId: String(e.id ?? `eonet-${Date.now()}`),
+      eventDate: String(latest?.date ?? new Date().toISOString()).slice(0, 10),
+      country: "Global",
+      region: String(cat?.title ?? "Natural Event"),
+      eventType: String(cat?.title ?? "Natural Event"),
+      subEventType: latest?.magnitudeValue != null
+        ? `${latest!.magnitudeValue} ${latest!.magnitudeUnit ?? ""}`
+        : "Active",
+      actor1: "NASA EONET",
+      fatalities: 0,
+      notes: String(e.title ?? "").slice(0, 300),
+      latitude: coords.length >= 2 ? coords[1] : null,
+      longitude: coords.length >= 2 ? coords[0] : null,
+    };
+  });
+}
+
+// ── USGS — earthquakes M4.5+ ──────────────────────────────────────
+// Free, no auth. https://earthquake.usgs.gov/fdsnws/event/1/
+async function fetchEarthquakesFromUsgs(): Promise<ConflictEvent[]> {
+  const url = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&limit=10&orderby=time&minmagnitude=4.5";
+  const res = await fetchWithTimeout(url, 12_000);
+  if (!res.ok) throw new Error(`usgs_${res.status}`);
+  const body = await res.json();
+  const features = body?.features;
+  if (!Array.isArray(features)) throw new Error("usgs_no_features");
+
+  return features.slice(0, 10).map((f: Record<string, unknown>) => {
+    const props = (f.properties ?? {}) as Record<string, unknown>;
+    const geo = (f.geometry ?? {}) as Record<string, unknown>;
+    const coords = Array.isArray(geo.coordinates) ? geo.coordinates as number[] : [];
+    const mag = Number(props.mag ?? 0);
+    const time = props.time ? new Date(Number(props.time)).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+
+    return {
+      eventId: String(f.id ?? `usgs-${Date.now()}`),
+      eventDate: time,
+      country: "Global",
+      region: String(props.place ?? ""),
+      eventType: "Earthquake",
+      subEventType: `M${mag.toFixed(1)}`,
+      actor1: "USGS",
+      fatalities: 0,
+      notes: String(props.title ?? `M${mag.toFixed(1)} earthquake`).slice(0, 300),
+      latitude: coords.length >= 2 ? coords[1] : null,
+      longitude: coords.length >= 2 ? coords[0] : null,
+    };
+  });
 }
 
 async function readConflictsFromDb(): Promise<ConflictEvent[]> {

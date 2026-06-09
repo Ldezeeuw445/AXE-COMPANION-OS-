@@ -415,8 +415,8 @@ async function fetchIntelSnapshot(
     ),
     toStatus(
       "conflictEvents",
-      "Conflict events",
-      "AXE Intel geopolitical conflict feed (ACLED/GDELT)",
+      "Seismic events",
+      "AXE Intel seismic & geo events (ACLED + NASA EONET + USGS)",
       conflictRes.ok && conflicts.length > 0,
       conflictRes.ok ? undefined : conflictRes.error,
     ),
