@@ -62,6 +62,7 @@ import {
 } from "@/components/chart/useLiveChart";
 import { usePageVisible } from "@/components/chart/usePageVisible";
 import { getChartTheme, readChartThemeKey, type ChartThemeKey } from "@/components/chart/chartTheme";
+import { seedGlobalsFromAccount, writePref } from "@/lib/accountPreferences";
 import {
   AxeContextToolbar,
   type AxeToolbarSection,
@@ -794,6 +795,26 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
+  // ── Per-account settings: seed global localStorage from scoped keys ──
+  // When accountId changes (account switch), overwrite global keys with
+  // that account's stored values so all downstream reads (indicators,
+  // theme, pane heights) instantly reflect the account's settings.
+  const prevAccountRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (accountId && accountId !== prevAccountRef.current) {
+      seedGlobalsFromAccount(accountId);
+      prevAccountRef.current = accountId;
+      // Re-read chart theme after seeding (may differ per account)
+      setChartThemeKey(readChartThemeKey());
+    }
+  }, [accountId]);
+
+  /** Write to both global + account-scoped localStorage. */
+  const savePref = useCallback(
+    (key: string, value: string) => writePref(accountId, key, value),
+    [accountId],
+  );
+
   const [chartThemeKey, setChartThemeKey] = useState<ChartThemeKey>(() => readChartThemeKey());
   const chartTheme = useMemo(() => getChartTheme(chartThemeKey), [chartThemeKey]);
   const isVisible = usePageVisible();
@@ -911,11 +932,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         // closest equivalent (S/D fib mode) instead of resetting to
         // "auto".
         setFibMode("sd");
-        try {
-          localStorage.setItem("axe.chart.fibMode", "sd");
-        } catch {
-          /* ignore */
-        }
+        try { savePref("axe.chart.fibMode", "sd"); } catch { /* ignore */ }
       }
       const rawFibSwing = Number(localStorage.getItem("axe.chart.fibSwingOffset") ?? "");
       if (rawFibSwing === 0 || rawFibSwing === 1 || rawFibSwing === 2 || rawFibSwing === 3) {
@@ -949,7 +966,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateOrderBlockCount = useCallback((next: 1 | 2 | 3) => {
     setOrderBlockCount(next);
     try {
-      localStorage.setItem("axe.chart.obCount", String(next));
+      savePref("axe.chart.obCount", String(next));
     } catch {
       /* ignore */
     }
@@ -957,7 +974,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateInverseFvgCount = useCallback((next: 1 | 2 | 3) => {
     setInverseFvgCount(next);
     try {
-      localStorage.setItem("axe.chart.ifvgCount", String(next));
+      savePref("axe.chart.ifvgCount", String(next));
     } catch {
       /* ignore */
     }
@@ -965,7 +982,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateFvgCount = useCallback((next: 1 | 2 | 3) => {
     setFvgCount(next);
     try {
-      localStorage.setItem("axe.chart.fvgCount", String(next));
+      savePref("axe.chart.fvgCount", String(next));
     } catch {
       /* ignore */
     }
@@ -973,7 +990,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateProjectionCount = useCallback((next: 1 | 2 | 3) => {
     setProjectionCount(next);
     try {
-      localStorage.setItem("axe.chart.projectionCount", String(next));
+      savePref("axe.chart.projectionCount", String(next));
     } catch {
       /* ignore */
     }
@@ -983,7 +1000,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setMaPeriod((prev) => {
       const next = periods[(periods.indexOf(prev) + 1) % periods.length];
       try {
-        localStorage.setItem("axe.chart.maPeriod", String(next));
+        savePref("axe.chart.maPeriod", String(next));
       } catch {
         /* ignore */
       }
@@ -994,7 +1011,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setMaType((prev) => {
       const next = prev === "sma" ? "ema" : "sma";
       try {
-        localStorage.setItem("axe.chart.maType", next);
+        savePref("axe.chart.maType", next);
       } catch {
         /* ignore */
       }
@@ -1007,7 +1024,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateFibMode = useCallback((next: FibMode) => {
     setFibMode(next);
     try {
-      localStorage.setItem("axe.chart.fibMode", next);
+      savePref("axe.chart.fibMode", next);
     } catch {
       /* ignore */
     }
@@ -1015,7 +1032,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateFibSwingOffset = useCallback((next: 0 | 1 | 2 | 3) => {
     setFibSwingOffset(next);
     try {
-      localStorage.setItem("axe.chart.fibSwingOffset", String(next));
+      savePref("axe.chart.fibSwingOffset", String(next));
     } catch {
       /* ignore */
     }
@@ -1078,7 +1095,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
     setPaneHeights((prev) => ({ ...prev, [mode]: next }));
     try {
-      localStorage.setItem(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
+      savePref(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
     } catch {
       /* ignore — best-effort persistence */
     }
@@ -2262,7 +2279,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setIndicatorToolFlags((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       try {
-        localStorage.setItem("axe.chart.indicatorFlags", JSON.stringify(next));
+        savePref("axe.chart.indicatorFlags", JSON.stringify(next));
       } catch {
         /* localStorage may be blocked */
       }
@@ -2684,7 +2701,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-[26%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-[38%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             toolRailOpen
               ? "border-white/[0.14] bg-white/[0.08] text-white shadow-[0_0_24px_rgba(255,255,255,0.2)]"
               : "border-white/[0.08] bg-black/78 text-white/80"
@@ -2695,7 +2712,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-[26%] z-30 max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-[38%] z-30 max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
           style={{ width: "calc(100% - 80px)" }}
@@ -3082,7 +3099,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   type="button"
                   onClick={() => {
                     setMaPeriod(period);
-                    try { localStorage.setItem("axe.chart.maPeriod", String(period)); } catch { /* ignore */ }
+                    try { savePref("axe.chart.maPeriod", String(period)); } catch { /* ignore */ }
                   }}
                   className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold transition ${
                     maPeriod === period
