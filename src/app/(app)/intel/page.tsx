@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Anchor, BarChart3, Eye, Landmark, TrendingUp, Plane, Ship, Swords, Zap, Shield } from "lucide-react";
+import { Activity, Anchor, BarChart3, Eye, Landmark, TrendingUp, Plane, Ship, Swords, Zap, Shield, Radar, AlertTriangle } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
@@ -396,6 +396,119 @@ export default async function IntelPage({ searchParams }: PageProps) {
         )}
       </GlassPanel>
 
+      {/* ─── ALT-DATA: MILITARY RADAR + EMERGENCY MONITOR ──────── */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <GlassPanel className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Radar className="h-3.5 w-3.5 text-amber-300/85" aria-hidden />
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+                AXE Military Radar
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">
+                {intel.military.length > 0
+                  ? `${intel.military.filter((m) => !m.onGround).length} airborne · ${intel.military.length} tracked`
+                  : ""}
+              </span>
+              <InlineStatus providers={intel.providers} id="militaryRadar" />
+            </div>
+          </div>
+          {intel.military.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {intel.military.slice(0, 12).map((m, i) => (
+                <li
+                  key={`${m.hex}-${i}`}
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                >
+                  <span className={`font-mono text-[10px] font-semibold uppercase ${
+                    m.category === "bomber" ? "text-rose-300" :
+                    m.category === "fighter" ? "text-rose-300/80" :
+                    m.category === "isr" ? "text-amber-200" :
+                    m.category === "tanker" ? "text-blue-300/80" :
+                    m.category === "transport" ? "text-emerald-300/80" :
+                    "text-tos-dim"
+                  }`}>
+                    {m.category}
+                  </span>
+                  <span className="font-mono text-[11px] font-semibold text-tos-text">
+                    {m.aircraftType}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[10px] text-tos-dim">
+                    {m.callsign || m.registration || m.hex}
+                  </span>
+                  {m.onGround ? (
+                    <span className="font-mono text-[10px] text-tos-dim">GROUND</span>
+                  ) : (
+                    <>
+                      <span className="font-mono text-[10px] text-emerald-300">
+                        FL{m.altitude != null ? Math.round(m.altitude / 100) : "?"}
+                      </span>
+                      {m.groundSpeed != null && (
+                        <span className="font-mono text-[10px] text-tos-dim">{Math.round(m.groundSpeed)}kt</span>
+                      )}
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-tos-muted">
+              {intel.providers.find((p) => p.id === "militaryRadar")?.description ?? "No military aircraft data yet."}
+            </p>
+          )}
+        </GlassPanel>
+
+        <GlassPanel className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-rose-300/85" aria-hidden />
+              <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+                AXE Emergency Monitor
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">
+                {intel.emergency.length > 0 ? `${intel.emergency.length} active` : "clear"}
+              </span>
+              <InlineStatus providers={intel.providers} id="emergencyMonitor" />
+            </div>
+          </div>
+          {intel.emergency.length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {intel.emergency.slice(0, 8).map((e, i) => (
+                <li
+                  key={`${e.hex}-${i}`}
+                  className="flex items-baseline gap-3 rounded-lg border border-rose-400/25 bg-rose-400/[0.06] px-3 py-2"
+                >
+                  <span className="font-mono text-[11px] font-bold text-rose-300">SQK 7700</span>
+                  <span className="font-mono text-[11px] font-semibold text-tos-text">
+                    {e.aircraftType}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[10px] text-tos-dim">
+                    {e.callsign || e.registration || e.hex}
+                  </span>
+                  {e.altitude != null && (
+                    <span className="font-mono text-[10px] text-amber-200">
+                      FL{Math.round(e.altitude / 100)}
+                    </span>
+                  )}
+                  {e.groundSpeed != null && (
+                    <span className="font-mono text-[10px] text-tos-dim">{Math.round(e.groundSpeed)}kt</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-3 text-center">
+              <span className="font-mono text-[11px] font-semibold text-emerald-300/80">ALL CLEAR</span>
+              <p className="mt-1 text-[10px] text-tos-dim">No aircraft broadcasting emergency squawk 7700</p>
+            </div>
+          )}
+        </GlassPanel>
+      </div>
+
       {/* ─── ALT-DATA: VESSEL TRACKING + ENERGY ────────────────── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <GlassPanel className="p-4">
@@ -628,7 +741,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
         </Link>
         <Link
           href={chatQ(
-            `[AXE · intel]\nAnalyze all alt-data feeds: executive jets, supply chain, energy flows, conflict events and cyber threats. Find any cross-feed correlations that could affect ${symbol} or broader markets.`,
+            `[AXE · intel]\nAnalyze all alt-data feeds: executive jets, military radar, emergency monitor, supply chain, energy flows, conflict events and cyber threats. Find any cross-feed correlations that could affect ${symbol} or broader markets.`,
           )}
           className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
         >
@@ -643,8 +756,8 @@ export default async function IntelPage({ searchParams }: PageProps) {
       </div>
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
-        AXE Intel runs 10 feeds through the Supabase intel-proxy — smart money (insider, congress, dark pool, options, tide)
-        and alt-data (corporate jets, vessels, conflict, energy, cyber). AXE serializes requests and reuses cached snapshots.
+        AXE Intel runs 13 feeds through the Supabase intel-proxy — smart money (insider, congress, dark pool, options, tide)
+        and alt-data (corporate jets, military radar, emergency monitor, vessels, chokepoints, conflict, energy, cyber). AXE serializes requests and reuses cached snapshots.
         Nothing here is fabricated.
       </p>
 
@@ -786,6 +899,8 @@ function intelHealthLabel(id: string): string {
     darkPoolPrints: "AXE Dark Pool",
     unusualOptions: "AXE Options Flow",
     corporateJets: "AXE Jet Tracker",
+    militaryRadar: "AXE Military Radar",
+    emergencyMonitor: "AXE Emergency Monitor",
     vesselTracking: "AXE Vessel Intel",
     conflictEvents: "AXE Seismic Events",
     energyFlows: "AXE Energy Flow",

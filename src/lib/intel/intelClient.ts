@@ -20,7 +20,9 @@ export type IntelProviderStatus = {
     | "chokepoints"
     | "conflictEvents"
     | "energyFlows"
-    | "cyberThreats";
+    | "cyberThreats"
+    | "militaryRadar"
+    | "emergencyMonitor";
   label: string;
   state: IntelProviderState;
   description?: string;
@@ -156,6 +158,36 @@ export type CyberThreat = {
   category: string;
 };
 
+/* ── Military & Emergency Types ────────────────────────────────── */
+
+export type MilitaryAircraft = {
+  hex: string;
+  registration: string;
+  aircraftType: string;
+  callsign: string;
+  altitude: number | null;
+  groundSpeed: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  onGround: boolean;
+  category: string;
+  lastSeen: string;
+};
+
+export type EmergencySquawk = {
+  hex: string;
+  registration: string;
+  aircraftType: string;
+  callsign: string;
+  squawk: string;
+  altitude: number | null;
+  groundSpeed: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  onGround: boolean;
+  lastSeen: string;
+};
+
 export type IntelCorrelation = {
   id: string;
   title: string;
@@ -181,6 +213,8 @@ export type IntelSnapshot = {
   conflicts: ConflictEvent[];
   energy: EnergyFlow[];
   cyber: CyberThreat[];
+  military: MilitaryAircraft[];
+  emergency: EmergencySquawk[];
   providers: IntelProviderStatus[];
   hasLiveData: boolean;
   cache: {
@@ -201,7 +235,9 @@ type IntelAction =
   | "chokepoints"
   | "conflictEvents"
   | "energyFlows"
-  | "cyberThreats";
+  | "cyberThreats"
+  | "militaryRadar"
+  | "emergencyMonitor";
 
 type IntelEnvelope<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -338,6 +374,10 @@ async function fetchIntelSnapshot(
   const energyRes = await callIntelProxy<EnergyFlow[]>("energyFlows", {});
   const cyberRes = await callIntelProxy<CyberThreat[]>("cyberThreats", {});
 
+  // Military & Emergency feeds — same ADS-B Exchange subscription as jets
+  const militaryRes = await callIntelProxy<MilitaryAircraft[]>("militaryRadar", {});
+  const emergencyRes = await callIntelProxy<EmergencySquawk[]>("emergencyMonitor", {});
+
   const insiders = insiderRes.ok && Array.isArray(insiderRes.data) ? insiderRes.data : [];
   const senate = senateRes.ok && Array.isArray(senateRes.data) ? senateRes.data : [];
   const darkPool = darkPoolRes.ok && Array.isArray(darkPoolRes.data) ? darkPoolRes.data : [];
@@ -350,10 +390,12 @@ async function fetchIntelSnapshot(
   const conflicts = conflictRes.ok && Array.isArray(conflictRes.data) ? conflictRes.data : [];
   const energy = energyRes.ok && Array.isArray(energyRes.data) ? energyRes.data : [];
   const cyber = cyberRes.ok && Array.isArray(cyberRes.data) ? cyberRes.data : [];
+  const military = militaryRes.ok && Array.isArray(militaryRes.data) ? militaryRes.data : [];
+  const emergency = emergencyRes.ok && Array.isArray(emergencyRes.data) ? emergencyRes.data : [];
 
-  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes, energyRes, cyberRes];
+  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes, energyRes, cyberRes, militaryRes, emergencyRes];
   const hadError = allResults.some((r) => !r.ok);
-  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energy.length || cyber.length);
+  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energy.length || cyber.length || military.length);
 
   if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
     return markCache(
@@ -442,6 +484,21 @@ async function fetchIntelSnapshot(
       cyberRes.ok && cyber.length > 0,
       cyberRes.ok ? undefined : cyberRes.error,
     ),
+    toStatus(
+      "militaryRadar",
+      "Military radar",
+      "AXE Intel global military aircraft tracking",
+      militaryRes.ok && military.length > 0,
+      militaryRes.ok ? undefined : militaryRes.error,
+    ),
+    toStatus(
+      "emergencyMonitor",
+      "Emergency monitor",
+      "AXE Intel aviation emergency squawk tracking",
+      // 0 emergencies is normal — only mark error if the call itself failed
+      emergencyRes.ok,
+      emergencyRes.ok ? undefined : emergencyRes.error,
+    ),
   ];
 
   const snapshot: IntelSnapshot = {
@@ -457,6 +514,8 @@ async function fetchIntelSnapshot(
     conflicts,
     energy,
     cyber,
+    military,
+    emergency,
     providers,
     hasLiveData,
     cache: {

@@ -2132,6 +2132,322 @@ async function persistCyber(threats: CyberThreat[]) {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════
+// 11. MILITARY RADAR — ADS-B Exchange tagged military aircraft
+// ═══════════════════════════════════════════════════════════════════
+//
+// Real-time tracking of military aircraft worldwide via ADS-B Exchange.
+// Categories: transport (C-17, C-130), tankers (KC-135), ISR, helicopters.
+// Military air traffic patterns = geopolitical early warning signals.
+
+type MilitaryAircraft = {
+  hex: string;
+  registration: string;
+  aircraftType: string;
+  callsign: string;
+  altitude: number | null;      // feet
+  groundSpeed: number | null;   // knots
+  latitude: number | null;
+  longitude: number | null;
+  onGround: boolean;
+  category: string;             // transport, tanker, isr, helicopter, fighter, other
+  lastSeen: string;
+};
+
+const MIL_CATEGORIES: Record<string, string> = {
+  C17: "transport", C130: "transport", C30J: "transport", C5M: "transport", A400: "transport",
+  IL76: "transport", AN124: "transport", C2: "transport",
+  K35R: "tanker", KC10: "tanker", KC30: "tanker", A332: "tanker", A339: "tanker",
+  KC46: "tanker",
+  E3: "isr", E6B: "isr", E4B: "isr", RC135: "isr", P8: "isr", P3: "isr",
+  RQ4: "isr", MQ9: "isr", E8: "isr", EP3: "isr", AWACS: "isr",
+  H60: "helicopter", EC35: "helicopter", EC45: "helicopter", NH90: "helicopter",
+  AH64: "helicopter", UH60: "helicopter", CH47: "helicopter", V22: "helicopter",
+  F16: "fighter", F15: "fighter", F22: "fighter", F35: "fighter", F18: "fighter",
+  EF2K: "fighter", RFAL: "fighter", GR4: "fighter", JAS39: "fighter",
+  B52H: "bomber", B1B: "bomber", B2: "bomber",
+  TWR: "ground", G115: "trainer", TEX2: "trainer", BE20: "trainer",
+};
+
+function categorizeMilAircraft(typeCode: string): string {
+  if (!typeCode || typeCode === "?") return "other";
+  const upper = typeCode.toUpperCase();
+  for (const [prefix, cat] of Object.entries(MIL_CATEGORIES)) {
+    if (upper.startsWith(prefix) || upper === prefix) return cat;
+  }
+  return "other";
+}
+
+async function handleMilitaryRadar(): Promise<Response> {
+  const cacheKey = "military:all";
+  const hit = cached<MilitaryAircraft[]>(cacheKey);
+  if (hit) return json({ ok: true, data: hit });
+
+  if (await isFeedFresh("militaryRadar")) {
+    const result = await readMilitaryFromDb();
+    if (result.length > 0) {
+      setCache(cacheKey, result);
+      return json({ ok: true, data: result });
+    }
+  }
+
+  const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
+  if (!rapidApiKey) {
+    return json({ ok: false, error: "RAPIDAPI_KEY not configured" }, 500);
+  }
+
+  try {
+    const res = await fetchWithTimeout(
+      "https://adsbexchange-com1.p.rapidapi.com/v2/mil/",
+      12_000,
+      {
+        "x-rapidapi-host": "adsbexchange-com1.p.rapidapi.com",
+        "x-rapidapi-key": rapidApiKey,
+        "Content-Type": "application/json",
+      },
+    );
+    if (!res.ok) throw new Error(`ADS-B mil HTTP ${res.status}`);
+
+    const body = await res.json();
+    const acList = Array.isArray(body?.ac) ? body.ac : [];
+
+    const aircraft: MilitaryAircraft[] = acList
+      .filter((a: Record<string, unknown>) => {
+        const t = String(a.t ?? "");
+        const cat = categorizeMilAircraft(t);
+        // Skip ground stations and trainers for cleaner feed
+        return cat !== "ground" && cat !== "trainer";
+      })
+      .map((a: Record<string, unknown>) => {
+        const typeCode = String(a.t ?? "?");
+        const altRaw = a.alt_baro;
+        const isGnd = altRaw === "ground" || altRaw === 0;
+        return {
+          hex: String(a.hex ?? ""),
+          registration: String(a.r ?? ""),
+          aircraftType: typeCode,
+          callsign: String(a.flight ?? "").trim(),
+          altitude: isGnd ? 0 : (typeof altRaw === "number" ? altRaw : null),
+          groundSpeed: typeof a.gs === "number" ? a.gs : null,
+          latitude: a.lastPosition && typeof (a.lastPosition as Record<string, unknown>).lat === "number"
+            ? Number((a.lastPosition as Record<string, unknown>).lat)
+            : (typeof a.lat === "number" ? Number(a.lat) : null),
+          longitude: a.lastPosition && typeof (a.lastPosition as Record<string, unknown>).lon === "number"
+            ? Number((a.lastPosition as Record<string, unknown>).lon)
+            : (typeof a.lon === "number" ? Number(a.lon) : null),
+          onGround: isGnd,
+          category: categorizeMilAircraft(typeCode),
+          lastSeen: new Date().toISOString(),
+        };
+      });
+
+    // Sort: airborne first, then by category priority
+    const catPriority: Record<string, number> = { bomber: 0, fighter: 1, isr: 2, tanker: 3, transport: 4, helicopter: 5, other: 6 };
+    aircraft.sort((a, b) => {
+      if (a.onGround !== b.onGround) return a.onGround ? 1 : -1;
+      return (catPriority[a.category] ?? 9) - (catPriority[b.category] ?? 9);
+    });
+
+    await persistMilitary(aircraft);
+    await markSynced("militaryRadar", aircraft.length, "adsb_exchange");
+    setCache(cacheKey, aircraft);
+    return json({ ok: true, data: aircraft });
+  } catch (e) {
+    const fallback = await readMilitaryFromDb();
+    if (fallback.length > 0) return json({ ok: true, data: fallback });
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
+  }
+}
+
+async function readMilitaryFromDb(): Promise<MilitaryAircraft[]> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb
+      .from("intel_military_radar")
+      .select("*")
+      .order("snapshot_time", { ascending: false })
+      .limit(200);
+    if (!data) return [];
+    return data.map((r: Record<string, unknown>) => ({
+      hex: String(r.hex ?? ""),
+      registration: String(r.registration ?? ""),
+      aircraftType: String(r.aircraft_type ?? "?"),
+      callsign: String(r.callsign ?? ""),
+      altitude: r.altitude != null ? Number(r.altitude) : null,
+      groundSpeed: r.ground_speed != null ? Number(r.ground_speed) : null,
+      latitude: r.latitude != null ? Number(r.latitude) : null,
+      longitude: r.longitude != null ? Number(r.longitude) : null,
+      onGround: Boolean(r.on_ground),
+      category: String(r.category ?? "other"),
+      lastSeen: String(r.last_seen ?? new Date().toISOString()),
+    }));
+  } catch { return []; }
+}
+
+async function persistMilitary(aircraft: MilitaryAircraft[]) {
+  try {
+    const sb = getSupabase();
+    const now = new Date().toISOString();
+    // Only persist airborne aircraft to keep DB lean
+    const rows = aircraft.filter((a) => !a.onGround).slice(0, 100).map((a) => ({
+      hex: a.hex,
+      registration: a.registration,
+      aircraft_type: a.aircraftType,
+      callsign: a.callsign,
+      altitude: a.altitude,
+      ground_speed: a.groundSpeed,
+      latitude: a.latitude,
+      longitude: a.longitude,
+      on_ground: a.onGround,
+      category: a.category,
+      last_seen: a.lastSeen,
+      snapshot_time: now,
+    }));
+    if (rows.length > 0) {
+      await sb.from("intel_military_radar").insert(rows);
+    }
+  } catch { /* best effort */ }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// 12. EMERGENCY MONITOR — ADS-B Exchange squawk 7700
+// ═══════════════════════════════════════════════════════════════════
+//
+// Tracks aircraft broadcasting emergency squawk code 7700.
+// Real-time aviation emergency awareness — rare but high-signal events.
+
+type EmergencySquawk = {
+  hex: string;
+  registration: string;
+  aircraftType: string;
+  callsign: string;
+  squawk: string;
+  altitude: number | null;
+  groundSpeed: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  onGround: boolean;
+  lastSeen: string;
+};
+
+async function handleEmergencyMonitor(): Promise<Response> {
+  const cacheKey = "emergency:all";
+  const hit = cached<EmergencySquawk[]>(cacheKey);
+  if (hit) return json({ ok: true, data: hit });
+
+  if (await isFeedFresh("emergencyMonitor")) {
+    const result = await readEmergencyFromDb();
+    if (result.length > 0) {
+      setCache(cacheKey, result);
+      return json({ ok: true, data: result });
+    }
+  }
+
+  const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
+  if (!rapidApiKey) {
+    return json({ ok: false, error: "RAPIDAPI_KEY not configured" }, 500);
+  }
+
+  try {
+    const res = await fetchWithTimeout(
+      "https://adsbexchange-com1.p.rapidapi.com/v2/sqk/7700/",
+      12_000,
+      {
+        "x-rapidapi-host": "adsbexchange-com1.p.rapidapi.com",
+        "x-rapidapi-key": rapidApiKey,
+        "Content-Type": "application/json",
+      },
+    );
+    if (!res.ok) throw new Error(`ADS-B sqk7700 HTTP ${res.status}`);
+
+    const body = await res.json();
+    const acList = Array.isArray(body?.ac) ? body.ac : [];
+
+    const emergencies: EmergencySquawk[] = acList.map((a: Record<string, unknown>) => {
+      const altRaw = a.alt_baro;
+      const isGnd = altRaw === "ground" || altRaw === 0;
+      return {
+        hex: String(a.hex ?? ""),
+        registration: String(a.r ?? ""),
+        aircraftType: String(a.t ?? "?"),
+        callsign: String(a.flight ?? "").trim(),
+        squawk: String(a.squawk ?? "7700"),
+        altitude: isGnd ? 0 : (typeof altRaw === "number" ? altRaw : null),
+        groundSpeed: typeof a.gs === "number" ? a.gs : null,
+        latitude: a.lastPosition && typeof (a.lastPosition as Record<string, unknown>).lat === "number"
+          ? Number((a.lastPosition as Record<string, unknown>).lat)
+          : (typeof a.lat === "number" ? Number(a.lat) : null),
+        longitude: a.lastPosition && typeof (a.lastPosition as Record<string, unknown>).lon === "number"
+          ? Number((a.lastPosition as Record<string, unknown>).lon)
+          : (typeof a.lon === "number" ? Number(a.lon) : null),
+        onGround: isGnd,
+        lastSeen: new Date().toISOString(),
+      };
+    });
+
+    // Always return ok — 0 emergencies is the happy path
+    await persistEmergency(emergencies);
+    await markSynced("emergencyMonitor", emergencies.length, "adsb_exchange");
+    setCache(cacheKey, emergencies);
+    return json({ ok: true, data: emergencies });
+  } catch (e) {
+    const fallback = await readEmergencyFromDb();
+    if (fallback.length > 0) return json({ ok: true, data: fallback });
+    // Even on error, return ok with empty — no emergencies is normal
+    return json({ ok: true, data: [] });
+  }
+}
+
+async function readEmergencyFromDb(): Promise<EmergencySquawk[]> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb
+      .from("intel_emergency_monitor")
+      .select("*")
+      .order("snapshot_time", { ascending: false })
+      .limit(50);
+    if (!data) return [];
+    return data.map((r: Record<string, unknown>) => ({
+      hex: String(r.hex ?? ""),
+      registration: String(r.registration ?? ""),
+      aircraftType: String(r.aircraft_type ?? "?"),
+      callsign: String(r.callsign ?? ""),
+      squawk: String(r.squawk ?? "7700"),
+      altitude: r.altitude != null ? Number(r.altitude) : null,
+      groundSpeed: r.ground_speed != null ? Number(r.ground_speed) : null,
+      latitude: r.latitude != null ? Number(r.latitude) : null,
+      longitude: r.longitude != null ? Number(r.longitude) : null,
+      onGround: Boolean(r.on_ground),
+      lastSeen: String(r.last_seen ?? new Date().toISOString()),
+    }));
+  } catch { return []; }
+}
+
+async function persistEmergency(emergencies: EmergencySquawk[]) {
+  try {
+    if (emergencies.length === 0) return;
+    const sb = getSupabase();
+    const now = new Date().toISOString();
+    const rows = emergencies.map((e) => ({
+      hex: e.hex,
+      registration: e.registration,
+      aircraft_type: e.aircraftType,
+      callsign: e.callsign,
+      squawk: e.squawk,
+      altitude: e.altitude,
+      ground_speed: e.groundSpeed,
+      latitude: e.latitude,
+      longitude: e.longitude,
+      on_ground: e.onGround,
+      last_seen: e.lastSeen,
+      snapshot_time: now,
+    }));
+    await sb.from("intel_emergency_monitor").insert(rows);
+  } catch { /* best effort */ }
+}
+
+
 // ── Handler ────────────────────────────────────────────────────────
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -2166,6 +2482,10 @@ serve(async (req: Request) => {
         return await handleCyberThreats();
       case "chokepoints":
         return await handleChokepoints();
+      case "militaryRadar":
+        return await handleMilitaryRadar();
+      case "emergencyMonitor":
+        return await handleEmergencyMonitor();
       default:
         return json({ ok: false, error: `unknown action: ${action}` }, 400);
     }
