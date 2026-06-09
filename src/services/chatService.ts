@@ -616,5 +616,112 @@ export async function sendChatMessage(
     console.error("Failed to save AXE reply", replyError);
   }
 
+  // Fire-and-forget: extract durable memories from this conversation
+  extractMemoriesAsync(supabase, user.id, trimmed, finalReply).catch((e) =>
+    console.error("[chatService] memory extraction failed:", e),
+  );
+
   return { ok: true };
+}
+
+/**
+ * Async memory extraction — runs after the reply is saved.
+ * Pulls the last few messages and asks GPT-4o-mini to extract
+ * durable observations about the trader.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function extractMemoriesAsync(
+  supabase: any,
+  userId: string,
+  userMessage: string,
+  assistantReply: string,
+): Promise<void> {
+  const openaiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
+  if (!openaiKey) return;
+
+  // Load recent conversation context (last 6 messages)
+  const { data: recentMessages } = await supabase
+    .from("messages")
+    .select("role,content")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  const messages = [
+    ...(recentMessages ?? []).reverse().map((m: { role: string; content: string }) => ({
+      role: m.role,
+      content: m.content,
+    })),
+    { role: "user", content: userMessage },
+    { role: "assistant", content: assistantReply },
+  ];
+
+  // Load existing to avoid duplicates
+  const { data: existing } = await supabase
+    .from("axe_memory")
+    .select("content,memory_type")
+    .eq("user_id", userId)
+    .is("resolved_at", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const conversationText = messages
+    .map((m) => `${m.role.toUpperCase()}: ${m.content.slice(0, 500)}`)
+    .join("\n");
+
+  const existingText = (existing?.length ?? 0) > 0
+    ? `\n\nEXISTING MEMORIES (do not duplicate):\n${(existing ?? []).map((e: { memory_type: string; content: string }) => `- [${e.memory_type}] ${e.content}`).join("\n")}`
+    : "";
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${openaiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You extract durable trader observations from AXE conversations. Extract 0-3 memories.
+
+Types: observation, pattern, preference, weakness, strength, rule, context
+
+Return JSON (no fences): {"memories": [{"memory_type": "...", "content": "...", "symbol": "..." or null, "confidence": 0.5-1.0}]}
+
+Only extract behavioral patterns, preferences, rules, and durable insights. Skip temporary facts. Return empty array if nothing worth remembering.`,
+        },
+        { role: "user", content: `${conversationText}${existingText}` },
+      ],
+      temperature: 0.3,
+      max_tokens: 600,
+    }),
+  });
+
+  if (!res.ok) return;
+
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content?.trim();
+  if (!content) return;
+
+  try {
+    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(cleaned) as { memories: Array<{ memory_type: string; content: string; symbol: string | null; confidence: number }> };
+
+    for (const mem of parsed.memories ?? []) {
+      if (!mem.content || !mem.memory_type) continue;
+      await supabase.from("axe_memory").insert({
+        user_id: userId,
+        memory_type: mem.memory_type,
+        content: String(mem.content).slice(0, 500),
+        symbol: mem.symbol || null,
+        confidence: Math.max(0.5, Math.min(1, Number(mem.confidence) || 0.7)),
+        source: "chat",
+        type: mem.memory_type,
+      });
+    }
+  } catch {
+    // Silent — memory extraction is best-effort
+  }
 }
