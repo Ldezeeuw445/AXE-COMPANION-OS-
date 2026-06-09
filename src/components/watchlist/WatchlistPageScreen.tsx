@@ -342,10 +342,10 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
   /* ── Tick color class ──────────────────────────────────────────── */
 
   function tickColor(dir: TickDir | undefined, type: "bid" | "ask"): string {
-    if (dir === "up") return "text-emerald-400";
+    if (dir === "up") return "text-cyan-400";
     if (dir === "down") return "text-rose-400";
-    // Default: bid = green, ask = red (MT5-style)
-    return type === "bid" ? "text-emerald-400/70" : "text-rose-400/70";
+    // Default: bid = cyan, ask = red (AXE identity — like MT5 blue/red)
+    return type === "bid" ? "text-cyan-400/70" : "text-rose-400/70";
   }
 
   /* ── Render ────────────────────────────────────────────────────── */

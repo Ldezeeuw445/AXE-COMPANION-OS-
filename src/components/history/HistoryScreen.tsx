@@ -348,7 +348,7 @@ function PositionsTab({
           <span className="text-[11px] font-medium text-white/40">Balance</span>
           <span
             className={`font-mono text-sm font-bold tabular-nums ${
-              totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"
+              totalProfit >= 0 ? "text-cyan-400" : "text-rose-400"
             }`}
           >
             {fmtPnl(totalProfit)}
@@ -360,12 +360,12 @@ function PositionsTab({
           const digits = priceDigits(t.openPrice);
           const pnlColor =
             t.pnl > 0
-              ? "text-emerald-400"
+              ? "text-cyan-400"
               : t.pnl < 0
                 ? "text-rose-400"
                 : "text-white/40";
           const sideColor =
-            t.side === "buy" ? "text-emerald-400/80" : "text-rose-400/80";
+            t.side === "buy" ? "text-cyan-400/80" : "text-rose-400/80";
 
           return (
             <div
@@ -411,7 +411,7 @@ function PositionsTab({
           <span className="text-white/30">Profit</span>
           <span
             className={`font-mono font-semibold tabular-nums ${
-              totalProfit >= 0 ? "text-emerald-400" : "text-rose-400"
+              totalProfit >= 0 ? "text-cyan-400" : "text-rose-400"
             }`}
           >
             {fmtPnl(totalProfit)}

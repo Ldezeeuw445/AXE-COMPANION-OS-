@@ -61,7 +61,7 @@ import {
   type LiveUiStatus,
 } from "@/components/chart/useLiveChart";
 import { usePageVisible } from "@/components/chart/usePageVisible";
-import { CHART_THEME } from "@/components/chart/chartTheme";
+import { getChartTheme, readChartThemeKey, type ChartThemeKey } from "@/components/chart/chartTheme";
 import {
   AxeContextToolbar,
   type AxeToolbarSection,
@@ -794,6 +794,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
+  const [chartThemeKey, setChartThemeKey] = useState<ChartThemeKey>(() => readChartThemeKey());
+  const chartTheme = useMemo(() => getChartTheme(chartThemeKey), [chartThemeKey]);
   const isVisible = usePageVisible();
   const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
   const sessionState = useMemo(() => marketSessionState(data.symbol), [data.symbol]);
@@ -2512,7 +2514,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
         className="relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] md:min-h-[420px] md:rounded-none md:border-x"
-        style={{ background: CHART_THEME.background }}
+        style={{ background: chartTheme.background }}
       >
         <ChartCanvas
           ref={canvasRef}
@@ -2524,6 +2526,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           drawingMode={drawingMode}
           navigationLocked={pendingOrderVisible && executionMode === "pending"}
           onPointClick={handlePointClick}
+          themeKey={chartThemeKey}
         />
 
         {/* Left-side position labels (entry / SL / TP) — drag SL/TP to modify */}

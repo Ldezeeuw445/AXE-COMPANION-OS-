@@ -5,6 +5,7 @@ import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AmbientSoundToggles } from "@/components/settings/AmbientSoundToggles";
+import { ChartThemeSelector } from "@/components/settings/ChartThemeSelector";
 import { listLearningMetricsPreview } from "@/services/learningService";
 import { listMemoryPreview } from "@/services/memoryService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
@@ -271,6 +272,17 @@ export default async function SettingsPage() {
             </li>
           ))}
         </ul>
+      </GlassPanel>
+
+      {/* Chart Theme */}
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Chart theme
+        </h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Pick a background for the chart canvas. Syncs across devices.
+        </p>
+        <ChartThemeSelector />
       </GlassPanel>
 
       <GlassPanel className="mb-4 p-4">

@@ -17,7 +17,7 @@
  * Designed for a long-lived Node process (Railway / Fly / Render / Docker).
  */
 
-import { publishEvent } from "./publish.js";
+import { publishEvent, getInflightCount } from "./publish.js";
 import { SnapshotBuffer } from "./snapshotBuffer.js";
 import {
   loadAccountConfigs,
@@ -185,6 +185,9 @@ class MultiSymbolListener {
   private brokerToDisplay: Map<string, string>;
   /** Snapshot buffer — persists latest prices to Supabase for the Quotes page */
   readonly snapshotBuffer: SnapshotBuffer;
+  /** Tick throttle — max 1 broadcast per symbol per TICK_THROTTLE_MS */
+  private lastTickBroadcast: Map<string, number> = new Map();
+  private static readonly TICK_THROTTLE_MS = 500; // max 2 ticks/sec/symbol
 
   constructor(
     private readonly env: Env,
@@ -248,13 +251,19 @@ class MultiSymbolListener {
         ? (price.bid + price.ask) / 2
         : (price.bid ?? price.ask ?? null);
 
-    // Buffer for Supabase snapshot (Quotes page)
+    // Always buffer for Supabase snapshot (Quotes page) — no throttle
     this.snapshotBuffer.record(
       display, broker,
       price.bid ?? null, price.ask ?? null,
       mid != null ? Number(mid) : null,
       price.brokerTime ?? price.time ?? null,
     );
+
+    // Throttle CF Worker broadcasts to max 2/sec per symbol
+    const now = Date.now();
+    const lastBroadcast = this.lastTickBroadcast.get(broker) ?? 0;
+    if (now - lastBroadcast < MultiSymbolListener.TICK_THROTTLE_MS) return;
+    this.lastTickBroadcast.set(broker, now);
 
     broadcastToAllTfRooms(this.env, this.config, broker, display, () => ({
       type: "tick",
@@ -741,12 +750,22 @@ async function main() {
 
   // ── Heartbeat (keeps process alive + monitors health) ──────────
   const heartbeatTimer = setInterval(() => {
+    const mem = process.memoryUsage();
+    const rss = Math.round(mem.rss / 1024 / 1024);
+    const heap = Math.round(mem.heapUsed / 1024 / 1024);
+    const heapTotal = Math.round(mem.heapTotal / 1024 / 1024);
     const stats = Array.from(activeStreams.values()).map((s) => ({
       account: s.config.metaApiAccountId.slice(0, 8) + "…",
       symbols: s.subscribedSymbols.size,
       connected: s.connection !== null,
     }));
-    log("debug", `Heartbeat: ${activeStreams.size} stream(s)`, stats);
+    log("info", `Heartbeat: ${activeStreams.size} stream(s) | RSS ${rss}MB | Heap ${heap}/${heapTotal}MB | Inflight ${getInflightCount()}`, stats);
+
+    // Force GC if available (Node --expose-gc)
+    if (rss > 400 && typeof globalThis.gc === "function") {
+      globalThis.gc();
+      log("warn", `GC forced at RSS ${rss}MB`);
+    }
   }, 30_000);
 
   // ── Graceful shutdown ──────────────────────────────────────────

@@ -20,7 +20,7 @@ import type {
 } from "lightweight-charts";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
-import { CHART_THEME } from "@/components/chart/chartTheme";
+import { getChartTheme, type ChartThemeKey } from "@/components/chart/chartTheme";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import {
   type AnnotationPoint,
@@ -41,6 +41,8 @@ type Props = {
   navigationLocked?: boolean;
   /** Called when a chart point is tapped while in drawing mode. */
   onPointClick?: (point: AnnotationPoint) => void;
+  /** Chart color theme key. Defaults to "midnight". */
+  themeKey?: ChartThemeKey;
 };
 
 export type ChartCanvasHandle = {
@@ -94,9 +96,10 @@ function buildSeriesData(candles: MetaApiCandle[]): CandlestickData[] {
 }
 
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
-  { candles, overlays, pendingOrders = [], symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick },
+  { candles, overlays, pendingOrders = [], symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick, themeKey },
   ref,
 ) {
+  const theme = getChartTheme(themeKey);
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -121,29 +124,31 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
     const chart = createChart(el, {
       layout: {
-        background: { type: ColorType.Solid, color: CHART_THEME.chartCanvasBackground },
-        textColor: CHART_THEME.textColor,
+        background: { type: ColorType.Solid, color: theme.chartCanvasBackground },
+        textColor: theme.textColor,
         fontSize: 11,
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue'",
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: CHART_THEME.grid, style: LineStyle.Solid },
-        horzLines: { color: CHART_THEME.grid, style: LineStyle.Solid },
+        vertLines: { color: theme.grid, style: LineStyle.Solid },
+        horzLines: { color: theme.grid, style: LineStyle.Solid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#141414" },
-        horzLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#141414" },
+        vertLine: { color: theme.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: theme.crosshairLabelBg },
+        horzLine: { color: theme.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: theme.crosshairLabelBg },
       },
       rightPriceScale: {
-        borderVisible: false,
+        borderVisible: true,
+        borderColor: theme.axisSeparator,
         scaleMargins: { top: 0.08, bottom: 0.18 },
-        textColor: CHART_THEME.textColor,
+        textColor: theme.textColor,
       },
       timeScale: {
-        borderVisible: false,
+        borderVisible: true,
+        borderColor: theme.axisSeparator,
         secondsVisible: false,
         rightOffset: 4,
         barSpacing: 6,
@@ -162,11 +167,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: CHART_THEME.bull,
-      downColor: CHART_THEME.bear,
+      upColor: theme.bull,
+      downColor: theme.bear,
       borderVisible: false,
-      wickUpColor: CHART_THEME.bullWick,
-      wickDownColor: CHART_THEME.bearWick,
+      wickUpColor: theme.bullWick,
+      wickDownColor: theme.bearWick,
       priceFormat: { type: "price", precision: digits, minMove: Number(`1e-${digits}`) },
       lastValueVisible: true,
       priceLineVisible: true,
@@ -303,10 +308,10 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       // Side-based color — red for sell, cyan for buy.
       const entryColor =
         o.side === "sell"
-          ? CHART_THEME.negativeText
+          ? theme.negativeText
           : o.side === "buy"
-            ? CHART_THEME.cyanAccent
-            : CHART_THEME.entryLine;
+            ? theme.cyanAccent
+            : theme.entryLine;
 
       // Lines only — labels rendered by PositionLabelsOverlay (left-side text, no box).
       if (o.entryPrice != null && o.entryPrice > 0) {
@@ -325,7 +330,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.stopLoss,
-            color: CHART_THEME.stopLine,
+            color: theme.stopLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
             axisLabelVisible: false,
@@ -337,7 +342,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.takeProfit,
-            color: CHART_THEME.takeLine,
+            color: theme.takeLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
             axisLabelVisible: false,
@@ -365,9 +370,9 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     pendingOrders.forEach((o) => {
       // Side-based color — red for sell, cyan for buy (matches positions).
       const orderColor = o.side === "sell"
-        ? CHART_THEME.negativeText   // red for sell
+        ? theme.negativeText   // red for sell
         : o.side === "buy"
-          ? CHART_THEME.cyanAccent   // cyan for buy
+          ? theme.cyanAccent   // cyan for buy
           : "rgba(251,191,36,0.8)";  // amber fallback
 
       // Entry / trigger price
@@ -388,7 +393,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         pendingOrderLinesRef.current.push(
           series.createPriceLine({
             price: o.stopLoss,
-            color: CHART_THEME.stopLine,
+            color: theme.stopLine,
             lineWidth: 1,
             lineStyle: LineStyle.SparseDotted,
             axisLabelVisible: false,
@@ -401,7 +406,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         pendingOrderLinesRef.current.push(
           series.createPriceLine({
             price: o.takeProfit,
-            color: CHART_THEME.takeLine,
+            color: theme.takeLine,
             lineWidth: 1,
             lineStyle: LineStyle.SparseDotted,
             axisLabelVisible: false,
@@ -606,7 +611,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
-        style={{ background: CHART_THEME.chartCanvasBackground }}
+        style={{ background: theme.chartCanvasBackground }}
       />
 
       {/* Chart canvas itself — transparent so the bg blend shows through */}
@@ -624,7 +629,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
-        style={{ boxShadow: CHART_THEME.frameGlow }}
+        style={{ boxShadow: theme.frameGlow }}
       />
     </>
   );
