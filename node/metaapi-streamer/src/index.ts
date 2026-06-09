@@ -482,11 +482,35 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
     log("info", `Deploying account ${config.metaApiAccountId}`);
     await account.deploy();
   }
-  await account.waitConnected();
+
+  // Wait for broker connection with timeout (don't block other accounts)
+  const CONNECT_TIMEOUT_MS = 30_000;
+  try {
+    await Promise.race([
+      account.waitConnected(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("waitConnected timed out after 30s")), CONNECT_TIMEOUT_MS)
+      ),
+    ]);
+  } catch (e) {
+    log("warn", `[${config.metaApiAccountId}] waitConnected timed out — proceeding anyway`);
+  }
 
   const connection = account.getStreamingConnection();
   await connection.connect();
-  await connection.waitSynchronized();
+
+  // Wait for sync with timeout
+  const SYNC_TIMEOUT_MS = 30_000;
+  try {
+    await Promise.race([
+      connection.waitSynchronized(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("waitSynchronized timed out after 30s")), SYNC_TIMEOUT_MS)
+      ),
+    ]);
+  } catch (e) {
+    log("warn", `[${config.metaApiAccountId}] waitSynchronized timed out — proceeding with subscriptions`);
+  }
 
   const rawListener = new MultiSymbolListener(env, config);
 
@@ -682,13 +706,16 @@ async function main() {
     log("warn", "No active MT5 cloud accounts found — will retry on reconciliation");
   } else {
     log("info", `Found ${configs.length} account(s)`);
-    for (const config of configs) {
-      try {
-        await startAccountStream(env, config);
-      } catch (e) {
-        log("error", `Failed to start stream for ${config.metaApiAccountId}:`, e);
-      }
-    }
+    // Start all accounts in parallel — one slow broker shouldn't block others
+    await Promise.allSettled(
+      configs.map(async (config) => {
+        try {
+          await startAccountStream(env, config);
+        } catch (e) {
+          log("error", `Failed to start stream for ${config.metaApiAccountId}:`, e);
+        }
+      })
+    );
   }
 
   // ── Reconciliation loop ────────────────────────────────────────
