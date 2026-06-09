@@ -8,6 +8,7 @@ import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot, type Chokepoint } from "@/lib/intel/intelClient";
 import { IntelAiChat } from "@/components/intel/IntelAiChat";
 import { CorrelateButton } from "@/components/intel/CorrelateButton";
+import { CorrelationEngine } from "@/components/intel/CorrelationEngine";
 import { ConvictionEngine } from "@/components/intel/ConvictionEngine";
 
 const DEFAULT_SYMBOL = "XAUUSD";
@@ -732,6 +733,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
       </div>
 
       {/* ─── CORRELATION ENGINE ─────────────────────────────────── */}
+      <CorrelationEngine />
       <CorrelateButton symbol={symbol} />
 
       <div className="flex flex-wrap gap-2 px-1 text-[11px]">
