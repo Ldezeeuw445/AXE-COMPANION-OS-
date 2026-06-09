@@ -23,6 +23,16 @@ export type TradeHighlight = {
   axe_label: string | null;
   /** AXE Core reasoning for the tag */
   axe_note: string | null;
+  /** AXE alignment score 0-100 (null until scored) */
+  alignment_score: number | null;
+  /** AXE full journal breakdown */
+  axe_journal: {
+    rule_adherence: number;
+    playbook_alignment: number;
+    risk_management: number;
+    emotional_discipline: number;
+    explanation: string;
+  } | null;
 };
 
 export type JournalPageData = {
@@ -105,7 +115,7 @@ export async function loadJournalPageData(opts: {
 
     const { data: lbl } = await sb
       .from("trade_journal_labels")
-      .select("label,note,axe_label,axe_note")
+      .select("label,note,axe_label,axe_note,alignment_score,axe_journal")
       .eq("user_id", userId)
       .eq("trade_id", tradeId)
       .maybeSingle();
@@ -121,6 +131,8 @@ export async function loadJournalPageData(opts: {
       note: (lbl?.note as string | undefined) ?? null,
       axe_label: (lbl?.axe_label as string | undefined) ?? null,
       axe_note: (lbl?.axe_note as string | undefined) ?? null,
+      alignment_score: (lbl?.alignment_score as number | undefined) ?? null,
+      axe_journal: (lbl?.axe_journal as TradeHighlight["axe_journal"]) ?? null,
     };
   }
 
@@ -157,12 +169,14 @@ export async function loadJournalPageData(opts: {
       note: string | null;
       axe_label: string | null;
       axe_note: string | null;
+      alignment_score: number | null;
+      axe_journal: TradeHighlight["axe_journal"];
     }>();
 
     if (ids.length > 0) {
       const { data: labRows } = await sb
         .from("trade_journal_labels")
-        .select("trade_id,label,note,axe_label,axe_note")
+        .select("trade_id,label,note,axe_label,axe_note,alignment_score,axe_journal")
         .eq("user_id", userId)
         .in("trade_id", ids);
 
@@ -173,12 +187,16 @@ export async function loadJournalPageData(opts: {
           note: string | null;
           axe_label: string | null;
           axe_note: string | null;
+          alignment_score: number | null;
+          axe_journal: TradeHighlight["axe_journal"];
         };
         labelByTrade.set(r.trade_id, {
           label: r.label,
           note: r.note,
           axe_label: r.axe_label,
           axe_note: r.axe_note,
+          alignment_score: r.alignment_score,
+          axe_journal: r.axe_journal,
         });
       }
     }
@@ -197,6 +215,8 @@ export async function loadJournalPageData(opts: {
         note: lb?.note ?? null,
         axe_label: lb?.axe_label ?? null,
         axe_note: lb?.axe_note ?? null,
+        alignment_score: lb?.alignment_score ?? null,
+        axe_journal: lb?.axe_journal ?? null,
       });
     }
 

@@ -18,6 +18,7 @@ import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import type { JournalEntryRow, TradeHighlight } from "@/lib/journal/loadJournalPageData";
 import type { JournalAnalytics } from "@/lib/journal/computeJournalAnalytics";
 import { JOURNAL_TRADE_TAGS } from "@/lib/journal/tradeTags";
+import { AlignmentBadge } from "@/components/journal/AlignmentBadge";
 import { upsertTradeJournalLabelAction } from "@/app/actions/journalLabels";
 import {
   ChevronDown,
@@ -150,7 +151,7 @@ function TradeRow({
           )}
           {trade.axe_label && (
             <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${AXE_TAG_STYLE}`} title={trade.axe_note ?? "AXE score"}>
-              ⚡{trade.axe_label}
+              ⚡{trade.axe_label}{trade.alignment_score != null ? ` ${trade.alignment_score}` : ""}
             </span>
           )}
         </div>
@@ -171,20 +172,29 @@ function TradeRow({
       {/* Expanded: tag selector + note + AXE score */}
       {expanded && (
         <div className="space-y-3 px-4 pb-4 pl-10">
-          {/* AXE auto-score (if available) */}
-          {trade.axe_label && (
+          {/* AXE alignment score (if available) */}
+          {(trade.alignment_score != null || trade.axe_label) && (
             <div className="rounded-lg border border-cyan-500/10 bg-cyan-500/[0.03] px-3 py-2">
-              <p className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-cyan-400/40">
-                ⚡ AXE Score
+              <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-widest text-cyan-400/40">
+                ⚡ AXE Alignment
               </p>
-              <div className="flex items-center gap-2">
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${AXE_TAG_STYLE}`}>
-                  {trade.axe_label}
-                </span>
-                {trade.axe_note && (
-                  <span className="text-[11px] text-white/40">{trade.axe_note}</span>
-                )}
-              </div>
+              {trade.alignment_score != null ? (
+                <AlignmentBadge
+                  score={trade.alignment_score}
+                  axeLabel={trade.axe_label}
+                  axeNote={trade.axe_note}
+                  breakdown={trade.axe_journal ?? null}
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${AXE_TAG_STYLE}`}>
+                    {trade.axe_label}
+                  </span>
+                  {trade.axe_note && (
+                    <span className="text-[11px] text-white/40">{trade.axe_note}</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
