@@ -482,8 +482,10 @@ export async function sendChatMessage(
       const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
       const days = Math.max(1, Math.min(90, Number(tc.args.days ?? 7)));
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      // Strip broker suffixes (.x, .r, etc.) for fuzzy symbol matching
+      const cleanSym = (raw: string) => raw.toUpperCase().replace(/\.[a-z]+$/i, "").trim();
       const journalQ = supabase
-        .from("companion_journal_entries")
+        .from("user_journal_entries")
         .select("symbol,notes,created_at")
         .eq("user_id", user.id)
         .gte("created_at", since)
@@ -507,8 +509,8 @@ export async function sendChatMessage(
         pnl: number;
         close_time: string | null;
       }[];
-      const filteredEntries = sym ? entries.filter((e) => (e.symbol ?? "").toUpperCase() === sym) : entries;
-      const filteredTrades = sym ? trades.filter((t) => (t.symbol ?? "").toUpperCase() === sym) : trades;
+      const filteredEntries = sym ? entries.filter((e) => cleanSym(e.symbol ?? "") === cleanSym(sym)) : entries;
+      const filteredTrades = sym ? trades.filter((t) => cleanSym(t.symbol ?? "") === cleanSym(sym)) : trades;
       const out: string[] = [];
       if (filteredTrades.length > 0) {
         out.push(`CLOSED TRADES (last ${days}d, top ${Math.min(filteredTrades.length, 10)})`);
