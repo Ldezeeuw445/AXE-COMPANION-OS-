@@ -58,8 +58,8 @@ export function BottomNav() {
       ref={navRef}
       className="tos-nav-pill pointer-events-auto"
       style={{
-        width: "calc(100% - 24px)",
-        maxWidth: "420px",
+        /* width + maxWidth + centering handled by .tos-nav-pill CSS
+           (left:0 right:0 margin-inline:auto) — no transform needed */
         background: "linear-gradient(180deg, #131318 0%, #0a0a0e 100%)",
         borderRadius: "9999px",
         boxShadow:

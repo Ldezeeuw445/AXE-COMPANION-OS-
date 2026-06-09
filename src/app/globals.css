@@ -266,19 +266,28 @@ body {
    - Inner top highlight simulates edge-lit glass
    - Deep outer shadow grounds the bar to the screen edge
    - Subtle inner shadow gives a concave "tray" feel */
-/* Floating pill navbar — fixed directly, no wrapper.
+/* Floating pill navbar — fixed, centred with auto-margins (no transform).
+   Using left:0 + right:0 + margin-inline:auto avoids the
+   left:50%/translateX(-50%) pattern, which on iOS can cause the pill
+   to render at the wrong offset on first paint while the viewport
+   dimensions are still settling (address-bar retract, safe-area
+   resolution, splash overlay teardown).
    bottom = safe-area + small gap so the pill clears the home indicator. */
 .tos-nav-pill {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
   z-index: 50;
-  will-change: transform;
-  /* Prevent any layout thrash from splash/keyboard/address bar */
-  contain: layout style;
-  backface-visibility: hidden;
+  width: calc(100% - 24px);
+  max-width: 420px;
+  margin-inline: auto;
+  /* GPU-composited layer for smooth 60fps scroll, but NOT will-change:transform
+     which on iOS can cause the element to be positioned one frame early
+     before the layout viewport has stabilised. */
   -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0); /* force compositing without affecting 2D position */
 }
 
 /* Subtle ambient glow — ultra-faint radial light behind key content.
