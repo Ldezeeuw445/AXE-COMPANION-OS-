@@ -255,7 +255,7 @@ body {
 .tos-indicator-pane {
   position: relative;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(6, 6, 8, 0.92);
+  background: #0c0c0c;
 }
 
 /* Bottom nav — premium frosted glass dock with depth.

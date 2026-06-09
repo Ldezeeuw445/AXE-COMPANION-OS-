@@ -213,7 +213,7 @@ export function ChartOrderBookDrawer({
       ) : null}
 
       <aside
-        className={`fixed left-0 top-[var(--tos-topbar-offset)] z-[45] flex h-[calc(100dvh-var(--tos-topbar-offset)-var(--tos-nav-offset))] w-[88vw] max-w-[360px] flex-col border-r border-white/10 bg-[#030810]/96 shadow-[0_24px_72px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-200 ease-out ${
+        className={`fixed left-0 top-[var(--tos-topbar-offset)] z-[45] flex h-[calc(100dvh-var(--tos-topbar-offset)-var(--tos-nav-offset))] w-[88vw] max-w-[360px] flex-col border-r border-white/10 bg-[#0c0c0c]/96 shadow-[0_24px_72px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
         /* drawer height already stops above the bottom nav */

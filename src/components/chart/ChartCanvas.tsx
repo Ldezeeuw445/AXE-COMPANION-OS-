@@ -134,8 +134,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#0B1117" },
-        horzLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#0B1117" },
+        vertLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#141414" },
+        horzLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#141414" },
       },
       rightPriceScale: {
         borderVisible: false,

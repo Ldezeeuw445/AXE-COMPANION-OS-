@@ -2681,7 +2681,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-[36%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-[26%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             toolRailOpen
               ? "border-white/[0.14] bg-white/[0.08] text-white shadow-[0_0_24px_rgba(255,255,255,0.2)]"
               : "border-white/[0.08] bg-black/78 text-white/80"
@@ -2692,7 +2692,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-[36%] z-30 max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-[26%] z-30 max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
           style={{ width: "calc(100% - 80px)" }}
@@ -3018,7 +3018,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => setIndicatorRailOpen((v) => !v)}
-          className={`absolute left-0 top-1/2 z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-[72%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             indicatorRailOpen
               ? "border-amber-300/45 bg-amber-400/18 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.18)]"
               : "border-amber-400/18 bg-black/78 text-amber-200"
@@ -3029,7 +3029,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-[72%] z-30 -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
             indicatorRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
           style={{ width: "calc(100% - 80px)" }}
@@ -3568,7 +3568,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Standalone alert fired toast */}
       {firedAlert ? (
         <div
-          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-white/[0.14] bg-[#031418]/95 px-3 py-2 text-[11px] text-white shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
+          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-white/[0.14] bg-[#0c0c0c]/95 px-3 py-2 text-[11px] text-white shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
           role="status"
         >
           <Bell className="h-4 w-4 text-emerald-300" aria-hidden />
@@ -3637,7 +3637,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             const newest = demoBook.forSymbol[0];
             if (newest) demoBook.close(newest.id);
           }}
-          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/[0.12] bg-[#031418]/92 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-emerald-300/12"
+          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/[0.12] bg-[#0c0c0c]/92 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-emerald-300/12"
           aria-label="Close most recent demo position"
         >
           <span className="rounded-full bg-white/[0.10] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-white/90">

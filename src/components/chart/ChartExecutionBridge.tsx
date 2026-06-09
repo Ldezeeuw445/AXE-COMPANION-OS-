@@ -227,7 +227,7 @@ export function ChartExecutionBridge({
       </div>
 
       {approvalOpen ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#030810]/90 p-4">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0c0c0c]/90 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-rose-400/25 bg-[#060c16] p-4">
             <p className="text-sm font-semibold text-tos-text">Final approval</p>
             <p className="mt-2 text-[12px] leading-relaxed text-tos-muted">

@@ -3,16 +3,20 @@
  *
  * Inspiration: Trading OS landing dark UI + matte broker terminal.
  * Bull/bear stay readable on phones without becoming candy-bright.
+ *
+ * Uniform matte black — no blue tint. Chart canvas, volume pane, RSI pane
+ * and the surrounding frame all share the same neutral black so the whole
+ * chart tab feels like one seamless surface.
  */
 export const CHART_THEME = {
-  /** Base color of the chart frame — sits on top of the woven app background. */
-  background: "#040a14",
-  /** Chart canvas itself stays solid/flat so it feels like a native trading terminal. */
-  chartCanvasBackground: "#030810",
+  /** Base color of the chart frame — matte premium black, not pure #000. */
+  background: "#0c0c0c",
+  /** Chart canvas itself — same matte black for seamless feel with volume/indicators. */
+  chartCanvasBackground: "#0c0c0c",
   textColor: "rgba(220,230,245,0.90)",
-  grid: "rgba(80,140,180,0.04)",
+  grid: "rgba(255,255,255,0.03)",
   crosshair: "rgba(0,224,255,0.35)",
-  borderColor: "rgba(80,140,180,0.08)",
+  borderColor: "rgba(255,255,255,0.06)",
   // Bull: muted dark emerald-teal — luxe, niet candy.
   bull: "#1F9C7B",
   // Bear: warm coral red — deeper than candy pink, brighter than rust.
