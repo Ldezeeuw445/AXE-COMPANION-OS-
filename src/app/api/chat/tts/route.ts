@@ -34,9 +34,9 @@ export async function POST(request: Request) {
           text,
           model_id: ELEVENLABS_MODEL,
           voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-            style: 0.0,
+            stability: 0.65,        // higher = more consistent on numbers/prices
+            similarity_boost: 0.80,  // stronger voice identity
+            style: 0.15,            // slightly expressive, not monotone
             use_speaker_boost: true,
           },
         }),
