@@ -17,14 +17,19 @@ import {
   ScrollText,
   Settings,
   Sparkles,
-  Target,
   Vault,
   X,
   Landmark,
 } from "lucide-react";
 import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
 import { AxeWordmarkLive } from "@/components/brand/AxeWordmarkLive";
+import { AxeTriangle } from "@/components/brand/AxeTriangle";
 import Image from "next/image";
+
+/* ── Wrapper so AxeTriangle fits the same slot as Lucide icons ──── */
+function IntelTriangleIcon({ className }: { className?: string; strokeWidth?: number }) {
+  return <AxeTriangle size={20} className={className} />;
+}
 
 type NavItem = {
   href: string;
@@ -32,6 +37,8 @@ type NavItem = {
   Icon: typeof MessageSquare;
   /** If true, still routing but labeled coming soon in drawer */
   comingSoon?: boolean;
+  /** Premium-only nav item — show lock badge */
+  premium?: boolean;
 };
 
 const NAV: NavItem[] = [
@@ -42,7 +49,7 @@ const NAV: NavItem[] = [
   { href: "/history", label: "History", Icon: ScrollText },
   { href: "/journal", label: "Journal", Icon: BookOpen },
   { href: "/watchlist", label: "Watchlist", Icon: BarChart3 },
-  { href: "/intel", label: "Intel", Icon: Target },
+  { href: "/intel", label: "Intel", Icon: IntelTriangleIcon as unknown as typeof MessageSquare, premium: true },
   { href: "/market", label: "Market", Icon: Sparkles },
   { href: "/alerts", label: "Alerts", Icon: Bell },
   { href: "/vault", label: "Vault", Icon: Vault },
@@ -86,6 +93,10 @@ function NavLink({
           {item.comingSoon ? (
             <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-tos-dim">
               soon
+            </span>
+          ) : item.premium ? (
+            <span className="rounded border border-cyan-400/20 bg-cyan-400/[0.08] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-cyan-300/70">
+              pro
             </span>
           ) : null}
         </span>
