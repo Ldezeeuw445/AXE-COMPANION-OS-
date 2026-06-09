@@ -8,6 +8,7 @@ import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot, type Chokepoint } from "@/lib/intel/intelClient";
 import { IntelAiChat } from "@/components/intel/IntelAiChat";
 import { CorrelateButton } from "@/components/intel/CorrelateButton";
+import { ConvictionEngine } from "@/components/intel/ConvictionEngine";
 
 const DEFAULT_SYMBOL = "XAUUSD";
 
@@ -107,6 +108,9 @@ export default async function IntelPage({ searchParams }: PageProps) {
           </p>
         </GlassPanel>
       ) : null}
+
+      {/* ── AXE CONVICTION ENGINE ──────────────────────────────── */}
+      <ConvictionEngine />
 
       {/* MARKET TIDE */}
       <GlassPanel className="p-4" glow="none">
