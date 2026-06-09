@@ -403,15 +403,30 @@ class MultiSymbolListener {
     }
   }
 
-  // ── Health / status callbacks (required by SDK v29) ──────────────
+  // ── SDK v29 required callbacks (no-ops to suppress "not a function" errors) ─
 
-  async onHealthStatus(_instanceIndex: unknown, _status: unknown) {
-    // no-op — suppress SDK "not a function" errors
-  }
-
-  async onBrokerConnectionStatusChanged(_instanceIndex: unknown, _connected: unknown) {
-    // no-op — suppress SDK "not a function" errors
-  }
+  async onHealthStatus(..._a: unknown[]) { /* no-op */ }
+  async onBrokerConnectionStatusChanged(..._a: unknown[]) { /* no-op */ }
+  async onAccountInformationUpdated(..._a: unknown[]) { /* no-op */ }
+  async onDealAdded(..._a: unknown[]) { /* no-op */ }
+  async onDealSynchronizationFinished(..._a: unknown[]) { /* no-op */ }
+  async onOrderSynchronizationFinished(..._a: unknown[]) { /* no-op */ }
+  async onHistoryOrderAdded(..._a: unknown[]) { /* no-op */ }
+  async onSymbolSpecificationUpdated(..._a: unknown[]) { /* no-op */ }
+  async onSymbolSpecificationsUpdated(..._a: unknown[]) { /* no-op */ }
+  async onPositionUpdated(..._a: unknown[]) { /* no-op */ }
+  async onPositionRemoved(..._a: unknown[]) { /* no-op */ }
+  async onPendingOrderUpdated(..._a: unknown[]) { /* no-op */ }
+  async onPendingOrderCompleted(..._a: unknown[]) { /* no-op */ }
+  async onPositionsReplaced(..._a: unknown[]) { /* no-op */ }
+  async onPendingOrdersReplaced(..._a: unknown[]) { /* no-op */ }
+  async onPositionsSynchronized(..._a: unknown[]) { /* no-op */ }
+  async onPendingOrdersSynchronized(..._a: unknown[]) { /* no-op */ }
+  // Note: onSymbolPriceUpdated is defined above (delegates to handlePriceTick)
+  async onDowngradeSubscription(..._a: unknown[]) { /* no-op */ }
+  async onAccountsUpdated(..._a: unknown[]) { /* no-op */ }
+  async onStreamClosed(..._a: unknown[]) { /* no-op */ }
+  async onSynchronizationStarted(..._a: unknown[]) { /* no-op */ }
 
   // ── Connection lifecycle ────────────────────────────────────────
 
@@ -473,8 +488,24 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
   await connection.connect();
   await connection.waitSynchronized();
 
-  const listener = new MultiSymbolListener(env, config);
-  connection.addSynchronizationListener(listener as unknown as Record<string, unknown>);
+  const rawListener = new MultiSymbolListener(env, config);
+
+  // Wrap in Proxy: any SDK callback we haven't explicitly implemented
+  // becomes an async no-op instead of crashing with "not a function".
+  const listener = new Proxy(rawListener, {
+    get(target: Record<string, unknown>, prop: string) {
+      if (prop in target && typeof target[prop] === "function") {
+        return target[prop].bind(target);
+      }
+      // Return async no-op for any unimplemented callback
+      if (typeof prop === "string" && prop.startsWith("on")) {
+        return async () => {};
+      }
+      return target[prop];
+    },
+  }) as unknown as Record<string, unknown>;
+
+  connection.addSynchronizationListener(listener);
 
   // Subscribe to ALL watchlist symbols
   const subscribedSymbols = new Set<string>();
