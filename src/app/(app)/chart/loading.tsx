@@ -1,5 +1,5 @@
-import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
+import { AxeDotLoader } from "@/components/ui/AxeDotLoader";
 
 export default function ChartLoading() {
-  return <FullScreenLoader autoFade={false} label="AXE Chart" />;
+  return <AxeDotLoader />;
 }

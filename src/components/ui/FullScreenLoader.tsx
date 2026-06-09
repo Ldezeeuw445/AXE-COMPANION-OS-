@@ -134,7 +134,7 @@ function TypewriterTagline({
         letterSpacing: "0.18em",
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
         textTransform: "uppercase",
-        fontWeight: 600,
+        fontWeight: 300,
         whiteSpace: "nowrap",
         textShadow: "0 0 12px rgba(0,212,245,0.5), 0 0 24px rgba(0,212,245,0.2)",
       }}

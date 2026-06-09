@@ -274,6 +274,11 @@ body {
   transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
   z-index: 50;
+  will-change: transform;
+  /* Prevent any layout thrash from splash/keyboard/address bar */
+  contain: layout style;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Subtle ambient glow — ultra-faint radial light behind key content.
