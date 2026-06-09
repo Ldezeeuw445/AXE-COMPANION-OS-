@@ -29,11 +29,50 @@ type Size = { w: number; h: number };
 
 const MIN_AXIS_WIDTH = 56;
 
+/**
+ * Theme-aware indicator colors — ensures visibility on both dark and light backgrounds.
+ * Dark themes use bright/vivid colors; light (Paper) uses deeper, saturated tones.
+ */
+function indicatorColors(dark: boolean) {
+  return dark
+    ? {
+        bullBar: "rgba(45,212,191,0.78)",
+        bearBar: "rgba(239,68,68,0.78)",
+        rsiLine: "rgba(34,211,238,0.95)",
+        macdLine: "rgba(34,211,238,0.95)",
+        macdSignal: "rgba(250,204,21,0.92)",
+        macdHistBull: "rgba(45,212,191,0.72)",
+        macdHistBear: "rgba(244,63,94,0.72)",
+        levelLine: "rgba(255,255,255,0.16)",
+        levelLineDim: "rgba(255,255,255,0.08)",
+        separator: "rgba(255,255,255,0.04)",
+        labelEmphasis: "rgba(232,238,246,0.85)",
+        labelNormal: "rgba(168,180,196,0.7)",
+        titleText: "text-white/70",
+      }
+    : {
+        bullBar: "rgba(8,130,110,0.82)",
+        bearBar: "rgba(200,40,40,0.82)",
+        rsiLine: "rgba(0,130,180,0.92)",
+        macdLine: "rgba(0,130,180,0.92)",
+        macdSignal: "rgba(180,140,10,0.90)",
+        macdHistBull: "rgba(8,130,110,0.70)",
+        macdHistBear: "rgba(200,40,40,0.70)",
+        levelLine: "rgba(0,0,0,0.14)",
+        levelLineDim: "rgba(0,0,0,0.07)",
+        separator: "rgba(0,0,0,0.06)",
+        labelEmphasis: "rgba(30,35,45,0.85)",
+        labelNormal: "rgba(80,85,95,0.7)",
+        titleText: "text-black/70",
+      };
+}
+
 export function IndicatorPane({ mode, candles, canvasRef, background, isDark = true }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState<number>(MIN_AXIS_WIDTH);
   const [version, setVersion] = useState(0);
+  const colors = useMemo(() => indicatorColors(isDark), [isDark]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -124,8 +163,8 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
           h,
           color:
             candle.close >= candle.open
-              ? "rgba(45,212,191,0.78)"
-              : "rgba(239,68,68,0.78)",
+              ? colors.bullBar
+              : colors.bearBar,
         });
       }
       return {
@@ -162,7 +201,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
             x,
             y: point.histogram >= 0 ? zeroY - barHeight : zeroY,
             h: Math.max(1, barHeight),
-            color: point.histogram >= 0 ? "rgba(45,212,191,0.72)" : "rgba(244,63,94,0.72)",
+            color: point.histogram >= 0 ? colors.macdHistBull : colors.macdHistBear,
           });
         }
         if (point.macd != null) macdPoints.push({ x, y: zeroY - (point.macd / maxAbs) * (usable / 2) });
@@ -272,7 +311,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
     >
-      <span className={`pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] ${isDark ? "text-white/70" : "text-black/60"}`}>
+      <span className={`pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] ${colors.titleText}`}>
         {mode === "rsi"
           ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
           : mode === "macd"
@@ -295,7 +334,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
             x2={plotWidth}
             y1={0}
             y2={size.h}
-            stroke={isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)"}
+            stroke={colors.separator}
             strokeWidth={1}
           />
 
@@ -311,8 +350,8 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
                     y2={y}
                     stroke={
                       level === 50
-                        ? isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.14)"
-                        : isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)"
+                        ? colors.levelLine
+                        : colors.levelLineDim
                     }
                     strokeDasharray="4 4"
                   />
@@ -326,7 +365,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
               x2={plotWidth}
               y1={top + usable / 2}
               y2={top + usable / 2}
-              stroke={isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.14)"}
+              stroke={colors.levelLine}
               strokeDasharray="4 4"
             />
           ) : null}
@@ -363,7 +402,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
             <path
               d={geometry.rsiPath}
               fill="none"
-              stroke="rgba(34,211,238,0.95)"
+              stroke={colors.rsiLine}
               strokeWidth={1.6}
             />
           ) : null}
@@ -372,7 +411,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
             <path
               d={geometry.macdPath}
               fill="none"
-              stroke="rgba(34,211,238,0.95)"
+              stroke={colors.macdLine}
               strokeWidth={1.4}
             />
           ) : null}
@@ -380,7 +419,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
             <path
               d={geometry.macdSignalPath}
               fill="none"
-              stroke="rgba(250,204,21,0.92)"
+              stroke={colors.macdSignal}
               strokeWidth={1.15}
             />
           ) : null}
@@ -394,10 +433,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
               textAnchor="start"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="10"
-              fill={label.emphasis
-                ? isDark ? "rgba(232,238,246,0.85)" : "rgba(30,35,45,0.85)"
-                : isDark ? "rgba(168,180,196,0.7)" : "rgba(80,85,95,0.7)"
-              }
+              fill={label.emphasis ? colors.labelEmphasis : colors.labelNormal}
             >
               {label.text}
             </text>

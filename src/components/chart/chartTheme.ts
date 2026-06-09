@@ -29,6 +29,12 @@ export interface ChartThemeConfig {
   bear: string;
   bullWick: string;
   bearWick: string;
+  /** Border around bull candle bodies. Only visible when borderVisible is true. */
+  bullBorder: string;
+  /** Border around bear candle bodies. Only visible when borderVisible is true. */
+  bearBorder: string;
+  /** Whether candle borders are rendered. */
+  borderVisible: boolean;
   /** Crosshair label background. */
   crosshairLabelBg: string;
   entryLine: string;
@@ -61,6 +67,9 @@ const MIDNIGHT: ChartThemeConfig = {
   bear: "#C95450",
   bullWick: "rgba(31,156,123,0.95)",
   bearWick: "rgba(201,84,80,0.95)",
+  bullBorder: "#1F9C7B",
+  bearBorder: "#C95450",
+  borderVisible: false,
   crosshairLabelBg: "#0a0a0a",
   entryLine: "rgba(110,178,252,0.7)",
   stopLine: "rgba(201,84,80,0.7)",
@@ -89,6 +98,9 @@ const CHARCOAL: ChartThemeConfig = {
   bear: "#ef5350",
   bullWick: "rgba(38,166,154,0.95)",
   bearWick: "rgba(239,83,80,0.95)",
+  bullBorder: "#26a69a",
+  bearBorder: "#ef5350",
+  borderVisible: false,
   crosshairLabelBg: "#222222",
   entryLine: "rgba(110,178,252,0.7)",
   stopLine: "rgba(239,83,80,0.7)",
@@ -117,6 +129,9 @@ const SLATE: ChartThemeConfig = {
   bear: "#ef5350",
   bullWick: "rgba(38,166,154,0.95)",
   bearWick: "rgba(239,83,80,0.95)",
+  bullBorder: "#26a69a",
+  bearBorder: "#ef5350",
+  borderVisible: false,
   crosshairLabelBg: "#323640",
   entryLine: "rgba(110,178,252,0.7)",
   stopLine: "rgba(239,83,80,0.7)",
@@ -141,11 +156,14 @@ const PAPER: ChartThemeConfig = {
   crosshair: "rgba(0,140,200,0.40)",
   axisSeparator: "rgba(0,0,0,0.14)",
   borderColor: "rgba(0,0,0,0.08)",
-  /* Muted TradingView-style candles — calm & clear on light bg */
-  bull: "#2a2e39",
+  /* TradingView-style candles: hollow white bullish, solid dark bearish */
+  bull: "#ffffff",
   bear: "#131722",
-  bullWick: "rgba(42,46,57,0.85)",
-  bearWick: "rgba(19,23,34,0.85)",
+  bullWick: "#2a2e39",
+  bearWick: "#131722",
+  bullBorder: "#2a2e39",
+  bearBorder: "#131722",
+  borderVisible: true,
   crosshairLabelBg: "#c8c7c2",
   entryLine: "rgba(60,120,220,0.7)",
   stopLine: "rgba(242,54,69,0.7)",

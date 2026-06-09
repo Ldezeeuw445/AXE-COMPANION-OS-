@@ -173,7 +173,9 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     const series = chart.addSeries(CandlestickSeries, {
       upColor: theme.bull,
       downColor: theme.bear,
-      borderVisible: false,
+      borderVisible: theme.borderVisible,
+      borderUpColor: theme.bullBorder,
+      borderDownColor: theme.bearBorder,
       wickUpColor: theme.bullWick,
       wickDownColor: theme.bearWick,
       priceFormat: { type: "price", precision: digits, minMove: Number(`1e-${digits}`) },
