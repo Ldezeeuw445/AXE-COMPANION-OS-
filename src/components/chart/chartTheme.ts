@@ -187,7 +187,7 @@ export const CHART_THEMES: Record<ChartThemeKey, ChartThemeConfig> = {
   paper: PAPER,
 };
 
-export const CHART_THEME_KEYS: ChartThemeKey[] = ["midnight", "charcoal", "slate", "paper"];
+export const CHART_THEME_KEYS: ChartThemeKey[] = ["midnight", "paper"];
 
 /** Get a theme config by key. Falls back to midnight. */
 export function getChartTheme(key?: string | null): ChartThemeConfig {
@@ -209,7 +209,8 @@ const GRID_STORAGE_KEY = "axe-chart-grid";
 export function readChartThemeKey(): ChartThemeKey {
   if (typeof window === "undefined") return "midnight";
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && stored in CHART_THEMES) return stored as ChartThemeKey;
+  if (stored && (CHART_THEME_KEYS as readonly string[]).includes(stored))
+    return stored as ChartThemeKey;
   return "midnight";
 }
 

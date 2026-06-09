@@ -51,19 +51,20 @@ function indicatorColors(dark: boolean) {
         titleText: "text-white/70",
       }
     : {
-        bullBar: "rgba(8,130,110,0.82)",
-        bearBar: "rgba(200,40,40,0.82)",
-        rsiLine: "rgba(0,130,180,0.92)",
-        macdLine: "rgba(0,130,180,0.92)",
-        macdSignal: "rgba(180,140,10,0.90)",
-        macdHistBull: "rgba(8,130,110,0.70)",
-        macdHistBear: "rgba(200,40,40,0.70)",
-        levelLine: "rgba(0,0,0,0.14)",
-        levelLineDim: "rgba(0,0,0,0.07)",
-        separator: "rgba(0,0,0,0.06)",
-        labelEmphasis: "rgba(30,35,45,0.85)",
-        labelNormal: "rgba(80,85,95,0.7)",
-        titleText: "text-black/70",
+        /* Premium Paper palette — deep, rich, clearly visible on light bg */
+        bullBar: "rgba(0,110,90,0.92)",
+        bearBar: "rgba(180,30,30,0.92)",
+        rsiLine: "rgba(0,80,180,1)",
+        macdLine: "rgba(0,80,180,1)",
+        macdSignal: "rgba(190,120,0,1)",
+        macdHistBull: "rgba(0,110,90,0.88)",
+        macdHistBear: "rgba(180,30,30,0.88)",
+        levelLine: "rgba(0,0,0,0.22)",
+        levelLineDim: "rgba(0,0,0,0.12)",
+        separator: "rgba(0,0,0,0.10)",
+        labelEmphasis: "rgba(20,25,35,0.92)",
+        labelNormal: "rgba(50,55,65,0.82)",
+        titleText: "text-black/80",
       };
 }
 
