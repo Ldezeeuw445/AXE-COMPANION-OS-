@@ -10,6 +10,7 @@ import type {
 
 const EMPTY_DASHBOARD: CockpitDashboard = {
   snapshotId: "",
+  shouldAutoRefresh: false,
   learningProgress: { headline: "", milestones: [] },
   alignment: { score: 0, capturedAt: new Date().toISOString(), deltaFromPrior: 0 },
   confidence: { headline: "", series: [] },
@@ -241,8 +242,44 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
 
   const metricKeysSample = (metrics ?? []).map((m) => m.metric_key as string);
 
+  // ── Staleness detection ──────────────────────────────────────────
+  // Check if meaningful new signals arrived since the last snapshot.
+  // We count rows created after `captured_at` in the key tables.
+  const cutoff = latest.captured_at;
+  const [newMsgs, newTrades, newJournals, newMemory] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gt("created_at", cutoff),
+    supabase
+      .from("broker_trades")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gt("close_time", cutoff),
+    supabase
+      .from("user_journal_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gt("created_at", cutoff),
+    supabase
+      .from("assistant_memory_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gt("created_at", cutoff),
+  ]);
+  const newSignalCount =
+    countOrZero(newMsgs) + countOrZero(newTrades) + countOrZero(newJournals) + countOrZero(newMemory);
+
+  // Auto-refresh when: ≥3 new signals, OR snapshot is >24h old and ≥1 new signal
+  const snapshotAgeMs = Date.now() - new Date(cutoff).getTime();
+  const staleHours = snapshotAgeMs / (1000 * 60 * 60);
+  const shouldAutoRefresh =
+    newSignalCount >= 3 || (staleHours >= 24 && newSignalCount >= 1);
+
   return {
     snapshotId: latest.id,
+    shouldAutoRefresh,
     alignment: mapAlignment(
       latest.alignment_score ?? 0,
       latest.captured_at,

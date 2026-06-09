@@ -6,6 +6,7 @@ import type { CockpitDashboard } from "@/types/cockpit";
  */
 export const mockCockpitDashboard: CockpitDashboard = {
   snapshotId: "snap_2026_03_29_0630z",
+  shouldAutoRefresh: false,
   learningProgress: {
     headline:
       "After CPI week, the model leaned harder into how you define invalidation — fewer tick-scratch exits, more 5-minute closes. NY size-up only fires once London context is tagged “clean.”",

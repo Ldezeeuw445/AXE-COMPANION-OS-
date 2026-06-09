@@ -5,6 +5,7 @@ import { CockpitFeedbackImpact } from "@/components/cockpit/CockpitFeedbackImpac
 import { CockpitFooterNote } from "@/components/cockpit/CockpitFooterNote";
 import { CockpitLearningProgress } from "@/components/cockpit/CockpitLearningProgress";
 import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
+import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -37,6 +38,9 @@ export default async function CockpitPage() {
           and what stuck after feedback.
         </p>
       </div>
+
+      {/* Auto-recalibrate when new signals exist since last snapshot */}
+      <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
 
       {!hasSnapshot || dash.calibration.state !== "active" ? (
         <GlassPanel className="p-6 text-center">

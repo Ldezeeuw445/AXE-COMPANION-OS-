@@ -177,7 +177,7 @@ export async function POST() {
     return NextResponse.json({ error: "Failed to generate snapshot" }, { status: 500 });
   }
 
-  // Save to Supabase
+  // Save to Supabase (include signal_count for staleness tracking)
   const { data: saved, error: saveErr } = await supabase
     .from("assistant_cockpit_snapshots")
     .insert({
@@ -187,6 +187,7 @@ export async function POST() {
       confidence_trend: snapshot.confidence_trend,
       behavior_map: snapshot.behavior_map,
       feedback_loop_stats: snapshot.feedback_loop_stats,
+      signal_count: signalCount,
       captured_at: new Date().toISOString(),
     })
     .select("id")

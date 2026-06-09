@@ -66,6 +66,8 @@ export type CockpitBehaviorMap = {
 export type CockpitDashboard = {
   /** Mirrors `assistant_cockpit_snapshots.id` when live */
   snapshotId: string;
+  /** True when new signals exist since last snapshot — triggers background recalibration */
+  shouldAutoRefresh: boolean;
   learningProgress: {
     headline: string;
     milestones: CockpitLearningMilestone[];
