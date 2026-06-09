@@ -99,8 +99,6 @@ export default async function IntelPage({ searchParams }: PageProps) {
         allLiveOverride={hasFreshLiveIntel ? true : intel.hasLiveData ? false : null}
       />
 
-      <ProviderBadges providers={intel.providers} cache={intel.cache} />
-
       {intel.cache.message ? (
         <GlassPanel className="p-3">
           <p className="text-xs leading-relaxed text-tos-muted">
@@ -119,9 +117,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
               AXE Intel Tide
             </h2>
           </div>
-          <span className="text-[10px] text-tos-dim">
-            {intel.tide ? `AXE Intel · ${isStale ? "cached" : "live"}` : "Feed warming"}
-          </span>
+          <InlineStatus providers={intel.providers} id="marketTide" />
         </div>
         {intel.tide ? (
           <div className="mt-3 grid grid-cols-3 gap-3">
@@ -164,9 +160,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Insider Flow
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.insiders.length > 0 ? `${intel.insiders.length} latest` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.insiders.length > 0 ? `${intel.insiders.length} latest` : ""}</span>
+              <InlineStatus providers={intel.providers} id="insiderTrades" />
+            </div>
           </div>
           {intel.insiders.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -208,9 +205,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Policy Flow
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.senate.length > 0 ? `${intel.senate.length} disclosures` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.senate.length > 0 ? `${intel.senate.length} disclosures` : ""}</span>
+              <InlineStatus providers={intel.providers} id="senateTrades" />
+            </div>
           </div>
           {intel.senate.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -253,9 +251,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Dark Pool
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.darkPool.length > 0 ? `Top ${Math.min(10, intel.darkPool.length)}` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.darkPool.length > 0 ? `Top ${Math.min(10, intel.darkPool.length)}` : ""}</span>
+              <InlineStatus providers={intel.providers} id="darkPoolPrints" />
+            </div>
           </div>
           {intel.darkPool.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -297,9 +296,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Options Flow
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.options.length > 0 ? `Top ${Math.min(10, intel.options.length)} by premium` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.options.length > 0 ? `Top ${Math.min(10, intel.options.length)} by premium` : ""}</span>
+              <InlineStatus providers={intel.providers} id="unusualOptions" />
+            </div>
           </div>
           {intel.options.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -339,18 +339,22 @@ export default async function IntelPage({ searchParams }: PageProps) {
               AXE Jet Tracker
             </h2>
           </div>
-          <span className="text-[10px] text-tos-dim">
-            {intel.jets.length > 0 ? `${intel.jets.filter((j) => !j.onGround).length} airborne · ${intel.jets.length} tracked` : "Feed warming"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-tos-dim">
+              {intel.jets.length > 0 ? `${intel.jets.filter((j) => !j.onGround).length} airborne · ${intel.jets.length} tracked` : ""}
+            </span>
+            <InlineStatus providers={intel.providers} id="corporateJets" />
+          </div>
         </div>
         {intel.jets.length > 0 ? (
           <ul className="mt-3 space-y-2">
+            {/* Airborne jets first */}
             {intel.jets
               .filter((j) => !j.onGround)
               .slice(0, 8)
               .map((jet, i) => (
                 <li
-                  key={`${jet.icao24}-${i}`}
+                  key={`${jet.icao24}-air-${i}`}
                   className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
                   <span className="font-mono text-[11px] font-semibold text-emerald-200/90">{jet.ticker || jet.icao24}</span>
@@ -367,11 +371,23 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   )}
                 </li>
               ))}
-            {intel.jets.filter((j) => !j.onGround).length === 0 && (
-              <li className="px-1 text-xs text-tos-muted">
-                All tracked executive jets currently grounded.
-              </li>
-            )}
+            {/* Grounded jets */}
+            {intel.jets
+              .filter((j) => j.onGround)
+              .slice(0, 8)
+              .map((jet, i) => (
+                <li
+                  key={`${jet.icao24}-gnd-${i}`}
+                  className="flex items-baseline gap-3 rounded-lg border border-white/[0.04] bg-[#0a0a0d]/60 px-3 py-2"
+                >
+                  <span className="font-mono text-[11px] font-semibold text-tos-dim">{jet.ticker || jet.icao24}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-tos-muted" title={jet.company}>
+                    {jet.company}
+                    {jet.tailNumber && <span className="ml-1 text-[10px] text-tos-dim">· {jet.tailNumber}</span>}
+                  </span>
+                  <span className="font-mono text-[10px] text-tos-dim">GROUNDED</span>
+                </li>
+              ))}
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
@@ -390,9 +406,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Vessel Intel
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.vessels.length > 0 ? `${intel.vessels.length} tracked` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.vessels.length > 0 ? `${intel.vessels.length} tracked` : ""}</span>
+              <InlineStatus providers={intel.providers} id="vesselTracking" />
+            </div>
           </div>
           {intel.vessels.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -424,9 +441,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Energy Flow
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.energy.length > 0 ? `${intel.energy.length} data points` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.energy.length > 0 ? `${intel.energy.length} data points` : ""}</span>
+              <InlineStatus providers={intel.providers} id="energyFlows" />
+            </div>
           </div>
           {intel.energy.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -511,9 +529,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Seismic Events
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.conflicts.length > 0 ? `${intel.conflicts.length} events` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.conflicts.length > 0 ? `${intel.conflicts.length} events` : ""}</span>
+              <InlineStatus providers={intel.providers} id="conflictEvents" />
+            </div>
           </div>
           {intel.conflicts.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -551,9 +570,10 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 AXE Cyber Intel
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.cyber.length > 0 ? `${intel.cyber.length} signals` : "—"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">{intel.cyber.length > 0 ? `${intel.cyber.length} signals` : ""}</span>
+              <InlineStatus providers={intel.providers} id="cyberThreats" />
+            </div>
           </div>
           {intel.cyber.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -690,6 +710,23 @@ function ProviderBadges({
         })}
       </div>
     </div>
+  );
+}
+
+function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id: string }) {
+  const p = providers.find((pv) => pv.id === id);
+  if (!p) return null;
+  const dot =
+    p.state === "live" ? "bg-emerald-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25";
+  const text =
+    p.state === "live" ? "live" : p.state === "error" ? "error" : "off";
+  const textColor =
+    p.state === "live" ? "text-emerald-300/80" : p.state === "error" ? "text-amber-300/80" : "text-tos-dim";
+  return (
+    <span className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
+      {text}
+    </span>
   );
 }
 
