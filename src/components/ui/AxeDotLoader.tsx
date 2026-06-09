@@ -1,16 +1,16 @@
 "use client";
 
 /**
- * AxeDotLoader — minimal 12-dot grid loader.
+ * AxeDotLoader — minimal 16-dot grid loader.
  *
- * 4 columns × 3 rows of small dots that pulse sequentially.
+ * 4 columns × 4 rows of small dots that pulse sequentially.
  * Renders on a pure black full-screen background.
  * No box, no text, no "Running..." — just dots.
  */
 
 import { type CSSProperties } from "react";
 
-const ROWS = 3;
+const ROWS = 4;
 const COLS = 4;
 const DOT_SIZE = 6;
 const GAP = 10;

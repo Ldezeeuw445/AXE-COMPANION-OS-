@@ -288,6 +288,22 @@ body {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0); /* force compositing without affecting 2D position */
+  /* Prevent the bar from ever being pushed off-screen by keyboard or resize */
+  contain: layout style;
+}
+
+/* ── Landscape adaptation ──────────────────────────────────────── */
+/* In landscape, widen the navbar and reduce safe-area gap so the
+   screen estate is maximised for chart / trading views. */
+@media (orientation: landscape) {
+  .tos-nav-pill {
+    max-width: 560px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
+  }
+  /* Content padding in landscape only needs a small bottom offset */
+  .tos-app-content {
+    padding-bottom: calc(var(--tos-nav-offset, 72px) + 0.5rem) !important;
+  }
 }
 
 /* Subtle ambient glow — ultra-faint radial light behind key content.
@@ -367,21 +383,26 @@ button,
 a,
 nav,
 .tos-card-premium,
-.tos-card-premium-subtle,
-.tos-linear-card,
-.tos-watchlist-row,
-.tos-nav-pill,
-.tos-asset-pill,
-.tos-inset-panel,
-.tos-neu-composer,
-[role="button"] {
+/* ── Global copy/select prevention (mobile-first) ────────────── */
+/* Prevent text selection, copy menus, and blue highlight on ALL
+   app elements. Inputs/textarea/select keep their defaults so
+   users can still type and paste. */
+.tos-app-content,
+.tos-app-content * {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
 }
+.tos-app-content input,
+.tos-app-content textarea,
+.tos-app-content select,
+.tos-app-content [contenteditable="true"] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
 
-/* Double-tap zoom prevention on the entire app shell.
-   Individual elements like inputs/textarea keep default. */
+/* Double-tap zoom prevention on the entire app shell. */
 .tos-app-content {
   touch-action: pan-x pan-y;
 }

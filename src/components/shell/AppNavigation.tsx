@@ -25,6 +25,7 @@ import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
 import { AxeWordmarkLive } from "@/components/brand/AxeWordmarkLive";
 import { AxeTriangle } from "@/components/brand/AxeTriangle";
 import Image from "next/image";
+import { QuickActionMenu } from "@/components/shell/QuickActionMenu";
 
 /* ── Wrapper so AxeTriangle fits the same slot as Lucide icons ──── */
 function IntelTriangleIcon({ className }: { className?: string; strokeWidth?: number }) {
@@ -141,25 +142,9 @@ export function AppNavigation() {
           )}
         </div>
 
-        {/* Right — AXE context (page-injected) or brand mark */}
+        {/* Right — AXE context (page-injected) or quick-action menu */}
         <div className="flex items-center">
-          {slots.right ?? (
-            <Link
-              href="/chat"
-              className="relative inline-flex h-11 w-11 items-center justify-center"
-              aria-label="AXE Chat"
-            >
-              <Image
-                src="/axe-logo-companion.png"
-                alt=""
-                width={32}
-                height={32}
-                className="pointer-events-none h-8 w-8 object-contain"
-                priority
-                unoptimized
-              />
-            </Link>
-          )}
+          {slots.right ?? <QuickActionMenu />}
         </div>
       </div>
 

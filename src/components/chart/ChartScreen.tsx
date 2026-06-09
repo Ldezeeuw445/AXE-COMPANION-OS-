@@ -3018,7 +3018,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => setIndicatorRailOpen((v) => !v)}
-          className={`absolute left-0 top-[70%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-1/2 z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             indicatorRailOpen
               ? "border-amber-300/45 bg-amber-400/18 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.18)]"
               : "border-amber-400/18 bg-black/78 text-amber-200"
@@ -3029,7 +3029,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-[70%] z-30 -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-1/2 z-30 -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
             indicatorRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
           style={{ width: "calc(100% - 80px)" }}
