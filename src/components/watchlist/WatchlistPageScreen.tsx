@@ -133,6 +133,45 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
   const searchRef = useRef<HTMLInputElement>(null);
   const { bidDir, askDir } = useTickColors(localItems);
 
+  /* ── Live price polling — fetches latest prices every 2s ────────── */
+  useEffect(() => {
+    let active = true;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/quotes/prices", { credentials: "include" });
+        if (!res.ok || !active) return;
+        const json = (await res.json()) as {
+          prices: Record<string, { bid: number | null; ask: number | null; price: number | null; spread: number | null; tickAt: string | null; status: string | null }>;
+        };
+        if (!active || !json.prices) return;
+        setLocalItems((prev) =>
+          prev.map((item) => {
+            const p = json.prices[item.symbol];
+            if (!p) return item;
+            return {
+              ...item,
+              bid: p.bid ?? item.bid,
+              ask: p.ask ?? item.ask,
+              runtimePrice: p.price ?? item.runtimePrice,
+              spread: p.spread ?? item.spread,
+              freshness: p.tickAt ?? item.freshness,
+              runtimeState: p.status === "live" ? "live" as const : item.runtimeState,
+            };
+          }),
+        );
+      } catch {
+        /* ignore fetch errors */
+      }
+    };
+    // Initial fetch + interval
+    void poll();
+    const timer = setInterval(poll, 2000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
   // Keep items in sync with server data (but preserve order)
   useEffect(() => {
     setLocalItems((prev) => {

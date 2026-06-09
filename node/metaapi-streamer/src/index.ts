@@ -18,6 +18,7 @@
  */
 
 import { publishEvent } from "./publish.js";
+import { SnapshotBuffer } from "./snapshotBuffer.js";
 import {
   loadAccountConfigs,
   diffConfigs,
@@ -182,12 +183,15 @@ function broadcastToAllTfRooms(
 class MultiSymbolListener {
   /** Reverse map: broker symbol → display symbol */
   private brokerToDisplay: Map<string, string>;
+  /** Snapshot buffer — persists latest prices to Supabase for the Quotes page */
+  readonly snapshotBuffer: SnapshotBuffer;
 
   constructor(
     private readonly env: Env,
     private readonly config: AccountConfig
   ) {
     this.brokerToDisplay = new Map();
+    this.snapshotBuffer = new SnapshotBuffer(config.userId, config.accountId);
     this.rebuildReverseMap();
   }
 
@@ -243,6 +247,14 @@ class MultiSymbolListener {
       price.bid != null && price.ask != null
         ? (price.bid + price.ask) / 2
         : (price.bid ?? price.ask ?? null);
+
+    // Buffer for Supabase snapshot (Quotes page)
+    this.snapshotBuffer.record(
+      display, broker,
+      price.bid ?? null, price.ask ?? null,
+      mid != null ? Number(mid) : null,
+      price.brokerTime ?? price.time ?? null,
+    );
 
     broadcastToAllTfRooms(this.env, this.config, broker, display, () => ({
       type: "tick",
@@ -545,6 +557,9 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
   }
 
   log("info", `Account ${config.metaApiAccountId}: ${subscribedSymbols.size}/${config.watchlistSymbols.length} symbols subscribed`);
+
+  // Start snapshot buffer → flushes prices to Supabase every 3s for the Quotes page
+  rawListener.snapshotBuffer.start();
 
   // Broadcast ready + live status for all subscribed symbols
   for (const displaySymbol of config.watchlistSymbols) {
