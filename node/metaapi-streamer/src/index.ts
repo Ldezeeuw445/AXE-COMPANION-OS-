@@ -415,7 +415,9 @@ let metaApiSingleton: MetaApiInstance | null = null;
 
 async function getMetaApi(token: string, region: string): Promise<MetaApiInstance> {
   if (metaApiSingleton) return metaApiSingleton;
-  const sdkMod = (await import("metaapi.cloud-sdk")) as unknown as {
+  // Use the Node.js ESM entry point — the default "import" export resolves
+  // to esm-web which references `window` and crashes in Node.
+  const sdkMod = (await import("metaapi.cloud-sdk/esm-node")) as unknown as {
     default: new (token: string, opts?: { region?: string }) => MetaApiInstance;
   };
   metaApiSingleton = new sdkMod.default(token, { region });
