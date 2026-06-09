@@ -18,6 +18,7 @@ import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import { addWatchlistItem, removeWatchlistItem } from "@/app/(app)/settings/actions";
 import { CANONICAL_BROKER_SYMBOLS } from "@/lib/broker/brokerSymbolRuntime";
+import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { GripVertical, Plus, Search, Trash2, X } from "lucide-react";
 
 /* ── Types ──────────────────────────────────────────────────────── */
@@ -194,22 +195,34 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
 
-  /* ── Search candidates ─────────────────────────────────────────── */
+  /* ── Search candidates (cleaned display names from broker universe) ── */
   const searchCandidates = useMemo(() => {
-    const existing = new Set(localItems.map((i) => i.symbol));
-    const all = new Set([
-      ...CANONICAL_BROKER_SYMBOLS,
-      ...brokerUniverse,
-    ]);
-    // Remove already-added symbols
-    for (const sym of existing) all.delete(sym);
-    return [...all].sort();
+    const existing = new Set(localItems.map((i) => i.symbol.toUpperCase()));
+    // Map: display name → broker symbol (for subtitle)
+    const displayToBroker = new Map<string, string>();
+    for (const raw of brokerUniverse) {
+      const clean = cleanDisplaySymbol(raw) || raw.replace(/\.[a-zA-Z]+$/, "").toUpperCase();
+      if (!existing.has(clean) && !displayToBroker.has(clean)) {
+        displayToBroker.set(clean, raw !== clean ? raw : "");
+      }
+    }
+    // Add canonical symbols that aren't already covered
+    for (const sym of CANONICAL_BROKER_SYMBOLS) {
+      if (!existing.has(sym) && !displayToBroker.has(sym)) {
+        displayToBroker.set(sym, "");
+      }
+    }
+    return [...displayToBroker.entries()]
+      .map(([display, broker]) => ({ display, broker }))
+      .sort((a, b) => a.display.localeCompare(b.display));
   }, [localItems, brokerUniverse]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return searchCandidates.slice(0, 20);
+    if (!searchQuery.trim()) return searchCandidates.slice(0, 30);
     const q = searchQuery.trim().toUpperCase();
-    return searchCandidates.filter((s) => s.includes(q)).slice(0, 20);
+    return searchCandidates
+      .filter((s) => s.display.includes(q) || s.broker.toUpperCase().includes(q))
+      .slice(0, 30);
   }, [searchCandidates, searchQuery]);
 
   /* ── Handlers ──────────────────────────────────────────────────── */
@@ -390,18 +403,25 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
             />
           </div>
           {filtered.length > 0 && (
-            <div className="mt-2 max-h-[200px] overflow-y-auto">
-              {filtered.map((sym) => (
+            <div className="mt-2 max-h-[240px] overflow-y-auto">
+              {filtered.map((item) => (
                 <button
-                  key={sym}
+                  key={item.display}
                   type="button"
                   disabled={adding}
-                  onClick={() => handleAdd(sym)}
+                  onClick={() => handleAdd(item.display)}
                   className="flex w-full items-center justify-between px-2 py-2 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06] disabled:opacity-40"
                 >
-                  <span className="font-mono text-[13px] font-semibold text-white/80">
-                    {sym}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[13px] font-semibold text-white/80">
+                      {item.display}
+                    </span>
+                    {item.broker && item.broker !== item.display && (
+                      <span className="font-mono text-[10px] text-white/25">
+                        {item.broker}
+                      </span>
+                    )}
+                  </div>
                   <Plus size={14} className="text-cyan-400/60" />
                 </button>
               ))}
