@@ -480,9 +480,12 @@ export default async function IntelPage({ searchParams }: PageProps) {
                 Global Chokepoints
               </h2>
             </div>
-            <span className="text-[10px] text-tos-dim">
-              {intel.chokepoints.filter((cp) => cp.riskLevel === "critical").length} critical · {intel.chokepoints.length} monitored
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-tos-dim">
+                {intel.chokepoints.filter((cp) => cp.riskLevel === "critical").length} critical · {intel.chokepoints.length} monitored
+              </span>
+              <InlineStatus providers={intel.providers} id="chokepoints" />
+            </div>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {intel.chokepoints.map((cp) => (

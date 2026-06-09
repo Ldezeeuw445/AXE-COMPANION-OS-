@@ -17,6 +17,7 @@ export type IntelProviderStatus = {
     | "marketTide"
     | "corporateJets"
     | "vesselTracking"
+    | "chokepoints"
     | "conflictEvents"
     | "energyFlows"
     | "cyberThreats";
@@ -412,6 +413,13 @@ async function fetchIntelSnapshot(
       "AXE Intel supply chain & chokepoint monitoring",
       vesselRes.ok && vessels.length > 0,
       vesselRes.ok ? undefined : vesselRes.error,
+    ),
+    toStatus(
+      "chokepoints",
+      "Chokepoints",
+      "AXE Intel global chokepoint monitoring",
+      chokepointRes.ok && chokepoints.length > 0,
+      chokepointRes.ok ? undefined : chokepointRes.error,
     ),
     toStatus(
       "conflictEvents",
