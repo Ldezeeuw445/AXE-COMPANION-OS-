@@ -1665,7 +1665,7 @@ async function fetchEventsFromEonet(): Promise<ConflictEvent[]> {
       subEventType: latest?.magnitudeValue != null
         ? `${latest!.magnitudeValue} ${latest!.magnitudeUnit ?? ""}`
         : "Active",
-      actor1: "NASA EONET",
+      actor1: "",
       fatalities: 0,
       notes: String(e.title ?? "").slice(0, 300),
       latitude: coords.length >= 2 ? coords[1] : null,
@@ -1698,7 +1698,7 @@ async function fetchEarthquakesFromUsgs(): Promise<ConflictEvent[]> {
       region: String(props.place ?? ""),
       eventType: "Earthquake",
       subEventType: `M${mag.toFixed(1)}`,
-      actor1: "USGS",
+      actor1: "",
       fatalities: 0,
       notes: String(props.title ?? `M${mag.toFixed(1)} earthquake`).slice(0, 300),
       latitude: coords.length >= 2 ? coords[1] : null,

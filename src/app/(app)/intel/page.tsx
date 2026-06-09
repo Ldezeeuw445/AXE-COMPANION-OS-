@@ -542,14 +542,16 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   className="flex flex-col gap-1 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
                   <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-[11px] font-semibold text-tos-text">{c.country}</span>
+                    <span className="font-mono text-[11px] font-semibold text-tos-text">
+                      {c.eventType}{c.subEventType ? ` ${c.subEventType}` : ""}
+                    </span>
                     <span className="text-[10px] text-tos-dim">{c.eventDate}</span>
-                    <span className={`ml-auto font-mono text-[10px] font-semibold uppercase ${c.fatalities > 0 ? "text-rose-300" : "text-amber-200/70"}`}>
-                      {c.eventType}
+                    <span className={`ml-auto font-mono text-[10px] font-semibold ${seismicMarketTag(c).color}`}>
+                      {seismicMarketTag(c).label}
                     </span>
                   </div>
                   <p className="line-clamp-2 text-[10px] leading-relaxed text-tos-muted">
-                    {c.actor1 ? `${c.actor1} — ` : ""}{c.notes || c.subEventType}
+                    {c.notes || c.region}
                     {c.fatalities > 0 && <span className="ml-1 text-rose-300/80">({c.fatalities} fatalities)</span>}
                   </p>
                 </li>
@@ -711,6 +713,49 @@ function ProviderBadges({
       </div>
     </div>
   );
+}
+
+/** Market relevance tag for seismic/geo events */
+function seismicMarketTag(c: { eventType: string; region: string; notes: string; fatalities: number; latitude: number | null; longitude: number | null }): { label: string; color: string } {
+  const text = `${c.region} ${c.notes}`.toLowerCase();
+  const lat = c.latitude ?? 0;
+  const lon = c.longitude ?? 0;
+
+  // Shipping chokepoint proximity
+  const nearHormuz = lat > 24 && lat < 28 && lon > 54 && lon < 58;
+  const nearSuez = lat > 28 && lat < 32 && lon > 31 && lon < 34;
+  const nearTaiwan = lat > 21 && lat < 26 && lon > 118 && lon < 123;
+  const nearMalacca = lat > -2 && lat < 6 && lon > 98 && lon < 106;
+  const nearBabel = lat > 11 && lat < 14 && lon > 42 && lon < 44;
+  const nearPanama = lat > 7 && lat < 10 && lon > -81 && lon < -78;
+
+  if (nearHormuz || nearBabel) return { label: "Oil & shipping risk", color: "text-rose-300" };
+  if (nearSuez) return { label: "Supply chain risk", color: "text-rose-300" };
+  if (nearTaiwan) return { label: "Semiconductor risk", color: "text-rose-300" };
+  if (nearMalacca) return { label: "Trade route risk", color: "text-amber-200" };
+  if (nearPanama) return { label: "Shipping disruption", color: "text-amber-200" };
+
+  // Energy infrastructure
+  if (text.includes("lng") || text.includes("pipeline") || text.includes("refiner")) return { label: "Energy disruption", color: "text-rose-300" };
+  if (text.includes("oil") || text.includes("petroleum") || text.includes("crude")) return { label: "Energy risk", color: "text-amber-200" };
+
+  // Major storms
+  if (c.eventType === "Severe Storms" || text.includes("tropical") || text.includes("hurricane") || text.includes("typhoon")) return { label: "Logistics risk", color: "text-amber-200" };
+
+  // Volcanic / wildfire affecting major routes
+  if ((c.eventType === "Wildfires" || c.eventType === "Volcanoes") && (text.includes("canada") || text.includes("california") || text.includes("texas") || text.includes("alaska"))) return { label: "Commodity risk", color: "text-amber-200/70" };
+
+  // Conflict with fatalities
+  if (c.fatalities > 10) return { label: "Geopolitical risk", color: "text-rose-300" };
+  if (c.fatalities > 0) return { label: "Regional instability", color: "text-amber-200/70" };
+
+  // Large earthquakes
+  const magMatch = (c.notes + c.region).match(/M\s?(\d+\.?\d*)/i);
+  const mag = magMatch ? parseFloat(magMatch[1]) : 0;
+  if (mag >= 7) return { label: "Infrastructure risk", color: "text-rose-300" };
+  if (mag >= 6) return { label: "Potential disruption", color: "text-amber-200/70" };
+
+  return { label: "Low market impact", color: "text-tos-dim" };
 }
 
 function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id: string }) {

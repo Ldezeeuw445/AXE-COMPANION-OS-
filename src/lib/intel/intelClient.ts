@@ -279,14 +279,14 @@ function toStatus(
       id,
       label,
       state: "error",
-      description: `${description} — temporarily unavailable; using cached data when available`,
+      description: `${description} — feed syncing…`,
     };
   }
   return {
     id,
     label,
     state: "off",
-    description: `${description} — no cached rows yet`,
+    description: `${description} — waiting for new signals…`,
   };
 }
 
@@ -402,7 +402,7 @@ async function fetchIntelSnapshot(
     toStatus(
       "corporateJets",
       "Corporate jets",
-      "AXE Intel executive jet tracking (OpenSky)",
+      "AXE Intel executive mobility tracking",
       jetsRes.ok && jets.length > 0,
       jetsRes.ok ? undefined : jetsRes.error,
     ),
@@ -416,21 +416,21 @@ async function fetchIntelSnapshot(
     toStatus(
       "conflictEvents",
       "Seismic events",
-      "AXE Intel seismic & geo events (ACLED + NASA EONET + USGS)",
+      "AXE Intel geopolitical & seismic events",
       conflictRes.ok && conflicts.length > 0,
       conflictRes.ok ? undefined : conflictRes.error,
     ),
     toStatus(
       "energyFlows",
       "Energy flows",
-      "AXE Intel oil/gas inventory & pricing (EIA)",
+      "AXE Intel energy inventory & pricing",
       energyRes.ok && energy.length > 0,
       energyRes.ok ? undefined : energyRes.error,
     ),
     toStatus(
       "cyberThreats",
       "Cyber threats",
-      "AXE Intel network scanning intelligence (GreyNoise)",
+      "AXE Intel cyber threat detection",
       cyberRes.ok && cyber.length > 0,
       cyberRes.ok ? undefined : cyberRes.error,
     ),

@@ -174,9 +174,9 @@ function buildIntelContext(
   }
 
   if (intel.conflicts.length > 0) {
-    parts.push(`\n## CONFLICT & GEOPOLITICAL EVENTS (${intel.conflicts.length} events)`);
+    parts.push(`\n## AXE SEISMIC EVENTS (${intel.conflicts.length} events)`);
     for (const c of intel.conflicts.slice(0, 10)) {
-      parts.push(`- ${c.country} (${c.eventDate}): ${c.eventType} — ${c.actor1 ? c.actor1 + ": " : ""}${c.notes.slice(0, 150)}${c.fatalities > 0 ? ` [${c.fatalities} fatalities]` : ""}`);
+      parts.push(`- ${c.country} (${c.eventDate}): ${c.eventType} ${c.subEventType ? `[${c.subEventType}]` : ""} — ${c.notes.slice(0, 150)}${c.fatalities > 0 ? ` [${c.fatalities} fatalities]` : ""}`);
     }
   }
 

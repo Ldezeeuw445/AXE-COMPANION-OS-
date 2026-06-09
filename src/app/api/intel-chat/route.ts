@@ -23,11 +23,11 @@ FEEDS (Smart Money):
 - Market tide — net call vs put premium for macro bias
 
 FEEDS (Alternative Data):
-- Corporate jet tracking (OpenSky) — executive travel patterns for top 50 C-suite jets
-- Supply chain & vessel tracking — chokepoint monitoring, Finnhub supply chain data
-- Conflict & geopolitical events (ACLED/GDELT) — armed conflicts, sanctions, military activity
-- Energy flows (EIA) — crude oil inventories, natural gas storage, WTI/Brent pricing
-- Cyber threat intelligence (GreyNoise) — network scanning, financial sector attack signals
+- AXE Mobility — executive jet tracking, C-suite travel patterns
+- AXE Vessel Intel — supply chain & chokepoint monitoring, tanker reroutes
+- AXE Seismic Events — earthquakes, wildfires, storms, armed conflicts with market relevance
+- AXE Energy Flow — crude oil inventories, natural gas storage, WTI/Brent pricing
+- AXE Cyber Intel — network scanning intelligence, financial sector attack signals
 
 CAPABILITIES:
 - Cross-reference insider buys/sells with dark-pool volume to spot accumulation or distribution
@@ -125,9 +125,9 @@ function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>)
 
   if (intel.conflicts?.length > 0) {
     const rows = intel.conflicts.slice(0, 10).map(
-      (c) => `- ${c.country} (${c.eventDate}): ${c.eventType} — ${c.actor1 ? c.actor1 + ": " : ""}${c.notes.slice(0, 150)}${c.fatalities > 0 ? ` [${c.fatalities} fatalities]` : ""}`
+      (c) => `- ${c.country} (${c.eventDate}): ${c.eventType} ${c.subEventType ? `[${c.subEventType}]` : ""} — ${c.notes.slice(0, 150)}${c.fatalities > 0 ? ` [${c.fatalities} fatalities]` : ""}`
     ).join("\n");
-    sections.push(`## CONFLICT & GEOPOLITICAL (${intel.conflicts.length} events)\n${rows}`);
+    sections.push(`## AXE SEISMIC EVENTS (${intel.conflicts.length} events)\n${rows}`);
   }
 
   if (intel.energy?.length > 0) {
@@ -139,7 +139,7 @@ function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>)
     }).map(
       (e) => `- ${e.seriesName}: ${e.value != null ? e.value.toFixed(2) : "?"} ${e.unit} (${e.period})`
     ).join("\n");
-    sections.push(`## ENERGY FLOWS (EIA)\n${rows}`);
+    sections.push(`## AXE ENERGY FLOW\n${rows}`);
   }
 
   if (intel.cyber?.length > 0) {
