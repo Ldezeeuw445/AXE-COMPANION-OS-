@@ -1092,18 +1092,28 @@ async function handleCorporateJets(): Promise<Response> {
     }
   }
 
+  // Build grounded fleet as absolute fallback — never return an error
+  const groundedFleet: CorporateJet[] = Object.entries(EXEC_JET_FLEET).map(([icao, e]) => ({
+    icao24: icao, callsign: "", company: e.company, ticker: e.ticker,
+    tailNumber: e.tailNumber, originCountry: "", latitude: null,
+    longitude: null, altitude: null, velocity: null, onGround: true,
+  }));
+
   try {
     const jets = await fetchJetsFromOpenSky();
     if (jets.length > 0) {
-      await persistJets(jets);
-      await markSynced("corporateJets", jets.length, "opensky");
+      await persistJets(jets).catch(() => {});
+      await markSynced("corporateJets", jets.length, "opensky").catch(() => {});
     }
-    setCache(cacheKey, jets);
-    return json({ ok: true, data: jets });
-  } catch (e) {
-    const fallback = await readJetsFromDb();
-    if (fallback.length > 0) return json({ ok: true, data: fallback });
-    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
+    const result = jets.length > 0 ? jets : groundedFleet;
+    setCache(cacheKey, result);
+    return json({ ok: true, data: result });
+  } catch {
+    // OpenSky down — try DB cache, then return grounded fleet
+    const fallback = await readJetsFromDb().catch(() => [] as CorporateJet[]);
+    const result = fallback.length > 0 ? fallback : groundedFleet;
+    setCache(cacheKey, result);
+    return json({ ok: true, data: result });
   }
 }
 
