@@ -211,7 +211,30 @@ class MultiSymbolListener {
 
   // ── Tick events ──────────────────────────────────────────────────
 
+  // SDK v29 calls BOTH singular and plural variants — implement both.
+
+  /** Batch price update (SDK calls this for every tick batch) */
+  async onSymbolPricesUpdated(
+    _instanceIndex: unknown,
+    prices: SymbolPriceEvent[],
+    _equity?: unknown,
+    _margin?: unknown,
+    _freeMargin?: unknown,
+    _marginLevel?: unknown,
+    _accountCurrencyExchangeRate?: unknown
+  ) {
+    if (!Array.isArray(prices)) return;
+    for (const p of prices) {
+      await this.handlePriceTick(p);
+    }
+  }
+
+  /** Single price update (legacy SDK callback) */
   async onSymbolPriceUpdated(_account: unknown, price: SymbolPriceEvent) {
+    await this.handlePriceTick(price);
+  }
+
+  private async handlePriceTick(price: SymbolPriceEvent) {
     const broker = price?.symbol;
     if (!broker) return;
     const display = this.displayFor(broker);
@@ -378,6 +401,16 @@ class MultiSymbolListener {
         source: "metaapi_mt5",
       }));
     }
+  }
+
+  // ── Health / status callbacks (required by SDK v29) ──────────────
+
+  async onHealthStatus(_instanceIndex: unknown, _status: unknown) {
+    // no-op — suppress SDK "not a function" errors
+  }
+
+  async onBrokerConnectionStatusChanged(_instanceIndex: unknown, _connected: unknown) {
+    // no-op — suppress SDK "not a function" errors
   }
 
   // ── Connection lifecycle ────────────────────────────────────────
