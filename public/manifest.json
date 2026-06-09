@@ -9,8 +9,8 @@
   "background_color": "#06070a",
   "icons": [
     {
-      "src": "/axe-icon.png",
-      "sizes": "any",
+      "src": "/axe-icon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
@@ -19,6 +19,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/axe-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
   "categories": ["finance", "productivity"],

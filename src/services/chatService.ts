@@ -237,7 +237,6 @@ export async function sendChatMessage(
     .eq("user_id", user.id);
 
   // 3. Fetch message history + central TradingOS context in parallel
-  console.log(`[AXE:chain] symbol=${symbol ?? "—"}  tf=${tf ?? "—"}`);
   const [historyResult, context, knowledgeLayer] = await Promise.all([
     supabase
       .from("messages")

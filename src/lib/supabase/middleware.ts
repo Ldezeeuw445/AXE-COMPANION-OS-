@@ -3,14 +3,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
 
 const PROTECTED_PREFIXES = [
+  "/chart",
   "/chat",
+  "/cockpit",
   "/history",
+  "/intel",
   "/journal",
+  "/market",
   "/accounts",
   "/alerts",
+  "/positions",
   "/vault",
+  "/watchlist",
   "/actions",
-  "/cockpit",
   "/settings",
   "/upgrade",
 ];
