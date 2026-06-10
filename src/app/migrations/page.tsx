@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const DEFAULT_KEY = "axe-migrate-2026";
+const DEFAULT_KEY = process.env.MIGRATION_SECRET ?? "";
 
 type Search = { key?: string | string[] };
 
