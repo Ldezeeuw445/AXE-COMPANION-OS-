@@ -864,9 +864,13 @@ export async function streamChatMessage(
       const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
       return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
     } else if (tc.tool === "save_note") {
-      const { text: noteText, symbol: noteSym } = tc.args;
-      const { error } = await supabase.from("user_journal_entries").insert({ user_id: user.id, symbol: noteSym?.toUpperCase() ?? null, notes: noteText });
-      return error ? `Note failed: ${error.message}` : "Note saved to your journal.";
+      const { content, tag } = tc.args;
+      const entryKey = `note-${Date.now()}`;
+      const { error: noteError } = await supabase.from("assistant_memory_entries").insert({
+        user_id: user.id, scope: "notes", entry_key: entryKey,
+        content: tag ? `[${tag}] ${content}` : content,
+      });
+      return noteError ? `Note failed: ${noteError.message}` : "Note saved to your journal.";
     }
     return "Unknown tool.";
   }
