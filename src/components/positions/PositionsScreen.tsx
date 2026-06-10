@@ -137,8 +137,8 @@ export function PositionsScreen({
               const digits = priceDigits(p.openPrice);
               const pnl = p.profit ?? 0;
               const pnlColor =
-                pnl > 0 ? "text-emerald-400" : pnl < 0 ? "text-rose-400" : "text-white/40";
-              const sideColor = p.side === "buy" ? "text-emerald-400/80" : "text-rose-400/80";
+                pnl > 0 ? "text-cyan-400" : pnl < 0 ? "text-rose-400" : "text-white/40";
+              const sideColor = p.side === "buy" ? "text-cyan-400/80" : "text-rose-400/80";
 
               return (
                 <Link
@@ -192,7 +192,7 @@ export function PositionsScreen({
             {pendingOrders.map((o, i) => {
               const digits = priceDigits(o.openPrice);
               const isBuy = o.type.includes("buy");
-              const typeColor = isBuy ? "text-emerald-400/80" : "text-rose-400/80";
+              const typeColor = isBuy ? "text-cyan-400/80" : "text-rose-400/80";
               const typeLabel = o.type.replace("_", " ");
 
               return (
