@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * AxeDotLoader — minimal 16-dot grid loader.
+ * AxeDotLoader — minimal 20-dot grid loader.
  *
- * 4 columns × 4 rows of small dots that pulse sequentially.
+ * 4 columns × 5 rows of small dots that pulse sequentially.
  * Renders on a pure black full-screen background.
  * No box, no text, no "Running..." — just dots.
  */
