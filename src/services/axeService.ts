@@ -1334,3 +1334,117 @@ export async function callAxeFinal(
     return null;
   }
 }
+
+/* ── Streaming variants ─────────────────────────────────────────
+   callAxeStreaming  — streaming version of callAxe. Emits text
+   tokens via onToken callback. Returns AxeResponse with full text
+   + any tool calls (model may return tool calls instead of text).
+
+   callAxeFinalStreaming — streaming version of callAxeFinal.
+   No tools, just pure text streaming.
+   ────────────────────────────────────────────────────────────── */
+
+export async function callAxeStreaming(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[],
+  onToken: (text: string) => void,
+): Promise<AxeResponse> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error("[axeService] OPENAI_API_KEY not set");
+    return { content: null, toolCalls: [] };
+  }
+
+  const client = new OpenAI({ apiKey });
+
+  try {
+    const stream = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      tools: AXE_TOOLS,
+      tool_choice: "auto",
+      parallel_tool_calls: true,
+      max_tokens: 800,
+      temperature: 0.55,
+      stream: true,
+    });
+
+    let content = "";
+    const pendingToolCalls = new Map<number, { id: string; name: string; args: string }>();
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (!delta) continue;
+
+      if (delta.content) {
+        content += delta.content;
+        onToken(delta.content);
+      }
+
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const existing = pendingToolCalls.get(tc.index) ?? { id: "", name: "", args: "" };
+          if (tc.id) existing.id = tc.id;
+          if (tc.function?.name) existing.name += tc.function.name;
+          if (tc.function?.arguments) existing.args += tc.function.arguments;
+          pendingToolCalls.set(tc.index, existing);
+        }
+      }
+    }
+
+    if (pendingToolCalls.size > 0) {
+      const toolCalls: AxeToolCall[] = [];
+      for (const [, tc] of pendingToolCalls) {
+        try {
+          const name = tc.name as AxeToolCall["tool"];
+          if (VALID_TOOL_NAMES.has(name)) {
+            toolCalls.push({ id: tc.id, tool: name, args: JSON.parse(tc.args) } as AxeToolCall);
+          }
+        } catch {
+          console.error("[axeService] Failed to parse streamed tool call:", tc);
+        }
+      }
+      if (toolCalls.length > 0) {
+        return { content: null, toolCalls };
+      }
+    }
+
+    return { content: content || null, toolCalls: [] };
+  } catch (err) {
+    console.error("[axeService] callAxeStreaming error:", err);
+    return { content: null, toolCalls: [] };
+  }
+}
+
+export async function callAxeFinalStreaming(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[],
+  onToken: (text: string) => void,
+): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const client = new OpenAI({ apiKey });
+
+  try {
+    const stream = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      max_tokens: 500,
+      temperature: 0.4,
+      stream: true,
+    });
+
+    let content = "";
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      if (delta?.content) {
+        content += delta.content;
+        onToken(delta.content);
+      }
+    }
+
+    return content || null;
+  } catch (err) {
+    console.error("[axeService] callAxeFinalStreaming error:", err);
+    return null;
+  }
+}

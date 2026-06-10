@@ -8,6 +8,8 @@ import {
   callAxe,
   callAxeAfterTool,
   callAxeFinal,
+  callAxeStreaming,
+  callAxeFinalStreaming,
   computeFibonacci,
   computeOrderBlock,
   computePdhPdl,
@@ -622,6 +624,336 @@ export async function sendChatMessage(
     console.error("[chatService] memory extraction failed:", e),
   );
 
+  return { ok: true };
+}
+
+/* ── Streaming chat ─────────────────────────────────────────────
+   SSE-based streaming variant. Emits events via onEvent callback
+   as tokens arrive from OpenAI. The final message is saved to DB
+   after the stream completes.
+   ────────────────────────────────────────────────────────────── */
+
+export type StreamEvent =
+  | { type: "status"; phase: "thinking" | "tools" | "responding"; tools?: string[] }
+  | { type: "token"; text: string }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
+export async function streamChatMessage(
+  text: string,
+  onEvent: (event: StreamEvent) => void,
+  imageBase64?: string,
+  imageType?: string,
+  symbol?: string,
+  tf?: string,
+): Promise<{ ok: boolean; quotaExceeded?: boolean }> {
+  const trimmed = text.trim();
+  if (!trimmed && !imageBase64) return { ok: false };
+
+  const authed = await getAuthedServiceSupabase();
+  if (!authed) return { ok: false };
+
+  const conversation = await ensurePrimaryConversation(authed.user.id);
+  if (!conversation) return { ok: false };
+
+  const { supabase, user } = authed;
+
+  const quota = await tryConsumeChatQuota(supabase, user.id);
+  if (!quota.ok) {
+    if (quota.quotaExceeded) return { ok: false, quotaExceeded: true };
+    return { ok: false };
+  }
+
+  // 1. Save user message
+  const userContent = trimmed || (imageBase64 ? "[chart attached]" : "");
+  const { error: insertError } = await supabase.from("messages").insert({
+    conversation_id: conversation.id,
+    user_id: user.id,
+    role: "user",
+    content: imageBase64 && trimmed ? `${trimmed} [chart attached]` : userContent,
+  });
+
+  if (insertError) {
+    console.error("Failed to insert chat message", insertError);
+    return { ok: false };
+  }
+
+  await supabase
+    .from("conversations")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", conversation.id)
+    .eq("user_id", user.id);
+
+  onEvent({ type: "status", phase: "thinking" });
+
+  // 2. Fetch context in parallel
+  const [historyResult, context, knowledgeLayer] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("role,content")
+      .eq("conversation_id", conversation.id)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(40),
+    fetchTradingOSContext(user.id, supabase, symbol, tf),
+    buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
+  ]);
+
+  const history = ((historyResult.data ?? []) as { role: "user" | "assistant"; content: string }[])
+    .reverse()
+    .slice(0, -1);
+
+  const contextWithCandles = {
+    ...context,
+    candles_summary: conversation.pinnedContext || null,
+    knowledge_layer: knowledgeLayer,
+  };
+
+  const aiMessages = buildAxeMessagesFromContext(
+    contextWithCandles,
+    history,
+    trimmed || "(the trader attached a chart image — analyse it)",
+    imageBase64,
+    imageType,
+  );
+
+  // --- Reuse the same executeTool + appendToolRound from sendChatMessage ---
+  // (tool execution is non-streaming; only the final text response streams)
+
+  async function firePush(title: string, body: string, url = "/chat") {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost:5000"}`;
+      await fetch(`${baseUrl}/api/push/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, title, body, url }),
+      });
+    } catch (e) {
+      console.warn("[push] send failed:", e);
+    }
+  }
+
+  async function executeTool(tc: AxeToolCall): Promise<string> {
+    if (tc.tool === "create_alert") {
+      const { title, body, type: rawType, symbol: alertSymbol } = tc.args;
+      const allowed = new Set(["price", "news", "risk", "system"]);
+      const type = allowed.has(String(rawType)) ? String(rawType) : "system";
+      let alertError = null;
+      if (alertSymbol) {
+        const { error: e1 } = await supabase.from("alerts").insert({ user_id: user.id, type, title, body, symbol: alertSymbol.toUpperCase(), read: false });
+        if (e1 && e1.message?.includes("column")) {
+          const { error: e2 } = await supabase.from("alerts").insert({ user_id: user.id, type, title, body: `${body} [${alertSymbol.toUpperCase()}]`, read: false });
+          alertError = e2;
+        } else { alertError = e1; }
+      } else {
+        const { error: e } = await supabase.from("alerts").insert({ user_id: user.id, type, title, body, read: false });
+        alertError = e;
+      }
+      if (alertError) return `Alert creation failed: ${alertError.message}`;
+      firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
+      return "Alert created — visible under Alerts in the app.";
+    } else if (tc.tool === "track_commitment") {
+      const { description, symbol: commitSymbol } = tc.args as TrackCommitmentArgs;
+      const { error: commitError } = await supabase.from("axe_commitments").insert({ user_id: user.id, description, symbol: commitSymbol?.toUpperCase() ?? null, status: "open" });
+      return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
+    } else if (tc.tool === "get_live_price") {
+      return formatBrokerPriceForChat(contextWithCandles, tc.args.symbol);
+    } else if (tc.tool === "get_economic_calendar") {
+      const calendar = await fetchEconomicCalendar(tc.args.currency, tc.args.impact);
+      return "error" in calendar ? calendar.error : formatEconomicCalendar(calendar);
+    } else if (tc.tool === "get_news_headlines") {
+      try {
+        const requested = (tc.args.symbol ?? "").toString().toUpperCase().trim();
+        const newsItems = await loadNews(requested || undefined);
+        if (newsItems.length === 0) return requested ? `No recent headlines for ${requested}.` : "No recent headlines available.";
+        const lines = newsItems.slice(0, 10).map((n) => {
+          const when = (() => { const d = new Date(n.publishedAt); return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(11, 16) + "Z"; })();
+          const src = n.source ? ` (${n.source})` : "";
+          return `${when}  ${n.title}${src}`;
+        });
+        return `HEADLINES for ${requested || "MARKET"} (top ${lines.length})\n${lines.join("\n")}`;
+      } catch (e) { return `News fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`; }
+    } else if (tc.tool === "get_smart_money_intel") {
+      try {
+        const focus = (tc.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
+        const intel = await loadIntelSnapshot({ symbol: focus });
+        if (!intel.hasLiveData) return "Smart-money intel unavailable.";
+        const lines: string[] = [];
+        if (intel.tide) {
+          lines.push(`MARKET TIDE: ${intel.tide.bias.toUpperCase()} (calls $${(intel.tide.netCallPremium / 1e6).toFixed(1)}M / puts $${(intel.tide.netPutPremium / 1e6).toFixed(1)}M)`);
+        }
+        if (intel.insiders.length > 0) lines.push("INSIDER (Form 4): " + intel.insiders.slice(0, 3).map((r) => `${r.ticker} ${r.type} ${r.insider} $${(r.value / 1e6).toFixed(2)}M (${r.date})`).join(" | "));
+        if (intel.senate.length > 0) lines.push("CONGRESS: " + intel.senate.slice(0, 3).map((r) => `${r.ticker} ${r.direction} ${r.politician} ${r.size} (${r.date})`).join(" | "));
+        if (intel.darkPool.length > 0) lines.push("DARK POOL: " + intel.darkPool.slice(0, 3).map((r) => `${r.symbol} ${r.size.toLocaleString()} @ $${r.price.toFixed(2)} = $${(r.notional / 1e6).toFixed(2)}M`).join(" | "));
+        if (intel.options.length > 0) lines.push("OPTIONS FLOW: " + intel.options.slice(0, 3).map((r) => `${r.symbol} ${r.side} ${r.strike} ${r.exp} $${(r.premium / 1e6).toFixed(2)}M`).join(" | "));
+        return lines.length > 0 ? lines.join("\n") : "Smart-money intel returned no rows.";
+      } catch (e) { return `Intel fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`; }
+    } else if (tc.tool === "list_alerts") {
+      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
+      const includePaused = tc.args.include_paused !== false;
+      let q = supabase.from("user_alerts").select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(50);
+      if (sym) q = q.eq("symbol", sym);
+      if (!includePaused) q = q.eq("status", "active");
+      const { data, error } = await q;
+      if (error) return `Could not load alerts: ${error.message}`;
+      if (!data || data.length === 0) return sym ? `No alerts on ${sym}.` : "No alerts saved yet.";
+      const lines = data.map((a) => {
+        const cond = a.condition && a.threshold != null ? `${a.condition} ${a.threshold}` : a.keyword ? `keyword "${a.keyword}"` : "";
+        const status = a.status === "active" ? "ACTIVE" : a.status?.toUpperCase() ?? "?";
+        const fired = a.triggered_at ? `  fired ${a.triggered_at.slice(0, 16).replace("T", " ")}Z` : "";
+        return `${a.id}  [${status}] ${a.symbol ?? "—"} ${a.type} ${cond}${fired}`;
+      });
+      return `ALERTS (${data.length})\n${lines.join("\n")}`;
+    } else if (tc.tool === "update_alert") {
+      const { alert_id, action } = tc.args;
+      if (!alert_id) return "alert_id is required.";
+      if (action === "delete") {
+        const { error } = await supabase.from("user_alerts").delete().eq("id", alert_id).eq("user_id", user.id);
+        return error ? `Delete failed: ${error.message}` : "Alert deleted.";
+      }
+      const nextStatus = action === "pause" ? "paused" : "active";
+      const { error } = await supabase.from("user_alerts").update({ status: nextStatus }).eq("id", alert_id).eq("user_id", user.id);
+      if (error) return `Update failed: ${error.message}`;
+      return action === "pause" ? "Alert paused." : "Alert resumed.";
+    } else if (tc.tool === "read_journal") {
+      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
+      const days = Math.max(1, Math.min(90, Number(tc.args.days ?? 7)));
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const cleanSym = (raw: string) => raw.toUpperCase().replace(/\.[a-z]+$/i, "").trim();
+      const [journalRes, tradesRes] = await Promise.all([
+        supabase.from("user_journal_entries").select("symbol,notes,created_at").eq("user_id", user.id).gte("created_at", since).order("created_at", { ascending: false }).limit(30),
+        supabase.from("broker_trades").select("id,symbol,side,volume,pnl,close_time").eq("user_id", user.id).not("close_time", "is", null).gte("close_time", since).order("close_time", { ascending: false }).limit(30),
+      ]);
+      const entries = (journalRes.data ?? []) as { symbol: string; notes: string; created_at: string }[];
+      const trades = (tradesRes.data ?? []) as { id: string; symbol: string; side: string; volume: number; pnl: number; close_time: string | null }[];
+      const filteredEntries = sym ? entries.filter((e) => cleanSym(e.symbol ?? "") === cleanSym(sym)) : entries;
+      const filteredTrades = sym ? trades.filter((t) => cleanSym(t.symbol ?? "") === cleanSym(sym)) : trades;
+      const out: string[] = [];
+      if (filteredTrades.length > 0) {
+        out.push(`CLOSED TRADES (last ${days}d, top ${Math.min(filteredTrades.length, 10)})`);
+        out.push(...filteredTrades.slice(0, 10).map((t) => {
+          const when = t.close_time?.slice(0, 16).replace("T", " ") ?? "—";
+          const pnl = Number(t.pnl ?? 0);
+          return `${when}Z  ${t.symbol} ${t.side} ${t.volume}lot  P&L:${pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)}`;
+        }));
+      }
+      if (filteredEntries.length > 0) {
+        out.push(`\nJOURNAL ENTRIES (last ${days}d, top ${Math.min(filteredEntries.length, 10)})`);
+        out.push(...filteredEntries.slice(0, 10).map((e) => {
+          const when = e.created_at?.slice(0, 16).replace("T", " ") ?? "—";
+          return `${when}Z  ${e.symbol}: ${(e.notes ?? "").trim().slice(0, 240)}`;
+        }));
+      }
+      if (out.length === 0) return `No journal entries or closed trades found in the last ${days}d${sym ? ` for ${sym}` : ""}.`;
+      return out.join("\n");
+    } else if (tc.tool === "calculate_fibonacci") {
+      return computeFibonacci(tc.args);
+    } else if (tc.tool === "analyze_orderblock") {
+      return computeOrderBlock(tc.args);
+    } else if (tc.tool === "analyze_pdh_pdl") {
+      return computePdhPdl(tc.args);
+    } else if (tc.tool === "calculate_trendline") {
+      return computeTrendline(tc.args);
+    } else if (tc.tool === "navigate_to") {
+      const { page } = tc.args;
+      const params: string[] = [];
+      if (tc.args.symbol) params.push(`symbol=${encodeURIComponent(tc.args.symbol.toUpperCase())}`);
+      if (tc.args.timeframe) params.push(`tf=${encodeURIComponent(tc.args.timeframe.toUpperCase())}`);
+      const href = `/${page}${params.length ? `?${params.join("&")}` : ""}`;
+      const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
+      return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
+    } else if (tc.tool === "save_note") {
+      const { text: noteText, symbol: noteSym } = tc.args;
+      const { error } = await supabase.from("user_journal_entries").insert({ user_id: user.id, symbol: noteSym?.toUpperCase() ?? null, notes: noteText });
+      return error ? `Note failed: ${error.message}` : "Note saved to your journal.";
+    }
+    return "Unknown tool.";
+  }
+
+  function appendToolRound(
+    msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+    tcs: AxeToolCall[],
+    results: { tc: AxeToolCall; result: string }[],
+  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+    return [
+      ...msgs,
+      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.tool, arguments: JSON.stringify(tc.args) } })) } as OpenAI.Chat.ChatCompletionAssistantMessageParam,
+      ...results.map(({ tc, result }) => ({ role: "tool", tool_call_id: tc.id, content: result }) as OpenAI.Chat.ChatCompletionToolMessageParam),
+    ];
+  }
+
+  // 3. Stream the response — tool rounds are non-streaming, final text is streaming
+  let finalReply: string | null = null;
+
+  try {
+    // First call: streaming — may return tool calls or text
+    let firstContent = "";
+    const firstResponse = await callAxeStreaming(aiMessages, (token) => {
+      firstContent += token;
+      onEvent({ type: "token", text: token });
+    });
+
+    if (firstResponse.toolCalls.length > 0) {
+      // Tool calls — execute them
+      onEvent({ type: "status", phase: "tools", tools: firstResponse.toolCalls.map((t) => t.tool) });
+
+      const round1Results = await Promise.all(
+        firstResponse.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) })),
+      );
+      const afterRound1 = appendToolRound(aiMessages, firstResponse.toolCalls, round1Results);
+
+      // Second call: streaming for text, but may have more tool calls
+      onEvent({ type: "status", phase: "responding" });
+      let round2Content = "";
+      const round2Response = await callAxeStreaming(afterRound1, (token) => {
+        round2Content += token;
+        onEvent({ type: "token", text: token });
+      });
+
+      if (round2Response.toolCalls.length > 0) {
+        // Third round of tools (rare)
+        onEvent({ type: "status", phase: "tools", tools: round2Response.toolCalls.map((t) => t.tool) });
+        const round2Results = await Promise.all(
+          round2Response.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) })),
+        );
+        const afterRound2 = appendToolRound(afterRound1, round2Response.toolCalls, round2Results);
+
+        // Final streaming call (no tools)
+        onEvent({ type: "status", phase: "responding" });
+        let round3Content = "";
+        await callAxeFinalStreaming(afterRound2, (token) => {
+          round3Content += token;
+          onEvent({ type: "token", text: token });
+        });
+        finalReply = round3Content || null;
+      } else {
+        finalReply = round2Content || null;
+      }
+    } else {
+      finalReply = firstContent || null;
+    }
+  } catch (err) {
+    console.error("[chatService] streaming error:", err);
+    onEvent({ type: "error", message: "AXE encountered an error." });
+    return { ok: false };
+  }
+
+  // 4. Save assistant reply
+  if (finalReply) {
+    const { error: replyError } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      user_id: user.id,
+      role: "assistant",
+      content: finalReply,
+    });
+    if (replyError) console.error("Failed to save AXE reply", replyError);
+
+    extractMemoriesAsync(supabase, user.id, trimmed, finalReply).catch((e) =>
+      console.error("[chatService] memory extraction failed:", e),
+    );
+  }
+
+  onEvent({ type: "done" });
   return { ok: true };
 }
 

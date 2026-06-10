@@ -124,7 +124,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     return `Ask AXE… · ${quota.remaining} queries left`;
   })();
 
-  // ── Submit ────────────────────────────────────────────────────────────
+  // ── Submit (streaming) ─────────────────────────────────────────────────
   async function submit() {
     const text = value.trim();
     if ((!text && !image) || sending) return;
@@ -157,42 +157,91 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         new CustomEvent("axe:thinking", { detail: { thinking: true } }),
       );
     }
-    try {
-      const body: Record<string, unknown> = { text: text || "(chart attached)" };
-      if (image) {
-        body.imageBase64 = image.base64;
-        body.imageType = image.type;
-      }
-      if (symbol) body.symbol = symbol;
-      if (tf) body.tf = tf;
 
-      const res = await fetch("/api/chat/messages", {
+    const body: Record<string, unknown> = { text: text || "(chart attached)" };
+    if (image) {
+      body.imageBase64 = image.base64;
+      body.imageType = image.type;
+    }
+    if (symbol) body.symbol = symbol;
+    if (tf) body.tf = tf;
+
+    // Clear input immediately
+    const inputText = value;
+    setValue("");
+    setImage(null);
+
+    try {
+      const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      let resBody: { code?: string; error?: string } = {};
-      try {
-        resBody = (await res.json()) as { code?: string; error?: string };
-      } catch {
-        /* non-JSON */
+
+      if (!res.ok || !res.body) {
+        // Fallback: try non-streaming route
+        const fallback = await fetch("/api/chat/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!fallback.ok) throw new Error("Message not persisted");
+        void loadQuota();
+        router.refresh();
+        return;
       }
-      if (!res.ok) {
-        if (res.status === 429 && resBody.code === "CHAT_QUOTA") {
-          setError(
-            resBody.error ??
-              "Daily free message limit reached. Upgrade to Pro for unlimited chat.",
-          );
-          void loadQuota();
-          return;
+
+      // Read SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+      let currentEvent = "";
+
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+
+        sseBuffer += decoder.decode(chunk, { stream: true });
+
+        // Parse SSE lines
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (currentEvent === "token" && data.text) {
+                window.dispatchEvent(
+                  new CustomEvent("axe:stream-token", { detail: { text: data.text } }),
+                );
+              } else if (currentEvent === "status") {
+                window.dispatchEvent(
+                  new CustomEvent("axe:stream-status", { detail: data }),
+                );
+              } else if (currentEvent === "done") {
+                // Stream complete — refresh to load persisted messages from DB
+                void loadQuota();
+                router.refresh();
+              } else if (currentEvent === "error") {
+                const msg = data.message ?? "AXE encountered an error.";
+                if (msg.includes("limit reached") || msg.includes("Upgrade")) {
+                  setError(msg);
+                  void loadQuota();
+                } else {
+                  setError(msg);
+                }
+              }
+            } catch {
+              /* malformed JSON line — skip */
+            }
+          }
         }
-        throw new Error("Message not persisted");
       }
-      setValue("");
-      setImage(null);
-      void loadQuota();
-      router.refresh();
     } catch {
+      setValue(inputText); // Restore input on failure
       setError("Could not save message.");
     } finally {
       setSending(false);

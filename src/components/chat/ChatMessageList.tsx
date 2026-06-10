@@ -57,6 +57,38 @@ function TypingBubble() {
   );
 }
 
+function StreamingBubble({ text, phase }: { text: string; phase: string | null }) {
+  const showToolHint = phase === "tools" && !text;
+  return (
+    <article className="group flex flex-col items-start">
+      <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
+        <span className="h-1 w-1 rounded-full bg-[#00d4f5]/70" />
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
+      </div>
+      {showToolHint ? (
+        <div className="flex items-center gap-[5px] px-3 py-2">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <span
+              key={i}
+              className="inline-block h-[6px] w-[6px] rounded-full bg-[#00d4f5]"
+              style={{
+                animation: "axe-dot-breathe 1.6s ease-in-out infinite",
+                animationDelay: `${i * 0.15}s`,
+              }}
+            />
+          ))}
+          <span className="ml-2 text-[10px] text-white/30">fetching data…</span>
+        </div>
+      ) : (
+        <div className="max-w-[85%] px-1">
+          {renderAssistantBody(text)}
+          <span className="inline-block h-4 w-[2px] animate-pulse bg-[#00d4f5]/70 align-text-bottom" />
+        </div>
+      )}
+    </article>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-start gap-4 px-1 py-6 text-tos-muted">
@@ -138,26 +170,56 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   const [showJump, setShowJump] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [pending, setPending] = useState<OptimisticUserMessage[]>([]);
+  const [streamText, setStreamText] = useState("");
+  const [streamPhase, setStreamPhase] = useState<string | null>(null);
   const lastServerCountRef = useRef(messages.length);
 
-  // Composer dispatches `axe:thinking` when a message is in flight so we can
-  // show a typing indicator immediately. Server round-trip can be 3-8s when
-  // AXE is chaining tools — silence in that window feels broken.
+  // Composer dispatches events for optimistic bubbles, thinking state,
+  // and streaming tokens from the SSE response.
   useEffect(() => {
     function onThinking(e: Event) {
       const ce = e as CustomEvent<{ thinking: boolean }>;
-      setThinking(Boolean(ce.detail?.thinking));
+      const on = Boolean(ce.detail?.thinking);
+      setThinking(on);
+      if (on) {
+        // Starting a new message — reset stream state
+        setStreamText("");
+        setStreamPhase("thinking");
+      } else {
+        // Done — clear stream phase (router.refresh will bring persisted msg)
+        setStreamPhase(null);
+        setStreamText("");
+      }
     }
     function onUserMessage(e: Event) {
       const ce = e as CustomEvent<OptimisticUserMessage>;
       if (!ce.detail?.content) return;
       setPending((prev) => [...prev, ce.detail]);
     }
+    function onStreamToken(e: Event) {
+      const ce = e as CustomEvent<{ text: string }>;
+      if (ce.detail?.text) {
+        setStreamText((prev) => prev + ce.detail.text);
+      }
+    }
+    function onStreamStatus(e: Event) {
+      const ce = e as CustomEvent<{ phase: string; tools?: string[] }>;
+      const phase = ce.detail?.phase ?? null;
+      setStreamPhase(phase);
+      // When switching to tools or starting a new response, clear partial text
+      if (phase === "tools" || phase === "responding") {
+        setStreamText("");
+      }
+    }
     window.addEventListener("axe:thinking", onThinking);
     window.addEventListener("axe:user-message", onUserMessage);
+    window.addEventListener("axe:stream-token", onStreamToken);
+    window.addEventListener("axe:stream-status", onStreamStatus);
     return () => {
       window.removeEventListener("axe:thinking", onThinking);
       window.removeEventListener("axe:user-message", onUserMessage);
+      window.removeEventListener("axe:stream-token", onStreamToken);
+      window.removeEventListener("axe:stream-status", onStreamStatus);
     };
   }, []);
 
@@ -204,14 +266,13 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     });
   }, []);
 
-  // Auto-scroll to the typing bubble when AXE starts thinking OR an
-  // optimistic user bubble is added, so the user sees their own message
-  // immediately without having to scroll.
+  // Auto-scroll to the typing/streaming bubble when AXE starts thinking,
+  // tokens stream in, or an optimistic user bubble is added.
   useEffect(() => {
-    if ((thinking || pending.length > 0) && stickToBottomRef.current) {
+    if ((thinking || pending.length > 0 || streamText) && stickToBottomRef.current) {
       bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
     }
-  }, [thinking, pending.length]);
+  }, [thinking, pending.length, streamText]);
 
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
@@ -315,7 +376,12 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
             </div>
           </article>
         ))}
-        {thinking ? <TypingBubble /> : null}
+        {/* Streaming / thinking indicator */}
+        {thinking && streamText ? (
+          <StreamingBubble text={streamText} phase={streamPhase} />
+        ) : thinking ? (
+          <TypingBubble />
+        ) : null}
         <div ref={bottomRef} />
       </div>
 
