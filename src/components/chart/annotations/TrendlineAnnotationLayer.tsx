@@ -345,32 +345,44 @@ export function TrendlineAnnotationLayer({
                 />
               ) : null}
 
-              {/* Handles only render when the line is "active" — first draw
-                  auto-activates so dots appear, tapping the chart locks it. */}
-              {isActive ? (
-                <g style={{ pointerEvents: "auto" }}>
-                  <circle
-                    cx={g.ax}
-                    cy={g.ay}
-                    r={8}
-                    fill={dotColor}
-                    stroke={isDark ? "rgba(255,255,255,0.85)" : "rgba(60,55,50,0.85)"}
-                    strokeWidth={1.5}
-                    onPointerDown={(e) => startDrag(e, g.id, 0)}
-                    style={{ cursor: "grab", touchAction: "none" }}
-                  />
-                  <circle
-                    cx={g.bx}
-                    cy={g.by}
-                    r={8}
-                    fill={dotColor}
-                    stroke={isDark ? "rgba(255,255,255,0.85)" : "rgba(60,55,50,0.85)"}
-                    strokeWidth={1.5}
-                    onPointerDown={(e) => startDrag(e, g.id, 1)}
-                    style={{ cursor: "grab", touchAction: "none" }}
-                  />
-                </g>
-              ) : null}
+              {/* Always-visible drag handles at both endpoints.
+                  Large invisible touch target (r=18) for easy mobile
+                  dragging, visible dot (r=5/8) shows position.
+                  Semi-transparent when inactive, bright when active. */}
+              <g style={{ pointerEvents: "auto" }}>
+                  {/* Handle A */}
+                  <circle cx={g.ax} cy={g.ay} r={18}
+                    fill="transparent" pointerEvents="all"
+                    onPointerDown={(e) => {
+                      if (isActive) { startDrag(e, g.id, 0); }
+                      else { e.stopPropagation(); e.preventDefault(); setActiveId(g.id); }
+                    }}
+                    style={{ cursor: isActive ? "grab" : "pointer", touchAction: "none" }} />
+                  <circle cx={g.ax} cy={g.ay}
+                    r={isActive ? 8 : 5}
+                    fill={isActive ? dotColor : dotColor.replace(/[\d.]+\)$/, "0.50)")}
+                    stroke={isDark
+                      ? (isActive ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.45)")
+                      : (isActive ? "rgba(60,55,50,0.85)" : "rgba(60,55,50,0.45)")}
+                    strokeWidth={isActive ? 1.5 : 1}
+                    pointerEvents="none" />
+                  {/* Handle B */}
+                  <circle cx={g.bx} cy={g.by} r={18}
+                    fill="transparent" pointerEvents="all"
+                    onPointerDown={(e) => {
+                      if (isActive) { startDrag(e, g.id, 1); }
+                      else { e.stopPropagation(); e.preventDefault(); setActiveId(g.id); }
+                    }}
+                    style={{ cursor: isActive ? "grab" : "pointer", touchAction: "none" }} />
+                  <circle cx={g.bx} cy={g.by}
+                    r={isActive ? 8 : 5}
+                    fill={isActive ? dotColor : dotColor.replace(/[\d.]+\)$/, "0.50)")}
+                    stroke={isDark
+                      ? (isActive ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.45)")
+                      : (isActive ? "rgba(60,55,50,0.85)" : "rgba(60,55,50,0.45)")}
+                    strokeWidth={isActive ? 1.5 : 1}
+                    pointerEvents="none" />
+              </g>
 
               {onRemove && isActive ? (
                 <g

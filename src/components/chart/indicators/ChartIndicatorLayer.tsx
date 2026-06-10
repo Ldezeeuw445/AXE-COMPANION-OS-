@@ -1696,7 +1696,9 @@ type SupplyDemandGeom = {
 };
 
 function isErcCandle(body: number, avgBody: number): boolean {
-  return avgBody > 0 && body >= 1.5 * avgBody;
+  // Relaxed from 1.5× to 1.25× so more zones appear on volatile
+  // instruments (XAUUSD, BTC) where nearly every candle is large.
+  return avgBody > 0 && body >= 1.25 * avgBody;
 }
 
 /** Average body size over the last `period` candles. */
@@ -1743,7 +1745,7 @@ function findErcZone(
     const baseCandles: typeof candles = [];
     for (let k = i - 1; k >= Math.max(0, i - 3); k -= 1) {
       const bBody = Math.abs(candles[k].close - candles[k].open);
-      if (bBody >= 1.2 * avg) break; // base candles are quiet
+      if (bBody >= 1.5 * avg) break; // base candles are quiet (relaxed from 1.2×)
       baseCandles.unshift(candles[k]);
     }
     if (baseCandles.length === 0) continue;

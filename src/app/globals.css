@@ -288,8 +288,10 @@ body {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0); /* force compositing without affecting 2D position */
-  /* Prevent the bar from ever being pushed off-screen by keyboard or resize */
-  contain: layout style;
+  /* Smooth transition on `bottom` so any first-load safe-area shift
+     (iOS resolves env(safe-area-inset-bottom) asynchronously after
+     the viewport settles) is imperceptible instead of a visible jump. */
+  transition: bottom 0.25s ease-out;
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
