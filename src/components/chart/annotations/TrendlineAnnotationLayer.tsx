@@ -40,7 +40,7 @@ type TrendGeom = {
  *   • Lower line (through swing lows, direction="up") → blue/cyan (original)
  *   • No direction → fallback blue
  */
-function lineColor(direction: "up" | "down" | null, isActive: boolean): string {
+function lineColor(direction: "up" | "down" | null, isActive: boolean, dark: boolean): string {
   if (dark) {
     if (direction === "down") return isActive ? "rgba(220,38,38,0.92)" : "rgba(185,28,28,0.78)";
     return isActive ? "rgba(34,211,238,0.92)" : "rgba(110,178,252,0.78)";
@@ -48,7 +48,7 @@ function lineColor(direction: "up" | "down" | null, isActive: boolean): string {
   if (direction === "down") return isActive ? "rgba(150,18,25,0.95)" : "rgba(130,10,20,0.82)";
   return isActive ? "rgba(0,100,120,0.95)" : "rgba(20,60,140,0.82)";
 }
-function projectionColor(direction: "up" | "down" | null, isActive: boolean): string {
+function projectionColor(direction: "up" | "down" | null, isActive: boolean, dark: boolean): string {
   if (dark) {
     if (direction === "down") return isActive ? "rgba(220,38,38,0.55)" : "rgba(185,28,28,0.45)";
     return isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)";
@@ -56,7 +56,7 @@ function projectionColor(direction: "up" | "down" | null, isActive: boolean): st
   if (direction === "down") return isActive ? "rgba(150,18,25,0.40)" : "rgba(130,10,20,0.30)";
   return isActive ? "rgba(0,100,120,0.40)" : "rgba(20,60,140,0.30)";
 }
-function handleColor(direction: "up" | "down" | null): string {
+function handleColor(direction: "up" | "down" | null, dark: boolean): string {
   if (dark) {
     if (direction === "down") return "rgba(248,113,113,0.95)";
     return "rgba(34,211,238,0.95)";
@@ -289,9 +289,9 @@ export function TrendlineAnnotationLayer({
           const isActive = activeId === g.id;
           const mx = (g.ax + g.bx) / 2;
           const my = (g.ay + g.by) / 2;
-          const color = lineColor(g.direction, isActive);
-          const projColor = projectionColor(g.direction, isActive);
-          const dotColor = handleColor(g.direction);
+          const color = lineColor(g.direction, isActive, isDark);
+          const projColor = projectionColor(g.direction, isActive, isDark);
+          const dotColor = handleColor(g.direction, isDark);
           return (
             <g key={g.id}>
               {/* Invisible fat hit-line for body drag (when active) or
