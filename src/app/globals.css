@@ -393,6 +393,12 @@ nav,
   -webkit-user-select: none;
   user-select: none;
 }
+/* Prevent long-press "Save Image" / link preview on iOS */
+.tos-app-content img,
+.tos-app-content a {
+  -webkit-touch-callout: none;
+  pointer-events: auto; /* keep clickable but no callout */
+}
 .tos-app-content input,
 .tos-app-content textarea,
 .tos-app-content select,
