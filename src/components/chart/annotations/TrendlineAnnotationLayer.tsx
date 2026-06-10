@@ -16,6 +16,8 @@ type Props = {
    * future. Falls back to the right edge of the SVG when null.
    */
   futureProjectionX?: number | null;
+  /** Dark theme — Paper mode needs darker colors. */
+  isDark?: boolean;
 };
 
 type TrendGeom = {
@@ -39,20 +41,28 @@ type TrendGeom = {
  *   • No direction → fallback blue
  */
 function lineColor(direction: "up" | "down" | null, isActive: boolean): string {
-  if (direction === "down") {
-    return isActive ? "rgba(220,38,38,0.92)" : "rgba(185,28,28,0.78)";
+  if (dark) {
+    if (direction === "down") return isActive ? "rgba(220,38,38,0.92)" : "rgba(185,28,28,0.78)";
+    return isActive ? "rgba(34,211,238,0.92)" : "rgba(110,178,252,0.78)";
   }
-  return isActive ? "rgba(34,211,238,0.92)" : "rgba(110,178,252,0.78)";
+  if (direction === "down") return isActive ? "rgba(150,18,25,0.95)" : "rgba(130,10,20,0.82)";
+  return isActive ? "rgba(0,100,120,0.95)" : "rgba(20,60,140,0.82)";
 }
 function projectionColor(direction: "up" | "down" | null, isActive: boolean): string {
-  if (direction === "down") {
-    return isActive ? "rgba(220,38,38,0.55)" : "rgba(185,28,28,0.45)";
+  if (dark) {
+    if (direction === "down") return isActive ? "rgba(220,38,38,0.55)" : "rgba(185,28,28,0.45)";
+    return isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)";
   }
-  return isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)";
+  if (direction === "down") return isActive ? "rgba(150,18,25,0.40)" : "rgba(130,10,20,0.30)";
+  return isActive ? "rgba(0,100,120,0.40)" : "rgba(20,60,140,0.30)";
 }
 function handleColor(direction: "up" | "down" | null): string {
-  if (direction === "down") return "rgba(248,113,113,0.95)";
-  return "rgba(34,211,238,0.95)";
+  if (dark) {
+    if (direction === "down") return "rgba(248,113,113,0.95)";
+    return "rgba(34,211,238,0.95)";
+  }
+  if (direction === "down") return "rgba(130,10,20,0.95)";
+  return "rgba(0,90,100,0.95)";
 }
 
 export function TrendlineAnnotationLayer({
@@ -61,6 +71,7 @@ export function TrendlineAnnotationLayer({
   onUpdate,
   onRemove,
   futureProjectionX = null,
+  isDark = true,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -343,7 +354,7 @@ export function TrendlineAnnotationLayer({
                     cy={g.ay}
                     r={8}
                     fill={dotColor}
-                    stroke="rgba(255,255,255,0.85)"
+                    stroke={isDark ? "rgba(255,255,255,0.85)" : "rgba(60,55,50,0.85)"}
                     strokeWidth={1.5}
                     onPointerDown={(e) => startDrag(e, g.id, 0)}
                     style={{ cursor: "grab", touchAction: "none" }}
@@ -353,7 +364,7 @@ export function TrendlineAnnotationLayer({
                     cy={g.by}
                     r={8}
                     fill={dotColor}
-                    stroke="rgba(255,255,255,0.85)"
+                    stroke={isDark ? "rgba(255,255,255,0.85)" : "rgba(60,55,50,0.85)"}
                     strokeWidth={1.5}
                     onPointerDown={(e) => startDrag(e, g.id, 1)}
                     style={{ cursor: "grab", touchAction: "none" }}
@@ -375,8 +386,8 @@ export function TrendlineAnnotationLayer({
                     width={20}
                     height={14}
                     rx={3}
-                    fill="rgba(0,0,0,0.55)"
-                    stroke="rgba(255,255,255,0.18)"
+                    fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
+                    stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
                   />
                   <text
                     x={mx}
@@ -384,7 +395,7 @@ export function TrendlineAnnotationLayer({
                     textAnchor="middle"
                     fontFamily="ui-sans-serif, system-ui"
                     fontSize="9"
-                    fill="rgba(232,238,246,0.92)"
+                    fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
                   >
                     ✕
                   </text>

@@ -2562,6 +2562,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <ChartIndicatorLayer
           candles={liveCandles}
           canvasRef={canvasRef}
+          isDark={chartTheme.isDark}
           futureProjectionX={futureProjectionX}
           orderBlockCount={orderBlockCount}
           inverseFvgCount={inverseFvgCount}
@@ -3140,6 +3141,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             futureProjectionX={futureProjectionX}
             lastBarTimeSec={recentCandleTimes[recentCandleTimes.length - 1] ?? null}
             prevBarTimeSec={recentCandleTimes[recentCandleTimes.length - 2] ?? null}
+            isDark={chartTheme.isDark}
           />
 
           {/* Interactive Trendline layer — draggable endpoints */}
@@ -3149,6 +3151,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             onUpdate={updateAnnotation}
             onRemove={removeAnnotationById}
             futureProjectionX={futureProjectionX}
+            isDark={chartTheme.isDark}
           />
         </div>
 

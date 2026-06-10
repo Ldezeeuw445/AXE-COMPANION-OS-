@@ -89,6 +89,8 @@ type Props = {
   maPeriod?: number;
   /** Moving Average type — "sma" or "ema". Default "sma". */
   maType?: "sma" | "ema";
+  /** Dark theme? Paper mode needs much darker overlay colors. */
+  isDark?: boolean;
 };
 
 type Size = { w: number; h: number };
@@ -181,6 +183,89 @@ type VolumetricBreakdown = {
  */
 const MIN_FUTURE_BARS = 5;
 
+/* ── Overlay color palette ─────────────────────────────────────
+ * Same hues for both themes; Paper variants are much darker so
+ * overlays stay legible on the warm #d7d6d0 background.
+ * Text strokes swap from black (Midnight) to the Paper bg so
+ * labels pop equally on both surfaces.
+ */
+function overlayPalette(dark: boolean) {
+  if (dark) {
+    return {
+      textStroke06: "rgba(0,0,0,0.55)",
+      textStroke07: "rgba(0,0,0,0.6)",
+      textStroke08: "rgba(0,0,0,0.65)",
+      textStroke09: "rgba(0,0,0,0.72)",
+      textStroke10: "rgba(0,0,0,0.74)",
+      textStroke11: "rgba(0,0,0,0.78)",
+      pdhStroke: "rgba(34,211,238,0.78)", pdhLabel: "rgba(125,235,255,0.96)",
+      pdlStroke: "rgba(244,63,94,0.78)", pdlLabel: "rgba(252,165,165,0.98)",
+      pdqStroke: "rgba(96,165,250,0.72)", pdqLabel: "rgba(186,212,255,0.96)",
+      structBullLine: "rgba(8,153,129,0.72)", structBullText: "rgba(8,153,129,0.82)",
+      structBearLine: "rgba(242,54,69,0.72)", structBearText: "rgba(242,54,69,0.82)",
+      pivotHigh: "rgba(34,211,238,0.72)", pivotLow: "rgba(45,212,191,0.72)",
+      sfpBull: "rgba(8,153,129,0.82)", sfpBear: "rgba(242,54,69,0.82)",
+      swingHighStroke: "rgba(244,63,94,0.68)", swingHighFill: "rgba(244,63,94,0.95)",
+      swingLowStroke: "rgba(45,212,191,0.68)", swingLowFill: "rgba(45,212,191,0.95)",
+      maLine: "rgba(96,165,250,0.92)", maLabel: "rgba(96,165,250,0.9)",
+      bolFill: "rgba(34,211,238,0.055)", bolBand: "rgba(34,211,238,0.42)", bolMid: "rgba(96,165,250,0.35)",
+      vwapLine: "rgba(250,204,21,0.88)", vwapLabel: "rgba(250,204,21,0.9)",
+      pocStroke: "rgba(168,85,247,0.78)", pocLabel: "rgba(216,180,254,0.95)",
+      supplyFill: "rgba(244,63,94,0.06)", supplyStroke: "rgba(244,63,94,0.34)", supplyLabel: "rgba(252,165,165,0.88)",
+      demandFill: "rgba(45,212,191,0.06)", demandStroke: "rgba(45,212,191,0.34)", demandLabel: "rgba(167,243,208,0.88)",
+      eqStroke: "rgba(148,163,184,0.55)", eqLabel: "rgba(148,163,184,0.88)",
+      obUpSource: "rgba(45,212,191,0.20)", obUpExt: "rgba(45,212,191,0.08)", obUpStroke: "rgba(45,212,191,0.65)",
+      obDownSource: "rgba(239,68,68,0.20)", obDownExt: "rgba(239,68,68,0.08)", obDownStroke: "rgba(239,68,68,0.65)",
+      obLabelUp: "rgba(167,243,208,0.65)", obLabelDown: "rgba(252,165,165,0.65)",
+      obVolLabelUp: "rgba(167,243,208,0.75)", obVolLabelDown: "rgba(252,165,165,0.75)",
+      sellerBar: "rgba(244,63,94,0.55)", buyerBar: "rgba(45,212,191,0.55)",
+      fvgUpStroke: "rgba(96,165,250,0.95)", fvgUpFill: "rgba(96,165,250,0.22)",
+      fvgDownStroke: "rgba(217,119,6,0.95)", fvgDownFill: "rgba(217,119,6,0.22)",
+      fvgLabelUp: "rgba(96,165,250,0.75)", fvgLabelDown: "rgba(217,119,6,0.75)",
+      ifvgBullOrig: "rgba(8,153,129,0.22)", ifvgBearOrig: "rgba(242,54,69,0.22)",
+      ifvgBullStroke: "rgba(8,153,129,0.95)", ifvgBearStroke: "rgba(242,54,69,0.95)",
+      ifvgMidline: "rgba(120,123,134,0.65)",
+    };
+  }
+  return {
+    textStroke06: "rgba(215,214,208,0.65)",
+    textStroke07: "rgba(215,214,208,0.70)",
+    textStroke08: "rgba(215,214,208,0.75)",
+    textStroke09: "rgba(215,214,208,0.80)",
+    textStroke10: "rgba(215,214,208,0.82)",
+    textStroke11: "rgba(215,214,208,0.85)",
+    pdhStroke: "rgba(0,100,120,0.85)", pdhLabel: "rgba(0,80,100,0.95)",
+    pdlStroke: "rgba(150,18,35,0.85)", pdlLabel: "rgba(120,10,25,0.95)",
+    pdqStroke: "rgba(30,70,150,0.85)", pdqLabel: "rgba(20,50,120,0.95)",
+    structBullLine: "rgba(0,90,70,0.85)", structBullText: "rgba(0,80,60,0.95)",
+    structBearLine: "rgba(150,18,25,0.85)", structBearText: "rgba(130,10,20,0.95)",
+    pivotHigh: "rgba(0,90,110,0.85)", pivotLow: "rgba(0,100,85,0.85)",
+    sfpBull: "rgba(0,80,60,0.95)", sfpBear: "rgba(130,10,20,0.95)",
+    swingHighStroke: "rgba(150,18,35,0.75)", swingHighFill: "rgba(130,10,25,0.95)",
+    swingLowStroke: "rgba(0,100,85,0.75)", swingLowFill: "rgba(0,90,70,0.95)",
+    maLine: "rgba(30,70,150,0.95)", maLabel: "rgba(20,50,120,0.95)",
+    bolFill: "rgba(0,100,120,0.06)", bolBand: "rgba(0,90,110,0.55)", bolMid: "rgba(30,70,150,0.45)",
+    vwapLine: "rgba(160,110,0,0.95)", vwapLabel: "rgba(140,95,0,0.95)",
+    pocStroke: "rgba(90,30,160,0.85)", pocLabel: "rgba(70,20,130,0.95)",
+    supplyFill: "rgba(150,18,35,0.08)", supplyStroke: "rgba(150,18,35,0.40)", supplyLabel: "rgba(130,10,25,0.90)",
+    demandFill: "rgba(0,100,85,0.08)", demandStroke: "rgba(0,100,85,0.40)", demandLabel: "rgba(0,80,65,0.90)",
+    eqStroke: "rgba(50,55,65,0.55)", eqLabel: "rgba(40,45,55,0.88)",
+    obUpSource: "rgba(0,100,85,0.25)", obUpExt: "rgba(0,100,85,0.10)", obUpStroke: "rgba(0,90,70,0.70)",
+    obDownSource: "rgba(150,18,18,0.25)", obDownExt: "rgba(150,18,18,0.10)", obDownStroke: "rgba(140,10,10,0.70)",
+    obLabelUp: "rgba(0,80,65,0.80)", obLabelDown: "rgba(130,10,25,0.80)",
+    obVolLabelUp: "rgba(0,80,65,0.85)", obVolLabelDown: "rgba(130,10,25,0.85)",
+    sellerBar: "rgba(150,18,35,0.60)", buyerBar: "rgba(0,100,85,0.60)",
+    fvgUpStroke: "rgba(30,70,150,0.95)", fvgUpFill: "rgba(30,70,150,0.22)",
+    fvgDownStroke: "rgba(160,90,0,0.95)", fvgDownFill: "rgba(160,90,0,0.22)",
+    fvgLabelUp: "rgba(30,70,150,0.75)", fvgLabelDown: "rgba(160,90,0,0.75)",
+    ifvgBullOrig: "rgba(0,90,70,0.22)", ifvgBearOrig: "rgba(150,18,25,0.22)",
+    ifvgBullStroke: "rgba(0,90,70,0.95)", ifvgBearStroke: "rgba(150,18,25,0.95)",
+    ifvgMidline: "rgba(50,55,65,0.65)",
+  };
+}
+
+type OverlayPalette = ReturnType<typeof overlayPalette>;
+
 export function ChartIndicatorLayer({
   candles,
   canvasRef,
@@ -192,7 +277,9 @@ export function ChartIndicatorLayer({
   futureProjectionX = null,
   maPeriod = 20,
   maType = "sma",
+  isDark = true,
 }: Props) {
+  const pal = useMemo(() => overlayPalette(isDark), [isDark]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [version, setVersion] = useState(0);
@@ -390,26 +477,26 @@ export function ChartIndicatorLayer({
       supplyDemand,
       totalChartVolume,
     };
-  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType]);
+  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
       <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
         {active.orderBlocks
           ? geometry.orderBlocks.map((zone, index) => (
-              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" />
+              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" pal={pal} />
             ))
           : null}
 
         {active.fvg
           ? geometry.fairValueGaps.map((zone, index) => (
-              <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" />
+              <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" pal={pal} />
             ))
           : null}
 
         {active.ifvg
           ? geometry.inverseFairValueGaps.map((zone, index) => (
-              <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" />
+              <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" pal={pal} />
             ))
           : null}
 
@@ -421,7 +508,7 @@ export function ChartIndicatorLayer({
             under those lines in z-order — exactly per spec, since SD
             is contextual background and PDH/PDL/PDQ are tactical. */}
         {active.supplyDemand && geometry.supplyDemand ? (
-          <SupplyDemandOverlay sd={geometry.supplyDemand} width={size.w} />
+          <SupplyDemandOverlay sd={geometry.supplyDemand} width={size.w} pal={pal} />
         ) : null}
 
         {/* Previous Day High / Low / Equilibrium — thin SOLID lines
@@ -437,7 +524,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayHigh.y}
               y2={geometry.previousDayHigh.y}
-              stroke="rgba(34,211,238,0.78)"
+              stroke={pal.pdhStroke}
               strokeWidth={1}
             />
             <text
@@ -447,8 +534,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
-              fill="rgba(125,235,255,0.96)"
-              stroke="rgba(0,0,0,0.78)"
+              fill={pal.pdhLabel}
+              stroke={pal.textStroke11}
               strokeWidth="2.6"
               paintOrder="stroke"
             >
@@ -464,7 +551,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayLow.y}
               y2={geometry.previousDayLow.y}
-              stroke="rgba(244,63,94,0.78)"
+              stroke={pal.pdlStroke}
               strokeWidth={1}
             />
             <text
@@ -474,8 +561,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
-              fill="rgba(252,165,165,0.98)"
-              stroke="rgba(0,0,0,0.78)"
+              fill={pal.pdlLabel}
+              stroke={pal.textStroke11}
               strokeWidth="2.6"
               paintOrder="stroke"
             >
@@ -491,7 +578,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayEq.y}
               y2={geometry.previousDayEq.y}
-              stroke="rgba(96,165,250,0.72)"
+              stroke={pal.pdqStroke}
               strokeWidth={1}
             />
             <text
@@ -501,8 +588,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
-              fill="rgba(186,212,255,0.96)"
-              stroke="rgba(0,0,0,0.78)"
+              fill={pal.pdqLabel}
+              stroke={pal.textStroke11}
               strokeWidth="2.6"
               paintOrder="stroke"
             >
@@ -514,8 +601,8 @@ export function ChartIndicatorLayer({
         {active.swingPoints
           ? geometry.swingPointLevels.map((level, index) => {
               const isHigh = level.kind === "high";
-              const stroke = isHigh ? "rgba(244,63,94,0.68)" : "rgba(45,212,191,0.68)";
-              const fill = isHigh ? "rgba(244,63,94,0.95)" : "rgba(45,212,191,0.95)";
+              const stroke = isHigh ? pal.swingHighStroke : pal.swingLowStroke;
+              const fill = isHigh ? pal.swingHighFill : pal.swingLowFill;
               // When MARKET STRUCTURE is also on, the HH / HL / LH / LL
               // labels sit at ~y-6 above their pivot lines. We push the
               // swing SH / SL labels further out (-18 / +24 instead of
@@ -548,7 +635,7 @@ export function ChartIndicatorLayer({
                     fontSize="9"
                     fontWeight="700"
                     fill={fill}
-                    stroke="rgba(0,0,0,0.74)"
+                    stroke={pal.textStroke10}
                     strokeWidth="2.2"
                     paintOrder="stroke"
                   >
@@ -575,7 +662,7 @@ export function ChartIndicatorLayer({
                   x2={item.x2}
                   y1={item.y}
                   y2={item.y}
-                  stroke={item.bullish ? "rgba(8,153,129,0.72)" : "rgba(242,54,69,0.72)"}
+                  stroke={item.bullish ? pal.structBullLine : pal.structBearLine}
                   strokeWidth={item.continuation ? 0.8 : 1.2}
                   strokeDasharray={item.continuation ? "5 4" : undefined}
                 />
@@ -586,8 +673,8 @@ export function ChartIndicatorLayer({
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                   fontSize="8"
                   fontWeight="500"
-                  fill={item.bullish ? "rgba(8,153,129,0.82)" : "rgba(242,54,69,0.82)"}
-                  stroke="rgba(0,0,0,0.55)"
+                  fill={item.bullish ? pal.structBullText : pal.structBearText}
+                  stroke={pal.textStroke06}
                   strokeWidth="2"
                   paintOrder="stroke"
                 >
@@ -599,7 +686,7 @@ export function ChartIndicatorLayer({
 
         {active.ma && geometry.maPath ? (
           <g pointerEvents="none">
-            <path d={geometry.maPath} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth={1.7} />
+            <path d={geometry.maPath} fill="none" stroke={pal.maLine} strokeWidth={1.7} />
             {geometry.latestMaY != null ? (
               <text
                 x={size.w - RIGHT_RAIL_OFFSET}
@@ -608,8 +695,8 @@ export function ChartIndicatorLayer({
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                 fontSize="9"
                 fontWeight={700}
-                fill="rgba(96,165,250,0.9)"
-                stroke="rgba(0,0,0,0.72)"
+                fill={pal.maLabel}
+                stroke={pal.textStroke09}
                 strokeWidth={2.4}
                 paintOrder="stroke"
               >
@@ -620,21 +707,21 @@ export function ChartIndicatorLayer({
         ) : null}
 
         {active.bollinger && geometry.bollingerFillPath ? (
-          <path d={geometry.bollingerFillPath} fill="rgba(34,211,238,0.055)" stroke="none" />
+          <path d={geometry.bollingerFillPath} fill={pal.bolFill} stroke="none" />
         ) : null}
         {active.bollinger && geometry.bollingerUpperPath ? (
-          <path d={geometry.bollingerUpperPath} fill="none" stroke="rgba(34,211,238,0.42)" strokeWidth={1} />
+          <path d={geometry.bollingerUpperPath} fill="none" stroke={pal.bolBand} strokeWidth={1} />
         ) : null}
         {active.bollinger && geometry.bollingerMiddlePath ? (
-          <path d={geometry.bollingerMiddlePath} fill="none" stroke="rgba(96,165,250,0.35)" strokeWidth={0.85} strokeDasharray="4 4" />
+          <path d={geometry.bollingerMiddlePath} fill="none" stroke={pal.bolMid} strokeWidth={0.85} strokeDasharray="4 4" />
         ) : null}
         {active.bollinger && geometry.bollingerLowerPath ? (
-          <path d={geometry.bollingerLowerPath} fill="none" stroke="rgba(34,211,238,0.42)" strokeWidth={1} />
+          <path d={geometry.bollingerLowerPath} fill="none" stroke={pal.bolBand} strokeWidth={1} />
         ) : null}
 
         {active.vwap && geometry.vwapPath ? (
           <g pointerEvents="none">
-            <path d={geometry.vwapPath} fill="none" stroke="rgba(250,204,21,0.88)" strokeWidth={1.35} />
+            <path d={geometry.vwapPath} fill="none" stroke={pal.vwapLine} strokeWidth={1.35} />
             {geometry.latestVwap != null ? (
               <text
                 x={size.w - RIGHT_RAIL_OFFSET}
@@ -643,8 +730,8 @@ export function ChartIndicatorLayer({
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                 fontSize="9"
                 fontWeight={700}
-                fill="rgba(250,204,21,0.9)"
-                stroke="rgba(0,0,0,0.72)"
+                fill={pal.vwapLabel}
+                stroke={pal.textStroke09}
                 strokeWidth={2.4}
                 paintOrder="stroke"
               >
@@ -661,7 +748,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.poc.y}
               y2={geometry.poc.y}
-              stroke="rgba(168,85,247,0.78)"
+              stroke={pal.pocStroke}
               strokeWidth={1}
               strokeDasharray="6 4"
             />
@@ -672,8 +759,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9"
               fontWeight={700}
-              fill="rgba(216,180,254,0.95)"
-              stroke="rgba(0,0,0,0.72)"
+              fill={pal.pocLabel}
+              stroke={pal.textStroke09}
               strokeWidth={2.4}
               paintOrder="stroke"
             >
@@ -695,8 +782,8 @@ export function ChartIndicatorLayer({
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                   fontSize="8"
                   fontWeight="500"
-                  fill={item.kind === "high" ? "rgba(34,211,238,0.72)" : "rgba(45,212,191,0.72)"}
-                  stroke="rgba(0,0,0,0.6)"
+                  fill={item.kind === "high" ? pal.pivotHigh : pal.pivotLow}
+                  stroke={pal.textStroke07}
                   strokeWidth="2"
                   paintOrder="stroke"
                 >
@@ -716,8 +803,8 @@ export function ChartIndicatorLayer({
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                   fontSize="8"
                   fontWeight="500"
-                  fill={item.bullish ? "rgba(8,153,129,0.82)" : "rgba(242,54,69,0.82)"}
-                  stroke="rgba(0,0,0,0.55)"
+                  fill={item.bullish ? pal.sfpBull : pal.sfpBear}
+                  stroke={pal.textStroke06}
                   strokeWidth="2"
                   paintOrder="stroke"
                 >
@@ -743,7 +830,7 @@ export function ChartIndicatorLayer({
  * fields cleanly — JSX ternaries on struct fields don't narrow through
  * boolean variables.
  */
-function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: number }) {
+function SupplyDemandOverlay({ sd, width, pal }: { sd: SupplyDemandGeom; width: number; pal: OverlayPalette }) {
   const bandW = Math.max(0, width - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET);
   return (
     <g pointerEvents="none">
@@ -754,8 +841,8 @@ function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: numbe
             y={sd.supplyTop.y}
             width={bandW}
             height={Math.max(1, sd.supplyBottom.y - sd.supplyTop.y)}
-            fill="rgba(244,63,94,0.06)"
-            stroke="rgba(244,63,94,0.34)"
+            fill={pal.supplyFill}
+            stroke={pal.supplyStroke}
             strokeWidth={0.6}
             strokeDasharray="3 3"
           />
@@ -767,8 +854,8 @@ function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: numbe
             fontSize="9"
             fontWeight={700}
             letterSpacing="0.5"
-            fill="rgba(252,165,165,0.88)"
-            stroke="rgba(0,0,0,0.6)"
+            fill={pal.supplyLabel}
+            stroke={pal.textStroke07}
             strokeWidth={2}
             paintOrder="stroke"
           >
@@ -783,8 +870,8 @@ function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: numbe
             y={sd.demandTop.y}
             width={bandW}
             height={Math.max(1, sd.demandBottom.y - sd.demandTop.y)}
-            fill="rgba(45,212,191,0.06)"
-            stroke="rgba(45,212,191,0.34)"
+            fill={pal.demandFill}
+            stroke={pal.demandStroke}
             strokeWidth={0.6}
             strokeDasharray="3 3"
           />
@@ -796,8 +883,8 @@ function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: numbe
             fontSize="9"
             fontWeight={700}
             letterSpacing="0.5"
-            fill="rgba(167,243,208,0.88)"
-            stroke="rgba(0,0,0,0.6)"
+            fill={pal.demandLabel}
+            stroke={pal.textStroke07}
             strokeWidth={2}
             paintOrder="stroke"
           >
@@ -812,7 +899,7 @@ function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: numbe
             x2={width - RIGHT_RAIL_OFFSET}
             y1={sd.eq.y}
             y2={sd.eq.y}
-            stroke="rgba(148,163,184,0.55)"
+            stroke={pal.eqStroke}
             strokeWidth={0.85}
             strokeDasharray="2 5"
           />
@@ -824,8 +911,8 @@ function SupplyDemandOverlay({ sd, width }: { sd: SupplyDemandGeom; width: numbe
             fontSize="8.5"
             fontWeight={600}
             letterSpacing="0.4"
-            fill="rgba(148,163,184,0.88)"
-            stroke="rgba(0,0,0,0.6)"
+            fill={pal.eqLabel}
+            stroke={pal.textStroke07}
             strokeWidth={2}
             paintOrder="stroke"
           >
@@ -869,7 +956,7 @@ function formatVolume(n: number): string {
  *
  * Falls back to a single row when the OB is too thin to fit both.
  */
-function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }) {
+function ObInnerVolumeLabel({ zone, obRightX, pal }: { zone: Zone; obRightX: number; pal: OverlayPalette }) {
   const v = zone.volumetric;
   if (!v || v.totalVolume <= 0) return null;
   if (zone.height < 8) return null;
@@ -883,7 +970,7 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
   // No more red/green dominance split: the volumetric inner bars already
   // show which side is bigger. Dialled back to 75% opacity so the labels
   // read as ambient data, not loud annotations.
-  const labelColor = zone.direction === "up" ? "rgba(167,243,208,0.75)" : "rgba(252,165,165,0.75)";
+  const labelColor = zone.direction === "up" ? pal.obVolLabelUp : pal.obVolLabelDown;
   const sideColor = labelColor;
   const baseColor = labelColor;
 
@@ -904,7 +991,7 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
         fontSize="8.5"
         fontWeight={600}
         fill={baseColor}
-        stroke="rgba(0,0,0,0.65)"
+        stroke={pal.textStroke08}
         strokeWidth="2.2"
         paintOrder="stroke"
       >
@@ -919,7 +1006,7 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
           fontSize="8"
           fontWeight={600}
           fill={sideColor}
-          stroke="rgba(0,0,0,0.65)"
+          stroke={pal.textStroke08}
           strokeWidth="2.2"
           paintOrder="stroke"
         >
@@ -943,7 +1030,7 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
  * - iFVG: two-tone box (original colour | inverted colour) split at
  *   the inversion candle, dashed midline, ▲/▼ trigger marker.
  */
-function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg" }) {
+function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"; pal: OverlayPalette }) {
   const labelText = variant === "ifvg" ? "iFVG" : variant === "fvg" ? "FVG" : "OB";
   const fadeFactor = zone.mitigated ? 0.45 : 1;
   const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
@@ -980,14 +1067,14 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
     const sellerW = v && v.totalVolume > 0 ? innerMaxW * (v.sellerPercent / 100) : 0;
     const buyerW = v && v.totalVolume > 0 ? innerMaxW * (v.buyerPercent / 100) : 0;
     const halfH = zone.height / 2;
-    const sellerFill = "rgba(244,63,94,0.55)";
-    const buyerFill = "rgba(45,212,191,0.55)";
+    const sellerFill = pal.sellerBar;
+    const buyerFill = pal.buyerBar;
     // Two-tone background: the source area carries the OB's normal
     // translucent fill, while the forward extension is more transparent
     // so it reads as "this zone is still relevant" without competing
     // visually with live candles to its left. Premium-but-quiet look.
-    const sourceFill = zone.direction === "up" ? "rgba(45,212,191,0.20)" : "rgba(239,68,68,0.20)";
-    const extensionFill = zone.direction === "up" ? "rgba(45,212,191,0.08)" : "rgba(239,68,68,0.08)";
+    const sourceFill = zone.direction === "up" ? pal.obUpSource : pal.obDownSource;
+    const extensionFill = zone.direction === "up" ? pal.obUpExt : pal.obDownExt;
     return (
       <g opacity={fadeFactor}>
         <rect
@@ -1050,14 +1137,14 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
           fontSize="8"
           fontWeight="600"
-          fill={zone.direction === "up" ? "rgba(167,243,208,0.65)" : "rgba(252,165,165,0.65)"}
-          stroke="rgba(0,0,0,0.55)"
+          fill={zone.direction === "up" ? pal.obLabelUp : pal.obLabelDown}
+          stroke={pal.textStroke06}
           strokeWidth="2"
           paintOrder="stroke"
         >
           OB
         </text>
-        <ObInnerVolumeLabel zone={zone} obRightX={obRightX} />
+        <ObInnerVolumeLabel zone={zone} obRightX={obRightX} pal={pal} />
       </g>
     );
   }
@@ -1081,7 +1168,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
     // rather than zone.fill so the colour pair stays consistent even if
     // the fill is tweaked later.
     const originalIsBull = zone.originalDirection === "up";
-    const originalFill = originalIsBull ? "rgba(8,153,129,0.22)" : "rgba(242,54,69,0.22)";
+    const originalFill = originalIsBull ? pal.ifvgBullOrig : pal.ifvgBearOrig;
     const leftWidth = Math.max(0, inversionX - zone.x);
     const rightWidth = Math.max(0, rightEndX - inversionX);
     return (
@@ -1111,7 +1198,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           x2={rightEndX}
           y1={zone.midY}
           y2={zone.midY}
-          stroke="rgba(120,123,134,0.65)"
+          stroke={pal.ifvgMidline}
           strokeWidth={0.7}
           strokeDasharray="3 4"
         />
@@ -1127,7 +1214,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           fontSize="9"
           fontWeight="700"
           fill={zone.fill.replace(/[\d.]+\)$/, "0.75)")}
-          stroke="rgba(0,0,0,0.78)"
+          stroke={pal.textStroke11}
           strokeWidth="2.4"
           paintOrder="stroke"
         >
@@ -1150,7 +1237,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           fontSize="9"
           fontWeight="700"
           fill={zone.fill.replace(/[\d.]+\)$/, "0.75)")}
-          stroke="rgba(0,0,0,0.78)"
+          stroke={pal.textStroke11}
           strokeWidth="2.4"
           paintOrder="stroke"
         >
@@ -1167,8 +1254,8 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   // so text sits calmly inside the box.
   const fvgLabelColor =
     zone.direction === "up"
-      ? "rgba(96,165,250,0.75)"
-      : "rgba(217,119,6,0.75)";
+      ? pal.fvgLabelUp
+      : pal.fvgLabelDown;
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -1189,7 +1276,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         fontSize="9"
         fontWeight="700"
         fill={fvgLabelColor}
-        stroke="rgba(0,0,0,0.78)"
+        stroke={pal.textStroke11}
         strokeWidth="2.4"
         paintOrder="stroke"
       >
@@ -1514,8 +1601,8 @@ function buildStructureOverlay(
             extendX: Math.max(detectionEndX, futureExtensionX),
             detectionEndX,
             midY: (topY + bottomY) / 2,
-            stroke: isBullishOb ? "rgba(45,212,191,0.65)" : "rgba(239,68,68,0.65)",
-            fill: isBullishOb ? "rgba(45,212,191,0.18)" : "rgba(239,68,68,0.18)",
+            stroke: isBullishOb ? pal.obUpStroke : pal.obDownStroke,
+            fill: isBullishOb ? pal.obUpSource : pal.obDownSource,
             direction: isBullishOb ? "up" : "down",
             extend: true,
             mitigated: false,
@@ -1554,8 +1641,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(96,165,250,0.95)",
-              fill: "rgba(96,165,250,0.22)",
+              stroke: pal.fvgUpStroke,
+              fill: pal.fvgUpFill,
               direction: "up",
               extend: !mitigated,
               mitigated,
@@ -1581,8 +1668,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(217,119,6,0.95)",
-              fill: "rgba(217,119,6,0.22)",
+              stroke: pal.fvgDownStroke,
+              fill: pal.fvgDownFill,
               direction: "down",
               extend: !mitigated,
               mitigated,
@@ -2100,8 +2187,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(242,54,69,0.95)",
-            fill: "rgba(242,54,69,0.22)",
+            stroke: pal.ifvgBearStroke,
+            fill: pal.ifvgBearOrig,
             // Inverted bullish FVG flips polarity → behaves like bearish
             // resistance going forward.
             direction: "down",
@@ -2158,8 +2245,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(8,153,129,0.95)",
-            fill: "rgba(8,153,129,0.22)",
+            stroke: pal.ifvgBullStroke,
+            fill: pal.ifvgBullOrig,
             // Inverted bearish FVG → flips to bullish support.
             direction: "up",
             originalDirection: "down",

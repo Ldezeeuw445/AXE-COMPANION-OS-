@@ -64,6 +64,8 @@ type Props = {
    * the 3-bar clamp keeps its visual width as the user pinch-zooms.
    */
   prevBarTimeSec?: number | null;
+  /** Dark theme — Paper mode needs darker fib colors. */
+  isDark?: boolean;
 };
 
 type FibLineGeom = {
@@ -111,26 +113,15 @@ type FibGeom = {
   style: "levels" | "premium_discount";
 };
 
-function fibLevelStyle(level: number): { stroke: string; label: string; width: number } {
-  if (level === 0.5) {
-    return {
-      stroke: "rgba(59,130,246,0.9)",
-      label: "rgba(96,165,250,0.95)",
-      width: 1.15,
-    };
+function fibLevelStyle(level: number, dark = true): { stroke: string; label: string; width: number } {
+  if (dark) {
+    if (level === 0.5) return { stroke: "rgba(59,130,246,0.9)", label: "rgba(96,165,250,0.95)", width: 1.15 };
+    if (level === 0.618 || level === 0.65) return { stroke: "rgba(244,191,99,0.9)", label: "rgba(244,191,99,0.96)", width: 1.15 };
+    return { stroke: "rgba(45,212,191,0.62)", label: "rgba(125,238,226,0.82)", width: level === 0 || level === 1 ? 1.05 : 0.95 };
   }
-  if (level === 0.618 || level === 0.65) {
-    return {
-      stroke: "rgba(244,191,99,0.9)",
-      label: "rgba(244,191,99,0.96)",
-      width: 1.15,
-    };
-  }
-  return {
-    stroke: "rgba(45,212,191,0.62)",
-    label: "rgba(125,238,226,0.82)",
-    width: level === 0 || level === 1 ? 1.05 : 0.95,
-  };
+  if (level === 0.5) return { stroke: "rgba(20,60,160,0.9)", label: "rgba(20,55,140,0.95)", width: 1.15 };
+  if (level === 0.618 || level === 0.65) return { stroke: "rgba(160,110,20,0.9)", label: "rgba(150,100,15,0.96)", width: 1.15 };
+  return { stroke: "rgba(0,100,85,0.72)", label: "rgba(0,80,65,0.88)", width: level === 0 || level === 1 ? 1.05 : 0.95 };
 }
 
 /**
@@ -152,7 +143,14 @@ export function FibAnnotationLayer({
   futureProjectionX = null,
   lastBarTimeSec = null,
   prevBarTimeSec = null,
+  isDark = true,
 }: Props) {
+  const textStroke = isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.65)";
+  const handleFill = isDark ? "rgba(34,211,238,0.95)" : "rgba(0,100,120,0.95)";
+  const gripFill = isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)";
+  const gripStroke = isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)";
+  const gripLabel = isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)";
+  const handleStroke = isDark ? "rgba(255,255,255,0.85)" : "rgba(60,55,50,0.85)";
   const hostRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [geoms, setGeoms] = useState<FibGeom[]>([]);
@@ -464,11 +462,11 @@ export function FibAnnotationLayer({
           const totalH = Math.max(0, botY - topY);
           const bandH = Math.max(2, totalH * pdBandPct);
           // Premium fill / stroke — very faint red.
-          const premiumFill = "rgba(244,63,94,0.045)";
-          const premiumStroke = "rgba(244,63,94,0.30)";
+          const premiumFill = isDark ? "rgba(244,63,94,0.045)" : "rgba(150,18,35,0.06)";
+          const premiumStroke = isDark ? "rgba(244,63,94,0.30)" : "rgba(150,18,35,0.38)";
           // Discount fill / stroke — very faint emerald.
-          const discountFill = "rgba(45,212,191,0.05)";
-          const discountStroke = "rgba(45,212,191,0.30)";
+          const discountFill = isDark ? "rgba(45,212,191,0.05)" : "rgba(0,100,85,0.06)";
+          const discountStroke = isDark ? "rgba(45,212,191,0.30)" : "rgba(0,100,85,0.38)";
           return (
             <g key={g.id}>
               {/* Premium / Discount EXTREME bands. Top 25% of the range
@@ -509,8 +507,8 @@ export function FibAnnotationLayer({
                     fontSize="9"
                     fontWeight={700}
                     letterSpacing="0.5"
-                    fill="rgba(252,165,165,0.85)"
-                    stroke="rgba(0,0,0,0.55)"
+                    fill={isDark ? "rgba(252,165,165,0.85)" : "rgba(130,10,25,0.90)"}
+                    stroke={textStroke}
                     strokeWidth="2"
                     paintOrder="stroke"
                   >
@@ -525,8 +523,8 @@ export function FibAnnotationLayer({
                     fontSize="9"
                     fontWeight={700}
                     letterSpacing="0.5"
-                    fill="rgba(167,243,208,0.85)"
-                    stroke="rgba(0,0,0,0.55)"
+                    fill={isDark ? "rgba(167,243,208,0.85)" : "rgba(0,80,65,0.90)"}
+                    stroke={textStroke}
                     strokeWidth="2"
                     paintOrder="stroke"
                   >
@@ -542,8 +540,8 @@ export function FibAnnotationLayer({
                       fontSize="8.5"
                       fontWeight={600}
                       letterSpacing="0.4"
-                      fill="rgba(148,163,184,0.85)"
-                      stroke="rgba(0,0,0,0.55)"
+                      fill={isDark ? "rgba(148,163,184,0.85)" : "rgba(40,45,55,0.90)"}
+                      stroke={textStroke}
                       strokeWidth="2"
                       paintOrder="stroke"
                     >
@@ -628,8 +626,8 @@ export function FibAnnotationLayer({
                     cx={g.pointAX}
                     cy={g.pointAY}
                     r={9}
-                    fill="rgba(34,211,238,0.95)"
-                    stroke="rgba(255,255,255,0.85)"
+                    fill={handleFill}
+                    stroke={handleStroke}
                     strokeWidth={1.5}
                     onPointerDown={(e) => startDrag(e, g.id, 0)}
                     style={{ cursor: "grab", touchAction: "none" }}
@@ -638,8 +636,8 @@ export function FibAnnotationLayer({
                     cx={g.pointBX}
                     cy={g.pointBY}
                     r={9}
-                    fill="rgba(34,211,238,0.95)"
-                    stroke="rgba(255,255,255,0.85)"
+                    fill={handleFill}
+                    stroke={handleStroke}
                     strokeWidth={1.5}
                     onPointerDown={(e) => startDrag(e, g.id, 1)}
                     style={{ cursor: "grab", touchAction: "none" }}
@@ -662,8 +660,8 @@ export function FibAnnotationLayer({
                     width={20}
                     height={14}
                     rx={3}
-                    fill="rgba(0,0,0,0.55)"
-                    stroke="rgba(255,255,255,0.18)"
+                    fill={gripFill}
+                    stroke={gripStroke}
                   />
                   <text
                     x={removeX + 10}
@@ -671,7 +669,7 @@ export function FibAnnotationLayer({
                     textAnchor="middle"
                     fontFamily="ui-sans-serif, system-ui"
                     fontSize="9"
-                    fill="rgba(232,238,246,0.92)"
+                    fill={gripLabel}
                   >
                     ✕
                   </text>
