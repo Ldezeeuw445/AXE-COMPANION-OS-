@@ -69,12 +69,13 @@ type FibGeom = {
   extendLeft: boolean;
   style: "levels" | "premium_discount";
   /* ── Corner geometry ─────────────────────────────────────────
-     Diagonal follows the draw direction (A → B, left → right).
-     If A is above B the line descends; if A is below B it ascends.
-     Handles sit at the left and right endpoints for dragging. */
-  /** Y at left edge — the point that is further left in time. */
+     Diagonal ALWAYS ascends: bottom-left → top-right.
+     Left corner = lower price (higher screen Y = bottom).
+     Right corner = higher price (lower screen Y = top).
+     Handles sit at the endpoints for dragging. */
+  /** Y at left edge — bottom (lower price, higher screen Y). */
   leftCornerY: number;
-  /** Y at right edge — the point that is further right in time. */
+  /** Y at right edge — top (higher price, lower screen Y). */
   rightCornerY: number;
   /** Which point index (0 or 1) is at the left corner — for drag. */
   leftHandleIdx: 0 | 1;
@@ -218,15 +219,15 @@ export function FibAnnotationLayer({
               : hostWidth - RIGHT_RAIL_OFFSET;
           rightX = Math.max(endX, projectionEdge);
         }
-        // Corner geometry: diagonal follows the draw direction
-        // (A → B). Whichever point is further LEFT gets the left
-        // corner; the other gets the right corner. Direction
-        // (ascending vs descending) matches the actual price move.
-        const isALeft = xA <= xB;
-        const leftCornerY  = isALeft ? yA : yB;
-        const rightCornerY = isALeft ? yB : yA;
-        const leftHandleIdx: 0 | 1  = isALeft ? 0 : 1;
-        const rightHandleIdx: 0 | 1 = isALeft ? 1 : 0;
+        // Corner geometry: diagonal ALWAYS ascends (bottom-left →
+        // top-right) regardless of draw direction. In screen coords
+        // higher Y = lower on screen, so left corner gets the MAX Y
+        // (bottom) and right corner gets the MIN Y (top).
+        const leftCornerY  = Math.max(yA, yB); // bottom (lower price)
+        const rightCornerY = Math.min(yA, yB); // top    (higher price)
+        // Handle index: which original point (0=A, 1=B) is at each corner
+        const leftHandleIdx: 0 | 1  = yA >= yB ? 0 : 1;
+        const rightHandleIdx: 0 | 1 = yA >= yB ? 1 : 0;
 
         next.push({
           id: ann.id,
