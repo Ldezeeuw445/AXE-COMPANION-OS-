@@ -2521,11 +2521,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   return (
     <div
+      ref={chartFrameRef}
       className={`tos-ambient-glow flex min-h-0 flex-col overflow-hidden overscroll-none ${
         isFullscreen
           ? "fixed inset-0 z-[9999]"
           : "fixed inset-x-0 bottom-[var(--tos-nav-offset)] top-[var(--tos-topbar-offset)] z-30 md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
       }`}
+      style={isFullscreen ? {
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        background: "#000",
+      } : undefined}
     >
       <LiveStatusReporter
         liveCount={headerSeverity === "fresh" ? 1 : 0}
