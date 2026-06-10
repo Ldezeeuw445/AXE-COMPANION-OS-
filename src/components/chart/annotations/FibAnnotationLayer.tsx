@@ -551,10 +551,29 @@ export function FibAnnotationLayer({
                 </g>
               ) : null}
 
+              {/* Diagonal trendline connecting the two anchor points —
+                  thin, same colour as the default fib level stroke.
+                  Makes the fib easier to see and to grab for dragging. */}
+              <line
+                x1={g.pointAX}
+                y1={g.pointAY}
+                x2={g.pointBX}
+                y2={g.pointBY}
+                stroke={fibLevelStyle(0, isDark).stroke}
+                strokeWidth={0.9}
+                strokeDasharray="4 4"
+                pointerEvents="none"
+                opacity={0.65}
+              />
+
               {/* Fib level lines */}
               {visibleLines.map((ln) => {
                 const isFocus = ln.level === 0.5 || ln.level === 0.618 || ln.level === 0.65;
                 const style = fibLevelStyle(ln.level, isDark);
+                /* Line ends at rightX; labels sit just past it.
+                   % is right-aligned at the line end, price starts
+                   just after — so they read as "50,0%  4300.06". */
+                const lineLabelX = g.rightX + 4;
                 return (
                   <g key={ln.level}>
                     <line
@@ -579,31 +598,37 @@ export function FibAnnotationLayer({
                       strokeLinecap="round"
                       pointerEvents="none"
                     />
-                    {/* Combined % + price label, both right-anchored on
-                        the right rail. % uses a UI font / dimmed; price
-                        uses mono / bright. Same row, ~6px gap. Stays
-                        clear of historical candles regardless of where
-                        the swing leg sits. */}
+                    {/* % label — ON the line, left-aligned at the line
+                        end so it reads cleanly. */}
                     <text
-                      x={pctLabelRightX}
-                      y={ln.y - 3}
-                      textAnchor="end"
+                      x={lineLabelX}
+                      y={ln.y + 3.5}
+                      textAnchor="start"
                       fontFamily="ui-sans-serif, system-ui, -apple-system"
                       fontSize="10"
                       fontWeight={isFocus ? 650 : 500}
                       fill={style.label}
+                      stroke={textStroke}
+                      strokeWidth="2"
+                      paintOrder="stroke"
                       pointerEvents="none"
                     >
                       {(ln.level * 100).toFixed(1).replace(".", ",")}%
                     </text>
+                    {/* Price label — right next to the %, separated by
+                        a small gap so both sit in one neat cluster
+                        just past the horizontal line end. */}
                     <text
-                      x={priceLabelRightX}
-                      y={ln.y - 3}
-                      textAnchor="end"
+                      x={lineLabelX + 38}
+                      y={ln.y + 3.5}
+                      textAnchor="start"
                       fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                       fontSize="10"
                       fontWeight={isFocus ? 650 : 500}
                       fill={style.label}
+                      stroke={textStroke}
+                      strokeWidth="2"
+                      paintOrder="stroke"
                       pointerEvents="none"
                     >
                       {ln.price.toFixed(digits)}

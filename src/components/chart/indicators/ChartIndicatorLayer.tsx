@@ -1068,39 +1068,17 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
     const halfH = zone.height / 2;
     const sellerFill = pal.sellerBar;
     const buyerFill = pal.buyerBar;
-    // LuxAlgo-style single seamless box: one fill from origin to
-    // extension edge, no two-tone split. Source area gets the full OB
-    // colour; the extension uses a slightly lighter shade so the zone
-    // reads as "still active" without competing with live candles.
-    const sourceFill = zone.direction === "up" ? pal.obUpSource : pal.obDownSource;
-    const extensionFill = zone.direction === "up" ? pal.obUpExt : pal.obDownExt;
+    // LuxAlgo-style: single clean box — ONE fill colour, ONE border.
+    // No two-tone source/extension split. Simple and premium.
+    const boxFill = zone.direction === "up" ? pal.obUpExt : pal.obDownExt;
     return (
       <g opacity={fadeFactor}>
-        {/* Single seamless background: source area at full opacity,
-            extension at lighter opacity — no visible seam between them. */}
         <rect
           x={zone.x}
           y={zone.y}
           width={obWidth}
           height={zone.height}
-          fill={extensionFill}
-          rx={2}
-        />
-        <rect
-          x={zone.x}
-          y={zone.y}
-          width={Math.max(2, detectionWidth)}
-          height={zone.height}
-          fill={sourceFill}
-          rx={2}
-        />
-        {/* Border — single outline around the full zone */}
-        <rect
-          x={zone.x}
-          y={zone.y}
-          width={obWidth}
-          height={zone.height}
-          fill="none"
+          fill={boxFill}
           stroke={zone.stroke}
           strokeWidth={1}
           rx={2}
