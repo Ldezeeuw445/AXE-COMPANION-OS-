@@ -7,12 +7,6 @@
  * Background: linear-gradient(180deg, #101016, #0a0a0e).
  * Icon wells: 38×38 px, border-radius 12 px, inset shadows.
  * Active tab: deeper inset + cyan glow dot (4 px, #00d4f5).
- *
- * Glassmorphism swipe: when the user swipes content left/right
- * (detected by SwipeContentWrapper), a translucent glass bubble
- * appears on the navbar and slides toward the target tab — just
- * like the Slack mobile app.
- *
  * Label: 8 px uppercase, letter-spacing 0.06 em.
  */
 
@@ -29,7 +23,6 @@ import {
   Star,
 } from "lucide-react";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
-import { useSwipeNav } from "./SwipeNavContext";
 
 const CYAN = "#00d4f5";
 const GOLD = "#d4af37";
@@ -48,24 +41,12 @@ export function BottomNav() {
   const navRef = useRef<HTMLElement>(null);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
 
-  const { progress, currentTabIdx } = useSwipeNav();
-
   // Conditional 6th tab
   const sixthTab = isAxeView
     ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
     : { href: "/settings", label: "Settings", Icon: Settings, accent: undefined };
 
   const tabs = [...CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined })), sixthTab];
-
-  /* ── Glass bubble position from swipe progress ──────────────
-     progress: -1 (swiping to prev tab) … 0 (resting) … +1 (swiping to next tab)
-     We interpolate between current tab and target tab positions. */
-  const isSwiping = Math.abs(progress) > 0.05;
-  const targetIdx = progress > 0
-    ? Math.min(currentTabIdx + 1, tabs.length - 1)
-    : Math.max(currentTabIdx - 1, 0);
-  // Fractional index: current + progress toward target
-  const fractionalIdx = currentTabIdx + progress * (progress > 0 ? 1 : 1);
 
   return (
     <nav
@@ -89,33 +70,9 @@ export function BottomNav() {
         }}
       />
 
-      {/* Glassmorphism swipe bubble — tracks content swipe progress */}
-      {isSwiping && (
-        <div
-          className="pointer-events-none absolute z-0"
-          style={{
-            /* Position: each tab occupies 1/N of the navbar width.
-               The bubble sits at the fractionalIdx position. */
-            left: `calc(${(fractionalIdx + 0.5) / tabs.length * 100}% - 28px)`,
-            top: 3,
-            width: 56,
-            height: "calc(100% - 6px)",
-            borderRadius: 16,
-            background: "rgba(0, 212, 245, 0.08)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            border: "1px solid rgba(0, 212, 245, 0.15)",
-            boxShadow: "0 0 20px rgba(0, 212, 245, 0.12), inset 0 0 12px rgba(0, 212, 245, 0.06)",
-            transition: "left 0.05s linear",
-          }}
-        />
-      )}
-
       <div className="relative z-10 flex items-center justify-around">
-        {tabs.map(({ href, label, Icon, accent }, idx) => {
+        {tabs.map(({ href, label, Icon, accent }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
-          // Highlight tab that the swipe bubble is over
-          const bubbleOver = isSwiping && Math.abs(fractionalIdx - idx) < 0.6;
           const color = active ? (accent ?? CYAN) : undefined;
 
           return (
@@ -138,26 +95,17 @@ export function BottomNav() {
                         boxShadow: `inset 2px 2px 5px rgba(0,0,0,0.7), inset -1px -1px 3px rgba(255,255,255,0.04), 0 0 8px ${color}33`,
                         background: "rgba(255,255,255,0.03)",
                       }
-                    : bubbleOver
-                      ? {
-                          boxShadow: `inset 2px 2px 5px rgba(0,0,0,0.5), inset -1px -1px 3px rgba(255,255,255,0.04), 0 0 12px ${CYAN}22`,
-                          background: "rgba(0, 212, 245, 0.06)",
-                        }
-                      : {
-                          boxShadow:
-                            "inset 3px 3px 6px rgba(0,0,0,0.5), inset -2px -2px 4px rgba(255,255,255,0.03)",
-                          background: "rgba(255,255,255,0.015)",
-                        }
+                    : {
+                        boxShadow:
+                          "inset 3px 3px 6px rgba(0,0,0,0.5), inset -2px -2px 4px rgba(255,255,255,0.03)",
+                        background: "rgba(255,255,255,0.015)",
+                      }
                 }
               >
                 <Icon
                   className="h-[18px] w-[18px] transition-colors duration-200"
                   style={{
-                    color: active
-                      ? color
-                      : bubbleOver
-                        ? "rgba(0, 212, 245, 0.55)"
-                        : "rgba(255,255,255,0.25)",
+                    color: active ? color : "rgba(255,255,255,0.25)",
                   }}
                   strokeWidth={active ? 2 : 1.5}
                   aria-hidden
@@ -179,11 +127,7 @@ export function BottomNav() {
               <span
                 className="text-[7px] font-medium tracking-[0.06em] uppercase transition-colors duration-200"
                 style={{
-                  color: active
-                    ? color
-                    : bubbleOver
-                      ? "rgba(0, 212, 245, 0.45)"
-                      : "rgba(255,255,255,0.22)",
+                  color: active ? color : "rgba(255,255,255,0.22)",
                 }}
               >
                 {label}

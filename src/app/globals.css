@@ -290,11 +290,11 @@ body {
   transform: translateZ(0); /* force compositing without affecting 2D position */
   /* Fade-in on first load hides any safe-area-inset-bottom async resolve jump.
      `bottom` also transitions in case safe-area changes after initial paint. */
-  animation: tos-nav-appear 0.3s ease-out 0.15s both;
-  transition: bottom 0.2s ease-out;
+  animation: tos-nav-appear 0.4s ease-out 0.35s both;
+  transition: bottom 0.25s ease-out;
 }
 @keyframes tos-nav-appear {
-  from { opacity: 0; transform: translateZ(0) translateY(8px); }
+  from { opacity: 0; transform: translateZ(0) translateY(16px); }
   to   { opacity: 1; transform: translateZ(0) translateY(0); }
 }
 
