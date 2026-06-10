@@ -2942,7 +2942,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     { value: "auto", label: "Auto" },
                     { value: "swing", label: "Swing" },
                     { value: "pd", label: "Day" },
-                    { value: "sd", label: "S/D" },
                   ] as Array<{ value: FibMode; label: string }>).map((opt) => {
                     const isActive = fibMode === opt.value;
                     return (

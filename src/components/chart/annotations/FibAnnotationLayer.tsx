@@ -10,27 +10,11 @@ import {
 
 /**
  * Single right-rail offset. Every chart label that lives on the right
- * side (fib %, fib price, OB volume, iFVG label) anchors at
+ * side (fib price, OB volume, iFVG label) anchors at
  * `hostWidth - RIGHT_RAIL_OFFSET` so they line up vertically with no
  * overlap. Wide enough to clear the price-axis gutter.
  */
 const RIGHT_RAIL_OFFSET = 8;
-
-/**
- * Mirror of {@link RIGHT_RAIL_OFFSET} for labels that live on the left
- * rail (PDH / PDL / PDQ, Supply / Demand band labels). Same px value so
- * both rails feel symmetric on a phone-sized canvas.
- */
-const LEFT_RAIL_OFFSET = 8;
-
-/**
- * Default left-side visual clamp for auto-fib lines. The fib's actual
- * 0% / 100% anchors still come from real swing data; only the rendered
- * line is clipped so the chart isn't drowned in a long historical fib
- * that overlaps old candles. The trader can opt out per-fib by toggling
- * `settings.extendLeft = true`.
- */
-const LEFT_VISUAL_BARS = 3;
 
 type Props = {
   /** All annotations; the layer only renders fib_retracement entries. */
@@ -46,25 +30,19 @@ type Props = {
   /**
    * Pixel X position of the future-projection cursor (chart-frame coords).
    * When provided, fib retracements with `settings.extendRight` extend
-   * their lines all the way to this X — so the trader can see the
-   * intersection between the next candle and a level.
+   * their lines all the way to this X.
    */
   futureProjectionX?: number | null;
   /**
-   * UTC seconds of the most recent candle in the live stream. Used to
-   * compute the 3-bar left clamp so auto-fibs stop overlapping old price
-   * action regardless of timeframe (M5, H1, D1 — same visual width).
-   * When `null` (no candles yet), the clamp is disabled and fibs render
-   * from their original anchor.
+   * UTC seconds of the most recent candle in the live stream. Kept in
+   * the interface for backwards compat but no longer used for left-clamp.
    */
   lastBarTimeSec?: number | null;
   /**
-   * UTC seconds of the bar BEFORE {@link lastBarTimeSec}. Combined with
-   * the canvas's `timeToCoordinate` it gives us live pixel-per-bar so
-   * the 3-bar clamp keeps its visual width as the user pinch-zooms.
+   * UTC seconds of the bar BEFORE {@link lastBarTimeSec}. Kept for compat.
    */
   prevBarTimeSec?: number | null;
-  /** Dark theme — Paper mode needs darker fib colors. */
+  /** Dark theme — Paper mode needs different fib colors. */
   isDark?: boolean;
 };
 
@@ -76,22 +54,9 @@ type FibLineGeom = {
 
 type FibGeom = {
   id: string;
-  /**
-   * Original (un-clamped) leftmost X of the fib's two anchor points.
-   * Kept around for the X / remove pill anchor and for the band
-   * width when {@link extendLeft} is on.
-   */
   startX: number;
   endX: number;
-  /**
-   * Effective LEFT X used for line + band rendering. Equal to
-   * {@link startX} when {@link extendLeft} is on or the clamp can't be
-   * computed; otherwise pinned to `lastBarX - LEFT_VISUAL_BARS *
-   * barWidthPx` so every fib renders ~3 bars wide regardless of where
-   * the actual swing leg sits.
-   */
-  renderedStartX: number;
-  /** Right-most X for level lines and price labels (= endX or projection). */
+  /** Right-most X for level lines (= endX or projection edge). */
   rightX: number;
   /** y at level=0 (anchor). */
   anchorY: number;
@@ -107,32 +72,42 @@ type FibGeom = {
   swingPrice: number;
   lines: FibLineGeom[];
   extend: boolean;
-  /** True when the user has toggled "extend left" on for this fib. */
   extendLeft: boolean;
-  /** Render style: standard fib levels OR premium/discount banding. */
   style: "levels" | "premium_discount";
 };
 
+/* ── Colour helpers ─────────────────────────────────────────────── */
+
+/** Boundary levels (0% / 100%) get a gold/amber accent — like the yellow
+ *  lines in the AMZN reference. Interior levels use teal/cyan. */
 function fibLevelStyle(level: number, dark = true): { stroke: string; label: string; width: number } {
+  const isBoundary = level === 0 || level === 1;
   if (dark) {
-    if (level === 0.5) return { stroke: "rgba(59,130,246,0.9)", label: "rgba(96,165,250,0.95)", width: 1.15 };
-    if (level === 0.618 || level === 0.65) return { stroke: "rgba(244,191,99,0.9)", label: "rgba(244,191,99,0.96)", width: 1.15 };
-    return { stroke: "rgba(45,212,191,0.62)", label: "rgba(125,238,226,0.82)", width: level === 0 || level === 1 ? 1.05 : 0.95 };
+    if (isBoundary) return { stroke: "rgba(250,204,21,0.82)", label: "rgba(253,224,71,0.95)", width: 1.2 };
+    if (level === 0.5) return { stroke: "rgba(59,130,246,0.85)", label: "rgba(96,165,250,0.95)", width: 1.05 };
+    if (level === 0.618 || level === 0.65) return { stroke: "rgba(244,191,99,0.85)", label: "rgba(244,191,99,0.96)", width: 1.05 };
+    return { stroke: "rgba(45,212,191,0.60)", label: "rgba(125,238,226,0.82)", width: 0.9 };
   }
-  if (level === 0.5) return { stroke: "rgba(15,50,140,0.98)", label: "rgba(15,45,130,0.98)", width: 1.3 };
-  if (level === 0.618 || level === 0.65) return { stroke: "rgba(140,95,10,0.98)", label: "rgba(130,85,5,0.98)", width: 1.3 };
-  return { stroke: "rgba(0,80,65,0.90)", label: "rgba(0,65,50,0.95)", width: level === 0 || level === 1 ? 1.15 : 1.05 };
+  /* Paper */
+  if (isBoundary) return { stroke: "rgba(161,98,7,0.92)", label: "rgba(133,77,14,0.98)", width: 1.3 };
+  if (level === 0.5) return { stroke: "rgba(15,50,140,0.92)", label: "rgba(15,45,130,0.98)", width: 1.2 };
+  if (level === 0.618 || level === 0.65) return { stroke: "rgba(140,95,10,0.92)", label: "rgba(130,85,5,0.98)", width: 1.2 };
+  return { stroke: "rgba(0,80,65,0.82)", label: "rgba(0,65,50,0.95)", width: 1.0 };
+}
+
+/** Diagonal line colour — distinct accent (like the purple in the
+ *  AMZN reference), adapted to AXE palette. */
+function diagonalColor(dark: boolean) {
+  return dark ? "rgba(168,85,247,0.72)" : "rgba(107,33,168,0.78)";
 }
 
 /**
- * Interactive Fibonacci retracement layer that mirrors broker apps:
- * - dotted horizontal levels only (no filled background)
- * - percentage + price labels on the RIGHT rail
- * - two draggable corner handles (anchor + swing) — drag, resize, flip
- *
- * Renders as an absolutely-positioned SVG over the chart frame. The layer
- * subscribes to the canvas viewport (pan/zoom/resize) so geometry stays
- * in sync.
+ * Interactive Fibonacci retracement layer — TradingView / broker-style:
+ * - SOLID horizontal levels (green/teal interior, gold boundary)
+ * - SOLID diagonal trendline corner-to-corner (purple accent)
+ * - % label LEFT, price label RIGHT
+ * - Two always-visible drag handles at diagonal endpoints
+ * - Freely draggable, resizable, flippable
  */
 export function FibAnnotationLayer({
   annotations,
@@ -141,25 +116,22 @@ export function FibAnnotationLayer({
   onUpdate,
   onRemove,
   futureProjectionX = null,
-  lastBarTimeSec = null,
-  prevBarTimeSec = null,
   isDark = true,
 }: Props) {
   const textStroke = isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.65)";
   const handleFill = isDark ? "rgba(34,211,238,0.95)" : "rgba(0,100,120,0.95)";
+  const handleStroke = isDark ? "rgba(255,255,255,0.85)" : "rgba(60,55,50,0.85)";
+  const handleFillInactive = isDark ? "rgba(34,211,238,0.50)" : "rgba(0,100,120,0.50)";
+  const handleStrokeInactive = isDark ? "rgba(255,255,255,0.45)" : "rgba(60,55,50,0.45)";
   const gripFill = isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)";
   const gripStroke = isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)";
   const gripLabel = isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)";
-  const handleStroke = isDark ? "rgba(255,255,255,0.85)" : "rgba(60,55,50,0.85)";
+
   const hostRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [geoms, setGeoms] = useState<FibGeom[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  // Width of the right price-axis gutter (in px). We subtract this from
-  // `containerSize.w` so fib %, fib price and PD labels land just before
-  // the price-axis numbers, not on top of them. Updates whenever the
-  // chart viewport changes (price scale auto-resizes with new digits).
   const [axisWidth, setAxisWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{
@@ -171,7 +143,7 @@ export function FibAnnotationLayer({
     originPoints: AnnotationPoint[];
   } | null>(null);
 
-  // Track container size for absolute positioning of the SVG.
+  /* ── Container size ──────────────────────────────────────────── */
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
@@ -185,8 +157,7 @@ export function FibAnnotationLayer({
     return () => ro.disconnect();
   }, []);
 
-  // Keep the right-axis width in sync with the chart. It can shift any
-  // time the price scale resizes (zoom / new digits / different symbol).
+  /* ── Axis width tracking ─────────────────────────────────────── */
   useEffect(() => {
     const handle = canvasRef.current;
     if (!handle) return;
@@ -195,7 +166,7 @@ export function FibAnnotationLayer({
     return handle.subscribeViewport(update);
   }, [canvasRef]);
 
-  // Recompute pixel geometry on viewport / annotations change.
+  /* ── Geometry computation ─────────────────────────────────────── */
   useEffect(() => {
     const handle = canvasRef.current;
     if (!handle) return;
@@ -203,28 +174,11 @@ export function FibAnnotationLayer({
     function compute() {
       const h = canvasRef.current;
       const host = hostRef.current;
-      if (!h) {
-        setGeoms([]);
-        return;
-      }
+      if (!h) { setGeoms([]); return; }
       const fibs = annotations.filter((a) => a.type === "fib_retracement" && a.points.length >= 2);
       const next: FibGeom[] = [];
       const hostWidth = host?.getBoundingClientRect().width ?? 0;
-      // Derive the live "3 bars before live candle" pixel anchor once
-      // per compute pass. Both projections come from the SAME canvas so
-      // they share viewport / zoom / pan; if either fails we fall back
-      // to no-clamp (`leftClipX = null`) and every fib renders from its
-      // original anchor. That keeps Phase 1 safe on an empty stream or
-      // a freshly mounted chart.
-      let leftClipX: number | null = null;
-      if (lastBarTimeSec != null && prevBarTimeSec != null) {
-        const lastX = h.timeToCoordinate(lastBarTimeSec);
-        const prevX = h.timeToCoordinate(prevBarTimeSec);
-        if (lastX != null && prevX != null) {
-          const barWidthPx = Math.max(1, lastX - prevX);
-          leftClipX = lastX - LEFT_VISUAL_BARS * barWidthPx;
-        }
-      }
+
       for (const ann of fibs) {
         const a = ann.points[0];
         const b = ann.points[1];
@@ -248,21 +202,8 @@ export function FibAnnotationLayer({
         const extendLeft = Boolean(settings.extendLeft);
         const style: "levels" | "premium_discount" =
           settings.style === "premium_discount" ? "premium_discount" : "levels";
-        // Apply the LEFT clamp only when the user hasn't asked for an
-        // explicit extend-left AND we have a valid clip point. The clamp
-        // uses Math.max so a fib whose original startX already sits to
-        // the right of the clip line keeps its tighter rendering; only
-        // wider fibs get pulled in to ~3 bars from the live candle.
-        const renderedStartX =
-          extendLeft || leftClipX == null ? startX : Math.max(startX, leftClipX);
-        // Right-edge behaviour (TradingView / MT5 native): the fib LINES
-        // extend forward past the live candle and stop just before the
-        // right-rail labels. Anchor detection (in swingAnalysis) skips
-        // the trailing N candles so 0% / 100% never read the unfinished
-        // wick — but the lines themselves project forward so the trader
-        // can see exactly when price will hit each level. Capped at
-        // `hostWidth - RIGHT_RAIL_OFFSET` so PDH / PDL / PDQ / fib-%
-        // labels share one clean right rail with no overlap.
+
+        // Right-edge: extend past live candle when enabled
         let rightX = endX;
         if (extend) {
           const projectionEdge =
@@ -275,7 +216,6 @@ export function FibAnnotationLayer({
           id: ann.id,
           startX,
           endX,
-          renderedStartX,
           rightX,
           anchorY,
           swingY,
@@ -297,11 +237,11 @@ export function FibAnnotationLayer({
     compute();
     const unsubscribe = handle.subscribeViewport(compute);
     return unsubscribe;
-  }, [annotations, canvasRef, futureProjectionX, lastBarTimeSec, prevBarTimeSec]);
+  }, [annotations, canvasRef, futureProjectionX]);
 
+  /* ── Deselect on outside tap ─────────────────────────────────── */
   useEffect(() => {
     if (!activeId) return;
-
     function deselectWhenChartIsTapped(event: PointerEvent) {
       const host = hostRef.current;
       const target = event.target;
@@ -309,18 +249,17 @@ export function FibAnnotationLayer({
       if (host.contains(target)) return;
       setActiveId(null);
     }
-
     window.addEventListener("pointerdown", deselectWhenChartIsTapped, true);
     return () => window.removeEventListener("pointerdown", deselectWhenChartIsTapped, true);
   }, [activeId]);
 
   useEffect(() => {
     if (!activeId) return;
-    if (annotations.some((annotation) => annotation.id === activeId)) return;
+    if (annotations.some((a) => a.id === activeId)) return;
     setActiveId(null);
   }, [activeId, annotations]);
 
-  // ── Drag handling ───────────────────────────────────────────────────────
+  /* ── Drag handling ───────────────────────────────────────────── */
   function stopChartPointer(e: React.PointerEvent<SVGElement>) {
     e.stopPropagation();
     e.preventDefault();
@@ -388,21 +327,21 @@ export function FibAnnotationLayer({
 
   function endDrag(e: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
-    if (!drag) return;
-    if (drag.pointerId !== e.pointerId) return;
+    if (!drag || drag.pointerId !== e.pointerId) return;
     stopChartPointer(e);
     dragRef.current = null;
     setIsDragging(false);
   }
 
+  /* ── Early returns ───────────────────────────────────────────── */
   if (containerSize.w === 0 || containerSize.h === 0) {
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
-
   if (geoms.length === 0) {
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
 
+  /* ── Render ──────────────────────────────────────────────────── */
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0">
       <svg
@@ -418,217 +357,117 @@ export function FibAnnotationLayer({
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;
-          // Anchor every right-side label at the same right-rail X so
-          // the fib %, fib price, PDH, PDL and PDQ all line up — no
-          // overlap, no labels falling off-screen. Price is the
-          // right-most (mono, brighter); the percentage sits to its
-          // left (UI font, dimmed). MT5 native behaviour.
-          // Anchor on the CHART canvas, not inside the price-axis
-          // gutter. `axisWidth` is the live price-axis width (≈ 60-80px
-          // depending on digits / zoom). Subtracting it keeps every
-          // right-rail label visibly on top of candles, never on top of
-          // the numeric price scale.
-          const priceLabelRightX = containerSize.w - axisWidth - RIGHT_RAIL_OFFSET;
-          // Reserve ~60px for the price text so the % can slot in just
-          // to its left without overlap. Works for FX (5 digits),
-          // metals (3 digits) and indices (1-2 digits).
-          const pctLabelRightX = priceLabelRightX - 60;
-          // Anchor the remove pill at the visible-left edge of the fib
-          // (the clamped renderedStartX) so it doesn't sail off the
-          // canvas when the actual swing leg sits far to the left and
-          // extendLeft is off. Min 8px so it never clips the chart edge.
-          const removeX = Math.max(8, g.renderedStartX - 30);
+          const eqLine = g.lines.find((ln) => ln.level === 0.5);
+          const anchorLine = g.lines.find((ln) => ln.level === 0);
+          const swingExtreme = g.lines.find((ln) => ln.level === 1);
+
+          /* Label X positions: % on LEFT, price on RIGHT */
+          const pctLabelX = g.startX + 4;
+          const priceLabelX = g.rightX - 4;
+
+          /* Remove pill near top-left corner */
+          const removeX = Math.max(8, g.startX - 30);
           const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
-          // In premium/discount mode we only render 0%, 50% and 100% +
-          // a faint zone tint. The trader sees one clean structural
-          // half (premium) and one clean half (discount) — same anchors
-          // as the standard fib so price levels still tag, just visually
-          // less busy.
+
+          /* Premium / discount visible lines */
           const visibleLines =
             g.style === "premium_discount"
               ? g.lines.filter((ln) => ln.level === 0 || ln.level === 0.5 || ln.level === 1)
               : g.lines;
-          const eqLine = g.lines.find((ln) => ln.level === 0.5);
-          const anchorLine = g.lines.find((ln) => ln.level === 0);
-          const swingExtreme = g.lines.find((ln) => ln.level === 1);
-          // Premium = top 25% of the range (extreme high / supply).
-          // Discount = bottom 25% of the range (extreme low / demand).
-          // We render only those small "extreme" bands, not the full
-          // halves — much less visible than OB / FVG / iFVG which sit
-          // on top, exactly per spec.
-          const pdBandPct = 0.25;
+
+          /* Premium / Discount band geometry */
           const topY = anchorLine && swingExtreme ? Math.min(anchorLine.y, swingExtreme.y) : 0;
           const botY = anchorLine && swingExtreme ? Math.max(anchorLine.y, swingExtreme.y) : 0;
           const totalH = Math.max(0, botY - topY);
-          const bandH = Math.max(2, totalH * pdBandPct);
-          // Premium fill / stroke — very faint red.
+          const bandH = Math.max(2, totalH * 0.25);
           const premiumFill = isDark ? "rgba(244,63,94,0.045)" : "rgba(150,18,35,0.06)";
           const premiumStroke = isDark ? "rgba(244,63,94,0.30)" : "rgba(150,18,35,0.38)";
-          // Discount fill / stroke — very faint emerald.
           const discountFill = isDark ? "rgba(45,212,191,0.05)" : "rgba(0,100,85,0.06)";
           const discountStroke = isDark ? "rgba(45,212,191,0.30)" : "rgba(0,100,85,0.38)";
+
           return (
             <g key={g.id}>
-              {/* Premium / Discount EXTREME bands. Top 25% of the range
-                  is supply (premium), bottom 25% is demand (discount).
-                  Anything in between stays clean — this layer sits
-                  underneath OB / FVG / iFVG and is intentionally vague
-                  so the active SMC zones above remain dominant. */}
+              {/* Premium / Discount bands (only in that style mode) */}
               {g.style === "premium_discount" && anchorLine && swingExtreme && totalH > 0 ? (
                 <g pointerEvents="none">
-                  {/* Top extreme band (always premium / supply) */}
-                  <rect
-                    x={g.renderedStartX}
-                    y={topY}
-                    width={Math.max(2, g.rightX - g.renderedStartX)}
-                    height={bandH}
-                    fill={premiumFill}
-                    stroke={premiumStroke}
-                    strokeWidth={0.6}
-                    strokeDasharray="3 3"
-                  />
-                  {/* Bottom extreme band (always discount / demand) */}
-                  <rect
-                    x={g.renderedStartX}
-                    y={botY - bandH}
-                    width={Math.max(2, g.rightX - g.renderedStartX)}
-                    height={bandH}
-                    fill={discountFill}
-                    stroke={discountStroke}
-                    strokeWidth={0.6}
-                    strokeDasharray="3 3"
-                  />
-                  {/* PREMIUM label — chart canvas, mid of top band */}
-                  <text
-                    x={priceLabelRightX}
-                    y={topY + bandH / 2 + 3}
-                    textAnchor="end"
-                    fontFamily="ui-sans-serif, system-ui, -apple-system"
-                    fontSize="9"
-                    fontWeight={700}
-                    letterSpacing="0.5"
+                  <rect x={g.startX} y={topY} width={Math.max(2, g.rightX - g.startX)} height={bandH}
+                    fill={premiumFill} stroke={premiumStroke} strokeWidth={0.6} strokeDasharray="3 3" />
+                  <rect x={g.startX} y={botY - bandH} width={Math.max(2, g.rightX - g.startX)} height={bandH}
+                    fill={discountFill} stroke={discountStroke} strokeWidth={0.6} strokeDasharray="3 3" />
+                  <text x={g.rightX - 4} y={topY + bandH / 2 + 3} textAnchor="end"
+                    fontFamily="ui-sans-serif, system-ui" fontSize="9" fontWeight={700} letterSpacing="0.5"
                     fill={isDark ? "rgba(252,165,165,0.85)" : "rgba(130,10,25,0.90)"}
-                    stroke={textStroke}
-                    strokeWidth="2"
-                    paintOrder="stroke"
-                  >
-                    PREMIUM
-                  </text>
-                  {/* DISCOUNT label — chart canvas, mid of bottom band */}
-                  <text
-                    x={priceLabelRightX}
-                    y={botY - bandH / 2 + 3}
-                    textAnchor="end"
-                    fontFamily="ui-sans-serif, system-ui, -apple-system"
-                    fontSize="9"
-                    fontWeight={700}
-                    letterSpacing="0.5"
+                    stroke={textStroke} strokeWidth="2" paintOrder="stroke">PREMIUM</text>
+                  <text x={g.rightX - 4} y={botY - bandH / 2 + 3} textAnchor="end"
+                    fontFamily="ui-sans-serif, system-ui" fontSize="9" fontWeight={700} letterSpacing="0.5"
                     fill={isDark ? "rgba(167,243,208,0.85)" : "rgba(0,80,65,0.90)"}
-                    stroke={textStroke}
-                    strokeWidth="2"
-                    paintOrder="stroke"
-                  >
-                    DISCOUNT
-                  </text>
-                  {/* EQ label */}
+                    stroke={textStroke} strokeWidth="2" paintOrder="stroke">DISCOUNT</text>
                   {eqLine ? (
-                    <text
-                      x={priceLabelRightX}
-                      y={eqLine.y - 2}
-                      textAnchor="end"
-                      fontFamily="ui-sans-serif, system-ui, -apple-system"
-                      fontSize="8.5"
-                      fontWeight={600}
-                      letterSpacing="0.4"
+                    <text x={g.rightX - 4} y={eqLine.y - 2} textAnchor="end"
+                      fontFamily="ui-sans-serif, system-ui" fontSize="8.5" fontWeight={600} letterSpacing="0.4"
                       fill={isDark ? "rgba(148,163,184,0.85)" : "rgba(40,45,55,0.90)"}
-                      stroke={textStroke}
-                      strokeWidth="2"
-                      paintOrder="stroke"
-                    >
-                      EQ
-                    </text>
+                      stroke={textStroke} strokeWidth="2" paintOrder="stroke">EQ</text>
                   ) : null}
                 </g>
               ) : null}
 
-              {/* Diagonal trendline connecting the two anchor points —
-                  thin, same colour as the default fib level stroke.
-                  Makes the fib easier to see and to grab for dragging. */}
+              {/* ── Diagonal trendline (corner to corner) ──────────
+                  SOLID line like the purple diagonal in the reference.
+                  Connects pointA (0%) to pointB (100%). */}
               <line
-                x1={g.pointAX}
-                y1={g.pointAY}
-                x2={g.pointBX}
-                y2={g.pointBY}
-                stroke={fibLevelStyle(0, isDark).stroke}
-                strokeWidth={0.9}
-                strokeDasharray="4 4"
+                x1={g.pointAX} y1={g.pointAY}
+                x2={g.pointBX} y2={g.pointBY}
+                stroke={diagonalColor(isDark)}
+                strokeWidth={1.3}
                 pointerEvents="none"
-                opacity={0.65}
+                opacity={0.80}
               />
 
-              {/* Fib level lines */}
+              {/* ── SOLID horizontal level lines ───────────────────
+                  Matching the reference: solid lines spanning the
+                  full fib width, % label LEFT, price label RIGHT. */}
               {visibleLines.map((ln) => {
                 const isFocus = ln.level === 0.5 || ln.level === 0.618 || ln.level === 0.65;
                 const style = fibLevelStyle(ln.level, isDark);
-                /* Line ends at rightX; labels sit just past it.
-                   % is right-aligned at the line end, price starts
-                   just after — so they read as "50,0%  4300.06". */
-                const lineLabelX = g.rightX + 4;
                 return (
                   <g key={ln.level}>
+                    {/* Invisible wide hit area for body drag */}
                     <line
-                      x1={g.renderedStartX}
-                      x2={g.rightX}
-                      y1={ln.y}
-                      y2={ln.y}
-                      stroke="transparent"
-                      strokeWidth={22}
+                      x1={g.startX} x2={g.rightX} y1={ln.y} y2={ln.y}
+                      stroke="transparent" strokeWidth={22}
                       pointerEvents="stroke"
                       onPointerDown={(e) => startDrag(e, g.id, "body")}
                       style={{ cursor: "move", touchAction: "none" }}
                     />
+                    {/* Visible SOLID level line */}
                     <line
-                      x1={g.renderedStartX}
-                      x2={g.rightX}
-                      y1={ln.y}
-                      y2={ln.y}
+                      x1={g.startX} x2={g.rightX} y1={ln.y} y2={ln.y}
                       stroke={style.stroke}
                       strokeWidth={style.width}
-                      strokeDasharray="2 5"
-                      strokeLinecap="round"
                       pointerEvents="none"
                     />
-                    {/* % label — ON the line, left-aligned at the line
-                        end so it reads cleanly. */}
+                    {/* % label — LEFT side of the line */}
                     <text
-                      x={lineLabelX}
-                      y={ln.y + 3.5}
+                      x={pctLabelX} y={ln.y - 3}
                       textAnchor="start"
                       fontFamily="ui-sans-serif, system-ui, -apple-system"
                       fontSize="10"
                       fontWeight={isFocus ? 650 : 500}
                       fill={style.label}
-                      stroke={textStroke}
-                      strokeWidth="2"
-                      paintOrder="stroke"
+                      stroke={textStroke} strokeWidth="2.5" paintOrder="stroke"
                       pointerEvents="none"
                     >
                       {(ln.level * 100).toFixed(1).replace(".", ",")}%
                     </text>
-                    {/* Price label — right next to the %, separated by
-                        a small gap so both sit in one neat cluster
-                        just past the horizontal line end. */}
+                    {/* Price label — RIGHT side of the line */}
                     <text
-                      x={lineLabelX + 38}
-                      y={ln.y + 3.5}
-                      textAnchor="start"
+                      x={priceLabelX} y={ln.y - 3}
+                      textAnchor="end"
                       fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                       fontSize="10"
                       fontWeight={isFocus ? 650 : 500}
                       fill={style.label}
-                      stroke={textStroke}
-                      strokeWidth="2"
-                      paintOrder="stroke"
+                      stroke={textStroke} strokeWidth="2.5" paintOrder="stroke"
                       pointerEvents="none"
                     >
                       {ln.price.toFixed(digits)}
@@ -637,67 +476,47 @@ export function FibAnnotationLayer({
                 );
               })}
 
-              {/* Two draggable handles — rendered at the ACTUAL point[0]
-                  and point[1] coordinates (not at startX/endX). This is
-                  the fix for the "dragging one handle starts moving the
-                  whole fib" bug: the visual handle and the drag index
-                  stay glued to the same logical point even when dragging
-                  past the other point swaps the time order. The user
-                  can extend the fib in either direction freely with no
-                  clamping. */}
-              {isActive ? (
-                <g style={{ pointerEvents: "auto" }}>
-                  <circle
-                    cx={g.pointAX}
-                    cy={g.pointAY}
-                    r={9}
-                    fill={handleFill}
-                    stroke={handleStroke}
-                    strokeWidth={1.5}
-                    onPointerDown={(e) => startDrag(e, g.id, 0)}
-                    style={{ cursor: "grab", touchAction: "none" }}
-                  />
-                  <circle
-                    cx={g.pointBX}
-                    cy={g.pointBY}
-                    r={9}
-                    fill={handleFill}
-                    stroke={handleStroke}
-                    strokeWidth={1.5}
-                    onPointerDown={(e) => startDrag(e, g.id, 1)}
-                    style={{ cursor: "grab", touchAction: "none" }}
-                  />
-                </g>
-              ) : null}
+              {/* ── Always-visible drag handles ────────────────────
+                  Sit at pointA and pointB (the diagonal endpoints).
+                  Semi-transparent when inactive, bright when active.
+                  Large invisible touch target (r=18) behind visible
+                  dot (r=7) for easy mobile dragging. */}
+              <g style={{ pointerEvents: "auto" }}>
+                {/* Handle A (0% anchor) */}
+                <circle cx={g.pointAX} cy={g.pointAY} r={18}
+                  fill="transparent" pointerEvents="all"
+                  onPointerDown={(e) => startDrag(e, g.id, 0)}
+                  style={{ cursor: "grab", touchAction: "none" }} />
+                <circle cx={g.pointAX} cy={g.pointAY}
+                  r={isActive ? 8 : 5}
+                  fill={isActive ? handleFill : handleFillInactive}
+                  stroke={isActive ? handleStroke : handleStrokeInactive}
+                  strokeWidth={isActive ? 1.5 : 1}
+                  pointerEvents="none" />
 
-              {/* Remove pill on the right edge near the connector line midpoint */}
+                {/* Handle B (100% swing) */}
+                <circle cx={g.pointBX} cy={g.pointBY} r={18}
+                  fill="transparent" pointerEvents="all"
+                  onPointerDown={(e) => startDrag(e, g.id, 1)}
+                  style={{ cursor: "grab", touchAction: "none" }} />
+                <circle cx={g.pointBX} cy={g.pointBY}
+                  r={isActive ? 8 : 5}
+                  fill={isActive ? handleFill : handleFillInactive}
+                  stroke={isActive ? handleStroke : handleStrokeInactive}
+                  strokeWidth={isActive ? 1.5 : 1}
+                  pointerEvents="none" />
+              </g>
+
+              {/* Remove button — only when active */}
               {onRemove && isActive ? (
                 <g
                   style={{ pointerEvents: "auto", cursor: "pointer" }}
-                  onPointerDown={(e) => {
-                    stopChartPointer(e);
-                    onRemove(g.id);
-                  }}
+                  onPointerDown={(e) => { stopChartPointer(e); onRemove(g.id); }}
                 >
-                  <rect
-                    x={removeX}
-                    y={removeY}
-                    width={20}
-                    height={14}
-                    rx={3}
-                    fill={gripFill}
-                    stroke={gripStroke}
-                  />
-                  <text
-                    x={removeX + 10}
-                    y={removeY + 10}
-                    textAnchor="middle"
-                    fontFamily="ui-sans-serif, system-ui"
-                    fontSize="9"
-                    fill={gripLabel}
-                  >
-                    ✕
-                  </text>
+                  <rect x={removeX} y={removeY} width={20} height={14} rx={3}
+                    fill={gripFill} stroke={gripStroke} />
+                  <text x={removeX + 10} y={removeY + 10} textAnchor="middle"
+                    fontFamily="ui-sans-serif, system-ui" fontSize="9" fill={gripLabel}>✕</text>
                 </g>
               ) : null}
             </g>
