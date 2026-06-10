@@ -764,9 +764,10 @@ export async function streamChatMessage(
     } else if (tc.tool === "get_news_headlines") {
       try {
         const requested = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-        const newsItems = await loadNews(requested || undefined);
+        const limit = Math.max(1, Math.min(20, Number(tc.args.limit ?? 10)));
+        const newsItems = await loadNews({ symbol: requested, watchlist: [], limit });
         if (newsItems.length === 0) return requested ? `No recent headlines for ${requested}.` : "No recent headlines available.";
-        const lines = newsItems.slice(0, 10).map((n) => {
+        const lines = newsItems.slice(0, limit).map((n) => {
           const when = (() => { const d = new Date(n.publishedAt); return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(11, 16) + "Z"; })();
           const src = n.source ? ` (${n.source})` : "";
           return `${when}  ${n.title}${src}`;
