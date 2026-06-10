@@ -69,15 +69,15 @@ type FibGeom = {
   extendLeft: boolean;
   style: "levels" | "premium_discount";
   /* ── Corner geometry ─────────────────────────────────────────
-     The diagonal + handles sit at the actual CORNERS of the fib
-     rectangle, not at arbitrary point coordinates. */
-  /** Y at the left edge (startX) — one end of the diagonal. */
+     Diagonal ALWAYS ascends: bottom-left → top-right.
+     Handles sit at those corners for dragging. */
+  /** Y at left edge — always the BOTTOM (larger Y = lower price). */
   leftCornerY: number;
-  /** Y at the right edge (endX) — other end of the diagonal. */
+  /** Y at right edge — always the TOP (smaller Y = higher price). */
   rightCornerY: number;
-  /** Which point index (0 or 1) lives at startX — for drag routing. */
+  /** Which point index (0 or 1) is at bottom-left — for drag. */
   leftHandleIdx: 0 | 1;
-  /** Which point index (0 or 1) lives at endX — for drag routing. */
+  /** Which point index (0 or 1) is at top-right — for drag. */
   rightHandleIdx: 0 | 1;
 };
 
@@ -217,13 +217,13 @@ export function FibAnnotationLayer({
               : hostWidth - RIGHT_RAIL_OFFSET;
           rightX = Math.max(endX, projectionEdge);
         }
-        // Corner geometry: diagonal + handles sit at the actual
-        // corners of the fib box. Determine which point is left/right.
-        const isALeft = xA <= xB;
-        const leftCornerY = isALeft ? yA : yB;
-        const rightCornerY = isALeft ? yB : yA;
-        const leftHandleIdx: 0 | 1 = isALeft ? 0 : 1;
-        const rightHandleIdx: 0 | 1 = isALeft ? 1 : 0;
+        // Corner geometry: diagonal ALWAYS ascends (bottom-left →
+        // top-right). In chart coords larger Y = lower price = bottom.
+        const isABottom = yA >= yB;          // point A is the lower price?
+        const leftCornerY = Math.max(yA, yB); // bottom on the left
+        const rightCornerY = Math.min(yA, yB); // top on the right
+        const leftHandleIdx: 0 | 1 = isABottom ? 0 : 1;
+        const rightHandleIdx: 0 | 1 = isABottom ? 1 : 0;
 
         next.push({
           id: ann.id,
@@ -424,10 +424,9 @@ export function FibAnnotationLayer({
                 </g>
               ) : null}
 
-              {/* ── Diagonal trendline (corner to corner) ──────────
-                  SOLID line from left corner (startX) to right corner
-                  (endX) of the fib box — exactly like the purple
-                  diagonal in the AMZN reference. */}
+              {/* ── Diagonal trendline (always ascending) ──────────
+                  Bottom-left corner → top-right corner of the fib box.
+                  Always rises regardless of draw direction. */}
               <line
                 x1={g.startX} y1={g.leftCornerY}
                 x2={g.endX} y2={g.rightCornerY}
@@ -491,14 +490,14 @@ export function FibAnnotationLayer({
               })}
 
               {/* ── Always-visible drag handles ────────────────────
-                  Sit at the CORNERS of the fib box (startX/endX),
-                  exactly where the diagonal endpoints are. Dragging
+                  Bottom-left and top-right corners of the fib box,
+                  matching the ascending diagonal endpoints. Dragging
                   a corner moves the corresponding annotation point.
                   Semi-transparent when inactive, bright when active.
                   Large invisible touch target (r=18) behind visible
                   dot (r=7/8) for easy mobile dragging. */}
               <g style={{ pointerEvents: "auto" }}>
-                {/* Left corner handle */}
+                {/* Bottom-left corner handle */}
                 <circle cx={g.startX} cy={g.leftCornerY} r={18}
                   fill="transparent" pointerEvents="all"
                   onPointerDown={(e) => startDrag(e, g.id, g.leftHandleIdx)}
@@ -510,7 +509,7 @@ export function FibAnnotationLayer({
                   strokeWidth={isActive ? 1.5 : 1}
                   pointerEvents="none" />
 
-                {/* Right corner handle */}
+                {/* Top-right corner handle */}
                 <circle cx={g.endX} cy={g.rightCornerY} r={18}
                   fill="transparent" pointerEvents="all"
                   onPointerDown={(e) => startDrag(e, g.id, g.rightHandleIdx)}
