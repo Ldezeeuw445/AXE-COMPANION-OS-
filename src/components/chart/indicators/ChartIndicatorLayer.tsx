@@ -214,8 +214,8 @@ function overlayPalette(dark: boolean) {
       supplyFill: "rgba(244,63,94,0.12)", supplyStroke: "rgba(244,63,94,0.50)", supplyLabel: "rgba(252,165,165,0.95)",
       demandFill: "rgba(45,212,191,0.12)", demandStroke: "rgba(45,212,191,0.50)", demandLabel: "rgba(167,243,208,0.95)",
       eqStroke: "rgba(148,163,184,0.70)", eqLabel: "rgba(148,163,184,0.95)",
-      obUpSource: "rgba(45,212,191,0.32)", obUpExt: "rgba(45,212,191,0.16)", obUpStroke: "rgba(45,212,191,0.82)",
-      obDownSource: "rgba(239,68,68,0.32)", obDownExt: "rgba(239,68,68,0.16)", obDownStroke: "rgba(239,68,68,0.82)",
+      obUpSource: "rgba(45,212,191,0.38)", obUpExt: "rgba(45,212,191,0.22)", obUpStroke: "rgba(45,212,191,0.88)",
+      obDownSource: "rgba(239,68,68,0.38)", obDownExt: "rgba(239,68,68,0.22)", obDownStroke: "rgba(239,68,68,0.88)",
       obLabelUp: "rgba(167,243,208,0.82)", obLabelDown: "rgba(252,165,165,0.82)",
       obVolLabelUp: "rgba(167,243,208,0.90)", obVolLabelDown: "rgba(252,165,165,0.90)",
       sellerBar: "rgba(244,63,94,0.72)", buyerBar: "rgba(45,212,191,0.72)",
@@ -250,8 +250,8 @@ function overlayPalette(dark: boolean) {
     supplyFill: "rgba(150,18,35,0.14)", supplyStroke: "rgba(150,18,35,0.55)", supplyLabel: "rgba(130,10,25,0.95)",
     demandFill: "rgba(0,100,85,0.14)", demandStroke: "rgba(0,100,85,0.55)", demandLabel: "rgba(0,80,65,0.95)",
     eqStroke: "rgba(50,55,65,0.72)", eqLabel: "rgba(40,45,55,0.95)",
-    obUpSource: "rgba(0,100,85,0.35)", obUpExt: "rgba(0,100,85,0.18)", obUpStroke: "rgba(0,90,70,0.85)",
-    obDownSource: "rgba(150,18,18,0.35)", obDownExt: "rgba(150,18,18,0.18)", obDownStroke: "rgba(140,10,10,0.85)",
+    obUpSource: "rgba(0,100,85,0.42)", obUpExt: "rgba(0,100,85,0.26)", obUpStroke: "rgba(0,90,70,0.90)",
+    obDownSource: "rgba(150,18,18,0.42)", obDownExt: "rgba(150,18,18,0.26)", obDownStroke: "rgba(140,10,10,0.90)",
     obLabelUp: "rgba(0,80,65,0.90)", obLabelDown: "rgba(130,10,25,0.90)",
     obVolLabelUp: "rgba(0,80,65,0.95)", obVolLabelDown: "rgba(130,10,25,0.95)",
     sellerBar: "rgba(150,18,35,0.75)", buyerBar: "rgba(0,100,85,0.75)",
@@ -1059,8 +1059,6 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
   if (variant === "ob") {
     const obWidth = Math.max(2, zone.extendX - zone.x);
     const obRightX = zone.x + obWidth;
-    const extensionStartX = detectionEndX;
-    const extensionWidth = Math.max(0, obRightX - extensionStartX);
     const v = zone.volumetric;
     // Inner sub-bars sit inside the SOURCE candle column. They share the
     // same base width so percentages are visually comparable.
@@ -1070,37 +1068,43 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
     const halfH = zone.height / 2;
     const sellerFill = pal.sellerBar;
     const buyerFill = pal.buyerBar;
-    // Two-tone background: the source area carries the OB's normal
-    // translucent fill, while the forward extension is more transparent
-    // so it reads as "this zone is still relevant" without competing
-    // visually with live candles to its left. Premium-but-quiet look.
+    // LuxAlgo-style single seamless box: one fill from origin to
+    // extension edge, no two-tone split. Source area gets the full OB
+    // colour; the extension uses a slightly lighter shade so the zone
+    // reads as "still active" without competing with live candles.
     const sourceFill = zone.direction === "up" ? pal.obUpSource : pal.obDownSource;
     const extensionFill = zone.direction === "up" ? pal.obUpExt : pal.obDownExt;
     return (
       <g opacity={fadeFactor}>
+        {/* Single seamless background: source area at full opacity,
+            extension at lighter opacity — no visible seam between them. */}
+        <rect
+          x={zone.x}
+          y={zone.y}
+          width={obWidth}
+          height={zone.height}
+          fill={extensionFill}
+          rx={2}
+        />
         <rect
           x={zone.x}
           y={zone.y}
           width={Math.max(2, detectionWidth)}
           height={zone.height}
           fill={sourceFill}
+          rx={2}
+        />
+        {/* Border — single outline around the full zone */}
+        <rect
+          x={zone.x}
+          y={zone.y}
+          width={obWidth}
+          height={zone.height}
+          fill="none"
           stroke={zone.stroke}
           strokeWidth={1}
-          rx={3}
+          rx={2}
         />
-        {extensionWidth > 0 ? (
-          <rect
-            x={extensionStartX}
-            y={zone.y}
-            width={extensionWidth}
-            height={zone.height}
-            fill={extensionFill}
-            stroke={zone.stroke}
-            strokeWidth={0.85}
-            strokeOpacity={0.55}
-            rx={3}
-          />
-        ) : null}
         {v && v.totalVolume > 0 && sellerW > 0 && halfH > 1 ? (
           <rect
             x={zone.x}
@@ -1108,6 +1112,7 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
             width={Math.max(1, sellerW)}
             height={halfH}
             fill={sellerFill}
+            rx={1}
           />
         ) : null}
         {v && v.totalVolume > 0 && buyerW > 0 && halfH > 1 ? (
@@ -1117,17 +1122,19 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
             width={Math.max(1, buyerW)}
             height={halfH}
             fill={buyerFill}
+            rx={1}
           />
         ) : null}
+        {/* Dashed midline across the full zone */}
         <line
           x1={zone.x}
           x2={obRightX}
           y1={zone.midY}
           y2={zone.midY}
           stroke={zone.stroke}
-          strokeWidth={1}
-          strokeDasharray="2 3"
-          opacity={0.85}
+          strokeWidth={1.2}
+          strokeDasharray="4 3"
+          opacity={0.90}
         />
 
         <ObInnerVolumeLabel zone={zone} obRightX={obRightX} pal={pal} />

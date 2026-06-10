@@ -51,9 +51,9 @@ function indicatorColors(dark: boolean) {
         titleText: "text-white/70",
       }
     : {
-        /* Paper palette — same hues as Midnight (cyan/red/yellow) but much darker */
-        bullBar: "rgba(42,46,57,0.75)",        /* #2a2e39 — matches bullish candle border */
-        bearBar: "rgba(19,23,34,0.85)",       /* #131722 — matches bearish candle body */
+        /* Paper palette — candle-coloured volume bars: light bull, darker bear */
+        bullBar: "rgba(42,46,57,0.38)",        /* #2a2e39 lighter — bullish candle hint */
+        bearBar: "rgba(19,23,34,0.72)",       /* #131722 — bearish candle body */
         rsiLine: "rgba(0,90,110,1)",          /* dark cyan — same hue as RSI cyan */
         macdLine: "rgba(0,90,110,1)",         /* dark cyan */
         macdSignal: "rgba(160,110,0,1)",      /* dark amber — same hue as yellow signal */

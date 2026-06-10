@@ -119,9 +119,9 @@ function fibLevelStyle(level: number, dark = true): { stroke: string; label: str
     if (level === 0.618 || level === 0.65) return { stroke: "rgba(244,191,99,0.9)", label: "rgba(244,191,99,0.96)", width: 1.15 };
     return { stroke: "rgba(45,212,191,0.62)", label: "rgba(125,238,226,0.82)", width: level === 0 || level === 1 ? 1.05 : 0.95 };
   }
-  if (level === 0.5) return { stroke: "rgba(20,60,160,0.9)", label: "rgba(20,55,140,0.95)", width: 1.15 };
-  if (level === 0.618 || level === 0.65) return { stroke: "rgba(160,110,20,0.9)", label: "rgba(150,100,15,0.96)", width: 1.15 };
-  return { stroke: "rgba(0,100,85,0.72)", label: "rgba(0,80,65,0.88)", width: level === 0 || level === 1 ? 1.05 : 0.95 };
+  if (level === 0.5) return { stroke: "rgba(15,50,140,0.98)", label: "rgba(15,45,130,0.98)", width: 1.3 };
+  if (level === 0.618 || level === 0.65) return { stroke: "rgba(140,95,10,0.98)", label: "rgba(130,85,5,0.98)", width: 1.3 };
+  return { stroke: "rgba(0,80,65,0.90)", label: "rgba(0,65,50,0.95)", width: level === 0 || level === 1 ? 1.15 : 1.05 };
 }
 
 /**
@@ -554,7 +554,7 @@ export function FibAnnotationLayer({
               {/* Fib level lines */}
               {visibleLines.map((ln) => {
                 const isFocus = ln.level === 0.5 || ln.level === 0.618 || ln.level === 0.65;
-                const style = fibLevelStyle(ln.level);
+                const style = fibLevelStyle(ln.level, isDark);
                 return (
                   <g key={ln.level}>
                     <line
