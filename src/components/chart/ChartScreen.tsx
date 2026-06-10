@@ -3048,11 +3048,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           className={`absolute left-0 top-[72%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             indicatorRailOpen
               ? chartTheme.isDark
-                ? "border-amber-300/45 bg-amber-400/18 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.18)]"
-                : "border-amber-700/35 bg-amber-500/12 text-amber-900 shadow-[0_0_24px_rgba(180,130,20,0.10)]"
+                ? "border-white/[0.14] bg-white/[0.08] text-white shadow-[0_0_24px_rgba(255,255,255,0.2)]"
+                : "border-black/[0.14] bg-black/[0.06] text-black/80 shadow-[0_0_24px_rgba(0,0,0,0.08)]"
               : chartTheme.isDark
-                ? "border-amber-400/18 bg-black/78 text-amber-200"
-                : "border-amber-700/12 bg-white/78 text-amber-800"
+                ? "border-white/[0.08] bg-black/78 text-white/80"
+                : "border-black/[0.10] bg-white/78 text-black/60"
           }`}
           aria-label="Toggle indicator toolbar"
         >
