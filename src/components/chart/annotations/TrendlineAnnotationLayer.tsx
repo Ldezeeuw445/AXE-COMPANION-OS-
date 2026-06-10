@@ -283,7 +283,7 @@ export function TrendlineAnnotationLayer({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        style={{ touchAction: isDragging ? "none" : "manipulation" }}
+        style={{ touchAction: isDragging || activeId ? "none" : "manipulation" }}
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;

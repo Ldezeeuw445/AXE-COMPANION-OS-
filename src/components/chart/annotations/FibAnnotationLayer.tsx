@@ -58,6 +58,8 @@ type FibGeom = {
   endX: number;
   /** Right-most X for level lines (= endX or projection edge). */
   rightX: number;
+  /** Right-most X for diagonal — always extends to chart edge. */
+  diagRightX: number;
   /** y at level=0 (anchor). */
   anchorY: number;
   /** y at level=1 (swing). */
@@ -219,6 +221,8 @@ export function FibAnnotationLayer({
               : hostWidth - RIGHT_RAIL_OFFSET;
           rightX = Math.max(endX, projectionEdge);
         }
+        // Diagonal always extends to chart right edge
+        const diagRightX = Math.max(endX, hostWidth - RIGHT_RAIL_OFFSET);
         // Corner geometry: diagonal ALWAYS ascends (bottom-left →
         // top-right) regardless of draw direction. In screen coords
         // higher Y = lower on screen, so left corner gets the MAX Y
@@ -234,6 +238,7 @@ export function FibAnnotationLayer({
           startX,
           endX,
           rightX,
+          diagRightX,
           anchorY,
           swingY,
           anchorPrice: a.price,
@@ -370,7 +375,7 @@ export function FibAnnotationLayer({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        style={{ touchAction: isDragging ? "none" : "manipulation" }}
+        style={{ touchAction: isDragging || activeId ? "none" : "manipulation" }}
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;
@@ -428,17 +433,28 @@ export function FibAnnotationLayer({
                 </g>
               ) : null}
 
-              {/* ── Diagonal trendline (follows draw direction) ──────
-                  Left corner → right corner of the fib box.
-                  Ascends or descends matching the actual A→B move. */}
-              <line
-                x1={g.startX} y1={g.leftCornerY}
-                x2={g.endX} y2={g.rightCornerY}
-                stroke={diagonalColor(isDark)}
-                strokeWidth={1.3}
-                pointerEvents="none"
-                opacity={0.80}
-              />
+              {/* ── Diagonal trendline (always ascending) ────────
+                  Bottom-left corner → top-right, extended to the chart
+                  right edge (diagRightX) so it runs past the price
+                  labels. Slope is computed from the fib box corners. */}
+              {(() => {
+                const dx = g.endX - g.startX;
+                const dy = g.rightCornerY - g.leftCornerY; // negative (ascending)
+                const extDx = g.diagRightX - g.startX;
+                const extY = dx > 0
+                  ? g.leftCornerY + (dy / dx) * extDx
+                  : g.rightCornerY;
+                return (
+                  <line
+                    x1={g.startX} y1={g.leftCornerY}
+                    x2={g.diagRightX} y2={extY}
+                    stroke={diagonalColor(isDark)}
+                    strokeWidth={1.3}
+                    pointerEvents="none"
+                    opacity={0.80}
+                  />
+                );
+              })()}
 
               {/* ── SOLID horizontal level lines ───────────────────
                   Matching the reference: solid lines spanning the

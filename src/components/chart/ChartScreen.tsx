@@ -849,17 +849,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     });
   }, []);
 
-  // Listen for orientation changes → auto-exit fullscreen when rotating back to portrait
+  // Auto-enter fullscreen when rotating to landscape on mobile,
+  // auto-exit when rotating back to portrait.
   useEffect(() => {
-    if (!isFullscreen) return;
+    // Only on mobile-width devices
+    if (typeof window === "undefined" || window.innerWidth > 1024) return;
     function handleOrientationChange() {
       const isLandscape = window.matchMedia("(orientation: landscape)").matches;
-      if (!isLandscape) setIsFullscreen(false);
+      setIsFullscreen(isLandscape);
     }
     const mql = window.matchMedia("(orientation: landscape)");
     mql.addEventListener("change", handleOrientationChange);
     return () => mql.removeEventListener("change", handleOrientationChange);
-  }, [isFullscreen]);
+  }, []);
 
   // Escape key exits fullscreen
   useEffect(() => {
