@@ -51,14 +51,14 @@ function indicatorColors(dark: boolean) {
         titleText: "text-white/70",
       }
     : {
-        /* Premium Paper palette — deep, rich, clearly visible on light bg */
-        bullBar: "rgba(0,110,90,0.92)",
-        bearBar: "rgba(180,30,30,0.92)",
-        rsiLine: "rgba(0,80,180,1)",
-        macdLine: "rgba(0,80,180,1)",
-        macdSignal: "rgba(190,120,0,1)",
-        macdHistBull: "rgba(0,110,90,0.88)",
-        macdHistBear: "rgba(180,30,30,0.88)",
+        /* Paper palette — same hues as Midnight (cyan/red/yellow) but much darker */
+        bullBar: "rgba(0,100,85,0.95)",       /* dark teal — same hue as cyan bull */
+        bearBar: "rgba(150,18,18,0.95)",      /* dark red — same hue as red bear */
+        rsiLine: "rgba(0,90,110,1)",          /* dark cyan — same hue as RSI cyan */
+        macdLine: "rgba(0,90,110,1)",         /* dark cyan */
+        macdSignal: "rgba(160,110,0,1)",      /* dark amber — same hue as yellow signal */
+        macdHistBull: "rgba(0,100,85,0.92)",  /* dark teal */
+        macdHistBear: "rgba(150,18,35,0.92)", /* dark rose */
         levelLine: "rgba(0,0,0,0.22)",
         levelLineDim: "rgba(0,0,0,0.12)",
         separator: "rgba(0,0,0,0.10)",
