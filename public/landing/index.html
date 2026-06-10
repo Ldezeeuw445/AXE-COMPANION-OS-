@@ -17,7 +17,7 @@
   --glow:rgba(34,211,238,.55);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;overflow-x:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .mono{font-family:'Inter',sans-serif;font-feature-settings:'tnum' 1,'cv01' 1;letter-spacing:-.01em}
 a{color:inherit;text-decoration:none}
@@ -117,7 +117,7 @@ header{position:sticky;top:0;z-index:80;backdrop-filter:blur(18px);background:rg
 .hero{position:relative;z-index:6;max-width:1240px;margin:0 auto;padding:78px 26px 18px;text-align:center}
 .badge{display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(34,211,238,.25);background:rgba(34,211,238,.06);color:#a5f3fc;font-size:12px;font-weight:500;padding:7px 16px;border-radius:999px;margin-bottom:30px}
 .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);animation:pulse 2s infinite}
-h1{font-size:clamp(38px,5.4vw,72px);line-height:1.02;font-weight:900;letter-spacing:-.04em;white-space:nowrap}
+h1{font-size:clamp(38px,5.4vw,72px);line-height:1.02;font-weight:900;letter-spacing:-.04em}
 h1 .grad{background:linear-gradient(94deg,#bae6fd,var(--cyan) 38%,var(--teal) 72%,#6ee7b7);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero .one-tap-inline{display:inline-block;margin-left:0;font-size:1em;line-height:1;font-weight:800;letter-spacing:-.04em;color:#d7e2f1;vertical-align:baseline}
 .hero .one-tap-inline .soft{color:#99abc2}
@@ -134,7 +134,7 @@ h1 .grad{background:linear-gradient(94deg,#bae6fd,var(--cyan) 38%,var(--teal) 72
 .chip:hover{border-color:rgba(34,211,238,.4);color:#a5f3fc;box-shadow:0 0 18px rgba(34,211,238,.18)}
 
 /* ===== hero stage: 3 phones + reveal ===== */
-.stage{position:relative;z-index:6;max-width:1380px;margin:0 auto 0;padding:0 26px 6px;height:880px;perspective:1800px}
+.stage{position:relative;z-index:6;max-width:1380px;margin:0 auto 0;padding:0 26px 6px;height:880px;perspective:1800px;overflow:hidden}
 .stage-glow{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);width:900px;height:560px;border-radius:50%;
   background:radial-gradient(closest-side,rgba(34,211,238,.16),rgba(45,212,191,.05) 50%,transparent 72%);filter:blur(40px);animation:halo 7s ease-in-out infinite}
 @keyframes halo{0%,100%{opacity:.75;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}}
