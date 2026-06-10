@@ -10,7 +10,7 @@
 
 import { type CSSProperties } from "react";
 
-const ROWS = 4;
+const ROWS = 5;
 const COLS = 4;
 const DOT_SIZE = 6;
 const GAP = 10;
