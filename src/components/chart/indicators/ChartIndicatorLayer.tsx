@@ -409,7 +409,7 @@ export function ChartIndicatorLayer({
     const poc: PointOfControlGeom =
       pocRaw && pocY != null ? { y: pocY, price: pocRaw.price, volume: pocRaw.volume } : null;
 
-    const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX);
+    const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX, pal);
     // ATR(200) drives the LuxAlgo iFVG gap-size filter (default 0.25
      // × ATR). Filters out micro-gaps that would otherwise clutter the
      // chart with noise on calmer pairs.
@@ -419,6 +419,7 @@ export function ChartIndicatorLayer({
       handle,
       futureExtensionX,
       atrForIfvg,
+      pal,
     );
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
       buildPreviousDayLevels(visibleWithTime, handle);
@@ -1335,6 +1336,7 @@ function buildStructureOverlay(
   candles: IndicatorCandle[],
   handle: ChartCanvasHandle,
   futureExtensionX: number,
+  pal: OverlayPalette,
 ): {
   labels: StructureLabel[];
   lines: StructureLine[];
@@ -2057,6 +2059,7 @@ function buildInverseFvgs(
   handle: ChartCanvasHandle,
   futureExtensionX: number,
   atr: Array<number>,
+  pal: OverlayPalette,
 ): Zone[] {
   const out: Zone[] = [];
   if (candles.length < 4) return out;
