@@ -192,75 +192,75 @@ const MIN_FUTURE_BARS = 5;
 function overlayPalette(dark: boolean) {
   if (dark) {
     return {
-      textStroke06: "rgba(0,0,0,0.55)",
-      textStroke07: "rgba(0,0,0,0.6)",
-      textStroke08: "rgba(0,0,0,0.65)",
-      textStroke09: "rgba(0,0,0,0.72)",
-      textStroke10: "rgba(0,0,0,0.74)",
-      textStroke11: "rgba(0,0,0,0.78)",
-      pdhStroke: "rgba(34,211,238,0.78)", pdhLabel: "rgba(125,235,255,0.96)",
-      pdlStroke: "rgba(244,63,94,0.78)", pdlLabel: "rgba(252,165,165,0.98)",
-      pdqStroke: "rgba(96,165,250,0.72)", pdqLabel: "rgba(186,212,255,0.96)",
-      structBullLine: "rgba(8,153,129,0.72)", structBullText: "rgba(8,153,129,0.82)",
-      structBearLine: "rgba(242,54,69,0.72)", structBearText: "rgba(242,54,69,0.82)",
-      pivotHigh: "rgba(34,211,238,0.72)", pivotLow: "rgba(45,212,191,0.72)",
-      sfpBull: "rgba(8,153,129,0.82)", sfpBear: "rgba(242,54,69,0.82)",
-      swingHighStroke: "rgba(244,63,94,0.68)", swingHighFill: "rgba(244,63,94,0.95)",
-      swingLowStroke: "rgba(45,212,191,0.68)", swingLowFill: "rgba(45,212,191,0.95)",
-      maLine: "rgba(96,165,250,0.92)", maLabel: "rgba(96,165,250,0.9)",
-      bolFill: "rgba(34,211,238,0.055)", bolBand: "rgba(34,211,238,0.42)", bolMid: "rgba(96,165,250,0.35)",
-      vwapLine: "rgba(250,204,21,0.88)", vwapLabel: "rgba(250,204,21,0.9)",
-      pocStroke: "rgba(168,85,247,0.78)", pocLabel: "rgba(216,180,254,0.95)",
-      supplyFill: "rgba(244,63,94,0.06)", supplyStroke: "rgba(244,63,94,0.34)", supplyLabel: "rgba(252,165,165,0.88)",
-      demandFill: "rgba(45,212,191,0.06)", demandStroke: "rgba(45,212,191,0.34)", demandLabel: "rgba(167,243,208,0.88)",
-      eqStroke: "rgba(148,163,184,0.55)", eqLabel: "rgba(148,163,184,0.88)",
-      obUpSource: "rgba(45,212,191,0.20)", obUpExt: "rgba(45,212,191,0.08)", obUpStroke: "rgba(45,212,191,0.65)",
-      obDownSource: "rgba(239,68,68,0.20)", obDownExt: "rgba(239,68,68,0.08)", obDownStroke: "rgba(239,68,68,0.65)",
-      obLabelUp: "rgba(167,243,208,0.65)", obLabelDown: "rgba(252,165,165,0.65)",
-      obVolLabelUp: "rgba(167,243,208,0.75)", obVolLabelDown: "rgba(252,165,165,0.75)",
-      sellerBar: "rgba(244,63,94,0.55)", buyerBar: "rgba(45,212,191,0.55)",
-      fvgUpStroke: "rgba(96,165,250,0.95)", fvgUpFill: "rgba(96,165,250,0.22)",
-      fvgDownStroke: "rgba(217,119,6,0.95)", fvgDownFill: "rgba(217,119,6,0.22)",
-      fvgLabelUp: "rgba(96,165,250,0.75)", fvgLabelDown: "rgba(217,119,6,0.75)",
-      ifvgBullOrig: "rgba(8,153,129,0.22)", ifvgBearOrig: "rgba(242,54,69,0.22)",
-      ifvgBullStroke: "rgba(8,153,129,0.95)", ifvgBearStroke: "rgba(242,54,69,0.95)",
-      ifvgMidline: "rgba(120,123,134,0.65)",
+      textStroke06: "rgba(0,0,0,0.60)",
+      textStroke07: "rgba(0,0,0,0.65)",
+      textStroke08: "rgba(0,0,0,0.70)",
+      textStroke09: "rgba(0,0,0,0.76)",
+      textStroke10: "rgba(0,0,0,0.78)",
+      textStroke11: "rgba(0,0,0,0.82)",
+      pdhStroke: "rgba(34,211,238,0.92)", pdhLabel: "rgba(125,235,255,0.98)",
+      pdlStroke: "rgba(244,63,94,0.92)", pdlLabel: "rgba(252,165,165,0.98)",
+      pdqStroke: "rgba(96,165,250,0.88)", pdqLabel: "rgba(186,212,255,0.98)",
+      structBullLine: "rgba(8,153,129,0.90)", structBullText: "rgba(8,153,129,0.95)",
+      structBearLine: "rgba(242,54,69,0.90)", structBearText: "rgba(242,54,69,0.95)",
+      pivotHigh: "rgba(34,211,238,0.88)", pivotLow: "rgba(45,212,191,0.88)",
+      sfpBull: "rgba(8,153,129,0.95)", sfpBear: "rgba(242,54,69,0.95)",
+      swingHighStroke: "rgba(244,63,94,0.85)", swingHighFill: "rgba(244,63,94,0.98)",
+      swingLowStroke: "rgba(45,212,191,0.85)", swingLowFill: "rgba(45,212,191,0.98)",
+      maLine: "rgba(96,165,250,0.95)", maLabel: "rgba(96,165,250,0.95)",
+      bolFill: "rgba(34,211,238,0.10)", bolBand: "rgba(34,211,238,0.65)", bolMid: "rgba(96,165,250,0.55)",
+      vwapLine: "rgba(250,204,21,0.95)", vwapLabel: "rgba(250,204,21,0.95)",
+      pocStroke: "rgba(168,85,247,0.92)", pocLabel: "rgba(216,180,254,0.98)",
+      supplyFill: "rgba(244,63,94,0.12)", supplyStroke: "rgba(244,63,94,0.50)", supplyLabel: "rgba(252,165,165,0.95)",
+      demandFill: "rgba(45,212,191,0.12)", demandStroke: "rgba(45,212,191,0.50)", demandLabel: "rgba(167,243,208,0.95)",
+      eqStroke: "rgba(148,163,184,0.70)", eqLabel: "rgba(148,163,184,0.95)",
+      obUpSource: "rgba(45,212,191,0.32)", obUpExt: "rgba(45,212,191,0.16)", obUpStroke: "rgba(45,212,191,0.82)",
+      obDownSource: "rgba(239,68,68,0.32)", obDownExt: "rgba(239,68,68,0.16)", obDownStroke: "rgba(239,68,68,0.82)",
+      obLabelUp: "rgba(167,243,208,0.82)", obLabelDown: "rgba(252,165,165,0.82)",
+      obVolLabelUp: "rgba(167,243,208,0.90)", obVolLabelDown: "rgba(252,165,165,0.90)",
+      sellerBar: "rgba(244,63,94,0.72)", buyerBar: "rgba(45,212,191,0.72)",
+      fvgUpStroke: "rgba(96,165,250,0.98)", fvgUpFill: "rgba(96,165,250,0.38)",
+      fvgDownStroke: "rgba(217,119,6,0.98)", fvgDownFill: "rgba(217,119,6,0.38)",
+      fvgLabelUp: "rgba(96,165,250,0.90)", fvgLabelDown: "rgba(217,119,6,0.90)",
+      ifvgBullOrig: "rgba(8,153,129,0.38)", ifvgBearOrig: "rgba(242,54,69,0.38)",
+      ifvgBullStroke: "rgba(8,153,129,0.98)", ifvgBearStroke: "rgba(242,54,69,0.98)",
+      ifvgMidline: "rgba(120,123,134,0.78)",
     };
   }
   return {
-    textStroke06: "rgba(215,214,208,0.65)",
-    textStroke07: "rgba(215,214,208,0.70)",
-    textStroke08: "rgba(215,214,208,0.75)",
-    textStroke09: "rgba(215,214,208,0.80)",
-    textStroke10: "rgba(215,214,208,0.82)",
-    textStroke11: "rgba(215,214,208,0.85)",
-    pdhStroke: "rgba(0,100,120,0.85)", pdhLabel: "rgba(0,80,100,0.95)",
-    pdlStroke: "rgba(150,18,35,0.85)", pdlLabel: "rgba(120,10,25,0.95)",
-    pdqStroke: "rgba(30,70,150,0.85)", pdqLabel: "rgba(20,50,120,0.95)",
-    structBullLine: "rgba(0,90,70,0.85)", structBullText: "rgba(0,80,60,0.95)",
-    structBearLine: "rgba(150,18,25,0.85)", structBearText: "rgba(130,10,20,0.95)",
-    pivotHigh: "rgba(0,90,110,0.85)", pivotLow: "rgba(0,100,85,0.85)",
-    sfpBull: "rgba(0,80,60,0.95)", sfpBear: "rgba(130,10,20,0.95)",
-    swingHighStroke: "rgba(150,18,35,0.75)", swingHighFill: "rgba(130,10,25,0.95)",
-    swingLowStroke: "rgba(0,100,85,0.75)", swingLowFill: "rgba(0,90,70,0.95)",
-    maLine: "rgba(30,70,150,0.95)", maLabel: "rgba(20,50,120,0.95)",
-    bolFill: "rgba(0,100,120,0.06)", bolBand: "rgba(0,90,110,0.55)", bolMid: "rgba(30,70,150,0.45)",
-    vwapLine: "rgba(160,110,0,0.95)", vwapLabel: "rgba(140,95,0,0.95)",
-    pocStroke: "rgba(90,30,160,0.85)", pocLabel: "rgba(70,20,130,0.95)",
-    supplyFill: "rgba(150,18,35,0.08)", supplyStroke: "rgba(150,18,35,0.40)", supplyLabel: "rgba(130,10,25,0.90)",
-    demandFill: "rgba(0,100,85,0.08)", demandStroke: "rgba(0,100,85,0.40)", demandLabel: "rgba(0,80,65,0.90)",
-    eqStroke: "rgba(50,55,65,0.55)", eqLabel: "rgba(40,45,55,0.88)",
-    obUpSource: "rgba(0,100,85,0.25)", obUpExt: "rgba(0,100,85,0.10)", obUpStroke: "rgba(0,90,70,0.70)",
-    obDownSource: "rgba(150,18,18,0.25)", obDownExt: "rgba(150,18,18,0.10)", obDownStroke: "rgba(140,10,10,0.70)",
-    obLabelUp: "rgba(0,80,65,0.80)", obLabelDown: "rgba(130,10,25,0.80)",
-    obVolLabelUp: "rgba(0,80,65,0.85)", obVolLabelDown: "rgba(130,10,25,0.85)",
-    sellerBar: "rgba(150,18,35,0.60)", buyerBar: "rgba(0,100,85,0.60)",
-    fvgUpStroke: "rgba(30,70,150,0.95)", fvgUpFill: "rgba(30,70,150,0.22)",
-    fvgDownStroke: "rgba(160,90,0,0.95)", fvgDownFill: "rgba(160,90,0,0.22)",
-    fvgLabelUp: "rgba(30,70,150,0.75)", fvgLabelDown: "rgba(160,90,0,0.75)",
-    ifvgBullOrig: "rgba(0,90,70,0.22)", ifvgBearOrig: "rgba(150,18,25,0.22)",
-    ifvgBullStroke: "rgba(0,90,70,0.95)", ifvgBearStroke: "rgba(150,18,25,0.95)",
-    ifvgMidline: "rgba(50,55,65,0.65)",
+    textStroke06: "rgba(215,214,208,0.70)",
+    textStroke07: "rgba(215,214,208,0.75)",
+    textStroke08: "rgba(215,214,208,0.80)",
+    textStroke09: "rgba(215,214,208,0.85)",
+    textStroke10: "rgba(215,214,208,0.88)",
+    textStroke11: "rgba(215,214,208,0.90)",
+    pdhStroke: "rgba(0,100,120,0.95)", pdhLabel: "rgba(0,80,100,0.98)",
+    pdlStroke: "rgba(150,18,35,0.95)", pdlLabel: "rgba(120,10,25,0.98)",
+    pdqStroke: "rgba(30,70,150,0.95)", pdqLabel: "rgba(20,50,120,0.98)",
+    structBullLine: "rgba(0,90,70,0.95)", structBullText: "rgba(0,80,60,0.98)",
+    structBearLine: "rgba(150,18,25,0.95)", structBearText: "rgba(130,10,20,0.98)",
+    pivotHigh: "rgba(0,90,110,0.95)", pivotLow: "rgba(0,100,85,0.95)",
+    sfpBull: "rgba(0,80,60,0.98)", sfpBear: "rgba(130,10,20,0.98)",
+    swingHighStroke: "rgba(150,18,35,0.88)", swingHighFill: "rgba(130,10,25,0.98)",
+    swingLowStroke: "rgba(0,100,85,0.88)", swingLowFill: "rgba(0,90,70,0.98)",
+    maLine: "rgba(30,70,150,0.98)", maLabel: "rgba(20,50,120,0.98)",
+    bolFill: "rgba(0,100,120,0.10)", bolBand: "rgba(0,90,110,0.72)", bolMid: "rgba(30,70,150,0.60)",
+    vwapLine: "rgba(160,110,0,0.98)", vwapLabel: "rgba(140,95,0,0.98)",
+    pocStroke: "rgba(90,30,160,0.95)", pocLabel: "rgba(70,20,130,0.98)",
+    supplyFill: "rgba(150,18,35,0.14)", supplyStroke: "rgba(150,18,35,0.55)", supplyLabel: "rgba(130,10,25,0.95)",
+    demandFill: "rgba(0,100,85,0.14)", demandStroke: "rgba(0,100,85,0.55)", demandLabel: "rgba(0,80,65,0.95)",
+    eqStroke: "rgba(50,55,65,0.72)", eqLabel: "rgba(40,45,55,0.95)",
+    obUpSource: "rgba(0,100,85,0.35)", obUpExt: "rgba(0,100,85,0.18)", obUpStroke: "rgba(0,90,70,0.85)",
+    obDownSource: "rgba(150,18,18,0.35)", obDownExt: "rgba(150,18,18,0.18)", obDownStroke: "rgba(140,10,10,0.85)",
+    obLabelUp: "rgba(0,80,65,0.90)", obLabelDown: "rgba(130,10,25,0.90)",
+    obVolLabelUp: "rgba(0,80,65,0.95)", obVolLabelDown: "rgba(130,10,25,0.95)",
+    sellerBar: "rgba(150,18,35,0.75)", buyerBar: "rgba(0,100,85,0.75)",
+    fvgUpStroke: "rgba(30,70,150,0.98)", fvgUpFill: "rgba(30,70,150,0.38)",
+    fvgDownStroke: "rgba(160,90,0,0.98)", fvgDownFill: "rgba(160,90,0,0.38)",
+    fvgLabelUp: "rgba(30,70,150,0.90)", fvgLabelDown: "rgba(160,90,0,0.90)",
+    ifvgBullOrig: "rgba(0,90,70,0.38)", ifvgBearOrig: "rgba(150,18,25,0.38)",
+    ifvgBullStroke: "rgba(0,90,70,0.98)", ifvgBearStroke: "rgba(150,18,25,0.98)",
+    ifvgMidline: "rgba(50,55,65,0.78)",
   };
 }
 
@@ -1031,7 +1031,7 @@ function ObInnerVolumeLabel({ zone, obRightX, pal }: { zone: Zone; obRightX: num
  *   the inversion candle, dashed midline, ▲/▼ trigger marker.
  */
 function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"; pal: OverlayPalette }) {
-  const labelText = variant === "ifvg" ? "iFVG" : variant === "fvg" ? "FVG" : "OB";
+
   const fadeFactor = zone.mitigated ? 0.45 : 1;
   const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
   const detectionEndX = zone.x + detectionWidth;
@@ -1128,22 +1128,7 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
           strokeDasharray="2 3"
           opacity={0.85}
         />
-        {/* Small "OB" label at top-left of the zone, same colour as the
-            OB direction fill so it blends in calmly. */}
-        <text
-          x={zone.x + 4}
-          y={zone.y + 10}
-          textAnchor="start"
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="8"
-          fontWeight="600"
-          fill={zone.direction === "up" ? pal.obLabelUp : pal.obLabelDown}
-          stroke={pal.textStroke06}
-          strokeWidth="2"
-          paintOrder="stroke"
-        >
-          OB
-        </text>
+
         <ObInnerVolumeLabel zone={zone} obRightX={obRightX} pal={pal} />
       </g>
     );
@@ -1202,47 +1187,8 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
           strokeWidth={0.7}
           strokeDasharray="3 4"
         />
-        {/* Tiny trigger marker at the inversion candle so the trader
-            sees the flip moment clearly. ▲ for bullish flip (originalDir
-            = down, now support), ▼ for bearish flip. Colour matches the
-            inverted fill for a calm, integrated look. */}
-        <text
-          x={inversionX}
-          y={originalIsBull ? zone.y - 4 : zone.y + zone.height + 10}
-          textAnchor="middle"
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight="700"
-          fill={zone.fill.replace(/[\d.]+\)$/, "0.75)")}
-          stroke={pal.textStroke11}
-          strokeWidth="2.4"
-          paintOrder="stroke"
-        >
-          {originalIsBull ? "▼" : "▲"}
-        </text>
-        {/* Label is centred inside the LATEST (right / inverted) half
-            so when the FVG flips, the marker tracks the active state
-            the trader cares about right now. Falls back to the whole
-            zone centre when the right half is too thin to fit. Colour
-            matches the inverted fill so text sits calmly. */}
-        <text
-          x={
-            rightWidth > 18
-              ? inversionX + rightWidth / 2
-              : zone.x + Math.max(leftWidth + rightWidth, 2) / 2
-          }
-          y={zone.y + zone.height / 2 + 3}
-          textAnchor="middle"
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight="700"
-          fill={zone.fill.replace(/[\d.]+\)$/, "0.75)")}
-          stroke={pal.textStroke11}
-          strokeWidth="2.4"
-          paintOrder="stroke"
-        >
-          {labelText}
-        </text>
+
+
       </g>
     );
   }
@@ -1252,10 +1198,7 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
   // FVG is light blue, bearish is amber — visually distinct from iFVG
   // (teal/red) and OB (teal/red). Label colour matches the zone fill
   // so text sits calmly inside the box.
-  const fvgLabelColor =
-    zone.direction === "up"
-      ? pal.fvgLabelUp
-      : pal.fvgLabelDown;
+
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -1268,20 +1211,7 @@ function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "
         strokeWidth={1}
         rx={2}
       />
-      <text
-        x={zone.x + Math.max(2, detectionWidth) / 2}
-        y={zone.y + zone.height / 2 + 3}
-        textAnchor="middle"
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-        fontSize="9"
-        fontWeight="700"
-        fill={fvgLabelColor}
-        stroke={pal.textStroke11}
-        strokeWidth="2.4"
-        paintOrder="stroke"
-      >
-        {labelText}
-      </text>
+
     </g>
   );
 }
