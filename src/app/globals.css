@@ -833,9 +833,30 @@ select {
 .axe-stagger-enter > *:nth-child(9)  { animation-delay: 0.27s; }
 .axe-stagger-enter > *:nth-child(10) { animation-delay: 0.30s; }
 
+/* ── Tab-swipe slide animations ─────────────────────────────────
+   Applied by SwipePageWrapper when arriving via horizontal swipe.
+   "from-left"  = previous tab (user swiped right)
+   "from-right" = next tab (user swiped left) */
+@keyframes tos-slide-from-left {
+  from { opacity: 0.4; transform: translateX(-18%); }
+  to   { opacity: 1;   transform: translateX(0); }
+}
+@keyframes tos-slide-from-right {
+  from { opacity: 0.4; transform: translateX(18%); }
+  to   { opacity: 1;   transform: translateX(0); }
+}
+.tos-slide-from-left {
+  animation: tos-slide-from-left 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.tos-slide-from-right {
+  animation: tos-slide-from-right 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .axe-page-enter,
-  .axe-stagger-enter > * {
+  .axe-stagger-enter > *,
+  .tos-slide-from-left,
+  .tos-slide-from-right {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

@@ -2695,8 +2695,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               {/* Live price */}
               <span className="font-mono text-[11px] font-medium text-white/70">{lastPriceText}</span>
             </div>
-            {/* Session state */}
-            <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.14em] text-tos-dim">
+            {/* Session state — subtle on Paper, normal dim on Midnight */}
+            <span
+              className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.14em]"
+              style={{ color: chartTheme.isDark ? "rgba(74,74,84,0.90)" : "rgba(215,214,208,0.50)" }}
+            >
               {sessionCopy()}
             </span>
           </div>
