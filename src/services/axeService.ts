@@ -1221,7 +1221,7 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
 export async function callAxe(
   messages: OpenAI.Chat.ChatCompletionMessageParam[]
 ): Promise<AxeResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
   if (!apiKey) {
     console.error("[axeService] OPENAI_API_KEY not set");
     return { content: null, toolCalls: [] };
@@ -1270,7 +1270,7 @@ export async function callAxe(
 export async function callAxeAfterTool(
   messages: OpenAI.Chat.ChatCompletionMessageParam[]
 ): Promise<AxeResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
   if (!apiKey) return { content: null, toolCalls: [] };
 
   const client = new OpenAI({ apiKey });
@@ -1316,7 +1316,7 @@ export async function callAxeAfterTool(
 export async function callAxeFinal(
   messages: OpenAI.Chat.ChatCompletionMessageParam[]
 ): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
   if (!apiKey) return null;
 
   const client = new OpenAI({ apiKey });
@@ -1348,7 +1348,7 @@ export async function callAxeStreaming(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   onToken: (text: string) => void,
 ): Promise<AxeResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
   if (!apiKey) {
     console.error("[axeService] OPENAI_API_KEY not set");
     return { content: null, toolCalls: [] };
@@ -1419,7 +1419,7 @@ export async function callAxeFinalStreaming(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   onToken: (text: string) => void,
 ): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
   if (!apiKey) return null;
 
   const client = new OpenAI({ apiKey });

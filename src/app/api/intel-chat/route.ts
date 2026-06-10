@@ -157,7 +157,7 @@ function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>)
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       { ok: false, error: "OPENAI_API_KEY not configured." },

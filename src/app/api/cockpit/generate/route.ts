@@ -67,7 +67,7 @@ export async function POST() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "OpenAI not configured" }, { status: 500 });
   }

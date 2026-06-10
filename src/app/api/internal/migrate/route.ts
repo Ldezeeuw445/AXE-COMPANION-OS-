@@ -1,6 +1,6 @@
 /**
  * ONE-TIME migration runner — DELETE after use.
- * Call: POST /api/internal/migrate  with header x-migration-secret: axe-migrate-2026
+ * Call: POST /api/internal/migrate  with header x-migration-secret: <MIGRATION_SECRET env var>
  *
  * Uses the Supabase REST API via supabase-js admin client to check table existence.
  * The actual DDL must be run directly in Supabase SQL editor.
@@ -10,7 +10,8 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get("x-migration-secret");
-  if (secret !== "axe-migrate-2026") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const expected = process.env.MIGRATION_SECRET;
+  if (!expected || secret !== expected) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
