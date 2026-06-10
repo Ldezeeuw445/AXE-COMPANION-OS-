@@ -3,14 +3,14 @@
 /**
  * SkeuNavBar — floating pill navbar at the bottom of the screen.
  *
- * Position is set via JS after reading the computed safe-area-inset-bottom,
- * so there's never a position jump on first load.
+ * Position uses CSS env(safe-area-inset-bottom) with a delayed fade-in
+ * animation so the async env() resolution on iOS never causes a visible jump.
  *
  * Glass bubble: when the user swipes content left/right, a translucent
  * cyan bubble slides across the navbar tabs (like Slack).
  */
 
-import { useRef, useState, useEffect } from "react";
+import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -44,38 +44,6 @@ export function BottomNav() {
 
   const { progress, currentTabIdx } = useSwipeNav();
 
-  /* ── Stable position via JS ─────────────────────────────────
-     Read the computed safe-area-inset-bottom once on mount
-     (after iOS has resolved it) and lock it. No more async
-     CSS env() jumps. */
-  const [bottomPx, setBottomPx] = useState<number | null>(null);
-
-  useEffect(() => {
-    function readSafeArea() {
-      const el = document.documentElement;
-      const raw = getComputedStyle(el).getPropertyValue("--sab")?.trim();
-      if (raw) {
-        const px = parseFloat(raw);
-        if (!Number.isNaN(px)) { setBottomPx(px + 4); return; }
-      }
-      // Fallback: read env() via a probe element
-      const probe = document.createElement("div");
-      probe.style.cssText = "position:fixed;bottom:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none;height:0;";
-      document.body.appendChild(probe);
-      // Give iOS a frame to compute
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const rect = probe.getBoundingClientRect();
-          const viewH = window.innerHeight;
-          const safeBottom = viewH - rect.bottom;
-          setBottomPx(Math.max(0, safeBottom) + 4);
-          probe.remove();
-        });
-      });
-    }
-    readSafeArea();
-  }, []);
-
   // Conditional 6th tab
   const sixthTab = isAxeView
     ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
@@ -87,15 +55,11 @@ export function BottomNav() {
   const isSwiping = Math.abs(progress) > 0.05;
   const fractionalIdx = currentTabIdx + progress;
 
-  // Don't render until JS has measured the safe area
-  if (bottomPx === null) return null;
-
   return (
     <nav
       ref={navRef}
       className="tos-nav-pill pointer-events-auto"
       style={{
-        bottom: bottomPx,
         background: "linear-gradient(180deg, #131318 0%, #0a0a0e 100%)",
         borderRadius: "9999px",
         boxShadow:

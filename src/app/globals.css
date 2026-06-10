@@ -277,8 +277,9 @@ body {
   position: fixed;
   left: 0;
   right: 0;
-  /* `bottom` is set by JS after reading computed safe-area-inset-bottom,
-     so the navbar never jumps. Before JS runs, the component returns null. */
+  /* Position via CSS env() — hidden during splash screen load so the
+     async env() resolution on iOS never causes a visible position jump. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
   z-index: 50;
   width: calc(100% - 24px);
   max-width: 420px;
@@ -286,8 +287,9 @@ body {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0);
-  /* Gentle fade-in after JS positions the navbar */
-  animation: tos-nav-appear 0.3s ease-out both;
+  /* Hide during initial 500ms (splash screen covers this), then fade in.
+     By the time the animation starts, env() has fully resolved on iOS. */
+  animation: tos-nav-appear 0.3s ease-out 0.5s both;
 }
 @keyframes tos-nav-appear {
   from { opacity: 0; transform: translateZ(0) translateY(6px); }

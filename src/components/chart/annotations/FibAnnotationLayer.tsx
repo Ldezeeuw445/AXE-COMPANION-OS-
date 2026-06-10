@@ -69,19 +69,14 @@ type FibGeom = {
   extend: boolean;
   extendLeft: boolean;
   style: "levels" | "premium_discount";
-  /* ── Corner geometry ─────────────────────────────────────────
-     Diagonal ALWAYS ascends: bottom-left → top-right.
-     Left corner = lower price (higher screen Y = bottom).
-     Right corner = higher price (lower screen Y = top).
-     Handles sit at the endpoints for dragging. */
-  /** Y at left edge — bottom (lower price, higher screen Y). */
-  leftCornerY: number;
-  /** Y at right edge — top (higher price, lower screen Y). */
-  rightCornerY: number;
-  /** Which point index (0 or 1) is at the left corner — for drag. */
-  leftHandleIdx: 0 | 1;
-  /** Which point index (0 or 1) is at the right corner — for drag. */
-  rightHandleIdx: 0 | 1;
+  /* ── Diagonal geometry ────────────────────────────────────────
+     Follows the actual A→B draw direction (like TradingView).
+     Point A = annotation.points[0], Point B = annotation.points[1].
+     Handles sit at each endpoint for dragging. */
+  diagAX: number;
+  diagAY: number;
+  diagBX: number;
+  diagBY: number;
 };
 
 /* ── Colour helpers ─────────────────────────────────────────────── */
@@ -221,15 +216,12 @@ export function FibAnnotationLayer({
           rightX = Math.max(endX, projectionEdge);
         }
 
-        // Corner geometry: diagonal ALWAYS ascends (bottom-left →
-        // top-right) regardless of draw direction. In screen coords
-        // higher Y = lower on screen, so left corner gets the MAX Y
-        // (bottom) and right corner gets the MIN Y (top).
-        const leftCornerY  = Math.max(yA, yB); // bottom (lower price)
-        const rightCornerY = Math.min(yA, yB); // top    (higher price)
-        // Handle index: which original point (0=A, 1=B) is at each corner
-        const leftHandleIdx: 0 | 1  = yA >= yB ? 0 : 1;
-        const rightHandleIdx: 0 | 1 = yA >= yB ? 1 : 0;
+        // Diagonal geometry: follows A→B draw direction (like TradingView).
+        // Point A = first drawn point, Point B = second drawn point.
+        const diagAX = xA;
+        const diagAY = yA;
+        const diagBX = xB;
+        const diagBY = yB;
 
         next.push({
           id: ann.id,
@@ -245,10 +237,10 @@ export function FibAnnotationLayer({
           extend,
           extendLeft,
           style,
-          leftCornerY,
-          rightCornerY,
-          leftHandleIdx,
-          rightHandleIdx,
+          diagAX,
+          diagAY,
+          diagBX,
+          diagBY,
         });
       }
       setGeoms(next);
@@ -431,12 +423,11 @@ export function FibAnnotationLayer({
                 </g>
               ) : null}
 
-              {/* ── Diagonal trendline (always ascending) ────────
-                  Bottom-left corner → top-right corner of the fib box.
-                  Matches the TradingView AMZN reference exactly. */}
+              {/* ── Diagonal trendline (A→B draw direction) ────────
+                  Follows the actual draw direction like TradingView. */}
               <line
-                x1={g.startX} y1={g.leftCornerY}
-                x2={g.endX}   y2={g.rightCornerY}
+                x1={g.diagAX} y1={g.diagAY}
+                x2={g.diagBX} y2={g.diagBY}
                 stroke={diagonalColor(isDark)}
                 strokeWidth={1.3}
                 pointerEvents="none"
@@ -497,30 +488,29 @@ export function FibAnnotationLayer({
               })}
 
               {/* ── Always-visible drag handles ────────────────────
-                  Left and right corners of the fib box, matching the
-                  diagonal endpoints. Dragging a corner moves the
-                  corresponding annotation point. Semi-transparent
-                  when inactive, bright when active. Large invisible
-                  touch target (r=18) behind visible dot for mobile. */}
+                  At diagonal endpoints (A and B). Dragging a handle
+                  moves the corresponding annotation point (0 or 1).
+                  Large invisible touch target (r=18) behind visible
+                  dot for mobile. */}
               <g style={{ pointerEvents: "auto" }}>
-                {/* Left corner handle */}
-                <circle cx={g.startX} cy={g.leftCornerY} r={18}
+                {/* Point A handle (index 0) */}
+                <circle cx={g.diagAX} cy={g.diagAY} r={18}
                   fill="transparent" pointerEvents="all"
-                  onPointerDown={(e) => startDrag(e, g.id, g.leftHandleIdx)}
+                  onPointerDown={(e) => startDrag(e, g.id, 0)}
                   style={{ cursor: "grab", touchAction: "none" }} />
-                <circle cx={g.startX} cy={g.leftCornerY}
+                <circle cx={g.diagAX} cy={g.diagAY}
                   r={isActive ? 8 : 5}
                   fill={isActive ? handleFill : handleFillInactive}
                   stroke={isActive ? handleStroke : handleStrokeInactive}
                   strokeWidth={isActive ? 1.5 : 1}
                   pointerEvents="none" />
 
-                {/* Right corner handle */}
-                <circle cx={g.endX} cy={g.rightCornerY} r={18}
+                {/* Point B handle (index 1) */}
+                <circle cx={g.diagBX} cy={g.diagBY} r={18}
                   fill="transparent" pointerEvents="all"
-                  onPointerDown={(e) => startDrag(e, g.id, g.rightHandleIdx)}
+                  onPointerDown={(e) => startDrag(e, g.id, 1)}
                   style={{ cursor: "grab", touchAction: "none" }} />
-                <circle cx={g.endX} cy={g.rightCornerY}
+                <circle cx={g.diagBX} cy={g.diagBY}
                   r={isActive ? 8 : 5}
                   fill={isActive ? handleFill : handleFillInactive}
                   stroke={isActive ? handleStroke : handleStrokeInactive}
