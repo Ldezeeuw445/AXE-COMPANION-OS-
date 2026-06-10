@@ -84,11 +84,6 @@ export function SwipeContentWrapper({ children }: { children: ReactNode }) {
     // Check boundaries — don't show progress if there's no tab in that direction
     const canGoPrev = t.currentIdx > 0;
     const canGoNext = t.currentIdx < TAB_ORDER.length - 1;
-    // Skip chart tab in navigation
-    const prevIdx = t.currentIdx - 1;
-    const nextIdx = t.currentIdx + 1;
-    const prevPath = prevIdx >= 0 ? TAB_ORDER[prevIdx] : null;
-    const nextPath = nextIdx < TAB_ORDER.length ? TAB_ORDER[nextIdx] : null;
 
     if (progress < 0 && !canGoPrev) {
       setProgress(0);
