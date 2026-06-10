@@ -277,24 +277,20 @@ body {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
+  /* `bottom` is set by JS after reading computed safe-area-inset-bottom,
+     so the navbar never jumps. Before JS runs, the component returns null. */
   z-index: 50;
   width: calc(100% - 24px);
   max-width: 420px;
   margin-inline: auto;
-  /* GPU-composited layer for smooth 60fps scroll, but NOT will-change:transform
-     which on iOS can cause the element to be positioned one frame early
-     before the layout viewport has stabilised. */
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  transform: translateZ(0); /* force compositing without affecting 2D position */
-  /* Fade-in on first load hides any safe-area-inset-bottom async resolve jump.
-     `bottom` also transitions in case safe-area changes after initial paint. */
-  animation: tos-nav-appear 0.4s ease-out 0.35s both;
-  transition: bottom 0.25s ease-out;
+  transform: translateZ(0);
+  /* Gentle fade-in after JS positions the navbar */
+  animation: tos-nav-appear 0.3s ease-out both;
 }
 @keyframes tos-nav-appear {
-  from { opacity: 0; transform: translateZ(0) translateY(16px); }
+  from { opacity: 0; transform: translateZ(0) translateY(6px); }
   to   { opacity: 1; transform: translateZ(0) translateY(0); }
 }
 
@@ -304,7 +300,6 @@ body {
 @media (orientation: landscape) {
   .tos-nav-pill {
     max-width: 560px;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 2px);
   }
   /* Content padding in landscape only needs a small bottom offset */
   .tos-app-content {
