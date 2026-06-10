@@ -374,6 +374,10 @@ function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice:
  * above), dragging it down shrinks it. Pointer capture keeps the drag glued
  * to the finger even when it leaves the handle area.
  */
+/* ── Indicator pane ordering ──────────────────────────────────── */
+type PaneMode = "volume" | "rsi" | "macd";
+const PANE_MODE_DEFAULT: PaneMode[] = ["volume", "rsi", "macd"];
+
 function ResizablePane({
   height,
   onResize,
@@ -1150,6 +1154,35 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     } catch {
       /* ignore — best-effort persistence */
     }
+  }, []);
+
+  // Indicator pane display order — persisted to localStorage.
+  const [paneOrder, setPaneOrder] = useState<PaneMode[]>(PANE_MODE_DEFAULT);
+
+  // Hydrate pane order from localStorage once on mount.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("axe.chart.paneOrder");
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length === 3) {
+          setPaneOrder(parsed as PaneMode[]);
+        }
+      }
+    } catch { /* noop */ }
+  }, []);
+
+  const movePaneInOrder = useCallback((mode: PaneMode, dir: -1 | 1) => {
+    setPaneOrder((prev) => {
+      const idx = prev.indexOf(mode);
+      if (idx < 0) return prev;
+      const swapIdx = idx + dir;
+      if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx]!, next[swapIdx]!] = [next[swapIdx]!, next[idx]!];
+      try { localStorage.setItem("axe.chart.paneOrder", JSON.stringify(next)); } catch { /* noop */ }
+      return next;
+    });
   }, []);
 
   const hasFibAnnotation = useMemo(
@@ -3208,6 +3241,47 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               </button>
             </div>
           ) : null}
+
+          {/* Pane order — visible when 2+ pane indicators are enabled */}
+          {(() => {
+            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m]);
+            if (enabledPanes.length < 2) return null;
+            const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
+            return (
+              <div className="mt-2 border-t border-white/[0.06] pt-2">
+                <div className="mb-1 text-[8px] font-bold uppercase tracking-widest text-amber-100/60">
+                  Order
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {enabledPanes.map((mode, i) => (
+                    <div key={mode} className="flex items-center gap-1">
+                      <span className="min-w-[2.2rem] text-[9px] font-semibold text-white/75">
+                        {labels[mode] ?? mode.toUpperCase()}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => movePaneInOrder(mode, -1)}
+                        className="flex h-5 w-5 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-white/50 disabled:opacity-20"
+                        aria-label={`Move ${labels[mode]} up`}
+                      >
+                        <ChevronUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === enabledPanes.length - 1}
+                        onClick={() => movePaneInOrder(mode, 1)}
+                        className="flex h-5 w-5 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-white/50 disabled:opacity-20"
+                        aria-label={`Move ${labels[mode]} down`}
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
@@ -3334,39 +3408,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       {/* Indicator panes: each one is its own bounded box, so the chart can
           never bleed into the volume/RSI area and vice versa. They share the
           main chart's time scale via canvasRef.timeToCoordinate(...). */}
-      {indicatorToolFlags.volume ? (
+      {/* Indicator panes rendered in user-configured order */}
+      {paneOrder.filter((m) => indicatorToolFlags[m]).map((mode) => (
         <ResizablePane
-          height={paneHeights.volume}
-          onResize={(next) => setPaneHeight("volume", next)}
+          key={mode}
+          height={paneHeights[mode]}
+          onResize={(next) => setPaneHeight(mode, next)}
           minHeight={70}
-          maxHeight={260}
-          ariaLabel="Resize volume pane"
+          maxHeight={mode === "volume" ? 260 : 280}
+          ariaLabel={`Resize ${mode.toUpperCase()} pane`}
         >
-          <IndicatorPane mode="volume" candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
+          <IndicatorPane mode={mode} candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
         </ResizablePane>
-      ) : null}
-      {indicatorToolFlags.rsi ? (
-        <ResizablePane
-          height={paneHeights.rsi}
-          onResize={(next) => setPaneHeight("rsi", next)}
-          minHeight={70}
-          maxHeight={280}
-          ariaLabel="Resize RSI pane"
-        >
-          <IndicatorPane mode="rsi" candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
-        </ResizablePane>
-      ) : null}
-      {indicatorToolFlags.macd ? (
-        <ResizablePane
-          height={paneHeights.macd}
-          onResize={(next) => setPaneHeight("macd", next)}
-          minHeight={70}
-          maxHeight={280}
-          ariaLabel="Resize MACD pane"
-        >
-          <IndicatorPane mode="macd" candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
-        </ResizablePane>
-      ) : null}
+      ))}
 
       {/* ─── MT5-style execution bar ─── */}
       {oneClickVisible ? (
