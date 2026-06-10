@@ -22,6 +22,7 @@ import {
   LineChart,
   MessageSquare,
   Maximize2,
+  Minimize2,
   MoveHorizontal,
   Newspaper,
   Plus,
@@ -823,6 +824,52 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
   const sessionState = useMemo(() => marketSessionState(data.symbol), [data.symbol]);
   const closedCanonicalPrice = useMemo(() => data.lastPrice ?? data.candles.at(-1)?.close ?? null, [data.candles, data.lastPrice]);
+
+  /* ── Landscape fullscreen mode ───────────────────────────────── */
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const chartFrameRef = useRef<HTMLDivElement | null>(null);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      if (next) {
+        // Try to lock orientation to landscape
+        try {
+          const s = screen as unknown as { orientation?: { lock?: (o: string) => Promise<void> } };
+          s.orientation?.lock?.("landscape-primary")?.catch(() => {});
+        } catch { /* not supported */ }
+      } else {
+        // Unlock orientation
+        try {
+          const s = screen as unknown as { orientation?: { unlock?: () => void } };
+          s.orientation?.unlock?.();
+        } catch { /* not supported */ }
+      }
+      return next;
+    });
+  }, []);
+
+  // Listen for orientation changes → auto-exit fullscreen when rotating back to portrait
+  useEffect(() => {
+    if (!isFullscreen) return;
+    function handleOrientationChange() {
+      const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+      if (!isLandscape) setIsFullscreen(false);
+    }
+    const mql = window.matchMedia("(orientation: landscape)");
+    mql.addEventListener("change", handleOrientationChange);
+    return () => mql.removeEventListener("change", handleOrientationChange);
+  }, [isFullscreen]);
+
+  // Escape key exits fullscreen
+  useEffect(() => {
+    if (!isFullscreen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setIsFullscreen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen]);
 
   useEffect(() => {
     setPendingTfKey(null);
@@ -2474,7 +2521,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   return (
     <div
-      className="tos-ambient-glow fixed inset-x-0 bottom-[var(--tos-nav-offset)] top-[var(--tos-topbar-offset)] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
+      className={`tos-ambient-glow flex min-h-0 flex-col overflow-hidden overscroll-none ${
+        isFullscreen
+          ? "fixed inset-0 z-[9999]"
+          : "fixed inset-x-0 bottom-[var(--tos-nav-offset)] top-[var(--tos-topbar-offset)] z-30 md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
+      }`}
     >
       <LiveStatusReporter
         liveCount={headerSeverity === "fresh" ? 1 : 0}
@@ -2702,6 +2753,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             >
               {sessionCopy()}
             </span>
+            {/* Fullscreen / landscape toggle */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="ml-1.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            >
+              {isFullscreen
+                ? <Minimize2 className="h-3 w-3" />
+                : <Maximize2 className="h-3 w-3" />}
+            </button>
           </div>
         </div>
 
