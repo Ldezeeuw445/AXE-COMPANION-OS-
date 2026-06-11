@@ -280,7 +280,8 @@ body {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* padding-bottom handled inline in BottomNav.tsx to avoid
+     specificity issues with the padding shorthand. */
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0);

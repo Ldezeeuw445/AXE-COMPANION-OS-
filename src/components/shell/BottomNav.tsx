@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * SkeuNavBar — floating pill navbar at the bottom of the screen.
+ * SkeuNavBar — docked bottom tab bar.
  *
- * Position uses CSS env(safe-area-inset-bottom) with a delayed fade-in
- * animation so the async env() resolution on iOS never causes a visible jump.
+ * Pinned to bottom: 0 with safe-area padding inside so icons clear the
+ * home indicator. Top corners rounded (16px), bottom edge flush with screen.
  *
  * Glass bubble: when the user swipes content left/right, a translucent
  * cyan bubble slides across the navbar tabs (like Slack).
@@ -64,7 +64,12 @@ export function BottomNav() {
         borderRadius: "16px 16px 0 0",
         boxShadow:
           "0 -4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 rgba(255,255,255,0.04) inset",
-        padding: "6px 4px",
+        paddingTop: 6,
+        paddingLeft: 4,
+        paddingRight: 4,
+        /* Bottom padding = content spacing + safe-area clearance.
+           Using inline style so the shorthand can't override the env(). */
+        paddingBottom: "calc(6px + env(safe-area-inset-bottom, 0px))",
       }}
       aria-label="Primary"
     >
