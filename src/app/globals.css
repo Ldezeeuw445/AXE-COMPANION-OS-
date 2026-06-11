@@ -277,16 +277,12 @@ body {
    This is the only reliable way to keep the bar at the bottom on iOS PWA
    across cold starts, page transitions, and keyboard events.
    z-index keeps it above content that might overlap (drawers, etc.). */
-/* Bottom navbar — position:fixed at the bottom of the viewport.
-   Pure CSS, no JS hacks. Safe-area padding handled here so the
-   background extends seamlessly to the screen edge. */
-/* Navbar flush with screen bottom — background extends to the edge.
-   padding-bottom pushes icons/labels well above the home indicator. */
+/* The navbar is the final flex row in the h-dvh app shell. This keeps it
+   pinned below the content without overlaying the chat composer. */
 .tos-nav-pill {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
   z-index: 50;
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
 }
@@ -320,12 +316,10 @@ body {
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.06);
 }
 
-/* ── App content ───────────────────────────────────────────────────────
-   Mobile: padding-bottom clears the fixed navbar + safe area so
-   content is never hidden behind the bar.
-   Desktop: no fixed navbar, just breathing room. */
+/* The mobile navbar consumes its own flex row, so app content must not
+   reserve a second navbar-sized gap. */
 .tos-app-content {
-  padding-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.5rem);
+  padding-bottom: 0.5rem;
 }
 /* Pages that fill the viewport (chat, chart) don't need navbar
    clearance padding — they manage their own layout. */

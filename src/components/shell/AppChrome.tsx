@@ -25,15 +25,14 @@ export function AppChrome({ children }: { children: ReactNode }) {
         <SwipeNavProvider>
           <div className="mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden md:flex-row">
             <AppNavigation />
-            <div className="flex min-w-0 flex-1 flex-col md:pl-[4.25rem]">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-[4.25rem]">
               <SwipeContentWrapper>
                 <div className="tos-app-content flex min-h-0 flex-1 flex-col px-4 pt-0 md:px-6 md:pt-[max(0.75rem,env(safe-area-inset-top))]">
                   {children}
                 </div>
               </SwipeContentWrapper>
             </div>
-            {/* Navbar: position:fixed via CSS, lives here for React tree */}
-            <div className="md:hidden">
+            <div className="shrink-0 md:hidden">
               <ClientBottomNav />
             </div>
           </div>
