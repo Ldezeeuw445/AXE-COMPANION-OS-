@@ -321,11 +321,6 @@ body {
 .tos-app-content {
   padding-bottom: 0.5rem;
 }
-/* Pages that fill the viewport (chat, chart) don't need navbar
-   clearance padding — they manage their own layout. */
-.tos-app-content:has(> .tos-flush-nav) {
-  padding-bottom: 0 !important;
-}
 @media (min-width: 768px) {
   .tos-app-content {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));

@@ -6,6 +6,7 @@ import { ClientSplashOverlay } from "@/components/shell/ClientSplashOverlay";
 import { AmbientProvider } from "@/components/ambient/AmbientProvider";
 import { SwipeNavProvider } from "@/components/shell/SwipeNavContext";
 import { SwipeContentWrapper } from "@/components/shell/SwipeContentWrapper";
+import { ContentShell } from "@/components/shell/ContentShell";
 
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
@@ -27,9 +28,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
             <AppNavigation />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-[4.25rem]">
               <SwipeContentWrapper>
-                <div className="tos-app-content flex min-h-0 flex-1 flex-col px-4 pt-0 md:px-6 md:pt-[max(0.75rem,env(safe-area-inset-top))]">
-                  {children}
-                </div>
+                <ContentShell>{children}</ContentShell>
               </SwipeContentWrapper>
             </div>
             <div className="shrink-0 md:hidden">
