@@ -110,9 +110,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
         label="Market"
         allLiveOverride={ctx.hasLiveData ? true : false}
       />
-          </span>
-        }
-      />
 
       <ProviderBadges providers={ctx.providers} />
 

@@ -113,9 +113,6 @@ export default async function SubscriptionsPage() {
         allLiveOverride={upgradeReady ? true : false}
       />
       <AxeTopBarInjector title="Subscriptions" subtitle={isPro ? "You’re on Pro" : "Free → Pro"} sections={toolbarSections} center={<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Subscriptions</span>} />
-          </span>
-        }
-      />
 
       {skipChatQuota() ? (
         <p className="mb-3 rounded-lg border border-tos-gold/25 bg-tos-gold/5 px-3 py-2 text-center text-[11px] text-tos-muted">

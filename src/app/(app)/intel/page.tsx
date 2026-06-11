@@ -89,10 +89,6 @@ export default async function IntelPage({ searchParams }: PageProps) {
         label="Intel"
         allLiveOverride={intel.hasLiveData && !isStale ? true : intel.hasLiveData ? false : null}
       />
-            </span>
-          </div>
-        }
-      />
 
       <ProviderBadges providers={intel.providers} cache={intel.cache} />
 
