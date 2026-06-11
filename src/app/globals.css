@@ -288,7 +288,7 @@ body {
   left: 0;
   right: 0;
   z-index: 50;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
