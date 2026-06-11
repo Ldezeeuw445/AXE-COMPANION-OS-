@@ -95,6 +95,7 @@ import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
 import { writeCachedChart, prefetchTimeframes } from "@/lib/chart/clientChartCache";
+import { setActiveAccountAction } from "@/app/actions/brokerAccounts";
 
 const TICK_REACT_THROTTLE_MS = 150;
 const SNAPSHOT_INTERVAL_MS = 10_000;
@@ -1940,6 +1941,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     [router, accountId, data.symbol, startRouteTransition],
   );
 
+  const goAccount = useCallback(
+    (newAccountId: string) => {
+      if (newAccountId === accountId) return;
+      setRouteFallbackMessage(null);
+      // Persist choice so other pages pick it up
+      void setActiveAccountAction(newAccountId);
+      startRouteTransition(() => {
+        router.push(buildHref(newAccountId, data.symbol, data.timeframeKey));
+      });
+    },
+    [router, accountId, data.symbol, data.timeframeKey, startRouteTransition],
+  );
+
   const lastPriceText = useMemo(
     () => formatBrokerPrice(data.brokerSymbol, livePrice),
     [data.brokerSymbol, livePrice],
@@ -2823,6 +2837,24 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
               </div>
+              {/* Account chip — only when 2+ accounts available */}
+              {data.accountChoices.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={accountId ?? ""}
+                    onChange={(e) => goAccount(e.target.value)}
+                    className="max-w-[6.5rem] appearance-none truncate rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-2 py-0.5 pr-5 text-[10px] font-semibold text-amber-300/80 outline-none transition-colors hover:bg-amber-400/[0.10]"
+                    aria-label="Account"
+                  >
+                    {data.accountChoices.map((a) => (
+                      <option key={a.brokerAccountId} value={a.brokerAccountId}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-amber-400/50" />
+                </div>
+              )}
               {/* Live price */}
               <span className="font-mono text-[11px] font-medium text-white/70">{lastPriceText}</span>
             </div>
@@ -3391,6 +3423,21 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     className="rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 font-semibold text-tos-muted hover:bg-white/[0.08]"
                   >
                     Try H1
+                  </button>
+                ) : null}
+                {/* Quick switch to demo when broker account is failing */}
+                {data.accountChoices.length > 1 &&
+                  data.account?.connectionMethod !== "demo_paper" &&
+                  data.accountChoices.find((a) => a.connectionMethod === "demo_paper") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const demo = data.accountChoices.find((a) => a.connectionMethod === "demo_paper");
+                      if (demo) goAccount(demo.brokerAccountId);
+                    }}
+                    className="rounded-lg border border-cyan-400/25 bg-cyan-400/[0.08] px-3 py-1.5 font-semibold text-cyan-300/90 hover:bg-cyan-400/[0.14]"
+                  >
+                    Use Demo
                   </button>
                 ) : null}
                 <Link
