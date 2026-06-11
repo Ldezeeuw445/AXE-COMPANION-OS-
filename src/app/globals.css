@@ -113,22 +113,8 @@ html {
   color-scheme: dark;
 }
 
-/* On mobile the app shell is position:fixed inset:0, so html/body must
-   not create a scrollable document behind it. overflow:hidden + height:100%
-   prevent iOS rubber-band scroll and any body-level reflow that could
-   shift the fixed container on cold start. Desktop (md:) keeps normal flow. */
-html,
-body {
-  overflow: hidden;
-  height: 100%;
-}
-@media (min-width: 768px) {
-  html,
-  body {
-    overflow: visible;
-    height: auto;
-  }
-}
+/* No overflow lock on html/body — content scrolls naturally.
+   The navbar is position:fixed so it stays at the bottom regardless. */
 
 body {
   /*
@@ -291,19 +277,16 @@ body {
    This is the only reliable way to keep the bar at the bottom on iOS PWA
    across cold starts, page transitions, and keyboard events.
    z-index keeps it above content that might overlap (drawers, etc.). */
-/* Wrapper around the navbar — extends the navbar background through the
-   safe-area zone so there's no gap between the bar and the screen edge.
-   CSS env() is reliable in stylesheets (not always in inline styles). */
-.tos-nav-safe {
-  background: #111115;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-
+/* Bottom navbar — position:fixed at the bottom of the viewport.
+   Pure CSS, no JS hacks. Safe-area padding handled here so the
+   background extends seamlessly to the screen edge. */
 .tos-nav-pill {
-  position: relative;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 50;
-  width: 100%;
-  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
@@ -336,11 +319,11 @@ body {
 }
 
 /* ── App content ───────────────────────────────────────────────────────
-   The navbar is now a flex sibling (not fixed overlay), so content no
-   longer needs padding-bottom for clearance. On desktop, add a small
-   bottom inset for breathing room. */
+   Mobile: padding-bottom clears the fixed navbar + safe area so
+   content is never hidden behind the bar.
+   Desktop: no fixed navbar, just breathing room. */
 .tos-app-content {
-  padding-bottom: 0;
+  padding-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.5rem);
 }
 @media (min-width: 768px) {
   .tos-app-content {

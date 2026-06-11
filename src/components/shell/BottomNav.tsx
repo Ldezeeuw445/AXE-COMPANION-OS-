@@ -3,9 +3,9 @@
 /**
  * SkeuNavBar — docked bottom tab bar.
  *
- * Regular flex child in the h-dvh shell — NOT position:fixed.
- * Safe-area padding inside so icons clear the home indicator.
- * Top corners rounded (16px), bottom edge flush with screen.
+ * position:fixed via CSS (.tos-nav-pill) — always at the bottom.
+ * Safe-area padding-bottom in CSS so background extends to screen edge.
+ * Top corners rounded (16px), bottom edge flush.
  *
  * Glass bubble: when the user swipes content left/right, a translucent
  * cyan bubble slides across the navbar tabs (like Slack).

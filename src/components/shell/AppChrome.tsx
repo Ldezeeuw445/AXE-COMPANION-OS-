@@ -10,33 +10,30 @@ import { SwipeContentWrapper } from "@/components/shell/SwipeContentWrapper";
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
  *
- * Mobile: `fixed inset-0` flex column. This is the most bulletproof way
- * to fill the viewport on iOS PWA — fixed positioning always uses the
- * actual visual viewport as its containing block, with zero dependency
- * on dvh/svh/lvh timing. The navbar is the last flex child and
- * physically cannot move.
+ * The navbar is `position: fixed; bottom: 0` via CSS (.tos-nav-pill).
+ * Content scrolls naturally in the body and clears the navbar via
+ * padding-bottom on .tos-app-content.
  *
- * Desktop: regular flow with min-h-dvh + row layout.
+ * This is the simplest possible architecture — no viewport height
+ * hacks, no overflow:hidden shell, no JS positioning. Content scrolls
+ * normally. Navbar stays put.
  */
 export function AppChrome({ children }: { children: ReactNode }) {
   return (
     <AppTopBarProvider>
       <AmbientProvider>
         <SwipeNavProvider>
-          <div className="fixed inset-0 z-0 mx-auto flex w-full max-w-6xl flex-col overflow-hidden md:relative md:inset-auto md:z-auto md:min-h-dvh md:flex-row md:overflow-visible">
+          <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
             <AppNavigation />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-[4.25rem]">
+            <div className="flex min-w-0 flex-1 flex-col md:pl-[4.25rem]">
               <SwipeContentWrapper>
                 <div className="tos-app-content flex min-h-0 flex-1 flex-col px-4 pt-0 md:px-6 md:pt-[max(0.75rem,env(safe-area-inset-top))]">
                   {children}
                 </div>
               </SwipeContentWrapper>
             </div>
-            {/* Bottom nav: last flex child, always at bottom.
-                tos-nav-safe fills the safe-area gap below the navbar
-                with the same background — handled in CSS to guarantee
-                env() is parsed (inline styles can't always do env()). */}
-            <div className="tos-nav-safe shrink-0 md:hidden">
+            {/* Navbar: position:fixed via CSS, lives here for React tree */}
+            <div className="md:hidden">
               <ClientBottomNav />
             </div>
           </div>
