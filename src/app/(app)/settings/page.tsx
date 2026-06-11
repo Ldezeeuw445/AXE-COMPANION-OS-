@@ -95,7 +95,7 @@ export default async function SettingsPage() {
     (accountName ? 1 : 0) +
     1; // liveTrading flag always loaded
   return (
-    <div className="axe-stagger-enter flex h-0 min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain pb-4 [-webkit-overflow-scrolling:touch]">
+    <div className="axe-stagger-enter flex shrink-0 flex-col pb-4">
       <LiveStatusReporter
         liveCount={liveSections}
         totalCount={6}
