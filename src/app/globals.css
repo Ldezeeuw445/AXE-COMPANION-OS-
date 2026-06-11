@@ -822,6 +822,135 @@ select {
 .axe-stagger-enter > *:nth-child(9)  { animation-delay: 0.27s; }
 .axe-stagger-enter > *:nth-child(10) { animation-delay: 0.30s; }
 
+/* ═══════════════════════════════════════════════════════════
+   HULY / LINEAR LANDING — aurora, grid, device glow, reveal
+   ═══════════════════════════════════════════════════════════ */
+
+/* Animated aurora blobs that drift slowly behind the hero. */
+@keyframes axe-aurora-drift-a {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(6%, 4%, 0) scale(1.12); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes axe-aurora-drift-b {
+  0%   { transform: translate3d(0, 0, 0) scale(1.05); }
+  50%  { transform: translate3d(-7%, 5%, 0) scale(0.95); }
+  100% { transform: translate3d(0, 0, 0) scale(1.05); }
+}
+@keyframes axe-aurora-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.9; }
+}
+
+.axe-aurora-a {
+  animation: axe-aurora-drift-a 22s ease-in-out infinite, axe-aurora-pulse 11s ease-in-out infinite;
+}
+.axe-aurora-b {
+  animation: axe-aurora-drift-b 26s ease-in-out infinite, axe-aurora-pulse 13s ease-in-out infinite;
+}
+
+/* Perspective grid floor that fades upward — Huly-style. */
+.axe-grid-floor {
+  background-image:
+    linear-gradient(to right, rgba(34, 211, 238, 0.10) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 211, 238, 0.10) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 72%);
+}
+
+/* A thin sweeping conic beam — the "glow up" light from the top. */
+@keyframes axe-beam-sweep {
+  0%, 100% { opacity: 0.4; transform: translateX(-3%); }
+  50%      { opacity: 0.75; transform: translateX(3%); }
+}
+.axe-hero-beam {
+  background: conic-gradient(
+    from 180deg at 50% -10%,
+    transparent 0deg,
+    rgba(34, 211, 238, 0.14) 70deg,
+    rgba(45, 212, 191, 0.10) 110deg,
+    transparent 180deg
+  );
+  animation: axe-beam-sweep 9s ease-in-out infinite;
+}
+
+/* Device shot framing — premium glow + edge highlight for real screenshots. */
+.axe-device-shot {
+  position: relative;
+  border-radius: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(160deg, rgba(20, 24, 32, 0.9), rgba(4, 7, 12, 0.9));
+  box-shadow:
+    0 50px 120px -40px rgba(0, 0, 0, 0.9),
+    0 24px 60px -30px rgba(34, 211, 238, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.axe-device-shot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 35%);
+  pointer-events: none;
+}
+
+/* Browser-style window chrome for wide product shots. */
+.axe-window-shot {
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 10, 14, 0.6);
+  box-shadow:
+    0 50px 130px -45px rgba(0, 0, 0, 0.92),
+    0 24px 70px -34px rgba(34, 211, 238, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Scroll reveal — elements fade + rise as they enter the viewport. */
+.axe-reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.axe-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Soft conic ring that rotates behind feature badges / logos. */
+@keyframes axe-ring-spin {
+  to { transform: rotate(360deg); }
+}
+.axe-conic-ring {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(34, 211, 238, 0.5) 60deg,
+    transparent 140deg,
+    transparent 220deg,
+    rgba(45, 212, 191, 0.4) 300deg,
+    transparent 360deg
+  );
+  animation: axe-ring-spin 8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axe-aurora-a,
+  .axe-aurora-b,
+  .axe-hero-beam,
+  .axe-conic-ring {
+    animation: none !important;
+  }
+  .axe-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .axe-page-enter,
   .axe-stagger-enter > * {
