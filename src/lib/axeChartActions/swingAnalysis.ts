@@ -3,7 +3,7 @@ import type {
   ChartActionCommand,
 } from "@/lib/axeChartActions/chartActionTypes";
 
-const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.65, 0.786, 1] as const;
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
 /** URL-key → seconds-per-bar so we can aggregate higher timeframes. */
 const TF_SECONDS: Record<string, number> = {

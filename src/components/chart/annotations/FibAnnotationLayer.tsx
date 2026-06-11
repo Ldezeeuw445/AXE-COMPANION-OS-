@@ -436,7 +436,7 @@ export function FibAnnotationLayer({
                   Matching the reference: solid lines spanning the
                   full fib width, % label LEFT, price label RIGHT. */}
               {visibleLines.map((ln) => {
-                const isFocus = ln.level === 0.5 || ln.level === 0.618 || ln.level === 0.65;
+                const isFocus = ln.level === 0.5 || ln.level === 0.618;
                 const style = fibLevelStyle(ln.level, isDark);
                 return (
                   <g key={ln.level}>
