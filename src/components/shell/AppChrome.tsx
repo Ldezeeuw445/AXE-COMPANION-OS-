@@ -32,8 +32,11 @@ export function AppChrome({ children }: { children: ReactNode }) {
                 </div>
               </SwipeContentWrapper>
             </div>
-            {/* Bottom nav: last flex child, always at bottom */}
-            <div className="shrink-0 md:hidden">
+            {/* Bottom nav: last flex child, always at bottom.
+                tos-nav-safe fills the safe-area gap below the navbar
+                with the same background — handled in CSS to guarantee
+                env() is parsed (inline styles can't always do env()). */}
+            <div className="tos-nav-safe shrink-0 md:hidden">
               <ClientBottomNav />
             </div>
           </div>

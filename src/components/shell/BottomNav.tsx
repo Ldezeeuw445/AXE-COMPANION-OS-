@@ -68,9 +68,7 @@ export function BottomNav() {
         paddingTop: 4,
         paddingLeft: 4,
         paddingRight: 4,
-        /* Safe-area padding via pure CSS — no JS measurement needed since
-           the navbar is now a flex child, not position:fixed. */
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        paddingBottom: 4,
       }}
       aria-label="Primary"
     >
@@ -91,7 +89,7 @@ export function BottomNav() {
             left: `calc(${(fractionalIdx + 0.5) / tabs.length * 100}% - 28px)`,
             top: 2,
             width: 56,
-            height: "calc(100% - 4px - env(safe-area-inset-bottom, 0px))",
+            height: "calc(100% - 8px)",
             borderRadius: 16,
             background: "rgba(0, 212, 245, 0.08)",
             backdropFilter: "blur(12px)",

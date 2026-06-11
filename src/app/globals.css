@@ -291,6 +291,14 @@ body {
    This is the only reliable way to keep the bar at the bottom on iOS PWA
    across cold starts, page transitions, and keyboard events.
    z-index keeps it above content that might overlap (drawers, etc.). */
+/* Wrapper around the navbar — extends the navbar background through the
+   safe-area zone so there's no gap between the bar and the screen edge.
+   CSS env() is reliable in stylesheets (not always in inline styles). */
+.tos-nav-safe {
+  background: #111115;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 .tos-nav-pill {
   position: relative;
   z-index: 50;
