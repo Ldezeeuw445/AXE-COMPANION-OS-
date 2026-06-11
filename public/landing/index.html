@@ -70,16 +70,18 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .frag{position:absolute;pointer-events:none;opacity:.65;transform:translate(-50%,-50%)}
 .frag img{display:block;width:100%;height:auto;filter:drop-shadow(0 4px 16px rgba(0,0,0,.4))}
 /* ── Linear-mirror overlapping cards ── */
-.intro-stage{position:relative;max-width:1100px;margin:0 auto;padding:48px 40px 0;display:flex;align-items:center;min-height:520px}
+.intro-stage{position:relative;max-width:1100px;margin:0 auto;padding:48px 40px 0;display:flex;align-items:center;min-height:600px}
 /* shared card styling */
 .intro-card{overflow:hidden;border-radius:16px;background:#16161a;
   border:1px solid rgba(255,255,255,.06)}
 .intro-card img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
-/* LEFT = background panel (login) — larger */
-.intro-bg{position:relative;width:66%;height:520px;flex-shrink:0;z-index:1;
-  box-shadow:0 2px 4px rgba(0,0,0,.15),0 8px 24px rgba(0,0,0,.2),0 24px 48px rgba(0,0,0,.12)}
+/* LEFT = background panel (login) — larger, fades into bg on left edge */
+.intro-bg{position:relative;width:66%;height:600px;flex-shrink:0;z-index:1;
+  box-shadow:0 2px 4px rgba(0,0,0,.15),0 8px 24px rgba(0,0,0,.2),0 24px 48px rgba(0,0,0,.12);
+  -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,.3) 8%, rgba(0,0,0,.85) 22%, black 38%);
+  mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,.3) 8%, rgba(0,0,0,.85) 22%, black 38%)}
 /* RIGHT = foreground card (splash) — overlaps left panel */
-.intro-fg{position:absolute;right:40px;top:50%;transform:translateY(-50%);width:44%;height:560px;z-index:2;
+.intro-fg{position:absolute;right:40px;top:50%;transform:translateY(-50%);width:44%;height:640px;z-index:2;
   box-shadow:0 4px 8px rgba(0,0,0,.3),0 16px 48px rgba(0,0,0,.4),0 40px 80px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.05);
   border-color:rgba(255,255,255,.08)}
 .intro-labels{max-width:1100px;margin:18px auto 0;padding:0 40px;display:flex;gap:24px}
@@ -106,8 +108,8 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .phone-stage{position:relative;z-index:3;max-width:100%;margin:0 auto;padding:36px 0 0;text-align:center}
 .phone-stage img{width:100%;max-width:1600px;height:auto;filter:drop-shadow(0 40px 80px rgba(0,0,0,.5))}
 
-/* trust badges carousel — inside hero */
-.trust{position:relative;z-index:3;overflow:hidden;padding:48px 0 48px;margin-top:16px}
+/* trust badges carousel — between hero text and phones */
+.trust{position:relative;z-index:3;overflow:hidden;padding:12px 0 24px;margin-top:0}
 .trust-track{display:flex;gap:14px;animation:trustScroll 40s linear infinite;width:max-content}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:7px 18px;border-radius:999px;font-size:11.5px;font-weight:600;color:#a5f3fc;background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.12);white-space:nowrap;letter-spacing:.01em}
 @keyframes trustScroll{to{transform:translateX(-50%)}}
@@ -242,8 +244,8 @@ footer .links a:hover{color:var(--text)}
   .itile.span2{grid-column:span 1}
   .stats{grid-template-columns:repeat(2,1fr)}
   .intro-stage{flex-direction:column;padding:32px 16px 0;min-height:auto}
-  .intro-bg{width:100%;height:380px}
-  .intro-fg{position:relative;right:auto;top:auto;transform:none;width:85%;height:360px;margin:-60px auto 0;z-index:2}
+  .intro-bg{width:100%;height:420px;-webkit-mask-image:none;mask-image:none}
+  .intro-fg{position:relative;right:auto;top:auto;transform:none;width:85%;height:400px;margin:-60px auto 0;z-index:2}
   .intro-labels{flex-direction:column;padding:0 16px;gap:8px}
   .intro-labels .lbl-bg,.intro-labels .lbl-fg{width:100%}
   .nav-links{display:none}
@@ -344,18 +346,7 @@ footer .links a:hover{color:var(--text)}
     </div>
   </section>
 
-  <!-- 3 PHONE HERO MOCK — no frames, just the image -->
-  <div class="phone-stage reveal in">
-    <img src="./photos/hero_3phones.png" alt="AXE Companion — Chart, Cockpit, Chat">
-  </div>
-
-  <!-- CTA buttons below phones -->
-  <div class="hero-cta" style="justify-content:center;padding:36px 26px 0;position:relative;z-index:3">
-    <a class="btn btn-primary btn-lg" href="#">Open AXE on web</a>
-    <a class="btn btn-ghost btn-lg" href="#">Install as PWA</a>
-  </div>
-
-  <!-- BADGE CAROUSEL — stays in hero, above banner -->
+  <!-- BADGE CAROUSEL — above phones, below hero text -->
   <div class="trust" aria-label="AXE feature carousel">
     <div class="trust-track" id="trustTrack">
       <span class="chip">Your MT5 Account, Your Data</span>
@@ -380,6 +371,18 @@ footer .links a:hover{color:var(--text)}
       <span class="chip">AXE Déjà Vu</span>
     </div>
   </div>
+
+  <!-- 3 PHONE HERO MOCK — no frames, just the image -->
+  <div class="phone-stage reveal in">
+    <img src="./photos/hero_3phones.png" alt="AXE Companion — Chart, Cockpit, Chat">
+  </div>
+
+  <!-- CTA buttons below phones -->
+  <div class="hero-cta" style="justify-content:center;padding:36px 26px 0;position:relative;z-index:3">
+    <a class="btn btn-primary btn-lg" href="#">Open AXE on web</a>
+    <a class="btn btn-ghost btn-lg" href="#">Install as PWA</a>
+  </div>
+
 
 </div><!-- /hero-wrap -->
 
