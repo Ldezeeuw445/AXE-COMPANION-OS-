@@ -440,10 +440,11 @@ export function FibAnnotationLayer({
                 const style = fibLevelStyle(ln.level, isDark);
                 return (
                   <g key={ln.level}>
-                    {/* Invisible wide hit area for body drag */}
+                    {/* Invisible wide hit area for body drag — 36px
+                        for comfortable touch on narrow portrait screens */}
                     <line
                       x1={g.startX} x2={g.rightX} y1={ln.y} y2={ln.y}
-                      stroke="transparent" strokeWidth={22}
+                      stroke="transparent" strokeWidth={36}
                       pointerEvents="stroke"
                       onPointerDown={(e) => startDrag(e, g.id, "body")}
                       style={{ cursor: "move", touchAction: "none" }}
@@ -488,11 +489,12 @@ export function FibAnnotationLayer({
               {/* ── Always-visible drag handles ────────────────────
                   At diagonal endpoints (A and B). Dragging a handle
                   moves the corresponding annotation point (0 or 1).
-                  Large invisible touch target (r=18) behind visible
-                  dot for mobile. */}
+                  Large invisible touch target (r=28, 56px) behind
+                  visible dot — exceeds Apple 44pt minimum for reliable
+                  portrait-mode interaction. */}
               <g style={{ pointerEvents: "auto" }}>
                 {/* Point A handle (index 0) */}
-                <circle cx={g.diagAX} cy={g.diagAY} r={18}
+                <circle cx={g.diagAX} cy={g.diagAY} r={28}
                   fill="transparent" pointerEvents="all"
                   onPointerDown={(e) => startDrag(e, g.id, 0)}
                   style={{ cursor: "grab", touchAction: "none" }} />
@@ -504,7 +506,7 @@ export function FibAnnotationLayer({
                   pointerEvents="none" />
 
                 {/* Point B handle (index 1) */}
-                <circle cx={g.diagBX} cy={g.diagBY} r={18}
+                <circle cx={g.diagBX} cy={g.diagBY} r={28}
                   fill="transparent" pointerEvents="all"
                   onPointerDown={(e) => startDrag(e, g.id, 1)}
                   style={{ cursor: "grab", touchAction: "none" }} />

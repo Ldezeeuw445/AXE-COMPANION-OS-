@@ -294,26 +294,20 @@ export function TrendlineAnnotationLayer({
           const dotColor = handleColor(g.direction, isDark);
           return (
             <g key={g.id}>
-              {/* Invisible fat hit-line for body drag (when active) or
-                  re-selection (when locked). Covers entire line incl.
-                  extension so it's easy to grab on mobile. */}
+              {/* Invisible fat hit-line for body drag. Covers the
+                  entire line + extension so it's easy to grab in
+                  portrait. 36px wide — exceeds Apple 44pt minimum.
+                  Starts drag immediately (no "tap-to-select" gate). */}
               <line
                 x1={g.ax}
                 y1={g.ay}
                 x2={g.rx}
                 y2={g.ry}
                 stroke="transparent"
-                strokeWidth={22}
+                strokeWidth={36}
                 pointerEvents="stroke"
-                onPointerDown={(e) => {
-                  if (isActive) {
-                    startDrag(e, g.id, "body");
-                  } else {
-                    e.stopPropagation();
-                    setActiveId(g.id);
-                  }
-                }}
-                style={{ cursor: isActive ? "move" : "pointer", touchAction: "none" }}
+                onPointerDown={(e) => startDrag(e, g.id, "body")}
+                style={{ cursor: "move", touchAction: "none" }}
               />
 
               {/* Solid segment between the two anchor swings */}
@@ -346,18 +340,15 @@ export function TrendlineAnnotationLayer({
               ) : null}
 
               {/* Always-visible drag handles at both endpoints.
-                  Large invisible touch target (r=18) for easy mobile
-                  dragging, visible dot (r=5/8) shows position.
-                  Semi-transparent when inactive, bright when active. */}
+                  Large invisible touch target (r=28, 56px) for
+                  reliable portrait-mode dragging. Starts drag
+                  immediately — no "tap-to-select" gate. */}
               <g style={{ pointerEvents: "auto" }}>
                   {/* Handle A */}
-                  <circle cx={g.ax} cy={g.ay} r={18}
+                  <circle cx={g.ax} cy={g.ay} r={28}
                     fill="transparent" pointerEvents="all"
-                    onPointerDown={(e) => {
-                      if (isActive) { startDrag(e, g.id, 0); }
-                      else { e.stopPropagation(); e.preventDefault(); setActiveId(g.id); }
-                    }}
-                    style={{ cursor: isActive ? "grab" : "pointer", touchAction: "none" }} />
+                    onPointerDown={(e) => startDrag(e, g.id, 0)}
+                    style={{ cursor: "grab", touchAction: "none" }} />
                   <circle cx={g.ax} cy={g.ay}
                     r={isActive ? 8 : 5}
                     fill={isActive ? dotColor : dotColor.replace(/[\d.]+\)$/, "0.50)")}
@@ -367,13 +358,10 @@ export function TrendlineAnnotationLayer({
                     strokeWidth={isActive ? 1.5 : 1}
                     pointerEvents="none" />
                   {/* Handle B */}
-                  <circle cx={g.bx} cy={g.by} r={18}
+                  <circle cx={g.bx} cy={g.by} r={28}
                     fill="transparent" pointerEvents="all"
-                    onPointerDown={(e) => {
-                      if (isActive) { startDrag(e, g.id, 1); }
-                      else { e.stopPropagation(); e.preventDefault(); setActiveId(g.id); }
-                    }}
-                    style={{ cursor: isActive ? "grab" : "pointer", touchAction: "none" }} />
+                    onPointerDown={(e) => startDrag(e, g.id, 1)}
+                    style={{ cursor: "grab", touchAction: "none" }} />
                   <circle cx={g.bx} cy={g.by}
                     r={isActive ? 8 : 5}
                     fill={isActive ? dotColor : dotColor.replace(/[\d.]+\)$/, "0.50)")}
