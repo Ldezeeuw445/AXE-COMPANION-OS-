@@ -60,16 +60,17 @@ export function BottomNav() {
       ref={navRef}
       className="tos-nav-pill pointer-events-auto"
       style={{
-        background: "linear-gradient(180deg, #131318 0%, #0a0a0e 100%)",
+        background: "#111115",
         borderRadius: "16px 16px 0 0",
         boxShadow:
           "0 -4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 rgba(255,255,255,0.04) inset",
-        paddingTop: 6,
+        paddingTop: 4,
         paddingLeft: 4,
         paddingRight: 4,
-        /* Bottom padding = content spacing + safe-area clearance.
-           Using inline style so the shorthand can't override the env(). */
-        paddingBottom: "calc(6px + env(safe-area-inset-bottom, 0px))",
+        /* Safe-area only — no extra px.  Solid bg (#111115) contrasts with
+           page bg (#060608) so the home-indicator region reads as part of
+           the bar, not a floating gap. */
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
       aria-label="Primary"
     >
@@ -88,9 +89,9 @@ export function BottomNav() {
           className="pointer-events-none absolute z-0"
           style={{
             left: `calc(${(fractionalIdx + 0.5) / tabs.length * 100}% - 28px)`,
-            top: 3,
+            top: 2,
             width: 56,
-            height: "calc(100% - 6px)",
+            height: "calc(100% - 4px - env(safe-area-inset-bottom, 0px))",
             borderRadius: 16,
             background: "rgba(0, 212, 245, 0.08)",
             backdropFilter: "blur(12px)",

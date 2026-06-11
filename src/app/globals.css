@@ -78,8 +78,8 @@
 
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
-  --tos-nav-h: 3.875rem;
-  --tos-nav-offset: calc(var(--tos-nav-h) + 4px + env(safe-area-inset-bottom, 0px));
+  --tos-nav-h: 3.5rem;
+  --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px));
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
 }
 
@@ -282,9 +282,6 @@ body {
   margin: 0;
   /* padding-bottom handled inline in BottomNav.tsx to avoid
      specificity issues with the padding shorthand. */
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  transform: translateZ(0);
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
