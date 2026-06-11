@@ -86,22 +86,20 @@ type FibGeom = {
 function fibLevelStyle(level: number, dark = true): { stroke: string; label: string; width: number } {
   const isBoundary = level === 0 || level === 1;
   if (dark) {
+    /* Boundary (0% / 100%) — gold/yellow accent */
     if (isBoundary) return { stroke: "rgba(250,204,21,0.82)", label: "rgba(253,224,71,0.95)", width: 1.2 };
-    if (level === 0.5) return { stroke: "rgba(59,130,246,0.85)", label: "rgba(96,165,250,0.95)", width: 1.05 };
-    if (level === 0.618 || level === 0.65) return { stroke: "rgba(244,191,99,0.85)", label: "rgba(244,191,99,0.96)", width: 1.05 };
+    /* ALL interior levels — uniform teal/cyan (matches fragment sheet) */
     return { stroke: "rgba(45,212,191,0.60)", label: "rgba(125,238,226,0.82)", width: 0.9 };
   }
   /* Paper */
   if (isBoundary) return { stroke: "rgba(161,98,7,0.92)", label: "rgba(133,77,14,0.98)", width: 1.3 };
-  if (level === 0.5) return { stroke: "rgba(15,50,140,0.92)", label: "rgba(15,45,130,0.98)", width: 1.2 };
-  if (level === 0.618 || level === 0.65) return { stroke: "rgba(140,95,10,0.92)", label: "rgba(130,85,5,0.98)", width: 1.2 };
   return { stroke: "rgba(0,80,65,0.82)", label: "rgba(0,65,50,0.95)", width: 1.0 };
 }
 
-/** Diagonal line colour — distinct accent (like the purple in the
- *  AMZN reference), adapted to AXE palette. */
+/** Diagonal line colour — cyan/teal to match interior fib levels
+ *  (as shown in the fragment sheet reference). */
 function diagonalColor(dark: boolean) {
-  return dark ? "rgba(168,85,247,0.72)" : "rgba(107,33,168,0.78)";
+  return dark ? "rgba(45,212,191,0.55)" : "rgba(0,80,65,0.65)";
 }
 
 /**
