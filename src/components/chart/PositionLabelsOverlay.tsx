@@ -84,6 +84,14 @@ function entryColor(side: string | null): string {
   return CHART_THEME.entryLine;
 }
 
+/** PnL-aware color: cyan when profit ≥ 0, red when loss, fallback to side color. */
+function pnlAwareColor(side: string | null, profit: number | null | undefined): string {
+  if (profit != null) {
+    return profit >= 0 ? CHART_THEME.cyanAccent : CHART_THEME.negativeText;
+  }
+  return entryColor(side);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Modify-position API call                                           */
 /* ------------------------------------------------------------------ */
@@ -210,7 +218,7 @@ export function PositionLabelsOverlay({
             key: `entry-${o.id}`,
             y,
             text: `${sideLabel} ${o.volume}${pnl}`,
-            color: entryColor(side),
+            color: pnlAwareColor(side, o.profit),
             draggable: false,
           });
         }

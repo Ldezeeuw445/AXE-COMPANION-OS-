@@ -37,11 +37,15 @@ export function AxeDotLoader() {
       className="fixed inset-0 z-[998] flex items-center justify-center"
       style={{ background: "#000000" }}
     >
+      {/* Dots delayed 0.8s so splash screen (z-999) mounts first.
+          Black bg shows instantly — no flash of underlying content. */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(${COLS}, ${DOT_SIZE}px)`,
           gap: GAP,
+          opacity: 0,
+          animation: "axe-grid-appear 0.3s ease-out 0.8s forwards",
         }}
       >
         {Array.from({ length: ROWS * COLS }, (_, i) => (
@@ -53,6 +57,10 @@ export function AxeDotLoader() {
         @keyframes axe-dot-pulse {
           0%, 100% { opacity: 0.2; transform: scale(0.85); }
           50% { opacity: 1; transform: scale(1.1); }
+        }
+        @keyframes axe-grid-appear {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
       `}</style>
     </div>

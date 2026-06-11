@@ -61,9 +61,9 @@ export function BottomNav() {
       className="tos-nav-pill pointer-events-auto"
       style={{
         background: "linear-gradient(180deg, #131318 0%, #0a0a0e 100%)",
-        borderRadius: "9999px",
+        borderRadius: "16px 16px 0 0",
         boxShadow:
-          "0 8px 32px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 rgba(255,255,255,0.04) inset",
+          "0 -4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 rgba(255,255,255,0.04) inset",
         padding: "6px 4px",
       }}
       aria-label="Primary"

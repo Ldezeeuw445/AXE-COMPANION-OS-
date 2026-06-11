@@ -266,34 +266,24 @@ body {
    - Inner top highlight simulates edge-lit glass
    - Deep outer shadow grounds the bar to the screen edge
    - Subtle inner shadow gives a concave "tray" feel */
-/* Floating pill navbar — fixed, centred with auto-margins (no transform).
-   Using left:0 + right:0 + margin-inline:auto avoids the
-   left:50%/translateX(-50%) pattern, which on iOS can cause the pill
-   to render at the wrong offset on first paint while the viewport
-   dimensions are still settling (address-bar retract, safe-area
-   resolution, splash overlay teardown).
-   bottom = safe-area + small gap so the pill clears the home indicator. */
+/* Bottom nav — docked to the absolute bottom edge (no env() positioning
+   dependency, no async-resolution jump on iOS).
+   Safe-area clearance is handled by padding-bottom INSIDE the bar so
+   icons sit above the home indicator while the background fills the
+   safe-area region seamlessly. Top corners rounded, bottom square. */
 .tos-nav-pill {
   position: fixed;
   left: 0;
   right: 0;
-  /* Position via CSS env() — hidden during splash screen load so the
-     async env() resolution on iOS never causes a visible position jump. */
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
+  bottom: 0;
   z-index: 50;
-  width: calc(100% - 24px);
-  max-width: 420px;
-  margin-inline: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0);
-  /* Hide during initial 500ms (splash screen covers this), then fade in.
-     By the time the animation starts, env() has fully resolved on iOS. */
-  animation: tos-nav-appear 0.3s ease-out 0.5s both;
-}
-@keyframes tos-nav-appear {
-  from { opacity: 0; transform: translateZ(0) translateY(6px); }
-  to   { opacity: 1; transform: translateZ(0) translateY(0); }
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
@@ -301,7 +291,7 @@ body {
    screen estate is maximised for chart / trading views. */
 @media (orientation: landscape) {
   .tos-nav-pill {
-    max-width: 560px;
+    /* Full width in landscape too — docked bar style */
   }
   /* Content padding in landscape only needs a small bottom offset */
   .tos-app-content {
