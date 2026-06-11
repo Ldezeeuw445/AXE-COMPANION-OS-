@@ -67,9 +67,8 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .hero-wrap{position:relative;overflow:hidden;isolation:isolate;padding-top:90px}
 /* fragments layer: behind fog */
 .frag-layer{position:absolute;inset:0;z-index:1;pointer-events:none}
-.frag{position:absolute;pointer-events:none;filter:drop-shadow(0 8px 20px rgba(0,0,0,.4));opacity:.7;transition:opacity .3s}
-.frag img{display:block;width:100%;height:auto}
-.frag.soft{opacity:.5}.frag.dim{opacity:.35}.frag.mini{filter:drop-shadow(0 4px 10px rgba(0,0,0,.25))}
+.frag{position:absolute;pointer-events:none;opacity:0;transform:translate(-50%,-50%);will-change:opacity}
+.frag img{display:block;width:100%;height:auto;filter:drop-shadow(0 4px 16px rgba(0,0,0,.4))}
 /* fog canvas */
 #fog{position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:normal}
 /* hero content sits ABOVE fog */
@@ -277,11 +276,46 @@ footer .links a:hover{color:var(--text)}
 
   <!-- FRAGMENTS — empty, waiting for Luka's placement guide -->
   <div class="frag-layer" id="fragLayer">
-    <!-- Luka will mark positions on a screenshot, then fragments go here -->
+    <!-- 35 fragments placed per Luka's numbered placement guide -->
+    <div class="frag" style="left:2.8%;top:6.4%;width:120px"><img src="./fragments/01_axe_triangle.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:96.8%;top:9.9%;width:94px"><img src="./fragments/02_dot_loader.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:83.2%;top:56.7%;width:370px"><img src="./fragments/03_skeu_navbar.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:78.9%;top:47.1%;width:201px"><img src="./fragments/04_candlestick_chart.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:16.1%;top:18.1%;width:260px"><img src="./fragments/05_fib_annotation.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:80.7%;top:36%;width:281px"><img src="./fragments/06_chat_bubble.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:18.4%;top:60.5%;width:63px"><img src="./fragments/07_typing_indicator.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:78.1%;top:15.3%;width:380px"><img src="./fragments/08_ticker_bar.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:85.7%;top:9.9%;width:180px"><img src="./fragments/09_pnl_profit.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:11.9%;top:13%;width:167px"><img src="./fragments/10_pnl_loss.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:18.4%;top:5.4%;width:92px"><img src="./fragments/11_axe_wordmark.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:75.3%;top:8%;width:92px"><img src="./fragments/12_live_status.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:9.6%;top:59.8%;width:201px"><img src="./fragments/13_volume_bars.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:89.7%;top:5.1%;width:206px"><img src="./fragments/14_timeframe_pills.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:77.3%;top:25.1%;width:45px"><img src="./fragments/15_send_button.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:5.7%;top:15.3%;width:45px"><img src="./fragments/16_mic_button.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:14.6%;top:52.5%;width:142px"><img src="./fragments/17_pinned_context.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:92.4%;top:59.8%;width:191px"><img src="./fragments/18_buy_sell_buttons.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:3.5%;top:57%;width:241px"><img src="./fragments/19_crosshair_price.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:15.1%;top:38.8%;width:221px"><img src="./fragments/20_account_card.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:87.6%;top:20.4%;width:280px"><img src="./fragments/21_trade_position.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:90%;top:33.1%;width:261px"><img src="./fragments/22_sl_tp_lines.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:7.2%;top:48.1%;width:260px"><img src="./fragments/23_alert_item.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:3.1%;top:43.3%;width:200px"><img src="./fragments/24_quick_action_menu.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:96.5%;top:50.3%;width:321px"><img src="./fragments/25_composer_input.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:77.6%;top:59.5%;width:360px"><img src="./fragments/26_aura_wave.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:97.3%;top:25.5%;width:160px"><img src="./fragments/27_order_book.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:10%;top:6%;width:261px"><img src="./fragments/28_login_field.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:3.8%;top:25.5%;width:165px"><img src="./fragments/29_upgrade_badge.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:96.8%;top:38.2%;width:201px"><img src="./fragments/30_supply_demand_zones.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:21.1%;top:14.3%;width:47px"><img src="./fragments/31_wordmark_topbar.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:9.2%;top:34.4%;width:221px"><img src="./fragments/32_rsi_indicator.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:15.9%;top:29.9%;width:70px"><img src="./fragments/33_tts_button.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:89.5%;top:47.1%;width:241px"><img src="./fragments/34_intel_card.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:12%;top:21.6%;width:191px"><img src="./fragments/35_journal_tags.png" alt="" loading="lazy"></div>
   </div>
 
-  <!-- fog disabled until fragments are placed -->
-  <canvas id="fog" style="display:none"></canvas>
+  <!-- fog canvas for atmospheric effect -->
+  <canvas id="fog"></canvas>
 
   <!-- HERO CONTENT -->
   <section class="hero">
@@ -719,6 +753,40 @@ document.querySelectorAll('.itile,.card').forEach(c=>c.addEventListener('mousemo
   fc.globalCompositeOperation='source-over';
   requestAnimationFrame(frame);}
  requestAnimationFrame(frame);
+})();
+
+/* ===== Fragment proximity reveal ===== */
+(function(){
+  const frags=document.querySelectorAll('.frag');
+  if(!frags.length)return;
+  let raf=false;
+  function update(ex,ey){
+    const scrollY=window.scrollY||window.pageYOffset;
+    frags.forEach(f=>{
+      const rect=f.getBoundingClientRect();
+      const cx=rect.left+rect.width/2;
+      const cy=rect.top+rect.height/2;
+      const dist=Math.hypot(ex-cx,ey-cy);
+      const radius=280;
+      const maxOpacity=0.55;
+      const t=Math.max(0,1-dist/radius);
+      // ease-out curve for smoother falloff
+      const opacity=(t*t)*maxOpacity;
+      f.style.opacity=opacity.toFixed(3);
+    });
+  }
+  document.addEventListener('mousemove',function(e){
+    if(raf)return;
+    raf=true;
+    requestAnimationFrame(function(){
+      update(e.clientX,e.clientY);
+      raf=false;
+    });
+  });
+  // fade out when mouse leaves
+  document.addEventListener('mouseleave',function(){
+    frags.forEach(f=>{f.style.opacity='0';});
+  });
 })();
 
 /* ===== reveal ===== */
