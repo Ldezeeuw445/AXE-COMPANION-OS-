@@ -10,7 +10,7 @@
  * cyan bubble slides across the navbar tabs (like Slack).
  */
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -44,6 +44,32 @@ export function BottomNav() {
 
   const { progress, currentTabIdx } = useSwipeNav();
 
+  // iOS PWA: env(safe-area-inset-bottom) can resolve asynchronously on
+  // first launch — the CSS value is 0 during the initial paint, then
+  // jumps to the real value ~50-100ms later. We measure it via JS and
+  // re-trigger a render so the bar never floats above its final position.
+  const [safeBottom, setSafeBottom] = useState<number | null>(null);
+  useEffect(() => {
+    function measure() {
+      const el = document.createElement("div");
+      el.style.cssText =
+        "position:fixed;bottom:0;left:0;width:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden";
+      document.body.appendChild(el);
+      const h = el.getBoundingClientRect().height;
+      document.body.removeChild(el);
+      return h;
+    }
+    // First read — might be 0 on iOS PWA cold start
+    const first = measure();
+    setSafeBottom(first);
+    // Re-measure after a short delay in case iOS resolves the inset late
+    const t = setTimeout(() => {
+      const second = measure();
+      if (second !== first) setSafeBottom(second);
+    }, 150);
+    return () => clearTimeout(t);
+  }, []);
+
   // Conditional 6th tab
   const sixthTab = isAxeView
     ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
@@ -67,10 +93,13 @@ export function BottomNav() {
         paddingTop: 4,
         paddingLeft: 4,
         paddingRight: 4,
-        /* Safe-area only — no extra px.  Solid bg (#111115) contrasts with
-           page bg (#060608) so the home-indicator region reads as part of
-           the bar, not a floating gap. */
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        /* Safe-area padding. JS-measured value takes priority so the bar
+           never floats higher than intended on iOS PWA cold start (where
+           the CSS env() value can resolve asynchronously). */
+        paddingBottom:
+          safeBottom != null && safeBottom > 0
+            ? safeBottom
+            : "env(safe-area-inset-bottom, 0px)",
       }}
       aria-label="Primary"
     >

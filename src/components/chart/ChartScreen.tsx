@@ -385,6 +385,8 @@ function ResizablePane({
   maxHeight,
   children,
   ariaLabel,
+  onMoveUp,
+  onMoveDown,
 }: {
   height: number;
   onResize: (next: number) => void;
@@ -392,44 +394,81 @@ function ResizablePane({
   maxHeight: number;
   children: React.ReactNode;
   ariaLabel: string;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const reorderRef = useRef<{ startY: number; moved: boolean } | null>(null);
+  const canReorder = Boolean(onMoveUp || onMoveDown);
+  const REORDER_THRESHOLD = 40; // px to trigger swap
 
   return (
     <div className="relative shrink-0" style={{ height }}>
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label={ariaLabel}
-        className="absolute inset-x-0 -top-1 z-30 flex h-3 cursor-ns-resize items-center justify-center"
-        style={{ touchAction: "none" }}
-        onPointerDown={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          event.currentTarget.setPointerCapture(event.pointerId);
-          dragRef.current = { startY: event.clientY, startH: height };
-        }}
-        onPointerMove={(event) => {
-          const drag = dragRef.current;
-          if (!drag) return;
-          const delta = drag.startY - event.clientY; // up = grow
-          const next = Math.min(maxHeight, Math.max(minHeight, drag.startH + delta));
-          onResize(next);
-        }}
-        onPointerUp={(event) => {
-          if (!dragRef.current) return;
-          dragRef.current = null;
-          try {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          } catch {
-            /* noop */
-          }
-        }}
-        onPointerCancel={() => {
-          dragRef.current = null;
-        }}
-      >
-        <span className="h-0.5 w-10 rounded-full bg-white/20" aria-hidden />
+      {/* Separator bar: right side = resize handle, left side = reorder grip */}
+      <div className="absolute inset-x-0 -top-1 z-30 flex h-3 items-center" style={{ touchAction: "none" }}>
+        {/* Reorder grip — left zone (48px wide, only when multiple panes) */}
+        {canReorder && (
+          <div
+            className="flex h-full w-12 shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              reorderRef.current = { startY: event.clientY, moved: false };
+            }}
+            onPointerMove={(event) => {
+              const ro = reorderRef.current;
+              if (!ro) return;
+              const delta = event.clientY - ro.startY;
+              if (!ro.moved && Math.abs(delta) >= REORDER_THRESHOLD) {
+                ro.moved = true;
+                if (delta < 0 && onMoveUp) onMoveUp();
+                if (delta > 0 && onMoveDown) onMoveDown();
+              }
+            }}
+            onPointerUp={(event) => {
+              reorderRef.current = null;
+              try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* noop */ }
+            }}
+            onPointerCancel={() => { reorderRef.current = null; }}
+            aria-label={`Drag to reorder ${ariaLabel}`}
+          >
+            {/* ≡ grip dots */}
+            <div className="flex flex-col gap-[2px]">
+              <span className="block h-[1.5px] w-3 rounded-full bg-white/25" />
+              <span className="block h-[1.5px] w-3 rounded-full bg-white/25" />
+              <span className="block h-[1.5px] w-3 rounded-full bg-white/25" />
+            </div>
+          </div>
+        )}
+        {/* Resize handle — the rest of the bar */}
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={ariaLabel}
+          className="flex h-full flex-1 cursor-ns-resize items-center justify-center"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragRef.current = { startY: event.clientY, startH: height };
+          }}
+          onPointerMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag) return;
+            const delta = drag.startY - event.clientY; // up = grow
+            const next = Math.min(maxHeight, Math.max(minHeight, drag.startH + delta));
+            onResize(next);
+          }}
+          onPointerUp={(event) => {
+            if (!dragRef.current) return;
+            dragRef.current = null;
+            try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* noop */ }
+          }}
+          onPointerCancel={() => { dragRef.current = null; }}
+        >
+          <span className="h-0.5 w-10 rounded-full bg-white/20" aria-hidden />
+        </div>
       </div>
       {children}
     </div>
@@ -3409,18 +3448,24 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           never bleed into the volume/RSI area and vice versa. They share the
           main chart's time scale via canvasRef.timeToCoordinate(...). */}
       {/* Indicator panes rendered in user-configured order */}
-      {paneOrder.filter((m) => indicatorToolFlags[m]).map((mode) => (
-        <ResizablePane
-          key={mode}
-          height={paneHeights[mode]}
-          onResize={(next) => setPaneHeight(mode, next)}
-          minHeight={70}
-          maxHeight={mode === "volume" ? 260 : 280}
-          ariaLabel={`Resize ${mode.toUpperCase()} pane`}
-        >
-          <IndicatorPane mode={mode} candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
-        </ResizablePane>
-      ))}
+      {(() => {
+        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m]);
+        const multiPane = enabledPanesList.length > 1;
+        return enabledPanesList.map((mode, idx) => (
+          <ResizablePane
+            key={mode}
+            height={paneHeights[mode]}
+            onResize={(next) => setPaneHeight(mode, next)}
+            minHeight={70}
+            maxHeight={mode === "volume" ? 260 : 280}
+            ariaLabel={`Resize ${mode.toUpperCase()} pane`}
+            onMoveUp={multiPane && idx > 0 ? () => movePaneInOrder(mode, -1) : undefined}
+            onMoveDown={multiPane && idx < enabledPanesList.length - 1 ? () => movePaneInOrder(mode, 1) : undefined}
+          >
+            <IndicatorPane mode={mode} candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
+          </ResizablePane>
+        ));
+      })()}
 
       {/* ─── MT5-style execution bar ─── */}
       {oneClickVisible ? (

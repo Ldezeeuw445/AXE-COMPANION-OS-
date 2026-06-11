@@ -57,8 +57,54 @@ function TypingBubble() {
   );
 }
 
+/**
+ * StreamingBubble — typewriter-style character reveal.
+ *
+ * Tokens arrive in variable-sized chunks from SSE. Instead of dumping each
+ * chunk visually, we maintain a "revealed" cursor that advances at a steady
+ * pace (CHAR_INTERVAL ms per character). When new tokens push `text` ahead
+ * of the cursor, the reveal loop catches up smoothly. When idle (cursor
+ * caught up), no timer runs.
+ */
+const CHAR_INTERVAL = 12; // ms between revealed characters
+
 function StreamingBubble({ text, phase }: { text: string; phase: string | null }) {
   const showToolHint = phase === "tools" && !text;
+  const [revealed, setRevealed] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const lastFrameRef = useRef(0);
+  const textRef = useRef(text);
+  textRef.current = text;
+
+  // Reset reveal cursor when a new stream starts (text goes to "")
+  useEffect(() => {
+    if (text === "") setRevealed(0);
+  }, [text]);
+
+  // Advance reveal cursor with requestAnimationFrame for smoothness
+  useEffect(() => {
+    function step(now: number) {
+      if (now - lastFrameRef.current >= CHAR_INTERVAL) {
+        lastFrameRef.current = now;
+        setRevealed((prev) => {
+          const target = textRef.current.length;
+          if (prev >= target) return prev;
+          // Advance 1-3 chars per frame to keep up without stutter
+          const remaining = target - prev;
+          const advance = remaining > 40 ? 3 : remaining > 20 ? 2 : 1;
+          return Math.min(prev + advance, target);
+        });
+      }
+      rafRef.current = requestAnimationFrame(step);
+    }
+    rafRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  const visibleText = text.slice(0, revealed);
+
   return (
     <article className="group flex flex-col items-start">
       <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
@@ -81,7 +127,7 @@ function StreamingBubble({ text, phase }: { text: string; phase: string | null }
         </div>
       ) : (
         <div className="max-w-[85%] px-1">
-          {renderAssistantBody(text)}
+          {renderAssistantBody(visibleText)}
           <span className="inline-block h-4 w-[2px] animate-pulse bg-[#00d4f5]/70 align-text-bottom" />
         </div>
       )}
