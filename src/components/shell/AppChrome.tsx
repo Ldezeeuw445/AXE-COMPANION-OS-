@@ -10,18 +10,20 @@ import { SwipeContentWrapper } from "@/components/shell/SwipeContentWrapper";
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
  *
- * Layout: h-dvh flex column. The navbar is a regular flex child at the
- * bottom — NOT position:fixed. Content fills the remaining space and
- * handles its own scrolling. This is the only architecture that keeps
- * the navbar rock-solid on iOS PWA across cold starts, page transitions,
- * and keyboard events.
+ * Mobile: `fixed inset-0` flex column. This is the most bulletproof way
+ * to fill the viewport on iOS PWA — fixed positioning always uses the
+ * actual visual viewport as its containing block, with zero dependency
+ * on dvh/svh/lvh timing. The navbar is the last flex child and
+ * physically cannot move.
+ *
+ * Desktop: regular flow with min-h-dvh + row layout.
  */
 export function AppChrome({ children }: { children: ReactNode }) {
   return (
     <AppTopBarProvider>
       <AmbientProvider>
         <SwipeNavProvider>
-          <div className="relative mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden md:min-h-dvh md:flex-row md:overflow-visible">
+          <div className="fixed inset-0 z-0 mx-auto flex w-full max-w-6xl flex-col overflow-hidden md:relative md:inset-auto md:z-auto md:min-h-dvh md:flex-row md:overflow-visible">
             <AppNavigation />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-[4.25rem]">
               <SwipeContentWrapper>
@@ -30,7 +32,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
                 </div>
               </SwipeContentWrapper>
             </div>
-            {/* Bottom nav: regular flex child, always at bottom */}
+            {/* Bottom nav: last flex child, always at bottom */}
             <div className="shrink-0 md:hidden">
               <ClientBottomNav />
             </div>

@@ -113,11 +113,27 @@ html {
   color-scheme: dark;
 }
 
+/* On mobile the app shell is position:fixed inset:0, so html/body must
+   not create a scrollable document behind it. overflow:hidden + height:100%
+   prevent iOS rubber-band scroll and any body-level reflow that could
+   shift the fixed container on cold start. Desktop (md:) keeps normal flow. */
+html,
+body {
+  overflow: hidden;
+  height: 100%;
+}
+@media (min-width: 768px) {
+  html,
+  body {
+    overflow: visible;
+    height: auto;
+  }
+}
+
 body {
   /*
    * Pure matte black — no blue/navy tints.
    * Depth comes from card elevation and subtle white borders, not color.
-   * Shell uses h-dvh for viewport lock; body doesn't need min-height.
    */
   background-color: #060608;
   background-image: none;
