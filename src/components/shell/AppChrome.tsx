@@ -23,7 +23,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
     <AppTopBarProvider>
       <AmbientProvider>
         <SwipeNavProvider>
-          <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
+          <div className="mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden md:flex-row">
             <AppNavigation />
             <div className="flex min-w-0 flex-1 flex-col md:pl-[4.25rem]">
               <SwipeContentWrapper>
