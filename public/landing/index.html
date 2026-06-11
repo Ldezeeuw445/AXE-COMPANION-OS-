@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0a0a0e; --bg2:#0e0f14; --panel:rgba(255,255,255,.028);
+  --bg:#050508; --bg2:#08090d; --panel:rgba(255,255,255,.028);
   --line:rgba(255,255,255,.07); --text:#eef2f8; --muted:#7e8a9c; --dim:#586273;
   --cyan:#22d3ee; --teal:#2dd4bf; --green:#34d399; --rose:#fb7185; --amber:#fbbf24; --blue:#60a5fa;
   --glow:rgba(34,211,238,.55);
@@ -36,12 +36,11 @@ a{color:inherit;text-decoration:none}
   animation:auroraShift 28s ease-in-out infinite alternate}
 @keyframes auroraShift{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(2%,2.5%,0) scale(1.04)}}
 
-/* particle canvas below hero */
-canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
+/* particle canvas removed — clean background */
 
 /* ===== nav ===== */
 .top-nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;
-  padding:14px 28px;backdrop-filter:blur(18px) saturate(1.7);background:rgba(10,10,14,.72);
+  padding:14px 28px;backdrop-filter:blur(18px) saturate(1.7);background:rgba(5,5,8,.82);
   border-bottom:1px solid rgba(255,255,255,.05);transition:background .3s}
 .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;letter-spacing:-.03em;color:var(--text)}
 .logo img{width:26px;height:26px}
@@ -56,7 +55,7 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .btn-sm{padding:7px 16px;font-size:12px;border-radius:8px}
 
 /* ===== ticker ===== */
-.ticker-bar{position:fixed;top:52px;left:0;right:0;z-index:99;overflow:hidden;background:rgba(10,10,14,.8);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.04);height:28px;display:flex;align-items:center}
+.ticker-bar{position:fixed;top:52px;left:0;right:0;z-index:99;overflow:hidden;background:rgba(5,5,8,.88);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.04);height:28px;display:flex;align-items:center}
 .ticker-track{display:flex;gap:0;animation:tickScroll 48s linear infinite;width:max-content}
 .tick{display:flex;align-items:center;gap:8px;padding:0 20px;font-size:11px;white-space:nowrap;color:var(--muted);font-weight:500;font-feature-settings:'tnum' 1}
 .tick b{color:var(--text);font-weight:700;letter-spacing:-.01em}
@@ -70,21 +69,21 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .frag{position:absolute;pointer-events:none;opacity:.65;transform:translate(-50%,-50%)}
 .frag img{display:block;width:100%;height:auto;filter:drop-shadow(0 4px 16px rgba(0,0,0,.4))}
 /* ── Linear-mirror overlapping cards ── */
-.intro-stage{position:relative;max-width:1100px;margin:0 auto;padding:48px 40px 0;display:flex;align-items:center;min-height:600px}
+.intro-stage{position:relative;max-width:1200px;margin:0 auto;padding:80px 40px 0;display:flex;align-items:center;min-height:680px}
 /* shared card styling */
 .intro-card{overflow:hidden;border-radius:16px;background:#16161a;
   border:1px solid rgba(255,255,255,.06)}
 .intro-card img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
 /* LEFT = background panel (login) — larger, fades into bg on left edge */
-.intro-bg{position:relative;width:66%;height:600px;flex-shrink:0;z-index:1;
+.intro-bg{position:relative;width:66%;height:680px;flex-shrink:0;z-index:1;
   box-shadow:0 2px 4px rgba(0,0,0,.15),0 8px 24px rgba(0,0,0,.2),0 24px 48px rgba(0,0,0,.12);
   -webkit-mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,.3) 8%, rgba(0,0,0,.85) 22%, black 38%);
   mask-image:linear-gradient(to right, transparent 0%, rgba(0,0,0,.3) 8%, rgba(0,0,0,.85) 22%, black 38%)}
 /* RIGHT = foreground card (splash) — overlaps left panel */
-.intro-fg{position:absolute;right:40px;top:50%;transform:translateY(-50%);width:44%;height:640px;z-index:2;
+.intro-fg{position:absolute;right:40px;top:50%;transform:translateY(-50%);width:44%;height:720px;z-index:2;
   box-shadow:0 4px 8px rgba(0,0,0,.3),0 16px 48px rgba(0,0,0,.4),0 40px 80px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.05);
   border-color:rgba(255,255,255,.08)}
-.intro-labels{max-width:1100px;margin:18px auto 0;padding:0 40px;display:flex;gap:24px}
+.intro-labels{max-width:1200px;margin:18px auto 0;padding:0 40px 60px;display:flex;gap:24px}
 .intro-labels .lbl-bg{width:66%;text-align:center}
 .intro-labels .lbl-fg{flex:1;text-align:center}
 .intro-labels h3{font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--text)}
@@ -109,13 +108,13 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .phone-stage img{width:100%;max-width:1600px;height:auto;filter:drop-shadow(0 40px 80px rgba(0,0,0,.5))}
 
 /* trust badges carousel — between hero text and phones */
-.trust{position:relative;z-index:3;overflow:hidden;padding:12px 0 24px;margin-top:0}
+.trust{position:relative;z-index:3;overflow:hidden;padding:12px 0 24px;margin-top:0;background:var(--bg)}
 .trust-track{display:flex;gap:14px;animation:trustScroll 40s linear infinite;width:max-content}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:7px 18px;border-radius:999px;font-size:11.5px;font-weight:600;color:#a5f3fc;background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.12);white-space:nowrap;letter-spacing:.01em}
 @keyframes trustScroll{to{transform:translateX(-50%)}}
 
 /* ===== section banner (glow lines) ===== */
-.section-banner{position:relative;width:100vw;left:50%;margin-left:-50vw;background:rgba(0,0,0,.18);padding:56px 26px;overflow:hidden;border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.04)}
+.section-banner{position:relative;width:100vw;left:50%;margin-left:-50vw;background:rgba(0,0,0,.18);padding:56px 26px;overflow:hidden;border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.04);margin-top:80px}
 .section-banner::before,.section-banner::after{content:"";position:absolute;left:8%;right:8%;height:2px;opacity:0;transition:opacity .5s,filter .5s;background:linear-gradient(90deg,transparent 0%,#86ef6b 14%,#34d399 32%,#22d3ee 56%,#60a5fa 78%,transparent 100%);filter:blur(.7px);box-shadow:0 0 18px rgba(34,211,238,.28),0 0 24px rgba(96,165,250,.18)}
 .section-banner::before{top:0}.section-banner::after{bottom:0}
 .section-banner:hover::before,.section-banner:hover::after{opacity:1;filter:blur(1px)}
@@ -268,7 +267,7 @@ footer .links a:hover{color:var(--text)}
 <div class="bg-layer">
   <div class="aurora"></div>
 </div>
-<canvas id="fx"></canvas>
+<!-- particle canvas removed -->
 
 <!-- NAV -->
 <nav class="top-nav">
@@ -409,7 +408,7 @@ footer .links a:hover{color:var(--text)}
   </div>
 
   <!-- PHONE SHOWCASE — bigger, no glow, Linear-style emerging from bg -->
-  <div class="section-banner reveal" style="margin-top:72px">
+  <div class="section-banner reveal">
     <div class="inner">
       <div class="kicker">Inside the app</div>
       <h2>Every screen, <span style="background:linear-gradient(90deg,#7dd3fc,var(--teal));-webkit-background-clip:text;background-clip:text;color:transparent">built for the candle.</span></h2>
@@ -819,47 +818,7 @@ const go=new IntersectionObserver(es=>es.forEach(en=>{if(!en.isIntersecting)retu
 go.observe(document.querySelector('.gauge'));
 })();
 
-/* ===== Particle field (below hero) ===== */
-(function(){
-const cv=document.getElementById('fx'),cx=cv.getContext('2d');
-let W,H,DPR,ps=[];const mouse={x:-9999,y:-9999,active:false};
-function place(){DPR=Math.min(devicePixelRatio||1,2);const hw=document.getElementById('heroWrap');
- const top=hw?Math.round(hw.offsetTop+hw.offsetHeight):0;
- const docH=document.documentElement.scrollHeight;
- W=innerWidth;H=Math.max(1,docH-top);
- cv.style.top=top+'px';cv.style.width=W+'px';cv.style.height=H+'px';
- cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0);}
-place();addEventListener('resize',()=>{place();init();});addEventListener('load',()=>{place();init();});setTimeout(()=>{place();init();},500);
-function init(){ps=[];const n=Math.min(170,Math.floor(W*H/13000));
- for(let i=0;i<n;i++){const x=Math.random()*W,y=Math.random()*H;
-  ps.push({hx:x,hy:y,x:x,y:y,vx:0,vy:0,dx:(Math.random()-.5)*.18,dy:(Math.random()-.5)*.18,r:Math.random()*1.7+.5,tw:Math.random()*Math.PI*2,o:Math.random()*.4+.12});}}
-init();
-addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;mouse.active=true;});
-addEventListener('mouseleave',()=>{mouse.active=false;mouse.x=-9999;mouse.y=-9999;});
-const R=150,R2=R*R;
-(function anim(){cx.clearRect(0,0,W,H);
- for(let i=0;i<ps.length;i++){const p=ps[i];
-  p.hx+=p.dx;p.hy+=p.dy;
-  if(p.hx<0||p.hx>W)p.dx*=-1;if(p.hy<0||p.hy>H)p.dy*=-1;
-  const ddx=p.x-mouse.x,ddy=p.y-mouse.y,d2=ddx*ddx+ddy*ddy;
-  if(mouse.active&&d2<R2){const d=Math.sqrt(d2)||1,f=(1-d/R);const push=f*f*5.2;p.vx+=(ddx/d)*push;p.vy+=(ddy/d)*push;}
-  p.vx+=(p.hx-p.x)*.012;p.vy+=(p.hy-p.y)*.012;p.vx*=.86;p.vy*=.86;
-  p.x+=p.vx;p.y+=p.vy;
-  p.tw+=.03;const twinkle=.6+.4*Math.sin(p.tw);
-  let near=mouse.active&&d2<R2?(1-Math.sqrt(d2)/R):0;
-  const alpha=Math.max(0,p.o*twinkle*(1-near*.85));
-  cx.beginPath();cx.arc(p.x,p.y,p.r,0,6.283);
-  cx.fillStyle=`rgba(${near>0?'125,211,252':'34,211,238'},${alpha})`;cx.fill();}
- for(let i=0;i<ps.length;i++){for(let j=i+1;j<ps.length;j++){const a=ps[i],b=ps[j];
-   const dx=a.x-b.x,dy=a.y-b.y,dd=dx*dx+dy*dy;
-   if(dd<13000){const al=(1-dd/13000);
-    const mid=Math.hypot((a.x+b.x)/2-mouse.x,(a.y+b.y)/2-mouse.y);
-    const glow=mouse.active&&mid<R?(1-mid/R):0;
-    cx.beginPath();cx.moveTo(a.x,a.y);cx.lineTo(b.x,b.y);
-    cx.strokeStyle=`rgba(${glow>.05?'125,211,252':'34,211,238'},${al*(0.06+glow*0.22)})`;
-    cx.lineWidth=.6;cx.stroke();}}}
- requestAnimationFrame(anim);})();
-})();
+/* ===== Particle field removed — clean dark background ===== */
 </script>
 </body>
 </html>
