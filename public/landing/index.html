@@ -47,10 +47,13 @@ a{color:inherit;text-decoration:none}
 .nav-links{display:flex;gap:24px;font-size:13px;font-weight:500;color:var(--muted)}
 .nav-links a:hover{color:var(--text)}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:'Inter',sans-serif}
-.btn-primary{background:linear-gradient(135deg,#22d3ee,#2dd4bf);color:#030508;box-shadow:0 0 24px -4px rgba(34,211,238,.45);transition:all .35s cubic-bezier(.22,.61,.36,1)}
+.btn-primary{background:linear-gradient(135deg,#22d3ee,#2dd4bf);color:#030508;box-shadow:0 0 24px -4px rgba(34,211,238,.45);transition:all .35s cubic-bezier(.22,.61,.36,1);position:relative}
+.btn-primary:hover{box-shadow:0 0 36px -2px rgba(34,211,238,.6),inset 0 0 0 1px rgba(255,255,255,.15)}
 .btn-primary:hover{box-shadow:0 0 48px -2px rgba(34,211,238,.7),0 0 80px -8px rgba(45,212,191,.35);transform:translateY(-2px) scale(1.02)}
-.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.12);color:var(--text);transition:all .35s cubic-bezier(.22,.61,.36,1)}
-.btn-ghost:hover{border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.06);box-shadow:0 0 32px -4px rgba(255,255,255,.08);transform:translateY(-2px) scale(1.02)}
+.btn-ghost{background:transparent;border:1px solid rgba(255,255,255,.12);color:var(--text);transition:all .35s cubic-bezier(.22,.61,.36,1);position:relative}
+.btn-ghost:hover{border-color:transparent;background:rgba(255,255,255,.04);box-shadow:0 0 32px -4px rgba(34,211,238,.2);transform:translateY(-2px) scale(1.02);
+  background-image:linear-gradient(var(--bg),var(--bg)),linear-gradient(135deg,rgba(34,211,238,.5),rgba(45,212,191,.5));
+  background-origin:border-box;background-clip:padding-box,border-box;border:1px solid transparent}
 .btn-lg{padding:16px 48px;font-size:15px;border-radius:14px}
 .btn-sm{padding:7px 16px;font-size:12px;border-radius:8px}
 
@@ -64,10 +67,13 @@ a{color:inherit;text-decoration:none}
 
 /* ===== hero ===== */
 .hero-wrap{position:relative;overflow:hidden;isolation:isolate;padding-top:90px}
-/* fragments layer: behind fog */
-.frag-layer{position:absolute;inset:0;z-index:1;pointer-events:none}
-.frag{position:absolute;pointer-events:none;opacity:.65;transform:translate(-50%,-50%)}
-.frag img{display:block;width:100%;height:auto;filter:drop-shadow(0 4px 16px rgba(0,0,0,.4))}
+/* grid canvas — laser line animation behind hero */
+#gridCanvas{position:absolute;inset:0;z-index:1;pointer-events:none}
+/* radial glow behind phones */
+.phone-glow{position:absolute;left:50%;top:55%;transform:translate(-50%,-50%);width:900px;height:700px;border-radius:50%;
+  background:radial-gradient(circle at center, rgba(0,242,254,0.08) 0%, rgba(0,242,254,0.02) 40%, transparent 70%);
+  pointer-events:none;z-index:2;opacity:0;transition:opacity 1.2s ease;filter:blur(40px)}
+.phone-glow.active{opacity:1}
 /* ── Linear-mirror overlapping cards ── */
 .intro-stage{position:relative;max-width:1200px;margin:0 auto;padding:80px 40px 0;display:flex;align-items:center;min-height:680px}
 /* shared card styling */
@@ -88,9 +94,7 @@ a{color:inherit;text-decoration:none}
 .intro-labels .lbl-fg{flex:1;text-align:center}
 .intro-labels h3{font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--text)}
 .intro-labels p{font-size:13px;color:var(--muted);margin-top:4px}
-/* fog canvas */
-#fog{position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:normal}
-/* hero content sits ABOVE fog */
+/* hero content sits above grid */
 .hero{position:relative;z-index:3;text-align:center;padding:56px 26px 16px}
 .hero h1{font-size:clamp(32px,5.5vw,64px);font-weight:900;letter-spacing:-.04em;line-height:1.12;margin-bottom:16px}
 .hero .grad{background:linear-gradient(135deg,#22d3ee,#2dd4bf);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -103,9 +107,10 @@ a{color:inherit;text-decoration:none}
 @keyframes blink{50%{opacity:0}}
 .hero-cta{display:flex;gap:14px;justify-content:center;margin-top:28px;flex-wrap:wrap}
 
-/* phone stage — simple image, no frames */
+/* phone stage — simple image with glow convergence */
 .phone-stage{position:relative;z-index:3;max-width:100%;margin:0 auto;padding:36px 0 0;text-align:center}
-.phone-stage img{width:100%;max-width:1600px;height:auto;filter:drop-shadow(0 40px 80px rgba(0,0,0,.5))}
+.phone-stage img{width:100%;max-width:1600px;height:auto;filter:drop-shadow(0 40px 80px rgba(0,0,0,.5));transition:filter .6s ease}
+.phone-stage.glow-pulse img{filter:drop-shadow(0 40px 80px rgba(0,0,0,.5)) drop-shadow(0 0 60px rgba(34,211,238,.12))}
 
 /* trust badges carousel — between hero text and phones */
 .trust{position:relative;z-index:3;overflow:hidden;padding:12px 0 24px;margin-top:0;background:var(--bg)}
@@ -250,9 +255,9 @@ footer .links a:hover{color:var(--text)}
   .nav-links{display:none}
   .hero h1{font-size:clamp(32px,8vw,52px)}
   .phone-stage img{max-width:100%}
-  /* hide fog fragments on mobile */
-  .frag-layer{display:none}
-  #fog{display:none}
+  /* hide grid canvas on small screens for perf */
+  #gridCanvas{display:none}
+  .phone-glow{display:none}
 }
 @media(max-width:600px){
   .hero{padding:48px 20px 16px}
@@ -292,48 +297,11 @@ footer .links a:hover{color:var(--text)}
 <!-- ============================== HERO ============================== -->
 <div class="hero-wrap" id="heroWrap">
 
-  <!-- FRAGMENTS — empty, waiting for Luka's placement guide -->
-  <div class="frag-layer" id="fragLayer">
-    <!-- 35 fragments — zero-overlap, below hero text (26-98% vertical), sides only (0-30% / 70-100%) -->
-    <div class="frag" style="left:24.4%;top:63.3%;width:120px"><img src="./fragments/01_axe_triangle.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:23.5%;top:74.6%;width:94px"><img src="./fragments/02_dot_loader.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:13.1%;top:92%;width:370px"><img src="./fragments/03_skeu_navbar.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:7.2%;top:50.9%;width:201px"><img src="./fragments/04_candlestick_chart.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:9.3%;top:34.4%;width:260px"><img src="./fragments/05_fib_annotation.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:10%;top:64.4%;width:281px"><img src="./fragments/06_chat_bubble.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:89.3%;top:48.4%;width:63px"><img src="./fragments/07_typing_indicator.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:83.1%;top:85.5%;width:380px"><img src="./fragments/08_ticker_bar.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:93.4%;top:36.1%;width:180px"><img src="./fragments/09_pnl_profit.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:92.9%;top:40.5%;width:167px"><img src="./fragments/10_pnl_loss.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:23.5%;top:82%;width:92px"><img src="./fragments/11_axe_wordmark.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:95.3%;top:47.6%;width:92px"><img src="./fragments/12_live_status.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:92.7%;top:73.6%;width:201px"><img src="./fragments/13_volume_bars.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:91%;top:89%;width:206px"><img src="./fragments/14_timeframe_pills.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:21.8%;top:86.5%;width:45px"><img src="./fragments/15_send_button.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:25.4%;top:86.5%;width:45px"><img src="./fragments/16_mic_button.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:19.1%;top:96.6%;width:142px"><img src="./fragments/17_pinned_context.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.5%;top:89.3%;width:191px"><img src="./fragments/18_buy_sell_buttons.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:78.3%;top:40.4%;width:241px"><img src="./fragments/19_crosshair_price.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:77.6%;top:30.9%;width:221px"><img src="./fragments/20_account_card.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:10%;top:84.5%;width:280px"><img src="./fragments/21_trade_position.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:9.3%;top:75.1%;width:261px"><img src="./fragments/22_sl_tp_lines.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:79%;top:80.9%;width:260px"><img src="./fragments/23_alert_item.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:21.7%;top:50.2%;width:200px"><img src="./fragments/24_quick_action_menu.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:81%;top:60.8%;width:321px"><img src="./fragments/25_composer_input.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:82.4%;top:55.3%;width:360px"><img src="./fragments/26_aura_wave.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:24.4%;top:32.8%;width:160px"><img src="./fragments/27_order_book.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:79%;top:67.1%;width:261px"><img src="./fragments/28_login_field.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:92.8%;top:44.6%;width:165px"><img src="./fragments/29_upgrade_badge.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:92.7%;top:29.8%;width:201px"><img src="./fragments/30_supply_demand_zones.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:26%;top:41.2%;width:47px"><img src="./fragments/31_wordmark_topbar.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:77.6%;top:74.1%;width:221px"><img src="./fragments/32_rsi_indicator.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:21.3%;top:41.6%;width:70px"><img src="./fragments/33_tts_button.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:78.3%;top:48.5%;width:241px"><img src="./fragments/34_intel_card.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:6.9%;top:96.5%;width:191px"><img src="./fragments/35_journal_tags.png" alt="" loading="lazy"></div>
-  </div>
+  <!-- Grid + laser line canvas -->
+  <canvas id="gridCanvas"></canvas>
 
-  <!-- fog canvas for atmospheric effect -->
-  <canvas id="fog"></canvas>
+  <!-- Radial glow behind phones — pulses when beams converge -->
+  <div class="phone-glow" id="phoneGlow"></div>
 
   <!-- HERO CONTENT -->
   <section class="hero">
@@ -725,74 +693,121 @@ let pi=0,ci=0,del=false;const typed=document.getElementById('typed');
 /* ===== spotlight on tiles + cards ===== */
 document.querySelectorAll('.itile,.card').forEach(c=>c.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect();c.style.setProperty('--mx',(e.clientX-r.left)+'px');c.style.setProperty('--my',(e.clientY-r.top)+'px');}));
 
-/* ===== Smoke / fog reveal (Huly-style) ===== */
+/* ===== Grid + laser beams (Linear / Huly-style hero) ===== */
 (function(){
- const fog=document.getElementById('fog');if(!fog)return;
- const fc=fog.getContext('2d');
- const hole=document.createElement('canvas'),hc=hole.getContext('2d');
- let FW,FH,DPR;
- function res(){DPR=Math.min(devicePixelRatio||1,2);const r=fog.getBoundingClientRect();FW=Math.max(1,Math.round(r.width));FH=Math.max(1,Math.round(r.height));
-   fog.width=FW*DPR;fog.height=FH*DPR;fog.style.width=FW+'px';fog.style.height=FH+'px';fc.setTransform(DPR,0,0,DPR,0,0);
-   hole.width=FW*DPR;hole.height=FH*DPR;hc.setTransform(DPR,0,0,DPR,0,0);}
- res();addEventListener('resize',()=>{res();seed();});addEventListener('load',()=>{res();seed();});setTimeout(()=>{res();seed();},400);
- let puffs=[],dust=[],trail=[];
- function seed(){puffs=[];dust=[];trail=[];const n=Math.round(FW*FH/18000)+24;
-   for(let i=0;i<n;i++)puffs.push({x:Math.random()*FW,y:Math.random()*FH,r:145+Math.random()*220,dx:(Math.random()-.5)*.12,dy:(Math.random()-.5)*.09,o:.56+Math.random()*.5,ph:Math.random()*6.28});
-   const dn=Math.round(FW*FH/15000);
-   for(let i=0;i<dn;i++)dust.push({x:Math.random()*FW,y:Math.random()*FH,r:.45+Math.random()*1.4,o:.04+Math.random()*.08,dx:(Math.random()-.5)*.06,dy:(Math.random()-.5)*.05,ph:Math.random()*6.28});}
- seed();
- let mx=-9999,my=-9999,on=false;
- addEventListener('mousemove',e=>{const r=fog.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;
-   if(x>=0&&y>=0&&x<=r.width&&y<=r.height){mx=x;my=y;on=true;trail.push({x,y,t:performance.now()});if(trail.length>12)trail.shift();}else{on=false;}});
- addEventListener('mouseleave',()=>{on=false;mx=-9999;my=-9999;});
- function frame(){
-  fc.clearRect(0,0,FW,FH);
-  fc.globalCompositeOperation='source-over';
-  // drifting smoke puffs
-  for(const p of puffs){p.x+=p.dx;p.y+=p.dy;p.ph+=.005;
-   if(p.x<-300)p.x=FW+300;if(p.x>FW+300)p.x=-300;if(p.y<-300)p.y=FH+300;if(p.y>FH+300)p.y=-300;
-   const pr=p.r*(1+0.06*Math.sin(p.ph));
-   const g=fc.createRadialGradient(p.x,p.y,0,p.x,p.y,pr);
-   const a=0.64*p.o*(0.82+0.18*Math.sin(p.ph));
-   g.addColorStop(0,`rgba(10,10,14,${a})`);g.addColorStop(.58,`rgba(10,10,14,${a*0.62})`);g.addColorStop(1,'rgba(10,10,14,0)');
-   fc.fillStyle=g;fc.beginPath();fc.arc(p.x,p.y,pr,0,6.283);fc.fill();}
-  // floating dust
-  for(const d of dust){d.x+=d.dx;d.y+=d.dy;d.ph+=.016;
-   if(d.x<0)d.x=FW;if(d.x>FW)d.x=0;if(d.y<0)d.y=FH;if(d.y>FH)d.y=0;
-   const a=d.o*(.55+.45*Math.sin(d.ph));
-   fc.beginPath();fc.arc(d.x,d.y,d.r,0,6.283);
-   fc.fillStyle=`rgba(165,243,252,${a})`;fc.fill();}
-  // solid haze — matches Linear bg color
-  fc.fillStyle='rgba(10,10,14,0.97)';fc.fillRect(0,0,FW,FH);
-  // heal the reveal mask
-  hc.globalCompositeOperation='destination-out';
-  const heal=on?0.007:0.04;
-  hc.fillStyle=`rgba(0,0,0,${heal})`;hc.fillRect(0,0,FW,FH);
-  // carve at cursor
-  hc.globalCompositeOperation='source-over';
-  if(on){
-   const now=performance.now();
-   const points=trail.filter(p=>now-p.t<800);
-   for(let i=0;i<points.length;i++){
-    const p=points[i];const age=(now-p.t)/800;
-    const rad=120+(1-age)*50;const alpha=.76*(1-age);
-    const g=hc.createRadialGradient(p.x,p.y,0,p.x,p.y,rad);
-    g.addColorStop(0,`rgba(255,255,255,${alpha})`);
-    g.addColorStop(.36,`rgba(255,255,255,${alpha*.26})`);
-    g.addColorStop(1,'rgba(255,255,255,0)');
-    hc.fillStyle=g;hc.beginPath();hc.arc(p.x,p.y,rad,0,6.283);hc.fill();}
-   const core=hc.createRadialGradient(mx,my,0,mx,my,130);
-   core.addColorStop(0,'rgba(255,255,255,0.97)');
-   core.addColorStop(.30,'rgba(255,255,255,0.42)');
-   core.addColorStop(.62,'rgba(255,255,255,0.10)');
-   core.addColorStop(1,'rgba(255,255,255,0)');
-   hc.fillStyle=core;hc.beginPath();hc.arc(mx,my,130,0,6.283);hc.fill();}
-  // punch holes
-  fc.globalCompositeOperation='destination-out';
-  fc.drawImage(hole,0,0,FW,FH);
-  fc.globalCompositeOperation='source-over';
-  requestAnimationFrame(frame);}
- requestAnimationFrame(frame);
+ const cv=document.getElementById('gridCanvas');if(!cv)return;
+ const c=cv.getContext('2d');
+ let W,H,DPR;
+ const G=68; /* grid spacing */
+ const beams=[];
+ const MAX=45;
+ let mx=-9999,my=-9999,inHero=false,scrollV=0,lastScroll=0,glowStr=0,frame=0;
+ const glow=document.getElementById('phoneGlow');
+ const stage=document.querySelector('.phone-stage');
+
+ function res(){
+  DPR=Math.min(devicePixelRatio||1,2);
+  const r=cv.parentElement.getBoundingClientRect();
+  W=Math.round(r.width);H=Math.round(r.height);
+  cv.width=W*DPR;cv.height=H*DPR;
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  c.setTransform(DPR,0,0,DPR,0,0);}
+ res();addEventListener('resize',res);addEventListener('load',res);setTimeout(res,400);
+
+ /* ── draw base grid ── */
+ function grid(){
+  c.strokeStyle='rgba(34,211,238,0.028)';c.lineWidth=0.5;c.beginPath();
+  for(let x=G;x<W;x+=G){c.moveTo(x,0);c.lineTo(x,H);}
+  for(let y=G;y<H;y+=G){c.moveTo(0,y);c.lineTo(W,y);}
+  c.stroke();
+  /* brighter cross at phone center */
+  const cx=W*.5,cy=H*.62;
+  c.strokeStyle='rgba(34,211,238,0.05)';c.lineWidth=0.5;c.beginPath();
+  c.moveTo(0,Math.round(cy/G)*G);c.lineTo(W,Math.round(cy/G)*G);
+  c.moveTo(Math.round(cx/G)*G,0);c.lineTo(Math.round(cx/G)*G,H);
+  c.stroke();}
+
+ /* ── spawn a beam ── */
+ function spawn(){
+  if(beams.length>=MAX)return;
+  const cx=W*.5,cy=H*.62;
+  const horiz=Math.random()>.45;
+  let x,y,dx,dy;
+  if(horiz){
+   /* horizontal beam on a grid row, weighted toward phone center */
+   const rows=[];for(let r=G;r<H;r+=G)rows.push(r);
+   const w=rows.map(r=>1/(1+Math.pow(Math.abs(r-cy)/260,1.6)));
+   const tot=w.reduce((a,b)=>a+b,0);let pick=Math.random()*tot;
+   y=rows[0];for(let i=0;i<rows.length;i++){pick-=w[i];if(pick<=0){y=rows[i];break;}}
+   const left=Math.random()>.5;x=left?-80:W+80;dx=(left?1:-1)*(1.8+Math.random()*3.2);dy=0;
+  }else{
+   const cols=[];for(let cl=G;cl<W;cl+=G)cols.push(cl);
+   const w=cols.map(cl=>1/(1+Math.pow(Math.abs(cl-cx)/300,1.6)));
+   const tot=w.reduce((a,b)=>a+b,0);let pick=Math.random()*tot;
+   x=cols[0];for(let i=0;i<cols.length;i++){pick-=w[i];if(pick<=0){x=cols[i];break;}}
+   const top=Math.random()>.5;y=top?-80:H+80;dy=(top?1:-1)*(1.8+Math.random()*3.2);dx=0;
+  }
+  beams.push({x,y,dx,dy,len:70+Math.random()*130,life:1});}
+
+ /* ── update + cull ── */
+ function tick(){
+  const cx=W*.5,cy=H*.62,pr=220;
+  for(let i=beams.length-1;i>=0;i--){
+   const b=beams[i];b.x+=b.dx;b.y+=b.dy;
+   const d=Math.hypot(b.x-cx,b.y-cy);
+   if(d<pr){b.life-=.04;glowStr=Math.min(1,glowStr+.09);}
+   if(b.life<=0||b.x<-200||b.x>W+200||b.y<-200||b.y>H+200)beams.splice(i,1);}}
+
+ /* ── draw beams ── */
+ function drawBeams(){
+  c.save();c.lineCap='round';
+  for(const b of beams){
+   const spd=Math.hypot(b.dx,b.dy)||1;
+   const tx=b.x-b.dx*(b.len/spd),ty=b.y-b.dy*(b.len/spd);
+   const g=c.createLinearGradient(tx,ty,b.x,b.y);
+   g.addColorStop(0,'rgba(34,211,238,0)');
+   g.addColorStop(0.6,`rgba(34,211,238,${.22*b.life})`);
+   g.addColorStop(1,`rgba(34,211,238,${.55*b.life})`);
+   c.strokeStyle=g;c.lineWidth=1;c.shadowColor='rgba(34,211,238,0.4)';c.shadowBlur=6;
+   c.beginPath();c.moveTo(tx,ty);c.lineTo(b.x,b.y);c.stroke();}
+  c.restore();}
+
+ /* ── convergence glow ── */
+ function drawGlow(){
+  const cx=W*.5,cy=H*.62,r=380;
+  const a=glowStr*.12;
+  if(a>.001){
+   const g=c.createRadialGradient(cx,cy,0,cx,cy,r);
+   g.addColorStop(0,`rgba(0,242,254,${a})`);
+   g.addColorStop(.4,`rgba(0,242,254,${a*.35})`);
+   g.addColorStop(1,'rgba(0,242,254,0)');
+   c.fillStyle=g;c.fillRect(cx-r,cy-r,r*2,r*2);}
+  glowStr*=.965;
+  /* CSS glow on phone stage */
+  if(glow)glow.classList.toggle('active',glowStr>.15);
+  if(stage)stage.classList.toggle('glow-pulse',glowStr>.25);}
+
+ /* ── mouse/scroll listeners ── */
+ addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();mx=e.clientX-r.left;my=e.clientY-r.top;
+  inHero=mx>=0&&mx<=W&&my>=0&&my<=H;});
+ addEventListener('mouseleave',()=>{inHero=false;});
+ addEventListener('scroll',()=>{const s=window.scrollY;scrollV=Math.abs(s-lastScroll);lastScroll=s;},{passive:true});
+
+ /* ── main loop ── */
+ (function anim(){
+  c.clearRect(0,0,W,H);
+  /* radial bg glow — always present, very subtle */
+  const bg=c.createRadialGradient(W*.5,H*.62,0,W*.5,H*.62,W*.55);
+  bg.addColorStop(0,'rgba(0,242,254,0.06)');bg.addColorStop(.4,'rgba(0,242,254,0.015)');bg.addColorStop(1,'rgba(0,0,0,0)');
+  c.fillStyle=bg;c.fillRect(0,0,W,H);
+  grid();
+  frame++;
+  /* auto-spawn: ~1 every 10 frames, boost with mouse/scroll */
+  if(frame%10===0)spawn();
+  if(inHero&&frame%5===0)spawn();
+  if(scrollV>2&&frame%6===0){spawn();scrollV*=.8;}
+  tick();drawBeams();drawGlow();
+  requestAnimationFrame(anim);})();
 })();
 
 /* ===== reveal ===== */
