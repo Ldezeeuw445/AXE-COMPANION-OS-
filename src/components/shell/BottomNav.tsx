@@ -68,7 +68,7 @@ export function BottomNav() {
         paddingTop: 4,
         paddingLeft: 4,
         paddingRight: 4,
-        paddingBottom: 4,
+        /* paddingBottom handled by .tos-nav-pill CSS (safe-area + lift) */
       }}
       aria-label="Primary"
     >
