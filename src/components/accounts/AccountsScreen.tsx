@@ -571,7 +571,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
   const onlyDemo = initialAccounts.length > 0 && initialAccounts.every((a) => isDemoAccount(a));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto gap-5 pb-4">
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
         liveCount={connectedCount}

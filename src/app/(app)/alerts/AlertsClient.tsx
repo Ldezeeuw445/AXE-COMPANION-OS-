@@ -381,7 +381,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
   }, [error, push?.vapidConfigured, push?.hasSubscription, delivery.short]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto gap-3 pb-2">
       {/* Desktop header; mobile uses AppTopBar slots */}
       <div className="hidden items-center justify-between gap-3 border-b border-white/[0.04] py-2 md:flex">
         <div className="flex items-center gap-2">

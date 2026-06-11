@@ -105,7 +105,7 @@ export default async function SubscriptionsPage() {
   const upgradeReady = Boolean(supabase) && billingConfigured;
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col overflow-y-auto pb-6">
       <LiveStatusReporter
         liveCount={(supabase ? 1 : 0) + (billingConfigured ? 1 : 0)}
         totalCount={2}

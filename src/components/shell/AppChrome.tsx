@@ -10,19 +10,18 @@ import { SwipeContentWrapper } from "@/components/shell/SwipeContentWrapper";
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
  *
- * AmbientProvider owns the particle canvas + sound-fx context.
- * The canvas renders at z-0 behind everything; pointer-events:none.
- *
- * Bottom padding uses a CSS custom property so full-screen pages (chat,
- * chart) can override it to just the safe-area inset instead of the full
- * nav-bar clearance.  See `tos-fullscreen-page` in globals.css.
+ * Layout: h-dvh flex column. The navbar is a regular flex child at the
+ * bottom — NOT position:fixed. Content fills the remaining space and
+ * handles its own scrolling. This is the only architecture that keeps
+ * the navbar rock-solid on iOS PWA across cold starts, page transitions,
+ * and keyboard events.
  */
 export function AppChrome({ children }: { children: ReactNode }) {
   return (
     <AppTopBarProvider>
       <AmbientProvider>
         <SwipeNavProvider>
-          <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
+          <div className="relative mx-auto flex h-dvh w-full max-w-6xl flex-col overflow-hidden md:min-h-dvh md:flex-row md:overflow-visible">
             <AppNavigation />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-[4.25rem]">
               <SwipeContentWrapper>
@@ -31,8 +30,8 @@ export function AppChrome({ children }: { children: ReactNode }) {
                 </div>
               </SwipeContentWrapper>
             </div>
-            {/* Bottom nav: only on mobile, hidden on chart/chat */}
-            <div className="md:hidden">
+            {/* Bottom nav: regular flex child, always at bottom */}
+            <div className="shrink-0 md:hidden">
               <ClientBottomNav />
             </div>
           </div>

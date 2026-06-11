@@ -117,6 +117,7 @@ body {
   /*
    * Pure matte black — no blue/navy tints.
    * Depth comes from card elevation and subtle white borders, not color.
+   * Shell uses h-dvh for viewport lock; body doesn't need min-height.
    */
   background-color: #060608;
   background-image: none;
@@ -124,7 +125,6 @@ body {
   color: var(--tos-text);
   font-family: var(--font-sans), system-ui, sans-serif;
   font-weight: 400;
-  min-height: 100dvh;
 }
 
 ::selection {
@@ -271,29 +271,21 @@ body {
    Safe-area clearance is handled by padding-bottom INSIDE the bar so
    icons sit above the home indicator while the background fills the
    safe-area region seamlessly. Top corners rounded, bottom square. */
+/* Navbar is a regular flex child in the h-dvh shell — NOT position:fixed.
+   This is the only reliable way to keep the bar at the bottom on iOS PWA
+   across cold starts, page transitions, and keyboard events.
+   z-index keeps it above content that might overlap (drawers, etc.). */
 .tos-nav-pill {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
   z-index: 50;
   width: 100%;
-  max-width: none;
-  margin: 0;
-  /* padding-bottom handled inline in BottomNav.tsx to avoid
-     specificity issues with the padding shorthand. */
+  flex-shrink: 0;
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
-/* In landscape, widen the navbar and reduce safe-area gap so the
-   screen estate is maximised for chart / trading views. */
 @media (orientation: landscape) {
   .tos-nav-pill {
-    /* Full width in landscape too — docked bar style */
-  }
-  /* Content padding in landscape only needs a small bottom offset */
-  .tos-app-content {
-    padding-bottom: calc(var(--tos-nav-offset, 72px) + 0.5rem) !important;
+    /* Full width in landscape — docked bar style */
   }
 }
 
@@ -319,32 +311,16 @@ body {
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.06);
 }
 
-/* ── App content bottom padding ─────────────────────────────────────────
-   Default: clears the fixed bottom nav + extra breathing room.
-   Full-screen pages (chat) get tighter clearance — just the nav. */
+/* ── App content ───────────────────────────────────────────────────────
+   The navbar is now a flex sibling (not fixed overlay), so content no
+   longer needs padding-bottom for clearance. On desktop, add a small
+   bottom inset for breathing room. */
 .tos-app-content {
-  padding-bottom: calc(var(--tos-nav-offset) + 1rem);
+  padding-bottom: 0;
 }
 @media (min-width: 768px) {
   .tos-app-content {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  }
-}
-/* Full-screen pages (chat) — tight clearance, just enough for the nav.
-   Also lock body overflow to prevent iOS rubber-band scroll behind the
-   fixed overlay, which lets the sticky top bar slide off-screen. */
-.tos-app-content:has(> .tos-fullscreen-page) {
-  padding-bottom: var(--tos-nav-offset) !important;
-}
-/* NOTE: Do NOT use overflow:hidden or overscroll-behavior:none on html/body
-   for fullscreen pages. iOS PWA cold-start treats those as viewport-altering
-   properties, causing position:fixed (the navbar) to float ~20-30 px above
-   its correct position until the user navigates to a non-fullscreen page.
-   The fullscreen page element itself is position:fixed + overflow:hidden +
-   overscroll-none, so body-level locking is unnecessary. */
-@media (min-width: 768px) {
-  .tos-app-content:has(> .tos-fullscreen-page) {
-    padding-bottom: 0 !important;
   }
 }
 

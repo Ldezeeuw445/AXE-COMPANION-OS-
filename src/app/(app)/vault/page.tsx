@@ -44,7 +44,7 @@ export default async function VaultPage() {
   ];
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col overflow-y-auto">
       <LiveStatusReporter
         liveCount={0}
         totalCount={0}

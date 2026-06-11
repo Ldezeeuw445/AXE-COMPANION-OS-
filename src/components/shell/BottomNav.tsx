@@ -3,14 +3,15 @@
 /**
  * SkeuNavBar — docked bottom tab bar.
  *
- * Pinned to bottom: 0 with safe-area padding inside so icons clear the
- * home indicator. Top corners rounded (16px), bottom edge flush with screen.
+ * Regular flex child in the h-dvh shell — NOT position:fixed.
+ * Safe-area padding inside so icons clear the home indicator.
+ * Top corners rounded (16px), bottom edge flush with screen.
  *
  * Glass bubble: when the user swipes content left/right, a translucent
  * cyan bubble slides across the navbar tabs (like Slack).
  */
 
-import { useRef, useState, useEffect } from "react";
+import { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -44,79 +45,6 @@ export function BottomNav() {
 
   const { progress, currentTabIdx } = useSwipeNav();
 
-  // iOS PWA: env(safe-area-inset-bottom) can resolve asynchronously on
-  // first launch — the CSS value is 0 during the initial paint, then
-  // jumps to the real value ~50-100ms later. We measure it via JS and
-  // re-trigger a render so the bar never floats above its final position.
-  const [safeBottom, setSafeBottom] = useState<number | null>(null);
-  useEffect(() => {
-    function measure() {
-      const el = document.createElement("div");
-      el.style.cssText =
-        "position:fixed;bottom:0;left:0;width:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden";
-      document.body.appendChild(el);
-      const h = el.getBoundingClientRect().height;
-      document.body.removeChild(el);
-      return h;
-    }
-    // First read — might be 0 on iOS PWA cold start
-    const first = measure();
-    setSafeBottom(first);
-    // Re-measure after a short delay in case iOS resolves the inset late
-    const t = setTimeout(() => {
-      const second = measure();
-      if (second !== first) setSafeBottom(second);
-    }, 150);
-    return () => clearTimeout(t);
-  }, []);
-
-  // iOS PWA cold-start fix: verify the navbar is actually flush with the
-  // viewport bottom. On some iOS versions, `position: fixed; bottom: 0`
-  // can be offset when the page first loads (especially on fullscreen-page
-  // routes like /chat). We detect the discrepancy via getBoundingClientRect
-  // and nudge the bottom property until the nav is flush.
-  const [bottomCorrection, setBottomCorrection] = useState(0);
-  useEffect(() => {
-    if (!navRef.current) return;
-
-    function verify() {
-      const nav = navRef.current;
-      if (!nav) return;
-      // Temporarily reset correction so we measure the "native" position
-      const prevBottom = nav.style.bottom;
-      nav.style.bottom = "0px";
-      const rect = nav.getBoundingClientRect();
-      const viewH = window.visualViewport?.height ?? window.innerHeight;
-      // gap > 0 means nav is floating above the bottom
-      const gap = viewH - rect.bottom;
-      if (Math.abs(gap) > 2) {
-        // Apply negative bottom to push the nav down into the gap
-        const fix = Math.max(-40, Math.min(40, Math.round(-gap)));
-        nav.style.bottom = `${fix}px`;
-        setBottomCorrection(fix);
-      } else {
-        nav.style.bottom = prevBottom === "0px" || !prevBottom ? "" : prevBottom;
-        setBottomCorrection(0);
-      }
-    }
-
-    // Check on mount + after short delay (iOS env() async resolve)
-    const raf = requestAnimationFrame(verify);
-    const t1 = setTimeout(verify, 250);
-    const t2 = setTimeout(verify, 600);
-
-    // Re-check on viewport resize (keyboard, rotation, etc.)
-    const vv = window.visualViewport;
-    if (vv) vv.addEventListener("resize", verify);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(t1);
-      clearTimeout(t2);
-      if (vv) vv.removeEventListener("resize", verify);
-    };
-  }, [pathname]); // re-run when route changes
-
   // Conditional 6th tab
   const sixthTab = isAxeView
     ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
@@ -140,13 +68,9 @@ export function BottomNav() {
         paddingTop: 4,
         paddingLeft: 4,
         paddingRight: 4,
-        /* Safe-area padding. JS-measured value takes priority so the bar
-           never floats higher than intended on iOS PWA cold start (where
-           the CSS env() value can resolve asynchronously). */
-        paddingBottom:
-          safeBottom != null && safeBottom > 0
-            ? safeBottom
-            : "env(safe-area-inset-bottom, 0px)",
+        /* Safe-area padding via pure CSS — no JS measurement needed since
+           the navbar is now a flex child, not position:fixed. */
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
       aria-label="Primary"
     >
