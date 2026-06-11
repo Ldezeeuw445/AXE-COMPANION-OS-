@@ -69,18 +69,24 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .frag-layer{position:absolute;inset:0;z-index:1;pointer-events:none}
 .frag{position:absolute;pointer-events:none;opacity:.65;transform:translate(-50%,-50%)}
 .frag img{display:block;width:100%;height:auto;filter:drop-shadow(0 4px 16px rgba(0,0,0,.4))}
-/* ── Linear-exact intro blocks ── */
-.intro-blocks{max-width:1200px;margin:0 auto;padding:48px 26px 0;display:grid;grid-template-columns:5fr 7fr;gap:24px;align-items:start}
-.intro-block{position:relative;overflow:hidden;border-radius:16px;height:520px;
-  background:#16161a;
-  border:1px solid rgba(255,255,255,.06);
-  box-shadow:0 2px 4px rgba(0,0,0,.2),0 8px 24px rgba(0,0,0,.28),0 24px 48px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.04)}
-.intro-block img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block;
-  -webkit-mask-image:linear-gradient(to bottom,black 60%,transparent 100%);
-  mask-image:linear-gradient(to bottom,black 60%,transparent 100%)}
-.intro-label{text-align:center;margin-top:14px}
-.intro-label h3{font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--text)}
-.intro-label p{font-size:13px;color:var(--muted);margin-top:4px}
+/* ── Linear-mirror overlapping cards ── */
+.intro-stage{position:relative;max-width:1100px;margin:0 auto;padding:48px 40px 0;display:flex;align-items:center;min-height:520px}
+/* shared card styling */
+.intro-card{overflow:hidden;border-radius:16px;background:#16161a;
+  border:1px solid rgba(255,255,255,.06)}
+.intro-card img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+/* LEFT = background panel (login) — larger */
+.intro-bg{position:relative;width:66%;height:520px;flex-shrink:0;z-index:1;
+  box-shadow:0 2px 4px rgba(0,0,0,.15),0 8px 24px rgba(0,0,0,.2),0 24px 48px rgba(0,0,0,.12)}
+/* RIGHT = foreground card (splash) — overlaps left panel */
+.intro-fg{position:absolute;right:40px;top:50%;transform:translateY(-50%);width:44%;height:560px;z-index:2;
+  box-shadow:0 4px 8px rgba(0,0,0,.3),0 16px 48px rgba(0,0,0,.4),0 40px 80px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.05);
+  border-color:rgba(255,255,255,.08)}
+.intro-labels{max-width:1100px;margin:18px auto 0;padding:0 40px;display:flex;gap:24px}
+.intro-labels .lbl-bg{width:66%;text-align:center}
+.intro-labels .lbl-fg{flex:1;text-align:center}
+.intro-labels h3{font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--text)}
+.intro-labels p{font-size:13px;color:var(--muted);margin-top:4px}
 /* fog canvas */
 #fog{position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:normal}
 /* hero content sits ABOVE fog */
@@ -235,8 +241,11 @@ footer .links a:hover{color:var(--text)}
   .plans{grid-template-columns:1fr}
   .itile.span2{grid-column:span 1}
   .stats{grid-template-columns:repeat(2,1fr)}
-  .intro-blocks{grid-template-columns:1fr;gap:32px;padding:32px 16px 0}
-  .intro-block{height:380px}
+  .intro-stage{flex-direction:column;padding:32px 16px 0;min-height:auto}
+  .intro-bg{width:100%;height:380px}
+  .intro-fg{position:relative;right:auto;top:auto;transform:none;width:85%;height:360px;margin:-60px auto 0;z-index:2}
+  .intro-labels{flex-direction:column;padding:0 16px;gap:8px}
+  .intro-labels .lbl-bg,.intro-labels .lbl-fg{width:100%}
   .nav-links{display:none}
   .hero h1{font-size:clamp(32px,8vw,52px)}
   .phone-stage img{max-width:100%}
@@ -284,42 +293,42 @@ footer .links a:hover{color:var(--text)}
 
   <!-- FRAGMENTS — empty, waiting for Luka's placement guide -->
   <div class="frag-layer" id="fragLayer">
-    <!-- 35 fragments — zero-overlap, all within viewport bounds (solver-generated) -->
-    <div class="frag" style="left:20.5%;top:24.7%;width:120px"><img src="./fragments/01_axe_triangle.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:91%;top:21.2%;width:94px"><img src="./fragments/02_dot_loader.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:70.5%;width:370px"><img src="./fragments/03_skeu_navbar.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:8.4%;width:201px"><img src="./fragments/04_candlestick_chart.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:9.7%;top:9.3%;width:260px"><img src="./fragments/05_fib_annotation.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:22.2%;width:281px"><img src="./fragments/06_chat_bubble.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:22.7%;top:8%;width:63px"><img src="./fragments/07_typing_indicator.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:93.8%;width:380px"><img src="./fragments/08_ticker_bar.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:92%;top:56.5%;width:180px"><img src="./fragments/09_pnl_profit.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:23.2%;top:38.3%;width:167px"><img src="./fragments/10_pnl_loss.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:20.6%;top:33.3%;width:92px"><img src="./fragments/11_axe_wordmark.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:91%;top:28.4%;width:92px"><img src="./fragments/12_live_status.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:7.7%;top:66.4%;width:201px"><img src="./fragments/13_volume_bars.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:89.7%;width:206px"><img src="./fragments/14_timeframe_pills.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:97.2%;top:18.2%;width:45px"><img src="./fragments/15_send_button.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:22%;top:2.9%;width:45px"><img src="./fragments/16_mic_button.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:23.3%;top:47.2%;width:142px"><img src="./fragments/17_pinned_context.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:91%;top:51.5%;width:191px"><img src="./fragments/18_buy_sell_buttons.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:9.1%;top:49.8%;width:241px"><img src="./fragments/19_crosshair_price.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:8.4%;top:39.3%;width:221px"><img src="./fragments/20_account_card.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:44.1%;width:280px"><img src="./fragments/21_trade_position.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:34%;width:261px"><img src="./fragments/22_sl_tp_lines.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:9.7%;top:80.5%;width:260px"><img src="./fragments/23_alert_item.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:7.6%;top:25.8%;width:200px"><img src="./fragments/24_quick_action_menu.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:77.5%;width:321px"><img src="./fragments/25_composer_input.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:84%;width:360px"><img src="./fragments/26_aura_wave.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:89.9%;top:7.7%;width:160px"><img src="./fragments/27_order_book.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:9.8%;top:73.6%;width:261px"><img src="./fragments/28_login_field.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:23.1%;top:43.2%;width:165px"><img src="./fragments/29_upgrade_badge.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:53.5%;width:201px"><img src="./fragments/30_supply_demand_zones.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:22.1%;top:15.4%;width:47px"><img src="./fragments/31_wordmark_topbar.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:8.4%;top:58.8%;width:221px"><img src="./fragments/32_rsi_indicator.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:22.9%;top:12.2%;width:70px"><img src="./fragments/33_tts_button.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:76.4%;top:62.7%;width:241px"><img src="./fragments/34_intel_card.png" alt="" loading="lazy"></div>
-    <div class="frag" style="left:23%;top:64.5%;width:191px"><img src="./fragments/35_journal_tags.png" alt="" loading="lazy"></div>
+    <!-- 35 fragments — zero-overlap, below hero text (26-98% vertical), sides only (0-30% / 70-100%) -->
+    <div class="frag" style="left:24.4%;top:63.3%;width:120px"><img src="./fragments/01_axe_triangle.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:23.5%;top:74.6%;width:94px"><img src="./fragments/02_dot_loader.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:13.1%;top:92%;width:370px"><img src="./fragments/03_skeu_navbar.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:7.2%;top:50.9%;width:201px"><img src="./fragments/04_candlestick_chart.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:9.3%;top:34.4%;width:260px"><img src="./fragments/05_fib_annotation.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:10%;top:64.4%;width:281px"><img src="./fragments/06_chat_bubble.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:89.3%;top:48.4%;width:63px"><img src="./fragments/07_typing_indicator.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:83.1%;top:85.5%;width:380px"><img src="./fragments/08_ticker_bar.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:93.4%;top:36.1%;width:180px"><img src="./fragments/09_pnl_profit.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:92.9%;top:40.5%;width:167px"><img src="./fragments/10_pnl_loss.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:23.5%;top:82%;width:92px"><img src="./fragments/11_axe_wordmark.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:95.3%;top:47.6%;width:92px"><img src="./fragments/12_live_status.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:92.7%;top:73.6%;width:201px"><img src="./fragments/13_volume_bars.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:91%;top:89%;width:206px"><img src="./fragments/14_timeframe_pills.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:21.8%;top:86.5%;width:45px"><img src="./fragments/15_send_button.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:25.4%;top:86.5%;width:45px"><img src="./fragments/16_mic_button.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:19.1%;top:96.6%;width:142px"><img src="./fragments/17_pinned_context.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:76.5%;top:89.3%;width:191px"><img src="./fragments/18_buy_sell_buttons.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:78.3%;top:40.4%;width:241px"><img src="./fragments/19_crosshair_price.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:77.6%;top:30.9%;width:221px"><img src="./fragments/20_account_card.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:10%;top:84.5%;width:280px"><img src="./fragments/21_trade_position.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:9.3%;top:75.1%;width:261px"><img src="./fragments/22_sl_tp_lines.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:79%;top:80.9%;width:260px"><img src="./fragments/23_alert_item.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:21.7%;top:50.2%;width:200px"><img src="./fragments/24_quick_action_menu.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:81%;top:60.8%;width:321px"><img src="./fragments/25_composer_input.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:82.4%;top:55.3%;width:360px"><img src="./fragments/26_aura_wave.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:24.4%;top:32.8%;width:160px"><img src="./fragments/27_order_book.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:79%;top:67.1%;width:261px"><img src="./fragments/28_login_field.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:92.8%;top:44.6%;width:165px"><img src="./fragments/29_upgrade_badge.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:92.7%;top:29.8%;width:201px"><img src="./fragments/30_supply_demand_zones.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:26%;top:41.2%;width:47px"><img src="./fragments/31_wordmark_topbar.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:77.6%;top:74.1%;width:221px"><img src="./fragments/32_rsi_indicator.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:21.3%;top:41.6%;width:70px"><img src="./fragments/33_tts_button.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:78.3%;top:48.5%;width:241px"><img src="./fragments/34_intel_card.png" alt="" loading="lazy"></div>
+    <div class="frag" style="left:6.9%;top:96.5%;width:191px"><img src="./fragments/35_journal_tags.png" alt="" loading="lazy"></div>
   </div>
 
   <!-- fog canvas for atmospheric effect -->
@@ -385,15 +394,15 @@ footer .links a:hover{color:var(--text)}
       <p class="lead">From the moment you open AXE — the particle triangle, the encrypted command channel, one tap to enter.</p>
     </div>
   </div>
-  <div class="intro-blocks reveal">
-    <div>
-      <div class="intro-block"><img src="./photos/axe_splash.jpg" alt="AXE Splash — Secure, Intelligent, Encrypted"></div>
-      <div class="intro-label"><h3>Boot sequence</h3><p>Particle triangle · encrypted handshake · live context restore</p></div>
-    </div>
-    <div>
-      <div class="intro-block"><img src="./photos/axe_login.jpg" alt="AXE Login — Private Command Channel"></div>
-      <div class="intro-label"><h3>Private command channel</h3><p>Supabase auth · not a social feed · your data stays yours</p></div>
-    </div>
+  <div class="intro-stage reveal">
+    <!-- LEFT: large bg panel — login -->
+    <div class="intro-card intro-bg"><img src="./photos/axe_login.jpg" alt="AXE Login — Private Command Channel"></div>
+    <!-- RIGHT: foreground card — splash, overlaps left -->
+    <div class="intro-card intro-fg"><img src="./photos/axe_splash.jpg" alt="AXE Splash — Secure, Intelligent, Encrypted"></div>
+  </div>
+  <div class="intro-labels reveal">
+    <div class="lbl-bg"><h3>Private command channel</h3><p>Supabase auth · not a social feed · your data stays yours</p></div>
+    <div class="lbl-fg"><h3>Boot sequence</h3><p>Particle triangle · encrypted handshake · live context restore</p></div>
   </div>
 
   <!-- PHONE SHOWCASE — bigger, no glow, Linear-style emerging from bg -->
