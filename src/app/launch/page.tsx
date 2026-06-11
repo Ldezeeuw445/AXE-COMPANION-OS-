@@ -47,7 +47,7 @@ const SHOWCASE_SECTIONS = [
     title: "The chart feels like the product, not the marketing layer around it.",
     copy:
       "MT5 ticks, Lightweight Charts, Auto-Fib, structure, OB, FVG, iFVG and a real execution dock all live on the same canvas. Nothing here feels detached from the trading surface.",
-    image: "/launch/809_1x_shots_so.png",
+    image: "/launch/app-real/chart.png",
     bullets: [
       "Auto-Fib (Auto / Swing / Day), Auto-Trend, BOS / CHoCH, swing points and MA stack.",
       "Demo trading on live ticks, so the free experience still teaches the real workflow.",
@@ -58,7 +58,7 @@ const SHOWCASE_SECTIONS = [
     title: "News, conviction and saved research arrive as one operating picture.",
     copy:
       "Polygon, Perigon, Finnhub, EODHD and FRED feed the intel layer, while AXE can pin the result into vault notes and explain what matters in the same dark language as the rest of the app.",
-    image: "/launch/595_1x_shots_so.png",
+    image: "/launch/app-real/intel.png",
     bullets: [
       "Smart 5-minute caching keeps provider costs sane during quieter periods.",
       "Market tide, energy flow, vessel tracking and macro context can all land in saved workspace memory.",
@@ -69,7 +69,7 @@ const SHOWCASE_SECTIONS = [
     title: "Multi-account, multi-broker, and still calm enough to trust on the phone.",
     copy:
       "Funded, demo and live accounts can live in the same companion OS with one active account at a time, clear server setup, and the same Supabase-backed memory that Trading OS will use on desktop.",
-    image: "/launch/338_1x_shots_so.png",
+    image: "/launch/app-real/settings.png",
     bullets: [
       "AXE demo account is instant; live execution stays behind explicit activation and account context.",
       "Row-Level Security keeps each workspace scoped correctly instead of faking isolation.",
@@ -159,9 +159,9 @@ function ShowcaseSection({
         <Image
           src={image}
           alt={title}
-          width={1080}
-          height={1080}
-          className="relative z-10 w-full rounded-[2rem] object-cover"
+          width={1206}
+          height={2622}
+          className="relative z-10 mx-auto max-h-[48rem] w-auto max-w-full rounded-[2rem] object-contain"
           sizes="(max-width: 1024px) 100vw, 48vw"
         />
       </div>
@@ -285,11 +285,11 @@ export default function LaunchPage() {
             </div>
             <div className="launch-wide-image-frame mt-10">
               <Image
-                src="/launch/570_1x_shots_so.png"
-                alt="AXE Companion gallery trio"
-                width={1920}
-                height={1080}
-                className="relative z-10 w-full rounded-[2rem] object-cover"
+                src="/launch/app-real/depth.png"
+                alt="AXE Companion market depth"
+                width={1206}
+                height={2622}
+                className="relative z-10 mx-auto max-h-[52rem] w-auto rounded-[2rem] object-contain"
                 sizes="100vw"
               />
             </div>
