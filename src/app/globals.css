@@ -336,18 +336,12 @@ body {
 .tos-app-content:has(> .tos-fullscreen-page) {
   padding-bottom: var(--tos-nav-offset) !important;
 }
-/* NOTE: Do NOT use overflow:hidden on html/body for fullscreen pages.
-   iOS Safari treats overflow:hidden on the root as a new containing block,
-   which breaks position:fixed on the navbar (pushes it ~60-100 px higher).
-   The fullscreen page element itself is position:fixed + overflow:hidden,
-   so body-level clipping is unnecessary. overscroll-behavior:none alone
-   prevents pull-to-refresh / scroll bounce without affecting fixed layout. */
-html:has(.tos-fullscreen-page) {
-  overscroll-behavior: none;
-}
-html:has(.tos-fullscreen-page) body {
-  overscroll-behavior: none;
-}
+/* NOTE: Do NOT use overflow:hidden or overscroll-behavior:none on html/body
+   for fullscreen pages. iOS PWA cold-start treats those as viewport-altering
+   properties, causing position:fixed (the navbar) to float ~20-30 px above
+   its correct position until the user navigates to a non-fullscreen page.
+   The fullscreen page element itself is position:fixed + overflow:hidden +
+   overscroll-none, so body-level locking is unnecessary. */
 @media (min-width: 768px) {
   .tos-app-content:has(> .tos-fullscreen-page) {
     padding-bottom: 0 !important;

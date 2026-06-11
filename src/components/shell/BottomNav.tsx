@@ -70,6 +70,53 @@ export function BottomNav() {
     return () => clearTimeout(t);
   }, []);
 
+  // iOS PWA cold-start fix: verify the navbar is actually flush with the
+  // viewport bottom. On some iOS versions, `position: fixed; bottom: 0`
+  // can be offset when the page first loads (especially on fullscreen-page
+  // routes like /chat). We detect the discrepancy via getBoundingClientRect
+  // and nudge the bottom property until the nav is flush.
+  const [bottomCorrection, setBottomCorrection] = useState(0);
+  useEffect(() => {
+    if (!navRef.current) return;
+
+    function verify() {
+      const nav = navRef.current;
+      if (!nav) return;
+      // Temporarily reset correction so we measure the "native" position
+      const prevBottom = nav.style.bottom;
+      nav.style.bottom = "0px";
+      const rect = nav.getBoundingClientRect();
+      const viewH = window.visualViewport?.height ?? window.innerHeight;
+      // gap > 0 means nav is floating above the bottom
+      const gap = viewH - rect.bottom;
+      if (Math.abs(gap) > 2) {
+        // Apply negative bottom to push the nav down into the gap
+        const fix = Math.max(-40, Math.min(40, Math.round(-gap)));
+        nav.style.bottom = `${fix}px`;
+        setBottomCorrection(fix);
+      } else {
+        nav.style.bottom = prevBottom === "0px" || !prevBottom ? "" : prevBottom;
+        setBottomCorrection(0);
+      }
+    }
+
+    // Check on mount + after short delay (iOS env() async resolve)
+    const raf = requestAnimationFrame(verify);
+    const t1 = setTimeout(verify, 250);
+    const t2 = setTimeout(verify, 600);
+
+    // Re-check on viewport resize (keyboard, rotation, etc.)
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener("resize", verify);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (vv) vv.removeEventListener("resize", verify);
+    };
+  }, [pathname]); // re-run when route changes
+
   // Conditional 6th tab
   const sixthTab = isAxeView
     ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
