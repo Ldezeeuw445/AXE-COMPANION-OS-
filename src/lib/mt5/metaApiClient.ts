@@ -717,6 +717,61 @@ export async function clientModifyOrder(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+//   POSITION CLOSE
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ClosePositionInput = {
+  accountId: string;
+  /** MT5 position id (string). */
+  positionId: string;
+  /** MetaApi region (london / new-york / singapore). */
+  region?: string | null;
+};
+
+/**
+ * Close an open position via MetaApi.
+ * Uses `actionType: "POSITION_CLOSE_ID"` on the same `/trade` endpoint.
+ */
+export async function clientClosePosition(
+  input: ClosePositionInput,
+): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl(input.region);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body = {
+    actionType: "POSITION_CLOSE_ID",
+    positionId: input.positionId,
+  };
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Close position failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 //   MARKET DATA
 // ────────────────────────────────────────────────────────────────────────────
 

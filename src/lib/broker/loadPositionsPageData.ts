@@ -44,6 +44,8 @@ export type PositionsPageData = {
   providerStatus: string | null;
   error: string | null;
   hint: string | null;
+  /** Supabase user_broker_accounts.id — needed by client for close/modify calls. */
+  brokerAccountId: string | null;
 };
 
 function mapSide(t: string | undefined): string {
@@ -67,13 +69,13 @@ function mapOrderType(t: string | undefined): string {
 export async function loadPositionsPageData(): Promise<PositionsPageData> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
-    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Supabase is not configured.", hint: null };
+    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Supabase is not configured.", hint: null, brokerAccountId: null };
   }
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Not signed in.", hint: null };
+    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Not signed in.", hint: null, brokerAccountId: null };
   }
 
   if (!getMetaApiToken()) {
@@ -84,6 +86,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       providerStatus: "provider_not_configured",
       error: null,
       hint: "AXE MT5 Cloud is not configured on the server yet, so live positions cannot load.",
+      brokerAccountId: null,
     };
   }
 
@@ -96,6 +99,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       providerStatus: null,
       error: null,
       hint: "Set an active AXE MT5 Cloud account on Accounts, then Sync. Positions load from your MT5 terminal through AXE.",
+      brokerAccountId: null,
     };
   }
 
@@ -159,6 +163,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       providerStatus: "connected",
       error: null,
       hint: isEmpty ? "No open positions or pending orders on this account right now." : null,
+      brokerAccountId: cloud.brokerAccountId,
     };
   } catch {
     return {
@@ -168,6 +173,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       providerStatus: "failed",
       error: null,
       hint: "Could not load positions through AXE MT5 Cloud. Try Test/Sync on Accounts, or check server logs.",
+      brokerAccountId: cloud.brokerAccountId,
     };
   }
 }

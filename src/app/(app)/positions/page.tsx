@@ -11,6 +11,7 @@ export default async function PositionsPage() {
       providerStatus={data.providerStatus}
       error={data.error}
       hint={data.hint}
+      brokerAccountId={data.brokerAccountId}
     />
   );
 }
