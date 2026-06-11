@@ -2583,7 +2583,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   return (
     <div
       ref={chartFrameRef}
-      className={`tos-ambient-glow flex min-h-0 flex-col overflow-hidden overscroll-none ${
+      className={`tos-ambient-glow flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden overscroll-none ${
         isFullscreen
           ? "fixed inset-0 z-[9999]"
           : "flex-1"

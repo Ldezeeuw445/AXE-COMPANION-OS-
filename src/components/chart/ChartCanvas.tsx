@@ -639,6 +639,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
+          touchAction: "none",
         }}
       />
 

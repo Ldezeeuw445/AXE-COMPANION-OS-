@@ -12,6 +12,14 @@ const appChrome = await readFile(
   new URL("../src/components/shell/AppChrome.tsx", import.meta.url),
   "utf8",
 );
+const swipeContentWrapper = await readFile(
+  new URL("../src/components/shell/SwipeContentWrapper.tsx", import.meta.url),
+  "utf8",
+);
+const chartCanvas = await readFile(
+  new URL("../src/components/chart/ChartCanvas.tsx", import.meta.url),
+  "utf8",
+);
 
 if (
   !contentShell.includes('"overflow-hidden"') ||
@@ -28,6 +36,23 @@ if (settingsPage.includes("overflow-y-auto")) {
 
 if (!appChrome.includes("fixed inset-0")) {
   throw new Error("The app shell must be anchored to the viewport.");
+}
+
+if (
+  !appChrome.includes("overflow-x-hidden") ||
+  !appChrome.includes("[touch-action:pan-y]")
+) {
+  throw new Error(
+    "The app shell must block horizontal viewport panning while preserving vertical gestures.",
+  );
+}
+
+if (!swipeContentWrapper.includes("overflow-x-hidden")) {
+  throw new Error("Swipe content must not widen the viewport.");
+}
+
+if (!chartCanvas.includes('touchAction: "none"')) {
+  throw new Error("The chart canvas must retain its own drag gestures.");
 }
 
 console.log("Shell scroll contract is valid.");
