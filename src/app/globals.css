@@ -281,15 +281,14 @@ body {
    Pure CSS, no JS hacks. Safe-area padding handled here so the
    background extends seamlessly to the screen edge. */
 /* Navbar flush with screen bottom — background extends to the edge.
-   padding-bottom pushes icons/labels above the home indicator.
-   Extra 8px on top of safe-area for breathing room. */
+   padding-bottom pushes icons/labels well above the home indicator. */
 .tos-nav-pill {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 50;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */

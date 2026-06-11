@@ -152,16 +152,7 @@ export function BottomNav() {
                   aria-hidden
                 />
 
-                {/* Active cyan (or gold) glow dot */}
-                {active && (
-                  <span
-                    className="absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full"
-                    style={{
-                      background: color,
-                      boxShadow: `0 0 6px ${color}, 0 0 12px ${color}66`,
-                    }}
-                  />
-                )}
+                {/* Active dot removed — cleaner look */}
               </div>
 
               {/* Label */}
