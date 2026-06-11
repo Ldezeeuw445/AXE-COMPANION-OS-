@@ -76,7 +76,7 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .hero{position:relative;z-index:3;text-align:center;padding:56px 26px 16px}
 .hero h1{font-size:clamp(32px,5.5vw,64px);font-weight:900;letter-spacing:-.04em;line-height:1.12;margin-bottom:16px}
 .hero .grad{background:linear-gradient(135deg,#22d3ee,#2dd4bf);-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero .sub{max-width:620px;margin:0 auto;font-size:16px;line-height:1.7;color:var(--muted);font-weight:400}
+.hero .sub{max-width:820px;margin:0 auto;font-size:16px;line-height:1.7;color:var(--muted);font-weight:400}
 .badge-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.18);border-radius:999px;padding:6px 16px;font-size:12px;font-weight:600;color:#a5f3fc;margin-bottom:20px}
 .badge-tag .dot{width:6px;height:6px;border-radius:50%;background:#22d3ee;box-shadow:0 0 8px #22d3ee;animation:pulse 2s ease infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -86,11 +86,11 @@ canvas#fx{position:absolute;left:0;width:100%;z-index:0;pointer-events:none}
 .hero-cta{display:flex;gap:14px;justify-content:center;margin-top:28px;flex-wrap:wrap}
 
 /* phone stage — simple image, no frames */
-.phone-stage{position:relative;z-index:3;max-width:100%;margin:0 auto;padding:32px 0 0;text-align:center}
-.phone-stage img{width:96%;max-width:1500px;height:auto;filter:drop-shadow(0 40px 80px rgba(0,0,0,.5))}
+.phone-stage{position:relative;z-index:3;max-width:100%;margin:0 auto;padding:36px 0 0;text-align:center}
+.phone-stage img{width:100%;max-width:1600px;height:auto;filter:drop-shadow(0 40px 80px rgba(0,0,0,.5))}
 
 /* trust badges carousel — inside hero */
-.trust{position:relative;z-index:3;overflow:hidden;padding:40px 0 44px;margin-top:8px}
+.trust{position:relative;z-index:3;overflow:hidden;padding:48px 0 48px;margin-top:16px}
 .trust-track{display:flex;gap:14px;animation:trustScroll 40s linear infinite;width:max-content}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:7px 18px;border-radius:999px;font-size:11.5px;font-weight:600;color:#a5f3fc;background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.12);white-space:nowrap;letter-spacing:.01em}
 @keyframes trustScroll{to{transform:translateX(-50%)}}
@@ -288,7 +288,7 @@ footer .links a:hover{color:var(--text)}
     <div class="reveal in">
       <span class="badge-tag"><span class="dot"></span>AXE Companion · live on MT5 · intelligence terminal</span>
       <h1>Chart. Intel. <span class="grad">Execution. One Tap.</span></h1>
-      <p class="sub">Live MT5 chart with auto-Fib, OB, FVG. Real broker depth ladder and a one-tap execution dock.<br>19 intelligence feeds — chokepoints, military radar, vessels, jets and smart-money flow.</p>
+      <p class="sub">Live MT5 chart with auto-Fib, OB, FVG — real broker depth ladder and a one-tap execution dock.<br>19 intelligence feeds — chokepoints, military radar, vessels, jets and smart-money flow.</p>
       <div class="type-line"><span id="typed"></span><span class="caret">&nbsp;</span></div>
     </div>
   </section>
