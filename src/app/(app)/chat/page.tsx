@@ -52,7 +52,7 @@ export default async function ChatPage() {
   const totalCount = 2;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none">
+    <div className="tos-flush-nav flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none">
       <LiveStatusReporter
         liveCount={liveCount}
         totalCount={totalCount}
