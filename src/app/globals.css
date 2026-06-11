@@ -280,13 +280,16 @@ body {
 /* Bottom navbar — position:fixed at the bottom of the viewport.
    Pure CSS, no JS hacks. Safe-area padding handled here so the
    background extends seamlessly to the screen edge. */
+/* Navbar flush with screen bottom — background extends to the edge.
+   padding-bottom pushes icons/labels above the home indicator.
+   Extra 8px on top of safe-area for breathing room. */
 .tos-nav-pill {
   position: fixed;
-  bottom: 14px;
+  bottom: 0;
   left: 0;
   right: 0;
   z-index: 50;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
