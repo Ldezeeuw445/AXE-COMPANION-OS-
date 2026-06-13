@@ -53,7 +53,7 @@ export default async function ActionsPage() {
   const capabilities = (hasActiveAccount ? 1 : 0) + (hasNews ? 1 : 0) + (hasMacro ? 1 : 0);
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain pb-6">
       <LiveStatusReporter
         liveCount={capabilities}
         totalCount={3}

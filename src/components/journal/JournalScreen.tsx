@@ -111,7 +111,7 @@ export function JournalScreen({
   }, [entries.length, journalTrades.length, loadError]);
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-4">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-4">
       <PageTitleInjector title="Journal" />
 
       {loadError ? (

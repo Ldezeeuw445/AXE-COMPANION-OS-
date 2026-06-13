@@ -312,7 +312,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
   // zero is a successful round-trip). Amber when we got a load error
   // back from the server.
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 pb-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-y-contain pb-6">
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
         liveCount={loadError ? 0 : 1}

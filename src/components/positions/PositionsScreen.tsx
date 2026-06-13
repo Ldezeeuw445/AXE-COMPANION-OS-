@@ -28,7 +28,7 @@ export function PositionsScreen({ positions, providerStatus, error, hint }: Prop
   const liveCount = providerStatus === "connected" ? 1 : 0;
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-3 pb-2">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain pb-2">
       <LiveStatusReporter
         liveCount={liveCount}
         totalCount={totalCount}

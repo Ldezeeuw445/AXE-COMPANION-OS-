@@ -16,7 +16,7 @@ export function WatchlistPageScreen({ items }: Props) {
   const merged = [...new Set([...items.map((i) => i.symbol), ...DEFAULTS])];
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-2">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-2">
       <LiveStatusReporter
         liveCount={1}
         totalCount={1}

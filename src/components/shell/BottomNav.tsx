@@ -48,7 +48,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2"
+      className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2 md:hidden"
       aria-label="Primary"
     >
       <div className="mx-auto max-w-lg rounded-[1.35rem] border border-white/[0.09] bg-gradient-to-b from-tos-surface-928/70 to-tos-bg/75 shadow-[0_8px_28px_rgba(0,0,0,0.48),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl" style={{backdropFilter: "blur(28px) saturate(160%)", WebkitBackdropFilter: "blur(28px) saturate(160%)"}}>
