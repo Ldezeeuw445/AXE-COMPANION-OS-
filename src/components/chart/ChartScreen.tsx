@@ -2674,6 +2674,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           symbol={data.brokerSymbol}
           brokerAccountId={data.account?.brokerAccountId}
           liveTradingEnabled={liveTrading.enabled}
+          isDark={chartTheme.isDark}
         />
 
         <ChartIndicatorLayer
@@ -3067,13 +3068,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
             return (
               <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
-                <div className="mb-1 text-[8px] font-bold uppercase tracking-widest text-cyan-100/60">
+                <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${chartTheme.isDark ? "text-cyan-100/60" : "text-cyan-900/70"}`}>
                   Pane order
                 </div>
                 <div className="flex flex-col gap-0.5">
                   {enabledPanes.map((mode, i) => (
                     <div key={mode} className="flex items-center gap-1">
-                      <span className="min-w-[2.2rem] text-[9px] font-semibold text-white/75">
+                      <span className={`min-w-[2.2rem] text-[9px] font-semibold ${chartTheme.isDark ? "text-white/75" : "text-black/75"}`}>
                         {labels[mode] ?? mode.toUpperCase()}
                       </span>
                       <button
@@ -3082,8 +3083,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                         onClick={() => movePaneInOrder(mode, -1)}
                         className={`rounded border px-1 py-0.5 text-[8px] ${
                           i === 0
-                            ? "border-white/[0.04] text-white/25"
-                            : "border-white/[0.08] text-white/65 hover:text-white"
+                            ? chartTheme.isDark
+                              ? "border-white/[0.04] text-white/25"
+                              : "border-black/[0.08] text-black/30"
+                            : chartTheme.isDark
+                              ? "border-white/[0.08] text-white/65 hover:text-white"
+                              : "border-black/[0.16] text-black/65 hover:text-black"
                         }`}
                       >
                         ↑
@@ -3094,8 +3099,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                         onClick={() => movePaneInOrder(mode, 1)}
                         className={`rounded border px-1 py-0.5 text-[8px] ${
                           i === enabledPanes.length - 1
-                            ? "border-white/[0.04] text-white/25"
-                            : "border-white/[0.08] text-white/65 hover:text-white"
+                            ? chartTheme.isDark
+                              ? "border-white/[0.04] text-white/25"
+                              : "border-black/[0.08] text-black/30"
+                            : chartTheme.isDark
+                              ? "border-white/[0.08] text-white/65 hover:text-white"
+                              : "border-black/[0.16] text-black/65 hover:text-black"
                         }`}
                       >
                         ↓
@@ -3111,8 +3120,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               Lets the user choose how many bullish + bearish blocks to
               show (1 each = cleanest, up to 3 each for context). */}
           {activeToolFlags.orderBlocks ? (
-            <div className="col-span-4 mt-1 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 mt-1 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 OB · per side
               </span>
               <div className="flex items-center gap-1">
@@ -3125,8 +3136,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateOrderBlockCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-white/[0.16] bg-white/[0.10] text-white"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Show ${value} order block${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -3142,8 +3157,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           {/* FVG count picker — mirrors OB / iFVG. Latest N bullish + N
               bearish unmitigated gaps. Only visible while FVG is on. */}
           {activeToolFlags.fvg ? (
-            <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 FVG · per side
               </span>
               <div className="flex items-center gap-1">
@@ -3156,8 +3173,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateFvgCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-white/[0.16] bg-white/[0.10] text-white"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Show ${value} FVG${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -3175,8 +3196,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               to the future-projection cursor; reclaimed ones stop at
               the inversion candle. */}
           {activeToolFlags.ifvg ? (
-            <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 iFVG · per side
               </span>
               <div className="flex items-center gap-1">
@@ -3189,8 +3212,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateInverseFvgCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-white/[0.16] bg-white/[0.10] text-white"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Show ${value} iFVG${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -3208,8 +3235,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               extend forward to the projection cursor. 1 = only the
               latest, 2 / 3 = latest two / three. */}
           {futureCursorEnabled ? (
-            <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 Project · per side
               </span>
               <div className="flex items-center gap-1">
@@ -3222,8 +3251,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateProjectionCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-white/[0.16] bg-white/[0.10] text-white"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Project ${value} indicator${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -3245,8 +3278,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               snap to the same levels). */}
           {hasFibAnnotation ? (
             <>
-              <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-                <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+              <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+              }`}>
+                <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                   Fib · source
                 </span>
                 <div className="flex items-center gap-1">
@@ -3263,8 +3298,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                         onClick={() => updateFibMode(opt.value)}
                         className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
                           isActive
-                            ? "border-white/[0.16] bg-white/[0.10] text-white"
-                            : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            ? chartTheme.isDark
+                              ? "border-white/[0.16] bg-white/[0.10] text-white"
+                              : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                            : chartTheme.isDark
+                              ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                              : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                         }`}
                         aria-label={`Fib source ${opt.label}`}
                         aria-pressed={isActive}
@@ -3282,8 +3321,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   side independently to widen or tighten the rendered fib
                   without touching the underlying anchors. Persisted on
                   every fib annotation via setFibExtendOnAll. */}
-              <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-                <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+              <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+              }`}>
+                <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                   Fib · extend
                 </span>
                 <div className="flex items-center gap-1">
@@ -3292,8 +3333,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     onClick={() => setFibExtendOnAll("extendLeft", !allFibsExtendLeft)}
                     className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
                       allFibsExtendLeft
-                        ? "border-white/[0.16] bg-white/[0.10] text-white"
-                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                        ? chartTheme.isDark
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                     }`}
                     aria-label="Extend fib lines left"
                     aria-pressed={allFibsExtendLeft}
@@ -3305,8 +3350,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     onClick={() => setFibExtendOnAll("extendRight", !allFibsExtendRight)}
                     className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
                       allFibsExtendRight
-                        ? "border-white/[0.16] bg-white/[0.10] text-white"
-                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                        ? chartTheme.isDark
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                     }`}
                     aria-label="Extend fib lines right"
                     aria-pressed={allFibsExtendRight}
@@ -3317,8 +3366,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               </div>
 
               {fibMode === "swing" ? (
-                <div className="col-span-4 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                  chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+                }`}>
+                  <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                     Swing leg
                   </span>
                   <div className="flex items-center gap-1">
@@ -3336,8 +3387,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                           onClick={() => updateFibSwingOffset(opt.value)}
                           className={`grid h-6 min-w-[1.8rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
                             isActive
-                              ? "border-white/[0.16] bg-white/[0.10] text-white"
-                              : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                              ? chartTheme.isDark
+                                ? "border-white/[0.16] bg-white/[0.10] text-white"
+                                : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                              : chartTheme.isDark
+                                ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                                : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                           }`}
                           aria-label={`Use swing leg ${opt.label}`}
                           aria-pressed={isActive}

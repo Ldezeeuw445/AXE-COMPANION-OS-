@@ -18,7 +18,7 @@ import {
 } from "react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
-import { CHART_THEME } from "@/components/chart/chartTheme";
+import { CHART_THEME, getChartTheme } from "@/components/chart/chartTheme";
 import {
   priceDigitsForSymbol,
   pointValueForSymbol,
@@ -155,6 +155,7 @@ export function PositionLabelsOverlay({
   symbol,
   brokerAccountId,
   liveTradingEnabled = false,
+  isDark = true,
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
   overlays: ChartOverlayRow[];
@@ -164,7 +165,17 @@ export function PositionLabelsOverlay({
   brokerAccountId?: string | null;
   /** Drag-to-modify only enabled when live trading is on. */
   liveTradingEnabled?: boolean;
+  /** Light chart uses crisper text + darker labels to avoid blur haze. */
+  isDark?: boolean;
 }) {
+  const theme = isDark ? CHART_THEME : getChartTheme("paper");
+  const labelShadow = isDark
+    ? "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)"
+    : "0 1px 0 rgba(255,255,255,0.82)";
+  const dragShadow = isDark
+    ? "0 0 6px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.7), 0 1px 3px rgba(0,0,0,0.9)"
+    : "0 1px 0 rgba(255,255,255,0.88)";
+
   const [labels, setLabels] = useState<LabelItem[]>([]);
   const overlaysRef = useRef(overlays);
   overlaysRef.current = overlays;
@@ -239,7 +250,7 @@ export function PositionLabelsOverlay({
             key: `sl-${o.id}`,
             y,
             text: `SL${pnl ? `, ${pnl}` : ""}`,
-            color: CHART_THEME.stopLine,
+            color: theme.stopLine,
             draggable: canDrag,
             field: "sl",
             positionId: o.id,
@@ -264,7 +275,7 @@ export function PositionLabelsOverlay({
             key: `tp-${o.id}`,
             y,
             text: `TP${pnl ? `, ${pnl}` : ""}`,
-            color: CHART_THEME.takeLine,
+            color: theme.takeLine,
             draggable: canDrag,
             field: "tp",
             positionId: o.id,
@@ -304,7 +315,7 @@ export function PositionLabelsOverlay({
             key: `pend-sl-${o.id}`,
             y,
             text: `SL${pnl ? `, ${pnl}` : ""}`,
-            color: CHART_THEME.stopLine,
+            color: theme.stopLine,
             draggable: canDragOrder,
             field: "sl",
             orderId: o.id,
@@ -323,7 +334,7 @@ export function PositionLabelsOverlay({
             key: `pend-tp-${o.id}`,
             y,
             text: `TP${pnl ? `, ${pnl}` : ""}`,
-            color: CHART_THEME.takeLine,
+            color: theme.takeLine,
             draggable: canDragOrder,
             field: "tp",
             orderId: o.id,
@@ -335,7 +346,7 @@ export function PositionLabelsOverlay({
     }
 
     setLabels(next);
-  }, [canvasRef, liveTradingEnabled, brokerAccountId]);
+  }, [canvasRef, liveTradingEnabled, brokerAccountId, theme.stopLine, theme.takeLine]);
 
   // Subscribe to viewport changes
   useEffect(() => {
@@ -527,8 +538,7 @@ export function PositionLabelsOverlay({
                     fontSize: "10px",
                     fontWeight: 600,
                     letterSpacing: "0.02em",
-                    textShadow:
-                      "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)",
+                    textShadow: labelShadow,
                     paddingLeft: 6,
                   }}
                 >
@@ -542,8 +552,7 @@ export function PositionLabelsOverlay({
                   fontSize: "10px",
                   fontWeight: 600,
                   letterSpacing: "0.02em",
-                  textShadow:
-                    "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)",
+                  textShadow: labelShadow,
                   paddingLeft: 6,
                 }}
               >
@@ -569,8 +578,7 @@ export function PositionLabelsOverlay({
               fontSize: "11px",
               fontWeight: 700,
               letterSpacing: "0.02em",
-              textShadow:
-                "0 0 6px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.7), 0 1px 3px rgba(0,0,0,0.9)",
+              textShadow: dragShadow,
               paddingLeft: 6,
             }}
           >

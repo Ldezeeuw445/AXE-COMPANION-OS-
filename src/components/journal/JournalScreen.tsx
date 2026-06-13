@@ -143,28 +143,28 @@ function TradeRow({
         </div>
 
         {/* Tag badges — user + AXE dual scoring */}
-        <div className="flex items-center gap-1">
+        <div className="flex max-w-[10.5rem] shrink-0 flex-wrap items-center justify-end gap-1">
           {selectedTag && (
-            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${tagColor}`}>
+            <span className={`max-w-full truncate rounded-full border px-2 py-0.5 text-[9px] font-semibold ${tagColor}`}>
               {selectedTag}
             </span>
           )}
           {trade.axe_label && (
-            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${AXE_TAG_STYLE}`} title={trade.axe_note ?? "AXE score"}>
+            <span className={`max-w-full truncate rounded-full border px-2 py-0.5 text-[9px] font-semibold ${AXE_TAG_STYLE}`} title={trade.axe_note ?? "AXE score"}>
               ⚡{trade.axe_label}{trade.alignment_score != null ? ` ${trade.alignment_score}` : ""}
             </span>
           )}
         </div>
 
         {/* PnL */}
-        <span className={`min-w-[60px] text-right font-mono text-[12px] font-semibold tabular-nums ${
+        <span className={`min-w-[54px] text-right font-mono text-[12px] font-semibold tabular-nums ${
           trade.pnl >= 0 ? "text-emerald-400" : "text-rose-400"
         }`}>
           {fmtPnl(trade.pnl)}
         </span>
 
         {/* Date */}
-        <span className="min-w-[80px] text-right text-[10px] text-white/25">
+        <span className="hidden min-w-[80px] text-right text-[10px] text-white/25 sm:block">
           {trade.close_time ? fmt(trade.close_time) : "—"}
         </span>
       </button>

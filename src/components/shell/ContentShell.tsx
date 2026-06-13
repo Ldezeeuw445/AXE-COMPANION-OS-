@@ -15,6 +15,7 @@ const FLUSH_ROUTES = ["/chat", "/chart"];
 
 export function ContentShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const isChartRoute = pathname === "/chart" || pathname.startsWith("/chart/");
   const flush = FLUSH_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(`${r}/`),
   );
@@ -23,7 +24,9 @@ export function ContentShell({ children }: { children: ReactNode }) {
     <div
       className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col px-4 pt-0 md:px-6 md:pt-[max(0.75rem,env(safe-area-inset-top))] ${
         flush
-          ? "overflow-hidden pb-[var(--tos-nav-offset)] md:pb-0"
+          ? isChartRoute
+            ? "overflow-hidden pb-[calc(var(--tos-nav-offset)-0.24rem)] md:pb-0"
+            : "overflow-hidden pb-[var(--tos-nav-offset)] md:pb-0"
           : "tos-app-content overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
       }`}
     >
