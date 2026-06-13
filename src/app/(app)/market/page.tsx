@@ -94,7 +94,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const liveProviderCount = ctx.providers.filter((p) => p.state === "live").length;
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-6">
       {/* Mobile top bar: the AXE wordmark in the centre carries the
           single live indicator now, fed by `LiveStatusReporter` below.
           We deliberately no longer inject a "LIVE" pill in the centre
