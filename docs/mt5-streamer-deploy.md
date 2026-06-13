@@ -3,14 +3,18 @@
 The streamer pushes **real-time** MetaAPI ticks to Cloudflare ChartLiveRoom (`WORKER_MODE=push`).
 Without it, the chart falls back to poll mode (~1–2.5s delay) or SSE.
 
-## 1. Deploy streamer (Railway recommended)
+## 1. Deploy streamer (Railway — geen Root Directory)
 
-```bash
-cd node/metaapi-streamer
-# Railway: connect repo, set root directory to node/metaapi-streamer
-```
+Volledige handleiding: **`docs/railway-streamer-setup-nl.md`**
 
-Required env on Railway:
+Kort:
+
+1. Nieuw Railway-project → Deploy from GitHub → `AXE-COMPANION-OS-`
+2. Service → Settings → **Config file path:** `/node/metaapi-streamer/railway.json`
+3. Variables invullen (zie tabel hieronder)
+4. Redeploy
+
+De repo bevat `Dockerfile.streamer` in de root — Railway hoeft geen Root Directory te kennen.
 
 | Variable | Value |
 |----------|--------|

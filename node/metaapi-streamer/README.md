@@ -48,9 +48,15 @@ npm run build
 npm start
 ```
 
-### Railway
+### Railway (aanbevolen — geen Root Directory nodig)
 
-Push the `node/metaapi-streamer` folder. Set env vars in the dashboard.
+Zie **`docs/railway-streamer-setup-nl.md`** — 3 stappen:
+
+1. Nieuw Railway-project → GitHub repo
+2. Config file path: `/node/metaapi-streamer/railway.json`
+3. Env vars plakken (METAAPI_TOKEN, WORKER_URL, STREAMER_SECRET, Supabase)
+
+De repo bevat `Dockerfile.streamer` in de root — Railway bouwt automatisch vanuit de monorepo.
 
 ### Docker
 
