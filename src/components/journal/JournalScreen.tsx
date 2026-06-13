@@ -112,7 +112,7 @@ export function JournalScreen({
   }, [entries.length, journalTrades.length, loadError]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-4">
       <ScreenHeader
         title="Journal"
         subtitle="Preset tags per trade, analytics, and free-form notes — same ledger as History."

@@ -154,7 +154,7 @@ export function HistoryScreen({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-4">
       <ScreenHeader
         title="Trade history"
         subtitle="Closed trades from broker_trades — same data as AXE web (RLS)."
