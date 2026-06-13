@@ -571,7 +571,11 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
   const onlyDemo = initialAccounts.length > 0 && initialAccounts.every((a) => isDemoAccount(a));
 
   return (
+<<<<<<< HEAD
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto gap-5 pb-4">
+=======
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-y-contain pb-6">
+>>>>>>> 88cc81a (feat: Fix Bottom Navigation Bar Issues)
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
         liveCount={connectedCount}

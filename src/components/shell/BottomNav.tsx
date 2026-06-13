@@ -58,6 +58,7 @@ export function BottomNav() {
 
   return (
     <nav
+<<<<<<< HEAD
       ref={navRef}
       className="tos-nav-pill pointer-events-auto"
       style={{
@@ -70,6 +71,9 @@ export function BottomNav() {
         paddingRight: 4,
         /* paddingBottom handled by .tos-nav-pill CSS (safe-area + lift) */
       }}
+=======
+      className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2 md:hidden"
+>>>>>>> 88cc81a (feat: Fix Bottom Navigation Bar Issues)
       aria-label="Primary"
     >
       {/* Inner glow highlight along top edge */}

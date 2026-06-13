@@ -264,7 +264,11 @@ export function PositionsScreen({
   }, []);
 
   return (
+<<<<<<< HEAD
     <div className="flex min-h-0 flex-1 flex-col pb-2">
+=======
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain pb-2">
+>>>>>>> 88cc81a (feat: Fix Bottom Navigation Bar Issues)
       <LiveStatusReporter
         liveCount={providerStatus === "connected" ? 1 : 0}
         totalCount={providerStatus ? 1 : 0}

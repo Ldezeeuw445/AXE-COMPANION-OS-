@@ -95,7 +95,11 @@ export default async function SettingsPage() {
     (accountName ? 1 : 0) +
     1; // liveTrading flag always loaded
   return (
+<<<<<<< HEAD
     <div className="axe-stagger-enter flex shrink-0 flex-col pb-4">
+=======
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain pb-4">
+>>>>>>> 88cc81a (feat: Fix Bottom Navigation Bar Issues)
       <LiveStatusReporter
         liveCount={liveSections}
         totalCount={6}

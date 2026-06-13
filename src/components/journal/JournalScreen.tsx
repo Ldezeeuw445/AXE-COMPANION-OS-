@@ -457,7 +457,11 @@ export function JournalScreen({
   /* ── Render ────────────────────────────────────────────────────── */
 
   return (
+<<<<<<< HEAD
     <div className="flex min-h-0 flex-1 flex-col">
+=======
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-4">
+>>>>>>> 88cc81a (feat: Fix Bottom Navigation Bar Issues)
       <PageTitleInjector title="Journal" />
 
       {loadError && (

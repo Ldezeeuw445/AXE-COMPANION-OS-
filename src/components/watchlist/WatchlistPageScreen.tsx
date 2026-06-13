@@ -351,7 +351,17 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
   /* ── Render ────────────────────────────────────────────────────── */
 
   return (
+<<<<<<< HEAD
     <div className="flex min-h-0 flex-1 flex-col">
+=======
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-2">
+      <LiveStatusReporter
+        liveCount={1}
+        totalCount={1}
+        label={`Watchlist · ${items.length} saved`}
+        allLiveOverride={true}
+      />
+>>>>>>> 88cc81a (feat: Fix Bottom Navigation Bar Issues)
       <PageTitleInjector title="Quotes" />
 
       {/* ── Header bar ─────────────────────────────────────────── */}

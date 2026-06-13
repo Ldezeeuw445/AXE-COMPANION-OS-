@@ -49,7 +49,7 @@ export function AlertsClient({ initialAlerts }: AlertsClientProps) {
   }
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain pb-4">
       <GlassPanel className="mb-4 p-4">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-dim">
           New alert
@@ -195,6 +195,6 @@ export function AlertsClient({ initialAlerts }: AlertsClientProps) {
           </GlassPanel>
         ))}
       </div>
-    </>
+    </div>
   );
 }
