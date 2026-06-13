@@ -47,7 +47,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-dvh font-normal">
+      <body className="min-h-svh overflow-x-hidden font-normal">
         <ServiceWorkerInit />
         {children}
       </body>

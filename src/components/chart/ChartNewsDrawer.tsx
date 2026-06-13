@@ -131,7 +131,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
       ) : null}
 
       <aside
-        className={`fixed left-0 top-[3.25rem] z-[45] flex h-[calc(100dvh-3.25rem)] w-[92vw] max-w-[420px] flex-col border-r border-white/10 bg-[#04070C]/96 shadow-[0_24px_72px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-200 ease-out ${
+        className={`fixed left-0 top-[3.25rem] z-[45] flex h-[calc(100svh-3.25rem)] w-[92vw] max-w-[420px] flex-col border-r border-white/10 bg-[#04070C]/96 shadow-[0_24px_72px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}

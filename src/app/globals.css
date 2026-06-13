@@ -132,7 +132,7 @@ body {
   color: var(--tos-text);
   font-family: var(--font-sans), system-ui, sans-serif;
   font-weight: 400;
-  min-height: 100dvh;
+  min-height: 100svh;
 }
 
 ::selection {
