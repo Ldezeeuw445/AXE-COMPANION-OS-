@@ -208,10 +208,10 @@ export function AxeAuraWave() {
   }, [draw]);
 
   return (
-    <div className="pointer-events-none relative h-12 shrink-0 overflow-visible">
+    <div className="pointer-events-none relative h-9 shrink-0 overflow-visible [mask-image:linear-gradient(to_bottom,transparent_2%,black_28%,black_78%,transparent_100%)]">
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 h-full w-full"
+        className="absolute inset-0 h-full w-full opacity-90"
       />
     </div>
   );
