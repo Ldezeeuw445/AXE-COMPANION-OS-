@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordLearningSignal } from "@/services/learningService";
 
 /**
  * AXE auto-journaling — shared logic used by both the `/api/axe-journal`
@@ -171,6 +172,15 @@ async function journalTrades(
       journaled++;
       results.push({
         tradeId: trade.id,
+        symbol: trade.symbol,
+        alignment_score: result.alignment_score,
+        axe_label: result.axe_label,
+      });
+
+      // Behavioral signal so the cockpit alignment score is grounded in AXE's
+      // actual per-trade assessments rather than a one-off GPT guess.
+      await recordLearningSignal(supabase, userId, "trade_alignment", {
+        trade_id: trade.id,
         symbol: trade.symbol,
         alignment_score: result.alignment_score,
         axe_label: result.axe_label,

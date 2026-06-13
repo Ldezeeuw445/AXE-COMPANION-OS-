@@ -179,12 +179,13 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
 
   const { supabase, user } = authed;
 
-  const [messageCount, memoryCount, journalCount, tradeCount, metricsCount] = await Promise.all([
+  const [messageCount, memoryCount, journalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_learning_metrics").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("assistant_learning_signals").select("id", { count: "exact", head: true }).eq("user_id", user.id),
   ]);
   const counts = {
     messageCount: countOrZero(messageCount),
@@ -192,13 +193,15 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     journalCount: countOrZero(journalCount),
     tradeCount: countOrZero(tradeCount),
     metricsCount: countOrZero(metricsCount),
+    learningSignalCount: countOrZero(learningSignalCount),
   };
   const signalCount =
     counts.messageCount +
     counts.memoryCount +
     counts.journalCount +
     counts.tradeCount +
-    counts.metricsCount;
+    counts.metricsCount +
+    counts.learningSignalCount;
 
   // Fetch the two most recent snapshots so we can compute alignment delta
   const { data: snapshots, error: snapErr } = await supabase
@@ -246,7 +249,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   // Check if meaningful new signals arrived since the last snapshot.
   // We count rows created after `captured_at` in the key tables.
   const cutoff = latest.captured_at;
-  const [newMsgs, newTrades, newJournals, newMemory] = await Promise.all([
+  const [newMsgs, newTrades, newJournals, newMemory, newLearningSignals] = await Promise.all([
     supabase
       .from("messages")
       .select("id", { count: "exact", head: true })
@@ -267,9 +270,18 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .gt("created_at", cutoff),
+    supabase
+      .from("assistant_learning_signals")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gt("created_at", cutoff),
   ]);
   const newSignalCount =
-    countOrZero(newMsgs) + countOrZero(newTrades) + countOrZero(newJournals) + countOrZero(newMemory);
+    countOrZero(newMsgs) +
+    countOrZero(newTrades) +
+    countOrZero(newJournals) +
+    countOrZero(newMemory) +
+    countOrZero(newLearningSignals);
 
   // Auto-refresh when: ≥3 new signals, OR snapshot is >24h old and ≥1 new signal
   const snapshotAgeMs = Date.now() - new Date(cutoff).getTime();

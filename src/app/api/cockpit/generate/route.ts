@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { summarizeLearningSignals } from "@/services/learningService";
 import OpenAI from "openai";
 
 const COCKPIT_PROMPT = `You are analyzing a trader's private session history with their AI trading companion (AXE).
@@ -175,6 +176,21 @@ export async function POST() {
   } catch (err) {
     console.error("[cockpit/generate] GPT error:", err);
     return NextResponse.json({ error: "Failed to generate snapshot" }, { status: 500 });
+  }
+
+  // Ground the feedback figures in recorded behavioral signals (journal labels,
+  // per-trade alignment) instead of trusting the model's guess. Falls back to
+  // the model output only when there are no recorded signals yet.
+  const signalSummary = await summarizeLearningSignals(supabase, user.id);
+  if (signalSummary.total > 0) {
+    const modelFeedback =
+      (snapshot.feedback_loop_stats as Record<string, unknown> | undefined) ?? {};
+    snapshot.feedback_loop_stats = {
+      ...modelFeedback,
+      acceptedSetups: signalSummary.aligned,
+      rejectedSetups: signalSummary.misaligned,
+      correctionsCount: signalSummary.corrections,
+    };
   }
 
   // Save to Supabase (include signal_count for staleness tracking)
