@@ -111,6 +111,8 @@
 
 html {
   color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* No overflow lock on html/body — content scrolls naturally.
@@ -295,7 +297,10 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(18px) saturate(145%);
   -webkit-backdrop-filter: blur(18px) saturate(145%);
-  padding: 0.22rem 0.34rem calc(env(safe-area-inset-bottom, 0px) + 0.28rem);
+  padding: 0.2rem 0.32rem 0.24rem;
+  --tos-nav-icon-size: 31px;
+  --tos-nav-icon-glyph-size: 15px;
+  --tos-nav-label-size: 6px;
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
@@ -303,6 +308,23 @@ body {
   .tos-nav-pill {
     width: min(38rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (display-mode: standalone) {
+  :root {
+    --tos-nav-h: 3.85rem;
+    --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.42rem);
+  }
+
+  .tos-nav-pill {
+    width: min(33rem, calc(100vw - max(0.8rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+    bottom: max(0.28rem, env(safe-area-inset-bottom, 0px));
+    border-radius: 1.05rem;
+    padding: 0.16rem 0.28rem 0.2rem;
+    --tos-nav-icon-size: 29px;
+    --tos-nav-icon-glyph-size: 14px;
+    --tos-nav-label-size: 5.5px;
   }
 }
 

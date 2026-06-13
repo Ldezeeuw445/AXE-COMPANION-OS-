@@ -2859,7 +2859,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-[5rem] z-40 grid h-14 w-6 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-0 z-40 grid h-14 w-6 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             toolRailOpen
               ? chartTheme.isDark
                 ? "border-white/[0.18] bg-white/[0.10] text-white shadow-[0_0_14px_rgba(255,255,255,0.12)]"
@@ -2868,18 +2868,20 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 ? "border-white/[0.10] bg-black/42 text-white/82"
                 : "border-black/[0.10] bg-white/78 text-black/60"
           }`}
+          style={{ top: "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
           aria-label="Toggle chart tools drawer"
         >
           <span className="h-7 w-1 rounded-full bg-current opacity-75" aria-hidden />
         </button>
 
         <div
-          className={`absolute left-0 top-[4.6rem] z-30 overflow-y-auto rounded-r-2xl border border-l-0 border-white/16 bg-[rgba(20,22,28,0.60)] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-lg transition-transform ${
+          className={`absolute left-0 top-0 z-30 overflow-y-auto rounded-r-2xl border border-l-0 border-white/16 bg-[rgba(20,22,28,0.60)] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-lg transition-transform ${
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
           style={{
+            top: "calc(env(safe-area-inset-top, 0px) + 4.6rem)",
             width: "calc(100% - 80px)",
-            maxHeight: "calc(100% - 5rem)",
+            maxHeight: "calc(100% - env(safe-area-inset-top, 0px) - 5rem)",
           }}
         >
           <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/72">Tools + indicators</div>
