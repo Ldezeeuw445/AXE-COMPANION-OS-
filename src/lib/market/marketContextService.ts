@@ -69,6 +69,12 @@ export function summarizeMarketContext(ctx: MarketContext): string {
   if (ctx.news.length > 0) {
     const heads = ctx.news.slice(0, 4).map((n) => `“${n.title}” — ${n.source}`).join(" | ");
     parts.push(`Recent headlines: ${heads}.`);
+    const scored = ctx.news.filter((n) => n.sentiment != null);
+    if (scored.length > 0) {
+      const avg = scored.reduce((sum, n) => sum + (n.sentiment ?? 0), 0) / scored.length;
+      const tone = avg > 0.15 ? "bullish" : avg < -0.15 ? "bearish" : "mixed/neutral";
+      parts.push(`News sentiment (${scored.length} scored): ${tone} (avg ${avg.toFixed(2)}).`);
+    }
   }
 
   if (!ctx.hasLiveData) {

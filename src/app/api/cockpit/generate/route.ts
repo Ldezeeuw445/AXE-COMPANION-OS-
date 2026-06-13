@@ -74,7 +74,8 @@ export async function POST() {
   }
 
   // Fetch data in parallel
-  const [messagesResult, memoryResult, alertsResult, execResult, journalResult, tradesResult] = await Promise.all([
+  const [messagesResult, memoryResult, alertsResult, execResult, journalResult, tradesResult, tradeLabelsResult] =
+    await Promise.all([
     supabase
       .from("messages")
       .select("role,content,created_at")
@@ -116,6 +117,12 @@ export async function POST() {
       .eq("user_id", user.id)
       .order("close_time", { ascending: false })
       .limit(50),
+
+    supabase
+      .from("trade_journal_labels")
+      .select("trade_id,label,axe_label,alignment_score,axe_journal")
+      .eq("user_id", user.id)
+      .limit(80),
   ]);
 
   const messages = (messagesResult.data ?? []).reverse();
@@ -124,7 +131,9 @@ export async function POST() {
   const execs = execResult.data ?? [];
   const journals = journalResult.data ?? [];
   const trades = tradesResult.data ?? [];
-  const signalCount = messages.length + memory.length + alerts.length + execs.length + journals.length + trades.length;
+  const tradeLabels = tradeLabelsResult.data ?? [];
+  const signalCount =
+    messages.length + memory.length + alerts.length + execs.length + journals.length + trades.length + tradeLabels.length;
 
   if (signalCount < 5 || messages.length < 2) {
     return NextResponse.json(
@@ -150,6 +159,13 @@ export async function POST() {
     executions: execs.map((e) => ({ symbol: e.symbol, direction: e.direction, status: e.status, at: e.created_at })),
     journals: journals.map((j) => ({ symbol: j.symbol, rating: j.rating, tags: j.tags, at: j.created_at, notes: String(j.notes ?? "").slice(0, 260) })),
     trades: trades.map((t) => ({ symbol: t.symbol, side: t.side, pnl: t.pnl, opened: t.open_time, closed: t.close_time })),
+    tradeJournalLabels: tradeLabels.map((l) => ({
+      tradeId: l.trade_id,
+      manualLabel: l.label,
+      axeLabel: l.axe_label,
+      alignmentScore: l.alignment_score,
+      hasAxeBreakdown: Boolean(l.axe_journal),
+    })),
   };
 
   const client = new OpenAI({ apiKey });
@@ -191,6 +207,16 @@ export async function POST() {
       rejectedSetups: signalSummary.misaligned,
       correctionsCount: signalSummary.corrections,
     };
+  }
+
+  const alignmentScores = tradeLabels
+    .map((l) => (l.alignment_score != null ? Number(l.alignment_score) : null))
+    .filter((score): score is number => score != null && Number.isFinite(score));
+  if (alignmentScores.length > 0) {
+    const avgPct = alignmentScores.reduce((sum, score) => sum + score, 0) / alignmentScores.length;
+    snapshot.alignment_score = Math.round((avgPct / 100) * 100) / 100;
+  } else if (signalSummary.total > 0) {
+    snapshot.alignment_score = Math.round((signalSummary.aligned / signalSummary.total) * 100) / 100;
   }
 
   // Save to Supabase (include signal_count for staleness tracking)

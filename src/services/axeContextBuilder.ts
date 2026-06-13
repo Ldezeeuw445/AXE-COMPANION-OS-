@@ -30,8 +30,10 @@ import type {
 import type { TerminalAlert, TerminalExecution, WatchlistEntry } from "@/services/axeService";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
+import type { EconomicEvent } from "@/lib/market/marketTypes";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 import { getMetadataSymbolMap, getMetadataSymbolReport } from "@/lib/broker/brokerSymbolRuntime";
+import { metaApiTimeframeFromKey, normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
 const INTEL_TIMEOUT_MS = 14_000;
@@ -189,6 +191,136 @@ function normalizeDoctorContext(meta: unknown): AccountsContext["accounts"][numb
     livePricesAvailable: stepStatus("live_prices_available"),
     tradingState: d.liveTradingEnabled ? "live_trading_enabled" : "read_only",
     knownFailureReason: d.knownFailureReason != null ? String(d.knownFailureReason) : null,
+  };
+}
+
+function mapCalendarImpact(impact: EconomicEvent["impact"]): FilteredNewsEvent["impact"] {
+  switch (impact) {
+    case "high":
+      return "High";
+    case "medium":
+      return "Medium";
+    case "low":
+      return "Low";
+    default:
+      return "Unknown";
+  }
+}
+
+/** Map economic calendar rows into the legacy filtered_news shape AXE prompts expect. */
+export function economicEventsToFilteredNews(events: EconomicEvent[]): FilteredNewsEvent[] {
+  const now = Date.now();
+  const horizonMs = 7 * 24 * 60 * 60 * 1000;
+  return events
+    .filter((e) => e.impact === "high" || e.impact === "medium")
+    .filter((e) => {
+      const t = new Date(e.startsAt).getTime();
+      return Number.isFinite(t) && t >= now - 24 * 60 * 60 * 1000 && t <= now + horizonMs;
+    })
+    .slice(0, 12)
+    .map((e) => {
+      const d = new Date(e.startsAt);
+      return {
+        title: e.title,
+        currency: e.currency ?? e.country ?? "?",
+        date: d.toISOString().slice(0, 10),
+        time: d.toISOString().slice(11, 16),
+        impact: mapCalendarImpact(e.impact),
+        forecast: e.forecast != null ? String(e.forecast) : "",
+        previous: e.previous != null ? String(e.previous) : "",
+      };
+    });
+}
+
+async function fetchChartSnapshotRow(
+  supabase: SupabaseClient,
+  userId: string,
+  activeAccountId: string,
+  symbol: string | null,
+  tf: string | null,
+): Promise<Record<string, unknown> | null> {
+  const symbolUpper = symbol?.toUpperCase() ?? null;
+  const normalizedTf = tf ? normalizeChartTfKey(tf) : null;
+  const metaTf = normalizedTf ? metaApiTimeframeFromKey(normalizedTf) : null;
+  const tfCandidates = compactList([
+    normalizedTf ?? "",
+    metaTf && metaTf !== normalizedTf ? metaTf : "",
+    "quote",
+  ]);
+
+  const tryFetch = async (timeframeFilter: string | null, symbolFilter: string | null) => {
+    let query = supabase
+      .from("chart_live_snapshots")
+      .select("account_id,display_symbol,broker_symbol,timeframe,last_price,last_bid,last_ask,last_tick_at,last_candle_at,last_candle,open_positions_count,open_positions,status,source,updated_at")
+      .eq("user_id", userId)
+      .eq("account_id", activeAccountId)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+    if (symbolFilter) query = query.eq("display_symbol", symbolFilter);
+    if (timeframeFilter) query = query.eq("timeframe", timeframeFilter);
+    const { data } = await query;
+    return (data?.[0] ?? null) as Record<string, unknown> | null;
+  };
+
+  for (const candidate of tfCandidates) {
+    if (!symbolUpper) continue;
+    const row = await tryFetch(candidate, symbolUpper);
+    if (row) return row;
+  }
+  if (symbolUpper) {
+    const anyTf = await tryFetch(null, symbolUpper);
+    if (anyTf) return anyTf;
+  }
+  for (const candidate of tfCandidates) {
+    const row = await tryFetch(candidate, null);
+    if (row) return row;
+  }
+  return tryFetch(null, null);
+}
+
+function rowToChartContext(
+  row: Record<string, unknown> | null,
+  symbol: string | null,
+  tf: string | null,
+  activeAccountId: string,
+): ChartContext {
+  if (!row) return { ...EMPTY_CHART, symbol, timeframe: tf, accountId: activeAccountId };
+  const displaySymbol = (row.display_symbol as string | null | undefined) ?? symbol;
+  const positions = Array.isArray(row.open_positions)
+    ? (row.open_positions as Array<Record<string, unknown>>).map((p) => normalizePosition(p, displaySymbol))
+    : [];
+  const lastCandle =
+    row.last_candle && typeof row.last_candle === "object" && !Array.isArray(row.last_candle)
+      ? (row.last_candle as Record<string, unknown>)
+      : null;
+  const candleClose = lastCandle?.close != null ? Number(lastCandle.close) : null;
+  const candleTime =
+    (lastCandle?.time as string | null | undefined) ??
+    (lastCandle?.brokerTime as string | null | undefined) ??
+    null;
+  const status = (row.status as string | null | undefined) ?? null;
+  const updatedAt = (row.updated_at as string | null | undefined) ?? null;
+
+  return {
+    symbol: displaySymbol,
+    timeframe: (row.timeframe as string | null | undefined) ?? tf,
+    brokerSymbol: (row.broker_symbol as string | null | undefined) ?? null,
+    accountId: (row.account_id as string | null | undefined) ?? activeAccountId,
+    lastPrice: row.last_price != null ? Number(row.last_price) : null,
+    lastBid: row.last_bid != null ? Number(row.last_bid) : null,
+    lastAsk: row.last_ask != null ? Number(row.last_ask) : null,
+    lastTickAt: (row.last_tick_at as string | null | undefined) ?? null,
+    lastCandleAt: (row.last_candle_at as string | null | undefined) ?? null,
+    liveStatus: status,
+    source: (row.source as string | null | undefined) ?? null,
+    updatedAt,
+    openPositionsCount: row.open_positions_count != null ? Number(row.open_positions_count) : null,
+    staleState: staleState(updatedAt, status),
+    relatedOpenPositions: positions.filter((p) => !displaySymbol || p.symbol === displaySymbol),
+    recentState:
+      candleClose != null || candleTime
+        ? `Last candle${candleTime ? ` ${candleTime}` : ""}${candleClose != null ? ` close ${candleClose}` : ""}`
+        : null,
   };
 }
 
@@ -487,57 +619,9 @@ async function buildChart(
   activeAccountId: string | null,
 ): Promise<ChartContext> {
   if (!activeAccountId) return { ...EMPTY_CHART, symbol, timeframe: tf };
-  let query = supabase
-    .from("chart_live_snapshots")
-    .select("account_id,display_symbol,broker_symbol,timeframe,last_price,last_bid,last_ask,last_tick_at,last_candle_at,last_candle,open_positions_count,open_positions,status,source,updated_at")
-    .eq("user_id", userId)
-    .eq("account_id", activeAccountId)
-    .order("updated_at", { ascending: false })
-    .limit(1);
-
-  if (symbol) query = query.eq("display_symbol", symbol);
-  if (tf) query = query.eq("timeframe", tf);
-
-  const { data } = await query;
-  const row = (data?.[0] ?? null) as Record<string, unknown> | null;
-  if (!row) return { ...EMPTY_CHART, symbol, timeframe: tf, accountId: activeAccountId };
-  const displaySymbol = (row.display_symbol as string | null | undefined) ?? symbol;
-  const positions = Array.isArray(row.open_positions)
-    ? (row.open_positions as Array<Record<string, unknown>>).map((p) => normalizePosition(p, displaySymbol))
-    : [];
-  const lastCandle =
-    row.last_candle && typeof row.last_candle === "object" && !Array.isArray(row.last_candle)
-      ? (row.last_candle as Record<string, unknown>)
-      : null;
-  const candleClose = lastCandle?.close != null ? Number(lastCandle.close) : null;
-  const candleTime =
-    (lastCandle?.time as string | null | undefined) ??
-    (lastCandle?.brokerTime as string | null | undefined) ??
-    null;
-  const status = (row.status as string | null | undefined) ?? null;
-  const updatedAt = (row.updated_at as string | null | undefined) ?? null;
-
-  return {
-    symbol: displaySymbol,
-    timeframe: (row.timeframe as string | null | undefined) ?? tf,
-    brokerSymbol: (row.broker_symbol as string | null | undefined) ?? null,
-    accountId: (row.account_id as string | null | undefined) ?? activeAccountId,
-    lastPrice: row.last_price != null ? Number(row.last_price) : null,
-    lastBid: row.last_bid != null ? Number(row.last_bid) : null,
-    lastAsk: row.last_ask != null ? Number(row.last_ask) : null,
-    lastTickAt: (row.last_tick_at as string | null | undefined) ?? null,
-    lastCandleAt: (row.last_candle_at as string | null | undefined) ?? null,
-    liveStatus: status,
-    source: (row.source as string | null | undefined) ?? null,
-    updatedAt,
-    openPositionsCount: row.open_positions_count != null ? Number(row.open_positions_count) : null,
-    staleState: staleState(updatedAt, status),
-    relatedOpenPositions: positions.filter((p) => !displaySymbol || p.symbol === displaySymbol),
-    recentState:
-      candleClose != null || candleTime
-        ? `Last candle${candleTime ? ` ${candleTime}` : ""}${candleClose != null ? ` close ${candleClose}` : ""}`
-        : null,
-  };
+  const normalizedTf = tf ? normalizeChartTfKey(tf) : null;
+  const row = await fetchChartSnapshotRow(supabase, userId, activeAccountId, symbol, normalizedTf);
+  return rowToChartContext(row, symbol, normalizedTf ?? tf, activeAccountId);
 }
 
 async function buildTrades(
@@ -589,7 +673,7 @@ async function buildTrades(
   if (tradeIds.length > 0) {
     const labelsRes = await supabase
       .from("trade_journal_labels")
-      .select("trade_id,label,note")
+      .select("trade_id,label,note,axe_label,axe_note,alignment_score,axe_journal")
       .eq("user_id", userId)
       .in("trade_id", tradeIds);
     const symbolByTrade = new Map(recentTrades.map((t) => [t.id, t.symbol]));
@@ -600,6 +684,13 @@ async function buildTrades(
         symbol: symbolByTrade.get(tradeId) ?? "—",
         label: (r.label as string | null | undefined) ?? null,
         note: (r.note as string | null | undefined) ?? null,
+        axe_label: (r.axe_label as string | null | undefined) ?? null,
+        axe_note: (r.axe_note as string | null | undefined) ?? null,
+        alignment_score: r.alignment_score != null ? Number(r.alignment_score) : null,
+        axe_journal:
+          r.axe_journal && typeof r.axe_journal === "object" && !Array.isArray(r.axe_journal)
+            ? (r.axe_journal as Record<string, unknown>)
+            : null,
       };
     });
   }
@@ -611,7 +702,7 @@ async function buildTrades(
   }));
   const labelMap = new Map<string, number>();
   for (const label of labels) {
-    const key = (label.label ?? "").trim();
+    const key = (label.label ?? label.axe_label ?? "").trim();
     if (!key) continue;
     labelMap.set(key, (labelMap.get(key) ?? 0) + 1);
   }
@@ -621,11 +712,15 @@ async function buildTrades(
     .slice(0, 8);
   const recurringLabels = labelCounts.filter((l) => l.count >= 2).map((l) => l.label);
   const journalText = journalEntries.map((j) => j.notes.toLowerCase()).join(" ");
+  const axeTagged = labels.filter((l) => l.axe_label);
   const riskPatterns = compactList([
     journalText.match(/\bfomo\b|chase|late entry/) ? "chasing/fomo language appears in journal" : "",
     journalText.match(/revenge|overtrade/) ? "revenge or overtrading language appears in journal" : "",
     journalText.match(/risk|lot|size|too big/) ? "risk sizing is being mentioned repeatedly" : "",
     recurringLabels.length > 0 ? `recurring labels: ${recurringLabels.join(", ")}` : "",
+    axeTagged.some((l) => /impatient|emotional|poor/i.test(l.axe_label ?? ""))
+      ? "AXE flagged impatient/emotional trades recently"
+      : "",
   ]);
 
   return {
@@ -1011,6 +1106,21 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
       `Journal patterns: ${[...ctx.trades.recurringLabels, ...ctx.trades.riskPatterns].slice(0, 5).join(" | ")}.`,
     );
   }
+  const axeTagged = ctx.trades.labels.filter((l) => l.axe_label);
+  if (axeTagged.length > 0) {
+    const scored = axeTagged.filter((l) => l.alignment_score != null);
+    const avgAlignment =
+      scored.length > 0
+        ? scored.reduce((sum, l) => sum + (l.alignment_score ?? 0), 0) / scored.length
+        : null;
+    const recentAxe = axeTagged
+      .slice(0, 4)
+      .map((l) => `${l.symbol}:${l.axe_label}${l.alignment_score != null ? `(${l.alignment_score})` : ""}`)
+      .join(", ");
+    lines.push(
+      `AXE auto-journal: ${axeTagged.length} tagged${avgAlignment != null ? `; avg alignment ${avgAlignment.toFixed(0)}` : ""}; recent ${recentAxe}.`,
+    );
+  }
   if (ctx.alerts.active || ctx.alerts.paused) {
     lines.push(`Alerts: ${ctx.alerts.active} active, ${ctx.alerts.paused} paused, ${ctx.alerts.triggered} triggered.`);
   }
@@ -1130,10 +1240,15 @@ export async function buildTradingOSCompatibleContext(args: BuilderArgs): Promis
           comment: "chart_live_snapshot",
         }));
 
+  const filteredNews =
+    legacyRes.value.filteredNews.length > 0
+      ? legacyRes.value.filteredNews
+      : economicEventsToFilteredNews(axeContext.market.raw?.events ?? []);
+
   return {
     symbol: axeContext.symbol,
     timeframe: axeContext.timeframe,
-    filtered_news: legacyRes.value.filteredNews,
+    filtered_news: filteredNews,
     account_state: {
       watchlist: axeContext.settings.watchlist,
       recentAlerts: axeContext.alerts.recent,

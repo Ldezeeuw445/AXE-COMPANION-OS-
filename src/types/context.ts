@@ -95,6 +95,10 @@ export type CompanionTradeLabel = {
   symbol: string;
   label: string | null;
   note: string | null;
+  axe_label?: string | null;
+  axe_note?: string | null;
+  alignment_score?: number | null;
+  axe_journal?: Record<string, unknown> | null;
 };
 
 export type CompanionJournalEntry = {

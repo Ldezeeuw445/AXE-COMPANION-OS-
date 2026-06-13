@@ -64,6 +64,14 @@ function mapMessage(row: MessageRow): ChatMessage {
   };
 }
 
+function watchlistSymbolsFromContext(
+  context: Awaited<ReturnType<typeof fetchTradingOSContext>>,
+): string[] {
+  const fromAxe = context.axe_context?.settings.watchlist.map((w) => w.symbol) ?? [];
+  const fromLegacy = context.account_state.watchlist.map((w) => w.symbol);
+  return Array.from(new Set([...fromAxe, ...fromLegacy].map((s) => s.toUpperCase().trim()).filter(Boolean)));
+}
+
 function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradingOSContext>>, requestedSymbol: string): string {
   const chart = context.axe_context?.chart;
   const activeSymbol = (chart?.symbol ?? context.symbol ?? "").toUpperCase();
@@ -366,7 +374,11 @@ export async function sendChatMessage(
       const requested = (tc.args.symbol ?? symbol ?? "").toString().toUpperCase().trim();
       if (!requested) return "No symbol provided and no active pair on this session.";
       try {
-        const items = await loadNews({ symbol: requested, watchlist: [], limit });
+        const items = await loadNews({
+          symbol: requested,
+          watchlist: watchlistSymbolsFromContext(contextWithCandles),
+          limit,
+        });
         if (!items.length) {
           return `No headlines available for ${requested}. Either no provider is configured (Perigon / Finnhub / EODHD) or the upstream returned nothing in the last few hours.`;
         }
@@ -770,7 +782,11 @@ export async function streamChatMessage(
       try {
         const requested = (tc.args.symbol ?? "").toString().toUpperCase().trim();
         const limit = Math.max(1, Math.min(20, Number(tc.args.limit ?? 10)));
-        const newsItems = await loadNews({ symbol: requested, watchlist: [], limit });
+        const newsItems = await loadNews({
+          symbol: requested,
+          watchlist: watchlistSymbolsFromContext(contextWithCandles),
+          limit,
+        });
         if (newsItems.length === 0) return requested ? `No recent headlines for ${requested}.` : "No recent headlines available.";
         const lines = newsItems.slice(0, limit).map((n) => {
           const when = (() => { const d = new Date(n.publishedAt); return Number.isNaN(d.getTime()) ? "—" : d.toISOString().slice(11, 16) + "Z"; })();
