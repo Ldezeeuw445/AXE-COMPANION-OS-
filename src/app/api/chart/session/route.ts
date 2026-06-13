@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
   const { data: account, error } = await supabase
     .from("user_broker_accounts")
-    .select("id,connection_method,external_connection_id")
+    .select("id,connection_method,external_connection_id,metadata")
     .eq("user_id", user.id)
     .eq("id", accountId)
     .maybeSingle();
@@ -75,11 +75,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const accountMeta =
+    account.metadata && typeof account.metadata === "object" && !Array.isArray(account.metadata)
+      ? (account.metadata as Record<string, unknown>)
+      : {};
+  const metaapiRegion =
+    typeof accountMeta.metaapiRegion === "string" && accountMeta.metaapiRegion.trim()
+      ? accountMeta.metaapiRegion.trim()
+      : undefined;
+
   const { token, expiresIn } = await signChartSessionToken(
     {
       userId: user.id,
       accountId,
       metaApiAccountId: account.external_connection_id,
+      metaapiRegion,
       displaySymbol,
       brokerSymbol,
       timeframe,

@@ -58,8 +58,15 @@ export function detectProviders(): ProviderStatus[] {
       id: "finnhub",
       label: "AXE Calendar",
       state: getFinnhubKey() ? "live" : "missing_config",
-      description: "Economic calendar, market news, forex/crypto news.",
+      description: "Economic calendar (Finnhub premium) with Forex Factory fallback.",
       env: ["FINNHUB_API_KEY"],
+    },
+    {
+      id: "forexFactory",
+      label: "AXE Calendar",
+      state: "live",
+      description: "Free economic calendar fallback (Forex Factory mirror).",
+      env: [],
     },
     {
       id: "eodhd",
