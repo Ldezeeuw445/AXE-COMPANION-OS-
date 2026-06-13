@@ -2842,13 +2842,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </div>
           </div>
 
-          <div className="mt-1 flex items-center gap-2 overflow-hidden">
+          <div className="mt-1 flex w-full items-center gap-2 overflow-hidden">
             <span className="shrink-0 font-mono text-[9.5px] font-semibold uppercase tracking-[0.11em] text-cyan-300/80">
               {data.symbol}
             </span>
             <span className="shrink-0 font-mono text-[11px] font-medium text-white/80">{lastPriceText}</span>
             <span
-              className="truncate text-[9px] font-semibold uppercase tracking-[0.14em]"
+              className="ml-auto shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em]"
               style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}
             >
               {sessionCopy()}
@@ -2859,7 +2859,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-[24%] z-40 grid h-14 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-[5rem] z-40 grid h-14 w-6 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             toolRailOpen
               ? chartTheme.isDark
                 ? "border-white/[0.18] bg-white/[0.10] text-white shadow-[0_0_14px_rgba(255,255,255,0.12)]"
@@ -2874,10 +2874,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-[24%] z-30 max-h-[56vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/16 bg-[rgba(20,22,28,0.60)] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-lg transition-transform ${
+          className={`absolute left-0 top-[4.6rem] z-30 overflow-y-auto rounded-r-2xl border border-l-0 border-white/16 bg-[rgba(20,22,28,0.60)] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-lg transition-transform ${
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
-          style={{ width: "calc(100% - 80px)" }}
+          style={{
+            width: "calc(100% - 80px)",
+            maxHeight: "calc(100% - 5rem)",
+          }}
         >
           <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/72">Tools + indicators</div>
           <div className="grid grid-cols-4 gap-1.5">
