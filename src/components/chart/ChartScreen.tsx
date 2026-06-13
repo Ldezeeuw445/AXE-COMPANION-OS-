@@ -1567,12 +1567,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setPendingOrderPrice((prev) => prev ?? data.lastPrice);
   }, [data.lastPrice]);
 
-<<<<<<< HEAD
   // Body scroll lock removed — the h-dvh overflow-hidden shell prevents
   // rubber-band scroll at the layout level. No JS body manipulation needed.
-
-=======
->>>>>>> a4a3600 (feat: Fix Bottom Navigation Bar Issues)
   // Live mirror of the last candle so the indicator panes (RSI/Volume) can
   // tick in lockstep with the candle stream instead of staying frozen on the
   // server-rendered snapshot. We seed it from data.candles so the very first
@@ -2585,21 +2581,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   return (
     <div
-<<<<<<< HEAD
       ref={chartFrameRef}
-      className={`tos-ambient-glow flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden overscroll-none ${
+      className={`relative z-30 tos-ambient-glow flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden overscroll-none ${
         isFullscreen
           ? "fixed inset-0 z-[9999]"
-          : "flex-1"
+          : "flex-1 md:z-auto md:overflow-visible"
       }`}
       style={isFullscreen ? {
         paddingTop: "env(safe-area-inset-top, 0px)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
         background: "#000",
       } : undefined}
-=======
-      className="relative z-30 flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none md:z-auto md:overflow-visible"
->>>>>>> a4a3600 (feat: Fix Bottom Navigation Bar Issues)
     >
       <LiveStatusReporter
         liveCount={headerSeverity === "fresh" ? 1 : 0}

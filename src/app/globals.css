@@ -127,10 +127,7 @@ body {
   color: var(--tos-text);
   font-family: var(--font-sans), system-ui, sans-serif;
   font-weight: 400;
-<<<<<<< HEAD
-=======
   min-height: 100svh;
->>>>>>> a4a3600 (feat: Fix Bottom Navigation Bar Issues)
 }
 
 ::selection {
