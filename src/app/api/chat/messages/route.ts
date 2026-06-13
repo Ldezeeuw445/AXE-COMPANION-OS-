@@ -25,6 +25,16 @@ export async function POST(request: Request) {
         { status: 429 }
       );
     }
+    if (result.aiFailed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "AI_FAILED",
+          error: "AXE couldn't generate a reply right now — please try again in a moment.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { ok: false, error: "Could not persist message." },
       { status: 400 }

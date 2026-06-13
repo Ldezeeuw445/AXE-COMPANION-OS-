@@ -25,7 +25,7 @@ import { fetchTradingOSContext } from "@/services/contextService";
 import { loadNews } from "@/lib/market/newsProvider";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
-import { tryConsumeChatQuota } from "@/lib/chatQuota";
+import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
 import type { ChatMessage, ConversationSummary } from "@/types/domain";
 import type OpenAI from "openai";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
@@ -191,7 +191,7 @@ export async function getChatThread(): Promise<{
 
 export type SendChatMessageResult =
   | { ok: true }
-  | { ok: false; quotaExceeded?: boolean };
+  | { ok: false; quotaExceeded?: boolean; aiFailed?: boolean };
 
 export async function sendChatMessage(
   text: string,
@@ -216,6 +216,7 @@ export async function sendChatMessage(
     if (quota.quotaExceeded) return { ok: false, quotaExceeded: true };
     return { ok: false };
   }
+  const consumed = quota.consumed;
 
   // 1. Save user message
   const userContent = trimmed || (imageBase64 ? "[chart attached]" : "");
@@ -228,6 +229,7 @@ export async function sendChatMessage(
 
   if (insertError) {
     console.error("Failed to insert chat message", insertError);
+    if (consumed) await refundChatQuota(supabase, user.id);
     return { ok: false };
   }
 
@@ -605,7 +607,8 @@ export async function sendChatMessage(
 
   if (!finalReply) {
     console.error("[chatService] AXE returned no reply");
-    return { ok: true };
+    if (consumed) await refundChatQuota(supabase, user.id);
+    return { ok: false, aiFailed: true };
   }
 
   const { error: replyError } = await supabase.from("messages").insert({
@@ -646,7 +649,7 @@ export async function streamChatMessage(
   imageType?: string,
   symbol?: string,
   tf?: string,
-): Promise<{ ok: boolean; quotaExceeded?: boolean }> {
+): Promise<{ ok: boolean; quotaExceeded?: boolean; aiFailed?: boolean }> {
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
 
@@ -663,6 +666,7 @@ export async function streamChatMessage(
     if (quota.quotaExceeded) return { ok: false, quotaExceeded: true };
     return { ok: false };
   }
+  const consumed = quota.consumed;
 
   // 1. Save user message
   const userContent = trimmed || (imageBase64 ? "[chart attached]" : "");
@@ -675,6 +679,7 @@ export async function streamChatMessage(
 
   if (insertError) {
     console.error("Failed to insert chat message", insertError);
+    if (consumed) await refundChatQuota(supabase, user.id);
     return { ok: false };
   }
 
@@ -939,24 +944,32 @@ export async function streamChatMessage(
     }
   } catch (err) {
     console.error("[chatService] streaming error:", err);
-    onEvent({ type: "error", message: "AXE encountered an error." });
-    return { ok: false };
+    // The reserved free-tier slot produced no reply — give it back.
+    if (consumed) await refundChatQuota(supabase, user.id);
+    return { ok: false, aiFailed: true };
+  }
+
+  // AXE produced no reply at all (e.g. OpenAI not configured or errored).
+  // Refund the reserved slot and surface a real error instead of a silent
+  // "done" that leaves the UI spinning forever.
+  if (!finalReply) {
+    console.error("[chatService] AXE returned no reply (stream)");
+    if (consumed) await refundChatQuota(supabase, user.id);
+    return { ok: false, aiFailed: true };
   }
 
   // 4. Save assistant reply
-  if (finalReply) {
-    const { error: replyError } = await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      user_id: user.id,
-      role: "assistant",
-      content: finalReply,
-    });
-    if (replyError) console.error("Failed to save AXE reply", replyError);
+  const { error: replyError } = await supabase.from("messages").insert({
+    conversation_id: conversation.id,
+    user_id: user.id,
+    role: "assistant",
+    content: finalReply,
+  });
+  if (replyError) console.error("Failed to save AXE reply", replyError);
 
-    extractMemoriesAsync(supabase, user.id, trimmed, finalReply).catch((e) =>
-      console.error("[chatService] memory extraction failed:", e),
-    );
-  }
+  extractMemoriesAsync(supabase, user.id, trimmed, finalReply).catch((e) =>
+    console.error("[chatService] memory extraction failed:", e),
+  );
 
   onEvent({ type: "done" });
   return { ok: true };
@@ -967,8 +980,8 @@ export async function streamChatMessage(
  * Pulls the last few messages and asks GPT-4o-mini to extract
  * durable observations about the trader.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function extractMemoriesAsync(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   userId: string,
   userMessage: string,
