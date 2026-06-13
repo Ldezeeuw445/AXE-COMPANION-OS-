@@ -35,6 +35,33 @@ export interface Env {
 const DEFAULT_CLIENT = "https://mt-client-api-vzsrmwxzqcwfarnn.london.agiliumtrade.ai";
 const DEFAULT_MARKET = "https://mt-market-data-client-api-v1.london.agiliumtrade.ai";
 
+const REGION_CLIENT: Record<string, string> = {
+  london: DEFAULT_CLIENT,
+  "new-york": "https://mt-client-api-vzsrmwxzqcwfarnn.new-york.agiliumtrade.ai",
+  singapore: "https://mt-client-api-vzsrmwxzqcwfarnn.singapore.agiliumtrade.ai",
+};
+
+const REGION_MARKET: Record<string, string> = {
+  london: DEFAULT_MARKET,
+  "new-york": "https://mt-market-data-client-api-v1.new-york.agiliumtrade.ai",
+  singapore: "https://mt-market-data-client-api-v1.singapore.agiliumtrade.ai",
+};
+
+function hostsForRegion(region: string | undefined, env: Env): { clientBase: string; marketBase: string } {
+  const key = (region ?? "").trim().toLowerCase();
+  const clientBase = (
+    (key && REGION_CLIENT[key]) ||
+    env.METAAPI_CLIENT_API_URL ||
+    DEFAULT_CLIENT
+  ).replace(/\/$/, "");
+  const marketBase = (
+    (key && REGION_MARKET[key]) ||
+    env.METAAPI_MARKET_DATA_URL ||
+    DEFAULT_MARKET
+  ).replace(/\/$/, "");
+  return { clientBase, marketBase };
+}
+
 const TF_MAP: Record<string, string> = {
   m5: "5m",
   m15: "15m",
@@ -174,6 +201,7 @@ type RoomState = {
   userId: string;
   accountId: string;
   metaApiAccountId: string;
+  metaapiRegion?: string;
   displaySymbol: string;
   brokerSymbol: string;
   timeframe: string;
@@ -188,6 +216,7 @@ function roomMatchesPayload(current: RoomState | null, next: RoomState): boolean
       current.userId === next.userId &&
       current.accountId === next.accountId &&
       current.metaApiAccountId === next.metaApiAccountId &&
+      (current.metaapiRegion ?? "") === (next.metaapiRegion ?? "") &&
       current.displaySymbol === next.displaySymbol &&
       current.brokerSymbol === next.brokerSymbol &&
       current.timeframe === next.timeframe &&
@@ -234,6 +263,7 @@ export class ChartLiveRoom implements DurableObject {
       userId: payload.userId,
       accountId: payload.accountId,
       metaApiAccountId: payload.metaApiAccountId,
+      metaapiRegion: payload.metaapiRegion,
       displaySymbol: payload.displaySymbol,
       brokerSymbol: payload.brokerSymbol,
       timeframe: payload.timeframe,
@@ -375,8 +405,7 @@ export class ChartLiveRoom implements DurableObject {
     const r = this.room;
     if (!r) return;
     const now = Date.now();
-    const clientBase = (this.env.METAAPI_CLIENT_API_URL ?? DEFAULT_CLIENT).replace(/\/$/, "");
-    const marketBase = (this.env.METAAPI_MARKET_DATA_URL ?? DEFAULT_MARKET).replace(/\/$/, "");
+    const { clientBase, marketBase } = hostsForRegion(r.metaapiRegion, this.env);
 
     if (now - this.lastTickAt >= TICK_INTERVAL_MS) {
       this.lastTickAt = now;

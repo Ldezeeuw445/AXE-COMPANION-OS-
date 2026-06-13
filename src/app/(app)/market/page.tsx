@@ -83,6 +83,10 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
+  const hasFinnhub = ctx.providers.find((p) => p.id === "finnhub")?.state === "live";
+  const hasCalendarFeed =
+    calendarReady ||
+    ctx.providers.some((p) => (p.id === "finnhub" || p.id === "forexFactory") && p.state === "live");
   return (
     <div className="axe-stagger-enter flex flex-col gap-4 pb-6">
       {/* Mobile top bar: the AXE wordmark in the centre carries the
@@ -147,7 +151,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       </GlassPanel>
 
       {/* Calendar */}
-      <SourceBadge label="AXE Calendar" ready={calendarReady} configured={ctx.providers.some((p) => p.id === "finnhub" && p.state === "live")} description="Impact-rated economic events" />
+      <SourceBadge label="AXE Calendar" ready={calendarReady} configured={hasCalendarFeed} description="Impact-rated economic events" />
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -167,9 +171,16 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-xs text-tos-muted">
-            AXE Calendar is not configured for impact-rated economic events yet.
-          </p>
+          <div className="mt-2 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-3">
+            <p className="text-sm font-medium text-tos-text">
+              {hasCalendarFeed ? "No high-impact events in the next 5 days" : "AXE Calendar is warming"}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+              {hasCalendarFeed
+                ? "The calendar feed is live — there are simply no scheduled releases in this window for your filter set."
+                : "Economic calendar providers are still starting. Finnhub premium calendar is optional; the free Forex Factory feed is used when Finnhub is unavailable."}
+            </p>
+          </div>
         )}
       </GlassPanel>
 

@@ -9,6 +9,8 @@ export type ChartSessionPayload = {
   userId: string;
   accountId: string;
   metaApiAccountId: string;
+  /** MetaApi cloud region (london | new-york | singapore) for edge polling. */
+  metaapiRegion?: string;
   displaySymbol: string;
   brokerSymbol: string;
   /** tf key (m5..d1) — same shape as URL `tf` param. */
@@ -71,6 +73,7 @@ export async function signChartSessionToken(
     userId: payload.userId,
     accountId: payload.accountId,
     metaApiAccountId: payload.metaApiAccountId,
+    ...(payload.metaapiRegion ? { metaapiRegion: payload.metaapiRegion } : {}),
     displaySymbol: payload.displaySymbol,
     brokerSymbol: payload.brokerSymbol,
     timeframe: payload.timeframe,

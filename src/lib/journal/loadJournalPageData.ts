@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { computeJournalAnalytics, type JournalAnalytics } from "@/lib/journal/computeJournalAnalytics";
+import { syncAccountIfStale } from "@/lib/mt5/backgroundSync";
 
 export type JournalEntryRow = {
   id: string;
@@ -95,6 +96,10 @@ export async function loadJournalPageData(opts: {
 
   const entries = (jRes.data ?? []) as JournalEntryRow[];
   const activeAccountId = (prefsRes.data?.active_account_id as string | null | undefined) ?? null;
+
+  if (activeAccountId) {
+    void syncAccountIfStale(sb, userId, activeAccountId).catch(() => undefined);
+  }
 
   let tradeHighlight: TradeHighlight | null = null;
   const journalTrades: TradeHighlight[] = [];

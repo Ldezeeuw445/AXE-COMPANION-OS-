@@ -5,6 +5,7 @@ export type ProviderId =
   | "perigon"
   | "polygon"
   | "finnhub"
+  | "forexFactory"
   | "eodhd"
   | "unusualWhales"
   | "demo";

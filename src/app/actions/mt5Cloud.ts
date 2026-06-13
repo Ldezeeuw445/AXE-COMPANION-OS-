@@ -3,8 +3,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { autoJournalTrades } from "@/services/journalingService";
-import { normalizeDealsToClosedTrades, type MetaApiDeal } from "@/lib/mt5/dealNormalization";
 import {
   classifyMetaApiProvisioningError,
   userMessageForCode,
@@ -13,7 +11,6 @@ import {
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetAccountInformation,
-  clientGetHistoryDealsRange,
   clientListSymbols,
   clientGetPositions,
   defaultRegionForProvisioning,
@@ -27,12 +24,7 @@ import {
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
-import {
-  buildBrokerSymbolRuntimeMetadata,
-  CANONICAL_BROKER_SYMBOLS,
-  probeBrokerSymbolReport,
-} from "@/lib/broker/brokerSymbolRuntime";
-import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
+import { runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -138,10 +130,6 @@ const PROVISIONING_POLL_BUDGET_MS = 10_000;
 const PROVISIONING_PROBE_STEP_TIMEOUT_MS = 4_000;
 const TEST_PROVISIONING_TIMEOUT_MS = 20_000;
 const TEST_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
-const SYNC_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
-const SYNC_POSITIONS_TIMEOUT_MS = 35_000;
-const SYNC_HISTORY_TIMEOUT_MS = 75_000;
-const SYNC_FINAL_STATUS_TIMEOUT_MS = 10_000;
 const RECOVERY_OPERATION_TIMEOUT_MS = 70_000;
 const RECOVERY_POLL_BUDGET_MS = 60_000;
 const RECOVERY_POLL_INTERVAL_MS = 2_500;
@@ -622,10 +610,6 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
     tradesNormalized: number;
   }>
 > {
-  if (!getMetaApiToken()) {
-    return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
-  }
-
   const supabase = await createServerSupabaseClient();
   if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
 
@@ -634,278 +618,11 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
-  const { data: row, error } = await supabase
-    .from("user_broker_accounts")
-    .select("id,external_connection_id,connection_method,metadata,user_id,mt5_login,mt5_server")
-    .eq("id", accountId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error) return { ok: false, code: "unknown", message: error.message };
-  if (!row?.external_connection_id || row.connection_method !== "cloud_mt5") {
-    return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
-  }
-
-  let extId = row.external_connection_id as string;
-  const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
-  let accountRegion =
-    typeof prevMeta.metaapiRegion === "string" ? prevMeta.metaapiRegion : null;
-
-  await supabase
-    .from("user_broker_accounts")
-    .update({ provider_status: "syncing" })
-    .eq("id", accountId)
-    .eq("user_id", user.id);
-
-  let dealsRaw: unknown[] = [];
-  let positions: unknown[] = [];
-  let info: Record<string, unknown> = {};
-  let brokerSymbols: string[] = [];
-  let relinked = false;
-
-  try {
-    const mt5Login = normalizeLogin(row.mt5_login as string | null);
-    const mt5Server = String(row.mt5_server ?? "").trim();
-    let acc: MetaApiTradingAccount | null = null;
-    try {
-      acc = await withActionBudget(
-        "sync_read_account",
-        provisioningGetAccount(extId),
-        SYNC_FINAL_STATUS_TIMEOUT_MS,
-      );
-    } catch (e) {
-      const mapped = mapMetaError(e);
-      if (mapped.code !== "not_found") throw e;
-    }
-    if (!acc || !accountMatchesMt5(acc, mt5Login, mt5Server)) {
-      const existing = await withActionBudget(
-        "find_existing_metaapi_account",
-        findExistingMetaApiAccount(mt5Login, mt5Server),
-        TEST_PROVISIONING_TIMEOUT_MS,
-      );
-      if (!existing) {
-        throw new MetaApiRequestError("not_found", "No matching MetaApi account found for MT5 login/server", 404, null);
-      }
-      extId = existing.id;
-      acc = existing.account;
-      relinked = true;
-    }
-    if (typeof acc.region === "string" && acc.region.length > 0) {
-      accountRegion = acc.region;
-    }
-
-    info = await withActionBudget(
-      "sync_account_information",
-      clientGetAccountInformation(extId, true, accountRegion),
-      SYNC_ACCOUNT_INFO_TIMEOUT_MS,
-    );
-    positions = await withActionBudget(
-      "sync_positions",
-      clientGetPositions(extId, false, accountRegion),
-      SYNC_POSITIONS_TIMEOUT_MS,
-    );
-    try {
-      brokerSymbols = await withActionBudget(
-        "sync_symbols",
-        clientListSymbols(extId, accountRegion),
-        12_000,
-      );
-    } catch {
-      brokerSymbols = [];
-    }
-    const end = new Date();
-    const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
-    dealsRaw = await withActionBudget(
-      "sync_history_deals",
-      clientGetHistoryDealsRange(
-        extId,
-        start.toISOString(),
-        end.toISOString(),
-        accountRegion,
-      ),
-      SYNC_HISTORY_TIMEOUT_MS,
-    );
-  } catch (e) {
-    await supabase
-      .from("user_broker_accounts")
-      .update({ provider_status: "sync_failed", metadata: { ...prevMeta, lastSyncErrorAt: new Date().toISOString() } })
-      .eq("id", accountId)
-      .eq("user_id", user.id);
-    const m = mapMetaError(e);
-    if (m.code === "unknown") return { ok: false, code: "sync_failed", message: userMessageForCode("sync_failed") };
-    return m;
-  }
-
-  const dealsFetched = dealsRaw.length;
-  const normalized = normalizeDealsToClosedTrades(dealsRaw as MetaApiDeal[]);
-  const tradesNormalized = normalized.length;
-
-  let dealsUpserted = 0;
-  for (const t of normalized) {
-    const payload = {
-      user_id: user.id,
-      account_id: accountId,
-      symbol: t.symbol,
-      side: t.side,
-      volume: t.volume,
-      open_time: t.open_time,
-      close_time: t.close_time,
-      open_price: t.open_price,
-      close_price: t.close_price,
-      pnl: t.pnl,
-      fees: t.fees,
-      external_trade_id: t.external_trade_id,
-      raw: t.raw,
-    };
-
-    const { data: existing, error: exErr } = await supabase
-      .from("broker_trades")
-      .select("id")
-      .eq("account_id", accountId)
-      .eq("external_trade_id", t.external_trade_id)
-      .maybeSingle();
-
-    if (exErr) {
-      await supabase
-        .from("user_broker_accounts")
-        .update({ provider_status: "sync_failed" })
-        .eq("id", accountId)
-        .eq("user_id", user.id);
-      return { ok: false, code: "sync_failed", message: exErr.message };
-    }
-
-    if (existing?.id) {
-      const { error: upErr } = await supabase
-        .from("broker_trades")
-        .update({
-          symbol: payload.symbol,
-          side: payload.side,
-          volume: payload.volume,
-          open_time: payload.open_time,
-          close_time: payload.close_time,
-          open_price: payload.open_price,
-          close_price: payload.close_price,
-          pnl: payload.pnl,
-          fees: payload.fees,
-          raw: payload.raw,
-        })
-        .eq("id", existing.id)
-        .eq("user_id", user.id);
-      if (upErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
-        return { ok: false, code: "sync_failed", message: upErr.message };
-      }
-    } else {
-      const { error: inErr } = await supabase.from("broker_trades").insert(payload);
-      if (inErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
-        return { ok: false, code: "sync_failed", message: inErr.message };
-      }
-    }
-    dealsUpserted += 1;
-  }
-
-  let accSnap: { connectionStatus?: string; state?: string } = {};
-  try {
-    accSnap = await withActionBudget(
-      "sync_final_status",
-      provisioningGetAccount(extId),
-      SYNC_FINAL_STATUS_TIMEOUT_MS,
-    );
-  } catch {
-    /* ignore */
-  }
-
-  const provider_status = mapConnectionToProviderStatus(accSnap.connectionStatus, accSnap.state) || "connected";
-
-  const positionSymbols = positions
-    .map((p) => (p && typeof p === "object" ? String((p as Record<string, unknown>).symbol ?? "") : ""))
-    .filter(Boolean);
-  const symbolRuntime =
-    brokerSymbols.length > 0
-      ? buildBrokerSymbolRuntimeMetadata({
-          existingMetadata: prevMeta,
-          knownSymbols: [...brokerSymbols, ...positionSymbols],
-          displaySymbols: [...CANONICAL_BROKER_SYMBOLS, ...positionSymbols.map(cleanDisplaySymbol).filter(Boolean)],
-        })
-      : null;
-  const symbolResolutionReport =
-    symbolRuntime && brokerSymbols.length > 0
-      ? await probeBrokerSymbolReport({
-          accountId: extId,
-          region: accountRegion,
-          report: symbolRuntime.symbol_resolution_report,
-          timeframe: "1h",
-          displays: [...CANONICAL_BROKER_SYMBOLS],
-          timeoutMs: 1_800,
-        }).catch(() => symbolRuntime.symbol_resolution_report)
-      : null;
-
-  const metadata = {
-    ...prevMeta,
-    accountSummary: {
-      balance: info.balance,
-      equity: info.equity,
-      currency: info.currency,
-      server: info.server,
-      login: info.login,
-      broker: info.broker,
-    },
-    openPositions: positions,
-    dealsFetched,
-    dealsUpserted,
-    lastSyncAt: new Date().toISOString(),
-    ...(symbolRuntime
-      ? {
-          ...symbolRuntime,
-          ...(symbolResolutionReport ? { symbol_resolution_report: symbolResolutionReport } : {}),
-        }
-      : {}),
-  };
-
-  await supabase
-    .from("user_broker_accounts")
-    .update({
-      connection_method: "cloud_mt5",
-      external_connection_id: extId,
-      status: "active",
-      provider_status: provider_status === "unknown" ? "connected" : provider_status,
-      last_sync_at: new Date().toISOString(),
-      metadata: {
-        ...metadata,
-        ...(accountRegion ? { metaapiRegion: accountRegion } : {}),
-        ...(relinked ? { relinkedMetaapiAccountAt: new Date().toISOString() } : {}),
-      },
-    })
-    .eq("id", accountId)
-    .eq("user_id", user.id);
-
-  revalidatePath("/accounts");
-  revalidatePath("/history");
-  revalidatePath("/journal");
-  revalidatePath("/chat");
-
-  if (dealsFetched === 0) {
-    return {
-      ok: false,
-      code: "sync_no_deals",
-      message: userMessageForCode("sync_no_deals"),
-    };
-  }
-
-  // Fire-and-forget: auto-journal new trades with AXE alignment scoring.
-  // Runs IN-PROCESS with the authenticated client + user id. (Previously this
-  // POSTed to /api/axe-journal without auth cookies, which always returned 401
-  // and silently dropped every auto-journal.)
-  if (dealsUpserted > 0) {
-    autoJournalTrades(supabase, user.id, accountId)
-      .then((r) => {
-        if (!r.ok) console.error("[mt5Cloud] auto-journal failed:", r.error);
-      })
-      .catch((e) => console.error("[mt5Cloud] auto-journal trigger failed:", e));
-  }
-
-  return { ok: true, data: { dealsFetched, dealsUpserted, tradesNormalized } };
+  return runCloudMt5Sync(supabase, user.id, accountId, {
+    revalidate: true,
+    autoJournal: true,
+    allowEmptyDeals: false,
+  });
 }
 
 export async function disconnectCloudMt5AccountAction(accountId: string): Promise<Mt5CloudResult> {

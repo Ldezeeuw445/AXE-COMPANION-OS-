@@ -1,22 +1,3 @@
-/**
- * AXE Companion — MetaApi MT5 streaming service (v2).
- *
- * Dynamically loads account configs and watchlist symbols from Supabase.
- * Subscribes to broker price/quote/candle/positions/orders via the official
- * `metaapi.cloud-sdk` socket.io SDK and pushes normalized events to the
- * Cloudflare ChartLiveRoom Durable Object.
- *
- * Changes from v1:
- *   - Dynamic subscriptions from Supabase (no more static SUBSCRIPTIONS env)
- *   - Multi-symbol per account (all watchlist symbols on one connection)
- *   - Orders listener (onPendingOrdersUpdated)
- *   - Periodic reconciliation (new watchlist symbols picked up every 60s)
- *   - Ticks fan out to ALL timeframe rooms for a symbol
- *   - Positions/orders broadcast to all rooms for the account
- *
- * Designed for a long-lived Node process (Railway / Fly / Render / Docker).
- */
-
 import { publishEvent, getInflightCount } from "./publish.js";
 import { SnapshotBuffer } from "./snapshotBuffer.js";
 import {
@@ -111,6 +92,29 @@ type AccountStream = {
 
 // Track all active account streams
 const activeStreams = new Map<string, AccountStream>();
+
+function startHealthServer(): void {
+  const port = Number(process.env.PORT ?? 8080);
+  import("node:http").then(({ createServer }) => {
+    createServer((req, res) => {
+      if (req.url === "/health") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            streams: activeStreams.size,
+            inflight: getInflightCount(),
+          }),
+        );
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    }).listen(port, () => {
+      log("info", `Health server listening on :${port}/health`);
+    });
+  });
+}
 
 interface MetaApiInstance {
   metatraderAccountApi: {
@@ -689,6 +693,7 @@ async function reconcile(env: Env, currentConfigs: AccountConfig[]): Promise<Acc
 
 async function main() {
   const env = readEnv();
+  startHealthServer();
 
   // ── Static mode (v1 compatibility) ─────────────────────────────
   if (env.STATIC_MODE && env.SUBSCRIPTIONS) {

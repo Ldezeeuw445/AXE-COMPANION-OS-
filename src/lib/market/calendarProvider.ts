@@ -1,6 +1,7 @@
 import "server-only";
 import { getFinnhubKey } from "@/lib/market/providerStatus";
 import { getSupabaseKey, getSupabaseServiceRoleKey } from "@/lib/env";
+import { loadForexFactoryCalendar } from "@/lib/market/forexFactoryCalendar";
 import type { EconomicEvent } from "@/lib/market/marketTypes";
 
 const REVALIDATE_SECONDS = 60 * 30; // 30 min
@@ -123,17 +124,20 @@ async function fetchCalendarViaEdgeFunction(daysAhead: number): Promise<Economic
   }
 }
 
-/** Returns upcoming high-impact-first events; Finnhub-only after FMP was deprecated. */
+/** Returns upcoming high-impact-first events; Finnhub when available, Forex Factory fallback. */
 export async function loadEconomicCalendar(opts: {
   symbol: string;
   daysAhead?: number;
   limit?: number;
 }): Promise<EconomicEvent[]> {
   const days = Math.max(1, Math.min(14, opts.daysAhead ?? 5));
-  // Try direct Finnhub first, fall back to Edge Function proxy.
+  // Try direct Finnhub first, then Edge Function proxy, then free FF feed (chat source).
   let events = await fetchFinnhubCalendar(days);
   if (events.length === 0) {
     events = await fetchCalendarViaEdgeFunction(days);
+  }
+  if (events.length === 0) {
+    events = await loadForexFactoryCalendar(days);
   }
 
   const briefingCurrency = currencyForSymbol(opts.symbol);
