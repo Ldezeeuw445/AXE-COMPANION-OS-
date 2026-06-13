@@ -1106,36 +1106,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setPendingOrderPrice((prev) => prev ?? data.lastPrice);
   }, [data.lastPrice]);
 
-  useEffect(() => {
-    // Lock both <html> and <body> to the viewport so the chart screen can't
-    // be pulled past the top/bottom of the device. Setting position:fixed on
-    // <body> is the only reliable way to stop iOS Safari rubber-band scroll.
-    const html = document.documentElement;
-    const body = document.body;
-    const prev = {
-      htmlOverflow: html.style.overflow,
-      htmlHeight: html.style.height,
-      bodyOverflow: body.style.overflow,
-      bodyHeight: body.style.height,
-      bodyPosition: body.style.position,
-      bodyWidth: body.style.width,
-    };
-    html.style.overflow = "hidden";
-    html.style.height = "100dvh";
-    body.style.overflow = "hidden";
-    body.style.height = "100dvh";
-    body.style.position = "fixed";
-    body.style.width = "100%";
-    return () => {
-      html.style.overflow = prev.htmlOverflow;
-      html.style.height = prev.htmlHeight;
-      body.style.overflow = prev.bodyOverflow;
-      body.style.height = prev.bodyHeight;
-      body.style.position = prev.bodyPosition;
-      body.style.width = prev.bodyWidth;
-    };
-  }, []);
-
   // Live mirror of the last candle so the indicator panes (RSI/Volume) can
   // tick in lockstep with the candle stream instead of staying frozen on the
   // server-rendered snapshot. We seed it from data.candles so the very first
@@ -1995,7 +1965,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 top-[3.25rem] z-30 flex min-h-0 flex-col overflow-hidden overscroll-none md:static md:inset-auto md:z-auto md:h-auto md:flex-1 md:overflow-visible"
+      className="relative z-30 flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none md:z-auto md:overflow-visible"
     >
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
