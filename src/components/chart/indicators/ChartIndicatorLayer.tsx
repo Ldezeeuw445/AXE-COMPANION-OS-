@@ -482,7 +482,17 @@ export function ChartIndicatorLayer({
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
-      <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
+      <svg
+        width={size.w}
+        height={size.h}
+        viewBox={`0 0 ${size.w} ${size.h}`}
+        className="absolute inset-0"
+        style={{
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
+        }}
+      >
         {active.orderBlocks
           ? geometry.orderBlocks.map((zone, index) => (
               <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" pal={pal} />
