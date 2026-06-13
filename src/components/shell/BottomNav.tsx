@@ -65,6 +65,7 @@ export function BottomNav() {
         borderRadius: 22,
         boxShadow:
           "0 14px 34px rgba(0,0,0,0.56), 0 0 0 1px rgba(255,255,255,0.08) inset, 0 1px 0 rgba(255,255,255,0.06) inset",
+        WebkitTextSizeAdjust: "100%",
       }}
       aria-label="Primary"
     >
@@ -153,13 +154,15 @@ export function BottomNav() {
 
               {/* Label */}
               <span
-                className="text-[var(--tos-nav-label-size)] font-medium tracking-[0.07em] uppercase transition-colors duration-200"
+                className="font-medium tracking-[0.07em] uppercase transition-colors duration-200"
                 style={{
                   color: active
                     ? color
                     : bubbleOver
                       ? "rgba(0, 212, 245, 0.45)"
                       : "rgba(255,255,255,0.22)",
+                  fontSize: "var(--tos-nav-label-size, 6px)",
+                  lineHeight: "1.05",
                 }}
               >
                 {label}

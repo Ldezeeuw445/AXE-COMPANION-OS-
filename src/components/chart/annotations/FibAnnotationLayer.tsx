@@ -88,11 +88,15 @@ function fibLevelStyle(level: number, dark = true): { stroke: string; label: str
   if (dark) {
     /* Boundary (0% / 100%) — gold/yellow accent */
     if (isBoundary) return { stroke: "rgba(250,204,21,0.82)", label: "rgba(253,224,71,0.95)", width: 1.2 };
+    if (level === 0.5) return { stroke: "rgba(34,211,238,0.88)", label: "rgba(103,232,249,0.96)", width: 1.2 };
+    if (level === 0.618) return { stroke: "rgba(8,145,178,0.82)", label: "rgba(34,211,238,0.92)", width: 1.1 };
     /* ALL interior levels — uniform teal/cyan (matches fragment sheet) */
     return { stroke: "rgba(45,212,191,0.60)", label: "rgba(125,238,226,0.82)", width: 0.9 };
   }
   /* Paper */
   if (isBoundary) return { stroke: "rgba(161,98,7,0.92)", label: "rgba(133,77,14,0.98)", width: 1.3 };
+  if (level === 0.5) return { stroke: "rgba(8,145,178,0.88)", label: "rgba(8,145,178,0.98)", width: 1.2 };
+  if (level === 0.618) return { stroke: "rgba(14,116,144,0.82)", label: "rgba(14,116,144,0.95)", width: 1.1 };
   return { stroke: "rgba(0,80,65,0.82)", label: "rgba(0,65,50,0.95)", width: 1.0 };
 }
 

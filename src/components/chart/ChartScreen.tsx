@@ -2875,16 +2875,32 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
 
         <div
-          className={`absolute left-0 top-0 z-30 overflow-y-auto rounded-r-2xl border border-l-0 border-white/16 bg-[rgba(20,22,28,0.60)] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-lg transition-transform ${
-            toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
+          className={`absolute left-0 top-0 z-30 overflow-y-auto rounded-r-2xl border border-l-0 p-2.5 transition-[transform,opacity] ${
+            chartTheme.isDark
+              ? "border-white/16 bg-[rgba(20,22,28,0.64)]"
+              : "border-black/20 bg-[rgba(242,244,246,0.95)]"
+          } ${
+            toolRailOpen
+              ? chartTheme.isDark
+                ? "translate-x-6 opacity-100 shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                : "translate-x-6 opacity-100 shadow-[0_10px_24px_rgba(0,0,0,0.12)]"
+              : "pointer-events-none -translate-x-full opacity-0"
           }`}
           style={{
             top: "calc(env(safe-area-inset-top, 0px) + 4.6rem)",
             width: "calc(100% - 80px)",
             maxHeight: "calc(100% - env(safe-area-inset-top, 0px) - 5rem)",
+            backdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
+            WebkitBackdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
           }}
         >
-          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/72">Tools + indicators</div>
+          <div
+            className={`mb-2 text-[9px] font-bold uppercase tracking-[0.2em] ${
+              chartTheme.isDark ? "text-white/72" : "text-black/62"
+            }`}
+          >
+            Tools + indicators
+          </div>
           <div className="grid grid-cols-4 gap-1.5">
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
@@ -2941,10 +2957,16 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 title={item.label}
                 className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
                   isDisabled
-                    ? "cursor-not-allowed border-white/[0.04] bg-white/[0.02] text-tos-dim opacity-50"
+                    ? chartTheme.isDark
+                      ? "cursor-not-allowed border-white/[0.04] bg-white/[0.02] text-tos-dim opacity-50"
+                      : "cursor-not-allowed border-black/[0.08] bg-black/[0.03] text-black/35 opacity-60"
                     : item.active
-                      ? "border-white/[0.14] bg-white/[0.08] text-white"
-                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-white"
+                      ? chartTheme.isDark
+                        ? "border-white/[0.14] bg-white/[0.08] text-white"
+                        : "border-cyan-700/40 bg-cyan-500/14 text-cyan-900"
+                      : chartTheme.isDark
+                        ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-white"
+                        : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-black"
                 }`}
                 aria-label={item.label}
               >
@@ -2955,7 +2977,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           })}
 
           <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
-            <div className="mb-1 text-[8px] font-bold uppercase tracking-[0.18em] text-white/60">
+            <div className={`mb-1 text-[8px] font-bold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-white/60" : "text-black/55"}`}>
               Indicators
             </div>
             <div className="grid grid-cols-4 gap-1.5">
@@ -2978,8 +3000,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     title={item.label}
                     className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
                       active
-                        ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
-                        : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                        ? chartTheme.isDark
+                          ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                          : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
                     }`}
                     aria-label={`Toggle ${item.label}`}
                     aria-pressed={active}
@@ -2994,7 +3020,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
           {indicatorToolFlags.ma ? (
             <div className="col-span-4 mt-1 flex items-center gap-1.5 border-t border-white/[0.08] pt-2">
-              <span className="text-[8px] font-bold uppercase tracking-widest text-cyan-100/60">MA</span>
+              <span className={`text-[8px] font-bold uppercase tracking-widest ${chartTheme.isDark ? "text-cyan-100/60" : "text-cyan-900/70"}`}>MA</span>
               {([9, 20, 50, 200] as const).map((period) => (
                 <button
                   key={period}
@@ -3005,8 +3031,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   }}
                   className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold transition ${
                     maPeriod === period
-                      ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
-                      : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                      ? chartTheme.isDark
+                        ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                        : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                      : chartTheme.isDark
+                        ? "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                        : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
                   }`}
                 >
                   {period}
@@ -3017,8 +3047,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 onClick={toggleMaType}
                 className={`ml-auto rounded-md border px-1.5 py-0.5 text-[9px] font-bold transition ${
                   maType === "ema"
-                    ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
-                    : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                    ? chartTheme.isDark
+                      ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                      : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                    : chartTheme.isDark
+                      ? "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                      : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
                 }`}
                 title={`Switch to ${maType === "sma" ? "EMA" : "SMA"}`}
               >

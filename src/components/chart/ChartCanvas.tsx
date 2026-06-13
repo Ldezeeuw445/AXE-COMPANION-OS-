@@ -99,6 +99,74 @@ function buildSeriesData(candles: MetaApiCandle[]): CandlestickData[] {
   return data;
 }
 
+function readSeriesTimes(series: ISeriesApi<"Candlestick"> | null): number[] {
+  if (!series) return [];
+  const rows = series.data() as Array<{ time: unknown }>;
+  const times: number[] = [];
+  for (const row of rows) {
+    const t = Number(row.time);
+    if (Number.isFinite(t)) times.push(t);
+  }
+  return times;
+}
+
+function estimateBarStepSeconds(times: number[]): number {
+  if (times.length < 2) return 60;
+  const deltas: number[] = [];
+  const start = Math.max(1, times.length - 60);
+  for (let i = start; i < times.length; i += 1) {
+    const d = times[i] - times[i - 1];
+    if (Number.isFinite(d) && d > 0) deltas.push(d);
+  }
+  if (deltas.length === 0) return 60;
+  deltas.sort((a, b) => a - b);
+  return deltas[Math.floor(deltas.length / 2)] ?? 60;
+}
+
+function logicalToUnixTime(logical: number, times: number[], stepSec: number): number | null {
+  if (!Number.isFinite(logical) || times.length === 0) return null;
+  const first = times[0];
+  const lastIndex = times.length - 1;
+  const last = times[lastIndex];
+  if (logical <= 0) return Math.round(first + logical * stepSec);
+  if (logical >= lastIndex) return Math.round(last + (logical - lastIndex) * stepSec);
+  const lo = Math.floor(logical);
+  const hi = Math.ceil(logical);
+  if (lo === hi) return Math.round(times[lo] ?? first);
+  const loTime = times[lo] ?? first;
+  const hiTime = times[hi] ?? loTime + stepSec;
+  const frac = logical - lo;
+  return Math.round(loTime + (hiTime - loTime) * frac);
+}
+
+function unixTimeToLogical(timeSec: number, times: number[], stepSec: number): number | null {
+  if (!Number.isFinite(timeSec) || times.length === 0) return null;
+  const first = times[0];
+  const lastIndex = times.length - 1;
+  const last = times[lastIndex];
+  if (timeSec <= first) return (timeSec - first) / stepSec;
+  if (timeSec >= last) return lastIndex + (timeSec - last) / stepSec;
+
+  let lo = 0;
+  let hi = lastIndex;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const t = times[mid];
+    if (t === timeSec) return mid;
+    if (t < timeSec) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  const left = Math.max(0, hi);
+  const right = Math.min(lastIndex, lo);
+  if (left === right) return left;
+  const leftTime = times[left];
+  const rightTime = times[right];
+  const span = rightTime - leftTime;
+  if (!Number.isFinite(span) || span <= 0) return left;
+  const frac = (timeSec - leftTime) / span;
+  return left + frac;
+}
+
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
   { candles, overlays, pendingOrders = [], symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick, themeKey, gridStyle = "grid" },
   ref,
@@ -533,7 +601,13 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         const chart = chartRef.current;
         if (!chart || !Number.isFinite(time)) return null;
         const x = chart.timeScale().timeToCoordinate(time as UTCTimestamp);
-        return x == null ? null : Number(x);
+        if (x != null) return Number(x);
+        const times = readSeriesTimes(seriesRef.current);
+        const stepSec = estimateBarStepSeconds(times);
+        const logical = unixTimeToLogical(time, times, stepSec);
+        if (logical == null) return null;
+        const fallback = chart.timeScale().logicalToCoordinate(logical);
+        return fallback == null ? null : Number(fallback);
       },
       coordinateToPrice(y: number) {
         const ser = seriesRef.current;
@@ -545,7 +619,12 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         const chart = chartRef.current;
         if (!chart) return null;
         const t = chart.timeScale().coordinateToTime(x);
-        return t == null ? null : Number(t);
+        if (t != null) return Number(t);
+        const logical = chart.timeScale().coordinateToLogical(x);
+        if (logical == null || !Number.isFinite(logical)) return null;
+        const times = readSeriesTimes(seriesRef.current);
+        const stepSec = estimateBarStepSeconds(times);
+        return logicalToUnixTime(Number(logical), times, stepSec);
       },
       fitContent() {
         const chart = chartRef.current;
