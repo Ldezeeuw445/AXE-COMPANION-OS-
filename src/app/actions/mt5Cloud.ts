@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { autoJournalTrades } from "@/services/journalingService";
 import { normalizeDealsToClosedTrades, type MetaApiDeal } from "@/lib/mt5/dealNormalization";
 import {
   classifyMetaApiProvisioningError,
@@ -892,31 +893,19 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
     };
   }
 
-  // Fire-and-forget: auto-journal new trades with AXE alignment scoring
+  // Fire-and-forget: auto-journal new trades with AXE alignment scoring.
+  // Runs IN-PROCESS with the authenticated client + user id. (Previously this
+  // POSTed to /api/axe-journal without auth cookies, which always returned 401
+  // and silently dropped every auto-journal.)
   if (dealsUpserted > 0) {
-    triggerAutoJournal(accountId).catch((e) =>
-      console.error("[mt5Cloud] auto-journal trigger failed:", e),
-    );
+    autoJournalTrades(supabase, user.id, accountId)
+      .then((r) => {
+        if (!r.ok) console.error("[mt5Cloud] auto-journal failed:", r.error);
+      })
+      .catch((e) => console.error("[mt5Cloud] auto-journal trigger failed:", e));
   }
 
   return { ok: true, data: { dealsFetched, dealsUpserted, tradesNormalized } };
-}
-
-/**
- * Fire-and-forget: trigger AXE auto-journaling for un-journaled trades.
- * Called after a successful sync. Hits the /api/axe-journal endpoint internally.
- */
-async function triggerAutoJournal(accountId: string): Promise<void> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.axecompanion.com";
-  try {
-    await fetch(`${appUrl}/api/axe-journal`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId }),
-    });
-  } catch {
-    // Silent — auto-journal is best-effort
-  }
 }
 
 export async function disconnectCloudMt5AccountAction(accountId: string): Promise<Mt5CloudResult> {
