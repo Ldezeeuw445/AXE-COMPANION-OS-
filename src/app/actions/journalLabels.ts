@@ -55,6 +55,8 @@ export async function upsertTradeJournalLabelAction(
   const payload = {
     user_id: user.id,
     trade_id: tradeId,
+    // account_id is NOT NULL on trade_journal_labels — must be set on insert.
+    account_id: accountId,
     label,
     note: note || null,
   };
@@ -148,6 +150,7 @@ export async function upsertAxeTradeLabel(
       .insert({
         user_id: user.id,
         trade_id: tradeId,
+        account_id: accountId,
         axe_label: axeLabel.trim(),
         axe_note: axeNote?.trim() || null,
       });
