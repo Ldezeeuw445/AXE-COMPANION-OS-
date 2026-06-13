@@ -10,7 +10,7 @@
  * the new worker on next page load and we discard old caches in `activate`.
  */
 
-const CACHE_NAME = "axe-v3";
+const CACHE_NAME = "axe-v4";
 const OFFLINE_URL = "/chat";
 const FALLBACK_ICON = "/axe-icon-512.png";
 const FALLBACK_BADGE = "/axe-icon.png";
