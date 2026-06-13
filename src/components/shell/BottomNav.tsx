@@ -116,7 +116,7 @@ export function BottomNav() {
             >
               {/* Icon well */}
               <div
-                className="relative flex h-[38px] w-[38px] items-center justify-center rounded-xl transition-all duration-150"
+                className="relative flex h-[33px] w-[33px] items-center justify-center rounded-[10px] transition-all duration-150"
                 style={
                   active
                     ? {
@@ -136,7 +136,7 @@ export function BottomNav() {
                 }
               >
                 <Icon
-                  className="h-[18px] w-[18px] transition-colors duration-200"
+                  className="h-[16px] w-[16px] transition-colors duration-200"
                   style={{
                     color: active
                       ? color
@@ -153,7 +153,7 @@ export function BottomNav() {
 
               {/* Label */}
               <span
-                className="text-[7px] font-medium tracking-[0.06em] uppercase transition-colors duration-200"
+                className="text-[6px] font-medium tracking-[0.07em] uppercase transition-colors duration-200"
                 style={{
                   color: active
                     ? color

@@ -953,7 +953,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
-  const [indicatorRailOpen, setIndicatorRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
   const [indicatorToolFlags, setIndicatorToolFlags] = useState<Record<string, boolean>>({});
   // How many order blocks to render per direction. Default 1 bullish + 1
@@ -2812,13 +2811,23 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              {/* Session state — subtle on Paper, normal dim on Midnight */}
-              <span
-                className="text-[9px] font-semibold uppercase tracking-[0.14em]"
-                style={{ color: chartTheme.isDark ? "rgba(74,74,84,0.90)" : "rgba(215,214,208,0.50)" }}
-              >
-                {sessionCopy()}
-              </span>
+              {data.accountChoices.length > 1 ? (
+                <div className="relative shrink-0">
+                  <select
+                    value={accountId ?? ""}
+                    onChange={(e) => goAccount(e.target.value)}
+                    className="max-w-[10.4rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2.5 py-1 pr-6 text-[10px] font-semibold text-emerald-100/90 outline-none transition-colors hover:bg-emerald-400/[0.15]"
+                    aria-label="Account"
+                  >
+                    {data.accountChoices.map((a) => (
+                      <option key={a.brokerAccountId} value={a.brokerAccountId}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
+                </div>
+              ) : null}
               {/* Fullscreen / landscape toggle */}
               <button
                 type="button"
@@ -2833,57 +2842,44 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </div>
           </div>
 
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <span className="font-mono text-[11px] font-medium text-white/74">{lastPriceText}</span>
-              <p className="truncate font-mono text-[9px] uppercase tracking-[0.11em] text-white/40">
-                {data.brokerSymbol || "broker unresolved"}
-              </p>
-            </div>
-            {data.accountChoices.length > 1 ? (
-              <div className="relative shrink-0">
-                <select
-                  value={accountId ?? ""}
-                  onChange={(e) => goAccount(e.target.value)}
-                  className="max-w-[10.5rem] appearance-none truncate rounded-lg border border-amber-400/20 bg-amber-400/[0.08] px-2.5 py-1 pr-6 text-[10px] font-semibold text-amber-200/85 outline-none transition-colors hover:bg-amber-400/[0.12]"
-                  aria-label="Account"
-                >
-                  {data.accountChoices.map((a) => (
-                    <option key={a.brokerAccountId} value={a.brokerAccountId}>
-                      {a.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-amber-300/65" />
-              </div>
-            ) : null}
+          <div className="mt-1 flex items-center gap-2 overflow-hidden">
+            <span className="shrink-0 font-mono text-[9.5px] font-semibold uppercase tracking-[0.11em] text-cyan-300/80">
+              {data.symbol}
+            </span>
+            <span className="shrink-0 font-mono text-[11px] font-medium text-white/80">{lastPriceText}</span>
+            <span
+              className="truncate text-[9px] font-semibold uppercase tracking-[0.14em]"
+              style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}
+            >
+              {sessionCopy()}
+            </span>
           </div>
         </div>
 
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-[38%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-[24%] z-40 grid h-14 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
             toolRailOpen
               ? chartTheme.isDark
-                ? "border-white/[0.14] bg-white/[0.08] text-white shadow-[0_0_24px_rgba(255,255,255,0.2)]"
-                : "border-black/[0.14] bg-black/[0.06] text-black/80 shadow-[0_0_24px_rgba(0,0,0,0.08)]"
+                ? "border-white/[0.18] bg-white/[0.10] text-white shadow-[0_0_14px_rgba(255,255,255,0.12)]"
+                : "border-black/[0.14] bg-black/[0.06] text-black/80 shadow-[0_0_14px_rgba(0,0,0,0.06)]"
               : chartTheme.isDark
-                ? "border-white/[0.08] bg-black/78 text-white/80"
+                ? "border-white/[0.10] bg-black/42 text-white/82"
                 : "border-black/[0.10] bg-white/78 text-black/60"
           }`}
-          aria-label="Toggle SMC chart toolbar"
+          aria-label="Toggle chart tools drawer"
         >
-          <span className="h-8 w-1 rounded-full bg-current opacity-80" aria-hidden />
+          <span className="h-7 w-1 rounded-full bg-current opacity-75" aria-hidden />
         </button>
 
         <div
-          className={`absolute left-0 top-[38%] z-30 max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
+          className={`absolute left-0 top-[24%] z-30 max-h-[56vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/16 bg-[rgba(20,22,28,0.60)] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.28)] backdrop-blur-lg transition-transform ${
             toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
           }`}
           style={{ width: "calc(100% - 80px)" }}
         >
-          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/70">Chart tools</div>
+          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-white/72">Tools + indicators</div>
           <div className="grid grid-cols-4 gap-1.5">
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
@@ -2952,6 +2948,125 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               </button>
             );
           })}
+
+          <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
+            <div className="mb-1 text-[8px] font-bold uppercase tracking-[0.18em] text-white/60">
+              Indicators
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { id: "volume", label: "VOL", icon: BarChart3 },
+                { id: "ma", label: "MA", icon: LineChart },
+                { id: "macd", label: "MACD", icon: Activity },
+                { id: "bollinger", label: "BOL", icon: BarChart2 },
+                { id: "rsi", label: "RSI", icon: Activity },
+                { id: "vwap", label: "VWAP", icon: Landmark },
+                { id: "poc", label: "POC", icon: Crosshair },
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = Boolean(indicatorToolFlags[item.id]);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleIndicatorFlag(item.id)}
+                    title={item.label}
+                    className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                      active
+                        ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                        : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                    }`}
+                    aria-label={`Toggle ${item.label}`}
+                    aria-pressed={active}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                    <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {indicatorToolFlags.ma ? (
+            <div className="col-span-4 mt-1 flex items-center gap-1.5 border-t border-white/[0.08] pt-2">
+              <span className="text-[8px] font-bold uppercase tracking-widest text-cyan-100/60">MA</span>
+              {([9, 20, 50, 200] as const).map((period) => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => {
+                    setMaPeriod(period);
+                    try { savePref("axe.chart.maPeriod", String(period)); } catch { /* ignore */ }
+                  }}
+                  className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold transition ${
+                    maPeriod === period
+                      ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                      : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                  }`}
+                >
+                  {period}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={toggleMaType}
+                className={`ml-auto rounded-md border px-1.5 py-0.5 text-[9px] font-bold transition ${
+                  maType === "ema"
+                    ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                    : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                }`}
+                title={`Switch to ${maType === "sma" ? "EMA" : "SMA"}`}
+              >
+                {maType === "ema" ? "EMA" : "SMA"}
+              </button>
+            </div>
+          ) : null}
+
+          {(() => {
+            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m]);
+            if (enabledPanes.length < 2) return null;
+            const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
+            return (
+              <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
+                <div className="mb-1 text-[8px] font-bold uppercase tracking-widest text-cyan-100/60">
+                  Pane order
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {enabledPanes.map((mode, i) => (
+                    <div key={mode} className="flex items-center gap-1">
+                      <span className="min-w-[2.2rem] text-[9px] font-semibold text-white/75">
+                        {labels[mode] ?? mode.toUpperCase()}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => movePaneInOrder(mode, -1)}
+                        className={`rounded border px-1 py-0.5 text-[8px] ${
+                          i === 0
+                            ? "border-white/[0.04] text-white/25"
+                            : "border-white/[0.08] text-white/65 hover:text-white"
+                        }`}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === enabledPanes.length - 1}
+                        onClick={() => movePaneInOrder(mode, 1)}
+                        className={`rounded border px-1 py-0.5 text-[8px] ${
+                          i === enabledPanes.length - 1
+                            ? "border-white/[0.04] text-white/25"
+                            : "border-white/[0.08] text-white/65 hover:text-white"
+                        }`}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* OB count picker — only visible while the OB indicator is on.
               Lets the user choose how many bullish + bearish blocks to
@@ -3198,142 +3313,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             </>
           ) : null}
           </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setIndicatorRailOpen((v) => !v)}
-          className={`absolute left-0 top-[72%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
-            indicatorRailOpen
-              ? chartTheme.isDark
-                ? "border-white/[0.14] bg-white/[0.08] text-white shadow-[0_0_24px_rgba(255,255,255,0.2)]"
-                : "border-black/[0.14] bg-black/[0.06] text-black/80 shadow-[0_0_24px_rgba(0,0,0,0.08)]"
-              : chartTheme.isDark
-                ? "border-white/[0.08] bg-black/78 text-white/80"
-                : "border-black/[0.10] bg-white/78 text-black/60"
-          }`}
-          aria-label="Toggle indicator toolbar"
-        >
-          <span className="h-8 w-1 rounded-full bg-current opacity-80" aria-hidden />
-        </button>
-
-        <div
-          className={`absolute left-0 top-[72%] z-30 -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
-            indicatorRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
-          }`}
-          style={{ width: "calc(100% - 80px)" }}
-        >
-          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-100/85">
-            Indicators
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {[
-              { id: "volume", label: "VOL", icon: BarChart3 },
-              { id: "ma", label: "MA", icon: LineChart },
-              { id: "macd", label: "MACD", icon: Activity },
-              { id: "bollinger", label: "BOL", icon: BarChart2 },
-              { id: "rsi", label: "RSI", icon: Activity },
-              { id: "vwap", label: "VWAP", icon: Landmark },
-              { id: "poc", label: "POC", icon: Crosshair },
-            ].map((item) => {
-              const Icon = item.icon;
-              const active = Boolean(indicatorToolFlags[item.id]);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => toggleIndicatorFlag(item.id)}
-                  title={item.label}
-                  className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
-                    active
-                      ? "border-amber-300/45 bg-amber-400/16 text-amber-100"
-                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-amber-100"
-                  }`}
-                  aria-label={`Toggle ${item.label}`}
-                  aria-pressed={active}
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                  <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {/* MA settings — visible when MA indicator is active */}
-          {indicatorToolFlags.ma ? (
-            <div className="mt-2 flex items-center gap-1.5 border-t border-white/[0.06] pt-2">
-              <span className="text-[8px] font-bold uppercase tracking-widest text-amber-100/60">MA</span>
-              {([9, 20, 50, 200] as const).map((period) => (
-                <button
-                  key={period}
-                  type="button"
-                  onClick={() => {
-                    setMaPeriod(period);
-                    try { savePref("axe.chart.maPeriod", String(period)); } catch { /* ignore */ }
-                  }}
-                  className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold transition ${
-                    maPeriod === period
-                      ? "border-blue-400/50 bg-blue-400/20 text-blue-200"
-                      : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-blue-200"
-                  }`}
-                >
-                  {period}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={toggleMaType}
-                className={`ml-auto rounded-md border px-1.5 py-0.5 text-[9px] font-bold transition ${
-                  maType === "ema"
-                    ? "border-blue-400/50 bg-blue-400/20 text-blue-200"
-                    : "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-blue-200"
-                }`}
-                title={`Switch to ${maType === "sma" ? "EMA" : "SMA"}`}
-              >
-                {maType === "ema" ? "EMA" : "SMA"}
-              </button>
-            </div>
-          ) : null}
-
-          {/* Pane order — visible when 2+ pane indicators are enabled */}
-          {(() => {
-            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m]);
-            if (enabledPanes.length < 2) return null;
-            const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
-            return (
-              <div className="mt-2 border-t border-white/[0.06] pt-2">
-                <div className="mb-1 text-[8px] font-bold uppercase tracking-widest text-amber-100/60">
-                  Order
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  {enabledPanes.map((mode, i) => (
-                    <div key={mode} className="flex items-center gap-1">
-                      <span className="min-w-[2.2rem] text-[9px] font-semibold text-white/75">
-                        {labels[mode] ?? mode.toUpperCase()}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={i === 0}
-                        onClick={() => movePaneInOrder(mode, -1)}
-                        className="flex h-5 w-5 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-white/50 disabled:opacity-20"
-                        aria-label={`Move ${labels[mode]} up`}
-                      >
-                        <ChevronUp className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={i === enabledPanes.length - 1}
-                        onClick={() => movePaneInOrder(mode, 1)}
-                        className="flex h-5 w-5 items-center justify-center rounded border border-white/[0.08] bg-white/[0.04] text-white/50 disabled:opacity-20"
-                        aria-label={`Move ${labels[mode]} down`}
-                      >
-                        <ChevronDown className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
         </div>
 
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
