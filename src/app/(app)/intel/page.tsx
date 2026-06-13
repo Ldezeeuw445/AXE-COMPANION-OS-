@@ -83,7 +83,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
   const liveProviderCount = intel.providers.filter((p) => p.state === "live").length;
 
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col overflow-y-auto gap-4 pb-6">
+    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-6">
       {/* Mobile top bar: AXE wordmark + pulse is the single live
           indicator now — see `AxeWordmarkLive`. We pass our provider
           counts and freshness through `LiveStatusReporter`. The
