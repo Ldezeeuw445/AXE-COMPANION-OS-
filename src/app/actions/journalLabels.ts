@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isJournalTradeTag } from "@/lib/journal/tradeTags";
+import { recordLearningSignal } from "@/services/learningService";
 
 export type SaveTradeLabelResult = { ok?: true; error?: string };
 
@@ -68,6 +69,16 @@ export async function upsertTradeJournalLabelAction(
   } else {
     const { error: inErr } = await supabase.from("trade_journal_labels").insert(payload);
     if (inErr) return { error: inErr.message };
+  }
+
+  // Record a behavioral learning signal so the cockpit alignment score reflects
+  // the trader's own assessment of their trades (not just a GPT guess).
+  if (label) {
+    await recordLearningSignal(supabase, user.id, "journal_label", {
+      trade_id: tradeId,
+      label,
+      has_note: Boolean(note),
+    });
   }
 
   revalidatePath("/journal");

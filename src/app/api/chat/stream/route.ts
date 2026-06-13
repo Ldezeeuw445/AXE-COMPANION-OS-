@@ -37,6 +37,12 @@ export async function POST(request: Request) {
               type: "error",
               message: "Daily free message limit reached. Upgrade to Pro for unlimited chat.",
             });
+          } else if (result.aiFailed) {
+            send({
+              type: "error",
+              message:
+                "AXE couldn't generate a reply right now — please try again in a moment.",
+            });
           } else {
             send({ type: "error", message: "Could not process message." });
           }

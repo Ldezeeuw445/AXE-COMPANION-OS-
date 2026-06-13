@@ -675,13 +675,24 @@ async function buildAlerts(
 }
 
 async function buildMemory(supabase: SupabaseClient, userId: string): Promise<MemoryContext> {
-  const [memoryRes, commitmentsRes] = await Promise.all([
+  const [memoryRes, autoMemoryRes, commitmentsRes] = await Promise.all([
     supabase
       .from("assistant_memory_entries")
       .select("scope,entry_key,content")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(30),
+    // Auto-extracted memories written after each chat turn (extractMemoriesAsync).
+    // Previously these were only surfaced via the knowledge layer; merge them into
+    // the main TRADER MEMORY block so AXE consistently recalls what it learned.
+    supabase
+      .from("axe_memory")
+      .select("memory_type,symbol,content,confidence")
+      .eq("user_id", userId)
+      .is("resolved_at", null)
+      .order("confidence", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(20),
     supabase
       .from("axe_commitments")
       .select("id,symbol,description,created_at")
@@ -691,18 +702,27 @@ async function buildMemory(supabase: SupabaseClient, userId: string): Promise<Me
       .limit(10),
   ]);
 
-  const entries: AxeMemoryEntry[] = ((memoryRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+  const manualEntries: AxeMemoryEntry[] = ((memoryRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
     scope: String(r.scope ?? ""),
     entryKey: (r.entry_key as string | null | undefined) ?? null,
     content: String(r.content ?? ""),
   }));
+
+  const autoEntries: AxeMemoryEntry[] = ((autoMemoryRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    scope: `axe/${String(r.memory_type ?? "note")}`,
+    entryKey: (r.symbol as string | null | undefined) ?? null,
+    content: String(r.content ?? ""),
+  }));
+
+  const entries: AxeMemoryEntry[] = [...manualEntries, ...autoEntries];
   const seen = new Set<string>();
   const prioritizedEntries = entries.filter((entry) => {
+    if (!entry.content.trim()) return false;
     const key = `${entry.scope}:${entry.entryKey ?? ""}:${entry.content.trim().toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 14);
+  }).slice(0, 18);
   const compactSummary =
     prioritizedEntries.length > 0
       ? prioritizedEntries
