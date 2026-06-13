@@ -22,6 +22,7 @@ import { ContentShell } from "@/components/shell/ContentShell";
 export function AppChrome({ children }: { children: ReactNode }) {
   return (
     <AppTopBarProvider>
+<<<<<<< HEAD
       <AmbientProvider>
         <SwipeNavProvider>
           <div className="fixed inset-0 mx-auto flex w-full max-w-6xl flex-col overflow-hidden overflow-x-hidden overscroll-none [touch-action:pan-y] md:flex-row">
@@ -34,6 +35,13 @@ export function AppChrome({ children }: { children: ReactNode }) {
             <div className="shrink-0 md:hidden">
               <ClientBottomNav />
             </div>
+=======
+      <div className="relative mx-auto flex min-h-svh w-full max-w-6xl flex-col md:flex-row">
+        <AppNavigation />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-[4.25rem]">
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-0 md:px-6 md:pt-[max(0.75rem,env(safe-area-inset-top))]">
+            {children}
+>>>>>>> a4a3600 (feat: Fix Bottom Navigation Bar Issues)
           </div>
         </SwipeNavProvider>
       </AmbientProvider>
