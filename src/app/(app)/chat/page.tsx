@@ -69,7 +69,7 @@ export default async function ChatPage() {
         <PinnedContext text={conversation.pinnedContext} />
         <ChatMessageList messages={messages} />
         <div className="pointer-events-none fixed inset-x-0 bottom-[var(--tos-nav-offset)] z-30 px-3 pb-1 md:static md:inset-auto md:bottom-auto md:z-auto md:px-0 md:pb-0">
-          <div className="pointer-events-auto mx-auto w-full max-w-2xl rounded-t-[1.1rem] border border-white/[0.08] bg-[#07090c]/82 shadow-[0_-14px_36px_-22px_rgba(0,0,0,0.85)] backdrop-blur-xl md:rounded-none md:border-0 md:bg-transparent md:shadow-none md:backdrop-blur-0">
+          <div className="pointer-events-auto mx-auto w-full max-w-2xl">
             <AxeAuraWave />
             <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
           </div>
