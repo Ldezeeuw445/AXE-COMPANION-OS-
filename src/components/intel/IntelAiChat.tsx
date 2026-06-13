@@ -239,8 +239,8 @@ export function IntelAiChat({ symbol }: { symbol?: string }) {
       {/* ── FAB: Cyan triangle button ─────────────────────────── */}
       <button
         onClick={() => setOpen((p) => !p)}
-        className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+90px)] right-4 z-[60] flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-white/[0.12] bg-[#0a0a0d]/95 shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md active:scale-95"
-        style={{ transition: "transform 0.12s ease" }}
+        className="fixed right-4 z-[60] flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-white/[0.12] bg-[#0a0a0d]/95 shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md active:scale-95"
+        style={{ transition: "transform 0.12s ease", bottom: "calc(var(--tos-nav-offset) + 0.6rem)" }}
         aria-label={open ? "Close AXE Agent" : "Open AXE Agent"}
       >
         {open ? (
@@ -253,10 +253,11 @@ export function IntelAiChat({ symbol }: { symbol?: string }) {
       {/* ── Chat Panel ────────────────────────────────────────── */}
       {open && (
         <div
-          className="fixed inset-x-0 bottom-0 z-[55] flex flex-col"
+          className="fixed inset-x-0 z-[55] flex flex-col"
           style={{
             top: "env(safe-area-inset-top, 0px)",
-            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            bottom: "var(--tos-nav-offset)",
+            paddingBottom: "0px",
           }}
         >
           {/* Backdrop */}
