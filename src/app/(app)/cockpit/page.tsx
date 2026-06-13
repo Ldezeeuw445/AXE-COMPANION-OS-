@@ -16,7 +16,7 @@ export default async function CockpitPage() {
   const hasSnapshot = Boolean(dash.snapshotId);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 pb-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-y-contain pb-2">
       <LiveStatusReporter
         liveCount={hasSnapshot ? 1 : 0}
         totalCount={1}
