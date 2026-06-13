@@ -12,6 +12,7 @@ import {
 import type {
   CandlestickData,
   IChartApi,
+  Logical,
   IPriceLine,
   ISeriesApi,
   LineData,
@@ -606,7 +607,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         const stepSec = estimateBarStepSeconds(times);
         const logical = unixTimeToLogical(time, times, stepSec);
         if (logical == null) return null;
-        const fallback = chart.timeScale().logicalToCoordinate(logical);
+        const fallback = chart.timeScale().logicalToCoordinate(logical as Logical);
         return fallback == null ? null : Number(fallback);
       },
       coordinateToPrice(y: number) {
