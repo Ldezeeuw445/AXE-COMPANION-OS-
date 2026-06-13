@@ -5,41 +5,21 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { CSSProperties } from "react";
 import {
-  Bell,
-  BookOpen,
-  Brain,
+  BarChart3,
   Briefcase,
-  Landmark,
+  LineChart,
   MessageSquare,
-  Newspaper,
   ScrollText,
   Settings,
-  Target,
-  Vault,
 } from "lucide-react";
 
 const items = [
-  { href: "/accounts", label: "Accounts", Icon: Landmark, accentVar: "--icon-accounts" },
-  { href: "/history", label: "History", Icon: ScrollText, accentVar: "--icon-history" },
-  { href: "/journal", label: "Journal", Icon: BookOpen, accentVar: "--icon-journal" },
-  { href: "/chat", label: "Chat", Icon: MessageSquare, accentVar: "--icon-chat" },
-  { href: "/intel", label: "Intel", Icon: Target, accentVar: "--icon-intel" },
-  { href: "/market", label: "News", Icon: Newspaper, accentVar: "--icon-news" },
-  { href: "/alerts", label: "Alerts", Icon: Bell, accentVar: "--icon-alerts" },
-  { href: "/vault", label: "Vault", Icon: Vault, accentVar: "--icon-vault" },
-  {
-    href: "/actions",
-    label: "Actions",
-    Icon: Briefcase,
-    accentVar: "--icon-actions",
-  },
-  { href: "/cockpit", label: "Cockpit", Icon: Brain, accentVar: "--icon-cockpit" },
-  {
-    href: "/settings",
-    label: "Settings",
-    Icon: Settings,
-    accentVar: "--icon-settings",
-  },
+  { href: "/chat", label: "AXE", Icon: MessageSquare, accentVar: "--icon-chat" },
+  { href: "/watchlist", label: "QUOTES", Icon: BarChart3, accentVar: "--icon-quotes" },
+  { href: "/chart", label: "CHART", Icon: LineChart, accentVar: "--icon-chart" },
+  { href: "/actions", label: "TRADE", Icon: Briefcase, accentVar: "--icon-actions" },
+  { href: "/history", label: "HISTORY", Icon: ScrollText, accentVar: "--icon-history" },
+  { href: "/settings", label: "SETTINGS", Icon: Settings, accentVar: "--icon-settings" },
 ] as const;
 
 export function BottomNav() {
