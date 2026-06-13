@@ -2810,45 +2810,53 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
               </div>
-              {/* Account chip — only when 2+ accounts available */}
-              {data.accountChoices.length > 1 && (
-                <div className="relative">
-                  <select
-                    value={accountId ?? ""}
-                    onChange={(e) => goAccount(e.target.value)}
-                    className="max-w-[6.5rem] appearance-none truncate rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-2 py-0.5 pr-5 text-[10px] font-semibold text-amber-300/80 outline-none transition-colors hover:bg-amber-400/[0.10]"
-                    aria-label="Account"
-                  >
-                    {data.accountChoices.map((a) => (
-                      <option key={a.brokerAccountId} value={a.brokerAccountId}>
-                        {a.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-amber-400/50" />
-                </div>
-              )}
-              {/* Live price */}
-              <span className="font-mono text-[11px] font-medium text-white/70">{lastPriceText}</span>
             </div>
-            {/* Session state — subtle on Paper, normal dim on Midnight */}
-            <span
-              className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.14em]"
-              style={{ color: chartTheme.isDark ? "rgba(74,74,84,0.90)" : "rgba(215,214,208,0.50)" }}
-            >
-              {sessionCopy()}
-            </span>
-            {/* Fullscreen / landscape toggle */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="ml-1.5 grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/70"
-              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            >
-              {isFullscreen
-                ? <Minimize2 className="h-3 w-3" />
-                : <Maximize2 className="h-3 w-3" />}
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {/* Session state — subtle on Paper, normal dim on Midnight */}
+              <span
+                className="text-[9px] font-semibold uppercase tracking-[0.14em]"
+                style={{ color: chartTheme.isDark ? "rgba(74,74,84,0.90)" : "rgba(215,214,208,0.50)" }}
+              >
+                {sessionCopy()}
+              </span>
+              {/* Fullscreen / landscape toggle */}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              >
+                {isFullscreen
+                  ? <Minimize2 className="h-3 w-3" />
+                  : <Maximize2 className="h-3 w-3" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <span className="font-mono text-[11px] font-medium text-white/74">{lastPriceText}</span>
+              <p className="truncate font-mono text-[9px] uppercase tracking-[0.11em] text-white/40">
+                {data.brokerSymbol || "broker unresolved"}
+              </p>
+            </div>
+            {data.accountChoices.length > 1 ? (
+              <div className="relative shrink-0">
+                <select
+                  value={accountId ?? ""}
+                  onChange={(e) => goAccount(e.target.value)}
+                  className="max-w-[10.5rem] appearance-none truncate rounded-lg border border-amber-400/20 bg-amber-400/[0.08] px-2.5 py-1 pr-6 text-[10px] font-semibold text-amber-200/85 outline-none transition-colors hover:bg-amber-400/[0.12]"
+                  aria-label="Account"
+                >
+                  {data.accountChoices.map((a) => (
+                    <option key={a.brokerAccountId} value={a.brokerAccountId}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-amber-300/65" />
+              </div>
+            ) : null}
           </div>
         </div>
 

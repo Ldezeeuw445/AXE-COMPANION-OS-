@@ -78,8 +78,8 @@
 
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
-  --tos-nav-h: 3.5rem;
-  --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px));
+  --tos-nav-h: 4.75rem;
+  --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.75rem);
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
 }
 
@@ -280,17 +280,29 @@ body {
 /* The navbar is the final flex row in the h-dvh app shell. This keeps it
    pinned below the content without overlaying the chat composer. */
 .tos-nav-pill {
-  position: relative;
-  width: 100%;
-  flex-shrink: 0;
-  z-index: 50;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: max(0.55rem, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 55;
+  width: min(34rem, calc(100vw - max(1rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.35rem;
+  background: linear-gradient(180deg, rgba(22, 22, 24, 0.82) 0%, rgba(12, 12, 14, 0.88) 100%);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+  padding: 0.35rem 0.45rem calc(env(safe-area-inset-bottom, 0px) + 0.4rem);
 }
 
 /* ── Landscape adaptation ──────────────────────────────────────── */
 @media (orientation: landscape) {
   .tos-nav-pill {
-    /* Full width in landscape — docked bar style */
+    width: min(38rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+    bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -319,7 +331,7 @@ body {
 /* The mobile navbar consumes its own flex row, so app content must not
    reserve a second navbar-sized gap. */
 .tos-app-content {
-  padding-bottom: 0.5rem;
+  padding-bottom: calc(var(--tos-nav-offset) + 0.35rem);
 }
 @media (min-width: 768px) {
   .tos-app-content {

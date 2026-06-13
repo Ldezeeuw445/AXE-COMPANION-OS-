@@ -59,22 +59,18 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className="tos-nav-pill pointer-events-auto"
+      className="tos-nav-pill pointer-events-auto md:hidden"
       style={{
-        background: "#111115",
-        borderRadius: "16px 16px 0 0",
+        background: "linear-gradient(180deg, rgba(22,22,24,0.86) 0%, rgba(12,12,14,0.9) 100%)",
+        borderRadius: 22,
         boxShadow:
-          "0 -4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 rgba(255,255,255,0.04) inset",
-        paddingTop: 4,
-        paddingLeft: 4,
-        paddingRight: 4,
-        /* paddingBottom handled by .tos-nav-pill CSS (safe-area + lift) */
+          "0 14px 34px rgba(0,0,0,0.56), 0 0 0 1px rgba(255,255,255,0.08) inset, 0 1px 0 rgba(255,255,255,0.06) inset",
       }}
       aria-label="Primary"
     >
       {/* Inner glow highlight along top edge */}
       <div
-        className="pointer-events-none absolute inset-x-4 top-0 h-px"
+        className="pointer-events-none absolute inset-x-4 top-[1px] h-px"
         style={{
           background:
             "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.08) 70%, transparent 100%)",
@@ -101,7 +97,7 @@ export function BottomNav() {
         />
       )}
 
-      <div className="relative z-10 flex items-center justify-around">
+      <div className="relative z-10 flex items-center justify-around gap-1">
         {tabs.map(({ href, label, Icon, accent }, idx) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const bubbleOver = isSwiping && Math.abs(fractionalIdx - idx) < 0.6;

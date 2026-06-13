@@ -22,10 +22,9 @@ const chartCanvas = await readFile(
 );
 
 if (
-  !contentShell.includes('"overflow-hidden"') ||
-  !contentShell.includes(
-    '"tos-app-content overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"',
-  )
+  !contentShell.includes('"overflow-hidden pb-[var(--tos-nav-offset)] md:pb-0"') ||
+  !contentShell.includes("tos-app-content") ||
+  !contentShell.includes("overflow-y-auto")
 ) {
   throw new Error("Normal app routes must scroll in ContentShell.");
 }
@@ -34,16 +33,16 @@ if (settingsPage.includes("overflow-y-auto")) {
   throw new Error("Settings must not create a nested scroll container.");
 }
 
-if (!appChrome.includes("fixed inset-0")) {
-  throw new Error("The app shell must be anchored to the viewport.");
+if (!appChrome.includes("min-h-dvh")) {
+  throw new Error("The app shell must keep natural document flow with min-h-dvh.");
 }
 
 if (
-  !appChrome.includes("overflow-x-hidden") ||
+  !appChrome.includes("<ClientBottomNav />") ||
   !appChrome.includes("[touch-action:pan-y]")
 ) {
   throw new Error(
-    "The app shell must block horizontal viewport panning while preserving vertical gestures.",
+    "The app shell must keep touch-action guard and render the mobile bottom nav.",
   );
 }
 
