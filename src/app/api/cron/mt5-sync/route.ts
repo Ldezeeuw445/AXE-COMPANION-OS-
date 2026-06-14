@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
-import { syncStaleMt5Accounts } from "@/lib/mt5/backgroundSync";
+import { syncAccountsMissingSymbolMap, syncStaleMt5Accounts } from "@/lib/mt5/backgroundSync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "supabase_service_role_missing" }, { status: 503 });
   }
 
+  const symbolMapSummary = await syncAccountsMissingSymbolMap(supabase, { maxAccounts: 5 });
   const summary = await syncStaleMt5Accounts(supabase, { maxAccounts: 5, minAgeMs: 10 * 60 * 1000 });
-  return Response.json({ ok: true, ...summary });
+  return Response.json({ ok: true, symbolMapSummary, ...summary });
 }

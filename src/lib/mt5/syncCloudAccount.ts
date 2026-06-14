@@ -20,6 +20,7 @@ import {
 import {
   buildBrokerSymbolRuntimeMetadata,
   CANONICAL_BROKER_SYMBOLS,
+  metadataHasSymbolMap,
   probeBrokerSymbolReport,
 } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
@@ -35,6 +36,17 @@ const SYNC_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
 const SYNC_POSITIONS_TIMEOUT_MS = 35_000;
 const SYNC_HISTORY_TIMEOUT_MS = 75_000;
 const SYNC_FINAL_STATUS_TIMEOUT_MS = 10_000;
+const SYMBOL_LIST_TIMEOUT_MS = 12_000;
+const SYMBOL_PROBE_TIMEOUT_MS = 1_800;
+
+export type SymbolMapRefreshResult =
+  | { ok: true; data: { mappedCount: number; universeSize: number } }
+  | { ok: false; code: Mt5CloudErrorCode; message: string };
+
+export type RefreshCloudAccountSymbolMapOptions = {
+  /** Probe prices/candles for canonical symbols (default true). */
+  probe?: boolean;
+};
 
 function normalizeLogin(login: string | number | null | undefined): string {
   return String(login ?? "").replace(/\D/g, "");
@@ -378,3 +390,169 @@ export async function runCloudMt5Sync(
 
   return { ok: true, data: { dealsFetched, dealsUpserted, tradesNormalized } };
 }
+
+/**
+ * Lightweight MetaAPI symbol discovery — fetches broker symbol universe and
+ * writes metadata.symbol_map without syncing deal history. Used by cron backfill
+ * and auto-triggers after account connect / test.
+ */
+export async function refreshCloudAccountSymbolMap(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+  opts: RefreshCloudAccountSymbolMapOptions = {},
+): Promise<SymbolMapRefreshResult> {
+  if (!getMetaApiToken()) {
+    return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
+  }
+
+  const { data: row, error } = await supabase
+    .from("user_broker_accounts")
+    .select("id,external_connection_id,connection_method,metadata,user_id,mt5_login,mt5_server,provider_status")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) return { ok: false, code: "unknown", message: error.message };
+  if (!row?.external_connection_id || row.connection_method !== "cloud_mt5") {
+    return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
+  }
+
+  let extId = row.external_connection_id as string;
+  const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
+  let accountRegion =
+    typeof prevMeta.metaapiRegion === "string" ? prevMeta.metaapiRegion : null;
+
+  let brokerSymbols: string[] = [];
+  let positions: unknown[] = [];
+  let relinked = false;
+
+  try {
+    const mt5Login = normalizeLogin(row.mt5_login as string | null);
+    const mt5Server = String(row.mt5_server ?? "").trim();
+    let acc: MetaApiTradingAccount | null = null;
+    try {
+      acc = await withActionBudget(
+        "symbol_map_read_account",
+        provisioningGetAccount(extId),
+        SYNC_FINAL_STATUS_TIMEOUT_MS,
+      );
+    } catch (e) {
+      const mapped = mapMetaApiActionError(e);
+      if (mapped.code !== "not_found") throw e;
+    }
+    if (!acc || !accountMatchesMt5(acc, mt5Login, mt5Server)) {
+      const existing = await withActionBudget(
+        "symbol_map_find_existing",
+        findExistingMetaApiAccount(mt5Login, mt5Server),
+        TEST_PROVISIONING_TIMEOUT_MS,
+      );
+      if (!existing) {
+        throw new MetaApiRequestError(
+          "not_found",
+          "No matching MetaApi account found for MT5 login/server",
+          404,
+          null,
+        );
+      }
+      extId = existing.id;
+      acc = existing.account;
+      relinked = true;
+    }
+    if (typeof acc.region === "string" && acc.region.length > 0) {
+      accountRegion = acc.region;
+    }
+
+    try {
+      brokerSymbols = await withActionBudget(
+        "symbol_map_list_symbols",
+        clientListSymbols(extId, accountRegion),
+        SYMBOL_LIST_TIMEOUT_MS,
+      );
+    } catch {
+      brokerSymbols = [];
+    }
+
+    if (brokerSymbols.length === 0) {
+      return {
+        ok: false,
+        code: "sync_failed",
+        message: "Broker symbol list unavailable — terminal may still be deploying.",
+      };
+    }
+
+    try {
+      positions = await withActionBudget(
+        "symbol_map_positions",
+        clientGetPositions(extId, false, accountRegion),
+        SYNC_POSITIONS_TIMEOUT_MS,
+      );
+    } catch {
+      positions = [];
+    }
+  } catch (e) {
+    const m = mapMetaApiActionError(e);
+    if (m.code === "unknown") {
+      return { ok: false, code: "sync_failed", message: userMessageForCode("sync_failed") };
+    }
+    return m;
+  }
+
+  const positionSymbols = positions
+    .map((p) => (p && typeof p === "object" ? String((p as Record<string, unknown>).symbol ?? "") : ""))
+    .filter(Boolean);
+  const symbolRuntime = buildBrokerSymbolRuntimeMetadata({
+    existingMetadata: prevMeta,
+    knownSymbols: [...brokerSymbols, ...positionSymbols],
+    displaySymbols: [...CANONICAL_BROKER_SYMBOLS, ...positionSymbols.map(cleanDisplaySymbol).filter(Boolean)],
+  });
+
+  const shouldProbe = opts.probe !== false;
+  const symbolResolutionReport = shouldProbe
+    ? await probeBrokerSymbolReport({
+        accountId: extId,
+        region: accountRegion,
+        report: symbolRuntime.symbol_resolution_report,
+        timeframe: "1h",
+        displays: [...CANONICAL_BROKER_SYMBOLS],
+        timeoutMs: SYMBOL_PROBE_TIMEOUT_MS,
+      }).catch(() => symbolRuntime.symbol_resolution_report)
+    : symbolRuntime.symbol_resolution_report;
+
+  const mappedCount = Object.keys(symbolRuntime.symbol_map).length;
+  if (mappedCount === 0) {
+    return {
+      ok: false,
+      code: "sync_failed",
+      message: "No broker symbols could be mapped for this account.",
+    };
+  }
+
+  const providerStatus = String(row.provider_status ?? "connected");
+
+  await supabase
+    .from("user_broker_accounts")
+    .update({
+      connection_method: "cloud_mt5",
+      external_connection_id: extId,
+      status: "active",
+      provider_status: providerStatus === "syncing" ? "connected" : providerStatus,
+      metadata: {
+        ...prevMeta,
+        ...symbolRuntime,
+        symbol_resolution_report: symbolResolutionReport,
+        lastSymbolMapRefreshAt: new Date().toISOString(),
+        ...(accountRegion ? { metaapiRegion: accountRegion } : {}),
+        ...(relinked ? { relinkedMetaapiAccountAt: new Date().toISOString() } : {}),
+      },
+    })
+    .eq("id", accountId)
+    .eq("user_id", userId);
+
+  return {
+    ok: true,
+    data: { mappedCount, universeSize: brokerSymbols.length },
+  };
+}
+
+export { metadataHasSymbolMap };

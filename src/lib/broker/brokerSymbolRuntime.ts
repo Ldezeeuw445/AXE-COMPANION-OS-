@@ -74,6 +74,11 @@ export function getMetadataSymbolMap(meta: Record<string, unknown> | null | unde
   return out;
 }
 
+/** True when account metadata has at least one display→broker symbol mapping. */
+export function metadataHasSymbolMap(meta: Record<string, unknown> | null | undefined): boolean {
+  return Object.keys(getMetadataSymbolMap(meta)).length > 0;
+}
+
 export function getMetadataSymbolReport(
   meta: Record<string, unknown> | null | undefined,
 ): Record<string, BrokerSymbolReportEntry> {

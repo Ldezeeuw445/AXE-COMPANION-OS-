@@ -81,6 +81,39 @@ function extractRegion(metadata: Record<string, unknown> | null): string {
   return typeof region === "string" && region.length > 0 ? region : "london";
 }
 
+/** Skip obvious watchlist typos / non-instruments before symbol_map lookup. */
+function normalizeWatchlistSymbol(raw: string): string | null {
+  const key = raw.toUpperCase().trim();
+  if (!key) return null;
+  if (key === "AAPLE") return null;
+  if (key.includes(".") || key.includes("/")) return null;
+  if (!/^[A-Z0-9._-]{2,12}$/.test(key)) return null;
+  return key;
+}
+
+/**
+ * Only return display symbols that have a broker mapping.
+ * Never fall back to raw CORE_SYMBOLS — that causes hundreds of failed subscriptions.
+ */
+function resolveWatchlistSymbols(
+  symbolMap: Record<string, string>,
+  userWatchlist: string[],
+): string[] {
+  if (Object.keys(symbolMap).length === 0) return [];
+
+  const candidates = new Set<string>([...CORE_SYMBOLS]);
+  for (const raw of userWatchlist) {
+    const normalized = normalizeWatchlistSymbol(raw);
+    if (normalized) candidates.add(normalized);
+  }
+
+  const resolved: string[] = [];
+  for (const display of candidates) {
+    if (symbolMap[display]) resolved.push(display);
+  }
+  return resolved;
+}
+
 /**
  * Load all active MT5 cloud accounts and their watchlist symbols.
  */
@@ -137,24 +170,13 @@ export async function loadAccountConfigs(): Promise<AccountConfig[]> {
 
     const symbolMap = extractSymbolMap(acc.metadata);
     const userWatchlist = watchlistByUser.get(acc.user_id) ?? [];
+    const watchlistSymbols = resolveWatchlistSymbols(symbolMap, userWatchlist);
 
-    // Merge core symbols + user watchlist, deduplicate
-    const allDisplaySymbols = [...new Set([...CORE_SYMBOLS, ...userWatchlist])];
-
-    // Resolve each display symbol to a broker symbol via the symbol_map
-    const resolvedSymbols: string[] = [];
-    for (const display of allDisplaySymbols) {
-      const broker = symbolMap[display];
-      if (broker) {
-        resolvedSymbols.push(display);
-      }
-    }
-
-    if (resolvedSymbols.length === 0) {
+    if (watchlistSymbols.length === 0) {
       console.warn(
-        `[sub-mgr] Account ${acc.id} has no resolved symbols (symbol_map may be empty) — ` +
-          `including all ${allDisplaySymbols.length} display symbols as-is`
+        `[sub-mgr] Account ${acc.id} skipped — no symbol_map entries (run MT5 sync in app to populate mapping)`,
       );
+      continue;
     }
 
     configs.push({
@@ -163,7 +185,7 @@ export async function loadAccountConfigs(): Promise<AccountConfig[]> {
       metaApiAccountId: extId,
       region: extractRegion(acc.metadata),
       symbolMap,
-      watchlistSymbols: resolvedSymbols.length > 0 ? resolvedSymbols : allDisplaySymbols,
+      watchlistSymbols,
     });
   }
 

@@ -24,7 +24,7 @@ import {
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
-import { runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
+import { metadataHasSymbolMap, refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -71,6 +71,18 @@ function isProvisionedAndReady(
   const c = (connectionStatus ?? "").toUpperCase();
   const s = (state ?? "").toUpperCase();
   return c === "CONNECTED" || s === "DEPLOYED";
+}
+
+function triggerSymbolMapRefreshIfNeeded(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+  accountId: string,
+  metadata: Record<string, unknown> | null | undefined,
+): void {
+  if (!supabase || metadataHasSymbolMap(metadata)) return;
+  void refreshCloudAccountSymbolMap(supabase, userId, accountId, { probe: false }).catch((e) =>
+    console.error("[mt5Cloud] symbol map refresh failed:", e),
+  );
 }
 
 function normalizeLogin(login: string | number | null | undefined): string {
@@ -357,6 +369,13 @@ export async function createCloudMt5ConnectionAction(
 
     if (updateExistingErr) return { ok: false, code: "unknown", message: updateExistingErr.message };
 
+    if (probe.ready) {
+      triggerSymbolMapRefreshIfNeeded(supabase, user.id, existingLocalRow.id as string, {
+        ...previousMeta,
+        ...metadata,
+      });
+    }
+
     revalidatePath("/accounts");
     revalidatePath("/history");
     revalidatePath("/journal");
@@ -386,6 +405,10 @@ export async function createCloudMt5ConnectionAction(
 
   if (error) {
     return { ok: false, code: "unknown", message: error.message };
+  }
+
+  if (probe.ready) {
+    triggerSymbolMapRefreshIfNeeded(supabase, user.id, inserted.id as string, metadata);
   }
 
   revalidatePath("/accounts");
@@ -478,6 +501,10 @@ export async function probeCloudMt5StatusAction(accountId: string): Promise<
       .update(patch)
       .eq("id", accountId)
       .eq("user_id", user.id);
+  }
+
+  if (providerStatus === "connected") {
+    triggerSymbolMapRefreshIfNeeded(supabase, user.id, accountId, currentMeta);
   }
 
   return { ok: true, data: { providerStatus } };
@@ -588,6 +615,8 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
       })
       .eq("id", accountId)
       .eq("user_id", user.id);
+
+    triggerSymbolMapRefreshIfNeeded(supabase, user.id, accountId, meta);
   } catch (e) {
     const mapped = mapMetaError(e);
     const failStatus = mapped.code === "mt5_invalid_credentials" ? "invalid_credentials" : "failed";
