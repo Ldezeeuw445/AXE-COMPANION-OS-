@@ -55,7 +55,12 @@ import type {
   ChartActionResult,
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
-import { PositionLabelsOverlay } from "@/components/chart/PositionLabelsOverlay";
+import {
+  PositionLabelsOverlay,
+  type SlTpDraft,
+  slTpDraftKeyForOrder,
+  slTpDraftKeyForPosition,
+} from "@/components/chart/PositionLabelsOverlay";
 import {
   useLiveChart,
   type LivePosition,
@@ -92,7 +97,8 @@ import {
   type OrderConfirmInput,
   type OrderConfirmStatus,
 } from "@/components/chart/ChartOrderConfirm";
-import { useDemoPositions } from "@/components/chart/useDemoPositions";
+import { computeLivePnl, useDemoPositions } from "@/components/chart/useDemoPositions";
+import { useInstantSlTpModify } from "@/lib/chart/instantSlTpModify";
 import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
@@ -114,6 +120,8 @@ type Props = {
   initialAction?: string;
   /** Server-loaded live-trading enabled flag (from user_workspace_preferences). */
   liveTradingEnabled?: boolean;
+  /** Server-loaded instant SL/TP on drag release preference. */
+  instantSlTpModify?: boolean;
 };
 
 type DrawingMode = "fib_retracement" | "trendline" | null;
@@ -829,7 +837,7 @@ const TradePlanLine = memo(function TradePlanLine({
   prev.symbol === next.symbol,
 );
 
-export function ChartScreen({ data, initialAction, liveTradingEnabled = false }: Props) {
+export function ChartScreen({ data, initialAction, liveTradingEnabled = false, instantSlTpModify = false }: Props) {
   const router = useRouter();
   const { playSound, vibrate } = useAmbient();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
@@ -1347,6 +1355,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // POSTs to /api/mt5/order. `enabled` is server-persisted; armed window
   // is per-device. See liveTradingFlag.ts for the split-storage model.
   const liveTrading = useLiveTradingFlag(liveTradingEnabled);
+  const slTpModifyPref = useInstantSlTpModify(instantSlTpModify);
+  const [slTpDrafts, setSlTpDrafts] = useState<Record<string, SlTpDraft>>({});
   const isDemoAccount = data.account?.connectionMethod === "demo_paper";
   const demoBook = useDemoPositions(
     data.account?.brokerAccountId ?? null,
@@ -1821,6 +1831,82 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       return next;
     });
   }, []);
+
+  const baseOverlays = useMemo(() => {
+    if (!isDemoAccount) return overlays;
+    const demoRows: ChartOverlayRow[] = demoBook.forSymbol.map((p) => ({
+      id: p.id,
+      side: p.side,
+      volume: p.volume,
+      entryPrice: p.entryPrice,
+      stopLoss: p.stopLoss,
+      takeProfit: p.takeProfit,
+      profit: computeLivePnl(p, livePrice),
+      openTime: p.openedAt,
+      currentPrice: livePrice,
+    }));
+    const liveIds = new Set(overlays.map((o) => o.id));
+    return [...overlays, ...demoRows.filter((d) => !liveIds.has(d.id))];
+  }, [isDemoAccount, overlays, demoBook.forSymbol, livePrice]);
+
+  const displayOverlays = useMemo(
+    () =>
+      baseOverlays.map((o) => {
+        const draft = slTpDrafts[slTpDraftKeyForPosition(o.id)];
+        if (!draft) return o;
+        return {
+          ...o,
+          stopLoss: draft.stopLoss ?? o.stopLoss,
+          takeProfit: draft.takeProfit ?? o.takeProfit,
+        };
+      }),
+    [baseOverlays, slTpDrafts],
+  );
+
+  const displayPendingOrders = useMemo(
+    () =>
+      pendingOrders.map((o) => {
+        const draft = slTpDrafts[slTpDraftKeyForOrder(o.id)];
+        if (!draft) return o;
+        return {
+          ...o,
+          stopLoss: draft.stopLoss ?? o.stopLoss,
+          takeProfit: draft.takeProfit ?? o.takeProfit,
+        };
+      }),
+    [pendingOrders, slTpDrafts],
+  );
+
+  useEffect(() => {
+    setSlTpDrafts((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const next = { ...prev };
+      let changed = false;
+      const match = (a: number | null | undefined, b: number | null | undefined) => {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return Math.abs(a - b) < 1e-9;
+      };
+      for (const key of Object.keys(prev)) {
+        const draft = prev[key];
+        if (!draft) continue;
+        if (key.startsWith("pos:")) {
+          const row = overlays.find((o) => o.id === key.slice(4));
+          if (row && match(row.stopLoss, draft.stopLoss) && match(row.takeProfit, draft.takeProfit)) {
+            delete next[key];
+            changed = true;
+          }
+        } else if (key.startsWith("ord:")) {
+          const row = pendingOrders.find((o) => o.id === key.slice(4));
+          if (row && match(row.stopLoss, draft.stopLoss) && match(row.takeProfit, draft.takeProfit)) {
+            delete next[key];
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [overlays, pendingOrders]);
 
   const {
     status: liveStatus,
@@ -2751,8 +2837,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <ChartCanvas
           ref={canvasRef}
           candles={data.candles}
-          overlays={overlays}
-          pendingOrders={pendingOrders}
+          overlays={displayOverlays}
+          pendingOrders={displayPendingOrders}
           symbol={data.brokerSymbol}
           annotations={annotations}
           drawingMode={drawingMode}
@@ -2768,11 +2854,38 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         {/* Left-side position labels (entry / SL / TP) — drag SL/TP to modify */}
         <PositionLabelsOverlay
           canvasRef={canvasRef}
-          overlays={overlays}
-          pendingOrders={pendingOrders}
+          overlays={displayOverlays}
+          pendingOrders={displayPendingOrders}
           symbol={data.brokerSymbol}
           brokerAccountId={data.account?.brokerAccountId}
           liveTradingEnabled={liveTrading.enabled}
+          isDemoAccount={isDemoAccount}
+          instantSlTpModify={slTpModifyPref.enabled}
+          slTpDrafts={slTpDrafts}
+          onSlTpDraftChange={(input) => {
+            setSlTpDrafts((prev) => ({
+              ...prev,
+              [input.key]: { stopLoss: input.stopLoss, takeProfit: input.takeProfit },
+            }));
+          }}
+          onSlTpDraftClear={(key) => {
+            setSlTpDrafts((prev) => {
+              if (!prev[key]) return prev;
+              const next = { ...prev };
+              delete next[key];
+              return next;
+            });
+          }}
+          onDemoModify={({ positionId, stopLoss, takeProfit }) => {
+            demoBook.modify(positionId, { stopLoss, takeProfit });
+          }}
+          onModifyFeedback={(result) => {
+            setTradeToast({
+              kind: result.ok ? "live" : "error",
+              title: result.ok ? "SL / TP updated" : "Modify failed",
+              body: result.message,
+            });
+          }}
           isDark={chartTheme.isDark}
         />
 

@@ -110,6 +110,7 @@ export type UseDemoPositionsReturn = {
     stopLoss?: number | null;
     takeProfit?: number | null;
   }) => DemoPosition | null;
+  modify: (id: string, input: { stopLoss?: number | null; takeProfit?: number | null }) => void;
   close: (id: string) => void;
   closeAll: () => void;
 };
@@ -205,6 +206,19 @@ export function useDemoPositions(
     closeRef.current(id);
   }, []);
 
+  const modify = useCallback((id: string, input: { stopLoss?: number | null; takeProfit?: number | null }) => {
+    setPositions((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        return {
+          ...p,
+          stopLoss: input.stopLoss !== undefined ? input.stopLoss : p.stopLoss,
+          takeProfit: input.takeProfit !== undefined ? input.takeProfit : p.takeProfit,
+        };
+      }),
+    );
+  }, []);
+
   const closeAll = useCallback(() => {
     setPositions((prev) => prev.filter((p) => p.brokerAccountId !== brokerAccountId));
   }, [brokerAccountId]);
@@ -229,5 +243,5 @@ export function useDemoPositions(
     [allForAccount, livePrice],
   );
 
-  return { all: allForAccount, forSymbol, pnlOnSymbol, pnlAll, open, close, closeAll };
+  return { all: allForAccount, forSymbol, pnlOnSymbol, pnlAll, open, modify, close, closeAll };
 }

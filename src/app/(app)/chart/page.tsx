@@ -3,6 +3,7 @@ import { ChartScreen } from "@/components/chart/ChartScreen";
 import { ChartCacheFallback } from "@/components/chart/ChartCacheFallback";
 import { loadChartPageData } from "@/lib/broker/loadChartPageData";
 import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
+import { getInstantSlTpModifyServerState } from "@/lib/chart/serverSlTpPrefs";
 
 type PageProps = {
   searchParams: Promise<{ symbol?: string; tf?: string; account?: string; action?: string }>;
@@ -23,15 +24,17 @@ async function ChartData({
   account?: string;
   action?: string;
 }) {
-  const [data, liveTrading] = await Promise.all([
+  const [data, liveTrading, instantSlTpModify] = await Promise.all([
     loadChartPageData(symbol, tf, account),
     getLiveTradingServerState(),
+    getInstantSlTpModifyServerState(),
   ]);
   return (
     <ChartScreen
       data={data}
       initialAction={action}
       liveTradingEnabled={liveTrading.enabled}
+      instantSlTpModify={instantSlTpModify}
     />
   );
 }

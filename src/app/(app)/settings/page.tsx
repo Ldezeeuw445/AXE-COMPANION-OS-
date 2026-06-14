@@ -16,7 +16,9 @@ import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
 import { InstallPrompt } from "@/components/push/InstallPrompt";
 import { LiveTradingPanel } from "@/components/settings/LiveTradingPanel";
+import { SlTpModifyPanel } from "@/components/settings/SlTpModifyPanel";
 import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
+import { getInstantSlTpModifyServerState } from "@/lib/chart/serverSlTpPrefs";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -40,13 +42,14 @@ async function getPrimaryConversation() {
 }
 
 export default async function SettingsPage() {
-  const [metrics, memory, conversation, watchlist, accountName, liveTrading] = await Promise.all([
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
     listWatchlistItems(),
     getAccountName(),
     getLiveTradingServerState(),
+    getInstantSlTpModifyServerState(),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -181,6 +184,10 @@ export default async function SettingsPage() {
           per-device. */}
       <div className="mb-4">
         <LiveTradingPanel initialEnabled={liveTrading.enabled} />
+      </div>
+
+      <div className="mb-4">
+        <SlTpModifyPanel initialInstant={instantSlTpModify} />
       </div>
 
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}
