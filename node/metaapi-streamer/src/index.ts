@@ -392,7 +392,7 @@ class MultiSymbolListener {
 
   // ── Pending order events ────────────────────────────────────────
 
-  async onPendingOrdersUpdated(_account: unknown, orders: OrderEvent[]) {
+  private broadcastPendingOrders(orders: OrderEvent[]) {
     const arr = Array.isArray(orders) ? orders : [];
 
     // Group orders by broker symbol
@@ -429,6 +429,18 @@ class MultiSymbolListener {
     }
   }
 
+  async onPendingOrdersUpdated(_account: unknown, orders: OrderEvent[]) {
+    this.broadcastPendingOrders(orders);
+  }
+
+  async onPendingOrderUpdated(_account: unknown, order: OrderEvent) {
+    this.broadcastPendingOrders(order ? [order] : []);
+  }
+
+  async onPendingOrdersReplaced(_account: unknown, orders: OrderEvent[]) {
+    this.broadcastPendingOrders(orders);
+  }
+
   // ── SDK v29 required callbacks (no-ops to suppress "not a function" errors) ─
 
   async onHealthStatus(..._a: unknown[]) { /* no-op */ }
@@ -442,10 +454,8 @@ class MultiSymbolListener {
   async onSymbolSpecificationsUpdated(..._a: unknown[]) { /* no-op */ }
   async onPositionUpdated(..._a: unknown[]) { /* no-op */ }
   async onPositionRemoved(..._a: unknown[]) { /* no-op */ }
-  async onPendingOrderUpdated(..._a: unknown[]) { /* no-op */ }
   async onPendingOrderCompleted(..._a: unknown[]) { /* no-op */ }
   async onPositionsReplaced(..._a: unknown[]) { /* no-op */ }
-  async onPendingOrdersReplaced(..._a: unknown[]) { /* no-op */ }
   async onPositionsSynchronized(..._a: unknown[]) { /* no-op */ }
   async onPendingOrdersSynchronized(..._a: unknown[]) { /* no-op */ }
   // Note: onSymbolPriceUpdated is defined above (delegates to handlePriceTick)
