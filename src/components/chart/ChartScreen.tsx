@@ -832,9 +832,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     !routeFallbackMessage && (isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey));
 
   // Chart-only guard against accidental horizontal page drift on iOS/PWA.
-  // We keep this scoped to the chart route so the rest of the app remains untouched.
+  // Desktop stays untouched.
   useEffect(() => {
-    if (typeof document === "undefined") return;
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    const isMobileViewport = window.matchMedia("(max-width: 1024px)").matches;
+    const isStandalonePwa =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+    if (!isMobileViewport && !isStandalonePwa) return;
     const html = document.documentElement;
     const body = document.body;
     const prevHtmlOverflowX = html.style.overflowX;
