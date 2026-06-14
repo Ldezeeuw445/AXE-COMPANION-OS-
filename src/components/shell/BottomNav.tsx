@@ -11,7 +11,7 @@
  * cyan bubble slides across the navbar tabs (like Slack).
  */
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -42,6 +42,23 @@ export function BottomNav() {
   const { playSound, vibrate } = useAmbient();
   const navRef = useRef<HTMLElement>(null);
   const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
+
+  // iOS can report stale safe-area after chart landscape → portrait; force a reflow.
+  useEffect(() => {
+    function settleNav() {
+      if (document.body.classList.contains("chart-landscape-active")) return;
+      window.scrollTo(0, 0);
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+    }
+    window.addEventListener("orientationchange", settleNav);
+    window.visualViewport?.addEventListener("resize", settleNav);
+    return () => {
+      window.removeEventListener("orientationchange", settleNav);
+      window.visualViewport?.removeEventListener("resize", settleNav);
+    };
+  }, []);
 
   const { progress, currentTabIdx } = useSwipeNav();
 

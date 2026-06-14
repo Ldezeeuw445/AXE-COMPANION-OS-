@@ -403,11 +403,13 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
         const twinkle =
           0.45 +
           0.55 * Math.sin(t * p.twinkleSpeed * profile.twinkle * activeSpeed + p.twinklePhase);
-        const alpha = (isComposer ? 0.38 : 0.18) + depthFactor * p.brightness * (isComposer ? 0.82 : 0.95) * twinkle;
+        const alpha =
+          (isComposer ? 0.52 : 0.18) +
+          depthFactor * p.brightness * (isComposer ? 0.48 : 0.95) * twinkle;
         const [cr, cg, cb] = isComposer
           ? domeColor(item.y3d, p.sparkle)
           : cyanForElevation(item.y3d);
-        const dotR = p.sizeBase * (0.28 + depthFactor * 0.72) * (isComposer ? 0.34 : 0.48);
+        const dotR = p.sizeBase * (0.28 + depthFactor * 0.72) * (isComposer ? 0.38 : 0.48);
 
         if (!isComposer && depthFactor > 0.48 && alpha > 0.1) {
           ctx.beginPath();

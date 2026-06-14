@@ -936,27 +936,67 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    function syncLandscape() {
-      if (isPhoneLandscapeViewport() && !userDismissedLandscapeRef.current) {
-        setIsFullscreen(true);
-      } else if (!window.matchMedia("(orientation: landscape)").matches) {
-        userDismissedLandscapeRef.current = false;
-        setIsFullscreen(false);
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function unlockOrientation() {
+      try {
+        const s = screen as unknown as { orientation?: { unlock?: () => void } };
+        s.orientation?.unlock?.();
+      } catch {
+        /* not supported */
       }
+    }
+
+    function resetPortraitViewport() {
+      document.body.classList.remove("chart-landscape-active");
+      document.body.style.removeProperty("position");
+      document.body.style.removeProperty("top");
+      document.body.style.removeProperty("width");
+      document.body.style.removeProperty("height");
+      document.documentElement.style.removeProperty("height");
+      window.scrollTo(0, 0);
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+    }
+
+    function syncLandscape() {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        const landscapeQuery = window.matchMedia("(orientation: landscape)").matches;
+        if (isPhoneLandscapeViewport() && !userDismissedLandscapeRef.current) {
+          setIsFullscreen(true);
+          return;
+        }
+        if (!landscapeQuery) {
+          userDismissedLandscapeRef.current = false;
+          setIsFullscreen(false);
+          unlockOrientation();
+          resetPortraitViewport();
+        }
+      }, 160);
     }
 
     syncLandscape();
     window.addEventListener("resize", syncLandscape);
     window.addEventListener("orientationchange", syncLandscape);
+    window.visualViewport?.addEventListener("resize", syncLandscape);
     return () => {
+      if (settleTimer) clearTimeout(settleTimer);
       window.removeEventListener("resize", syncLandscape);
       window.removeEventListener("orientationchange", syncLandscape);
+      window.visualViewport?.removeEventListener("resize", syncLandscape);
     };
   }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("chart-landscape-active", isFullscreen);
+    if (!isFullscreen) {
+      document.body.style.removeProperty("position");
+      document.body.style.removeProperty("top");
+      window.scrollTo(0, 0);
+    }
     return () => document.body.classList.remove("chart-landscape-active");
   }, [isFullscreen]);
 

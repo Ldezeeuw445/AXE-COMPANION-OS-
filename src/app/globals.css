@@ -349,10 +349,9 @@ body {
 /* Chart immersive landscape — hide app chrome; chart drawer restores nav/actions */
 body.chart-landscape-active {
   overflow: hidden;
-  position: fixed;
-  inset: 0;
   width: 100%;
   height: 100dvh;
+  touch-action: none;
 }
 
 body.chart-landscape-active .chart-immersive-shell {

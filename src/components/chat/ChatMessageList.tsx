@@ -339,7 +339,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[8.5rem] pr-1 md:pb-2"
+        className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[10.5rem] pr-1 md:pb-2"
       >
         {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
         {messages.map((m) => (
