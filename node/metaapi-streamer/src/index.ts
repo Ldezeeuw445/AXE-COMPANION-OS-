@@ -192,6 +192,8 @@ class MultiSymbolListener {
   readonly snapshotBuffer: SnapshotBuffer;
   /** Tick throttle — max 1 broadcast per symbol per TICK_THROTTLE_MS */
   private lastTickBroadcast: Map<string, number> = new Map();
+  private pendingOrdersById: Map<string, OrderEvent> = new Map();
+  private pendingOrderTotal = 0;
   private static readonly TICK_THROTTLE_MS = 500; // max 2 ticks/sec/symbol
 
   constructor(
@@ -392,8 +394,42 @@ class MultiSymbolListener {
 
   // ── Pending order events ────────────────────────────────────────
 
-  private broadcastPendingOrders(orders: OrderEvent[]) {
+  private pendingOrderKey(order: OrderEvent): string {
+    return String(order.id ?? order.orderId ?? "");
+  }
+
+  private replacePendingOrderCache(orders: OrderEvent[]): void {
+    this.pendingOrdersById.clear();
+    this.pendingOrderTotal = orders.length;
+    for (const order of orders) {
+      const key = this.pendingOrderKey(order);
+      if (key) this.pendingOrdersById.set(key, order);
+    }
+  }
+
+  private rememberPendingOrder(order: OrderEvent): void {
+    const key = this.pendingOrderKey(order);
+    if (!key) {
+      this.pendingOrderTotal = Math.max(this.pendingOrderTotal, 1);
+      return;
+    }
+    const wasKnown = this.pendingOrdersById.has(key);
+    this.pendingOrdersById.set(key, order);
+    if (!wasKnown) this.pendingOrderTotal += 1;
+    this.pendingOrderTotal = Math.max(this.pendingOrderTotal, this.pendingOrdersById.size);
+  }
+
+  private forgetPendingOrder(orderId: unknown): void {
+    const key =
+      typeof orderId === "string" || typeof orderId === "number" ? String(orderId) : "";
+    if (key && this.pendingOrdersById.delete(key)) {
+      this.pendingOrderTotal = Math.max(0, this.pendingOrderTotal - 1);
+    }
+  }
+
+  private broadcastPendingOrders(orders: OrderEvent[], total?: number) {
     const arr = Array.isArray(orders) ? orders : [];
+    const accountTotal = total ?? arr.length;
 
     // Group orders by broker symbol
     const bySymbol = new Map<string, LivePendingOrderPayload[]>();
@@ -422,23 +458,39 @@ class MultiSymbolListener {
         type: "orders_update",
         userId: this.config.userId,
         accountId: this.config.accountId,
-        total: arr.length,
+        total: accountTotal,
         onSymbol,
         source: "metaapi_mt5",
       }));
     }
   }
 
-  async onPendingOrdersUpdated(_account: unknown, orders: OrderEvent[]) {
-    this.broadcastPendingOrders(orders);
+  async onPendingOrdersUpdated(
+    _account: unknown,
+    orders: OrderEvent[],
+    completedOrderIds?: unknown[]
+  ) {
+    const arr = Array.isArray(orders) ? orders : [];
+    const completed = Array.isArray(completedOrderIds) ? completedOrderIds : [];
+    for (const orderId of completed) this.forgetPendingOrder(orderId);
+    for (const order of arr) this.rememberPendingOrder(order);
+    this.broadcastPendingOrders(arr, this.pendingOrderTotal);
   }
 
   async onPendingOrderUpdated(_account: unknown, order: OrderEvent) {
-    this.broadcastPendingOrders(order ? [order] : []);
+    if (!order) return;
+    this.rememberPendingOrder(order);
+    this.broadcastPendingOrders([order], this.pendingOrderTotal);
   }
 
   async onPendingOrdersReplaced(_account: unknown, orders: OrderEvent[]) {
-    this.broadcastPendingOrders(orders);
+    const arr = Array.isArray(orders) ? orders : [];
+    this.replacePendingOrderCache(arr);
+    this.broadcastPendingOrders(arr);
+  }
+
+  async onPendingOrderCompleted(_account: unknown, orderId: unknown) {
+    this.forgetPendingOrder(orderId);
   }
 
   // ── SDK v29 required callbacks (no-ops to suppress "not a function" errors) ─
@@ -454,7 +506,6 @@ class MultiSymbolListener {
   async onSymbolSpecificationsUpdated(..._a: unknown[]) { /* no-op */ }
   async onPositionUpdated(..._a: unknown[]) { /* no-op */ }
   async onPositionRemoved(..._a: unknown[]) { /* no-op */ }
-  async onPendingOrderCompleted(..._a: unknown[]) { /* no-op */ }
   async onPositionsReplaced(..._a: unknown[]) { /* no-op */ }
   async onPositionsSynchronized(..._a: unknown[]) { /* no-op */ }
   async onPendingOrdersSynchronized(..._a: unknown[]) { /* no-op */ }
