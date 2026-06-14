@@ -32,6 +32,12 @@ import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 import { getMetadataSymbolMap, getMetadataSymbolReport } from "@/lib/broker/brokerSymbolRuntime";
+import {
+  AXE_CAPABILITY_ROADMAP,
+  AXE_CAPABILITY_ROADMAP_KEY,
+  AXE_CAPABILITY_ROADMAP_SCOPE,
+} from "@/lib/axe/capabilityRoadmap";
+import { BROKER_ACCOUNT_MEMORY_SCOPE, buildAccountPersona } from "@/lib/axe/accountPersona";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
 const INTEL_TIMEOUT_MS = 14_000;
@@ -57,6 +63,7 @@ const EMPTY_ACCOUNTS: AccountsContext = {
   activeSymbols: [],
   activeSymbolMap: {},
   activeSymbolResolutionReport: {},
+  activeAccountPersona: null,
   openExposure: { positionsCount: 0, symbols: [], netBySymbol: [] },
 };
 
@@ -441,6 +448,7 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
       mt5Doctor: normalizeDoctorContext(r.metadata),
       symbolMap: getMetadataSymbolMap(metadata),
       symbolResolutionReport: getMetadataSymbolReport(metadata),
+      metadata,
     };
   });
   const active = accounts.find((a) => a.active) ?? accounts[0] ?? null;
@@ -466,6 +474,7 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
     hasCloudMt5: accounts.some((a) => a.connectionMethod === "cloud_mt5"),
     activeLabel: active?.label ?? null,
     activeServer: active?.mt5Server ?? null,
+    activeAccountPersona: null,
     accountHealth,
     syncFreshness: {
       lastSyncAt: active?.lastSyncAt ?? null,
@@ -680,8 +689,9 @@ async function buildMemory(supabase: SupabaseClient, userId: string): Promise<Me
       .from("assistant_memory_entries")
       .select("scope,entry_key,content")
       .eq("user_id", userId)
+      .in("scope", ["notes", "account", "axe", "broker_account", "preference", "strategy"])
       .order("created_at", { ascending: false })
-      .limit(30),
+      .limit(40),
     // Auto-extracted memories written after each chat turn (extractMemoriesAsync).
     // Previously these were only surfaced via the knowledge layer; merge them into
     // the main TRADER MEMORY block so AXE consistently recalls what it learned.
@@ -707,6 +717,31 @@ async function buildMemory(supabase: SupabaseClient, userId: string): Promise<Me
     entryKey: (r.entry_key as string | null | undefined) ?? null,
     content: String(r.content ?? ""),
   }));
+
+  const hasRoadmap = manualEntries.some(
+    (e) => e.scope === AXE_CAPABILITY_ROADMAP_SCOPE && e.entryKey === AXE_CAPABILITY_ROADMAP_KEY,
+  );
+  if (!hasRoadmap) {
+    manualEntries.unshift({
+      scope: AXE_CAPABILITY_ROADMAP_SCOPE,
+      entryKey: AXE_CAPABILITY_ROADMAP_KEY,
+      content: AXE_CAPABILITY_ROADMAP,
+    });
+    void supabase
+      .from("assistant_memory_entries")
+      .upsert(
+        {
+          user_id: userId,
+          scope: AXE_CAPABILITY_ROADMAP_SCOPE,
+          entry_key: AXE_CAPABILITY_ROADMAP_KEY,
+          content: AXE_CAPABILITY_ROADMAP,
+        },
+        { onConflict: "user_id,scope,entry_key" },
+      )
+      .then(({ error }) => {
+        if (error) console.error("[axeContext] capability roadmap persist failed:", error.message);
+      });
+  }
 
   const autoEntries: AxeMemoryEntry[] = ((autoMemoryRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
     scope: `axe/${String(r.memory_type ?? "note")}`,
@@ -737,6 +772,64 @@ async function buildMemory(supabase: SupabaseClient, userId: string): Promise<Me
     openCommitments: (commitmentsRes.data ?? []) as OpenCommitment[],
     compactSummary,
   };
+}
+
+async function persistAccountPersona(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+  persona: string,
+): Promise<void> {
+  if (!persona.trim()) return;
+  await supabase.from("assistant_memory_entries").upsert(
+    {
+      user_id: userId,
+      scope: BROKER_ACCOUNT_MEMORY_SCOPE,
+      entry_key: accountId,
+      content: persona,
+    },
+    { onConflict: "user_id,scope,entry_key" },
+  );
+}
+
+function enrichMemoryWithAccountPersona(
+  memory: MemoryContext,
+  accounts: AccountsContext,
+  trades: TradesJournalContext,
+): MemoryContext {
+  const activeId = accounts.activeAccountId;
+  const active = accounts.accounts.find((a) => a.id === activeId) ?? null;
+  if (!active) {
+    return { ...memory, entries: memory.entries, prioritizedEntries: memory.prioritizedEntries };
+  }
+
+  const persona = buildAccountPersona(active, trades);
+  const personaEntry: AxeMemoryEntry = {
+    scope: BROKER_ACCOUNT_MEMORY_SCOPE,
+    entryKey: active.id,
+    content: persona,
+  };
+
+  const withoutDup = memory.entries.filter(
+    (e) => !(e.scope === BROKER_ACCOUNT_MEMORY_SCOPE && e.entryKey === active.id),
+  );
+  const entries = [personaEntry, ...withoutDup];
+  const prioritizedEntries = [
+    personaEntry,
+    ...memory.prioritizedEntries.filter(
+      (e) => !(e.scope === BROKER_ACCOUNT_MEMORY_SCOPE && e.entryKey === active.id),
+    ),
+  ].slice(0, 18);
+
+  const compactSummary =
+    prioritizedEntries.length > 0
+      ? prioritizedEntries
+          .slice(0, 8)
+          .map((m) => `${[m.scope, m.entryKey].filter(Boolean).join("/")}: ${m.content.slice(0, 140)}`)
+          .join(" | ")
+      : memory.compactSummary;
+
+  return { ...memory, entries, prioritizedEntries, compactSummary };
 }
 
 async function buildIntel(symbol: string | null): Promise<IntelContext> {
@@ -1016,6 +1109,9 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
   }
   if (ctx.intel.compactSummary) lines.push(`Intel: ${ctx.intel.compactSummary}; cache ${ctx.intel.cache.state}.`);
   if (ctx.memory.compactSummary) lines.push(`Memory: ${ctx.memory.compactSummary}`);
+  if (ctx.accounts.activeAccountPersona) {
+    lines.push(`Active account persona: ${ctx.accounts.activeAccountPersona}`);
+  }
   if (ctx.correlations.length > 0) lines.push(`Correlations: ${ctx.correlations.map((c) => c.message).join(" | ")}`);
   if (ctx.market.summary) lines.push(ctx.market.summary);
   const degraded = ctx.health.filter((h) => h.state === "timeout" || h.state === "error");
@@ -1050,6 +1146,17 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
   ]);
 
   const accounts = enrichAccounts(accountsRes.value, chartRes.value, tradesRes.value, watchlist);
+  const activeAccount = accounts.accounts.find((a) => a.id === accounts.activeAccountId) ?? null;
+  const activePersona = activeAccount ? buildAccountPersona(activeAccount, tradesRes.value) : null;
+  accounts.activeAccountPersona = activePersona;
+
+  if (activeAccount && activePersona) {
+    void persistAccountPersona(args.supabase, args.userId, activeAccount.id, activePersona).catch((e) =>
+      console.error("[axeContext] persona persist failed:", e),
+    );
+  }
+
+  const memory = enrichMemoryWithAccountPersona(memoryRes.value, accounts, tradesRes.value);
   const correlations = buildCorrelations({
     symbol,
     chart: chartRes.value,
@@ -1070,7 +1177,7 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
     intel: intelRes.value,
     alerts: alertsRes.value,
     market: marketRes.value,
-    memory: memoryRes.value,
+    memory,
     correlations,
     health: [
       settingsRes.health,

@@ -6,14 +6,6 @@ type AuraState = "idle" | "thinking" | "tools" | "responding" | "recording";
 
 const TAU = Math.PI * 2;
 
-const COLORS: readonly (readonly [number, number, number])[] = [
-  [200, 220, 255],
-  [0, 212, 245],
-  [120, 200, 255],
-  [180, 240, 255],
-  [0, 180, 220],
-];
-
 interface OrbParticle {
   phi: number;
   theta: number;
@@ -25,7 +17,7 @@ interface OrbParticle {
   sizeBase: number;
   twinkleSpeed: number;
   twinklePhase: number;
-  color: readonly [number, number, number];
+  noiseSeed: number;
 }
 
 function makeParticles(count: number): OrbParticle[] {
@@ -34,29 +26,38 @@ function makeParticles(count: number): OrbParticle[] {
     pts.push({
       phi: Math.acos(2 * Math.random() - 1),
       theta: TAU * Math.random(),
-      r: 0.78 + Math.random() * 0.28,
-      speed: 0.015 + Math.random() * 0.08,
-      brightness: 0.2 + Math.random() * 0.75,
+      r: 0.72 + Math.random() * 0.32,
+      speed: 0.012 + Math.random() * 0.09,
+      brightness: 0.25 + Math.random() * 0.75,
       drift: TAU * Math.random(),
-      driftAmp: 0.01 + Math.random() * 0.04,
-      sizeBase: 0.35 + Math.random() * 0.55,
-      twinkleSpeed: 1.2 + Math.random() * 2.8,
+      driftAmp: 0.012 + Math.random() * 0.045,
+      sizeBase: 0.28 + Math.random() * 0.62,
+      twinkleSpeed: 1.1 + Math.random() * 3.2,
       twinklePhase: TAU * Math.random(),
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      noiseSeed: Math.random() * TAU,
     });
   }
   return pts;
 }
 
+/** Cyan palette only — bright ice top → deep AXE cyan bottom (reference image style). */
+function cyanForElevation(yNorm: number): [number, number, number] {
+  const t = Math.max(0, Math.min(1, (yNorm + 1) * 0.5));
+  const r = Math.round(180 + (1 - t) * 40 + t * 0);
+  const g = Math.round(220 + (1 - t) * 20 + t * 32);
+  const b = Math.round(255 - t * 35);
+  return [r, g, b];
+}
+
 const STATE_PROFILE: Record<
   AuraState,
-  { speed: number; breathe: number; glow: number; stream: number; tint: [number, number, number] | null }
+  { speed: number; breathe: number; glow: number; stream: number; noise: number; spin: number }
 > = {
-  idle: { speed: 1, breathe: 0.028, glow: 0.06, stream: 0, tint: null },
-  thinking: { speed: 2.2, breathe: 0.05, glow: 0.12, stream: 0.35, tint: null },
-  tools: { speed: 2.8, breathe: 0.055, glow: 0.14, stream: 0.5, tint: [0, 180, 220] },
-  responding: { speed: 1.8, breathe: 0.045, glow: 0.11, stream: 0.65, tint: null },
-  recording: { speed: 2.4, breathe: 0.06, glow: 0.13, stream: 0.25, tint: [255, 180, 80] },
+  idle: { speed: 1, breathe: 0.034, glow: 0.09, stream: 0, noise: 0.1, spin: 0.35 },
+  thinking: { speed: 2.4, breathe: 0.06, glow: 0.18, stream: 0.45, noise: 0.16, spin: 0.85 },
+  tools: { speed: 3, breathe: 0.065, glow: 0.2, stream: 0.55, noise: 0.18, spin: 1.05 },
+  responding: { speed: 2, breathe: 0.055, glow: 0.16, stream: 0.72, noise: 0.14, spin: 0.7 },
+  recording: { speed: 2.6, breathe: 0.062, glow: 0.17, stream: 0.35, noise: 0.15, spin: 0.9 },
 };
 
 export function AxeAuraWave() {
@@ -71,10 +72,6 @@ export function AxeAuraWave() {
   }, [state]);
 
   useEffect(() => {
-    function pickState(): AuraState {
-      return targetStateRef.current;
-    }
-
     function onThinking(e: Event) {
       const thinking = (e as CustomEvent<{ thinking?: boolean }>).detail?.thinking;
       if (!thinking) {
@@ -91,7 +88,11 @@ export function AxeAuraWave() {
 
     function onRecording(e: Event) {
       const recording = (e as CustomEvent<{ recording?: boolean }>).detail?.recording;
-      targetStateRef.current = recording ? "recording" : pickState() === "recording" ? "idle" : pickState();
+      targetStateRef.current = recording
+        ? "recording"
+        : targetStateRef.current === "recording"
+          ? "idle"
+          : targetStateRef.current;
       setState(targetStateRef.current);
     }
 
@@ -134,7 +135,7 @@ export function AxeAuraWave() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dim = 56;
+    const dim = 80;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = dim * dpr;
     canvas.height = dim * dpr;
@@ -142,57 +143,65 @@ export function AxeAuraWave() {
 
     const cx = dim / 2;
     const cy = dim / 2;
-    const R = dim * 0.34;
-    const coreR = dim * 0.2;
-    const pts = makeParticles(90);
+    const R = dim * 0.36;
+    const coreR = dim * 0.22;
+    const pts = makeParticles(240);
     let t = 0;
-    let smoothState: AuraState = "idle";
 
     function draw() {
       if (!ctx) return;
       ctx.clearRect(0, 0, dim, dim);
-      t += 0.004;
+      t += 0.0055;
 
-      const target = stateRef.current;
-      if (smoothState !== target) smoothState = target;
-      const profile = STATE_PROFILE[smoothState];
+      const profile = STATE_PROFILE[stateRef.current];
+      const breathe = 1 + profile.breathe * Math.sin(t * (1.5 * profile.speed));
+      const pulse = 0.6 + 0.4 * Math.sin(t * (2.4 * profile.speed));
+      const globalSpin = t * profile.spin;
 
-      const breathe = 1 + profile.breathe * Math.sin(t * (1.6 * profile.speed));
-      const pulse = 0.65 + 0.35 * Math.sin(t * (2.2 * profile.speed));
+      const sorted = pts
+        .map((p) => {
+          const driftX = p.driftAmp * Math.sin(t * profile.speed * 1.1 + p.drift);
+          const driftY = p.driftAmp * Math.cos(t * profile.speed * 0.85 + p.drift * 1.3);
+          const theta = p.theta + globalSpin + t * p.speed * profile.speed + driftX;
+          const phi = p.phi + driftY * 0.4;
 
-      for (const p of pts) {
-        const driftX = p.driftAmp * Math.sin(t * profile.speed + p.drift);
-        const driftY = p.driftAmp * Math.cos(t * profile.speed * 0.75 + p.drift * 1.2);
-        const theta = p.theta + t * p.speed * profile.speed + driftX;
-        const phi = p.phi + driftY * 0.35;
+          const surfaceNoise =
+            1 +
+            profile.noise *
+              (Math.sin(theta * 3 + t * 1.6 + p.noiseSeed) * 0.45 +
+                Math.cos(phi * 4 - t * 1.2 + p.noiseSeed * 1.7) * 0.35 +
+                Math.sin((theta + phi) * 2 + t * 2.1) * 0.2);
 
-        const sinPhi = Math.sin(phi);
-        const x3d = Math.cos(theta) * sinPhi;
-        const y3d = Math.cos(phi);
-        const z3d = Math.sin(theta) * sinPhi;
+          const sinPhi = Math.sin(phi);
+          const x3d = Math.cos(theta) * sinPhi;
+          const y3d = Math.cos(phi);
+          const z3d = Math.sin(theta) * sinPhi;
 
-        const persp = 1 / (1 - z3d * 0.28);
-        const px = cx + x3d * R * p.r * breathe * persp;
-        const py = cy + y3d * R * p.r * breathe * persp;
+          const persp = 1 / (1 - z3d * 0.32);
+          const radius = R * p.r * breathe * surfaceNoise * persp;
+          const px = cx + x3d * radius;
+          const py = cy + y3d * radius;
 
+          return { p, px, py, y3d, z3d, persp, surfaceNoise };
+        })
+        .sort((a, b) => a.z3d - b.z3d);
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+
+      for (const item of sorted) {
+        const { p, px, py, y3d, z3d } = item;
         const depthFactor = (z3d + 1) * 0.5;
-        const twinkle = 0.55 + 0.45 * Math.sin(t * p.twinkleSpeed * profile.speed + p.twinklePhase);
-        const alpha = (0.05 + depthFactor * p.brightness * 0.75) * twinkle;
+        const twinkle = 0.5 + 0.5 * Math.sin(t * p.twinkleSpeed * profile.speed + p.twinklePhase);
+        const alpha = (0.06 + depthFactor * p.brightness * 0.82) * twinkle;
 
-        let [cr, cg, cb] = p.color;
-        if (profile.tint) {
-          const mix = 0.35 + profile.stream * 0.25;
-          cr = Math.round(cr * (1 - mix) + profile.tint[0] * mix);
-          cg = Math.round(cg * (1 - mix) + profile.tint[1] * mix);
-          cb = Math.round(cb * (1 - mix) + profile.tint[2] * mix);
-        }
+        const [cr, cg, cb] = cyanForElevation(y3d);
+        const dotR = p.sizeBase * (0.32 + depthFactor * 0.68) * 0.52;
 
-        const dotR = p.sizeBase * (0.35 + depthFactor * 0.65) * 0.55;
-
-        if (depthFactor > 0.55 && alpha > 0.2) {
+        if (depthFactor > 0.5 && alpha > 0.15) {
           ctx.beginPath();
-          ctx.arc(px, py, dotR * 2.5, 0, TAU);
-          ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha * 0.1})`;
+          ctx.arc(px, py, dotR * 3.2, 0, TAU);
+          ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha * 0.14})`;
           ctx.fill();
         }
 
@@ -202,10 +211,13 @@ export function AxeAuraWave() {
         ctx.fill();
       }
 
-      const glowR = coreR * breathe * (1 + profile.stream * 0.15);
+      ctx.restore();
+
+      const glowR = coreR * breathe * (1 + profile.stream * 0.2);
       const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      coreGlow.addColorStop(0, `rgba(0, 212, 245, ${profile.glow * pulse})`);
-      coreGlow.addColorStop(0.45, `rgba(0, 212, 245, ${profile.glow * 0.35 * pulse})`);
+      coreGlow.addColorStop(0, `rgba(200, 240, 255, ${profile.glow * pulse * 0.9})`);
+      coreGlow.addColorStop(0.35, `rgba(0, 212, 245, ${profile.glow * pulse * 0.55})`);
+      coreGlow.addColorStop(0.7, `rgba(0, 160, 210, ${profile.glow * pulse * 0.2})`);
       coreGlow.addColorStop(1, "rgba(0, 212, 245, 0)");
       ctx.beginPath();
       ctx.arc(cx, cy, glowR, 0, TAU);
@@ -213,15 +225,13 @@ export function AxeAuraWave() {
       ctx.fill();
 
       if (profile.stream > 0) {
-        const streamCount = 3;
-        for (let i = 0; i < streamCount; i++) {
-          const angle = t * profile.speed * 1.4 + (i / streamCount) * TAU;
-          const ringR = coreR * 0.85 * breathe;
-          const arcW = 0.5 + profile.stream * 0.8;
+        for (let i = 0; i < 4; i++) {
+          const angle = t * profile.speed * 1.6 + (i / 4) * TAU;
+          const ringR = coreR * (0.75 + i * 0.08) * breathe;
           ctx.beginPath();
-          ctx.arc(cx, cy, ringR, angle, angle + arcW);
-          ctx.strokeStyle = `rgba(0, 212, 245, ${0.08 + profile.stream * 0.12})`;
-          ctx.lineWidth = 0.8;
+          ctx.arc(cx, cy, ringR, angle, angle + 0.4 + profile.stream);
+          ctx.strokeStyle = `rgba(0, 212, 245, ${0.06 + profile.stream * 0.14})`;
+          ctx.lineWidth = 0.7 + profile.stream * 0.4;
           ctx.stroke();
         }
       }
@@ -234,27 +244,27 @@ export function AxeAuraWave() {
   }, []);
 
   return (
-    <div className="pointer-events-none mb-1 flex h-10 items-center justify-center" aria-hidden>
-      <div className="relative" style={{ width: 56, height: 56 }}>
-        <canvas ref={canvasRef} className="absolute inset-0" style={{ width: 56, height: 56 }} />
+    <div className="pointer-events-none mb-0.5 flex h-14 items-center justify-center" aria-hidden>
+      <div className="relative" style={{ width: 80, height: 80 }}>
+        <canvas ref={canvasRef} className="absolute inset-0" style={{ width: 80, height: 80 }} />
         <span
           className="pointer-events-none absolute rounded-full"
           style={{
-            top: "28%",
-            left: "28%",
-            width: "44%",
-            height: "44%",
+            top: "26%",
+            left: "26%",
+            width: "48%",
+            height: "48%",
             background:
-              "radial-gradient(circle at 38% 32%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.03) 30%, rgba(0,212,245,0.05) 58%, transparent 100%)",
-            boxShadow: "0 0 28px 8px rgba(0,212,245,0.08), inset 0 -4px 10px rgba(0,0,0,0.35)",
-            animation: "axe-orb-breathe 3s ease-in-out infinite",
+              "radial-gradient(circle at 35% 28%, rgba(255,255,255,0.18) 0%, rgba(200,240,255,0.06) 35%, rgba(0,212,245,0.04) 60%, transparent 100%)",
+            boxShadow: "0 0 36px 10px rgba(0,212,245,0.12), inset 0 -5px 12px rgba(0,80,120,0.35)",
+            animation: "axe-orb-breathe 2.8s ease-in-out infinite",
           }}
         />
         <span
-          className="pointer-events-none absolute inset-[-20%] rounded-full"
+          className="pointer-events-none absolute inset-[-28%] rounded-full"
           style={{
-            background: "radial-gradient(circle, rgba(0,212,245,0.05) 0%, transparent 65%)",
-            animation: "axe-orb-glow 3s ease-in-out infinite",
+            background: "radial-gradient(circle, rgba(0,212,245,0.08) 0%, rgba(0,212,245,0.02) 40%, transparent 68%)",
+            animation: "axe-orb-glow 2.8s ease-in-out infinite",
           }}
         />
       </div>

@@ -910,6 +910,19 @@ export function buildAxeMessagesFromContext(
     parts.push(`\nAXE COMPANION OPERATING CONTEXT\n${context.axe_context.summary}`);
   }
 
+  const capabilityRoadmap = context.user_memory.find(
+    (m) => m.scope === "axe" && m.entry_key === "capability_roadmap",
+  );
+  if (capabilityRoadmap?.content) {
+    parts.push(`\nAXE CAPABILITY ROADMAP (self-assessed focus — prioritize these when advising)\n${capabilityRoadmap.content}`);
+  }
+
+  if (context.axe_context?.accounts.activeAccountPersona) {
+    parts.push(
+      `\nACTIVE BROKER ACCOUNT PERSONA (adapt tone and focus to this account)\n${context.axe_context.accounts.activeAccountPersona}`,
+    );
+  }
+
   // 3. Session brief (candles_summary / pinned_context)
   if (pinnedContext.trim()) {
     parts.push(`\nSESSION BRIEF (set by trader — treat as ground truth)\n${pinnedContext.trim()}`);

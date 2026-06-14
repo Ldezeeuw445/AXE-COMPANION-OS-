@@ -242,10 +242,12 @@ export type AccountsContext = {
     } | null;
     symbolMap: Record<string, string>;
     symbolResolutionReport: Record<string, BrokerSymbolReportEntry>;
+    metadata?: Record<string, unknown>;
   }>;
   hasCloudMt5: boolean;
   activeLabel: string | null;
   activeServer: string | null;
+  activeAccountPersona: string | null;
   accountHealth: "connected" | "syncing" | "stale" | "offline" | "not_connected" | "unknown";
   syncFreshness: {
     lastSyncAt: string | null;
