@@ -25,6 +25,7 @@ import {
 } from "@/lib/mt5/metaApiClient";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
 import { metadataHasSymbolMap, refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
+import { syncBrokerHubFromAccountRow } from "@/lib/broker/hub/sync";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -403,6 +404,8 @@ export async function createCloudMt5ConnectionAction(
     revalidatePath("/journal");
     revalidatePath("/chat");
 
+    void syncBrokerHubFromAccountRow(supabase, existingLocalRow.id as string).catch(() => undefined);
+
     return { ok: true, data: { accountId: existingLocalRow.id as string } };
   }
 
@@ -437,6 +440,8 @@ export async function createCloudMt5ConnectionAction(
   revalidatePath("/history");
   revalidatePath("/journal");
   revalidatePath("/chat");
+
+  void syncBrokerHubFromAccountRow(supabase, inserted.id as string).catch(() => undefined);
 
   return { ok: true, data: { accountId: inserted.id as string } };
 }
@@ -518,11 +523,13 @@ export async function probeCloudMt5StatusAction(accountId: string): Promise<
     if (shouldBackfillRegion) {
       patch.metadata = { ...currentMeta, metaapiRegion: newRegion };
     }
-    await supabase
-      .from("user_broker_accounts")
-      .update(patch)
-      .eq("id", accountId)
-      .eq("user_id", user.id);
+  await supabase
+    .from("user_broker_accounts")
+    .update(patch)
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+    void syncBrokerHubFromAccountRow(supabase, accountId).catch(() => undefined);
   }
 
   if (providerStatus === "connected") {
