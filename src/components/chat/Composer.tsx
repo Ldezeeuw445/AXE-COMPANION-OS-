@@ -17,7 +17,6 @@ import { Mic, MicOff, Paperclip, Send, X, ImageIcon } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
-import { ChatComposerOrb } from "@/components/chat/ChatComposerOrb";
 
 declare global {
   interface Window {
@@ -75,7 +74,6 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const [listening, setListening] = useState(false);
   const [image, setImage] = useState<{ base64: string; type: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const composerRowRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
@@ -317,7 +315,6 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
   return (
     <div className="mt-auto shrink-0 overflow-visible px-1 pb-1 pt-0">
-      <ChatComposerOrb anchorRef={composerRowRef} />
       {/* ── Image preview ────────────────────────────────────────────── */}
       {image ? (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">
@@ -335,10 +332,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       ) : null}
 
       {/* ── Composer row ─────────────────────────────────────────────── */}
-      <div
-        ref={composerRowRef}
-        className="relative flex items-end gap-2 overflow-visible rounded-[1.15rem] border border-white/[0.06] bg-white/[0.02] p-2"
-      >
+      <div className="relative flex items-end gap-2 overflow-visible rounded-[1.15rem] border border-white/[0.06] bg-white/[0.02] p-2">
         {/* Attach button */}
         <button
           type="button"

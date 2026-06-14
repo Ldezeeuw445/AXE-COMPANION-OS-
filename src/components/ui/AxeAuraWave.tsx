@@ -141,21 +141,21 @@ function cyanForElevation(yNorm: number): [number, number, number] {
 }
 
 function referenceDomeColor(yNorm: number, sparkle: boolean): [number, number, number] {
-  if (sparkle) return [210, 250, 255];
-  const crest = Math.max(0, Math.min(1, (yNorm + 0.08) / 1.08));
-  if (crest > 0.58) {
-    const mix = (crest - 0.58) / 0.42;
+  if (sparkle) return [220, 252, 255];
+  const crest = Math.max(0, Math.min(1, (yNorm + 0.05) / 1.05));
+  if (crest > 0.5) {
+    const mix = (crest - 0.5) / 0.5;
     return [
-      Math.round(8 + mix * 18),
-      Math.round(150 + mix * 95),
-      Math.round(210 + mix * 45),
+      Math.round(4 + mix * 12),
+      Math.round(165 + mix * 85),
+      Math.round(215 + mix * 40),
     ];
   }
   const body = 1 - crest;
   return [
-    Math.round(55 + body * 35),
-    Math.round(55 + crest * 95),
-    Math.round(165 + crest * 55),
+    Math.round(48 + body * 28),
+    Math.round(62 + crest * 88),
+    Math.round(155 + crest * 62),
   ];
 }
 
@@ -294,7 +294,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
     const R = dim.w * (isComposer ? 0.38 : 0.36);
     const coreR = dim.w * (isComposer ? 0.22 : 0.24);
     const atmoR = dim.w * (isComposer ? 0.46 : 0.52);
-    const spherePts = isComposer ? makeGridDomeParticles(15, 30) : makeSphereParticles(820, false);
+    const spherePts = isComposer ? makeGridDomeParticles(18, 34) : makeSphereParticles(820, false);
     const sprayPts = isComposer ? makeSprayParticles(220) : [];
     const atmoPts = isComposer ? [] : makeAtmoParticles(150);
     let t = 0;
@@ -326,7 +326,11 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
       const globalSpin = t * activeSpin;
 
       ctx.save();
-      ctx.globalCompositeOperation = "lighter";
+      if (isComposer) {
+        ctx.globalCompositeOperation = "source-over";
+      } else {
+        ctx.globalCompositeOperation = "lighter";
+      }
 
       if (isComposer) {
         for (const p of sprayPts) {
@@ -403,13 +407,17 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
         const twinkle =
           0.45 +
           0.55 * Math.sin(t * p.twinkleSpeed * profile.twinkle * activeSpeed + p.twinklePhase);
-        const alpha =
-          (isComposer ? 0.52 : 0.18) +
-          depthFactor * p.brightness * (isComposer ? 0.48 : 0.95) * twinkle;
+          const alpha = Math.min(
+            1,
+            (isComposer ? 0.62 : 0.18) +
+              depthFactor * p.brightness * (isComposer ? 0.38 : 0.95) * twinkle,
+          );
         const [cr, cg, cb] = isComposer
           ? domeColor(item.y3d, p.sparkle)
           : cyanForElevation(item.y3d);
-        const dotR = p.sizeBase * (0.28 + depthFactor * 0.72) * (isComposer ? 0.38 : 0.48);
+        const dotR = isComposer
+          ? Math.max(1.05, p.sizeBase * (0.42 + depthFactor * 0.58) * 0.62)
+          : p.sizeBase * (0.28 + depthFactor * 0.72) * 0.48;
 
         if (!isComposer && depthFactor > 0.48 && alpha > 0.1) {
           ctx.beginPath();

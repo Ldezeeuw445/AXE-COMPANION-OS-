@@ -1,26 +1,44 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
+import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
 
 type Props = {
   children: ReactNode;
 };
 
 /**
- * Fixed chat composer stack pinned above bottom nav.
- * Orb is rendered separately via ChatComposerOrb (portaled, anchor-synced).
+ * Chat composer + particle orb, portaled to document.body so no ancestor
+ * can clip the dome. Orb sits in the same fixed column as the input bar.
  */
 export function ChatComposerDock({ children }: Props) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const dockBottom = "calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem)";
 
-  return (
+  const stack = (
     <div
-      className="pointer-events-none fixed inset-x-0 z-[70] overflow-visible px-3 md:static md:inset-auto md:bottom-auto md:z-auto md:overflow-visible md:px-0 md:pb-0"
+      className="pointer-events-none fixed inset-x-0 z-[85] px-3 max-md:block md:hidden"
       style={{ bottom: dockBottom }}
     >
-      <div className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">
-        {children}
+      <div className="mx-auto flex w-full max-w-2xl flex-col items-center overflow-visible">
+        <div className="pointer-events-none relative z-0 -mb-[5.25rem] flex w-full justify-center">
+          <AxeAuraWave variant="composer" />
+        </div>
+        <div className="pointer-events-auto relative z-10 w-full">{children}</div>
       </div>
     </div>
   );
+
+  if (!mounted || typeof document === "undefined") {
+    return stack;
+  }
+
+  return createPortal(stack, document.body);
 }
