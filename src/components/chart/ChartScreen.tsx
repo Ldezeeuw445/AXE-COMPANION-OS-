@@ -831,6 +831,22 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const isTimeframePending =
     !routeFallbackMessage && (isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey));
 
+  // Chart-only guard against accidental horizontal page drift on iOS/PWA.
+  // We keep this scoped to the chart route so the rest of the app remains untouched.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflowX = html.style.overflowX;
+    const prevBodyOverflowX = body.style.overflowX;
+    html.style.overflowX = "hidden";
+    body.style.overflowX = "hidden";
+    return () => {
+      html.style.overflowX = prevHtmlOverflowX;
+      body.style.overflowX = prevBodyOverflowX;
+    };
+  }, []);
+
   const [livePrice, setLivePrice] = useState<number | null>(data.lastPrice);
   const [liveBid, setLiveBid] = useState<number | null>(data.lastBid);
   const [liveAsk, setLiveAsk] = useState<number | null>(data.lastAsk);
@@ -2582,7 +2598,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   return (
     <div
       ref={chartFrameRef}
-      className={`tos-ambient-glow flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden overscroll-none ${
+      className={`tos-ambient-glow flex min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden overscroll-none ${
         isFullscreen
           ? "fixed inset-0 z-[9999]"
           : "flex-1"
