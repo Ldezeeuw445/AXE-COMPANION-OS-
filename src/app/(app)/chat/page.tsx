@@ -1,6 +1,6 @@
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
-import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
 import { Composer } from "@/components/chat/Composer";
+import { ChatComposerDock } from "@/components/chat/ChatComposerDock";
 import { PinnedContext } from "@/components/chat/PinnedContext";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -68,20 +68,9 @@ export default async function ChatPage() {
         ) : null}
         <PinnedContext text={conversation.pinnedContext} />
         <ChatMessageList messages={messages} />
-        <div
-          className="pointer-events-none fixed inset-x-0 z-30 px-3 md:static md:inset-auto md:bottom-auto md:z-auto md:px-0 md:pb-0"
-          style={{ bottom: "calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.22rem)" }}
-        >
-          <div className="pointer-events-auto relative mx-auto w-full max-w-2xl">
-            <div
-              className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2"
-              style={{ bottom: "calc(100% - 10px)" }}
-            >
-              <AxeAuraWave variant="composer" />
-            </div>
-            <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
-          </div>
-        </div>
+        <ChatComposerDock>
+          <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
+        </ChatComposerDock>
       </div>
     </div>
   );

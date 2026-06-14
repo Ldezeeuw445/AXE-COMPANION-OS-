@@ -364,7 +364,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
         const twinkle =
           0.45 +
           0.55 * Math.sin(t * p.twinkleSpeed * profile.twinkle * activeSpeed + p.twinklePhase);
-        const alpha = (0.045 + depthFactor * p.brightness * 0.88) * twinkle;
+        const alpha = (0.12 + depthFactor * p.brightness * 0.92) * twinkle;
         const [cr, cg, cb] = isComposer
           ? domeColor(item.y3d, p.sparkle)
           : cyanForElevation(item.y3d);

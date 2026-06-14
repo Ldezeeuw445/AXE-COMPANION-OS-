@@ -39,6 +39,7 @@ import {
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { isPhoneLandscapeViewport } from "@/components/ui/AxeAuraWave";
+import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol, pointValueForSymbol } from "@/lib/broker/symbolFormat";
@@ -900,6 +901,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
   /* ── Landscape fullscreen mode ───────────────────────────────── */
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
   const userDismissedLandscapeRef = useRef(false);
 
@@ -950,15 +952,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     return () => document.body.classList.remove("chart-landscape-active");
   }, [isFullscreen]);
 
-  // Escape key exits fullscreen
+  useEffect(() => {
+    if (!isFullscreen) setLandscapeDockOpen(false);
+  }, [isFullscreen]);
+
+  // Escape closes landscape drawer first, then exits immersive chart
   useEffect(() => {
     if (!isFullscreen) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setIsFullscreen(false);
+      if (e.key !== "Escape") return;
+      if (landscapeDockOpen) {
+        setLandscapeDockOpen(false);
+        return;
+      }
+      userDismissedLandscapeRef.current = true;
+      setIsFullscreen(false);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFullscreen]);
+  }, [isFullscreen, landscapeDockOpen]);
 
   useEffect(() => {
     setPendingTfKey(null);
@@ -1375,6 +1387,41 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     },
     [data.candles, data.lastPrice, livePrice, pendingOrderPrice, pendingOrderSide],
   );
+
+  const toggleOneClickTrade = useCallback(() => {
+    if (oneClickVisible) {
+      setOneClickVisible(false);
+      setExecutionMode("market");
+      setPendingOrderVisible(false);
+      setLotMenuOpen(false);
+      setOrderTypeMenuOpen(false);
+    } else {
+      setOneClickVisible(true);
+      setExecutionMode("market");
+      setPendingOrderVisible(false);
+    }
+    vibrate("light");
+    playSound("tap");
+  }, [oneClickVisible, vibrate, playSound]);
+
+  const togglePendingTrade = useCallback(() => {
+    if (executionMode === "pending" && pendingOrderVisible) {
+      setExecutionMode("market");
+      setPendingOrderVisible(false);
+    } else {
+      setOneClickVisible(true);
+      showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
+    }
+    vibrate("light");
+    playSound("tap");
+  }, [
+    executionMode,
+    pendingOrderVisible,
+    pendingOrderSide,
+    showPendingTradePlan,
+    vibrate,
+    playSound,
+  ]);
 
   /**
    * Auto-flip buy/sell side when dragging the pending entry price line.
@@ -2568,21 +2615,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         <div className="mx-0.5 h-4 w-px rounded-full bg-white/[0.08]" />
         <button
           type="button"
-          onClick={() => {
-            if (oneClickVisible) {
-              setOneClickVisible(false);
-              setExecutionMode("market");
-              setPendingOrderVisible(false);
-              setLotMenuOpen(false);
-              setOrderTypeMenuOpen(false);
-            } else {
-              setOneClickVisible(true);
-              setExecutionMode("market");
-              setPendingOrderVisible(false);
-            }
-            vibrate("light");
-            playSound("tap");
-          }}
+          onClick={toggleOneClickTrade}
           className={`${baseBtn} ${oneClickVisible && executionMode === "market" ? active : idle}`}
           style={oneClickVisible && executionMode === "market" ? { borderColor: "rgba(0,212,245,0.35)", boxShadow: "0 0 10px rgba(0,212,245,0.18)" } : undefined}
           aria-label="1-Click Trade"
@@ -2593,17 +2626,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (executionMode === "pending" && pendingOrderVisible) {
-              setExecutionMode("market");
-              setPendingOrderVisible(false);
-            } else {
-              setOneClickVisible(true);
-              showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
-            }
-            vibrate("light");
-            playSound("tap");
-          }}
+          onClick={togglePendingTrade}
           className={`${baseBtn} ${executionMode === "pending" && pendingOrderVisible ? active : idle}`}
           aria-label="Limit / Stop order"
           title="Limit / Stop order"
@@ -2635,10 +2658,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     oneClickVisible,
     executionMode,
     pendingOrderVisible,
-    pendingOrderSide,
-    showPendingTradePlan,
-    vibrate,
-    playSound,
+    toggleOneClickTrade,
+    togglePendingTrade,
     isFullscreen,
   ]);
 
@@ -4101,6 +4122,28 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         }}
         onConfirm={sendLiveConfirmedOrder}
       />
+
+      {isFullscreen ? (
+        <>
+          <ChartLandscapeDockHandle
+            onOpen={() => setLandscapeDockOpen(true)}
+            bottomOffset={oneClickVisible ? "2.85rem" : undefined}
+          />
+          <ChartLandscapeDrawer
+            open={landscapeDockOpen}
+            onClose={() => setLandscapeDockOpen(false)}
+            orderBookOpen={orderBookOpen}
+            newsOpen={newsOpen}
+            oneClickActive={oneClickVisible && executionMode === "market"}
+            pendingActive={executionMode === "pending" && pendingOrderVisible}
+            onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+            onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+            onOneClick={toggleOneClickTrade}
+            onPending={togglePendingTrade}
+            onTools={() => setToolRailOpen(true)}
+          />
+        </>
+      ) : null}
 
     </div>
   );

@@ -346,12 +346,15 @@ body {
   }
 }
 
-/* Chart immersive landscape — chart owns the full viewport on phone */
+/* Chart immersive landscape — hide app chrome; chart drawer restores nav/actions */
 body.chart-landscape-active {
   overflow: hidden;
 }
 
-body.chart-landscape-active .tos-shell-mobile-nav,
+body.chart-landscape-active .tos-shell-mobile-nav {
+  display: none !important;
+}
+
 body.chart-landscape-active .tos-shell-mobile-chrome {
   display: none !important;
 }
@@ -366,6 +369,17 @@ body.chart-landscape-active .tos-shell-desktop-content {
 
 body.chart-landscape-active .tos-shell-desktop-layout {
   padding-left: 0 !important;
+}
+
+/* Phone landscape on chart route — same immersive shell even before JS hydrates */
+@media (orientation: landscape) and (max-height: 520px) {
+  body.tos-route-chart .tos-shell-mobile-nav,
+  body.tos-route-chart .tos-shell-mobile-chrome {
+    display: none !important;
+  }
+  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
+    padding: 0 !important;
+  }
 }
 
 @media (display-mode: standalone) {
