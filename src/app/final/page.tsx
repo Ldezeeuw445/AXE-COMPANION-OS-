@@ -39,19 +39,32 @@ export default function FinalPage() {
           <FinalHeroExperience />
         </section>
 
-        <section className="border-y border-white/7 bg-white/[0.015] px-5 py-5 sm:px-8">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-3 text-center text-[11px] font-semibold uppercase tracking-[0.24em] text-white/42">
+        <section className="px-5 py-2 sm:px-8">
+          <div className="launch-meta-banner mx-auto max-w-6xl">
+            <div className="launch-meta-track">
             {[
               "Click through live app tabs",
               "Hero explains itself",
               "Supabase one source of truth",
               "Terminal + mobile companion",
             ].map((item) => (
-              <span key={item} className="flex items-center gap-2">
-                <span className="h-1 w-1 rounded-full bg-[var(--launch-accent)]" />
+              <span key={item} className="launch-meta-item">
                 {item}
               </span>
             ))}
+            {[...Array(2)].map((_, idx) =>
+              [
+                "Click through live app tabs",
+                "Hero explains itself",
+                "Supabase one source of truth",
+                "Terminal + mobile companion",
+              ].map((item) => (
+                <span key={`${item}-${idx}`} className="launch-meta-item">
+                  {item}
+                </span>
+              )),
+            )}
+            </div>
           </div>
         </section>
 

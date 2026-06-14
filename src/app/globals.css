@@ -872,12 +872,17 @@ select {
   position: fixed;
   inset: 0;
   z-index: 0;
-  opacity: 0.16;
+  opacity: 0.24;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-  background-size: 120px 120px;
-  mask-image: radial-gradient(circle at center, black 40%, transparent 90%);
+    radial-gradient(rgba(96, 233, 255, 0.24) 1px, transparent 1px),
+    radial-gradient(circle at 12% 16%, rgba(51, 200, 255, 0.1), transparent 38%),
+    radial-gradient(circle at 80% 25%, rgba(96, 233, 255, 0.09), transparent 34%);
+  background-size:
+    18px 18px,
+    100% 100%,
+    100% 100%;
+  mask-image: radial-gradient(circle at center, black 52%, transparent 94%);
+  animation: launch-bg-breathe 12s ease-in-out infinite;
 }
 
 .launch-final-banner-wrap {
@@ -944,6 +949,55 @@ select {
   content: "•";
   margin-right: 0.55rem;
   color: rgba(102, 234, 255, 0.82);
+}
+
+.launch-meta-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid rgba(95, 233, 255, 0.18);
+  background:
+    linear-gradient(100deg, rgba(8, 17, 28, 0.9), rgba(9, 12, 24, 0.86)),
+    linear-gradient(90deg, rgba(107, 97, 255, 0.12), rgba(92, 232, 255, 0.14), rgba(107, 97, 255, 0.1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 46px -34px rgba(0, 0, 0, 0.9),
+    0 0 40px -34px rgba(96, 233, 255, 0.65);
+}
+
+.launch-meta-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(99, 237, 255, 0.17), transparent);
+  mix-blend-mode: screen;
+}
+
+.launch-meta-track {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  width: max-content;
+  padding: 0.58rem 1rem;
+  animation: launch-banner-scroll 28s linear infinite;
+}
+
+.launch-meta-item {
+  white-space: nowrap;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(220, 246, 255, 0.7);
+}
+
+.launch-meta-item::before {
+  content: "•";
+  margin-right: 0.52rem;
+  color: rgba(96, 233, 255, 0.84);
 }
 
 .launch-dot-grid {
@@ -1378,6 +1432,18 @@ select {
   to {
     opacity: 0.34;
     transform: scale(1);
+  }
+}
+
+@keyframes launch-bg-breathe {
+  from {
+    opacity: 0.16;
+  }
+  50% {
+    opacity: 0.28;
+  }
+  to {
+    opacity: 0.16;
   }
 }
 
