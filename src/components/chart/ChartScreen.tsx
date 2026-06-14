@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { isPhoneLandscapeViewport } from "@/components/ui/AxeAuraWave";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice, priceDigitsForSymbol, pointValueForSymbol } from "@/lib/broker/symbolFormat";
@@ -924,20 +925,23 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // Auto-enter immersive chart on phone landscape; restore portrait layout on exit.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const phoneLandscapeMql = window.matchMedia("(orientation: landscape) and (max-height: 520px)");
 
     function syncLandscape() {
-      if (phoneLandscapeMql.matches && !userDismissedLandscapeRef.current) {
+      if (isPhoneLandscapeViewport() && !userDismissedLandscapeRef.current) {
         setIsFullscreen(true);
-      } else if (!phoneLandscapeMql.matches) {
+      } else if (!window.matchMedia("(orientation: landscape)").matches) {
         userDismissedLandscapeRef.current = false;
         setIsFullscreen(false);
       }
     }
 
     syncLandscape();
-    phoneLandscapeMql.addEventListener("change", syncLandscape);
-    return () => phoneLandscapeMql.removeEventListener("change", syncLandscape);
+    window.addEventListener("resize", syncLandscape);
+    window.addEventListener("orientationchange", syncLandscape);
+    return () => {
+      window.removeEventListener("resize", syncLandscape);
+      window.removeEventListener("orientationchange", syncLandscape);
+    };
   }, []);
 
   useEffect(() => {
@@ -2525,6 +2529,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // the chart screen.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
+    if (isFullscreen) {
+      setCenter(null);
+      setRight(null);
+      return () => {
+        setCenter(null);
+        setRight(null);
+      };
+    }
+
     const baseBtn =
       "inline-flex h-8 w-8 items-center justify-center rounded-full border bg-black/72 text-white/80 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95";
     const idle = "border-white/[0.10]";
@@ -2626,6 +2639,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     showPendingTradePlan,
     vibrate,
     playSound,
+    isFullscreen,
   ]);
 
   return (
@@ -2638,7 +2652,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       }`}
       style={isFullscreen ? {
         paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingLeft: "env(safe-area-inset-left, 0px)",
+        paddingRight: "env(safe-area-inset-right, 0px)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        width: "100dvw",
+        height: "100dvh",
         background: "#000",
       } : undefined}
     >
@@ -2652,7 +2670,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         reason={headerReason}
       />
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
-      <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
+      <div className="tos-shell-desktop-only hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2">
         <div className="flex shrink-0 items-baseline gap-1.5">
           <span className="font-mono text-sm font-semibold uppercase tracking-wider text-tos-text">
             {data.symbol}

@@ -335,6 +335,9 @@ body {
   .tos-shell-desktop-content.tos-flush-route {
     padding-bottom: 0;
   }
+  .tos-shell-desktop-only {
+    display: grid !important;
+  }
 }
 
 @media not all and (min-width: 768px) and (min-height: 520px) {
@@ -343,15 +346,26 @@ body {
   }
 }
 
-/* Chart immersive landscape — hide chrome while the chart owns the viewport */
+/* Chart immersive landscape — chart owns the full viewport on phone */
+body.chart-landscape-active {
+  overflow: hidden;
+}
+
 body.chart-landscape-active .tos-shell-mobile-nav,
 body.chart-landscape-active .tos-shell-mobile-chrome {
-  opacity: 0;
-  pointer-events: none;
+  display: none !important;
 }
 
 body.chart-landscape-active .tos-shell-desktop-rail {
   display: none !important;
+}
+
+body.chart-landscape-active .tos-shell-desktop-content {
+  padding: 0 !important;
+}
+
+body.chart-landscape-active .tos-shell-desktop-layout {
+  padding-left: 0 !important;
 }
 
 @media (display-mode: standalone) {

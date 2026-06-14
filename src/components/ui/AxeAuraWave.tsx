@@ -18,6 +18,17 @@ interface SphereParticle {
   twinkleSpeed: number;
   twinklePhase: number;
   noiseSeed: number;
+  sparkle: boolean;
+}
+
+interface SprayParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  brightness: number;
+  size: number;
+  drift: number;
 }
 
 interface AtmoParticle {
@@ -40,13 +51,16 @@ type MotionProfile = {
   scale: number;
 };
 
-function makeSphereParticles(count: number): SphereParticle[] {
+function makeSphereParticles(count: number, hemisphereOnly = false): SphereParticle[] {
   const pts: SphereParticle[] = [];
   for (let i = 0; i < count; i++) {
     const shell = Math.random();
     const r = shell < 0.28 ? 0.58 + Math.random() * 0.18 : 0.78 + Math.random() * 0.42;
+    const phi = hemisphereOnly
+      ? Math.acos(1 - Math.random() * 0.5)
+      : Math.acos(2 * Math.random() - 1);
     pts.push({
-      phi: Math.acos(2 * Math.random() - 1),
+      phi,
       theta: TAU * Math.random(),
       r,
       speed: 0.008 + Math.random() * 0.12,
@@ -57,6 +71,23 @@ function makeSphereParticles(count: number): SphereParticle[] {
       twinkleSpeed: 0.8 + Math.random() * 4,
       twinklePhase: TAU * Math.random(),
       noiseSeed: Math.random() * TAU,
+      sparkle: Math.random() < 0.06,
+    });
+  }
+  return pts;
+}
+
+function makeSprayParticles(count: number): SprayParticle[] {
+  const pts: SprayParticle[] = [];
+  for (let i = 0; i < count; i++) {
+    pts.push({
+      x: (Math.random() - 0.5) * 1.6,
+      y: -0.55 - Math.random() * 0.9,
+      vx: (Math.random() - 0.5) * 0.012,
+      vy: -0.004 - Math.random() * 0.014,
+      brightness: 0.08 + Math.random() * 0.35,
+      size: 0.12 + Math.random() * 0.35,
+      drift: TAU * Math.random(),
     });
   }
   return pts;
@@ -80,6 +111,25 @@ function makeAtmoParticles(count: number): AtmoParticle[] {
 function cyanForElevation(yNorm: number): [number, number, number] {
   const t = Math.max(0, Math.min(1, (yNorm + 1) * 0.5));
   return [Math.round(t * 8), Math.round(230 - t * 55), Math.round(255 - t * 25)];
+}
+
+function domeColor(yNorm: number, sparkle: boolean): [number, number, number] {
+  if (sparkle) return [255, 255, 255];
+  const crest = Math.max(0, Math.min(1, (yNorm + 0.15) / 1.15));
+  if (crest > 0.72) {
+    const mix = (crest - 0.72) / 0.28;
+    return [
+      Math.round(40 + mix * 20),
+      Math.round(170 + mix * 75),
+      Math.round(220 + mix * 35),
+    ];
+  }
+  const body = 1 - crest;
+  return [
+    Math.round(120 + body * 70),
+    Math.round(40 + crest * 90),
+    Math.round(180 + crest * 60),
+  ];
 }
 
 const STATE_PROFILE: Record<AuraState, MotionProfile> = {
@@ -117,6 +167,15 @@ function lerpProfile(current: MotionProfile, target: MotionProfile, t: number): 
     twinkle: lerp(current.twinkle, target.twinkle, t),
     scale: lerp(current.scale, target.scale, t),
   };
+}
+
+function isPhoneLandscapeViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  const landscape = window.matchMedia("(orientation: landscape)").matches;
+  if (!landscape) return false;
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const short = window.matchMedia("(max-height: 520px)").matches;
+  return coarse || short || window.innerHeight < 520;
 }
 
 export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer" }) {
@@ -192,24 +251,26 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dim = variant === "composer" ? 112 : 104;
+    const isComposer = variant === "composer";
+    const dim = isComposer ? { w: 260, h: 118 } : { w: 104, h: 104 };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = dim * dpr;
-    canvas.height = dim * dpr;
+    canvas.width = dim.w * dpr;
+    canvas.height = dim.h * dpr;
     ctx.scale(dpr, dpr);
 
-    const cx = dim / 2;
-    const cy = dim / 2;
-    const R = dim * (variant === "composer" ? 0.38 : 0.36);
-    const coreR = dim * (variant === "composer" ? 0.26 : 0.24);
-    const atmoR = dim * (variant === "composer" ? 0.58 : 0.52);
-    const spherePts = makeSphereParticles(variant === "composer" ? 760 : 820);
-    const atmoPts = makeAtmoParticles(variant === "composer" ? 120 : 150);
+    const cx = dim.w / 2;
+    const cy = isComposer ? dim.h - 2 : dim.h / 2;
+    const R = (isComposer ? dim.w : dim.w) * (isComposer ? 0.34 : 0.36);
+    const coreR = dim.w * (isComposer ? 0.22 : 0.24);
+    const atmoR = dim.w * (isComposer ? 0.46 : 0.52);
+    const spherePts = makeSphereParticles(isComposer ? 920 : 820, isComposer);
+    const sprayPts = isComposer ? makeSprayParticles(140) : [];
+    const atmoPts = isComposer ? [] : makeAtmoParticles(150);
     let t = 0;
 
     function draw() {
       if (!ctx) return;
-      ctx.clearRect(0, 0, dim, dim);
+      ctx.clearRect(0, 0, dim.w, dim.h);
       t += 0.005;
 
       const target = STATE_PROFILE[stateRef.current];
@@ -236,18 +297,33 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
 
-      for (const p of atmoPts) {
-        const wobble = 0.04 * Math.sin(t * 0.9 + p.drift);
-        const angle = p.angle + t * p.speed * activeSpeed + wobble;
-        const r = atmoR * p.radius * profile.scale;
-        const px = cx + Math.cos(angle) * r;
-        const py = cy + Math.sin(angle) * r;
-        const tw = 0.45 + 0.55 * Math.sin(t * 1.4 + p.drift);
-        const alpha = p.brightness * tw * (0.5 + profile.glow);
-        ctx.beginPath();
-        ctx.arc(px, py, p.sizeBase * 0.55, 0, TAU);
-        ctx.fillStyle = `rgba(0, 212, 245, ${alpha})`;
-        ctx.fill();
+      if (isComposer) {
+        for (const p of sprayPts) {
+          const wobble = 0.08 * Math.sin(t * 1.6 + p.drift);
+          const px = cx + (p.x + wobble) * R * profile.scale;
+          const py = cy + (p.y + Math.sin(t * 0.7 + p.drift) * 0.06) * R * profile.scale;
+          if (py > cy + 2) continue;
+          const tw = 0.35 + 0.65 * Math.sin(t * 2.4 + p.drift);
+          const alpha = p.brightness * tw * (0.35 + profile.glow);
+          ctx.beginPath();
+          ctx.arc(px, py, p.size, 0, TAU);
+          ctx.fillStyle = `rgba(0, 212, 245, ${alpha})`;
+          ctx.fill();
+        }
+      } else {
+        for (const p of atmoPts) {
+          const wobble = 0.04 * Math.sin(t * 0.9 + p.drift);
+          const angle = p.angle + t * p.speed * activeSpeed + wobble;
+          const r = atmoR * p.radius * profile.scale;
+          const px = cx + Math.cos(angle) * r;
+          const py = cy + Math.sin(angle) * r;
+          const tw = 0.45 + 0.55 * Math.sin(t * 1.4 + p.drift);
+          const alpha = p.brightness * tw * (0.5 + profile.glow);
+          ctx.beginPath();
+          ctx.arc(px, py, p.sizeBase * 0.55, 0, TAU);
+          ctx.fillStyle = `rgba(0, 212, 245, ${alpha})`;
+          ctx.fill();
+        }
       }
 
       const sorted = spherePts
@@ -274,11 +350,12 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
           return {
             p,
             px: cx + x3d * radius,
-            py: cy + y3d * radius,
+            py: cy - y3d * radius,
             y3d,
             z3d,
           };
         })
+        .filter((item) => !isComposer || item.py <= cy + 1)
         .sort((a, b) => a.z3d - b.z3d);
 
       for (const item of sorted) {
@@ -288,10 +365,12 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
           0.45 +
           0.55 * Math.sin(t * p.twinkleSpeed * profile.twinkle * activeSpeed + p.twinklePhase);
         const alpha = (0.045 + depthFactor * p.brightness * 0.88) * twinkle;
-        const [cr, cg, cb] = cyanForElevation(item.y3d);
-        const dotR = p.sizeBase * (0.28 + depthFactor * 0.72) * 0.48;
+        const [cr, cg, cb] = isComposer
+          ? domeColor(item.y3d, p.sparkle)
+          : cyanForElevation(item.y3d);
+        const dotR = p.sizeBase * (0.28 + depthFactor * 0.72) * (isComposer ? 0.42 : 0.48);
 
-        if (depthFactor > 0.48 && alpha > 0.1) {
+        if (!isComposer && depthFactor > 0.48 && alpha > 0.1) {
           ctx.beginPath();
           ctx.arc(px, py, dotR * 2.8, 0, TAU);
           ctx.fillStyle = `rgba(0, 212, 245, ${alpha * 0.16})`;
@@ -306,27 +385,29 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
 
       ctx.restore();
 
-      const glowR = coreR * breathe * (1 + profile.stream * 0.25);
-      const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      coreGlow.addColorStop(0, `rgba(0, 224, 255, ${profile.glow * pulse * 1})`);
-      coreGlow.addColorStop(0.35, `rgba(0, 212, 245, ${profile.glow * pulse * 0.7})`);
-      coreGlow.addColorStop(0.72, `rgba(0, 180, 220, ${profile.glow * pulse * 0.3})`);
-      coreGlow.addColorStop(1, "rgba(0, 160, 200, 0)");
-      ctx.beginPath();
-      ctx.arc(cx, cy, glowR, 0, TAU);
-      ctx.fillStyle = coreGlow;
-      ctx.fill();
+      if (!isComposer) {
+        const glowR = coreR * breathe * (1 + profile.stream * 0.25);
+        const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+        coreGlow.addColorStop(0, `rgba(0, 224, 255, ${profile.glow * pulse * 1})`);
+        coreGlow.addColorStop(0.35, `rgba(0, 212, 245, ${profile.glow * pulse * 0.7})`);
+        coreGlow.addColorStop(0.72, `rgba(0, 180, 220, ${profile.glow * pulse * 0.3})`);
+        coreGlow.addColorStop(1, "rgba(0, 160, 200, 0)");
+        ctx.beginPath();
+        ctx.arc(cx, cy, glowR, 0, TAU);
+        ctx.fillStyle = coreGlow;
+        ctx.fill();
 
-      if (profile.stream > 0.05) {
-        const arcs = stateRef.current === "tools" ? 6 : stateRef.current === "responding" ? 5 : 4;
-        for (let i = 0; i < arcs; i++) {
-          const angle = t * activeSpeed * 1.7 + (i / arcs) * TAU;
-          const ringR = coreR * (0.7 + i * 0.07) * breathe;
-          ctx.beginPath();
-          ctx.arc(cx, cy, ringR, angle, angle + 0.35 + profile.stream * 0.9);
-          ctx.strokeStyle = `rgba(0, 224, 255, ${0.07 + profile.stream * 0.18})`;
-          ctx.lineWidth = 0.6 + profile.stream * 0.45;
-          ctx.stroke();
+        if (profile.stream > 0.05) {
+          const arcs = stateRef.current === "tools" ? 6 : stateRef.current === "responding" ? 5 : 4;
+          for (let i = 0; i < arcs; i++) {
+            const angle = t * activeSpeed * 1.7 + (i / arcs) * TAU;
+            const ringR = coreR * (0.7 + i * 0.07) * breathe;
+            ctx.beginPath();
+            ctx.arc(cx, cy, ringR, angle, angle + 0.35 + profile.stream * 0.9);
+            ctx.strokeStyle = `rgba(0, 224, 255, ${0.07 + profile.stream * 0.18})`;
+            ctx.lineWidth = 0.6 + profile.stream * 0.45;
+            ctx.stroke();
+          }
         }
       }
 
@@ -338,53 +419,23 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
   }, [variant]);
 
   const breatheSec = STATE_BREATHE_SEC[state];
-  const displaySize = variant === "composer" ? 112 : 104;
-  const clipHeight = variant === "composer" ? 56 : displaySize;
+  const displaySize = variant === "composer" ? { w: 260, h: 118 } : { w: 104, h: 104 };
 
   if (variant === "composer") {
     return (
-      <div
-        className="pointer-events-none relative mx-auto flex w-[112px] items-end justify-center overflow-hidden"
-        style={{ height: clipHeight }}
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none block"
+        style={{ width: displaySize.w, height: displaySize.h, background: "transparent" }}
         aria-hidden
-      >
-        <div className="relative translate-y-[50%]" style={{ width: displaySize, height: displaySize }}>
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0"
-            style={{ width: displaySize, height: displaySize }}
-          />
-          <span
-            className="pointer-events-none absolute rounded-full transition-[animation-duration] duration-500"
-            style={{
-              top: "26%",
-              left: "26%",
-              width: "48%",
-              height: "48%",
-              background:
-                "radial-gradient(circle at 38% 32%, rgba(0,224,255,0.24) 0%, rgba(0,212,245,0.14) 35%, rgba(0,180,220,0.07) 62%, transparent 100%)",
-              boxShadow:
-                "0 0 44px 16px rgba(0,212,245,0.24), 0 0 88px 28px rgba(0,212,245,0.1), inset 0 -4px 10px rgba(0,100,140,0.4)",
-              animation: `axe-orb-breathe ${breatheSec}s ease-in-out infinite`,
-            }}
-          />
-          <span
-            className="pointer-events-none absolute inset-[-32%] rounded-full transition-[animation-duration] duration-500"
-            style={{
-              background:
-                "radial-gradient(circle, rgba(0,212,245,0.16) 0%, rgba(0,212,245,0.06) 42%, transparent 72%)",
-              animation: `axe-orb-glow ${breatheSec}s ease-in-out infinite`,
-            }}
-          />
-        </div>
-      </div>
+      />
     );
   }
 
   return (
     <div className="pointer-events-none mb-0.5 flex h-16 items-center justify-center" aria-hidden>
-      <div className="relative" style={{ width: displaySize, height: displaySize }}>
-        <canvas ref={canvasRef} className="absolute inset-0" style={{ width: displaySize, height: displaySize }} />
+      <div className="relative" style={{ width: displaySize.w, height: displaySize.h }}>
+        <canvas ref={canvasRef} className="absolute inset-0" style={{ width: displaySize.w, height: displaySize.h }} />
         <span
           className="pointer-events-none absolute rounded-full transition-[animation-duration] duration-500"
           style={{
@@ -411,3 +462,5 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
     </div>
   );
 }
+
+export { isPhoneLandscapeViewport };
