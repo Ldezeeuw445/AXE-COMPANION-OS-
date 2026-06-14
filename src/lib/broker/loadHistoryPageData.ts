@@ -1,5 +1,12 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
+import { getMetaApiCloudAccountById } from "@/lib/mt5/activeCloudAccount";
+import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
+import {
+  clientGetHistoryDealsRange,
+  clientGetHistoryOrdersRange,
+} from "@/lib/mt5/metaApiClient";
+import { syncAccountIfStale } from "@/lib/mt5/backgroundSync";
 
 export type HistorySearchParams = {
   account?: string;
@@ -22,6 +29,28 @@ export type BrokerTradeRow = {
   fees: number;
 };
 
+export type HistoryOrderRow = {
+  id: string;
+  symbol: string;
+  type: string;
+  state: string;
+  volume: number;
+  openPrice: number | null;
+  doneTime: string | null;
+};
+
+export type HistoryDealRow = {
+  id: string;
+  symbol: string;
+  type: string;
+  entryType: string;
+  volume: number;
+  price: number | null;
+  profit: number;
+  fees: number;
+  time: string | null;
+};
+
 export type HistorySummary = {
   totalTrades: number;
   totalPnl: number;
@@ -37,12 +66,150 @@ export type HistoryPageData = {
   activeAccountId: string | null;
   selectedAccountId: string | null;
   trades: BrokerTradeRow[];
+  orders: HistoryOrderRow[];
+  deals: HistoryDealRow[];
   summary: HistorySummary | null;
   filters: { symbol: string; from: string; to: string };
+  historyHint: string | null;
   error: string | null;
 };
 
 const TRADE_LIMIT = 500;
+const HISTORY_DAYS = 90;
+
+function mapOrderType(t: string | undefined): string {
+  const raw = (t ?? "").toLowerCase().replace(/^order_type_/, "").replace(/_/g, " ");
+  if (raw.includes("buy") && raw.includes("limit")) return "buy limit";
+  if (raw.includes("sell") && raw.includes("limit")) return "sell limit";
+  if (raw.includes("buy") && raw.includes("stop")) return "buy stop";
+  if (raw.includes("sell") && raw.includes("stop")) return "sell stop";
+  if (raw === "buy") return "buy";
+  if (raw === "sell") return "sell";
+  return raw.trim() || "order";
+}
+
+function mapOrderState(s: string | undefined): string {
+  const raw = (s ?? "").toLowerCase().replace(/^order_state_/, "").replace(/_/g, " ");
+  return raw.trim() || "unknown";
+}
+
+function mapDealType(t: string | undefined): string {
+  return (t ?? "").toLowerCase().replace(/^deal_type_/, "").replace(/_/g, " ") || "deal";
+}
+
+function mapDealEntry(e: string | undefined): string {
+  return (e ?? "").toLowerCase().replace(/^deal_entry_/, "").replace(/_/g, " ") || "";
+}
+
+function normalizeHistoryOrders(raw: unknown[]): HistoryOrderRow[] {
+  return raw
+    .map((item) => {
+      const r = item as Record<string, unknown>;
+      const id = r.id != null ? String(r.id) : "";
+      const symbol = String(r.symbol ?? "");
+      if (!id || !symbol) return null;
+      return {
+        id,
+        symbol,
+        type: mapOrderType(String(r.type ?? "")),
+        state: mapOrderState(String(r.state ?? "")),
+        volume: Number(r.volume ?? 0) || 0,
+        openPrice: r.openPrice != null ? Number(r.openPrice) : null,
+        doneTime: (r.doneTime as string | null) ?? (r.time as string | null) ?? null,
+      };
+    })
+    .filter((x): x is HistoryOrderRow => x != null)
+    .sort((a, b) => String(b.doneTime ?? "").localeCompare(String(a.doneTime ?? "")));
+}
+
+function normalizeHistoryDeals(raw: unknown[]): HistoryDealRow[] {
+  return raw
+    .map((item) => {
+      const r = item as Record<string, unknown>;
+      const id = r.id != null ? String(r.id) : "";
+      const symbol = String(r.symbol ?? "");
+      if (!id || !symbol) return null;
+      const commission = Number(r.commission ?? 0) || 0;
+      const swap = Number(r.swap ?? 0) || 0;
+      return {
+        id,
+        symbol,
+        type: mapDealType(String(r.type ?? "")),
+        entryType: mapDealEntry(String(r.entryType ?? "")),
+        volume: Number(r.volume ?? 0) || 0,
+        price: r.price != null ? Number(r.price) : null,
+        profit: Number(r.profit ?? 0) || 0,
+        fees: commission + swap,
+        time: (r.time as string | null) ?? null,
+      };
+    })
+    .filter((x): x is HistoryDealRow => x != null)
+    .sort((a, b) => String(b.time ?? "").localeCompare(String(a.time ?? "")));
+}
+
+function filterBySymbol<T extends { symbol: string }>(rows: T[], symbol: string): T[] {
+  if (!symbol) return rows;
+  const u = symbol.toUpperCase();
+  return rows.filter((r) => r.symbol.toUpperCase() === u);
+}
+
+function filterByTimeRange<T>(rows: T[], fromIso: string | null, toIso: string | null, pick: (r: T) => string | null): T[] {
+  return rows.filter((r) => {
+    const t = pick(r);
+    if (!t) return true;
+    if (fromIso && t < fromIso) return false;
+    if (toIso && t > toIso) return false;
+    return true;
+  });
+}
+
+async function loadCloudHistoryOrdersDeals(
+  userId: string,
+  selectedAccountId: string,
+  symbolTrim: string,
+  fromIso: string | null,
+  toIso: string | null,
+): Promise<{ orders: HistoryOrderRow[]; deals: HistoryDealRow[]; hint: string | null }> {
+  if (!getMetaApiToken()) {
+    return { orders: [], deals: [], hint: "MetaApi is not configured — order/deal history unavailable." };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return { orders: [], deals: [], hint: null };
+
+  const cloud = await getMetaApiCloudAccountById(supabase, userId, selectedAccountId);
+  if (!cloud) {
+    return {
+      orders: [],
+      deals: [],
+      hint: "Order and deal history requires a MetaApi cloud MT5 account.",
+    };
+  }
+
+  const end = toIso ? new Date(toIso) : new Date();
+  const start = fromIso
+    ? new Date(fromIso)
+    : new Date(end.getTime() - HISTORY_DAYS * 24 * 60 * 60 * 1000);
+
+  try {
+    const [ordersRaw, dealsRaw] = await Promise.all([
+      clientGetHistoryOrdersRange(cloud.metaApiAccountId, start.toISOString(), end.toISOString(), cloud.metaApiRegion),
+      clientGetHistoryDealsRange(cloud.metaApiAccountId, start.toISOString(), end.toISOString(), cloud.metaApiRegion),
+    ]);
+
+    let orders = normalizeHistoryOrders(ordersRaw);
+    let deals = normalizeHistoryDeals(dealsRaw);
+    orders = filterBySymbol(orders, symbolTrim);
+    deals = filterBySymbol(deals, symbolTrim);
+    orders = filterByTimeRange(orders, fromIso, toIso, (r) => r.doneTime);
+    deals = filterByTimeRange(deals, fromIso, toIso, (r) => r.time);
+
+    return { orders: orders.slice(0, TRADE_LIMIT), deals: deals.slice(0, TRADE_LIMIT), hint: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Could not load broker history.";
+    return { orders: [], deals: [], hint: msg };
+  }
+}
 
 function accountIdSet(accounts: BrokerAccountRow[]): Set<string> {
   return new Set(accounts.map((a) => a.id));
@@ -117,8 +284,11 @@ export async function loadHistoryPageData(
       activeAccountId: null,
       selectedAccountId: null,
       trades: [],
+      orders: [],
+      deals: [],
       summary: null,
       filters: { symbol: symbolTrim, from: fromRaw, to: toRaw },
+      historyHint: null,
       error: "Supabase is not configured.",
     };
   }
@@ -132,8 +302,11 @@ export async function loadHistoryPageData(
       activeAccountId: null,
       selectedAccountId: null,
       trades: [],
+      orders: [],
+      deals: [],
       summary: null,
       filters: { symbol: symbolTrim, from: fromRaw, to: toRaw },
+      historyHint: null,
       error: "Not signed in.",
     };
   }
@@ -159,8 +332,11 @@ export async function loadHistoryPageData(
       activeAccountId: null,
       selectedAccountId: null,
       trades: [],
+      orders: [],
+      deals: [],
       summary: null,
       filters: { symbol: symbolTrim, from: fromRaw, to: toRaw },
+      historyHint: null,
       error: accsRes.error.message,
     };
   }
@@ -181,11 +357,16 @@ export async function loadHistoryPageData(
       activeAccountId,
       selectedAccountId: null,
       trades: [],
+      orders: [],
+      deals: [],
       summary: null,
       filters: { symbol: symbolTrim, from: fromRaw, to: toRaw },
+      historyHint: null,
       error: prefsErr ?? null,
     };
   }
+
+  void syncAccountIfStale(supabase, user.id, selectedAccountId).catch(() => undefined);
 
   let q = supabase
     .from("broker_trades")
@@ -212,11 +393,22 @@ export async function loadHistoryPageData(
       activeAccountId,
       selectedAccountId,
       trades: [],
+      orders: [],
+      deals: [],
       summary: null,
       filters: { symbol: symbolTrim, from: fromRaw, to: toRaw },
+      historyHint: null,
       error: tradeErr.message,
     };
   }
+
+  const cloudHistory = await loadCloudHistoryOrdersDeals(
+    user.id,
+    selectedAccountId,
+    symbolTrim,
+    fromIso,
+    toIso,
+  );
 
   const trades: BrokerTradeRow[] = (tradeRows ?? []).map((r: Record<string, unknown>) => ({
     id: String(r.id),
@@ -237,8 +429,11 @@ export async function loadHistoryPageData(
     activeAccountId,
     selectedAccountId,
     trades,
+    orders: cloudHistory.orders,
+    deals: cloudHistory.deals,
     summary: buildSummary(trades),
     filters: { symbol: symbolTrim, from: fromRaw, to: toRaw },
+    historyHint: cloudHistory.hint,
     error: prefsErr ?? null,
   };
 }

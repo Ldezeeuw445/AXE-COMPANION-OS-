@@ -210,8 +210,8 @@ export type CreateMt5CloudAccountInput = {
   name: string;
   server: string;
   region: string;
-  /** Investor / read-only password path */
-  manualTrades: true;
+  /** true = investor (read-only) password; false = master password */
+  manualTrades: boolean;
 };
 
 export async function provisioningCreateMt5CloudAccount(
@@ -226,7 +226,7 @@ export async function provisioningCreateMt5CloudAccount(
     server: input.server.trim(),
     platform: "mt5",
     type: "cloud-g2",
-    manualTrades: true,
+    manualTrades: input.manualTrades,
     magic: 0,
     region: input.region,
   };
@@ -430,6 +430,37 @@ export async function clientGetSymbolPrice(
     brokerTime: r.brokerTime ?? null,
     time: r.time ?? null,
   };
+}
+
+export async function clientGetHistoryOrdersRange(
+  accountId: string,
+  startIso: string,
+  endIso: string,
+  region?: string | null,
+): Promise<unknown[]> {
+  const base = getMetaApiClientBaseUrl(region);
+  const s = encodeURIComponent(startIso);
+  const e = encodeURIComponent(endIso);
+  const all: unknown[] = [];
+  let offset = 0;
+  const limit = 1000;
+  for (;;) {
+    const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/history-orders/time/${s}/${e}?offset=${offset}&limit=${limit}`;
+    const res = await fetchWithTimeout(url, {
+      method: "GET",
+      headers: authHeadersGet(),
+      timeoutMs: 120_000,
+    });
+    const body = await readJson(res);
+    if (!res.ok) {
+      throw new MetaApiRequestError(classifyHttpStatus(res.status), `History orders ${res.status}`, res.status, body);
+    }
+    const chunk = Array.isArray(body) ? body : [];
+    all.push(...chunk);
+    if (chunk.length < limit) break;
+    offset += limit;
+  }
+  return all;
 }
 
 export async function clientGetHistoryDealsRange(

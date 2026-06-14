@@ -18,13 +18,15 @@ import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import { useEffect } from "react";
 import type {
   BrokerTradeRow,
+  HistoryDealRow,
+  HistoryOrderRow,
   HistoryPageData,
   HistorySummary,
 } from "@/lib/broker/loadHistoryPageData";
 
 /* ── Props ─────────────────────────────────────────────────────────── */
-type Props = Omit<HistoryPageData, "error"> & { loadError: string | null };
 type HistoryTab = "positions" | "orders" | "deals";
+type Props = Omit<HistoryPageData, "error"> & { loadError: string | null };
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 function fmtPrice(n: number | null, digits = 2) {
@@ -71,8 +73,11 @@ export function HistoryScreen({
   activeAccountId,
   selectedAccountId,
   trades,
+  orders,
+  deals,
   summary,
   filters,
+  historyHint,
   loadError,
 }: Props) {
   const router = useRouter();
@@ -304,14 +309,10 @@ export function HistoryScreen({
         />
       )}
       {tab === "orders" && (
-        <div className="flex flex-1 items-center justify-center px-6">
-          <p className="text-xs text-white/25">Order history — coming soon</p>
-        </div>
+        <OrdersTab orders={orders} hint={historyHint} />
       )}
       {tab === "deals" && (
-        <div className="flex flex-1 items-center justify-center px-6">
-          <p className="text-xs text-white/25">Deal history — coming soon</p>
-        </div>
+        <DealsTab deals={deals} hint={historyHint} />
       )}
     </div>
   );
@@ -436,6 +437,93 @@ function PositionsTab({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Orders Tab ────────────────────────────────────────────────────── */
+function OrdersTab({ orders, hint }: { orders: HistoryOrderRow[]; hint: string | null }) {
+  if (orders.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-6 text-center">
+        <p className="text-xs text-white/25">
+          {hint ?? "No order history in this range"}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {orders.map((o, i) => (
+        <div
+          key={o.id}
+          className={`border-b border-white/[0.04] px-4 py-2.5 ${i % 2 === 1 ? "bg-white/[0.015]" : ""}`}
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="flex min-w-0 items-baseline gap-1.5">
+              <span className="font-mono text-[12px] font-semibold text-white">{o.symbol}</span>
+              <span className="text-[10px] font-medium capitalize text-white/45">{o.type}</span>
+              <span className="text-[10px] tabular-nums text-white/30">{fmtPrice(o.volume, 2)}</span>
+            </div>
+            <span className="shrink-0 text-[10px] capitalize text-white/35">{o.state}</span>
+          </div>
+          <div className="mt-0.5 flex items-center justify-between gap-2">
+            <span className="text-[10px] tabular-nums text-white/25">
+              @ {fmtPrice(o.openPrice, priceDigits(o.openPrice))}
+            </span>
+            <span className="shrink-0 text-[10px] tabular-nums text-white/20">{fmtTime(o.doneTime)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Deals Tab ─────────────────────────────────────────────────────── */
+function DealsTab({ deals, hint }: { deals: HistoryDealRow[]; hint: string | null }) {
+  if (deals.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-6 text-center">
+        <p className="text-xs text-white/25">
+          {hint ?? "No deal history in this range"}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {deals.map((d, i) => {
+        const pnlColor =
+          d.profit > 0 ? "text-cyan-400" : d.profit < 0 ? "text-rose-400" : "text-white/40";
+        return (
+          <div
+            key={d.id}
+            className={`border-b border-white/[0.04] px-4 py-2.5 ${i % 2 === 1 ? "bg-white/[0.015]" : ""}`}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="flex min-w-0 items-baseline gap-1.5">
+                <span className="font-mono text-[12px] font-semibold text-white">{d.symbol}</span>
+                <span className="text-[10px] capitalize text-white/40">{d.type}</span>
+                {d.entryType ? (
+                  <span className="text-[10px] capitalize text-white/25">{d.entryType}</span>
+                ) : null}
+                <span className="text-[10px] tabular-nums text-white/30">{fmtPrice(d.volume, 2)}</span>
+              </div>
+              <span className={`font-mono text-[12px] font-bold tabular-nums shrink-0 ${pnlColor}`}>
+                {fmtPnl(d.profit)}
+              </span>
+            </div>
+            <div className="mt-0.5 flex items-center justify-between gap-2">
+              <span className="text-[10px] tabular-nums text-white/25">
+                @ {fmtPrice(d.price, priceDigits(d.price))}
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums text-white/20">{fmtTime(d.time)}</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

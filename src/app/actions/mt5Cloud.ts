@@ -258,20 +258,40 @@ export async function createCloudMt5ConnectionAction(
   const label = String(formData.get("label") ?? "").trim();
   const mt5Login = String(formData.get("mt5Login") ?? "").trim().replace(/\D/g, "");
   const mt5Server = String(formData.get("mt5Server") ?? "").trim();
-  const investorPassword = String(formData.get("investorPassword") ?? "");
+  const passwordTypeRaw = String(formData.get("passwordType") ?? "investor").trim();
+  const passwordType = passwordTypeRaw === "master" ? "master" : "investor";
+  const mt5Password =
+    String(formData.get("mt5Password") ?? "").trim() ||
+    String(formData.get("investorPassword") ?? "");
   const readOnlyOk = formData.get("readOnlyConfirm") === "on" || formData.get("readOnlyConfirm") === "true";
+  const masterOk = formData.get("masterConfirm") === "on" || formData.get("masterConfirm") === "true";
 
   if (!label) return { ok: false, code: "validation", message: "Label is required." };
   if (!mt5Login) return { ok: false, code: "validation", message: "MT5 login (digits) is required." };
   if (!mt5Server) return { ok: false, code: "validation", message: "MT5 server name is required." };
-  if (!investorPassword) return { ok: false, code: "validation", message: "Investor (read-only) password is required." };
-  if (!readOnlyOk) {
+  if (!mt5Password) {
+    return {
+      ok: false,
+      code: "validation",
+      message: passwordType === "master" ? "Master password is required." : "Investor (read-only) password is required.",
+    };
+  }
+  if (passwordType === "investor" && !readOnlyOk) {
     return {
       ok: false,
       code: "validation",
       message: "Confirm read-only access: tick the checkbox to use investor password only.",
     };
   }
+  if (passwordType === "master" && !masterOk) {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Confirm master password: tick the checkbox to acknowledge full trading access.",
+    };
+  }
+
+  const manualTrades = passwordType === "investor";
 
   // Region must be one of the supported MetaApi clouds. The form already
   // restricts the select to these three; this is a belt-and-braces check so
@@ -296,11 +316,11 @@ export async function createCloudMt5ConnectionAction(
     } else {
       const created = await provisioningCreateMt5CloudAccount({
         login: mt5Login,
-        password: investorPassword,
+        password: mt5Password,
         name: label,
         server: mt5Server,
         region,
-        manualTrades: true,
+        manualTrades,
       });
       metaId = created.id;
     }
@@ -324,7 +344,9 @@ export async function createCloudMt5ConnectionAction(
       (typeof existingMetaAccount?.region === "string" && existingMetaAccount.region.length > 0
         ? existingMetaAccount.region
         : region),
-    readOnlyConfirmed: true,
+    passwordType,
+    readOnlyConfirmed: passwordType === "investor" && readOnlyOk,
+    masterPasswordConfirmed: passwordType === "master" && masterOk,
     createdVia: "axe_companion_cloud_mt5",
     metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,

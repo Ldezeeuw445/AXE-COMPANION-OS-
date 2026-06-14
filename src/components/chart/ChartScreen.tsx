@@ -1304,6 +1304,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [pendingOrderType, setPendingOrderType] = useState<OrderTicketType>("market");
   const [orderTypeMenuOpen, setOrderTypeMenuOpen] = useState(false);
   const [lotMenuOpen, setLotMenuOpen] = useState(false);
+  const [lotVolumeDraft, setLotVolumeDraft] = useState("0.10");
   const [deviationPoints, setDeviationPoints] = useState(10);
   const [oneClickVisible, setOneClickVisible] = useState(false);
   const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
@@ -1458,15 +1459,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       return;
     }
 
-    if (!liveTrading.armed) {
-      setTradeToast({
-        kind: "info",
-        title: "Re-arm to send live orders",
-        body: "Open Settings → Live trading and tap “Arm for 30m”.",
-      });
-      return;
-    }
-
     setOrderConfirmStatus({ kind: "idle" });
     setOrderConfirmInput({
       symbol: data.symbol,
@@ -1491,7 +1483,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     demoBook,
     deviationPoints,
     isDemoAccount,
-    liveTrading.armed,
     liveTrading.enabled,
     livePrice,
     pendingOrderPrice,
@@ -1587,8 +1578,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setPendingOrderPrice((prev) => prev ?? data.lastPrice);
   }, [data.lastPrice]);
 
-  // Body scroll lock removed — the h-dvh overflow-hidden shell prevents
-  // rubber-band scroll at the layout level. No JS body manipulation needed.
+  // Lock page scroll on chart — only the canvas/panes should pan.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!oneClickVisible) {
+      setLotMenuOpen(false);
+      setOrderTypeMenuOpen(false);
+    }
+  }, [oneClickVisible]);
+
+  useEffect(() => {
+    if (lotMenuOpen) setLotVolumeDraft(tradeVolume);
+  }, [lotMenuOpen, tradeVolume]);
 
   // Live mirror of the last candle so the indicator panes (RSI/Volume) can
   // tick in lockstep with the candle stream instead of staying frozen on the
@@ -2534,6 +2542,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               setOneClickVisible(false);
               setExecutionMode("market");
               setPendingOrderVisible(false);
+              setLotMenuOpen(false);
+              setOrderTypeMenuOpen(false);
             } else {
               setOneClickVisible(true);
               setExecutionMode("market");
@@ -2603,7 +2613,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   return (
     <div
       ref={chartFrameRef}
-      className={`tos-ambient-glow flex min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden overscroll-none ${
+      className={`tos-ambient-glow relative flex min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden overscroll-none ${
         isFullscreen
           ? "fixed inset-0 z-[9999]"
           : "flex-1"
@@ -3804,14 +3814,67 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* Lot quick picker — MT5-style vertical scroll list */}
       {lotMenuOpen ? (
+        <>
+          <button
+            type="button"
+            className="absolute inset-0 z-30 bg-black/40"
+            aria-label="Close volume picker"
+            onClick={() => setLotMenuOpen(false)}
+          />
         <div
           className="absolute inset-x-4 bottom-[3rem] z-40 overflow-hidden rounded-2xl border border-white/10 shadow-[0_18px_48px_rgba(0,0,0,0.6)] backdrop-blur-xl"
           style={{ background: "linear-gradient(180deg, rgba(12,16,24,0.97) 0%, rgba(6,8,12,0.98) 100%)" }}
         >
-          {/* Title */}
-          <p className="py-2.5 text-center text-[15px] font-bold text-white">Volume</p>
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
+            <p className="text-[15px] font-bold text-white">Volume</p>
+            <button
+              type="button"
+              onClick={() => setLotMenuOpen(false)}
+              className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-tos-muted"
+            >
+              Close
+            </button>
+          </div>
+          <div className="border-b border-white/[0.06] px-3 py-2">
+            <label className="text-[10px] font-medium uppercase tracking-wider text-white/35">
+              Type lot size
+            </label>
+            <div className="mt-1 flex gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={lotVolumeDraft}
+                onChange={(e) => setLotVolumeDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const v = parseFloat(lotVolumeDraft.replace(",", "."));
+                    if (Number.isFinite(v) && v >= 0.01) {
+                      setTradeVolume(v < 1 ? v.toFixed(2) : v.toFixed(2));
+                      setLotMenuOpen(false);
+                      vibrate("light");
+                    }
+                  }
+                }}
+                className="flex-1 rounded-lg border border-white/10 bg-[#0c0c0f] px-2.5 py-2 font-mono text-[14px] text-white outline-none"
+                placeholder="0.10"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const v = parseFloat(lotVolumeDraft.replace(",", "."));
+                  if (!Number.isFinite(v) || v < 0.01) return;
+                  setTradeVolume(v < 1 ? v.toFixed(2) : v.toFixed(2));
+                  setLotMenuOpen(false);
+                  vibrate("light");
+                }}
+                className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 text-[11px] font-semibold text-cyan-200"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
           {/* Vertical scroll list */}
-          <div className="max-h-[220px] overflow-y-auto px-3" style={{ scrollSnapType: "y mandatory" }}>
+          <div className="max-h-[220px] overflow-y-auto overscroll-contain px-3" style={{ scrollSnapType: "y mandatory" }}>
             {[0.01, 0.02, 0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.50, 2.00, 3.00, 5.00, 10.00].map((v) => {
               const txt = v < 1 ? v.toFixed(2) : v >= 10 ? v.toFixed(1).replace(/\.0$/, "") : v.toFixed(2);
               const isActive = Math.abs(parseFloat(tradeVolume) - v) < 0.001;
@@ -3876,6 +3939,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             ))}
           </div>
         </div>
+        </>
       ) : null}
 
       {/* Slide-out drawers: anchored to the top of the chart frame so the
