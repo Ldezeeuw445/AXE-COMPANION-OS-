@@ -92,6 +92,7 @@ type AccountStream = {
 
 // Track all active account streams
 const activeStreams = new Map<string, AccountStream>();
+const startingStreams = new Set<string>();
 
 function startHealthServer(): void {
   const port = Number(process.env.PORT ?? 8080);
@@ -600,6 +601,22 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
   return stream;
 }
 
+async function startAccountStreamIfNeeded(
+  env: Env,
+  config: AccountConfig,
+): Promise<AccountStream | null> {
+  const existing = activeStreams.get(config.metaApiAccountId);
+  if (existing) return existing;
+  if (startingStreams.has(config.metaApiAccountId)) return null;
+
+  startingStreams.add(config.metaApiAccountId);
+  try {
+    return await startAccountStream(env, config);
+  } finally {
+    startingStreams.delete(config.metaApiAccountId);
+  }
+}
+
 async function addSymbolsToStream(
   env: Env,
   stream: AccountStream,
@@ -639,11 +656,18 @@ async function reconcile(env: Env, currentConfigs: AccountConfig[]): Promise<Acc
 
     if (diff.added.length > 0) {
       log("info", `Reconcile: ${diff.added.length} new account(s) found`);
-      for (const config of diff.added) {
+    }
+
+    const missingStreams = nextConfigs.filter(
+      (config) => !activeStreams.has(config.metaApiAccountId),
+    );
+    if (missingStreams.length > 0) {
+      log("info", `Reconcile: starting ${missingStreams.length} missing account stream(s)`);
+      for (const config of missingStreams) {
         try {
-          await startAccountStream(env, config);
+          await startAccountStreamIfNeeded(env, config);
         } catch (e) {
-          log("error", `Failed to start stream for new account ${config.metaApiAccountId}:`, e);
+          log("error", `Failed to start stream for account ${config.metaApiAccountId}:`, e);
         }
       }
     }
@@ -739,7 +763,7 @@ async function main() {
     await Promise.allSettled(
       configs.map(async (config) => {
         try {
-          await startAccountStream(env, config);
+          await startAccountStreamIfNeeded(env, config);
         } catch (e) {
           log("error", `Failed to start stream for ${config.metaApiAccountId}:`, e);
         }
@@ -748,9 +772,20 @@ async function main() {
   }
 
   // ── Reconciliation loop ────────────────────────────────────────
+  let reconcileInFlight = false;
   const reconcileTimer = setInterval(async () => {
+    if (reconcileInFlight) {
+      log("warn", "Skipping reconciliation; previous run is still in progress");
+      return;
+    }
+
+    reconcileInFlight = true;
     log("debug", "Running reconciliation…");
-    configs = await reconcile(env, configs);
+    try {
+      configs = await reconcile(env, configs);
+    } finally {
+      reconcileInFlight = false;
+    }
   }, RECONCILE_INTERVAL_MS);
 
   // ── Heartbeat (keeps process alive + monitors health) ──────────

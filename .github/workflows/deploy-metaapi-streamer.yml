@@ -3,6 +3,7 @@ name: Deploy MetaAPI Streamer
 on:
   push:
     branches:
+      - main
       - axe-companion-runtime-foundation
     paths:
       - "node/metaapi-streamer/**"
