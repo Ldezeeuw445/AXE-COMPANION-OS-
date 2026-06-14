@@ -34,8 +34,8 @@ export function ChatComposerDock({ children }: Props) {
           <div
             className="pointer-events-none absolute left-1/2 z-[2] flex -translate-x-1/2 justify-center md:hidden"
             style={{
-              bottom: "calc(100% - 0.35rem)",
-              width: "min(100vw, 20rem)",
+              bottom: "calc(100% - 0.15rem)",
+              width: "min(100vw, 22rem)",
             }}
             aria-hidden
           >

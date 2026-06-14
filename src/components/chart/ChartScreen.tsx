@@ -2749,7 +2749,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     isFullscreen,
   ]);
 
-  const landscapeLayoutInsetBottom = isFullscreen ? 10 : 0;
+  const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
 
   return (
     <div

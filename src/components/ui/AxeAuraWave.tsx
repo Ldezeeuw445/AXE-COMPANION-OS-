@@ -51,6 +51,33 @@ type MotionProfile = {
   scale: number;
 };
 
+function makeGridDomeParticles(latBands: number, lonBands: number): SphereParticle[] {
+  const pts: SphereParticle[] = [];
+  for (let li = 0; li <= latBands; li++) {
+    const v = li / latBands;
+    const phi = v * (Math.PI / 2);
+    const rowLon = Math.max(10, Math.round(lonBands * Math.sin(phi + 0.12)));
+    for (let j = 0; j < rowLon; j++) {
+      const theta = (j / rowLon) * TAU;
+      pts.push({
+        phi,
+        theta,
+        r: 0.9 + (Math.random() - 0.5) * 0.06,
+        speed: 0.006 + Math.random() * 0.03,
+        brightness: 0.42 + Math.random() * 0.48,
+        drift: TAU * Math.random(),
+        driftAmp: 0.006 + Math.random() * 0.022,
+        sizeBase: 0.22 + Math.random() * 0.18,
+        twinkleSpeed: 0.9 + Math.random() * 2.8,
+        twinklePhase: TAU * Math.random(),
+        noiseSeed: Math.random() * TAU,
+        sparkle: Math.random() < 0.035,
+      });
+    }
+  }
+  return pts;
+}
+
 function makeSphereParticles(count: number, hemisphereOnly = false): SphereParticle[] {
   const pts: SphereParticle[] = [];
   for (let i = 0; i < count; i++) {
@@ -113,23 +140,27 @@ function cyanForElevation(yNorm: number): [number, number, number] {
   return [Math.round(t * 8), Math.round(230 - t * 55), Math.round(255 - t * 25)];
 }
 
-function domeColor(yNorm: number, sparkle: boolean): [number, number, number] {
-  if (sparkle) return [255, 255, 255];
-  const crest = Math.max(0, Math.min(1, (yNorm + 0.15) / 1.15));
-  if (crest > 0.72) {
-    const mix = (crest - 0.72) / 0.28;
+function referenceDomeColor(yNorm: number, sparkle: boolean): [number, number, number] {
+  if (sparkle) return [210, 250, 255];
+  const crest = Math.max(0, Math.min(1, (yNorm + 0.08) / 1.08));
+  if (crest > 0.58) {
+    const mix = (crest - 0.58) / 0.42;
     return [
-      Math.round(40 + mix * 20),
-      Math.round(170 + mix * 75),
-      Math.round(220 + mix * 35),
+      Math.round(8 + mix * 18),
+      Math.round(150 + mix * 95),
+      Math.round(210 + mix * 45),
     ];
   }
   const body = 1 - crest;
   return [
-    Math.round(120 + body * 70),
-    Math.round(40 + crest * 90),
-    Math.round(180 + crest * 60),
+    Math.round(55 + body * 35),
+    Math.round(55 + crest * 95),
+    Math.round(165 + crest * 55),
   ];
+}
+
+function domeColor(yNorm: number, sparkle: boolean): [number, number, number] {
+  return referenceDomeColor(yNorm, sparkle);
 }
 
 const STATE_PROFILE: Record<AuraState, MotionProfile> = {
@@ -252,19 +283,19 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
     if (!ctx) return;
 
     const isComposer = variant === "composer";
-    const dim = isComposer ? { w: 300, h: 140 } : { w: 104, h: 104 };
+    const dim = isComposer ? { w: 340, h: 158 } : { w: 104, h: 104 };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = dim.w * dpr;
     canvas.height = dim.h * dpr;
     ctx.scale(dpr, dpr);
 
     const cx = dim.w / 2;
-    const cy = isComposer ? dim.h - 2 : dim.h / 2;
-    const R = (isComposer ? dim.w : dim.w) * (isComposer ? 0.34 : 0.36);
+    const cy = isComposer ? dim.h - 1 : dim.h / 2;
+    const R = dim.w * (isComposer ? 0.38 : 0.36);
     const coreR = dim.w * (isComposer ? 0.22 : 0.24);
     const atmoR = dim.w * (isComposer ? 0.46 : 0.52);
-    const spherePts = makeSphereParticles(isComposer ? 920 : 820, isComposer);
-    const sprayPts = isComposer ? makeSprayParticles(140) : [];
+    const spherePts = isComposer ? makeGridDomeParticles(15, 30) : makeSphereParticles(820, false);
+    const sprayPts = isComposer ? makeSprayParticles(220) : [];
     const atmoPts = isComposer ? [] : makeAtmoParticles(150);
     let t = 0;
 
@@ -299,15 +330,15 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
 
       if (isComposer) {
         for (const p of sprayPts) {
-          const wobble = 0.08 * Math.sin(t * 1.6 + p.drift);
+          const wobble = 0.1 * Math.sin(t * 1.8 + p.drift);
           const px = cx + (p.x + wobble) * R * profile.scale;
-          const py = cy + (p.y + Math.sin(t * 0.7 + p.drift) * 0.06) * R * profile.scale;
-          if (py > cy + 2) continue;
-          const tw = 0.35 + 0.65 * Math.sin(t * 2.4 + p.drift);
-          const alpha = p.brightness * tw * (0.35 + profile.glow);
+          const py = cy + (p.y + Math.sin(t * 0.85 + p.drift) * 0.08) * R * profile.scale;
+          if (py > cy + 1) continue;
+          const tw = 0.4 + 0.6 * Math.sin(t * 2.6 + p.drift);
+          const alpha = p.brightness * tw * 0.72;
           ctx.beginPath();
-          ctx.arc(px, py, p.size, 0, TAU);
-          ctx.fillStyle = `rgba(0, 212, 245, ${alpha})`;
+          ctx.arc(px, py, p.size * 0.85, 0, TAU);
+          ctx.fillStyle = `rgba(0, 228, 255, ${alpha})`;
           ctx.fill();
         }
       } else {
@@ -347,12 +378,20 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
 
           const persp = 1 / (1 - z3d * 0.3);
           const radius = R * p.r * breathe * surfaceNoise * persp * profile.scale;
+          let px = cx + x3d * radius;
+          let py = cy - y3d * radius;
+          if (isComposer && y3d > 0.45) {
+            py +=
+              Math.sin(theta * 6 + t * 2.1 + p.noiseSeed) * 2.8 +
+              Math.cos(theta * 4 - t * 1.6 + p.noiseSeed * 1.4) * 2.1;
+          }
           return {
             p,
-            px: cx + x3d * radius,
-            py: cy - y3d * radius,
+            px,
+            py,
             y3d,
             z3d,
+            theta,
           };
         })
         .filter((item) => !isComposer || item.py <= cy + 1)
@@ -364,11 +403,11 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
         const twinkle =
           0.45 +
           0.55 * Math.sin(t * p.twinkleSpeed * profile.twinkle * activeSpeed + p.twinklePhase);
-        const alpha = (0.28 + depthFactor * p.brightness * 0.95) * twinkle;
+        const alpha = (isComposer ? 0.38 : 0.18) + depthFactor * p.brightness * (isComposer ? 0.82 : 0.95) * twinkle;
         const [cr, cg, cb] = isComposer
           ? domeColor(item.y3d, p.sparkle)
           : cyanForElevation(item.y3d);
-        const dotR = p.sizeBase * (0.28 + depthFactor * 0.72) * (isComposer ? 0.42 : 0.48);
+        const dotR = p.sizeBase * (0.28 + depthFactor * 0.72) * (isComposer ? 0.34 : 0.48);
 
         if (!isComposer && depthFactor > 0.48 && alpha > 0.1) {
           ctx.beginPath();
@@ -385,18 +424,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
 
       ctx.restore();
 
-      if (isComposer) {
-        const glowR = coreR * breathe * (1 + profile.stream * 0.2);
-        const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy - glowR * 0.35, glowR * 1.15);
-        coreGlow.addColorStop(0, `rgba(0, 224, 255, ${profile.glow * pulse * 0.95})`);
-        coreGlow.addColorStop(0.4, `rgba(0, 212, 245, ${profile.glow * pulse * 0.55})`);
-        coreGlow.addColorStop(0.75, `rgba(0, 180, 220, ${profile.glow * pulse * 0.18})`);
-        coreGlow.addColorStop(1, "rgba(0, 160, 200, 0)");
-        ctx.beginPath();
-        ctx.ellipse(cx, cy - glowR * 0.15, glowR * 1.05, glowR * 0.72, 0, 0, TAU);
-        ctx.fillStyle = coreGlow;
-        ctx.fill();
-      } else {
+      if (!isComposer) {
         const glowR = coreR * breathe * (1 + profile.stream * 0.25);
         const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
         coreGlow.addColorStop(0, `rgba(0, 224, 255, ${profile.glow * pulse * 1})`);
@@ -430,48 +458,20 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
   }, [variant]);
 
   const breatheSec = STATE_BREATHE_SEC[state];
-  const displaySize = variant === "composer" ? { w: 300, h: 140 } : { w: 104, h: 104 };
+  const displaySize = variant === "composer" ? { w: 340, h: 158 } : { w: 104, h: 104 };
 
   if (variant === "composer") {
     return (
-      <div
-        className="pointer-events-none relative flex justify-center"
-        style={{ width: displaySize.w, height: displaySize.h }}
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none block"
+        style={{
+          width: displaySize.w,
+          height: displaySize.h,
+          background: "transparent",
+        }}
         aria-hidden
-      >
-        <span
-          className="pointer-events-none absolute rounded-full"
-          style={{
-            left: "18%",
-            right: "18%",
-            bottom: "-4%",
-            height: "72%",
-            background:
-              "radial-gradient(ellipse 100% 100% at 50% 100%, rgba(0,224,255,0.32) 0%, rgba(0,212,245,0.16) 42%, rgba(0,180,220,0.05) 68%, transparent 100%)",
-            boxShadow:
-              "0 0 36px 14px rgba(0,212,245,0.22), 0 0 72px 28px rgba(0,212,245,0.08)",
-            animation: `axe-orb-breathe ${breatheSec}s ease-in-out infinite`,
-          }}
-        />
-        <span
-          className="pointer-events-none absolute inset-[-18%] rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle at 50% 88%, rgba(0,212,245,0.14) 0%, rgba(0,212,245,0.05) 38%, transparent 72%)",
-            animation: `axe-orb-glow ${breatheSec}s ease-in-out infinite`,
-          }}
-        />
-        <canvas
-          ref={canvasRef}
-          className="pointer-events-none relative z-[1] block"
-          style={{
-            width: displaySize.w,
-            height: displaySize.h,
-            background: "transparent",
-            filter: "drop-shadow(0 0 22px rgba(0, 212, 245, 0.45))",
-          }}
-        />
-      </div>
+      />
     );
   }
 
