@@ -8,22 +8,19 @@
  * disclaimer. Even after this, every BUY/SELL on the chart still asks for a
  * final confirm before going to MetaApi.
  *
- * The flag is per-device on purpose. See `liveTradingFlag.ts`.
+ * The flag is account-wide (server-persisted). Per-order confirm on the chart
+ * remains the last gate before any order leaves the app.
  */
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, ShieldCheck, ShieldOff, X } from "lucide-react";
-import {
-  ARM_WINDOW_MS,
-  REQUIRED_PHRASE,
-  useLiveTradingFlag,
-} from "@/lib/liveTrading/liveTradingFlag";
+import { REQUIRED_PHRASE, useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 
 export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }) {
   const live = useLiveTradingFlag(initialEnabled);
   const [open, setOpen] = useState(false);
   const [riskAck, setRiskAck] = useState(false);
   const [responsibilityAck, setResponsibilityAck] = useState(false);
-  const [autoExecAck, setAutoExecAck] = useState(false);
+  const [deviceAck, setDeviceAck] = useState(false);
   const [phrase, setPhrase] = useState("");
   const [confirmDisable, setConfirmDisable] = useState(false);
 
@@ -31,15 +28,13 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
     if (!open) {
       setRiskAck(false);
       setResponsibilityAck(false);
-      setAutoExecAck(false);
+      setDeviceAck(false);
       setPhrase("");
     }
   }, [open]);
 
   const phraseMatches = phrase.trim() === REQUIRED_PHRASE;
-  const canEnable = riskAck && responsibilityAck && autoExecAck && phraseMatches;
-
-  const armWindowMin = Math.round(ARM_WINDOW_MS / 60_000);
+  const canEnable = riskAck && responsibilityAck && deviceAck && phraseMatches;
 
   return (
     <section className="rounded-2xl border border-white/[0.07] bg-[#0c0d0e]/90 p-4">
@@ -50,8 +45,8 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
           </h2>
           <p className="mt-1 text-xs text-tos-muted">
             Off by default. Activation is account-wide (synced across your devices) and stays on
-            until you turn it off. Each device still starts disarmed and every BUY / SELL asks for
-            a final tap. Demo paper trading always works without this.
+            until you turn it off. Every BUY / SELL still asks for a final 2-tap confirm on the
+            chart. Demo paper trading always works without this.
           </p>
         </div>
         <span
@@ -65,7 +60,7 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
         </span>
       </header>
 
-        {!live.enabled ? (
+      {!live.enabled ? (
         <div className="mt-4 space-y-3">
           <div className="flex items-start gap-2 rounded-xl border border-amber-400/22 bg-amber-400/[0.05] px-3 py-2.5 text-[11.5px] leading-relaxed text-amber-200/90">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
@@ -91,41 +86,8 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
             <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden />
             <p>
               Live trading is enabled on your account. BUY / SELL on a connected MT5 account opens a
-              final 2‑tap confirm before any order leaves the app. The arming window below is
-              per‑device — each new device starts disarmed even when this stays on.
+              final 2-tap confirm before any order leaves the app.
             </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[11px] text-tos-muted">
-            <div>
-              <p className="font-mono text-tos-text">
-                Arming window:{" "}
-                <span className="font-semibold">{armWindowMin} min</span>{" "}
-                <span className="text-tos-dim">
-                  ({live.armed ? formatRemaining(live.armedUntilMs) : "not armed"})
-                </span>
-              </p>
-              <p className="text-[10.5px] text-tos-dim">
-                Each BUY/SELL still asks for a final confirm tap.
-              </p>
-            </div>
-            {live.armed ? (
-              <button
-                type="button"
-                onClick={live.disarm}
-                className="rounded-full border border-white/12 bg-white/[0.04] px-3 py-1 text-[10.5px] font-semibold text-tos-muted hover:bg-white/[0.08] hover:text-tos-text"
-              >
-                Disarm
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={live.arm}
-                className="rounded-full border border-white/[0.10] bg-white/[0.05] px-3 py-1 text-[10.5px] font-semibold text-white/90 hover:bg-white/[0.08]"
-              >
-                Arm for {armWindowMin}m
-              </button>
-            )}
           </div>
 
           <button
@@ -146,8 +108,8 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
           setRiskAck={setRiskAck}
           responsibilityAck={responsibilityAck}
           setResponsibilityAck={setResponsibilityAck}
-          autoExecAck={autoExecAck}
-          setAutoExecAck={setAutoExecAck}
+          deviceAck={deviceAck}
+          setDeviceAck={setDeviceAck}
           phrase={phrase}
           setPhrase={setPhrase}
           phraseMatches={phraseMatches}
@@ -156,10 +118,8 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
           onClose={() => setOpen(false)}
           onEnable={async () => {
             await live.enable();
-            live.arm();
             setOpen(false);
           }}
-          armWindowMin={armWindowMin}
         />
       ) : null}
 
@@ -177,22 +137,13 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
   );
 }
 
-function formatRemaining(epochMs: number): string {
-  const ms = Math.max(0, epochMs - Date.now());
-  const minutes = Math.floor(ms / 60_000);
-  const seconds = Math.floor((ms % 60_000) / 1_000);
-  if (minutes <= 0 && seconds <= 0) return "expired";
-  if (minutes <= 0) return `${seconds}s left`;
-  return `${minutes}m left`;
-}
-
 function ActivateModal({
   riskAck,
   setRiskAck,
   responsibilityAck,
   setResponsibilityAck,
-  autoExecAck,
-  setAutoExecAck,
+  deviceAck,
+  setDeviceAck,
   phrase,
   setPhrase,
   phraseMatches,
@@ -200,14 +151,13 @@ function ActivateModal({
   pending,
   onClose,
   onEnable,
-  armWindowMin,
 }: {
   riskAck: boolean;
   setRiskAck: (b: boolean) => void;
   responsibilityAck: boolean;
   setResponsibilityAck: (b: boolean) => void;
-  autoExecAck: boolean;
-  setAutoExecAck: (b: boolean) => void;
+  deviceAck: boolean;
+  setDeviceAck: (b: boolean) => void;
   phrase: string;
   setPhrase: (s: string) => void;
   phraseMatches: boolean;
@@ -215,7 +165,6 @@ function ActivateModal({
   pending: boolean;
   onClose: () => void;
   onEnable: () => void | Promise<void>;
-  armWindowMin: number;
 }) {
   return (
     <div
@@ -260,13 +209,13 @@ function ActivateModal({
             value={responsibilityAck}
             onChange={setResponsibilityAck}
             label="I am solely responsible for every order I send."
-            sub="AXE does not auto‑execute. Every BUY / SELL is a deliberate action by me, not by the assistant."
+            sub="AXE does not auto-execute. Every BUY / SELL is a deliberate action by me, not by the assistant."
           />
           <Check
-            value={autoExecAck}
-            onChange={setAutoExecAck}
+            value={deviceAck}
+            onChange={setDeviceAck}
             label="I will keep this device secure."
-            sub={`Anyone with this unlocked device could place orders within the ${armWindowMin}‑minute arming window. I will lock the screen when I'm done.`}
+            sub="Anyone with this unlocked device could place orders after I enable live trading. I will lock the screen when I'm done."
           />
         </ul>
 

@@ -9,6 +9,35 @@ export type ActiveMetaApiCloud = {
   metaApiRegion: string | null;
 };
 
+/** MetaApi cloud credentials for a specific broker account row. */
+export async function getMetaApiCloudAccountById(
+  supabase: SupabaseClient,
+  userId: string,
+  brokerAccountId: string,
+): Promise<ActiveMetaApiCloud | null> {
+  const { data: row } = await supabase
+    .from("user_broker_accounts")
+    .select("id,connection_method,external_connection_id,metadata")
+    .eq("user_id", userId)
+    .eq("id", brokerAccountId)
+    .maybeSingle();
+
+  if (!row?.external_connection_id) return null;
+  if (row.connection_method !== "cloud_mt5") return null;
+
+  const meta =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
+
+  return {
+    brokerAccountId: row.id as string,
+    metaApiAccountId: row.external_connection_id as string,
+    metaApiRegion: region,
+  };
+}
+
 /** Active workspace account when it is a linked MetaApi cloud row. */
 export async function getActiveMetaApiCloudAccount(
   supabase: SupabaseClient,

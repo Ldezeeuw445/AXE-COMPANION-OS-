@@ -18,8 +18,11 @@ export default async function HistoryPage({ searchParams }: PageProps) {
       activeAccountId={data.activeAccountId}
       selectedAccountId={data.selectedAccountId}
       trades={data.trades}
+      orders={data.orders}
+      deals={data.deals}
       summary={data.summary}
       filters={data.filters}
+      historyHint={data.historyHint}
       loadError={data.error}
     />
   );

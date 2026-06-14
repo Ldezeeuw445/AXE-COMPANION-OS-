@@ -149,12 +149,14 @@ export function SwipeContentWrapper({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden"
+      className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-x-hidden ${
+        isChartPage ? "overflow-hidden overscroll-none" : ""
+      }`}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onTouchCancel={onTouchCancel}
-      style={{ touchAction: isChartPage ? "auto" : "pan-y" }}
+      style={{ touchAction: isChartPage ? "none" : "pan-y" }}
     >
       {children}
     </div>

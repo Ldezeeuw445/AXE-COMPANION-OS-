@@ -322,6 +322,7 @@ function ConnectWizard({ defaultRegion }: { defaultRegion: string }) {
   const [region, setRegion] = useState<"london" | "new-york" | "singapore">(
     isValidRegion(defaultRegion) ? defaultRegion : "london",
   );
+  const [passwordType, setPasswordType] = useState<"investor" | "master">("investor");
   const [state, action] = useActionState(createCloudMt5ConnectionAction, undefined);
 
   // After successful creation, go to step 3
@@ -449,6 +450,39 @@ function ConnectWizard({ defaultRegion }: { defaultRegion: string }) {
           {/* Hidden fields for the action */}
           <input type="hidden" name="mt5Server" value={server} />
           <input type="hidden" name="region" value={region} />
+          <input type="hidden" name="passwordType" value={passwordType} />
+
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
+              Password type
+            </label>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPasswordType("investor")}
+                className={`rounded-xl border px-2 py-2.5 text-left transition-all ${
+                  passwordType === "investor"
+                    ? "border-cyan-400/25 bg-cyan-400/10 text-cyan-100"
+                    : "border-white/[0.06] bg-white/[0.02] text-white/45 hover:border-white/[0.10]"
+                }`}
+              >
+                <span className="block text-[11px] font-semibold">Investor</span>
+                <span className="block text-[9px] opacity-70">Read-only · recommended</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPasswordType("master")}
+                className={`rounded-xl border px-2 py-2.5 text-left transition-all ${
+                  passwordType === "master"
+                    ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                    : "border-white/[0.06] bg-white/[0.02] text-white/45 hover:border-white/[0.10]"
+                }`}
+              >
+                <span className="block text-[11px] font-semibold">Master</span>
+                <span className="block text-[9px] opacity-70">Full trading access</span>
+              </button>
+            </div>
+          </div>
 
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30" htmlFor="wiz-label">
@@ -479,11 +513,11 @@ function ConnectWizard({ defaultRegion }: { defaultRegion: string }) {
 
           <div>
             <label className="text-[10px] font-semibold uppercase tracking-wider text-white/30" htmlFor="wiz-password">
-              Investor (read-only) password
+              {passwordType === "investor" ? "Investor (read-only) password" : "Master password"}
             </label>
             <input
               id="wiz-password"
-              name="investorPassword"
+              name="mt5Password"
               type="password"
               required
               autoComplete="new-password"
@@ -491,16 +525,29 @@ function ConnectWizard({ defaultRegion }: { defaultRegion: string }) {
             />
             <p className="mt-1 text-[10px] text-white/25">
               Sent once over TLS. Never stored in your database.
+              {passwordType === "master"
+                ? " Master password allows live order execution when Live Trading is enabled."
+                : " Investor password is read-only — enable Live Trading in Settings only if your broker allows it."}
             </p>
           </div>
 
-          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-[11px] text-white/50">
-            <input type="checkbox" name="readOnlyConfirm" required className="mt-0.5 rounded border-white/20" />
-            <span>
-              I confirm this is my <strong className="text-white/70">read-only investor</strong> password.
-              AXE won&apos;t place trades unless I explicitly enable Live Trading.
-            </span>
-          </label>
+          {passwordType === "investor" ? (
+            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-[11px] text-white/50">
+              <input type="checkbox" name="readOnlyConfirm" required className="mt-0.5 rounded border-white/20" />
+              <span>
+                I confirm this is my <strong className="text-white/70">read-only investor</strong> password.
+                AXE won&apos;t place trades unless I explicitly enable Live Trading in Settings.
+              </span>
+            </label>
+          ) : (
+            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] p-3 text-[11px] text-amber-100/80">
+              <input type="checkbox" name="masterConfirm" required className="mt-0.5 rounded border-white/20" />
+              <span>
+                I confirm this is my <strong className="text-amber-50">master (trading) password</strong> and I
+                understand AXE can send real orders when Live Trading is enabled. I accept full responsibility.
+              </span>
+            </label>
+          )}
 
           {err && (
             <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2.5 text-[11px] text-rose-200/90">
