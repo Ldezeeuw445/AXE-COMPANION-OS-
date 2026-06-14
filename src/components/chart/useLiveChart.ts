@@ -245,7 +245,7 @@ export function useLiveChart({
       if (cancelled || !eventMatchesSubscription(evt)) return;
       switch (evt.type) {
         case "ready":
-          setUi(hasStableData ? (transportRef.current === "ws" ? "connected" : "delayed_polling") : "connecting");
+          setUi(hasStableData ? "connected" : "connecting");
           return;
         case "tick": {
           const mid = evt.price ?? evt.bid ?? evt.ask ?? null;
@@ -255,19 +255,19 @@ export function useLiveChart({
             ask: evt.ask ?? null,
             time: evt.timestamp ?? null,
           });
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          markHealthy("connected");
           return;
         }
         case "candle_update":
           handlersRef.current.onCandleUpdate?.(evt.candle);
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          markHealthy("connected");
           return;
         case "positions_update":
           handlersRef.current.onPositions?.({
             total: typeof evt.total === "number" ? evt.total : 0,
             onSymbol: Array.isArray(evt.onSymbol) ? evt.onSymbol : [],
           });
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          markHealthy("connected");
           return;
         case "orders_update":
           handlersRef.current.onOrders?.({
@@ -278,12 +278,12 @@ export function useLiveChart({
         case "live_status":
           if (evt.status === "live") {
             if (hasStableData) {
-              markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+              markHealthy("connected");
             } else {
               setUi("connecting");
             }
           } else if (evt.status === "delayed") {
-            markHealthy("stale");
+            markHealthy("delayed_polling");
             setReasonSafe(evt.reason ?? "Live stream is delayed; showing the latest stable broker state.");
           } else if (evt.status === "reconnecting") {
             setReasonSafe(evt.reason ?? "Reconnecting to live broker data.");
@@ -300,7 +300,7 @@ export function useLiveChart({
           // High-impact calendar/news event pushed by the backend.
           // The UI can subscribe via onMarketAlert in a future pass;
           // for now we treat it as a health signal.
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          markHealthy("connected");
           return;
         case "heartbeat":
           if (!hasStableData) setUi("connecting");
@@ -396,7 +396,7 @@ export function useLiveChart({
       es.onopen = () => {
         opened = true;
         backoff = 1500;
-        setUi(hasStableData ? "delayed_polling" : "connecting");
+        setUi(hasStableData ? "connected" : "connecting");
       };
       es.onmessage = (ev) => {
         if (cancelled) return;

@@ -314,7 +314,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   }
 
   return (
-    <div className="mt-auto shrink-0 px-1 pb-2 pt-2">
+    <div className="mt-auto shrink-0 px-1 pb-1 pt-0">
       {/* ── Image preview ────────────────────────────────────────────── */}
       {image ? (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">

@@ -22,11 +22,13 @@ export function ContentShell({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col px-4 pt-0 md:px-6 md:pt-[max(0.75rem,env(safe-area-inset-top))] ${
+      className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col px-4 pt-0 tos-shell-desktop-content ${
+        flush ? "tos-flush-route" : ""
+      } ${
         flush
           ? isChartRoute
-            ? "overflow-hidden pb-[calc(var(--tos-nav-offset)-0.24rem)] md:pb-0"
-            : "overflow-hidden pb-[var(--tos-nav-offset)] md:pb-0"
+            ? "overflow-hidden pb-[calc(var(--tos-nav-offset)-0.24rem)]"
+            : "overflow-hidden pb-[var(--tos-nav-offset)]"
           : "tos-app-content overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
       }`}
     >

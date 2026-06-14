@@ -229,8 +229,15 @@ function statusPillCopy(
     };
   }
   if (live === "delayed_polling") {
+    if (hasFreshLiveData) {
+      return {
+        label: "AXE Live",
+        className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95 shadow-[0_0_22px_-16px_rgba(52,211,153,0.9)]",
+        dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.75)]",
+      };
+    }
     return {
-      label: transport === "sse" ? "SSE fallback" : "Delayed",
+      label: "Delayed",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85",
     };
@@ -893,18 +900,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   /* ── Landscape fullscreen mode ───────────────────────────────── */
   const [isFullscreen, setIsFullscreen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
+  const userDismissedLandscapeRef = useRef(false);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => {
       const next = !prev;
+      if (!next) userDismissedLandscapeRef.current = true;
       if (next) {
-        // Try to lock orientation to landscape
         try {
           const s = screen as unknown as { orientation?: { lock?: (o: string) => Promise<void> } };
           s.orientation?.lock?.("landscape-primary")?.catch(() => {});
         } catch { /* not supported */ }
       } else {
-        // Unlock orientation
         try {
           const s = screen as unknown as { orientation?: { unlock?: () => void } };
           s.orientation?.unlock?.();
@@ -914,19 +921,30 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     });
   }, []);
 
-  // Auto-enter fullscreen when rotating to landscape on mobile,
-  // auto-exit when rotating back to portrait.
+  // Auto-enter immersive chart on phone landscape; restore portrait layout on exit.
   useEffect(() => {
-    // Only on mobile-width devices
-    if (typeof window === "undefined" || window.innerWidth > 1024) return;
-    function handleOrientationChange() {
-      const isLandscape = window.matchMedia("(orientation: landscape)").matches;
-      setIsFullscreen(isLandscape);
+    if (typeof window === "undefined") return;
+    const phoneLandscapeMql = window.matchMedia("(orientation: landscape) and (max-height: 520px)");
+
+    function syncLandscape() {
+      if (phoneLandscapeMql.matches && !userDismissedLandscapeRef.current) {
+        setIsFullscreen(true);
+      } else if (!phoneLandscapeMql.matches) {
+        userDismissedLandscapeRef.current = false;
+        setIsFullscreen(false);
+      }
     }
-    const mql = window.matchMedia("(orientation: landscape)");
-    mql.addEventListener("change", handleOrientationChange);
-    return () => mql.removeEventListener("change", handleOrientationChange);
+
+    syncLandscape();
+    phoneLandscapeMql.addEventListener("change", syncLandscape);
+    return () => phoneLandscapeMql.removeEventListener("change", syncLandscape);
   }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("chart-landscape-active", isFullscreen);
+    return () => document.body.classList.remove("chart-landscape-active");
+  }, [isFullscreen]);
 
   // Escape key exits fullscreen
   useEffect(() => {
@@ -1876,7 +1894,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const liveFresh =
     freshestRuntimeAt != null &&
     Date.now() - Date.parse(freshestRuntimeAt) < 30_000 &&
-    (liveStatus === "connected" || liveStatus === "live_stream");
+    (liveStatus === "connected" || liveStatus === "live_stream" || liveStatus === "delayed_polling");
   const statusPill = statusPillCopy(
     liveStatus,
     liveTransport,
@@ -1895,7 +1913,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       return data.candles.length > 0 ? "Waiting for first live tick" : "Opening AXE Live";
     }
     if (liveStatus === "delayed_polling") {
-      return liveAge ? `Poll updated ${liveAge}` : "SSE fallback active";
+      return liveAge ? `Updated ${liveAge}` : "Broker feed delayed";
     }
     if (liveStatus === "reconnecting") {
       return reconnectAttempt > 0 ? `Recovering feed · attempt ${reconnectAttempt}` : "Recovering feed";

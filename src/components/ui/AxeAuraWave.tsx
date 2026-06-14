@@ -44,7 +44,7 @@ function makeSphereParticles(count: number): SphereParticle[] {
   const pts: SphereParticle[] = [];
   for (let i = 0; i < count; i++) {
     const shell = Math.random();
-    const r = shell < 0.35 ? 0.62 + Math.random() * 0.22 : 0.72 + Math.random() * 0.34;
+    const r = shell < 0.28 ? 0.58 + Math.random() * 0.18 : 0.78 + Math.random() * 0.42;
     pts.push({
       phi: Math.acos(2 * Math.random() - 1),
       theta: TAU * Math.random(),
@@ -67,11 +67,11 @@ function makeAtmoParticles(count: number): AtmoParticle[] {
   for (let i = 0; i < count; i++) {
     pts.push({
       angle: TAU * Math.random(),
-      radius: 0.48 + Math.random() * 0.55,
-      speed: 0.006 + Math.random() * 0.022,
-      brightness: 0.06 + Math.random() * 0.2,
+      radius: 0.62 + Math.random() * 0.48,
+      speed: 0.004 + Math.random() * 0.016,
+      brightness: 0.05 + Math.random() * 0.16,
       drift: TAU * Math.random(),
-      sizeBase: 0.18 + Math.random() * 0.42,
+      sizeBase: 0.14 + Math.random() * 0.36,
     });
   }
   return pts;
@@ -119,7 +119,7 @@ function lerpProfile(current: MotionProfile, target: MotionProfile, t: number): 
   };
 }
 
-export function AxeAuraWave() {
+export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer" }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const stateRef = useRef<AuraState>("idle");
@@ -192,7 +192,7 @@ export function AxeAuraWave() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dim = 104;
+    const dim = variant === "composer" ? 112 : 104;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = dim * dpr;
     canvas.height = dim * dpr;
@@ -200,11 +200,11 @@ export function AxeAuraWave() {
 
     const cx = dim / 2;
     const cy = dim / 2;
-    const R = dim * 0.36;
-    const coreR = dim * 0.24;
-    const atmoR = dim * 0.52;
-    const spherePts = makeSphereParticles(820);
-    const atmoPts = makeAtmoParticles(150);
+    const R = dim * (variant === "composer" ? 0.38 : 0.36);
+    const coreR = dim * (variant === "composer" ? 0.26 : 0.24);
+    const atmoR = dim * (variant === "composer" ? 0.58 : 0.52);
+    const spherePts = makeSphereParticles(variant === "composer" ? 760 : 820);
+    const atmoPts = makeAtmoParticles(variant === "composer" ? 120 : 150);
     let t = 0;
 
     function draw() {
@@ -335,14 +335,56 @@ export function AxeAuraWave() {
 
     frameRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frameRef.current);
-  }, []);
+  }, [variant]);
 
   const breatheSec = STATE_BREATHE_SEC[state];
+  const displaySize = variant === "composer" ? 112 : 104;
+  const clipHeight = variant === "composer" ? 56 : displaySize;
+
+  if (variant === "composer") {
+    return (
+      <div
+        className="pointer-events-none relative mx-auto flex w-[112px] items-end justify-center overflow-hidden"
+        style={{ height: clipHeight }}
+        aria-hidden
+      >
+        <div className="relative translate-y-[50%]" style={{ width: displaySize, height: displaySize }}>
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0"
+            style={{ width: displaySize, height: displaySize }}
+          />
+          <span
+            className="pointer-events-none absolute rounded-full transition-[animation-duration] duration-500"
+            style={{
+              top: "26%",
+              left: "26%",
+              width: "48%",
+              height: "48%",
+              background:
+                "radial-gradient(circle at 38% 32%, rgba(0,224,255,0.24) 0%, rgba(0,212,245,0.14) 35%, rgba(0,180,220,0.07) 62%, transparent 100%)",
+              boxShadow:
+                "0 0 44px 16px rgba(0,212,245,0.24), 0 0 88px 28px rgba(0,212,245,0.1), inset 0 -4px 10px rgba(0,100,140,0.4)",
+              animation: `axe-orb-breathe ${breatheSec}s ease-in-out infinite`,
+            }}
+          />
+          <span
+            className="pointer-events-none absolute inset-[-32%] rounded-full transition-[animation-duration] duration-500"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(0,212,245,0.16) 0%, rgba(0,212,245,0.06) 42%, transparent 72%)",
+              animation: `axe-orb-glow ${breatheSec}s ease-in-out infinite`,
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pointer-events-none mb-0.5 flex h-16 items-center justify-center" aria-hidden>
-      <div className="relative" style={{ width: 104, height: 104 }}>
-        <canvas ref={canvasRef} className="absolute inset-0" style={{ width: 104, height: 104 }} />
+      <div className="relative" style={{ width: displaySize, height: displaySize }}>
+        <canvas ref={canvasRef} className="absolute inset-0" style={{ width: displaySize, height: displaySize }} />
         <span
           className="pointer-events-none absolute rounded-full transition-[animation-duration] duration-500"
           style={{

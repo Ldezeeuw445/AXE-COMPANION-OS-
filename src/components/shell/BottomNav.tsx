@@ -59,7 +59,7 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className="tos-nav-pill pointer-events-auto md:hidden"
+      className="tos-nav-pill tos-shell-mobile-nav pointer-events-auto"
       style={{
         background: "linear-gradient(180deg, rgba(22,22,24,0.86) 0%, rgba(12,12,14,0.9) 100%)",
         borderRadius: 22,

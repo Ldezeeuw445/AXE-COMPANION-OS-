@@ -303,12 +303,55 @@ body {
   --tos-nav-label-size: 6px;
 }
 
-/* ── Landscape adaptation ──────────────────────────────────────── */
+  /* ── Landscape adaptation ──────────────────────────────────────── */
 @media (orientation: landscape) {
   .tos-nav-pill {
     width: min(38rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
   }
+}
+
+/* Phone landscape keeps the mobile shell — wide-but-short viewports
+   (rotated phones) must not trigger the desktop rail / hide bottom nav. */
+@media (min-width: 768px) and (min-height: 520px) {
+  .tos-shell-mobile-chrome {
+    display: none !important;
+  }
+  .tos-shell-desktop-rail {
+    display: flex !important;
+  }
+  .tos-shell-mobile-nav {
+    display: none !important;
+  }
+  .tos-shell-desktop-layout {
+    padding-left: 4.25rem;
+    flex-direction: row;
+  }
+  .tos-shell-desktop-content {
+    padding-left: 1.5rem;
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .tos-shell-desktop-content.tos-flush-route {
+    padding-bottom: 0;
+  }
+}
+
+@media not all and (min-width: 768px) and (min-height: 520px) {
+  .tos-shell-desktop-rail {
+    display: none !important;
+  }
+}
+
+/* Chart immersive landscape — hide chrome while the chart owns the viewport */
+body.chart-landscape-active .tos-shell-mobile-nav,
+body.chart-landscape-active .tos-shell-mobile-chrome {
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.chart-landscape-active .tos-shell-desktop-rail {
+  display: none !important;
 }
 
 @media (display-mode: standalone) {

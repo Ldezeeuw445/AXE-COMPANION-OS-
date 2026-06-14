@@ -120,7 +120,7 @@ export function AppNavigation() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-40 flex min-h-[var(--tos-topbar-h)] shrink-0 items-center justify-between border-b border-white/[0.05] bg-[var(--tos-bg-base)]/88 px-2.5 pt-[env(safe-area-inset-top)] backdrop-blur-xl md:hidden">
+      <div className="tos-shell-mobile-chrome sticky top-0 z-40 flex min-h-[var(--tos-topbar-h)] shrink-0 items-center justify-between border-b border-white/[0.05] bg-[var(--tos-bg-base)]/88 px-2.5 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         {/* Left — hamburger */}
         <button
           type="button"
@@ -150,7 +150,7 @@ export function AppNavigation() {
 
       {/* Desktop rail */}
       <aside
-        className="fixed bottom-0 left-0 top-0 z-40 hidden w-[4.25rem] flex-col border-r border-white/[0.06] bg-[var(--tos-bg-base)]/80 py-3 backdrop-blur-xl md:flex"
+        className="tos-shell-desktop-rail fixed bottom-0 left-0 top-0 z-40 hidden w-[4.25rem] flex-col border-r border-white/[0.06] bg-[var(--tos-bg-base)]/80 py-3 backdrop-blur-xl"
         aria-label="Primary"
       >
         <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -162,7 +162,7 @@ export function AppNavigation() {
 
       {/* Mobile drawer */}
       <div
-        className={`fixed inset-0 z-[60] md:hidden ${open ? "pointer-events-auto" : "pointer-events-none"}`}
+        className={`fixed inset-0 z-[60] tos-shell-mobile-chrome ${open ? "pointer-events-auto" : "pointer-events-none"}`}
         aria-hidden={!open}
       >
         <button

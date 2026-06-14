@@ -339,7 +339,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[8.75rem] pr-1 md:pb-2"
+        className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[7.5rem] pr-1 md:pb-2"
       >
         {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
         {messages.map((m) => (
@@ -436,7 +436,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
           type="button"
           onClick={jumpToLatest}
           aria-label="Jump to latest message"
-          className="pointer-events-auto absolute bottom-[8.1rem] right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/[0.10] bg-[#060608]/90 px-3 py-1.5 text-[10.5px] font-semibold text-white/85 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur transition-colors hover:bg-white/[0.08] md:bottom-3"
+          className="pointer-events-auto absolute bottom-[6.8rem] right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/[0.10] bg-[#060608]/90 px-3 py-1.5 text-[10.5px] font-semibold text-white/85 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.6)] backdrop-blur transition-colors hover:bg-white/[0.08] md:bottom-3"
         >
           <ArrowDown className="h-3 w-3" />
           Jump to latest
