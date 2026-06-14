@@ -2668,19 +2668,22 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       ref={chartFrameRef}
       className={`tos-ambient-glow relative flex min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden overscroll-none ${
         isFullscreen
-          ? "fixed inset-0 z-[9999]"
+          ? "chart-immersive-shell fixed inset-0 z-[9999]"
           : "flex-1"
       }`}
       style={isFullscreen ? {
         paddingTop: "env(safe-area-inset-top, 0px)",
         paddingLeft: "env(safe-area-inset-left, 0px)",
         paddingRight: "env(safe-area-inset-right, 0px)",
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
-        width: "100dvw",
-        height: "100dvh",
+        boxSizing: "border-box",
         background: "#000",
       } : undefined}
     >
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+          isFullscreen ? "chart-immersive-main" : ""
+        }`}
+      >
       <LiveStatusReporter
         liveCount={headerSeverity === "fresh" ? 1 : 0}
         totalCount={1}
@@ -2757,6 +2760,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           onPointClick={handlePointClick}
           themeKey={chartThemeKey}
           gridStyle={chartGridStyle}
+          layoutInsetTop={isFullscreen ? 92 : 0}
+          layoutInsetBottom={isFullscreen ? 6 : 0}
+          compactLayout={isFullscreen}
         />
 
         {/* Left-side position labels (entry / SL / TP) — drag SL/TP to modify */}
@@ -3637,12 +3643,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : null}
       </div>
+      </div>
 
-      {/* Indicator panes: each one is its own bounded box, so the chart can
-          never bleed into the volume/RSI area and vice versa. They share the
-          main chart's time scale via canvasRef.timeToCoordinate(...). */}
-      {/* Indicator panes rendered in user-configured order */}
-      {(() => {
+      {/* Indicator panes hidden in landscape immersive — keeps room for dates + execution bar */}
+      {!isFullscreen
+        ? (() => {
         const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m]);
         const multiPane = enabledPanesList.length > 1;
         return enabledPanesList.map((mode, idx) => (
@@ -3659,11 +3664,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             <IndicatorPane mode={mode} candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
           </ResizablePane>
         ));
-      })()}
+      })()
+        : null}
 
       {/* ─── MT5-style execution bar ─── */}
       {oneClickVisible ? (
-      <div className="shrink-0" style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}>
+      <div
+        className={`shrink-0 ${isFullscreen ? "chart-immersive-exec" : ""}`}
+        style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}
+      >
         {executionMode === "pending" ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
           <div className="flex h-[2.75rem] items-center gap-0 px-0">

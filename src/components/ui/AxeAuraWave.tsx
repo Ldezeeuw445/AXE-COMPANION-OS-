@@ -252,7 +252,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
     if (!ctx) return;
 
     const isComposer = variant === "composer";
-    const dim = isComposer ? { w: 260, h: 118 } : { w: 104, h: 104 };
+    const dim = isComposer ? { w: 280, h: 128 } : { w: 104, h: 104 };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = dim.w * dpr;
     canvas.height = dim.h * dpr;
@@ -364,7 +364,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
         const twinkle =
           0.45 +
           0.55 * Math.sin(t * p.twinkleSpeed * profile.twinkle * activeSpeed + p.twinklePhase);
-        const alpha = (0.12 + depthFactor * p.brightness * 0.92) * twinkle;
+        const alpha = (0.18 + depthFactor * p.brightness * 0.95) * twinkle;
         const [cr, cg, cb] = isComposer
           ? domeColor(item.y3d, p.sparkle)
           : cyanForElevation(item.y3d);
@@ -419,14 +419,19 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
   }, [variant]);
 
   const breatheSec = STATE_BREATHE_SEC[state];
-  const displaySize = variant === "composer" ? { w: 260, h: 118 } : { w: 104, h: 104 };
+  const displaySize = variant === "composer" ? { w: 280, h: 128 } : { w: 104, h: 104 };
 
   if (variant === "composer") {
     return (
       <canvas
         ref={canvasRef}
         className="pointer-events-none block"
-        style={{ width: displaySize.w, height: displaySize.h, background: "transparent" }}
+        style={{
+          width: displaySize.w,
+          height: displaySize.h,
+          background: "transparent",
+          filter: "drop-shadow(0 0 18px rgba(0, 212, 245, 0.35))",
+        }}
         aria-hidden
       />
     );

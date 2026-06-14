@@ -52,13 +52,13 @@ export default async function ChatPage() {
   const totalCount = 2;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none">
+    <div className="flex min-h-0 flex-1 flex-col overscroll-none">
       <LiveStatusReporter
         liveCount={liveCount}
         totalCount={totalCount}
         label={`Chat · ${operatorName ?? "AXE"}`}
       />
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
         {CHAT_USES_MOCK_DATA ? (
           <p className="shrink-0 border-b border-white/[0.08] bg-gradient-to-r from-tos-gold-soft/25 via-tos-warm-soft/20 to-tos-gold-soft/25 px-4 py-2.5 text-center text-[11px] text-tos-muted">
             You&apos;re signed in, but this thread is still{" "}
@@ -68,10 +68,10 @@ export default async function ChatPage() {
         ) : null}
         <PinnedContext text={conversation.pinnedContext} />
         <ChatMessageList messages={messages} />
-        <ChatComposerDock>
-          <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
-        </ChatComposerDock>
       </div>
+      <ChatComposerDock>
+        <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
+      </ChatComposerDock>
     </div>
   );
 }

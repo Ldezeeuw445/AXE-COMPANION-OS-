@@ -46,6 +46,12 @@ type Props = {
   themeKey?: ChartThemeKey;
   /** "grid" shows gridlines, "solid" hides them. Defaults to "grid". */
   gridStyle?: "grid" | "solid";
+  /** Reserve top space (e.g. mobile chart toolbar in landscape). */
+  layoutInsetTop?: number;
+  /** Extra bottom inset inside the chart frame for time-axis labels. */
+  layoutInsetBottom?: number;
+  /** Tighter margins for short landscape viewports. */
+  compactLayout?: boolean;
 };
 
 export type ChartCanvasHandle = {
@@ -169,7 +175,21 @@ function unixTimeToLogical(timeSec: number, times: number[], stepSec: number): n
 }
 
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
-  { candles, overlays, pendingOrders = [], symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick, themeKey, gridStyle = "grid" },
+  {
+    candles,
+    overlays,
+    pendingOrders = [],
+    symbol,
+    annotations = [],
+    drawingMode = null,
+    navigationLocked = false,
+    onPointClick,
+    themeKey,
+    gridStyle = "grid",
+    layoutInsetTop = 0,
+    layoutInsetBottom = 0,
+    compactLayout = false,
+  },
   ref,
 ) {
   const theme = getChartTheme(themeKey);
@@ -216,7 +236,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       rightPriceScale: {
         borderVisible: true,
         borderColor: theme.axisSeparator,
-        scaleMargins: { top: 0.08, bottom: 0.18 },
+        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.24 : 0.18 },
         textColor: theme.textColor,
       },
       timeScale: {
@@ -226,7 +246,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         rightOffset: 4,
         barSpacing: 6,
         timeVisible: true,
-        minimumHeight: 26,
+        minimumHeight: compactLayout ? 32 : 26,
       },
       autoSize: true,
       handleScroll: {
@@ -351,6 +371,17 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       lastBarRef.current = null;
     };
   }, [candles, symbol]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({
+      rightPriceScale: {
+        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.24 : 0.18 },
+      },
+      timeScale: { minimumHeight: compactLayout ? 32 : 26 },
+    });
+  }, [compactLayout]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -701,20 +732,28 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     [],
   );
 
+  const insetStyle = {
+    top: layoutInsetTop,
+    bottom: layoutInsetBottom,
+    left: 0,
+    right: 0,
+  };
+
   return (
     <>
       {/* Flat terminal base: keep the chart feeling native, not like a floating card. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ background: theme.chartCanvasBackground }}
+        className="pointer-events-none absolute"
+        style={{ ...insetStyle, background: theme.chartCanvasBackground }}
       />
 
       {/* Chart canvas itself — transparent so the bg blend shows through */}
       <div
         ref={hostRef}
-        className="absolute inset-0 h-full w-full"
+        className="absolute h-full w-full"
         style={{
+          ...insetStyle,
           cursor: drawingMode ? "crosshair" : undefined,
           userSelect: "none",
           WebkitUserSelect: "none",
@@ -725,8 +764,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ boxShadow: theme.frameGlow }}
+        className="pointer-events-none absolute"
+        style={{ ...insetStyle, boxShadow: theme.frameGlow }}
       />
     </>
   );
