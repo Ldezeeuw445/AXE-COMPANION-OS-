@@ -124,12 +124,22 @@ function AccountCard({
   return (
     <div
       className={`relative rounded-2xl border px-4 py-3.5 transition-all ${
+        menuOpen ? "z-[46]" : ""
+      } ${
         isActive
           ? "border-white/[0.12] bg-white/[0.04] ring-1 ring-white/[0.06]"
           : "border-white/[0.06] bg-white/[0.02] active:scale-[0.985]"
       }`}
       onClick={() => {
-        if (!isActive && !pending) onActivate();
+        if (menuOpen || actionBusy || pending) return;
+        if (!isActive) onActivate();
+      }}
+      onKeyDown={(e) => {
+        if (menuOpen || actionBusy || pending || isActive) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onActivate();
+        }
       }}
       role={isActive ? undefined : "button"}
       tabIndex={isActive ? undefined : 0}
@@ -175,10 +185,25 @@ function AccountCard({
           </button>
 
           {menuOpen && (
-            <div
-              className="absolute right-0 top-full z-50 mt-1 w-48 overflow-hidden rounded-xl border border-white/[0.10] bg-[#0c0c10]/95 shadow-[0_12px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <>
+              <div
+                className="fixed inset-0 z-[45]"
+                aria-hidden
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+              />
+              <div
+                className="absolute right-0 top-full z-[50] mt-1 w-48 overflow-hidden rounded-xl border border-white/[0.10] bg-[#0c0c10]/95 shadow-[0_12px_40px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
               {isCloud && (
                 <>
                   <MenuButton
@@ -228,6 +253,7 @@ function AccountCard({
                 variant="danger"
               />
             </div>
+            </>
           )}
         </div>
 
@@ -272,7 +298,11 @@ function MenuButton({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[11px] font-medium transition-colors ${color}`}
     >
       {icon}

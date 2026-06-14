@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
-import { addWatchlistItem, removeWatchlistItem } from "@/app/(app)/settings/actions";
+import { addBrokerWatchlistSymbol, removeWatchlistItem } from "@/app/(app)/settings/actions";
 import { CANONICAL_BROKER_SYMBOLS } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { GripVertical, Plus, Search, Trash2, X } from "lucide-react";
@@ -42,6 +42,8 @@ export type QuoteRow = {
 type Props = {
   items: QuoteRow[];
   brokerUniverse?: string[];
+  symbolMap?: Record<string, string>;
+  accountLabel?: string;
 };
 
 /* ── Helpers ────────────────────────────────────────────────────── */
@@ -121,7 +123,12 @@ function useTickColors(items: QuoteRow[]) {
 
 /* ── Component ──────────────────────────────────────────────────── */
 
-export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
+export function WatchlistPageScreen({
+  items,
+  brokerUniverse = [],
+  symbolMap = {},
+  accountLabel = "Active broker",
+}: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -195,45 +202,57 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
     if (searchOpen) searchRef.current?.focus();
   }, [searchOpen]);
 
-  /* ── Search candidates (cleaned display names from broker universe) ── */
+  /* ── Broker symbol candidates (MT5-style market watch add) ── */
   const searchCandidates = useMemo(() => {
     const existing = new Set(localItems.map((i) => i.symbol.toUpperCase()));
-    // Map: display name → broker symbol (for subtitle)
     const displayToBroker = new Map<string, string>();
+
+    const addCandidate = (display: string, broker: string) => {
+      const clean = cleanDisplaySymbol(display) || display.toUpperCase();
+      if (!clean || existing.has(clean) || displayToBroker.has(clean)) return;
+      displayToBroker.set(clean, broker && broker !== clean ? broker : "");
+    };
+
+    for (const [display, broker] of Object.entries(symbolMap)) {
+      addCandidate(display, broker);
+    }
+
     for (const raw of brokerUniverse) {
       const clean = cleanDisplaySymbol(raw) || raw.replace(/\.[a-zA-Z]+$/, "").toUpperCase();
-      if (!existing.has(clean) && !displayToBroker.has(clean)) {
-        displayToBroker.set(clean, raw !== clean ? raw : "");
+      const broker = raw.trim();
+      addCandidate(clean, broker !== clean ? broker : "");
+    }
+
+    if (displayToBroker.size === 0) {
+      for (const sym of CANONICAL_BROKER_SYMBOLS) {
+        addCandidate(sym, "");
       }
     }
-    // Add canonical symbols that aren't already covered
-    for (const sym of CANONICAL_BROKER_SYMBOLS) {
-      if (!existing.has(sym) && !displayToBroker.has(sym)) {
-        displayToBroker.set(sym, "");
-      }
-    }
+
     return [...displayToBroker.entries()]
       .map(([display, broker]) => ({ display, broker }))
       .sort((a, b) => a.display.localeCompare(b.display));
-  }, [localItems, brokerUniverse]);
+  }, [localItems, brokerUniverse, symbolMap]);
+
+  const hasBrokerCatalog = brokerUniverse.length > 0 || Object.keys(symbolMap).length > 0;
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return searchCandidates.slice(0, 30);
+    const limit = searchQuery.trim() ? 80 : 120;
+    if (!searchQuery.trim()) return searchCandidates.slice(0, limit);
     const q = searchQuery.trim().toUpperCase();
     return searchCandidates
       .filter((s) => s.display.includes(q) || s.broker.toUpperCase().includes(q))
-      .slice(0, 30);
+      .slice(0, limit);
   }, [searchCandidates, searchQuery]);
 
   /* ── Handlers ──────────────────────────────────────────────────── */
 
   const handleAdd = useCallback(
-    async (symbol: string) => {
+    async (symbol: string, brokerSymbol?: string) => {
       setAdding(true);
       setSearchQuery("");
-      const result = await addWatchlistItem(symbol, symbol);
+      const result = await addBrokerWatchlistSymbol(symbol, brokerSymbol);
       if (!result.error) {
-        // Optimistically add
         setLocalItems((prev) => {
           const exists = prev.some((i) => i.symbol === symbol);
           if (exists) return prev;
@@ -243,6 +262,7 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
               id: `temp-${symbol}`,
               symbol,
               message: null,
+              brokerSymbol: brokerSymbol || symbolMap[symbol] || null,
               runtimeState: "warming",
             },
           ];
@@ -252,7 +272,7 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
       }
       setAdding(false);
     },
-    [router, startTransition],
+    [router, startTransition, symbolMap],
   );
 
   const handleRemove = useCallback(
@@ -391,6 +411,9 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
       {/* ── Search panel ───────────────────────────────────────── */}
       {searchOpen && (
         <div className="border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/25">
+            {hasBrokerCatalog ? `Add from ${accountLabel}` : "Add symbol"}
+          </p>
           <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2">
             <Search size={14} className="shrink-0 text-white/30" />
             <input
@@ -398,18 +421,23 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search symbols…"
+              placeholder={hasBrokerCatalog ? "Search broker symbols…" : "Search symbols…"}
               className="flex-1 bg-transparent text-[13px] text-white placeholder:text-white/25 focus:outline-none"
             />
           </div>
+          {!hasBrokerCatalog && (
+            <p className="mt-2 px-1 text-[10px] text-white/30">
+              Sync your MT5 account first to browse symbols offered by your broker.
+            </p>
+          )}
           {filtered.length > 0 && (
-            <div className="mt-2 max-h-[240px] overflow-y-auto">
+            <div className="mt-2 max-h-[320px] overflow-y-auto">
               {filtered.map((item) => (
                 <button
-                  key={item.display}
+                  key={`${item.display}-${item.broker}`}
                   type="button"
                   disabled={adding}
-                  onClick={() => handleAdd(item.display)}
+                  onClick={() => handleAdd(item.display, item.broker || undefined)}
                   className="flex w-full items-center justify-between px-2 py-2 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06] disabled:opacity-40"
                 >
                   <div className="flex items-center gap-2">
@@ -427,7 +455,12 @@ export function WatchlistPageScreen({ items, brokerUniverse = [] }: Props) {
               ))}
             </div>
           )}
-          {filtered.length === 0 && searchQuery.trim() && (
+          {filtered.length === 0 && searchQuery.trim() && hasBrokerCatalog && (
+            <div className="mt-2 px-2 py-3 text-center">
+              <p className="text-[11px] text-white/30">No matching broker symbols</p>
+            </div>
+          )}
+          {filtered.length === 0 && searchQuery.trim() && !hasBrokerCatalog && (
             <div className="mt-2 px-2 py-3 text-center">
               <p className="text-[11px] text-white/30">No matching symbols</p>
               <button

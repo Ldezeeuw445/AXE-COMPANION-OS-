@@ -25,7 +25,7 @@ export default async function WatchlistPage() {
 
   const { data: account } = await supabase
     .from("user_broker_accounts")
-    .select("id,connection_method,provider_status,metadata")
+    .select("id,label,connection_method,provider_status,metadata")
     .eq("user_id", user.id)
     .eq("id", activeId)
     .maybeSingle();
@@ -99,5 +99,12 @@ export default async function WatchlistPage() {
     };
   });
 
-  return <WatchlistPageScreen items={enriched} brokerUniverse={universe} />;
+  return (
+    <WatchlistPageScreen
+      items={enriched}
+      brokerUniverse={universe}
+      symbolMap={map}
+      accountLabel={(account?.label as string | null) ?? "Active account"}
+    />
+  );
 }

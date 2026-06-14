@@ -264,6 +264,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
+      window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       return;
     }
 
@@ -277,15 +278,20 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       const transcript = e.results[0][0].transcript;
       setValue((prev) => (prev ? prev + " " + transcript : transcript));
     };
-    rec.onend = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
+    };
     rec.onerror = () => {
       setListening(false);
+      window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       setError("Mic error — check browser permissions.");
     };
 
     recognitionRef.current = rec;
     rec.start();
     setListening(true);
+    window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: true } }));
   }, [listening]);
 
   // ── File ──────────────────────────────────────────────────────────────
