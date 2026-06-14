@@ -31,11 +31,24 @@ type Env = {
   LOG_LEVEL: string;
 };
 
+function trimEnv(value: string | undefined): string {
+  return (value ?? "").trim().replace(/^["']|["']$/g, "");
+}
+
+/** Match Next.js metaApiEnv.ts fallback order so Railway can use the same tokens as Vercel. */
+function resolveMetaApiToken(): string {
+  return trimEnv(
+    process.env.METAAPI_TOKEN ??
+      process.env.AXE_METAAPI_TOKEN ??
+      process.env.AXE_MT5_METAAPI_TOKEN,
+  );
+}
+
 function readEnv(): Env {
   const e: Env = {
-    METAAPI_TOKEN: process.env.METAAPI_TOKEN ?? "",
-    WORKER_URL: process.env.WORKER_URL ?? "",
-    STREAMER_SECRET: process.env.STREAMER_SECRET ?? "",
+    METAAPI_TOKEN: resolveMetaApiToken(),
+    WORKER_URL: trimEnv(process.env.WORKER_URL),
+    STREAMER_SECRET: trimEnv(process.env.STREAMER_SECRET),
     SUBSCRIPTIONS: process.env.SUBSCRIPTIONS ?? "",
     STATIC_MODE: (process.env.STATIC_MODE ?? "").toLowerCase() === "true",
     LOG_LEVEL: process.env.LOG_LEVEL ?? "info",
