@@ -40,12 +40,13 @@ function makeParticles(count: number): OrbParticle[] {
   return pts;
 }
 
-/** Cyan palette only — bright ice top → deep AXE cyan bottom (reference image style). */
+/** Pure AXE cyan — saturated #00d4f5 family, minimal white. */
 function cyanForElevation(yNorm: number): [number, number, number] {
   const t = Math.max(0, Math.min(1, (yNorm + 1) * 0.5));
-  const r = Math.round(180 + (1 - t) * 40 + t * 0);
-  const g = Math.round(220 + (1 - t) * 20 + t * 32);
-  const b = Math.round(255 - t * 35);
+  // Top: bright cyan · bottom: deep teal-cyan (no ice-white)
+  const r = Math.round(0 + t * 8);
+  const g = Math.round(230 - t * 55);
+  const b = Math.round(255 - t * 25);
   return [r, g, b];
 }
 
@@ -201,13 +202,13 @@ export function AxeAuraWave() {
         if (depthFactor > 0.5 && alpha > 0.15) {
           ctx.beginPath();
           ctx.arc(px, py, dotR * 3.2, 0, TAU);
-          ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha * 0.14})`;
+          ctx.fillStyle = `rgba(0, 212, 245, ${alpha * 0.18})`;
           ctx.fill();
         }
 
         ctx.beginPath();
         ctx.arc(px, py, dotR, 0, TAU);
-        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${alpha})`;
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${Math.min(1, alpha * 1.08)})`;
         ctx.fill();
       }
 
@@ -215,10 +216,10 @@ export function AxeAuraWave() {
 
       const glowR = coreR * breathe * (1 + profile.stream * 0.2);
       const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      coreGlow.addColorStop(0, `rgba(200, 240, 255, ${profile.glow * pulse * 0.9})`);
-      coreGlow.addColorStop(0.35, `rgba(0, 212, 245, ${profile.glow * pulse * 0.55})`);
-      coreGlow.addColorStop(0.7, `rgba(0, 160, 210, ${profile.glow * pulse * 0.2})`);
-      coreGlow.addColorStop(1, "rgba(0, 212, 245, 0)");
+      coreGlow.addColorStop(0, `rgba(0, 224, 255, ${profile.glow * pulse * 0.95})`);
+      coreGlow.addColorStop(0.4, `rgba(0, 212, 245, ${profile.glow * pulse * 0.65})`);
+      coreGlow.addColorStop(0.75, `rgba(0, 180, 220, ${profile.glow * pulse * 0.28})`);
+      coreGlow.addColorStop(1, "rgba(0, 160, 200, 0)");
       ctx.beginPath();
       ctx.arc(cx, cy, glowR, 0, TAU);
       ctx.fillStyle = coreGlow;
@@ -230,7 +231,7 @@ export function AxeAuraWave() {
           const ringR = coreR * (0.75 + i * 0.08) * breathe;
           ctx.beginPath();
           ctx.arc(cx, cy, ringR, angle, angle + 0.4 + profile.stream);
-          ctx.strokeStyle = `rgba(0, 212, 245, ${0.06 + profile.stream * 0.14})`;
+          ctx.strokeStyle = `rgba(0, 224, 255, ${0.08 + profile.stream * 0.16})`;
           ctx.lineWidth = 0.7 + profile.stream * 0.4;
           ctx.stroke();
         }
@@ -255,15 +256,17 @@ export function AxeAuraWave() {
             width: "48%",
             height: "48%",
             background:
-              "radial-gradient(circle at 35% 28%, rgba(255,255,255,0.18) 0%, rgba(200,240,255,0.06) 35%, rgba(0,212,245,0.04) 60%, transparent 100%)",
-            boxShadow: "0 0 36px 10px rgba(0,212,245,0.12), inset 0 -5px 12px rgba(0,80,120,0.35)",
+              "radial-gradient(circle at 38% 32%, rgba(0,224,255,0.22) 0%, rgba(0,212,245,0.12) 35%, rgba(0,180,220,0.06) 62%, transparent 100%)",
+            boxShadow:
+              "0 0 40px 14px rgba(0,212,245,0.22), 0 0 80px 24px rgba(0,212,245,0.08), inset 0 -4px 10px rgba(0,100,140,0.4)",
             animation: "axe-orb-breathe 2.8s ease-in-out infinite",
           }}
         />
         <span
           className="pointer-events-none absolute inset-[-28%] rounded-full"
           style={{
-            background: "radial-gradient(circle, rgba(0,212,245,0.08) 0%, rgba(0,212,245,0.02) 40%, transparent 68%)",
+            background:
+              "radial-gradient(circle, rgba(0,212,245,0.14) 0%, rgba(0,212,245,0.05) 42%, transparent 70%)",
             animation: "axe-orb-glow 2.8s ease-in-out infinite",
           }}
         />
