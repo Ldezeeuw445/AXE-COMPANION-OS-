@@ -66,6 +66,7 @@ export function useLiveChart({
   onTick,
   onCandleUpdate,
   onPositions,
+  onOrders,
 }: Args) {
   const [uiStatus, setUiStatus] = useState<LiveUiStatus>("idle");
   const [transport, setTransport] = useState<LiveTransport>("off");
@@ -75,8 +76,8 @@ export function useLiveChart({
 
   const handlersRef = useRef<LiveChartHandlers>({});
   useEffect(() => {
-    handlersRef.current = { onTick, onCandleUpdate, onPositions };
-  }, [onTick, onCandleUpdate, onPositions]);
+    handlersRef.current = { onTick, onCandleUpdate, onPositions, onOrders };
+  }, [onTick, onCandleUpdate, onPositions, onOrders]);
 
   useEffect(() => {
     if (!enabled || !accountId || !brokerSymbol || !displaySymbol) {

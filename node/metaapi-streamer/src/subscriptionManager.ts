@@ -201,6 +201,7 @@ export function diffConfigs(
 ): {
   added: AccountConfig[];
   removed: AccountConfig[];
+  mappingsChanged: AccountConfig[];
   symbolsChanged: Array<{
     config: AccountConfig;
     addedSymbols: string[];
@@ -212,6 +213,7 @@ export function diffConfigs(
 
   const added: AccountConfig[] = [];
   const removed: AccountConfig[] = [];
+  const mappingsChanged: AccountConfig[] = [];
   const symbolsChanged: Array<{
     config: AccountConfig;
     addedSymbols: string[];
@@ -243,10 +245,22 @@ export function diffConfigs(
     const addedSymbols = nextConfig.watchlistSymbols.filter((s) => !currentSyms.has(s));
     const removedSymbols = currentConfig.watchlistSymbols.filter((s) => !nextSyms.has(s));
 
+    const currentSymbolMap = currentConfig.symbolMap;
+    const nextSymbolMap = nextConfig.symbolMap;
+    const currentMapKeys = Object.keys(currentSymbolMap);
+    const nextMapKeys = Object.keys(nextSymbolMap);
+    const symbolMapChanged =
+      currentMapKeys.length !== nextMapKeys.length ||
+      currentMapKeys.some((key) => currentSymbolMap[key] !== nextSymbolMap[key]);
+
+    if (symbolMapChanged) {
+      mappingsChanged.push(nextConfig);
+    }
+
     if (addedSymbols.length > 0 || removedSymbols.length > 0) {
       symbolsChanged.push({ config: nextConfig, addedSymbols, removedSymbols });
     }
   }
 
-  return { added, removed, symbolsChanged };
+  return { added, removed, mappingsChanged, symbolsChanged };
 }

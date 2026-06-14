@@ -685,8 +685,32 @@ async function reconcile(env: Env, currentConfigs: AccountConfig[]): Promise<Acc
       }
     }
 
+    const restartedAccounts = new Set<string>();
+    if (diff.mappingsChanged.length > 0) {
+      for (const config of diff.mappingsChanged) {
+        const stream = activeStreams.get(config.metaApiAccountId);
+        if (!stream) continue;
+
+        log("info", `Reconcile: symbol map changed for ${config.metaApiAccountId}; restarting stream`);
+        if (stream.connection) {
+          try {
+            await stream.connection.close();
+          } catch { /* ignore */ }
+        }
+        activeStreams.delete(config.metaApiAccountId);
+        restartedAccounts.add(config.metaApiAccountId);
+        try {
+          await startAccountStreamIfNeeded(env, config);
+        } catch (e) {
+          log("error", `Failed to restart stream for account ${config.metaApiAccountId}:`, e);
+        }
+      }
+    }
+
     if (diff.symbolsChanged.length > 0) {
       for (const change of diff.symbolsChanged) {
+        if (restartedAccounts.has(change.config.metaApiAccountId)) continue;
+
         const stream = activeStreams.get(change.config.metaApiAccountId);
         if (!stream) continue;
 
