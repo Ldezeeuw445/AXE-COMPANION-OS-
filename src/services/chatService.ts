@@ -26,6 +26,7 @@ import { loadNews } from "@/lib/market/newsProvider";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
 import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
+import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
 import type { ChatMessage, ConversationSummary } from "@/types/domain";
 import type OpenAI from "openai";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
@@ -293,35 +294,16 @@ export async function sendChatMessage(
   // Helper: execute a single tool call and return its string result
   async function executeTool(tc: AxeToolCall): Promise<string> {
     if (tc.tool === "create_alert") {
-      const { title, body, type: rawType, symbol: alertSymbol } = tc.args;
-      const allowed = new Set(["price", "news", "risk", "system"]);
-      const type = allowed.has(String(rawType)) ? String(rawType) : "system";
-      let alertError = null;
-      if (alertSymbol) {
-        const { error: e1 } = await supabase.from("alerts").insert({
-          user_id: user.id, type, title, body,
-          symbol: alertSymbol.toUpperCase(), read: false,
-        });
-        if (e1 && e1.message?.includes("column")) {
-          const { error: e2 } = await supabase.from("alerts").insert({
-            user_id: user.id, type, title,
-            body: `${body} [${alertSymbol.toUpperCase()}]`, read: false,
-          });
-          alertError = e2;
-        } else {
-          alertError = e1;
-        }
-      } else {
-        const { error: e } = await supabase.from("alerts").insert({
-          user_id: user.id, type, title, body, read: false,
-        });
-        alertError = e;
-      }
+      const { title, body } = tc.args;
+      const row = buildUserAlertFromChatTool(tc.args);
+      const { error: alertError } = await supabase.from("user_alerts").insert({
+        user_id: user.id,
+        ...row,
+      });
       if (alertError) {
         console.error("[create_alert] insert failed:", alertError.message);
         return `Alert creation failed: ${alertError.message}`;
       }
-      // Push notification: alert is set — fire and don't wait
       firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
       return "Alert created — visible under Alerts in the app.";
 
@@ -740,20 +722,12 @@ export async function streamChatMessage(
 
   async function executeTool(tc: AxeToolCall): Promise<string> {
     if (tc.tool === "create_alert") {
-      const { title, body, type: rawType, symbol: alertSymbol } = tc.args;
-      const allowed = new Set(["price", "news", "risk", "system"]);
-      const type = allowed.has(String(rawType)) ? String(rawType) : "system";
-      let alertError = null;
-      if (alertSymbol) {
-        const { error: e1 } = await supabase.from("alerts").insert({ user_id: user.id, type, title, body, symbol: alertSymbol.toUpperCase(), read: false });
-        if (e1 && e1.message?.includes("column")) {
-          const { error: e2 } = await supabase.from("alerts").insert({ user_id: user.id, type, title, body: `${body} [${alertSymbol.toUpperCase()}]`, read: false });
-          alertError = e2;
-        } else { alertError = e1; }
-      } else {
-        const { error: e } = await supabase.from("alerts").insert({ user_id: user.id, type, title, body, read: false });
-        alertError = e;
-      }
+      const { title, body } = tc.args;
+      const row = buildUserAlertFromChatTool(tc.args);
+      const { error: alertError } = await supabase.from("user_alerts").insert({
+        user_id: user.id,
+        ...row,
+      });
       if (alertError) return `Alert creation failed: ${alertError.message}`;
       firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
       return "Alert created — visible under Alerts in the app.";
