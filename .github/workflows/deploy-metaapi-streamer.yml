@@ -17,6 +17,8 @@ jobs:
   deploy:
     name: Railway streamer
     runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +27,5 @@ jobs:
         run: npm install -g @railway/cli@4.6.3
 
       - name: Redeploy linked service
-        if: ${{ secrets.RAILWAY_TOKEN != '' && vars.RAILWAY_STREAMER_SERVICE_ID != '' }}
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        if: ${{ env.RAILWAY_TOKEN != '' && vars.RAILWAY_STREAMER_SERVICE_ID != '' }}
         run: railway redeploy --service "${{ vars.RAILWAY_STREAMER_SERVICE_ID }}" --yes
