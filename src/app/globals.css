@@ -880,6 +880,96 @@ select {
   mask-image: radial-gradient(circle at center, black 40%, transparent 90%);
 }
 
+.launch-final-banner-wrap {
+  z-index: 15;
+}
+
+.launch-final-banner {
+  --launch-banner-x: 50%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(100deg, rgba(11, 20, 37, 0.9), rgba(7, 11, 24, 0.86)),
+    linear-gradient(90deg, rgba(124, 109, 255, 0.22), rgba(86, 233, 255, 0.16), rgba(124, 109, 255, 0.2));
+  padding: 0.55rem 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 22px 70px -36px rgba(0, 0, 0, 0.88),
+    0 0 54px -44px rgba(111, 223, 255, 0.62);
+}
+
+.launch-final-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--launch-banner-x) 50%, rgba(120, 255, 233, 0.38), transparent 34%);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.launch-final-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.11), transparent);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.launch-final-banner-track {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 1.35rem;
+  animation: launch-banner-scroll 26s linear infinite;
+  will-change: transform;
+}
+
+.launch-final-banner-item {
+  white-space: nowrap;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(236, 244, 255, 0.74);
+}
+
+.launch-final-banner-item::before {
+  content: "•";
+  margin-right: 0.55rem;
+  color: rgba(102, 234, 255, 0.82);
+}
+
+.launch-dot-grid {
+  pointer-events: none;
+  position: absolute;
+  inset: -1.9rem;
+  z-index: 0;
+  border-radius: 3.6rem;
+  opacity: 0.36;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.17), transparent 48%),
+    radial-gradient(rgba(119, 236, 255, 0.22) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    18px 18px;
+  mask-image: radial-gradient(circle at center, black 48%, transparent 92%);
+  animation: launch-dot-grid-pulse 760ms ease both;
+}
+
+.launch-dot-grid-active {
+  opacity: 0.7;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.27), transparent 52%),
+    radial-gradient(rgba(119, 236, 255, 0.33) 1px, transparent 1px);
+}
+
 .launch-kicker,
 .launch-side-panel,
 .launch-shot-frame,
@@ -1265,6 +1355,29 @@ select {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes launch-banner-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes launch-dot-grid-pulse {
+  from {
+    opacity: 0.08;
+    transform: scale(0.995);
+  }
+  55% {
+    opacity: 0.46;
+  }
+  to {
+    opacity: 0.34;
+    transform: scale(1);
   }
 }
 
