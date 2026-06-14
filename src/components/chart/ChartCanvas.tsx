@@ -236,7 +236,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       rightPriceScale: {
         borderVisible: true,
         borderColor: theme.axisSeparator,
-        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.24 : 0.18 },
+        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.28 : 0.18 },
         textColor: theme.textColor,
       },
       timeScale: {
@@ -246,7 +246,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         rightOffset: 4,
         barSpacing: 6,
         timeVisible: true,
-        minimumHeight: compactLayout ? 32 : 26,
+        minimumHeight: compactLayout ? 36 : 26,
       },
       autoSize: true,
       handleScroll: {
@@ -377,7 +377,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     if (!chart) return;
     chart.applyOptions({
       rightPriceScale: {
-        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.24 : 0.18 },
+        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.28 : 0.18 },
       },
       timeScale: { minimumHeight: compactLayout ? 32 : 26 },
     });

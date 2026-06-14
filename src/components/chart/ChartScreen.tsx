@@ -2749,6 +2749,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     isFullscreen,
   ]);
 
+  const landscapeLayoutInsetBottom = isFullscreen ? 10 : 0;
+
   return (
     <div
       ref={chartFrameRef}
@@ -2761,6 +2763,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         paddingTop: "env(safe-area-inset-top, 0px)",
         paddingLeft: "env(safe-area-inset-left, 0px)",
         paddingRight: "env(safe-area-inset-right, 0px)",
+        height: "100dvh",
+        maxHeight: "100dvh",
         boxSizing: "border-box",
         background: "#000",
       } : undefined}
@@ -2847,7 +2851,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           themeKey={chartThemeKey}
           gridStyle={chartGridStyle}
           layoutInsetTop={isFullscreen ? 92 : 0}
-          layoutInsetBottom={isFullscreen ? 6 : 0}
+          layoutInsetBottom={landscapeLayoutInsetBottom}
           compactLayout={isFullscreen}
         />
 

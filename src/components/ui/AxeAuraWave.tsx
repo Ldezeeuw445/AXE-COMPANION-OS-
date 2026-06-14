@@ -252,7 +252,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
     if (!ctx) return;
 
     const isComposer = variant === "composer";
-    const dim = isComposer ? { w: 280, h: 128 } : { w: 104, h: 104 };
+    const dim = isComposer ? { w: 300, h: 140 } : { w: 104, h: 104 };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = dim.w * dpr;
     canvas.height = dim.h * dpr;
@@ -364,7 +364,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
         const twinkle =
           0.45 +
           0.55 * Math.sin(t * p.twinkleSpeed * profile.twinkle * activeSpeed + p.twinklePhase);
-        const alpha = (0.18 + depthFactor * p.brightness * 0.95) * twinkle;
+        const alpha = (0.28 + depthFactor * p.brightness * 0.95) * twinkle;
         const [cr, cg, cb] = isComposer
           ? domeColor(item.y3d, p.sparkle)
           : cyanForElevation(item.y3d);
@@ -385,7 +385,18 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
 
       ctx.restore();
 
-      if (!isComposer) {
+      if (isComposer) {
+        const glowR = coreR * breathe * (1 + profile.stream * 0.2);
+        const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy - glowR * 0.35, glowR * 1.15);
+        coreGlow.addColorStop(0, `rgba(0, 224, 255, ${profile.glow * pulse * 0.95})`);
+        coreGlow.addColorStop(0.4, `rgba(0, 212, 245, ${profile.glow * pulse * 0.55})`);
+        coreGlow.addColorStop(0.75, `rgba(0, 180, 220, ${profile.glow * pulse * 0.18})`);
+        coreGlow.addColorStop(1, "rgba(0, 160, 200, 0)");
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - glowR * 0.15, glowR * 1.05, glowR * 0.72, 0, 0, TAU);
+        ctx.fillStyle = coreGlow;
+        ctx.fill();
+      } else {
         const glowR = coreR * breathe * (1 + profile.stream * 0.25);
         const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
         coreGlow.addColorStop(0, `rgba(0, 224, 255, ${profile.glow * pulse * 1})`);
@@ -419,21 +430,48 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
   }, [variant]);
 
   const breatheSec = STATE_BREATHE_SEC[state];
-  const displaySize = variant === "composer" ? { w: 280, h: 128 } : { w: 104, h: 104 };
+  const displaySize = variant === "composer" ? { w: 300, h: 140 } : { w: 104, h: 104 };
 
   if (variant === "composer") {
     return (
-      <canvas
-        ref={canvasRef}
-        className="pointer-events-none block"
-        style={{
-          width: displaySize.w,
-          height: displaySize.h,
-          background: "transparent",
-          filter: "drop-shadow(0 0 18px rgba(0, 212, 245, 0.35))",
-        }}
+      <div
+        className="pointer-events-none relative flex justify-center"
+        style={{ width: displaySize.w, height: displaySize.h }}
         aria-hidden
-      />
+      >
+        <span
+          className="pointer-events-none absolute rounded-full"
+          style={{
+            left: "18%",
+            right: "18%",
+            bottom: "-4%",
+            height: "72%",
+            background:
+              "radial-gradient(ellipse 100% 100% at 50% 100%, rgba(0,224,255,0.32) 0%, rgba(0,212,245,0.16) 42%, rgba(0,180,220,0.05) 68%, transparent 100%)",
+            boxShadow:
+              "0 0 36px 14px rgba(0,212,245,0.22), 0 0 72px 28px rgba(0,212,245,0.08)",
+            animation: `axe-orb-breathe ${breatheSec}s ease-in-out infinite`,
+          }}
+        />
+        <span
+          className="pointer-events-none absolute inset-[-18%] rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 88%, rgba(0,212,245,0.14) 0%, rgba(0,212,245,0.05) 38%, transparent 72%)",
+            animation: `axe-orb-glow ${breatheSec}s ease-in-out infinite`,
+          }}
+        />
+        <canvas
+          ref={canvasRef}
+          className="pointer-events-none relative z-[1] block"
+          style={{
+            width: displaySize.w,
+            height: displaySize.h,
+            background: "transparent",
+            filter: "drop-shadow(0 0 22px rgba(0, 212, 245, 0.45))",
+          }}
+        />
+      </div>
     );
   }
 
