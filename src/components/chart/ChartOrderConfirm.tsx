@@ -25,6 +25,8 @@ export type OrderConfirmInput = {
   slippagePoints: number;
   /** Human-readable account label so the user can sanity-check it isn't demo. */
   accountLabel: string;
+  /** lots for MT5, shares for Alpaca paper. */
+  volumeUnit?: "lots" | "shares";
 };
 
 export type OrderConfirmStatus =
@@ -60,6 +62,7 @@ export function ChartOrderConfirm({
     : "border-rose-400/40 bg-rose-400/12 text-rose-100";
 
   const orderTypeLabel = labelOrderType(input.orderType);
+  const volumeUnit = input.volumeUnit ?? "lots";
   const priceLabel = input.orderType === "market"
     ? input.livePrice != null
       ? formatBrokerPrice(input.brokerSymbol, input.livePrice)
@@ -94,7 +97,7 @@ export function ChartOrderConfirm({
                 · {input.symbol}
               </p>
               <p className="mt-0.5 text-[11px] text-tos-muted">
-                {orderTypeLabel} · {input.volume.toFixed(2)} lots · {input.accountLabel}
+                {orderTypeLabel} · {input.volume.toFixed(2)} {volumeUnit} · {input.accountLabel}
               </p>
             </div>
           </div>
@@ -121,7 +124,7 @@ export function ChartOrderConfirm({
           <Row label="Account" value={input.accountLabel} mono={false} />
           <Row label="Broker symbol" value={input.brokerSymbol} />
           <Row label="Type" value={orderTypeLabel} mono={false} />
-          <Row label="Volume" value={`${input.volume.toFixed(2)} lots`} />
+          <Row label="Volume" value={`${input.volume.toFixed(2)} ${volumeUnit}`} />
           <Row label="Price" value={priceLabel} highlight={isBuy ? "buy" : "rose"} />
           <Row
             label="Stop loss"

@@ -1,28 +1,20 @@
 "use client";
 
 /**
- * PositionLabelsOverlay — entry / SL / TP labels on the chart left edge.
+ * PositionLabelsOverlay — entry labels + draggable SL/TP lines on the chart.
  *
- * SL/TP are draggable. Default (MT5-style): drag → release → tap arrow on entry
- * to confirm. Optional instant mode (Settings): commit on release.
+ * SL/TP use the same TradePlanLine drag engine as buy/sell limit lines.
+ * Default (MT5-style): drag → release → tap arrow on entry to confirm.
+ * Optional instant mode (Settings): commit on release.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowRight } from "lucide-react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME, getChartTheme } from "@/components/chart/chartTheme";
-import {
-  estimateSlTpPnlUsd,
-  formatSlTpPnlUsd,
-  priceDigitsForSymbol,
-} from "@/lib/broker/symbolFormat";
+import { TradePlanLine } from "@/components/chart/TradePlanLine";
+import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
 export type SlTpDraft = {
   stopLoss: number | null;
@@ -38,32 +30,19 @@ export function slTpDraftKeyForOrder(id: string) {
   return `ord:${id}`;
 }
 
-interface LabelItem {
-  key: string;
-  y: number;
-  text: string;
-  color: string;
-  draggable: boolean;
-  field?: "sl" | "tp" | "entry";
-  positionId?: string;
-  orderId?: string;
-  currentSl?: number | null;
-  currentTp?: number | null;
-  showConfirm?: boolean;
-  confirmTargetKey?: string;
-}
-
 async function callModifyPosition(
   brokerAccountId: string,
   positionId: string,
   stopLoss: number | null | undefined,
   takeProfit: number | null | undefined,
+  isAlpacaAccount: boolean,
 ): Promise<{ ok: boolean; message?: string }> {
   try {
+    const endpoint = isAlpacaAccount ? "/api/alpaca/modify-position" : "/api/mt5/modify-position";
     const body: Record<string, unknown> = { brokerAccountId, positionId };
     if (stopLoss != null) body.stopLoss = stopLoss;
     if (takeProfit != null) body.takeProfit = takeProfit;
-    const res = await fetch("/api/mt5/modify-position", {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -83,13 +62,15 @@ async function callModifyOrder(
     stopLoss?: number | null;
     takeProfit?: number | null;
   },
+  isAlpacaAccount: boolean,
 ): Promise<{ ok: boolean; message?: string }> {
   try {
+    const endpoint = isAlpacaAccount ? "/api/alpaca/modify-order" : "/api/mt5/modify-order";
     const body: Record<string, unknown> = { brokerAccountId, orderId };
     if (fields.openPrice != null) body.openPrice = fields.openPrice;
     if (fields.stopLoss != null) body.stopLoss = fields.stopLoss;
     if (fields.takeProfit != null) body.takeProfit = fields.takeProfit;
-    const res = await fetch("/api/mt5/modify-order", {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -99,18 +80,6 @@ async function callModifyOrder(
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Network error" };
   }
-}
-
-function slTpPnl(
-  entryPrice: number | null | undefined,
-  levelPrice: number,
-  volume: number,
-  side: "buy" | "sell",
-  symbol: string,
-): string {
-  if (entryPrice == null || entryPrice <= 0) return "";
-  const usd = estimateSlTpPnlUsd(symbol, entryPrice, levelPrice, volume, side);
-  return formatSlTpPnlUsd(usd);
 }
 
 function formatPnl(profit: number | null | undefined): string {
@@ -132,6 +101,17 @@ function pnlAwareColor(side: string | null, profit: number | null | undefined): 
   return entryColor(side);
 }
 
+type EntryLabel = {
+  key: string;
+  y: number;
+  text: string;
+  color: string;
+  showConfirm: boolean;
+  confirmTargetKey: string;
+  positionId?: string;
+  orderId?: string;
+};
+
 export function PositionLabelsOverlay({
   canvasRef,
   overlays,
@@ -140,6 +120,7 @@ export function PositionLabelsOverlay({
   brokerAccountId,
   liveTradingEnabled = false,
   isDemoAccount = false,
+  isAlpacaAccount = false,
   instantSlTpModify = false,
   slTpDrafts = {},
   onSlTpDraftChange,
@@ -155,6 +136,7 @@ export function PositionLabelsOverlay({
   brokerAccountId?: string | null;
   liveTradingEnabled?: boolean;
   isDemoAccount?: boolean;
+  isAlpacaAccount?: boolean;
   instantSlTpModify?: boolean;
   slTpDrafts?: Record<string, SlTpDraft>;
   onSlTpDraftChange?: (
@@ -173,51 +155,14 @@ export function PositionLabelsOverlay({
   const labelShadow = isDark
     ? "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)"
     : "0 1px 0 rgba(255,255,255,0.82)";
-  const dragShadow = isDark
-    ? "0 0 6px rgba(0,0,0,0.95), 0 0 12px rgba(0,0,0,0.7), 0 1px 3px rgba(0,0,0,0.9)"
-    : "0 1px 0 rgba(255,255,255,0.88)";
+  const digits = priceDigitsForSymbol(symbol);
 
-  const [labels, setLabels] = useState<LabelItem[]>([]);
-  const overlaysRef = useRef(overlays);
-  overlaysRef.current = overlays;
-  const pendingOrdersRef = useRef(pendingOrders);
-  pendingOrdersRef.current = pendingOrders;
+  const [entryLabels, setEntryLabels] = useState<EntryLabel[]>([]);
+  const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const slTpDraftsRef = useRef(slTpDrafts);
   slTpDraftsRef.current = slTpDrafts;
-  const symbolRef = useRef(symbol);
-  symbolRef.current = symbol;
 
-  const [dragState, setDragState] = useState<{
-    key: string;
-    y: number;
-    price: number;
-    text: string;
-    color: string;
-    field: "sl" | "tp" | "entry";
-    dashed: boolean;
-  } | null>(null);
-  const [overlaySize, setOverlaySize] = useState({ w: 0, h: 0 });
-  const overlayRootRef = useRef<HTMLDivElement | null>(null);
-  const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
-  const isDraggingRef = useRef(false);
-  const dragDataRef = useRef<{
-    key: string;
-    field: "sl" | "tp" | "entry";
-    targetKey: string;
-    positionId?: string;
-    orderId?: string;
-    currentSl: number | null;
-    currentTp: number | null;
-    currentOpenPrice: number | null;
-    originPointerY: number;
-    originLabelY: number;
-    entryPrice: number | null;
-    volume: number;
-    side: "buy" | "sell";
-    color: string;
-  } | null>(null);
-
-  const canModify = !!brokerAccountId && (liveTradingEnabled || isDemoAccount);
+  const canModify = !!brokerAccountId && (liveTradingEnabled || isDemoAccount || isAlpacaAccount);
 
   const submitModify = useCallback(
     async (input: {
@@ -243,17 +188,23 @@ export function PositionLabelsOverlay({
 
       let result: { ok: boolean; message?: string };
       if (input.orderId) {
-        result = await callModifyOrder(brokerAccountId, input.orderId, {
-          openPrice: input.openPrice ?? undefined,
-          stopLoss: input.stopLoss ?? undefined,
-          takeProfit: input.takeProfit ?? undefined,
-        });
+        result = await callModifyOrder(
+          brokerAccountId,
+          input.orderId,
+          {
+            openPrice: input.openPrice ?? undefined,
+            stopLoss: input.stopLoss ?? undefined,
+            takeProfit: input.takeProfit ?? undefined,
+          },
+          isAlpacaAccount,
+        );
       } else if (input.positionId) {
         result = await callModifyPosition(
           brokerAccountId,
           input.positionId,
           input.stopLoss ?? undefined,
           input.takeProfit ?? undefined,
+          isAlpacaAccount,
         );
       } else {
         return { ok: false as const, message: "Unknown target" };
@@ -265,23 +216,59 @@ export function PositionLabelsOverlay({
       onModifyFeedback?.(result);
       return result;
     },
-    [brokerAccountId, isDemoAccount, onDemoModify, onModifyFeedback, onSlTpDraftClear],
+    [brokerAccountId, isAlpacaAccount, isDemoAccount, onDemoModify, onModifyFeedback, onSlTpDraftClear],
   );
 
-  const computeLabels = useCallback(() => {
+  const handleLevelChange = useCallback(
+    async (input: {
+      targetKey: string;
+      field: "sl" | "tp" | "entry";
+      positionId?: string;
+      orderId?: string;
+      currentSl: number | null;
+      currentTp: number | null;
+      currentOpenPrice: number | null;
+      newPrice: number;
+    }) => {
+      const newSl = input.field === "sl" ? input.newPrice : input.currentSl;
+      const newTp = input.field === "tp" ? input.newPrice : input.currentTp;
+      const newOpenPrice = input.field === "entry" ? input.newPrice : input.currentOpenPrice;
+
+      if (instantSlTpModify) {
+        await submitModify({
+          targetKey: input.targetKey,
+          positionId: input.positionId,
+          orderId: input.orderId,
+          stopLoss: newSl,
+          takeProfit: newTp,
+          openPrice: input.orderId ? newOpenPrice : undefined,
+        });
+        return;
+      }
+
+      onSlTpDraftChange?.({
+        key: input.targetKey,
+        stopLoss: newSl,
+        takeProfit: newTp,
+        openPrice: input.orderId ? newOpenPrice : undefined,
+        positionId: input.positionId,
+        orderId: input.orderId,
+      });
+    },
+    [instantSlTpModify, onSlTpDraftChange, submitModify],
+  );
+
+  const computeEntryLabels = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const next: LabelItem[] = [];
+    const next: EntryLabel[] = [];
     const drafts = slTpDraftsRef.current;
 
-    for (const o of overlaysRef.current) {
+    for (const o of overlays) {
       const side = o.side as "buy" | "sell" | null;
       const targetKey = slTpDraftKeyForPosition(o.id);
-      const draft = drafts[targetKey];
-      const sl = draft?.stopLoss ?? o.stopLoss;
-      const tp = draft?.takeProfit ?? o.takeProfit;
-      const hasDraft = Boolean(draft);
+      const hasDraft = Boolean(drafts[targetKey]);
 
       if (o.entryPrice != null && o.entryPrice > 0) {
         const y = canvas.priceToCoordinate(o.entryPrice);
@@ -293,61 +280,19 @@ export function PositionLabelsOverlay({
             y,
             text: `${sideLabel} ${o.volume}${pnl}`,
             color: pnlAwareColor(side, o.profit),
-            draggable: false,
             showConfirm: hasDraft && canModify,
             confirmTargetKey: targetKey,
             positionId: o.id,
-            currentSl: sl,
-            currentTp: tp,
-          });
-        }
-      }
-
-      if (sl != null && sl > 0) {
-        const y = canvas.priceToCoordinate(sl);
-        if (y != null) {
-          const pnl = slTpPnl(o.entryPrice, sl, o.volume, side as "buy" | "sell", symbolRef.current);
-          next.push({
-            key: `sl-${o.id}`,
-            y,
-            text: `SL${pnl ? `, ${pnl}` : ""}${hasDraft ? " · draft" : ""}`,
-            color: theme.stopLine,
-            draggable: canModify,
-            field: "sl",
-            positionId: o.id,
-            currentSl: sl,
-            currentTp: tp,
-          });
-        }
-      }
-
-      if (tp != null && tp > 0) {
-        const y = canvas.priceToCoordinate(tp);
-        if (y != null) {
-          const pnl = slTpPnl(o.entryPrice, tp, o.volume, side as "buy" | "sell", symbolRef.current);
-          next.push({
-            key: `tp-${o.id}`,
-            y,
-            text: `TP${pnl ? `, ${pnl}` : ""}${hasDraft ? " · draft" : ""}`,
-            color: theme.takeLine,
-            draggable: canModify,
-            field: "tp",
-            positionId: o.id,
-            currentSl: sl,
-            currentTp: tp,
           });
         }
       }
     }
 
-    for (const o of pendingOrdersRef.current) {
-      const side = o.side as "buy" | "sell";
+    for (const o of pendingOrders) {
       const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
       const targetKey = slTpDraftKeyForOrder(o.id);
       const draft = drafts[targetKey];
       const entryPrice = draft?.openPrice ?? o.openPrice;
-      const sl = draft?.stopLoss ?? o.stopLoss;
-      const tp = draft?.takeProfit ?? o.takeProfit;
       const hasDraft = Boolean(draft);
 
       if (entryPrice != null && entryPrice > 0) {
@@ -357,252 +302,27 @@ export function PositionLabelsOverlay({
             key: `pend-entry-${o.id}`,
             y,
             text: `${typeLabel} ${o.volume}${hasDraft && draft?.openPrice != null ? " · draft" : ""}`,
-            color: entryColor(side),
-            draggable: canModify && !isDemoAccount,
-            field: "entry",
+            color: entryColor(o.side),
             showConfirm: hasDraft && canModify && !isDemoAccount,
             confirmTargetKey: targetKey,
             orderId: o.id,
-            currentSl: sl,
-            currentTp: tp,
-          });
-        }
-      }
-
-      if (sl != null && sl > 0) {
-        const y = canvas.priceToCoordinate(sl);
-        if (y != null) {
-          const pnl = slTpPnl(entryPrice, sl, o.volume, side, symbolRef.current);
-          next.push({
-            key: `pend-sl-${o.id}`,
-            y,
-            text: `SL${pnl ? `, ${pnl}` : ""}${hasDraft ? " · draft" : ""}`,
-            color: theme.stopLine,
-            draggable: canModify && !isDemoAccount,
-            field: "sl",
-            orderId: o.id,
-            currentSl: sl,
-            currentTp: tp,
-          });
-        }
-      }
-
-      if (tp != null && tp > 0) {
-        const y = canvas.priceToCoordinate(tp);
-        if (y != null) {
-          const pnl = slTpPnl(entryPrice, tp, o.volume, side, symbolRef.current);
-          next.push({
-            key: `pend-tp-${o.id}`,
-            y,
-            text: `TP${pnl ? `, ${pnl}` : ""}${hasDraft ? " · draft" : ""}`,
-            color: theme.takeLine,
-            draggable: canModify && !isDemoAccount,
-            field: "tp",
-            orderId: o.id,
-            currentSl: sl,
-            currentTp: tp,
           });
         }
       }
     }
 
-    setLabels(next);
-  }, [canvasRef, canModify, isDemoAccount, theme.stopLine, theme.takeLine]);
+    setEntryLabels(next);
+  }, [canvasRef, canModify, isDemoAccount, overlays, pendingOrders]);
 
   useEffect(() => {
-    computeLabels();
+    computeEntryLabels();
     const canvas = canvasRef.current;
     if (!canvas) return;
-    return canvas.subscribeViewport(computeLabels);
-  }, [canvasRef, computeLabels, overlays, pendingOrders, slTpDrafts]);
-
-  useEffect(() => {
-    const el = overlayRootRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const rect = el.getBoundingClientRect();
-      setOverlaySize({ w: rect.width, h: rect.height });
-    });
-    ro.observe(el);
-    const rect = el.getBoundingClientRect();
-    setOverlaySize({ w: rect.width, h: rect.height });
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    computeLabels();
-  }, [overlays, slTpDrafts, computeLabels]);
-
-  const handlePointerMoveAt = useCallback(
-    (clientY: number) => {
-      if (!isDraggingRef.current || !dragDataRef.current) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const drag = dragDataRef.current;
-      const delta = clientY - drag.originPointerY;
-      const newY = drag.originLabelY + delta;
-      const newPrice = canvas.coordinateToPrice(newY);
-      if (newPrice == null || !Number.isFinite(newPrice) || newPrice <= 0) return;
-
-      const digits = priceDigitsForSymbol(symbolRef.current);
-      let text = "";
-      if (drag.field === "entry") {
-        text = `${newPrice.toFixed(digits)}`;
-      } else {
-        const tag = drag.field === "sl" ? "SL" : "TP";
-        const pnl = slTpPnl(drag.entryPrice, newPrice, drag.volume, drag.side, symbolRef.current);
-        text = `${tag}${pnl ? `, ${pnl}` : ""} → ${newPrice.toFixed(digits)}`;
-      }
-
-      setDragState({
-        key: drag.key,
-        y: newY,
-        price: newPrice,
-        text,
-        color: drag.color,
-        field: drag.field,
-        dashed: drag.field !== "entry",
-      });
-    },
-    [canvasRef],
-  );
-
-  const finishDragAt = useCallback(
-    async (clientY: number) => {
-      if (!isDraggingRef.current || !dragDataRef.current) return;
-      const canvas = canvasRef.current;
-      const drag = dragDataRef.current;
-
-      isDraggingRef.current = false;
-      dragDataRef.current = null;
-
-      if (!canvas || !brokerAccountId) {
-        setDragState(null);
-        return;
-      }
-
-      const delta = clientY - drag.originPointerY;
-      const newY = drag.originLabelY + delta;
-      const newPrice = canvas.coordinateToPrice(newY);
-
-      setDragState(null);
-
-      if (newPrice == null || !Number.isFinite(newPrice) || newPrice <= 0) return;
-
-      const newSl = drag.field === "sl" ? newPrice : drag.currentSl;
-      const newTp = drag.field === "tp" ? newPrice : drag.currentTp;
-      const newOpenPrice = drag.field === "entry" ? newPrice : drag.currentOpenPrice;
-
-      if (instantSlTpModify) {
-        await submitModify({
-          targetKey: drag.targetKey,
-          positionId: drag.positionId,
-          orderId: drag.orderId,
-          stopLoss: newSl,
-          takeProfit: newTp,
-          openPrice: drag.orderId ? newOpenPrice : undefined,
-        });
-        return;
-      }
-
-      onSlTpDraftChange?.({
-        key: drag.targetKey,
-        stopLoss: newSl,
-        takeProfit: newTp,
-        openPrice: drag.orderId ? newOpenPrice : undefined,
-        positionId: drag.positionId,
-        orderId: drag.orderId,
-      });
-    },
-    [brokerAccountId, canvasRef, instantSlTpModify, onSlTpDraftChange, submitModify],
-  );
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, label: LabelItem) => {
-      if (!label.draggable || !label.field || (!label.positionId && !label.orderId)) return;
-      e.preventDefault();
-      e.stopPropagation();
-
-      const targetKey = label.positionId
-        ? slTpDraftKeyForPosition(label.positionId)
-        : slTpDraftKeyForOrder(label.orderId!);
-
-      const overlay = label.positionId
-        ? overlaysRef.current.find((o) => o.id === label.positionId)
-        : null;
-      const pendingOrder = label.orderId
-        ? pendingOrdersRef.current.find((o) => o.id === label.orderId)
-        : null;
-
-      const draft = slTpDraftsRef.current[targetKey];
-
-      isDraggingRef.current = true;
-
-      dragDataRef.current = {
-        key: label.key,
-        field: label.field,
-        targetKey,
-        positionId: label.positionId,
-        orderId: label.orderId,
-        currentSl: label.currentSl ?? null,
-        currentTp: label.currentTp ?? null,
-        currentOpenPrice: draft?.openPrice ?? pendingOrder?.openPrice ?? null,
-        originPointerY: e.clientY,
-        originLabelY: label.y,
-        entryPrice: overlay?.entryPrice ?? pendingOrder?.openPrice ?? null,
-        volume: overlay?.volume ?? pendingOrder?.volume ?? 0,
-        side: (overlay?.side ?? pendingOrder?.side ?? "buy") as "buy" | "sell",
-        color: label.color,
-      };
-
-      const startPrice =
-        label.field === "sl"
-          ? (label.currentSl ?? 0)
-          : label.field === "tp"
-            ? (label.currentTp ?? 0)
-            : (draft?.openPrice ?? pendingOrder?.openPrice ?? overlay?.entryPrice ?? 0);
-
-      setDragState({
-        key: label.key,
-        y: label.y,
-        price: startPrice,
-        text: label.text,
-        color: label.color,
-        field: label.field ?? "sl",
-        dashed: label.field !== "entry",
-      });
-
-      const onDocCancel = () => {
-        cleanup();
-        isDraggingRef.current = false;
-        dragDataRef.current = null;
-        setDragState(null);
-      };
-      const cleanup = () => {
-        document.removeEventListener("pointermove", onDocMove);
-        document.removeEventListener("pointerup", onDocEnd);
-        document.removeEventListener("pointercancel", onDocCancel);
-      };
-      const onDocMove = (ev: PointerEvent) => {
-        ev.preventDefault();
-        handlePointerMoveAt(ev.clientY);
-      };
-      const onDocEnd = (ev: PointerEvent) => {
-        ev.preventDefault();
-        cleanup();
-        void finishDragAt(ev.clientY);
-      };
-
-      document.addEventListener("pointermove", onDocMove, { passive: false });
-      document.addEventListener("pointerup", onDocEnd, { passive: false });
-      document.addEventListener("pointercancel", onDocCancel);
-    },
-    [finishDragAt, handlePointerMoveAt],
-  );
+    return canvas.subscribeViewport(computeEntryLabels);
+  }, [canvasRef, computeEntryLabels, overlays, pendingOrders, slTpDrafts]);
 
   const handleConfirm = useCallback(
-    async (label: LabelItem) => {
+    async (label: EntryLabel) => {
       if (!label.confirmTargetKey || confirmingKey) return;
       const draft = slTpDraftsRef.current[label.confirmTargetKey];
       if (!draft) return;
@@ -624,147 +344,208 @@ export function PositionLabelsOverlay({
     [confirmingKey, submitModify],
   );
 
-  if (labels.length === 0 && !dragState) return null;
+  const lineItems: Array<{
+    key: string;
+    price: number;
+    label: string;
+    color: string;
+    dashed: boolean;
+    field: "sl" | "tp" | "entry";
+    targetKey: string;
+    positionId?: string;
+    orderId?: string;
+    currentSl: number | null;
+    currentTp: number | null;
+    currentOpenPrice: number | null;
+    entryPrice: number | null;
+    volume: number;
+    side: "buy" | "sell";
+    disabled: boolean;
+  }> = [];
 
-  const isDraggingVisible = dragState !== null;
-  const axisWidth = canvasRef.current?.getRightAxisWidth() ?? 56;
-  const plotRight = Math.max(0, overlaySize.w - Math.max(axisWidth, 56));
-  const lineEnd = Math.max(plotRight, overlaySize.w - 8);
+  for (const o of overlays) {
+    const side = (o.side ?? "buy") as "buy" | "sell";
+    const targetKey = slTpDraftKeyForPosition(o.id);
+    const draft = slTpDrafts[targetKey];
+    const sl = draft?.stopLoss ?? o.stopLoss;
+    const tp = draft?.takeProfit ?? o.takeProfit;
+
+    if (sl != null && sl > 0) {
+      lineItems.push({
+        key: `sl-${o.id}`,
+        price: sl,
+        label: "SL",
+        color: theme.stopLine,
+        dashed: true,
+        field: "sl",
+        targetKey,
+        positionId: o.id,
+        currentSl: sl,
+        currentTp: tp,
+        currentOpenPrice: null,
+        entryPrice: o.entryPrice,
+        volume: o.volume,
+        side,
+        disabled: !canModify,
+      });
+    }
+    if (tp != null && tp > 0) {
+      lineItems.push({
+        key: `tp-${o.id}`,
+        price: tp,
+        label: "TP",
+        color: theme.takeLine,
+        dashed: true,
+        field: "tp",
+        targetKey,
+        positionId: o.id,
+        currentSl: sl,
+        currentTp: tp,
+        currentOpenPrice: null,
+        entryPrice: o.entryPrice,
+        volume: o.volume,
+        side,
+        disabled: !canModify,
+      });
+    }
+  }
+
+  for (const o of pendingOrders) {
+    const side = o.side as "buy" | "sell";
+    const targetKey = slTpDraftKeyForOrder(o.id);
+    const draft = slTpDrafts[targetKey];
+    const entryPrice = draft?.openPrice ?? o.openPrice;
+    const sl = draft?.stopLoss ?? o.stopLoss;
+    const tp = draft?.takeProfit ?? o.takeProfit;
+    const pendingDisabled = !canModify || isDemoAccount;
+
+    if (entryPrice != null && entryPrice > 0) {
+      lineItems.push({
+        key: `pend-entry-${o.id}`,
+        price: entryPrice,
+        label: o.type.replace(/_/g, " "),
+        color: entryColor(side),
+        dashed: false,
+        field: "entry",
+        targetKey,
+        orderId: o.id,
+        currentSl: sl,
+        currentTp: tp,
+        currentOpenPrice: entryPrice,
+        entryPrice,
+        volume: o.volume,
+        side,
+        disabled: pendingDisabled,
+      });
+    }
+    if (sl != null && sl > 0) {
+      lineItems.push({
+        key: `pend-sl-${o.id}`,
+        price: sl,
+        label: "SL",
+        color: theme.stopLine,
+        dashed: true,
+        field: "sl",
+        targetKey,
+        orderId: o.id,
+        currentSl: sl,
+        currentTp: tp,
+        currentOpenPrice: entryPrice ?? null,
+        entryPrice: entryPrice ?? null,
+        volume: o.volume,
+        side,
+        disabled: pendingDisabled,
+      });
+    }
+    if (tp != null && tp > 0) {
+      lineItems.push({
+        key: `tp-${o.id}-pend`,
+        price: tp,
+        label: "TP",
+        color: theme.takeLine,
+        dashed: true,
+        field: "tp",
+        targetKey,
+        orderId: o.id,
+        currentSl: sl,
+        currentTp: tp,
+        currentOpenPrice: entryPrice ?? null,
+        entryPrice: entryPrice ?? null,
+        volume: o.volume,
+        side,
+        disabled: pendingDisabled,
+      });
+    }
+  }
+
+  if (entryLabels.length === 0 && lineItems.length === 0) return null;
 
   return (
-    <div
-      ref={overlayRootRef}
-      className={`absolute inset-0 overflow-hidden ${isDraggingVisible ? "z-[35]" : "z-10"}`}
-      style={{
-        pointerEvents: isDraggingVisible ? "auto" : "none",
-        touchAction: "none",
-      }}
-    >
-      {labels.map((label) => {
-        if (dragState && dragState.key === label.key) return null;
+    <div className="absolute inset-0 z-[22] overflow-hidden">
+      {lineItems.map((line) => (
+        <TradePlanLine
+          key={line.key}
+          canvasRef={canvasRef}
+          price={line.price}
+          label={line.label}
+          color={line.color}
+          digits={digits}
+          symbol={symbol}
+          dashed={line.dashed}
+          entryPrice={line.entryPrice}
+          volume={line.volume}
+          side={line.side}
+          disabled={line.disabled}
+          zIndex={24}
+          onChange={(newPrice) => {
+            void handleLevelChange({
+              targetKey: line.targetKey,
+              field: line.field,
+              positionId: line.positionId,
+              orderId: line.orderId,
+              currentSl: line.currentSl,
+              currentTp: line.currentTp,
+              currentOpenPrice: line.currentOpenPrice,
+              newPrice,
+            });
+          }}
+        />
+      ))}
 
-        return (
-          <div
-            key={label.key}
-            className="absolute left-0 -translate-y-1/2 whitespace-nowrap"
-            style={{
-              top: label.y,
-              pointerEvents: label.draggable || label.showConfirm ? "auto" : "none",
-              touchAction: "none",
-            }}
-          >
-            <div className="flex items-center gap-1">
-              {label.showConfirm && label.confirmTargetKey ? (
-                <button
-                  type="button"
-                  onClick={() => void handleConfirm(label)}
-                  disabled={confirmingKey === label.confirmTargetKey}
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-cyan-400/35 bg-cyan-400/15 text-cyan-200 shadow-[0_0_12px_rgba(0,212,245,0.25)] active:scale-95 disabled:opacity-50"
-                  aria-label="Set new SL and TP on broker"
-                  title="Set SL / TP (MetaTrader style)"
-                >
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              ) : null}
-
-              {label.draggable ? (
-                <div
-                  className="flex cursor-ns-resize items-center"
-                  style={{ padding: "12px 8px", margin: "-12px -8px" }}
-                  onPointerDown={(e) => handlePointerDown(e, label)}
-                >
-                  <span
-                    style={{
-                      color: label.color,
-                      fontSize: "10px",
-                      fontWeight: 600,
-                      letterSpacing: "0.02em",
-                      textShadow: labelShadow,
-                      paddingLeft: label.showConfirm ? 0 : 6,
-                    }}
-                  >
-                    {label.text}
-                  </span>
-                </div>
-              ) : (
-                <span
-                  style={{
-                    color: label.color,
-                    fontSize: "10px",
-                    fontWeight: 600,
-                    letterSpacing: "0.02em",
-                    textShadow: labelShadow,
-                    paddingLeft: label.showConfirm ? 0 : 6,
-                  }}
-                >
-                  {label.text}
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })}
-
-      {dragState && overlaySize.w > 0 ? (
-        <svg
-          className="pointer-events-none absolute inset-0 z-[25]"
-          width={overlaySize.w}
-          height={overlaySize.h}
-          viewBox={`0 0 ${overlaySize.w} ${overlaySize.h}`}
-        >
-          <g transform={`translate(0,${dragState.y})`}>
-            <line
-              x1={0}
-              x2={lineEnd}
-              y1={0}
-              y2={0}
-              stroke={dragState.color}
-              strokeWidth={dragState.field === "entry" ? 1.75 : 1.25}
-              strokeDasharray={dragState.dashed ? "6 4" : undefined}
-              opacity={0.95}
-            />
-            <text
-              x={6}
-              y={4}
-              fontFamily="ui-sans-serif, system-ui, -apple-system"
-              fontSize={10}
-              fontWeight={700}
-              fill={dragState.color}
-            >
-              {dragState.text}
-            </text>
-            <rect
-              x={overlaySize.w - Math.max(58, axisWidth - 4) - 2}
-              y={-9}
-              width={Math.max(58, axisWidth - 4)}
-              height={18}
-              rx={2}
-              fill={dragState.color}
-            />
-            <text
-              x={overlaySize.w - Math.max(58, axisWidth - 4) - 2 + Math.max(58, axisWidth - 4) / 2}
-              y={4}
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize={10}
-              fontWeight={700}
-              fill="#000"
-            >
-              {dragState.price.toFixed(priceDigitsForSymbol(symbolRef.current))}
-            </text>
-          </g>
-        </svg>
-      ) : null}
-
-      {dragState ? (
+      {entryLabels.map((label) => (
         <div
-          className="absolute left-0 -translate-y-1/2 whitespace-nowrap pointer-events-none opacity-0"
-          style={{ top: dragState.y }}
-          aria-hidden
+          key={label.key}
+          className="pointer-events-none absolute left-0 z-[26] -translate-y-1/2 whitespace-nowrap"
+          style={{ top: label.y }}
         >
-          <span>{dragState.text}</span>
+          <div className="pointer-events-auto flex items-center gap-1">
+            {label.showConfirm ? (
+              <button
+                type="button"
+                onClick={() => void handleConfirm(label)}
+                disabled={confirmingKey === label.confirmTargetKey}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-cyan-400/35 bg-cyan-400/15 text-cyan-200 shadow-[0_0_12px_rgba(0,212,245,0.25)] active:scale-95 disabled:opacity-50"
+                aria-label="Confirm SL and TP on broker"
+                title="Set SL / TP (MetaTrader style)"
+              >
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            <span
+              style={{
+                color: label.color,
+                fontSize: "10px",
+                fontWeight: 600,
+                letterSpacing: "0.02em",
+                textShadow: labelShadow,
+                paddingLeft: label.showConfirm ? 0 : 6,
+              }}
+            >
+              {label.text}
+            </span>
+          </div>
         </div>
-      ) : null}
+      ))}
     </div>
   );
 }

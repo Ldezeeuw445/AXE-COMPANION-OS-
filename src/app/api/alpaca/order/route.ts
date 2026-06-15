@@ -3,28 +3,36 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getAlpacaPaperConfig } from "@/lib/alpaca/env";
 import { createAlpacaOrder, replaceAlpacaOrder } from "@/lib/alpaca/client";
 import { toAlpacaSymbol } from "@/lib/alpaca/symbols";
+import { buildAlpacaOrderPayload, type AxeMt5OrderType } from "@/lib/alpaca/orders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type OrderBody = {
   brokerAccountId: string;
-  action: "place" | "replace";
-  symbol: string;
-  side: "buy" | "sell";
-  qty: number;
-  type: "market" | "limit" | "stop" | "stop_limit";
+  action?: "place" | "replace";
+  /** Direct Alpaca fields (legacy). */
+  symbol?: string;
+  side?: "buy" | "sell";
+  qty?: number;
+  type?: "market" | "limit" | "stop" | "stop_limit";
   limit_price?: number;
   stop_price?: number;
   orderId?: string;
   client_order_id?: string;
+  /** AXE chart fields (MT5-style). */
+  orderType?: AxeMt5OrderType;
+  volume?: number;
+  openPrice?: number | null;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
 };
 
 /**
  * POST /api/alpaca/order
  *
- * Place or replace orders on Alpaca paper. Orders are tagged with
- * client_order_id prefix `axe-{userId}` for future per-user filtering.
+ * Place or replace orders on Alpaca paper. Accepts either native Alpaca fields
+ * or AXE chart MT5-style orderType/volume/openPrice/stopLoss/takeProfit.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabaseClient();
@@ -62,11 +70,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: false, message: "Alpaca account not found." }, { status: 404 });
   }
 
-  const alpacaSymbol = toAlpacaSymbol(body.symbol);
-  if (!alpacaSymbol) {
-    return Response.json({ ok: false, message: `Symbol ${body.symbol} is not supported on Alpaca.` }, { status: 400 });
-  }
-
   const clientOrderId =
     body.client_order_id ?? `axe-${user.id.slice(0, 8)}-${Date.now().toString(36)}`;
 
@@ -83,17 +86,45 @@ export async function POST(request: NextRequest) {
       return Response.json({ ok: true, order });
     }
 
-    const order = await createAlpacaOrder(config, {
-      symbol: alpacaSymbol,
-      qty: body.qty,
-      side: body.side,
-      type: body.type,
-      time_in_force: body.type === "market" ? "day" : "gtc",
-      limit_price: body.limit_price,
-      stop_price: body.stop_price,
-      client_order_id: clientOrderId,
-    });
-    return Response.json({ ok: true, order });
+    const symbol = (body.symbol ?? "").trim();
+    const alpacaSymbol = toAlpacaSymbol(symbol);
+    if (!alpacaSymbol) {
+      return Response.json(
+        { ok: false, message: `Symbol ${symbol || "(empty)"} is not supported on Alpaca.` },
+        { status: 400 },
+      );
+    }
+
+    let payload: ReturnType<typeof buildAlpacaOrderPayload>;
+
+    if (body.orderType && body.volume != null) {
+      payload = buildAlpacaOrderPayload({
+        symbol: alpacaSymbol,
+        side: body.side ?? (body.orderType.startsWith("buy") ? "buy" : "sell"),
+        orderType: body.orderType,
+        volume: body.volume,
+        openPrice: body.openPrice,
+        stopLoss: body.stopLoss,
+        takeProfit: body.takeProfit,
+        clientOrderId,
+      });
+    } else if (body.side && body.qty != null && body.type) {
+      payload = {
+        symbol: alpacaSymbol,
+        qty: body.qty,
+        side: body.side,
+        type: body.type,
+        time_in_force: body.type === "market" ? "day" : "gtc",
+        limit_price: body.limit_price,
+        stop_price: body.stop_price,
+        client_order_id: clientOrderId,
+      };
+    } else {
+      return Response.json({ ok: false, message: "Missing order fields." }, { status: 400 });
+    }
+
+    const order = await createAlpacaOrder(config, payload);
+    return Response.json({ ok: true, order, orderId: order.id });
   } catch (error) {
     return Response.json(
       { ok: false, message: error instanceof Error ? error.message : "Alpaca order failed." },

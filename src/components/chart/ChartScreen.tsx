@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { RefObject } from "react";
 import {
   Activity,
@@ -43,9 +43,7 @@ import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/cha
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import {
-  estimateSlTpPnlUsd,
   formatBrokerPrice,
-  formatSlTpPnlUsd,
   priceDigitsForSymbol,
 } from "@/lib/broker/symbolFormat";
 import type { ChartOverlayRow, ChartPageData, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
@@ -61,6 +59,7 @@ import type {
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import { ChartPendingOrderSheet } from "@/components/chart/ChartPendingOrderSheet";
+import { TradePlanLine } from "@/components/chart/TradePlanLine";
 import {
   PositionLabelsOverlay,
   type SlTpDraft,
@@ -498,332 +497,6 @@ function ResizablePane({
     </div>
   );
 }
-
-/**
- * Compute estimated USD profit/loss for TP/SL labels via contract-size math.
- */
-function slTpInfo(
-  entryPrice: number | null,
-  levelPrice: number | null,
-  volume: string | number,
-  side: "buy" | "sell",
-  _digits: number,
-  symbol: string,
-): { label: string } | null {
-  if (entryPrice == null || levelPrice == null) return null;
-  const vol = typeof volume === "string" ? parseFloat(volume) || 0 : volume;
-  const usd = estimateSlTpPnlUsd(symbol, entryPrice, levelPrice, vol, side);
-  return { label: formatSlTpPnlUsd(usd) };
-}
-
-const TradePlanLine = memo(function TradePlanLine({
-  canvasRef,
-  price,
-  label,
-  color,
-  digits,
-  symbol = "",
-  onChange,
-  dashed = false,
-  entryPrice = null,
-  volume = "0",
-  side = "buy",
-  onDragStart,
-  onDragEnd,
-}: {
-  canvasRef: RefObject<ChartCanvasHandle | null>;
-  price: number | null;
-  label: string;
-  color: string;
-  digits: number;
-  symbol?: string;
-  onChange: (price: number) => void;
-  dashed?: boolean;
-  entryPrice?: number | null;
-  volume?: string | number;
-  side?: "buy" | "sell";
-  onDragStart?: () => void;
-  onDragEnd?: () => void;
-}) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const groupRef = useRef<SVGGElement | null>(null);
-  const priceTextRef = useRef<SVGTextElement | null>(null);
-  const labelTextRef = useRef<SVGTextElement | null>(null);
-  const circleRef = useRef<SVGCircleElement | null>(null);
-  const handleDivRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const [axisWidth, setAxisWidth] = useState(0);
-  const [baseY, setBaseY] = useState<number | null>(null);
-
-  // ── Drag is 100% ref-based — zero React state during drag ──
-  const isDraggingRef = useRef(false);
-  const rafRef = useRef(0);
-  const baseYRef = useRef<number | null>(null);
-  const dragPriceRef = useRef<number | null>(null);
-  const originRef = useRef<{ pointerY: number; baseY: number } | null>(null);
-
-  // Stable refs for callbacks
-  const onChangeRef = useRef(onChange);  onChangeRef.current = onChange;
-  const onDragStartRef = useRef(onDragStart);  onDragStartRef.current = onDragStart;
-  const onDragEndRef = useRef(onDragEnd);  onDragEndRef.current = onDragEnd;
-
-  // Prop refs for closure safety inside rAF
-  const digitsRef = useRef(digits);  digitsRef.current = digits;
-  const dashedRef = useRef(dashed);  dashedRef.current = dashed;
-  const entryPriceRef = useRef(entryPrice);  entryPriceRef.current = entryPrice;
-  const volumeRef = useRef(volume);  volumeRef.current = volume;
-  const sideRef = useRef(side);  sideRef.current = side;
-  const labelPropRef = useRef(label);  labelPropRef.current = label;
-  const symbolRef = useRef(symbol);  symbolRef.current = symbol;
-
-  // Size observer
-  useEffect(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const rect = el.getBoundingClientRect();
-      setSize({ w: rect.width, h: rect.height });
-    });
-    ro.observe(el);
-    const rect = el.getBoundingClientRect();
-    setSize({ w: rect.width, h: rect.height });
-    return () => ro.disconnect();
-  }, []);
-
-  // Viewport subscription — updates baseY, skipped during drag
-  useEffect(() => {
-    const handle = canvasRef.current;
-    if (!handle) return;
-    const compute = () => {
-      if (!isDraggingRef.current) {
-        const by = price == null ? null : handle.priceToCoordinate(price);
-        setBaseY(by);
-        baseYRef.current = by;
-        setAxisWidth(handle.getRightAxisWidth());
-      }
-    };
-    compute();
-    return handle.subscribeViewport(compute);
-  }, [canvasRef, price]);
-
-  // Cleanup on unmount
-  useEffect(() => () => { isDraggingRef.current = false; cancelAnimationFrame(rafRef.current); }, []);
-
-  const y = baseY;
-
-  // Sync line position from props — never via JSX transform (React re-renders
-  // from live ticks were snapping the line back during drag).
-  const applyLineY = useCallback((nextY: number) => {
-    groupRef.current?.setAttribute("transform", `translate(0,${nextY})`);
-    if (handleDivRef.current) {
-      handleDivRef.current.style.top = `${nextY - 28}px`;
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    if (isDraggingRef.current || y == null) return;
-    applyLineY(y);
-  }, [y, applyLineY, size.w, size.h]);
-
-  // ── Drag via HTML div + setPointerCapture ──
-  // SVG pointer-events on iOS are unreliable — the HTML div guarantees touch works
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    isDraggingRef.current = true;
-    dragPriceRef.current = null;
-
-    // Capture pointer to this HTML element — all subsequent pointer events
-    // go to this element regardless of where the finger moves
-    const el = e.currentTarget;
-    el.setPointerCapture(e.pointerId);
-
-    originRef.current = {
-      pointerY: e.clientY,
-      baseY: baseYRef.current ?? 0,
-    };
-
-    // Visual feedback via direct DOM
-    if (circleRef.current) {
-      circleRef.current.setAttribute("r", "7");
-      circleRef.current.setAttribute("stroke-width", "2");
-      circleRef.current.setAttribute("fill-opacity", "0.2");
-    }
-
-    onDragStartRef.current?.();
-
-    const onMove = (ev: PointerEvent) => {
-      if (!isDraggingRef.current) return;
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        const chartHandle = canvasRef.current;
-        const origin = originRef.current;
-        const group = groupRef.current;
-        if (!chartHandle || !origin || !group) return;
-
-        const delta = ev.clientY - origin.pointerY;
-        const newY = origin.baseY + delta;
-        const newPrice = chartHandle.coordinateToPrice(newY);
-        if (newPrice == null || !Number.isFinite(newPrice)) return;
-
-        applyLineY(newY);
-        dragPriceRef.current = newPrice;
-
-        // Update right-axis price text
-        if (priceTextRef.current) {
-          priceTextRef.current.textContent = newPrice.toFixed(digitsRef.current);
-        }
-        // Update left label (SL/TP get USD P&L)
-        if (labelTextRef.current && dashedRef.current) {
-          const info = slTpInfo(entryPriceRef.current, newPrice, volumeRef.current, sideRef.current, digitsRef.current, symbolRef.current);
-          labelTextRef.current.textContent = info
-            ? `${labelPropRef.current.toUpperCase()}, ${info.label}`
-            : labelPropRef.current.toUpperCase();
-        } else if (labelTextRef.current && !dashedRef.current) {
-          labelTextRef.current.textContent = `${labelPropRef.current.toUpperCase()} ${volumeRef.current}`;
-        }
-      });
-    };
-
-    const onUp = () => {
-      isDraggingRef.current = false;
-      cancelAnimationFrame(rafRef.current);
-      el.removeEventListener("pointermove", onMove);
-      el.removeEventListener("pointerup", onUp);
-      el.removeEventListener("lostpointercapture", onUp);
-
-      // Reset circle visual
-      if (circleRef.current) {
-        circleRef.current.setAttribute("r", "5");
-        circleRef.current.setAttribute("stroke-width", "1.5");
-        circleRef.current.setAttribute("fill-opacity", "0");
-      }
-
-      const finalPrice = dragPriceRef.current;
-      dragPriceRef.current = null;
-      originRef.current = null;
-      if (finalPrice != null) onChangeRef.current(finalPrice);
-      onDragEndRef.current?.();
-    };
-
-    // Listen on the captured element itself — more reliable than window
-    el.addEventListener("pointermove", onMove);
-    el.addEventListener("pointerup", onUp);
-    el.addEventListener("lostpointercapture", onUp);
-  }, [canvasRef, applyLineY]);
-
-  // ── Render ──
-  if (price == null || y == null || size.w <= 0 || size.h <= 0) {
-    return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
-  }
-
-  const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
-  const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits, symbol) : null;
-  const labelText = info ? `${label.toUpperCase()}, ${info.label}` : label.toUpperCase();
-  const priceText = price.toFixed(digits);
-  const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
-  const priceWidth = Math.max(58, axisWidth - 4);
-  const priceX = size.w - priceWidth - 2;
-  const handleCx = (labelPixels + 4 + plotRight) / 2;
-
-  return (
-    <div
-      ref={hostRef}
-      className="pointer-events-none absolute inset-0 z-[24]"
-      style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none", touchAction: "none" }}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <svg
-        width={size.w}
-        height={size.h}
-        viewBox={`0 0 ${size.w} ${size.h}`}
-        className="absolute inset-0"
-        style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
-      >
-        {/* Transform applied imperatively — see applyLineY */}
-        <g ref={groupRef}>
-          <line
-            x1={labelPixels + 4}
-            x2={plotRight}
-            y1={0}
-            y2={0}
-            stroke={color}
-            strokeWidth={dashed ? 1 : 1.5}
-            strokeDasharray={dashed ? "6 4" : ""}
-          />
-
-          <text
-            ref={labelTextRef}
-            x={4}
-            y={3}
-            fontFamily="ui-sans-serif, system-ui, -apple-system"
-            fontSize={10}
-            fontWeight={700}
-            fill={color}
-          >
-            {labelText}
-          </text>
-
-          {/* Circle — visual only, no pointer events */}
-          <circle
-            ref={circleRef}
-            cx={handleCx}
-            cy={0}
-            r={5}
-            fill={color}
-            fillOpacity={0}
-            stroke={color}
-            strokeWidth={1.5}
-            style={{ pointerEvents: "none" }}
-          />
-
-          <g style={{ pointerEvents: "none" }}>
-            <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
-            <text
-              ref={priceTextRef}
-              x={priceX + priceWidth / 2}
-              y={4}
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize={10}
-              fontWeight={700}
-              fill="#000"
-            >
-              {priceText}
-            </text>
-          </g>
-        </g>
-      </svg>
-
-      {/* HTML drag handle — sits on top of SVG circle, reliable touch on iOS */}
-      <div
-        ref={handleDivRef}
-        onPointerDown={handlePointerDown}
-        style={{
-          position: "absolute",
-          left: handleCx - 28,
-          top: y - 28,
-          width: 56,
-          height: 56,
-          pointerEvents: "auto",
-          touchAction: "none",
-          cursor: "ns-resize",
-        }}
-      />
-    </div>
-  );
-}, (prev, next) =>
-  prev.price === next.price &&
-  prev.label === next.label &&
-  prev.color === next.color &&
-  prev.digits === next.digits &&
-  prev.dashed === next.dashed &&
-  prev.entryPrice === next.entryPrice &&
-  prev.volume === next.volume &&
-  prev.side === next.side &&
-  prev.canvasRef === next.canvasRef &&
-  prev.symbol === next.symbol,
-);
 
 export function ChartScreen({ data, initialAction, liveTradingEnabled = false, instantSlTpModify = false }: Props) {
   const router = useRouter();
@@ -1385,6 +1058,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   const slTpModifyPref = useInstantSlTpModify(instantSlTpModify);
   const [slTpDrafts, setSlTpDrafts] = useState<Record<string, SlTpDraft>>({});
   const isDemoAccount = data.account?.connectionMethod === "demo_paper";
+  const isAlpacaAccount = data.account?.connectionMethod === "cloud_alpaca";
   const demoBook = useDemoPositions(
     data.account?.brokerAccountId ?? null,
     data.symbol,
@@ -1575,8 +1249,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       return;
     }
 
-    // Live MT5 account path
-    if (!liveTrading.enabled) {
+    // Live broker path (MT5 or Alpaca paper)
+    if (!isAlpacaAccount && !liveTrading.enabled) {
       setTradeToast({
         kind: "info",
         title: "Live trading is OFF on this device",
@@ -1599,6 +1273,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       takeProfit: isMarketOrder ? null : pendingTakeProfitPrice,
       slippagePoints: deviationPoints,
       accountLabel: data.account?.label ?? "MT5 Account",
+      volumeUnit: isAlpacaAccount ? "shares" : "lots",
     });
   }, [
     data.account?.brokerAccountId,
@@ -1608,6 +1283,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     data.symbol,
     demoBook,
     deviationPoints,
+    isAlpacaAccount,
     isDemoAccount,
     liveTrading.enabled,
     livePrice,
@@ -1624,21 +1300,35 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     if (!orderConfirmInput || !brokerAccountId) return;
     setOrderConfirmStatus({ kind: "sending" });
     try {
-      const res = await fetch("/api/mt5/order", {
+      const endpoint = isAlpacaAccount ? "/api/alpaca/order" : "/api/mt5/order";
+      const body = isAlpacaAccount
+        ? {
+            brokerAccountId,
+            symbol: orderConfirmInput.brokerSymbol,
+            side: orderConfirmInput.side,
+            orderType: orderConfirmInput.orderType,
+            volume: orderConfirmInput.volume,
+            openPrice: orderConfirmInput.openPrice,
+            stopLoss: orderConfirmInput.stopLoss,
+            takeProfit: orderConfirmInput.takeProfit,
+          }
+        : {
+            brokerAccountId,
+            symbol: orderConfirmInput.brokerSymbol,
+            side: orderConfirmInput.side,
+            orderType: orderConfirmInput.orderType,
+            volume: orderConfirmInput.volume,
+            openPrice: orderConfirmInput.openPrice,
+            stopLoss: orderConfirmInput.stopLoss,
+            takeProfit: orderConfirmInput.takeProfit,
+            slippage: orderConfirmInput.slippagePoints,
+            comment: "AXE",
+          };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          brokerAccountId,
-          symbol: orderConfirmInput.brokerSymbol,
-          side: orderConfirmInput.side,
-          orderType: orderConfirmInput.orderType,
-          volume: orderConfirmInput.volume,
-          openPrice: orderConfirmInput.openPrice,
-          stopLoss: orderConfirmInput.stopLoss,
-          takeProfit: orderConfirmInput.takeProfit,
-          slippage: orderConfirmInput.slippagePoints,
-          comment: "AXE",
-        }),
+        body: JSON.stringify(body),
       });
       const payload = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
@@ -1649,11 +1339,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         code?: string;
       };
       if (res.ok && payload.ok) {
+        const unit = isAlpacaAccount ? "shares" : "lots";
         setOrderConfirmStatus({
           kind: "ok",
-          message: `${orderConfirmInput.side.toUpperCase()} sent — ${payload.stringCode ?? "TRADE_RETCODE_DONE"}${
-            payload.positionId ? ` · position ${payload.positionId}` : ""
-          }.`,
+          message: `${orderConfirmInput.side.toUpperCase()} sent — ${
+            isAlpacaAccount ? "Alpaca accepted" : payload.stringCode ?? "TRADE_RETCODE_DONE"
+          }${payload.orderId ? ` · order ${payload.orderId}` : payload.positionId ? ` · position ${payload.positionId}` : ""}.`,
         });
         setPendingOrderVisible(false);
         setTimeout(() => {
@@ -1662,7 +1353,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           setTradeToast({
             kind: "live",
             title: `${orderConfirmInput.side.toUpperCase()} ${orderConfirmInput.symbol} sent`,
-            body: `${orderConfirmInput.volume.toFixed(2)} lots — broker accepted the order.`,
+            body: `${orderConfirmInput.volume.toFixed(2)} ${unit} — broker accepted the order.`,
           });
         }, 1_200);
       } else {
@@ -1679,7 +1370,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         message: err instanceof Error ? err.message : "Network error — no order sent.",
       });
     }
-  }, [data.account?.brokerAccountId, orderConfirmInput]);
+  }, [data.account?.brokerAccountId, isAlpacaAccount, orderConfirmInput]);
 
   // Load saved annotations when symbol/tf changes
   useEffect(() => {
@@ -2922,8 +2613,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           pendingOrders={displayPendingOrders}
           symbol={data.brokerSymbol}
           brokerAccountId={data.account?.brokerAccountId}
-          liveTradingEnabled={liveTrading.enabled}
+          liveTradingEnabled={liveTrading.enabled || isAlpacaAccount}
           isDemoAccount={isDemoAccount}
+          isAlpacaAccount={isAlpacaAccount}
           instantSlTpModify={slTpModifyPref.enabled}
           slTpDrafts={slTpDrafts}
           onSlTpDraftChange={(input) => {

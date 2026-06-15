@@ -91,6 +91,9 @@ export type CreateAlpacaOrderInput = {
   limit_price?: number;
   stop_price?: number;
   client_order_id?: string;
+  order_class?: "simple" | "bracket" | "oco" | "oto";
+  take_profit?: { limit_price: number };
+  stop_loss?: { stop_price: number; limit_price?: number };
 };
 
 export async function createAlpacaOrder(
@@ -137,10 +140,13 @@ export async function getAlpacaBars(
     end?: string;
     limit?: number;
     adjustment?: "raw" | "split" | "dividend" | "all";
+    /** IEX is free; SIP requires a paid subscription. */
+    feed?: "iex" | "sip" | "boats";
   },
 ): Promise<AlpacaBar[]> {
   const q = new URLSearchParams();
   q.set("timeframe", params.timeframe);
+  q.set("feed", params.feed ?? "iex");
   if (params.start) q.set("start", params.start);
   if (params.end) q.set("end", params.end);
   if (params.limit) q.set("limit", String(params.limit));

@@ -169,6 +169,31 @@ function mapAlpacaPositionRow(p: AlpacaPosition): ChartOverlayRow {
   };
 }
 
+/** Attach exit stop/limit orders as SL/TP levels on Alpaca positions for one symbol. */
+function attachAlpacaExitLevels(
+  positions: ChartOverlayRow[],
+  orders: AlpacaOrder[],
+  symbol: string,
+): ChartOverlayRow[] {
+  const sym = symbol.toUpperCase();
+  return positions.map((pos) => {
+    const exitSide = pos.side === "sell" ? "buy" : "sell";
+    const exitOrders = orders.filter(
+      (o) =>
+        axeSymbolFromAlpaca(o.symbol) === sym &&
+        o.side === exitSide &&
+        (o.order_type === "stop" || o.order_type === "limit"),
+    );
+    const stopOrder = exitOrders.find((o) => o.order_type === "stop");
+    const tpOrder = exitOrders.find((o) => o.order_type === "limit");
+    return {
+      ...pos,
+      stopLoss: stopOrder?.stop_price ? Number(stopOrder.stop_price) : pos.stopLoss,
+      takeProfit: tpOrder?.limit_price ? Number(tpOrder.limit_price) : pos.takeProfit,
+    };
+  });
+}
+
 function mapAlpacaPendingOrder(o: AlpacaOrder): PendingOrderOverlay | null {
   const openStatuses = new Set(["new", "accepted", "pending_new", "held", "partially_filled"]);
   if (!openStatuses.has(o.status)) return null;
@@ -615,9 +640,13 @@ export async function loadChartPageData(
           listAlpacaOrders(config, { status: "open", limit: 100 }),
         ]);
         totalPositions = positions.length;
-        positionsOnSymbol = positions
-          .filter((p) => axeSymbolFromAlpaca(p.symbol) === requested)
-          .map(mapAlpacaPositionRow);
+        positionsOnSymbol = attachAlpacaExitLevels(
+          positions
+            .filter((p) => axeSymbolFromAlpaca(p.symbol) === requested)
+            .map(mapAlpacaPositionRow),
+          orders,
+          requested,
+        );
         const pending = orders
           .map(mapAlpacaPendingOrder)
           .filter((o): o is PendingOrderOverlay => o != null);
@@ -652,7 +681,11 @@ export async function loadChartPageData(
       dataError: null,
       hint: alpacaCandles?.length
         ? "Alpaca paper — US equities with live market data. Switch symbol to TSLA, AAPL, NVDA, etc."
-        : `${requested} is not on Alpaca. Try TSLA or AAPL for live US equity data.`,
+        : !config || !isAlpacaConfigured()
+          ? "Alpaca market data is not configured on this server. Chart shows synthetic candles until ALPACA_PAPER keys are set."
+          : !isAlpacaSupportedSymbol(requested)
+            ? `${requested} is not on Alpaca. Try TSLA or AAPL for live US equity data.`
+            : `Live Alpaca candles for ${requested} are temporarily unavailable — showing synthetic data. Retry in a moment.`,
       symbolOptions,
       attemptedSymbols: [requested],
       account,
