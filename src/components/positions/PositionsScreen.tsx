@@ -509,14 +509,59 @@ function OrderRow({ order: o, index: i }: { order: PendingOrderRow; index: numbe
   );
 }
 
-/** Bottom sheet clearance — sits above fixed nav (--tos-nav-offset). */
-const TRADE_SHEET_BOTTOM = "calc(var(--tos-nav-offset) + 0.35rem)";
+/** Bottom edge of trade sheets — explicit calc so iOS PWA always clears the nav pill. */
+const TRADE_SHEET_BOTTOM =
+  "calc(4.1rem + env(safe-area-inset-bottom, 0px) + 0.85rem)";
 
 function BodyPortal({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted || typeof document === "undefined") return null;
   return createPortal(children, document.body);
+}
+
+function TradeSheetShell({
+  onBackdropClick,
+  children,
+}: {
+  onBackdropClick?: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    document.body.classList.add("trade-sheet-open");
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.classList.remove("trade-sheet-open");
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  return (
+    <BodyPortal>
+      <div className="fixed inset-0 z-[110]">
+        <div
+          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          onClick={onBackdropClick}
+          aria-hidden
+        />
+        <div
+          className="absolute left-1/2 w-full max-w-md -translate-x-1/2 overflow-y-auto rounded-t-2xl border-t border-white/[0.08] bg-[#111115] px-5 pt-5 pb-4"
+          style={{
+            bottom: TRADE_SHEET_BOTTOM,
+            maxHeight: `calc(100dvh - ${TRADE_SHEET_BOTTOM} - env(safe-area-inset-top, 0px) - 0.5rem)`,
+            boxShadow: "0 -8px 40px rgba(0,0,0,0.6)",
+            WebkitOverflowScrolling: "touch",
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="mx-auto mb-4 h-1 w-10 shrink-0 rounded-full bg-white/10" />
+          {children}
+        </div>
+      </div>
+    </BodyPortal>
+  );
 }
 
 /* ── Edit SL/TP Modal ──────────────────────────────────────────────── */
@@ -563,20 +608,7 @@ function EditSlTpModal({
   };
 
   return (
-    <BodyPortal>
-      <div className="fixed inset-0 z-[90] flex items-end justify-center">
-        <div
-          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-          onClick={isSaving ? undefined : onCancel}
-        />
-
-        <div
-          className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-white/[0.08] bg-[#111115] px-5 pt-5"
-          style={{ boxShadow: "0 -8px 40px rgba(0,0,0,0.6)", paddingBottom: TRADE_SHEET_BOTTOM }}
-        >
-          {/* Handle */}
-          <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/10" />
-
+    <TradeSheetShell onBackdropClick={isSaving ? undefined : onCancel}>
           {/* Header */}
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -690,9 +722,7 @@ function EditSlTpModal({
             )}
           </button>
         </div>
-      </div>
-    </div>
-    </BodyPortal>
+    </TradeSheetShell>
   );
 }
 
@@ -765,19 +795,7 @@ function CloseConfirmModal({
   const isError = closeState.status === "error";
 
   return (
-    <BodyPortal>
-      <div className="fixed inset-0 z-[90] flex items-end justify-center">
-        <div
-          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-          onClick={isClosing ? undefined : onCancel}
-        />
-
-        <div
-          className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-white/[0.08] bg-[#111115] px-5 pt-5"
-          style={{ boxShadow: "0 -8px 40px rgba(0,0,0,0.6)", paddingBottom: TRADE_SHEET_BOTTOM }}
-        >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/10" />
-
+    <TradeSheetShell onBackdropClick={isClosing ? undefined : onCancel}>
         <div className="mb-3 flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/15 border border-rose-500/20">
             <AlertTriangle className="h-4 w-4 text-rose-400" strokeWidth={2} />
@@ -847,9 +865,7 @@ function CloseConfirmModal({
             )}
           </button>
         </div>
-      </div>
-    </div>
-    </BodyPortal>
+    </TradeSheetShell>
   );
 }
 

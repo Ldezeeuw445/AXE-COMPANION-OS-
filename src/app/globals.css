@@ -303,6 +303,11 @@ body {
   --tos-nav-label-size: 6px;
 }
 
+/* Trade tab bottom sheets (close position, edit SL/TP) sit above the nav. */
+body.trade-sheet-open .tos-nav-pill {
+  z-index: 40;
+}
+
   /* ── Landscape adaptation ──────────────────────────────────────── */
 @media (orientation: landscape) {
   .tos-nav-pill {

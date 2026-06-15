@@ -88,6 +88,10 @@ function AccountCard({
   const isDemo = isDemoAccount(account);
   const isAlpaca = isAlpacaAccount(account);
   const isCloud = account.connection_method === "cloud_mt5" && account.external_connection_id;
+  const passwordType =
+    typeof account.metadata?.passwordType === "string" ? account.metadata.passwordType : null;
+  const isInvestorLinked = passwordType === "investor";
+  const isMasterLinked = passwordType === "master";
   const dot = statusDot(account);
 
   // Close menu on outside click
@@ -168,6 +172,16 @@ function AccountCard({
             {isAlpaca && (
               <span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-200/90">
                 Alpaca
+              </span>
+            )}
+            {isCloud && isInvestorLinked && (
+              <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/45">
+                Read-only
+              </span>
+            )}
+            {isCloud && isMasterLinked && (
+              <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-200/90">
+                Master
               </span>
             )}
           </div>
