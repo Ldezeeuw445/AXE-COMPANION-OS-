@@ -14,6 +14,7 @@ import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME, getChartTheme } from "@/components/chart/chartTheme";
 import { PositionSlTpLine } from "@/components/chart/PositionSlTpLine";
+import { TradePlanLine } from "@/components/chart/TradePlanLine";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
 export type SlTpDraft = {
@@ -162,7 +163,9 @@ export function PositionLabelsOverlay({
   const slTpDraftsRef = useRef(slTpDrafts);
   slTpDraftsRef.current = slTpDrafts;
 
-  const canModify = !!brokerAccountId && (liveTradingEnabled || isDemoAccount || isAlpacaAccount);
+  const canBrokerInteract = !!brokerAccountId && !isDemoAccount;
+  const canSubmitToBroker = canBrokerInteract && (liveTradingEnabled || isAlpacaAccount);
+  const canModify = canBrokerInteract;
 
   const submitModify = useCallback(
     async (input: {
@@ -230,6 +233,26 @@ export function PositionLabelsOverlay({
       currentOpenPrice: number | null;
       newPrice: number;
     }) => {
+      if (!canSubmitToBroker && !isDemoAccount) {
+        onModifyFeedback?.({
+          ok: false,
+          message: "Turn on Live trading in Settings to modify broker orders.",
+        });
+        return;
+      }
+
+      // Pending limit/stop entry: apply on release (MT5-style direct modify).
+      if (input.orderId && input.field === "entry") {
+        await submitModify({
+          targetKey: input.targetKey,
+          orderId: input.orderId,
+          stopLoss: input.currentSl,
+          takeProfit: input.currentTp,
+          openPrice: input.newPrice,
+        });
+        return;
+      }
+
       const newSl = input.field === "sl" ? input.newPrice : input.currentSl;
       const newTp = input.field === "tp" ? input.newPrice : input.currentTp;
       const newOpenPrice = input.field === "entry" ? input.newPrice : input.currentOpenPrice;
@@ -255,7 +278,7 @@ export function PositionLabelsOverlay({
         orderId: input.orderId,
       });
     },
-    [instantSlTpModify, onSlTpDraftChange, submitModify],
+    [instantSlTpModify, onSlTpDraftChange, submitModify, canSubmitToBroker, isDemoAccount, onModifyFeedback],
   );
 
   const computeEntryLabels = useCallback(() => {
@@ -289,30 +312,11 @@ export function PositionLabelsOverlay({
     }
 
     for (const o of pendingOrders) {
-      const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
-      const targetKey = slTpDraftKeyForOrder(o.id);
-      const draft = drafts[targetKey];
-      const entryPrice = draft?.openPrice ?? o.openPrice;
-      const hasDraft = Boolean(draft);
-
-      if (entryPrice != null && entryPrice > 0) {
-        const y = canvas.priceToCoordinate(entryPrice);
-        if (y != null) {
-          next.push({
-            key: `pend-entry-${o.id}`,
-            y,
-            text: `${typeLabel} ${o.volume}${hasDraft && draft?.openPrice != null ? " · draft" : ""}`,
-            color: entryColor(o.side),
-            showConfirm: hasDraft && canModify && !isDemoAccount,
-            confirmTargetKey: targetKey,
-            orderId: o.id,
-          });
-        }
-      }
+      // Pending broker entry labels are rendered as draggable TradePlanLine overlays.
     }
 
     setEntryLabels(next);
-  }, [canvasRef, canModify, isDemoAccount, overlays, pendingOrders]);
+  }, [canvasRef, canModify, overlays, pendingOrders]);
 
   useEffect(() => {
     computeEntryLabels();
@@ -360,6 +364,20 @@ export function PositionLabelsOverlay({
     entryPrice: number | null;
     volume: number;
     side: "buy" | "sell";
+    disabled: boolean;
+  }> = [];
+
+  const pendingEntryLines: Array<{
+    key: string;
+    price: number;
+    label: string;
+    color: string;
+    targetKey: string;
+    orderId: string;
+    currentSl: number | null;
+    currentTp: number | null;
+    side: "buy" | "sell";
+    volume: number;
     disabled: boolean;
   }> = [];
 
@@ -417,7 +435,24 @@ export function PositionLabelsOverlay({
     const entryPrice = draft?.openPrice ?? o.openPrice;
     const sl = draft?.stopLoss ?? o.stopLoss;
     const tp = draft?.takeProfit ?? o.takeProfit;
-    const pendingDisabled = !canModify || isDemoAccount;
+    const pendingDisabled = !canModify;
+
+    if (entryPrice != null && entryPrice > 0) {
+      const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
+      pendingEntryLines.push({
+        key: `pend-entry-${o.id}`,
+        price: entryPrice,
+        label: `${typeLabel} ${o.volume}`,
+        color: entryColor(side),
+        targetKey,
+        orderId: o.id,
+        currentSl: sl,
+        currentTp: tp,
+        side,
+        volume: o.volume,
+        disabled: pendingDisabled,
+      });
+    }
 
     if (sl != null && sl > 0) {
       lineItems.push({
@@ -459,10 +494,37 @@ export function PositionLabelsOverlay({
     }
   }
 
-  if (entryLabels.length === 0 && lineItems.length === 0) return null;
+  if (entryLabels.length === 0 && lineItems.length === 0 && pendingEntryLines.length === 0) return null;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[22] overflow-hidden">
+      {pendingEntryLines.map((line) => (
+        <TradePlanLine
+          key={line.key}
+          canvasRef={canvasRef}
+          price={line.price}
+          label={line.label}
+          color={line.color}
+          digits={digits}
+          symbol={symbol}
+          volume={line.volume}
+          side={line.side}
+          disabled={line.disabled}
+          zIndex={25}
+          onChange={(newPrice) => {
+            void handleLevelChange({
+              targetKey: line.targetKey,
+              field: "entry",
+              orderId: line.orderId,
+              currentSl: line.currentSl,
+              currentTp: line.currentTp,
+              currentOpenPrice: line.price,
+              newPrice,
+            });
+          }}
+        />
+      ))}
+
       {lineItems.map((line) => (
         <PositionSlTpLine
           key={line.key}

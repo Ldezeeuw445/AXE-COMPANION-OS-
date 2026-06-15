@@ -2581,7 +2581,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
 
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        className="relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] select-none md:min-h-[420px] md:rounded-none md:border-x"
+        className="relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] select-none md:min-h-[420px] md:rounded-none"
         style={{
           background: chartTheme.background,
           userSelect: "none",

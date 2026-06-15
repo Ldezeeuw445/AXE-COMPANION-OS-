@@ -474,26 +474,6 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     pendingOrderLinesRef.current = [];
 
     pendingOrders.forEach((o) => {
-      // Side-based color — red for sell, cyan for buy (matches positions).
-      const orderColor = o.side === "sell"
-        ? theme.negativeText   // red for sell
-        : o.side === "buy"
-          ? theme.cyanAccent   // cyan for buy
-          : "rgba(251,191,36,0.8)";  // amber fallback
-
-      // Entry / trigger price
-      if (o.openPrice != null && o.openPrice > 0) {
-        pendingOrderLinesRef.current.push(
-          series.createPriceLine({
-            price: o.openPrice,
-            color: orderColor,
-            lineWidth: 1,
-            lineStyle: LineStyle.SparseDotted,
-            axisLabelVisible: false,
-            title: "",
-          }),
-        );
-      }
       // SL
       if (o.stopLoss != null && o.stopLoss > 0) {
         pendingOrderLinesRef.current.push(

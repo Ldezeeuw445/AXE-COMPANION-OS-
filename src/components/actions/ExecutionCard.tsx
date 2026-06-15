@@ -1,6 +1,13 @@
+"use client";
+
+import { useTransition } from "react";
 import type { ExecutionRequestCard } from "@/types/domain";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import {
+  approveExecutionRequestAction,
+  rejectExecutionRequestAction,
+} from "@/app/(app)/actions/actions";
 
 type ExecutionCardProps = {
   card: ExecutionRequestCard;
@@ -28,6 +35,20 @@ function dirBadge(dir: ExecutionRequestCard["direction"]) {
 }
 
 export function ExecutionCard({ card }: ExecutionCardProps) {
+  const [pending, startTransition] = useTransition();
+
+  const run = (action: "approve" | "reject") => {
+    startTransition(async () => {
+      const result =
+        action === "approve"
+          ? await approveExecutionRequestAction(card.id)
+          : await rejectExecutionRequestAction(card.id);
+      if (!result.ok && result.message) {
+        console.warn("[ExecutionCard]", result.message);
+      }
+    });
+  };
+
   return (
     <GlassPanel className="p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -77,15 +98,19 @@ export function ExecutionCard({ card }: ExecutionCardProps) {
         <div className="mt-4 flex gap-2">
           <button
             type="button"
-            className="flex-1 rounded-xl border border-tos-short/30 bg-tos-short/10 py-2.5 text-xs font-medium text-tos-short transition-colors hover:bg-tos-short/18"
+            disabled={pending}
+            onClick={() => run("reject")}
+            className="flex-1 rounded-xl border border-tos-short/30 bg-tos-short/10 py-2.5 text-xs font-medium text-tos-short transition-colors hover:bg-tos-short/18 disabled:opacity-50"
           >
             Reject
           </button>
           <button
             type="button"
-            className="tos-btn-cyan flex-1 rounded-xl py-2.5 text-xs font-semibold"
+            disabled={pending}
+            onClick={() => run("approve")}
+            className="tos-btn-cyan flex-1 rounded-xl py-2.5 text-xs font-semibold disabled:opacity-50"
           >
-            Confirm trade
+            {pending ? "Saving…" : "Confirm trade"}
           </button>
         </div>
       ) : null}

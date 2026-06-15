@@ -40,11 +40,16 @@ async function detectActionRuntime(): Promise<ActionRuntime> {
     .from("user_broker_accounts")
     .select("id,connection_method,external_connection_id,provider_status")
     .eq("user_id", user.id)
-    .eq("connection_method", "cloud_mt5")
-    .not("external_connection_id", "is", null)
-    .limit(1);
+    .in("connection_method", ["cloud_mt5", "cloud_alpaca", "demo_paper"])
+    .limit(20);
   const activeAccount = Array.isArray(data)
-    ? data.find((a) => ["connected", "provisioned"].includes(String(a.provider_status ?? "").toLowerCase())) ?? data[0]
+    ? data.find((a) => {
+        const statusOk = ["connected", "provisioned"].includes(String(a.provider_status ?? "").toLowerCase());
+        if (a.connection_method === "cloud_mt5") {
+          return statusOk && Boolean(a.external_connection_id);
+        }
+        return statusOk;
+      }) ?? data[0]
     : null;
   const accountId = activeAccount?.id as string | undefined;
   const [positions, trades, journal, memory] = await Promise.all([

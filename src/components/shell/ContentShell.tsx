@@ -19,12 +19,13 @@ export function ContentShell({ children }: { children: ReactNode }) {
   const flush = FLUSH_ROUTES.some(
     (r) => pathname === r || pathname.startsWith(`${r}/`),
   );
+  const horizontalPad = isChartRoute ? "px-0" : "px-4";
 
   return (
     <div
-      className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col px-4 pt-0 tos-shell-desktop-content ${
+      className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col ${horizontalPad} pt-0 tos-shell-desktop-content ${
         flush ? "tos-flush-route" : ""
-      } ${
+      } ${isChartRoute ? "tos-chart-route" : ""} ${
         flush
           ? isChartRoute
             ? "overflow-hidden pb-[calc(var(--tos-nav-offset)-0.24rem)]"
