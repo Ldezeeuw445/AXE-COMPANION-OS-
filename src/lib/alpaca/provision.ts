@@ -5,6 +5,14 @@ import { getAlpacaAccount } from "@/lib/alpaca/client";
 export const ALPACA_CONNECTION_METHOD = "cloud_alpaca";
 export const ALPACA_PROVIDER = "alpaca";
 
+export function isAlpacaAccount(
+  account: { connection_method?: string | null; provider?: string | null } | null | undefined,
+): boolean {
+  return (
+    account?.connection_method === ALPACA_CONNECTION_METHOD || account?.provider === ALPACA_PROVIDER
+  );
+}
+
 export type AlpacaProvisionResult =
   | { ok: true; accountId: string; created: boolean }
   | { ok: false; code: string; message: string };

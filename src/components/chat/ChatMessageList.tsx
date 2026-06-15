@@ -209,12 +209,15 @@ type OptimisticUserMessage = {
 };
 
 const NEAR_BOTTOM_PX = 96;
+const PIN_DELAYS_MS = [0, 50, 120, 250, 500, 900, 1500, 2500];
 
 export function ChatMessageList({ messages }: ChatMessageListProps) {
   const pathname = usePathname();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const scrollLockRef = useRef(true);
+  const pinTimersRef = useRef<number[]>([]);
   const [showJump, setShowJump] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [pending, setPending] = useState<OptimisticUserMessage[]>([]);
@@ -295,40 +298,66 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     if (!force && !stickToBottomRef.current) return;
+
+    const anchor = bottomAnchorRef.current;
+    if (anchor) {
+      anchor.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
+    }
     scroller.scrollTop = scroller.scrollHeight;
+  }, []);
+
+  const clearPinTimers = useCallback(() => {
+    pinTimersRef.current.forEach((id) => window.clearTimeout(id));
+    pinTimersRef.current = [];
   }, []);
 
   const runPinSequence = useCallback(
     (force = true) => {
+      clearPinTimers();
       scrollLockRef.current = true;
       if (force) stickToBottomRef.current = true;
+
       pinToLatest(force);
       requestAnimationFrame(() => pinToLatest(force));
-      const timers = [50, 150, 400, 800].map((ms) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => pinToLatest(force)));
+
+      const timers = PIN_DELAYS_MS.map((ms) =>
         window.setTimeout(() => pinToLatest(force), ms),
       );
+      pinTimersRef.current = timers;
+
       const unlock = window.setTimeout(() => {
         scrollLockRef.current = false;
-      }, 850);
-      return () => {
-        timers.forEach((id) => window.clearTimeout(id));
-        window.clearTimeout(unlock);
-      };
+      }, PIN_DELAYS_MS.at(-1)! + 120);
+      pinTimersRef.current.push(unlock);
     },
-    [pinToLatest],
+    [clearPinTimers, pinToLatest],
   );
 
-  useLayoutEffect(() => runPinSequence(true), [runPinSequence]);
-
   useLayoutEffect(() => {
-    return runPinSequence(true);
-  }, [messages.length, lastMessageId, runPinSequence]);
+    if (pathname !== "/chat" && !pathname.startsWith("/chat/")) return;
+    runPinSequence(true);
+    return clearPinTimers;
+  }, [pathname, messages.length, lastMessageId, runPinSequence, clearPinTimers]);
 
-  useLayoutEffect(() => {
-    if (pathname === "/chat" || pathname.startsWith("/chat/")) {
-      return runPinSequence(true);
+  useEffect(() => {
+    function onPinRequest() {
+      runPinSequence(true);
     }
-  }, [pathname, messages.length, lastMessageId, runPinSequence]);
+    function onPageShow() {
+      runPinSequence(true);
+    }
+    window.addEventListener("axe:chat-pin", onPinRequest);
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") runPinSequence(true);
+    });
+    return () => {
+      window.removeEventListener("axe:chat-pin", onPinRequest);
+      window.removeEventListener("pageshow", onPageShow);
+      clearPinTimers();
+    };
+  }, [runPinSequence, clearPinTimers]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -458,6 +487,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         ) : thinking ? (
           <TypingBubble />
         ) : null}
+        <div ref={bottomAnchorRef} aria-hidden className="h-px w-full shrink-0 scroll-mt-0" />
       </div>
 
       {showJump ? (

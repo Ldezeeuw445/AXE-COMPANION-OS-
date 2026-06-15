@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { ensureActiveDemoWhenEmpty } from "@/lib/broker/demoAccount";
+import { ensureAlpacaPaperAccount } from "@/lib/alpaca/provision";
+import { isAlpacaConfigured } from "@/lib/alpaca/env";
 
 export type BrokerAccountRow = {
   id: string;
@@ -69,7 +71,7 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
   }
 
   const prefsErr = prefsRes.error?.message;
-  const accounts = (accsRes.data ?? []) as BrokerAccountRow[];
+  let accounts = (accsRes.data ?? []) as BrokerAccountRow[];
   const seeded = await ensureActiveDemoWhenEmpty(
     supabase,
     user.id,
@@ -77,9 +79,29 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
     accounts,
   );
 
+  accounts = seeded.accounts;
+  const activeAccountId = seeded.activeAccountId;
+
+  if (isAlpacaConfigured()) {
+    const alpaca = await ensureAlpacaPaperAccount(supabase, user.id);
+    if (alpaca.ok) {
+      const { data: refreshed, error: refreshErr } = await supabase
+        .from("user_broker_accounts")
+        .select(
+          "id,label,provider,status,mt5_login,mt5_server,created_at,connection_method,external_connection_id,provider_status,last_sync_at,masked_login,metadata",
+        )
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (!refreshErr && refreshed) {
+        accounts = refreshed as BrokerAccountRow[];
+      }
+    }
+  }
+
   return {
-    accounts: seeded.accounts,
-    activeAccountId: seeded.activeAccountId,
+    accounts,
+    activeAccountId,
     error: prefsErr ?? null,
   };
 }

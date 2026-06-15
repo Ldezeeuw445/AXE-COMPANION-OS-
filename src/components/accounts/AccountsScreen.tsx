@@ -31,6 +31,7 @@ import {
 import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAutoPoll";
 import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
+import { isAlpacaAccount } from "@/lib/alpaca/provision";
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
@@ -85,6 +86,7 @@ function AccountCard({
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const isDemo = isDemoAccount(account);
+  const isAlpaca = isAlpacaAccount(account);
   const isCloud = account.connection_method === "cloud_mt5" && account.external_connection_id;
   const dot = statusDot(account);
 
@@ -163,10 +165,21 @@ function AccountCard({
                 Demo
               </span>
             )}
+            {isAlpaca && (
+              <span className="rounded-md border border-emerald-400/20 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-200/90">
+                Alpaca
+              </span>
+            )}
           </div>
           <p className="mt-0.5 font-mono text-[11px] text-white/35">
-            {account.masked_login ?? account.mt5_login ?? "—"}
-            {account.mt5_server ? ` · ${account.mt5_server}` : ""}
+            {isAlpaca
+              ? `PAPER · ${account.mt5_server ?? "Alpaca"}${account.masked_login ? ` · ${account.masked_login}` : ""}`
+              : (
+                <>
+                  {account.masked_login ?? account.mt5_login ?? "—"}
+                  {account.mt5_server ? ` · ${account.mt5_server}` : ""}
+                </>
+              )}
           </p>
         </div>
 
@@ -229,6 +242,38 @@ function AccountCard({
                       void runAction(disconnectCloudMt5AccountAction, "Disconnect");
                     }}
                     variant="warn"
+                  />
+                  <div className="mx-3 border-t border-white/[0.06]" />
+                </>
+              )}
+              {isAlpaca && (
+                <>
+                  <MenuButton
+                    icon={<RefreshCw className="h-3.5 w-3.5" />}
+                    label="Reset paper positions"
+                    onClick={() => {
+                      if (!confirm("Close all Alpaca paper positions and cancel open orders?")) return;
+                      setMenuOpen(false);
+                      setActionBusy("Reset");
+                      setActionMsg(null);
+                      void (async () => {
+                        try {
+                          const res = await fetch("/api/alpaca/reset", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            credentials: "include",
+                            body: JSON.stringify({ brokerAccountId: account.id }),
+                          });
+                          const data = (await res.json()) as { ok?: boolean; message?: string };
+                          setActionMsg(data.ok ? "Reset ✓" : data.message ?? "Reset failed");
+                          router.refresh();
+                        } catch (e) {
+                          setActionMsg(e instanceof Error ? e.message : "Reset failed");
+                        } finally {
+                          setActionBusy(null);
+                        }
+                      })();
+                    }}
                   />
                   <div className="mx-3 border-t border-white/[0.06]" />
                 </>

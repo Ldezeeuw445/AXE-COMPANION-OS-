@@ -400,6 +400,9 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           rows={1}
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onFocus={() => {
+            window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
