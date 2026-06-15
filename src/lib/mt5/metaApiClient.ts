@@ -693,13 +693,15 @@ export type ModifyOrderInput = {
   accountId: string;
   /** MT5 order id (string). */
   orderId: string;
+  /** Pending order trigger / limit price. */
+  openPrice?: number | null;
   stopLoss?: number | null;
   takeProfit?: number | null;
   region?: string | null;
 };
 
 /**
- * Modify a pending order's SL / TP via MetaApi.
+ * Modify a pending order (price, SL, TP) via MetaApi.
  * Uses the same `/trade` endpoint, with `actionType: "ORDER_MODIFY"`.
  */
 export async function clientModifyOrder(
@@ -711,6 +713,9 @@ export async function clientModifyOrder(
     actionType: "ORDER_MODIFY",
     orderId: input.orderId,
   };
+  if (input.openPrice != null && Number.isFinite(input.openPrice)) {
+    body.openPrice = input.openPrice;
+  }
   if (input.stopLoss != null && Number.isFinite(input.stopLoss)) {
     body.stopLoss = input.stopLoss;
   }

@@ -1893,6 +1893,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         if (!draft) return o;
         return {
           ...o,
+          openPrice: draft.openPrice ?? o.openPrice,
           stopLoss: draft.stopLoss ?? o.stopLoss,
           takeProfit: draft.takeProfit ?? o.takeProfit,
         };
@@ -1921,7 +1922,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           }
         } else if (key.startsWith("ord:")) {
           const row = pendingOrders.find((o) => o.id === key.slice(4));
-          if (row && match(row.stopLoss, draft.stopLoss) && match(row.takeProfit, draft.takeProfit)) {
+          if (
+            row &&
+            match(row.stopLoss, draft.stopLoss) &&
+            match(row.takeProfit, draft.takeProfit) &&
+            match(row.openPrice, draft.openPrice ?? row.openPrice)
+          ) {
             delete next[key];
             changed = true;
           }
@@ -2892,7 +2898,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           onSlTpDraftChange={(input) => {
             setSlTpDrafts((prev) => ({
               ...prev,
-              [input.key]: { stopLoss: input.stopLoss, takeProfit: input.takeProfit },
+              [input.key]: {
+                stopLoss: input.stopLoss,
+                takeProfit: input.takeProfit,
+                openPrice: input.openPrice,
+              },
             }));
           }}
           onSlTpDraftClear={(key) => {
@@ -2909,7 +2919,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           onModifyFeedback={(result) => {
             setTradeToast({
               kind: result.ok ? "live" : "error",
-              title: result.ok ? "SL / TP updated" : "Modify failed",
+              title: result.ok ? "Order updated" : "Modify failed",
               body: result.message,
             });
           }}

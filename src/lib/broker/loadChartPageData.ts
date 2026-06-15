@@ -17,6 +17,9 @@ import {
   generateDemoCandles,
   isDemoAccount,
 } from "@/lib/broker/demoAccount";
+import { fetchAlpacaCandles } from "@/lib/alpaca/bars";
+import { isAlpacaConfigured } from "@/lib/alpaca/env";
+import { isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
 import {
   candidateBrokerSymbols,
   cleanDisplaySymbol,
@@ -535,9 +538,16 @@ export async function loadChartPageData(
   if (isDemo && account) {
     const requestedRaw = normalizeSymbol(symbolParam) || watchSyms[0] || DEFAULT_SYMBOL;
     const requested = safeDisplaySymbol(requestedRaw);
-    const candles = generateDemoCandles(requested, timeframeKey, 500);
+    const alpacaCandles =
+      isAlpacaConfigured() && isAlpacaSupportedSymbol(requested)
+        ? await fetchAlpacaCandles(requested, timeframeKey, 500)
+        : null;
+    const candles = alpacaCandles?.length ? alpacaCandles : generateDemoCandles(requested, timeframeKey, 500);
     const last = candles.at(-1)?.close ?? null;
     const lastTime = candles.at(-1)?.time ?? null;
+    const alpacaHint = alpacaCandles?.length
+      ? "AXE Demo with live Alpaca market data. Orders are virtual unless Alpaca Paper is enabled."
+      : "AXE Demo is a virtual paper account. No broker order is sent.";
     return {
       symbol: requested,
       brokerSymbol: requested,
@@ -553,10 +563,10 @@ export async function loadChartPageData(
       lastBid: null,
       lastAsk: null,
       lastTickAt: lastTime,
-      providerStatus: "demo",
+      providerStatus: alpacaCandles?.length ? "alpaca_data" : "demo",
       failure: "ok",
       dataError: null,
-      hint: "AXE Demo is a virtual paper account. No broker order is sent.",
+      hint: alpacaHint,
       symbolOptions: Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms.map(cleanDisplaySymbol).filter(Boolean)])).sort(),
       attemptedSymbols: [requested],
       account,

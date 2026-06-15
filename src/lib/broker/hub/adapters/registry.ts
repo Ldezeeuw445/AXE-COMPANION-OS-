@@ -1,6 +1,6 @@
 import type { BrokerAdapterRegistry, BrokerApiAdapter } from "../contract";
+import { createAlpacaBrokerApiAdapter } from "./alpacaLive";
 import {
-  alpacaStubBrokerApi,
   axeDemoBrokerApi,
   ibkrStubBrokerApi,
 } from "./stubBrokers";
@@ -27,7 +27,7 @@ export function createAxeBrokerRegistry(supabase: SupabaseClient): AxeBrokerAdap
   return new AxeBrokerAdapterRegistry([
     createMt5BrokerApiAdapter(supabase),
     axeDemoBrokerApi,
-    alpacaStubBrokerApi,
+    createAlpacaBrokerApiAdapter(supabase),
     ibkrStubBrokerApi,
   ]);
 }

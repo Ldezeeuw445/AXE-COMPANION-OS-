@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic";
 type ModifyBody = {
   brokerAccountId: string;
   orderId: string;
+  openPrice?: number | null;
   stopLoss?: number | null;
   takeProfit?: number | null;
 };
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     return errJson(400, "invalid_body", "Payload must be JSON.");
   }
 
-  const { brokerAccountId, orderId, stopLoss, takeProfit } = body ?? {};
+  const { brokerAccountId, orderId, openPrice, stopLoss, takeProfit } = body ?? {};
 
   if (typeof brokerAccountId !== "string" || !brokerAccountId) {
     return errJson(400, "missing_account", "brokerAccountId is required.");
@@ -58,12 +59,15 @@ export async function POST(request: NextRequest) {
   if (typeof orderId !== "string" || !orderId) {
     return errJson(400, "missing_order", "orderId is required.");
   }
-  if (stopLoss == null && takeProfit == null) {
+  if (openPrice == null && stopLoss == null && takeProfit == null) {
     return errJson(
       400,
       "nothing_to_modify",
-      "Provide at least one of stopLoss or takeProfit.",
+      "Provide at least one of openPrice, stopLoss, or takeProfit.",
     );
+  }
+  if (openPrice != null && (!Number.isFinite(openPrice) || openPrice <= 0)) {
+    return errJson(400, "invalid_price", "openPrice must be a positive number.");
   }
   if (stopLoss != null && (!Number.isFinite(stopLoss) || stopLoss <= 0)) {
     return errJson(400, "invalid_sl", "stopLoss must be a positive number.");
@@ -145,6 +149,7 @@ export async function POST(request: NextRequest) {
   const input: ModifyOrderInput = {
     accountId: account.external_connection_id,
     orderId,
+    openPrice: openPrice ?? null,
     stopLoss: stopLoss ?? null,
     takeProfit: takeProfit ?? null,
     region: accountRegion,

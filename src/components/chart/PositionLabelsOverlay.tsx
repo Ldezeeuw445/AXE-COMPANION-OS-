@@ -27,6 +27,7 @@ import {
 export type SlTpDraft = {
   stopLoss: number | null;
   takeProfit: number | null;
+  openPrice?: number | null;
 };
 
 export function slTpDraftKeyForPosition(id: string) {
@@ -43,7 +44,7 @@ interface LabelItem {
   text: string;
   color: string;
   draggable: boolean;
-  field?: "sl" | "tp";
+  field?: "sl" | "tp" | "entry";
   positionId?: string;
   orderId?: string;
   currentSl?: number | null;
@@ -77,13 +78,17 @@ async function callModifyPosition(
 async function callModifyOrder(
   brokerAccountId: string,
   orderId: string,
-  stopLoss: number | null | undefined,
-  takeProfit: number | null | undefined,
+  fields: {
+    openPrice?: number | null;
+    stopLoss?: number | null;
+    takeProfit?: number | null;
+  },
 ): Promise<{ ok: boolean; message?: string }> {
   try {
     const body: Record<string, unknown> = { brokerAccountId, orderId };
-    if (stopLoss != null) body.stopLoss = stopLoss;
-    if (takeProfit != null) body.takeProfit = takeProfit;
+    if (fields.openPrice != null) body.openPrice = fields.openPrice;
+    if (fields.stopLoss != null) body.stopLoss = fields.stopLoss;
+    if (fields.takeProfit != null) body.takeProfit = fields.takeProfit;
     const res = await fetch("/api/mt5/modify-order", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -153,7 +158,7 @@ export function PositionLabelsOverlay({
   instantSlTpModify?: boolean;
   slTpDrafts?: Record<string, SlTpDraft>;
   onSlTpDraftChange?: (
-    input: SlTpDraft & { key: string; positionId?: string; orderId?: string },
+    input: SlTpDraft & { key: string; positionId?: string; orderId?: string; openPrice?: number | null },
   ) => void;
   onSlTpDraftClear?: (key: string) => void;
   onDemoModify?: (input: {
@@ -193,12 +198,13 @@ export function PositionLabelsOverlay({
   const isDraggingRef = useRef(false);
   const dragDataRef = useRef<{
     key: string;
-    field: "sl" | "tp";
+    field: "sl" | "tp" | "entry";
     targetKey: string;
     positionId?: string;
     orderId?: string;
     currentSl: number | null;
     currentTp: number | null;
+    currentOpenPrice: number | null;
     originPointerY: number;
     originLabelY: number;
     entryPrice: number | null;
@@ -216,6 +222,7 @@ export function PositionLabelsOverlay({
       orderId?: string;
       stopLoss: number | null;
       takeProfit: number | null;
+      openPrice?: number | null;
     }) => {
       if (!brokerAccountId) return { ok: false as const, message: "No account" };
 
@@ -232,12 +239,11 @@ export function PositionLabelsOverlay({
 
       let result: { ok: boolean; message?: string };
       if (input.orderId) {
-        result = await callModifyOrder(
-          brokerAccountId,
-          input.orderId,
-          input.stopLoss ?? undefined,
-          input.takeProfit ?? undefined,
-        );
+        result = await callModifyOrder(brokerAccountId, input.orderId, {
+          openPrice: input.openPrice ?? undefined,
+          stopLoss: input.stopLoss ?? undefined,
+          takeProfit: input.takeProfit ?? undefined,
+        });
       } else if (input.positionId) {
         result = await callModifyPosition(
           brokerAccountId,
@@ -335,19 +341,21 @@ export function PositionLabelsOverlay({
       const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
       const targetKey = slTpDraftKeyForOrder(o.id);
       const draft = drafts[targetKey];
+      const entryPrice = draft?.openPrice ?? o.openPrice;
       const sl = draft?.stopLoss ?? o.stopLoss;
       const tp = draft?.takeProfit ?? o.takeProfit;
       const hasDraft = Boolean(draft);
 
-      if (o.openPrice != null && o.openPrice > 0) {
-        const y = canvas.priceToCoordinate(o.openPrice);
+      if (entryPrice != null && entryPrice > 0) {
+        const y = canvas.priceToCoordinate(entryPrice);
         if (y != null) {
           next.push({
             key: `pend-entry-${o.id}`,
             y,
-            text: `${typeLabel} ${o.volume}`,
+            text: `${typeLabel} ${o.volume}${hasDraft && draft?.openPrice != null ? " · draft" : ""}`,
             color: entryColor(side),
-            draggable: false,
+            draggable: canModify && !isDemoAccount,
+            field: "entry",
             showConfirm: hasDraft && canModify && !isDemoAccount,
             confirmTargetKey: targetKey,
             orderId: o.id,
@@ -360,7 +368,7 @@ export function PositionLabelsOverlay({
       if (sl != null && sl > 0) {
         const y = canvas.priceToCoordinate(sl);
         if (y != null) {
-          const pnl = slTpPnl(o.openPrice, sl, o.volume, side, symbolRef.current);
+          const pnl = slTpPnl(entryPrice, sl, o.volume, side, symbolRef.current);
           next.push({
             key: `pend-sl-${o.id}`,
             y,
@@ -378,7 +386,7 @@ export function PositionLabelsOverlay({
       if (tp != null && tp > 0) {
         const y = canvas.priceToCoordinate(tp);
         if (y != null) {
-          const pnl = slTpPnl(o.openPrice, tp, o.volume, side, symbolRef.current);
+          const pnl = slTpPnl(entryPrice, tp, o.volume, side, symbolRef.current);
           next.push({
             key: `pend-tp-${o.id}`,
             y,
@@ -429,6 +437,8 @@ export function PositionLabelsOverlay({
         ? pendingOrdersRef.current.find((o) => o.id === label.orderId)
         : null;
 
+      const draft = slTpDraftsRef.current[targetKey];
+
       dragDataRef.current = {
         key: label.key,
         field: label.field,
@@ -437,6 +447,7 @@ export function PositionLabelsOverlay({
         orderId: label.orderId,
         currentSl: label.currentSl ?? null,
         currentTp: label.currentTp ?? null,
+        currentOpenPrice: draft?.openPrice ?? pendingOrder?.openPrice ?? null,
         originPointerY: e.clientY,
         originLabelY: label.y,
         entryPrice: overlay?.entryPrice ?? pendingOrder?.openPrice ?? null,
@@ -445,10 +456,17 @@ export function PositionLabelsOverlay({
         color: label.color,
       };
 
+      const startPrice =
+        label.field === "sl"
+          ? (label.currentSl ?? 0)
+          : label.field === "tp"
+            ? (label.currentTp ?? 0)
+            : (draft?.openPrice ?? pendingOrder?.openPrice ?? overlay?.entryPrice ?? 0);
+
       setDragState({
         key: label.key,
         y: label.y,
-        price: label.field === "sl" ? (label.currentSl ?? 0) : (label.currentTp ?? 0),
+        price: startPrice,
         text: label.text,
         color: label.color,
       });
@@ -469,14 +487,20 @@ export function PositionLabelsOverlay({
       if (newPrice == null || !Number.isFinite(newPrice) || newPrice <= 0) return;
 
       const digits = priceDigitsForSymbol(symbolRef.current);
-      const tag = drag.field === "sl" ? "SL" : "TP";
-      const pnl = slTpPnl(drag.entryPrice, newPrice, drag.volume, drag.side, symbolRef.current);
+      let text = "";
+      if (drag.field === "entry") {
+        text = `${newPrice.toFixed(digits)}`;
+      } else {
+        const tag = drag.field === "sl" ? "SL" : "TP";
+        const pnl = slTpPnl(drag.entryPrice, newPrice, drag.volume, drag.side, symbolRef.current);
+        text = `${tag}${pnl ? `, ${pnl}` : ""} → ${newPrice.toFixed(digits)}`;
+      }
 
       setDragState({
         key: drag.key,
         y: newY,
         price: newPrice,
-        text: `${tag}${pnl ? `, ${pnl}` : ""} → ${newPrice.toFixed(digits)}`,
+        text,
         color: drag.color,
       });
     },
@@ -513,6 +537,7 @@ export function PositionLabelsOverlay({
 
       const newSl = drag.field === "sl" ? newPrice : drag.currentSl;
       const newTp = drag.field === "tp" ? newPrice : drag.currentTp;
+      const newOpenPrice = drag.field === "entry" ? newPrice : drag.currentOpenPrice;
 
       if (instantSlTpModify) {
         await submitModify({
@@ -521,6 +546,7 @@ export function PositionLabelsOverlay({
           orderId: drag.orderId,
           stopLoss: newSl,
           takeProfit: newTp,
+          openPrice: drag.orderId ? newOpenPrice : undefined,
         });
         return;
       }
@@ -529,6 +555,7 @@ export function PositionLabelsOverlay({
         key: drag.targetKey,
         stopLoss: newSl,
         takeProfit: newTp,
+        openPrice: drag.orderId ? newOpenPrice : undefined,
         positionId: drag.positionId,
         orderId: drag.orderId,
       });
@@ -550,6 +577,7 @@ export function PositionLabelsOverlay({
           orderId: label.orderId,
           stopLoss: draft.stopLoss,
           takeProfit: draft.takeProfit,
+          openPrice: draft.openPrice ?? undefined,
         });
       } finally {
         setConfirmingKey(null);
