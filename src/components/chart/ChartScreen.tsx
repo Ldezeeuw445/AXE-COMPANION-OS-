@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { RefObject } from "react";
 import {
   Activity,
@@ -60,6 +60,7 @@ import type {
   ChartActionResult,
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { ChartPendingOrderSheet } from "@/components/chart/ChartPendingOrderSheet";
 import {
   PositionLabelsOverlay,
   type SlTpDraft,
@@ -608,6 +609,22 @@ const TradePlanLine = memo(function TradePlanLine({
   // Cleanup on unmount
   useEffect(() => () => { isDraggingRef.current = false; cancelAnimationFrame(rafRef.current); }, []);
 
+  const y = baseY;
+
+  // Sync line position from props — never via JSX transform (React re-renders
+  // from live ticks were snapping the line back during drag).
+  const applyLineY = useCallback((nextY: number) => {
+    groupRef.current?.setAttribute("transform", `translate(0,${nextY})`);
+    if (handleDivRef.current) {
+      handleDivRef.current.style.top = `${nextY - 28}px`;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isDraggingRef.current || y == null) return;
+    applyLineY(y);
+  }, [y, applyLineY, size.w, size.h]);
+
   // ── Drag via HTML div + setPointerCapture ──
   // SVG pointer-events on iOS are unreliable — the HTML div guarantees touch works
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -649,14 +666,8 @@ const TradePlanLine = memo(function TradePlanLine({
         const newPrice = chartHandle.coordinateToPrice(newY);
         if (newPrice == null || !Number.isFinite(newPrice)) return;
 
-        // Move SVG group (line + label + circle + price tag)
-        group.setAttribute("transform", `translate(0,${newY})`);
+        applyLineY(newY);
         dragPriceRef.current = newPrice;
-
-        // Move HTML handle div to follow
-        if (handleDivRef.current) {
-          handleDivRef.current.style.top = `${newY - 28}px`;
-        }
 
         // Update right-axis price text
         if (priceTextRef.current) {
@@ -668,6 +679,8 @@ const TradePlanLine = memo(function TradePlanLine({
           labelTextRef.current.textContent = info
             ? `${labelPropRef.current.toUpperCase()}, ${info.label}`
             : labelPropRef.current.toUpperCase();
+        } else if (labelTextRef.current && !dashedRef.current) {
+          labelTextRef.current.textContent = `${labelPropRef.current.toUpperCase()} ${volumeRef.current}`;
         }
       });
     };
@@ -697,10 +710,9 @@ const TradePlanLine = memo(function TradePlanLine({
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
     el.addEventListener("lostpointercapture", onUp);
-  }, [canvasRef]);
+  }, [canvasRef, applyLineY]);
 
   // ── Render ──
-  const y = baseY;
   if (price == null || y == null || size.w <= 0 || size.h <= 0) {
     return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
   }
@@ -728,8 +740,8 @@ const TradePlanLine = memo(function TradePlanLine({
         className="absolute inset-0"
         style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
       >
-        {/* All visuals in a group — transform moves everything during drag */}
-        <g ref={groupRef} transform={`translate(0,${y})`}>
+        {/* Transform applied imperatively — see applyLineY */}
+        <g ref={groupRef}>
           <line
             x1={labelPixels + 4}
             x2={plotRight}
@@ -1362,6 +1374,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   const [lotVolumeDraft, setLotVolumeDraft] = useState("0.10");
   const [deviationPoints, setDeviationPoints] = useState(10);
   const [oneClickVisible, setOneClickVisible] = useState(false);
+  const [pendingSheetExpanded, setPendingSheetExpanded] = useState(false);
   const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
 
   // Order send wiring — demo fills locally, live opens a confirm modal that
@@ -1412,6 +1425,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       setExecutionMode("pending");
       setPendingOrderType(orderType);
       setPendingOrderVisible(true);
+      setPendingSheetExpanded(false);
       if (entry != null && Number.isFinite(entry)) {
         const sideChanged = side !== pendingOrderSide;
         setPendingOrderPrice(entry);
@@ -1449,6 +1463,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       setOneClickVisible(false);
       setLotMenuOpen(false);
       setOrderTypeMenuOpen(false);
+      setPendingSheetExpanded(false);
     } else {
       setOneClickVisible(true);
       showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
@@ -2890,7 +2905,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           symbol={data.brokerSymbol}
           annotations={annotations}
           drawingMode={drawingMode}
-          navigationLocked={pendingOrderVisible && executionMode === "pending"}
+          navigationLocked={false}
           onPointClick={handlePointClick}
           themeKey={chartThemeKey}
           gridStyle={chartGridStyle}
@@ -3832,13 +3847,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       })()
         : null}
 
-      {/* ─── MT5-style execution bar ─── */}
-      {oneClickVisible ? (
+      {/* ─── MT5-style execution bar (market) + landscape pending inline ─── */}
+      {oneClickVisible && (executionMode === "market" || (executionMode === "pending" && isFullscreen)) ? (
       <div
         className={`shrink-0 ${isFullscreen ? "chart-immersive-exec" : ""}`}
         style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}
       >
-        {executionMode === "pending" ? (
+        {executionMode === "pending" && isFullscreen ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
           <div className="flex h-[2.75rem] items-center gap-0 px-0">
             {/* Submit arrow — rounded pill */}
@@ -4317,6 +4332,61 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
             onTools={() => setToolRailOpen(true)}
           />
         </>
+      ) : null}
+
+      {oneClickVisible && executionMode === "pending" && pendingOrderVisible && !isFullscreen ? (
+        <ChartPendingOrderSheet
+          symbol={data.brokerSymbol}
+          orderLabel={orderTypeLabel(pendingOrderType)}
+          side={pendingOrderSide}
+          volume={tradeVolume}
+          price={pendingOrderPrice}
+          stopLoss={pendingStopLossPrice}
+          takeProfit={pendingTakeProfitPrice}
+          expanded={pendingSheetExpanded}
+          onToggleExpand={() => {
+            setPendingSheetExpanded((v) => !v);
+            vibrate("light");
+          }}
+          onSubmit={() => {
+            vibrate("medium");
+            playSound("chime");
+            handleSendCurrentPlan();
+          }}
+          onOpenLot={() => {
+            setLotMenuOpen((v) => !v);
+            vibrate("light");
+          }}
+          onOpenType={() => {
+            setOrderTypeMenuOpen((v) => !v);
+            vibrate("light");
+          }}
+          onToggleSl={() => {
+            const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+            if (entry == null || !Number.isFinite(entry)) return;
+            const distance = draggablePlanDistance(data.candles, entry);
+            setPendingStopLossPrice((prev) =>
+              prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
+            );
+            vibrate("light");
+            playSound("tap");
+          }}
+          onToggleTp={() => {
+            const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+            if (entry == null || !Number.isFinite(entry)) return;
+            const distance = draggablePlanDistance(data.candles, entry);
+            setPendingTakeProfitPrice((prev) =>
+              prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
+            );
+            vibrate("light");
+            playSound("tap");
+          }}
+          onPriceChange={(next) => {
+            handlePendingEntryPriceChange(next);
+          }}
+          onSlChange={setPendingStopLossPrice}
+          onTpChange={setPendingTakeProfitPrice}
+        />
       ) : null}
 
     </div>

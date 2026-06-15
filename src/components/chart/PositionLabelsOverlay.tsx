@@ -193,7 +193,11 @@ export function PositionLabelsOverlay({
     price: number;
     text: string;
     color: string;
+    field: "sl" | "tp" | "entry";
+    dashed: boolean;
   } | null>(null);
+  const [overlaySize, setOverlaySize] = useState({ w: 0, h: 0 });
+  const overlayRootRef = useRef<HTMLDivElement | null>(null);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const isDraggingRef = useRef(false);
   const dragDataRef = useRef<{
@@ -413,6 +417,19 @@ export function PositionLabelsOverlay({
   }, [canvasRef, computeLabels, overlays, pendingOrders, slTpDrafts]);
 
   useEffect(() => {
+    const el = overlayRootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect();
+      setOverlaySize({ w: rect.width, h: rect.height });
+    });
+    ro.observe(el);
+    const rect = el.getBoundingClientRect();
+    setOverlaySize({ w: rect.width, h: rect.height });
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
     computeLabels();
   }, [overlays, slTpDrafts, computeLabels]);
 
@@ -469,6 +486,8 @@ export function PositionLabelsOverlay({
         price: startPrice,
         text: label.text,
         color: label.color,
+        field: label.field ?? "sl",
+        dashed: label.field !== "entry",
       });
     },
     [],
@@ -502,6 +521,8 @@ export function PositionLabelsOverlay({
         price: newPrice,
         text,
         color: drag.color,
+        field: drag.field,
+        dashed: drag.field !== "entry",
       });
     },
     [canvasRef],
@@ -595,9 +616,12 @@ export function PositionLabelsOverlay({
   if (labels.length === 0 && !dragState) return null;
 
   const isDraggingVisible = dragState !== null;
+  const axisWidth = canvasRef.current?.getRightAxisWidth() ?? 56;
+  const plotRight = Math.max(0, overlaySize.w - Math.max(axisWidth, 56));
 
   return (
     <div
+      ref={overlayRootRef}
       className="absolute inset-0 overflow-hidden z-10"
       style={{
         pointerEvents: isDraggingVisible ? "auto" : "none",
@@ -672,23 +696,63 @@ export function PositionLabelsOverlay({
         );
       })}
 
+      {dragState && overlaySize.w > 0 ? (
+        <svg
+          className="pointer-events-none absolute inset-0 z-[25]"
+          width={overlaySize.w}
+          height={overlaySize.h}
+          viewBox={`0 0 ${overlaySize.w} ${overlaySize.h}`}
+        >
+          <g transform={`translate(0,${dragState.y})`}>
+            <line
+              x1={4}
+              x2={plotRight}
+              y1={0}
+              y2={0}
+              stroke={dragState.color}
+              strokeWidth={dragState.field === "entry" ? 1.5 : 1}
+              strokeDasharray={dragState.dashed ? "6 4" : undefined}
+            />
+            <text
+              x={6}
+              y={4}
+              fontFamily="ui-sans-serif, system-ui, -apple-system"
+              fontSize={10}
+              fontWeight={700}
+              fill={dragState.color}
+            >
+              {dragState.text}
+            </text>
+            <rect
+              x={overlaySize.w - Math.max(58, axisWidth - 4) - 2}
+              y={-9}
+              width={Math.max(58, axisWidth - 4)}
+              height={18}
+              rx={2}
+              fill={dragState.color}
+            />
+            <text
+              x={overlaySize.w - Math.max(58, axisWidth - 4) - 2 + Math.max(58, axisWidth - 4) / 2}
+              y={4}
+              textAnchor="middle"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize={10}
+              fontWeight={700}
+              fill="#000"
+            >
+              {dragState.price.toFixed(priceDigitsForSymbol(symbolRef.current))}
+            </text>
+          </g>
+        </svg>
+      ) : null}
+
       {dragState ? (
         <div
-          className="absolute left-0 -translate-y-1/2 whitespace-nowrap"
-          style={{ top: dragState.y, pointerEvents: "none" }}
+          className="absolute left-0 -translate-y-1/2 whitespace-nowrap pointer-events-none opacity-0"
+          style={{ top: dragState.y }}
+          aria-hidden
         >
-          <span
-            style={{
-              color: dragState.color,
-              fontSize: "11px",
-              fontWeight: 700,
-              letterSpacing: "0.02em",
-              textShadow: dragShadow,
-              paddingLeft: 6,
-            }}
-          >
-            {dragState.text}
-          </span>
+          <span>{dragState.text}</span>
         </div>
       ) : null}
     </div>
