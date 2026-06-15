@@ -15,7 +15,7 @@
 // Deploy:  supabase functions deploy intel-proxy --no-verify-jwt
 // Secrets: FINNHUB_API_KEY        (required)
 //          UNUSUAL_WHALES_TOKEN   (optional — congress, dark pool, options)
-//          QUIVER_API_KEY         (optional — congress fallback)
+//          QUIVER_API_KEY         (optional — paid Quiver Hobbyist+ for congress)
 //          FMP_API_KEY            (optional — congress fallback)
 // ─────────────────────────────────────────────────────────────────────
 
@@ -365,7 +365,7 @@ async function handleSenateTrades(): Promise<Response> {
     } catch { /* fall through */ }
   }
 
-  // 2. Try Quiver Quantitative (free API key)
+  // 2. Try Quiver Quantitative (paid subscription — Hobbyist+ includes Congress Trading)
   const quiverKey = env("QUIVER_API_KEY");
   if (quiverKey) {
     try {
