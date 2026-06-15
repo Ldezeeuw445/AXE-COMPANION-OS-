@@ -43,6 +43,8 @@ export const TradePlanLine = memo(function TradePlanLine({
   onDragEnd,
   disabled = false,
   zIndex = 24,
+  /** Broker pending orders: hide drag ball until the trader taps the line (MT5-style). */
+  tapToArm = false,
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
   price: number | null;
@@ -59,6 +61,7 @@ export const TradePlanLine = memo(function TradePlanLine({
   onDragEnd?: () => void;
   disabled?: boolean;
   zIndex?: number;
+  tapToArm?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const groupRef = useRef<SVGGElement | null>(null);
@@ -69,6 +72,7 @@ export const TradePlanLine = memo(function TradePlanLine({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState(0);
   const [baseY, setBaseY] = useState<number | null>(null);
+  const [armed, setArmed] = useState(false);
 
   const isDraggingRef = useRef(false);
   const rafRef = useRef(0);
@@ -150,6 +154,22 @@ export const TradePlanLine = memo(function TradePlanLine({
     applyLineY(y);
   }, [y, applyLineY, size.w, size.h]);
 
+  const disarm = useCallback(() => {
+    if (isDraggingRef.current) return;
+    setArmed(false);
+  }, []);
+
+  useEffect(() => {
+    if (!tapToArm || !armed) return;
+    const onDocDown = (ev: PointerEvent) => {
+      const host = hostRef.current;
+      if (!host || host.contains(ev.target as Node)) return;
+      disarm();
+    };
+    document.addEventListener("pointerdown", onDocDown, { capture: true });
+    return () => document.removeEventListener("pointerdown", onDocDown, { capture: true });
+  }, [armed, disarm, tapToArm]);
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (disabledRef.current) return;
@@ -227,6 +247,7 @@ export const TradePlanLine = memo(function TradePlanLine({
         const finalPrice = dragPriceRef.current;
         dragPriceRef.current = null;
         originRef.current = null;
+        if (tapToArm) setArmed(false);
         if (finalPrice != null) onChangeRef.current(finalPrice);
         onDragEndRef.current?.();
       };
@@ -235,7 +256,45 @@ export const TradePlanLine = memo(function TradePlanLine({
       el.addEventListener("pointerup", onUp);
       el.addEventListener("lostpointercapture", onUp);
     },
-    [applyLineY, canvasRef],
+    [applyLineY, canvasRef, tapToArm],
+  );
+
+  const handleArmPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (disabledRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setArmed(true);
+
+      const el = e.currentTarget;
+      const originY = e.clientY;
+      let dragging = false;
+
+      const onMove = (ev: PointerEvent) => {
+        if (dragging) return;
+        if (Math.abs(ev.clientY - originY) < 6) return;
+        dragging = true;
+        handlePointerDown({
+          ...e,
+          clientY: originY,
+          currentTarget: el,
+          pointerId: ev.pointerId,
+          preventDefault: () => ev.preventDefault(),
+          stopPropagation: () => ev.stopPropagation(),
+        } as React.PointerEvent<HTMLDivElement>);
+      };
+
+      const onUp = () => {
+        el.removeEventListener("pointermove", onMove);
+        el.removeEventListener("pointerup", onUp);
+        el.removeEventListener("pointercancel", onUp);
+      };
+
+      el.addEventListener("pointermove", onMove, { passive: false });
+      el.addEventListener("pointerup", onUp);
+      el.addEventListener("pointercancel", onUp);
+    },
+    [handlePointerDown],
   );
 
   if (price == null || y == null || size.w <= 0 || size.h <= 0) {
@@ -250,6 +309,7 @@ export const TradePlanLine = memo(function TradePlanLine({
   const priceWidth = Math.max(58, axisWidth - 4);
   const priceX = size.w - priceWidth - 2;
   const handleCx = (labelPixels + 4 + plotRight) / 2;
+  const showDragHandle = !tapToArm || armed;
 
   return (
     <div
@@ -294,17 +354,19 @@ export const TradePlanLine = memo(function TradePlanLine({
             {labelText}
           </text>
 
-          <circle
-            ref={circleRef}
-            cx={handleCx}
-            cy={0}
-            r={5}
-            fill={color}
-            fillOpacity={0}
-            stroke={color}
-            strokeWidth={1.5}
-            style={{ pointerEvents: "none" }}
-          />
+          {showDragHandle ? (
+            <circle
+              ref={circleRef}
+              cx={handleCx}
+              cy={0}
+              r={5}
+              fill={color}
+              fillOpacity={0}
+              stroke={color}
+              strokeWidth={1.5}
+              style={{ pointerEvents: "none" }}
+            />
+          ) : null}
 
           <g style={{ pointerEvents: "none" }}>
             <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
@@ -324,21 +386,39 @@ export const TradePlanLine = memo(function TradePlanLine({
         </g>
       </svg>
 
-      <div
-        ref={handleDivRef}
-        onPointerDown={handlePointerDown}
-        style={{
-          position: "absolute",
-          left: handleCx - 28,
-          top: y - 28,
-          width: 56,
-          height: 56,
-          pointerEvents: disabled ? "none" : "auto",
-          touchAction: "none",
-          cursor: disabled ? "default" : "ns-resize",
-          opacity: disabled ? 0 : 1,
-        }}
-      />
+      {showDragHandle ? (
+        <div
+          ref={handleDivRef}
+          onPointerDown={handlePointerDown}
+          style={{
+            position: "absolute",
+            left: handleCx - 28,
+            top: y - 28,
+            width: 56,
+            height: 56,
+            pointerEvents: disabled ? "none" : "auto",
+            touchAction: "none",
+            cursor: disabled ? "default" : "ns-resize",
+            opacity: disabled ? 0 : 1,
+          }}
+        />
+      ) : (
+        <div
+          onPointerDown={handleArmPointerDown}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: y - 16,
+            width: Math.max(labelPixels + 12, plotRight),
+            height: 32,
+            pointerEvents: disabled ? "none" : "auto",
+            touchAction: "manipulation",
+            cursor: disabled ? "default" : "pointer",
+            zIndex: zIndex + 1,
+          }}
+          aria-label={`Tap to adjust ${label}`}
+        />
+      )}
     </div>
   );
 }, (prev, next) =>
@@ -351,6 +431,7 @@ export const TradePlanLine = memo(function TradePlanLine({
   prev.volume === next.volume &&
   prev.side === next.side &&
   prev.disabled === next.disabled &&
+  prev.tapToArm === next.tapToArm &&
   prev.canvasRef === next.canvasRef &&
   prev.symbol === next.symbol,
 );

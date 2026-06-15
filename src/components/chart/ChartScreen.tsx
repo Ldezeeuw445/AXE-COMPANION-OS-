@@ -223,8 +223,10 @@ function statusPillCopy(
     };
   }
   if ((live === "connected" || live === "live_stream") && hasFreshLiveData) {
+    const transportTag =
+      transport === "ws" ? " · WS" : transport === "sse" ? " · SSE" : "";
     return {
-      label: transport === "ws" ? "AXE Live" : "AXE Live",
+      label: `AXE Live${transportTag}`,
       className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95 shadow-[0_0_22px_-16px_rgba(52,211,153,0.9)]",
       dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.75)]",
     };
@@ -290,6 +292,60 @@ function statusPillCopy(
     className: "border-white/12 bg-white/[0.04] text-tos-muted",
     dot: "bg-white/30",
   };
+}
+
+/** Compact WS / SSE badge for the chart overlay header (mobile + desktop). */
+function chartTransportBadge(
+  live: LiveUiStatus,
+  transport: LiveTransport,
+  providerStatus: string | null,
+  liveFresh: boolean,
+): { label: string; className: string; title: string } | null {
+  if (providerStatus === "demo") {
+    return {
+      label: "Demo",
+      className: "border-white/12 bg-white/[0.05] text-white/70",
+      title: "Demo price stream — not a live broker feed",
+    };
+  }
+  if (liveFresh && (live === "connected" || live === "live_stream" || live === "delayed_polling")) {
+    if (transport === "ws") {
+      return {
+        label: "WS",
+        className: "border-emerald-400/30 bg-emerald-400/12 text-emerald-200/95",
+        title: "AXE Live · WebSocket (primary stream)",
+      };
+    }
+    if (transport === "sse") {
+      return {
+        label: "SSE",
+        className: "border-amber-400/30 bg-amber-400/12 text-amber-200/95",
+        title: "AXE Live · SSE fallback stream",
+      };
+    }
+  }
+  if (live === "connecting") {
+    return {
+      label: "…",
+      className: "border-white/10 bg-white/[0.04] text-white/60",
+      title: "Opening live feed",
+    };
+  }
+  if (live === "reconnecting") {
+    return {
+      label: "↻",
+      className: "border-amber-400/25 bg-amber-400/10 text-amber-200/90",
+      title: "Recovering live feed",
+    };
+  }
+  if (live === "offline" || live === "stale") {
+    return {
+      label: "Cache",
+      className: "border-white/12 bg-white/[0.04] text-tos-muted",
+      title: "Cached broker candles — live stream unavailable",
+    };
+  }
+  return null;
 }
 
 function formatLiveAge(iso: string | null): string | null {
@@ -1791,6 +1847,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     liveFresh,
     sessionState,
   );
+  const transportBadge = chartTransportBadge(
+    liveStatus,
+    liveTransport,
+    data.providerStatus,
+    liveFresh,
+  );
   const liveDetail = useMemo(() => {
     if (data.providerStatus === "demo") return "Demo stream";
     if (sessionState.state !== "open" && !liveFresh) return sessionState.reason;
@@ -1827,6 +1889,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         : data.failure !== "ok"
           ? failureCardCopy(data.failure)?.title ?? "Chart runtime is blocked."
           : liveDetail;
+
+  const headerReasonWithTransport =
+    headerSeverity === "fresh" && liveTransport !== "off"
+      ? `${headerReason} · ${liveTransport === "ws" ? "WebSocket" : "SSE fallback"}`
+      : headerReason;
 
   const goSymbol = useCallback(
     (sym: string) => {
@@ -2532,7 +2599,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         label={`Chart · ${data.symbol}`}
         allLiveOverride={headerSeverity === "fresh" ? true : headerSeverity === "inactive" ? null : false}
         severity={headerSeverity}
-        reason={headerReason}
+        reason={headerReasonWithTransport}
       />
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
       <div className="tos-shell-desktop-only hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2">
@@ -2820,6 +2887,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               {data.symbol}
             </span>
             <span className="shrink-0 font-mono text-[11px] font-medium text-white/80">{lastPriceText}</span>
+            {transportBadge ? (
+              <span
+                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.12em] ${transportBadge.className}`}
+                title={transportBadge.title}
+              >
+                {transportBadge.label}
+              </span>
+            ) : null}
             <span
               className="ml-auto shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em]"
               style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}

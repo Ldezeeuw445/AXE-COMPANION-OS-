@@ -442,7 +442,7 @@ export function PositionLabelsOverlay({
       pendingEntryLines.push({
         key: `pend-entry-${o.id}`,
         price: entryPrice,
-        label: `${typeLabel} ${o.volume}`,
+        label: typeLabel,
         color: entryColor(side),
         targetKey,
         orderId: o.id,
@@ -510,6 +510,7 @@ export function PositionLabelsOverlay({
           volume={line.volume}
           side={line.side}
           disabled={line.disabled}
+          tapToArm
           zIndex={25}
           onChange={(newPrice) => {
             void handleLevelChange({
