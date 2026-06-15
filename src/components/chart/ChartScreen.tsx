@@ -736,7 +736,7 @@ const TradePlanLine = memo(function TradePlanLine({
             y1={0}
             y2={0}
             stroke={color}
-            strokeWidth={1}
+            strokeWidth={dashed ? 1 : 1.5}
             strokeDasharray={dashed ? "6 4" : ""}
           />
 
@@ -1393,16 +1393,31 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
 
   const showPendingTradePlan = useCallback(
     (side: "buy" | "sell", type?: PendingOrderTicketType) => {
-      const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-      const distance = draggablePlanDistance(data.candles, entry);
+      const market = livePrice ?? data.lastPrice ?? pendingOrderPrice;
+      const distance = draggablePlanDistance(data.candles, market);
+      const orderType = type ?? (side === "buy" ? "buy_limit" : "sell_limit");
+      const isLimit = orderType === "buy_limit" || orderType === "sell_limit";
+      const isStop = orderType === "buy_stop" || orderType === "sell_stop";
+
+      let entry = market;
+      if (market != null && Number.isFinite(market)) {
+        if (isLimit) {
+          entry = side === "buy" ? market - distance : market + distance;
+        } else if (isStop) {
+          entry = side === "buy" ? market + distance : market - distance;
+        }
+      }
+
       setPendingOrderSide(side);
       setExecutionMode("pending");
-      setPendingOrderType(type ?? (side === "buy" ? "buy_limit" : "sell_limit"));
+      setPendingOrderType(orderType);
       setPendingOrderVisible(true);
       if (entry != null && Number.isFinite(entry)) {
         const sideChanged = side !== pendingOrderSide;
         setPendingOrderPrice(entry);
-        setPendingStopLossPrice((prev) => (prev != null && !sideChanged ? prev : side === "buy" ? entry - distance : entry + distance));
+        setPendingStopLossPrice((prev) =>
+          prev != null && !sideChanged ? prev : side === "buy" ? entry - distance : entry + distance,
+        );
         setPendingTakeProfitPrice((prev) =>
           prev != null && !sideChanged ? prev : side === "buy" ? entry + distance * 1.6 : entry - distance * 1.6,
         );

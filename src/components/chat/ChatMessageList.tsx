@@ -295,8 +295,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     if (!force && !stickToBottomRef.current) return;
-    // flex-col-reverse: scrollTop 0 = newest messages near composer
-    scroller.scrollTop = 0;
+    scroller.scrollTop = scroller.scrollHeight;
   }, []);
 
   const runPinSequence = useCallback(
@@ -355,7 +354,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     if (scrollLockRef.current) return;
     const el = e.currentTarget;
-    const nearBottom = el.scrollTop <= NEAR_BOTTOM_PX;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
     stickToBottomRef.current = nearBottom;
     setShowJump(!nearBottom && messages.length > 0);
   }
@@ -371,39 +370,10 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="tos-scrollbar flex min-h-0 flex-1 flex-col-reverse gap-5 overflow-y-auto pb-[10rem] pr-1 md:pb-2"
+        className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[10rem] pr-1 md:pb-2"
       >
-        {thinking && streamText ? (
-          <StreamingBubble text={streamText} phase={streamPhase} />
-        ) : thinking ? (
-          <TypingBubble />
-        ) : null}
-        {pending.map((p) => (
-          <article key={p.id} className="group flex flex-col items-end">
-            <div className="mb-1.5 flex flex-row-reverse items-center gap-1.5 px-1.5">
-              <span className="h-1 w-1 rounded-full bg-tos-gold/70" />
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-gold/80">You said</p>
-            </div>
-            <div className="tos-bubble-user text-tos-text max-w-[92%] rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed opacity-90">
-              <div>
-                {p.hasImage && p.content === "(chart attached)" ? (
-                  <span className="italic text-tos-muted">Chart attached…</span>
-                ) : (
-                  renderUserBody(p.content)
-                )}
-              </div>
-            </div>
-            <div className="flex flex-row-reverse items-center gap-1.5 px-1.5">
-              <time className="text-[10px] text-tos-dim" dateTime={p.createdAt}>
-                {formatTimeHm(p.createdAt)}
-              </time>
-              <span className="text-[9.5px] uppercase tracking-wider text-tos-dim/80" aria-label="sending">
-                · sending
-              </span>
-            </div>
-          </article>
-        ))}
-        {[...messages].reverse().map((m) => (
+        {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
+        {messages.map((m) => (
           <article
             key={m.id}
             className={`group flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}
@@ -458,7 +428,36 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
             </div>
           </article>
         ))}
-        {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
+        {pending.map((p) => (
+          <article key={p.id} className="group flex flex-col items-end">
+            <div className="mb-1.5 flex flex-row-reverse items-center gap-1.5 px-1.5">
+              <span className="h-1 w-1 rounded-full bg-tos-gold/70" />
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-gold/80">You said</p>
+            </div>
+            <div className="tos-bubble-user text-tos-text max-w-[92%] rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed opacity-90">
+              <div>
+                {p.hasImage && p.content === "(chart attached)" ? (
+                  <span className="italic text-tos-muted">Chart attached…</span>
+                ) : (
+                  renderUserBody(p.content)
+                )}
+              </div>
+            </div>
+            <div className="flex flex-row-reverse items-center gap-1.5 px-1.5">
+              <time className="text-[10px] text-tos-dim" dateTime={p.createdAt}>
+                {formatTimeHm(p.createdAt)}
+              </time>
+              <span className="text-[9.5px] uppercase tracking-wider text-tos-dim/80" aria-label="sending">
+                · sending
+              </span>
+            </div>
+          </article>
+        ))}
+        {thinking && streamText ? (
+          <StreamingBubble text={streamText} phase={streamPhase} />
+        ) : thinking ? (
+          <TypingBubble />
+        ) : null}
       </div>
 
       {showJump ? (

@@ -13,7 +13,9 @@ const DEFAULT_DATA = "https://data.alpaca.markets";
 export function getAlpacaPaperConfig(): AlpacaEnvConfig | null {
   const keyId =
     process.env.ALPACA_PAPER_API_KEY_ID?.trim() ||
+    process.env.ALPACA_PAPER_API_KEY?.trim() ||
     process.env.ALPACA_API_KEY_ID?.trim() ||
+    process.env.ALPACA_API_KEY?.trim() ||
     "";
   const secretKey =
     process.env.ALPACA_PAPER_API_SECRET_KEY?.trim() ||
