@@ -8,13 +8,27 @@ type Props = {
 };
 
 export function CockpitConfidenceChart({ headline, series }: Props) {
+  if (series.length === 0) {
+    return (
+      <GlassPanel className="p-5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-tos-dim">
+          Conviction over time
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-tos-muted">{headline}</p>
+        <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-4 py-6 text-center text-[12px] leading-relaxed text-tos-muted">
+          No conviction points in this snapshot yet. Refresh after more chat or journal activity.
+        </div>
+      </GlassPanel>
+    );
+  }
+
   const w = 320;
   const h = 128;
   const padX = 14;
   const padY = 14;
   const vals = series.map((p) => p.value);
-  const minV = Math.min(...vals) - 0.03;
-  const maxV = Math.max(...vals) + 0.03;
+  const minV = Math.min(...vals, ...vals.map((v) => v - 0.03)) - 0.03;
+  const maxV = Math.max(...vals, ...vals.map((v) => v + 0.03)) + 0.03;
   const span = maxV - minV || 1;
 
   const points = series.map((p, i) => {

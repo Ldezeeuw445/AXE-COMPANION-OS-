@@ -64,6 +64,17 @@ export function VaultClient({ notes, media }: VaultClientProps) {
   const showNotes = tab === "all" || tab === "notes";
   const showVisual = tab === "all" || tab === "media";
   const showVoice = tab === "all" || tab === "voice";
+  const hasMedia = visualItems.length > 0 || voiceItems.length > 0;
+
+  const tabOptions = (
+    [
+      ["all", "All"],
+      ["axe", `AXE${axeNotes.length ? ` (${axeNotes.length})` : ""}`],
+      ["notes", `Notes${notes.length ? ` (${notes.length})` : ""}`],
+      ...(visualItems.length ? ([["media", `Images (${visualItems.length})`]] as const) : []),
+      ...(voiceItems.length ? ([["voice", `Voice (${voiceItems.length})`]] as const) : []),
+    ] as const
+  );
 
   return (
     <>
@@ -75,15 +86,7 @@ export function VaultClient({ notes, media }: VaultClientProps) {
         className="tos-neu-inset mb-3 w-full rounded-xl px-3 py-2.5 text-sm text-tos-text placeholder:text-tos-dim"
       />
       <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-        {(
-          [
-            ["all", "All"],
-            ["axe", `AXE${axeNotes.length ? ` (${axeNotes.length})` : ""}`],
-            ["notes", "Notes"],
-            ["media", "Images"],
-            ["voice", "Voice"],
-          ] as const
-        ).map(([key, label]) => (
+        {tabOptions.map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -98,6 +101,18 @@ export function VaultClient({ notes, media }: VaultClientProps) {
           </button>
         ))}
       </div>
+
+      {!hasMedia && tab === "all" && notes.length === 0 ? (
+        <GlassPanel className="mb-4 p-4 text-center">
+          <p className="text-sm font-medium text-tos-text">Vault is ready for your first save</p>
+          <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+            Bookmark an AXE reply in Chat, or add journal notes — they land here automatically.
+          </p>
+          <p className="mt-2 text-[10px] text-tos-dim">
+            Screenshots and voice memos are coming soon.
+          </p>
+        </GlassPanel>
+      ) : null}
 
       <div className="flex flex-col gap-4">
         {showAxe
@@ -177,6 +192,15 @@ export function VaultClient({ notes, media }: VaultClientProps) {
             ))
           : null}
 
+        {showNotes && !showAxe && filteredNotes.length === 0 ? (
+          <GlassPanel className="p-4 text-center">
+            <p className="text-sm font-medium text-tos-text">No notes yet</p>
+            <p className="mt-1 text-xs text-tos-muted">
+              Save AXE replies from Chat, or ask AXE to help you draft checklists to store here.
+            </p>
+          </GlassPanel>
+        ) : null}
+
         {showVisual
           ? filteredVisual.map((m) => (
               <GlassPanel key={m.id} className="p-4">
@@ -197,13 +221,22 @@ export function VaultClient({ notes, media }: VaultClientProps) {
                       </p>
                     ) : null}
                     <p className="mt-1 text-[10px] text-tos-dim">
-                      {m.thumbHint ?? "Storage path wired in Phase 2"}
+                      {m.thumbHint ?? "Saved to your vault"}
                     </p>
                   </div>
                 </div>
               </GlassPanel>
             ))
           : null}
+
+        {showVisual && filteredVisual.length === 0 && tab === "media" ? (
+          <GlassPanel className="p-4 text-center">
+            <p className="text-sm font-medium text-tos-text">Images coming soon</p>
+            <p className="mt-1 text-xs text-tos-muted">
+              Chart screenshots and uploads will appear here once media capture ships.
+            </p>
+          </GlassPanel>
+        ) : null}
 
         {showVoice
           ? filteredVoice.map((m) => (
@@ -215,7 +248,7 @@ export function VaultClient({ notes, media }: VaultClientProps) {
                       {m.title}
                     </p>
                     <p className="text-[10px] text-tos-dim">
-                      Voice memo · tap to play (Phase 2)
+                      Voice memo · playback coming soon
                     </p>
                   </div>
                 </div>

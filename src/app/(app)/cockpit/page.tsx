@@ -14,20 +14,29 @@ import { getCockpitDashboard } from "@/services/cockpitService";
 export default async function CockpitPage() {
   const dash = await getCockpitDashboard();
   const hasSnapshot = Boolean(dash.snapshotId);
-  const cockpitReady = hasSnapshot && dash.calibration.state === "active";
+  const cockpitCalibrated = hasSnapshot && dash.calibration.state === "active";
+  const cockpitPreview = hasSnapshot && dash.calibration.state !== "active";
 
   return (
     <div className="axe-stagger-enter flex flex-col gap-5 pb-2">
       <LiveStatusReporter
-        liveCount={cockpitReady ? 1 : 0}
+        liveCount={hasSnapshot ? 1 : 0}
         totalCount={1}
-        label={cockpitReady ? "Cockpit · calibrated" : "Cockpit · calibrating"}
-        allLiveOverride={cockpitReady ? true : null}
-        severity={cockpitReady ? "fresh" : "inactive"}
+        label={
+          cockpitCalibrated
+            ? "Cockpit · calibrated"
+            : cockpitPreview
+              ? "Cockpit · early snapshot"
+              : "Cockpit · calibrating"
+        }
+        allLiveOverride={cockpitCalibrated ? true : hasSnapshot ? false : null}
+        severity={cockpitCalibrated ? "fresh" : hasSnapshot ? "inactive" : "inactive"}
         reason={
-          cockpitReady
+          cockpitCalibrated
             ? `${dash.calibration.signalCount} real signals are available.`
-            : `${dash.calibration.signalCount} real signals found; missing ${dash.calibration.missingSignals.join(", ") || "snapshot"}.`
+            : hasSnapshot
+              ? `Snapshot ready with ${dash.calibration.signalCount} signals — scores stay conservative until more history exists.`
+              : `${dash.calibration.signalCount} real signals found; missing ${dash.calibration.missingSignals.join(", ") || "snapshot"}.`
         }
         scope="cockpit"
       />
@@ -39,10 +48,9 @@ export default async function CockpitPage() {
         </p>
       </div>
 
-      {/* Auto-recalibrate when new signals exist since last snapshot */}
       <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
 
-      {!hasSnapshot || dash.calibration.state !== "active" ? (
+      {!hasSnapshot ? (
         <GlassPanel className="p-6 text-center">
           <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-tos-dim">
             {dash.calibration.state === "insufficient_data" ? "Insufficient data" : "Calibrating"}
@@ -62,6 +70,23 @@ export default async function CockpitPage() {
         </GlassPanel>
       ) : (
         <>
+          {cockpitPreview ? (
+            <GlassPanel className="border-tos-warm/20 p-4">
+              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-tos-warm/90">
+                Early calibration
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-tos-muted">
+                {dash.calibration.message}
+              </p>
+              <p className="mt-2 text-[11px] text-tos-dim">
+                {dash.calibration.signalCount} signals ·{" "}
+                {dash.calibration.missingSignals.length
+                  ? `still missing ${dash.calibration.missingSignals.join(", ")}`
+                  : "building toward full calibration"}
+              </p>
+            </GlassPanel>
+          ) : null}
+
           <CockpitAlignment data={dash.alignment} calibrationMessage={dash.calibration.message} />
 
           <GlassPanel className="p-3">

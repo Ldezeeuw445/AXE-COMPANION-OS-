@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { ExecutionRequestCard } from "@/types/domain";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
@@ -36,6 +37,7 @@ function dirBadge(dir: ExecutionRequestCard["direction"]) {
 
 export function ExecutionCard({ card }: ExecutionCardProps) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const run = (action: "approve" | "reject") => {
     startTransition(async () => {
@@ -45,7 +47,9 @@ export function ExecutionCard({ card }: ExecutionCardProps) {
           : await rejectExecutionRequestAction(card.id);
       if (!result.ok && result.message) {
         console.warn("[ExecutionCard]", result.message);
+        return;
       }
+      router.refresh();
     });
   };
 

@@ -38,6 +38,38 @@ function chatQ(text: string): string {
   return `/chat?q=${encodeURIComponent(text)}`;
 }
 
+function deliveryNoteForType(type: string): string {
+  switch (type) {
+    case "price":
+      return "Live on Chart when this symbol is active";
+    case "position_risk":
+      return "Saved — position monitor evaluator coming soon";
+    case "news":
+    case "macro":
+      return "Saved — intel feed hook coming soon";
+    case "journal_reminder":
+      return "Reminder only — no auto-fire yet";
+    default:
+      return "In-app only";
+  }
+}
+
+function humanAlertType(type: string): string {
+  switch (type) {
+    case "price":
+      return "Price";
+    case "position_risk":
+      return "Position risk";
+    case "news":
+      return "News";
+    case "macro":
+      return "Macro";
+    case "journal_reminder":
+      return "Journal reminder";
+    default:
+      return type.replace(/_/g, " ");
+  }
+}
 function badgeVariantForType(type: string): "price" | "news" | "risk" | "warm" | "neutral" {
   if (type === "price") return "price";
   if (type === "news") return "news";
@@ -466,12 +498,17 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
               onChange={(e) => setFormType(e.target.value)}
               className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
             >
-              <option value="price">price</option>
-              <option value="position_risk">position_risk</option>
-              <option value="news">news</option>
-              <option value="macro">macro</option>
-              <option value="journal_reminder">journal_reminder</option>
+              <option value="price">Price (live on Chart)</option>
+              <option value="position_risk">Position risk (saved)</option>
+              <option value="news">News keyword (saved)</option>
+              <option value="macro">Macro keyword (saved)</option>
+              <option value="journal_reminder">Journal reminder (saved)</option>
             </select>
+            {formType !== "price" ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-tos-dim">
+                Only price alerts auto-evaluate today. Other types are stored for AXE context and future push hooks.
+              </p>
+            ) : null}
           </label>
 
           <label className="text-[11px] text-tos-dim">
@@ -556,9 +593,9 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
         </GlassPanel>
       ) : visibleAlerts.length === 0 ? (
         <GlassPanel className="p-4 text-sm text-tos-muted">
-          <p>No alerts yet. Create one above, or set from Chart → “Set price alert”.</p>
+          <p>No alerts yet. Create one above, or open Chart with a symbol to evaluate price alerts live.</p>
           <p className="mt-2 text-xs text-tos-dim">
-            Note: push delivery only happens when a device is subscribed and TradingOS triggers `/api/push/alert`.
+            Price alerts trip in-app while Chart is open. Push is optional when VAPID keys and a device subscription exist.
           </p>
         </GlassPanel>
       ) : (
@@ -570,7 +607,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm text-tos-text">{a.symbol ?? "—"}</span>
-                    <Badge variant={badgeVariantForType(a.type)}>{a.type}</Badge>
+                    <Badge variant={badgeVariantForType(a.type)}>{humanAlertType(a.type)}</Badge>
                     <Badge variant={paused ? "neutral" : "long"}>{paused ? "paused" : "active"}</Badge>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -601,6 +638,8 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                   {a.triggered_at ? `Triggered ${a.triggered_at}` : "Not triggered"}
                   {" · "}
                   {a.created_at}
+                  {" · "}
+                  {deliveryNoteForType(a.type)}
                 </p>
               </GlassPanel>
             );

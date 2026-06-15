@@ -110,7 +110,10 @@ export default async function ActionsPage() {
       />
 
       {/* Existing review pipelines moved into a folded section so the hub owns the page */}
-      <details className="group mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0a0a0d]/90">
+      <details
+        className="group mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0a0a0d]/90"
+        open={executions.length > 0 || setups.length > 0}
+      >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-muted [&::-webkit-details-marker]:hidden">
           Reviews & approvals
           <ChevronDown className="h-4 w-4 shrink-0 text-tos-dim transition-transform group-open:rotate-180" aria-hidden />

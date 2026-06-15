@@ -84,7 +84,7 @@ function calibrationState(input: {
       message: "Not enough real signals yet. Chat, journal notes, trades, and saved memory will calibrate AXE.",
     };
   }
-  if (!input.hasSnapshot || input.signalCount < 12 || missingSignals.length >= 3) {
+  if (!input.hasSnapshot || input.signalCount < 8 || missingSignals.length >= 4) {
     return {
       ...base,
       state: "calibrating",
@@ -111,6 +111,25 @@ function mapConfidenceTrend(raw: unknown): CockpitConfidencePoint[] {
       at: safeStr((p as Record<string, unknown>).at ?? (p as Record<string, unknown>).captured_at),
       value: safeNum((p as Record<string, unknown>).value ?? (p as Record<string, unknown>).confidence),
     }));
+}
+
+function buildConfidenceHeadline(series: CockpitConfidencePoint[]): string {
+  if (series.length === 0) {
+    return "Generate or refresh a snapshot after a few chat sessions to see conviction over time.";
+  }
+  if (series.length === 1) {
+    return "Early snapshot — more sessions will sharpen this curve.";
+  }
+  const first = series[0]?.value ?? 0;
+  const last = series[series.length - 1]?.value ?? 0;
+  const delta = last - first;
+  if (delta > 0.05) {
+    return "Conviction has trended higher as AXE learns your book.";
+  }
+  if (delta < -0.05) {
+    return "Conviction dipped recently — journal tags and corrections help recalibrate.";
+  }
+  return "Conviction has held steady across recent sessions.";
 }
 
 function mapLearningProgress(raw: unknown): { headline: string; milestones: CockpitLearningMilestone[] } {
@@ -298,7 +317,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
       prior?.alignment_score ?? null
     ),
     confidence: {
-      headline: "",
+      headline: buildConfidenceHeadline(mapConfidenceTrend(latest.confidence_trend)),
       series: mapConfidenceTrend(latest.confidence_trend),
     },
     learningProgress: mapLearningProgress(latest.learning_progress),

@@ -16,6 +16,7 @@ export async function listExecutionRequests(): Promise<ExecutionRequestCard[]> {
     .from("execution_requests")
     .select("id,instrument,direction,entry_price,stop_loss,take_profit,risk_amount,risk_percent,rationale,status")
     .eq("user_id", authed.user.id)
+    .in("status", ["pending", "pending_approval", "draft"])
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -52,6 +53,7 @@ export async function listSetupReviews(): Promise<SetupReviewCard[]> {
     .from("setup_reviews")
     .select("id,instrument,direction,summary,status")
     .eq("user_id", authed.user.id)
+    .in("status", ["pending", "in_review"])
     .order("created_at", { ascending: false });
 
   if (error) {

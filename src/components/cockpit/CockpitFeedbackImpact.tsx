@@ -84,33 +84,40 @@ export function CockpitFeedbackImpact({ data }: Props) {
             to alignment — from tightening how stops are described, not luck.
           </p>
         </div>
-        <p className="mt-4 text-[10px] uppercase tracking-wider text-tos-dim">
-          Four-week correction rhythm
-        </p>
-        <div className="mt-2 flex h-12 items-end gap-2">
-          {data.last28dTrend.map((w) => (
-            <div key={w.weekLabel} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
-              <div
-                className="flex w-full max-w-[2.75rem] flex-1 items-end justify-center"
-                title={`${w.corrections} fixes`}
-              >
-                <div
-                  className="w-full rounded-t-md bg-gradient-to-t from-tos-warm/15 to-tos-warm/75"
-                  style={{
-                    height: `${Math.max((w.corrections / maxCorr) * 100, 12)}%`,
-                  }}
-                />
-              </div>
-              <span className="max-w-full truncate text-center text-[9px] leading-tight text-tos-dim">
-                {w.weekLabel}
-              </span>
+        {data.last28dTrend.length > 0 ? (
+          <>
+            <p className="mt-4 text-[10px] uppercase tracking-wider text-tos-dim">
+              Four-week correction rhythm
+            </p>
+            <div className="mt-2 flex h-12 items-end gap-2">
+              {data.last28dTrend.map((w) => (
+                <div key={w.weekLabel} className="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+                  <div
+                    className="flex w-full max-w-[2.75rem] flex-1 items-end justify-center"
+                    title={`${w.corrections} fixes`}
+                  >
+                    <div
+                      className="w-full rounded-t-md bg-gradient-to-t from-tos-warm/15 to-tos-warm/75"
+                      style={{
+                        height: `${Math.max((w.corrections / maxCorr) * 100, 12)}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="max-w-full truncate text-center text-[9px] leading-tight text-tos-dim">
+                    {w.weekLabel}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
-          Mid-March bump tracks CPI — you were precise about wick vs close;
-          that week cost confidence briefly, then paid alignment back.
-        </p>
+            <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
+              Spikes usually follow macro weeks or when you tighten how stops and invalidations are described.
+            </p>
+          </>
+        ) : (
+          <p className="mt-4 text-[11px] leading-relaxed text-tos-dim">
+            Correction rhythm appears after journal tags or chat corrections build up over a few weeks.
+          </p>
+        )}
       </div>
     </GlassPanel>
   );
