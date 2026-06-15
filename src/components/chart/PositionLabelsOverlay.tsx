@@ -433,74 +433,14 @@ export function PositionLabelsOverlay({
     computeLabels();
   }, [overlays, slTpDrafts, computeLabels]);
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, label: LabelItem) => {
-      if (!label.draggable || !label.field || (!label.positionId && !label.orderId)) return;
-      e.preventDefault();
-      e.stopPropagation();
-
-      const el = e.currentTarget;
-      el.setPointerCapture(e.pointerId);
-      isDraggingRef.current = true;
-
-      const targetKey = label.positionId
-        ? slTpDraftKeyForPosition(label.positionId)
-        : slTpDraftKeyForOrder(label.orderId!);
-
-      const overlay = label.positionId
-        ? overlaysRef.current.find((o) => o.id === label.positionId)
-        : null;
-      const pendingOrder = label.orderId
-        ? pendingOrdersRef.current.find((o) => o.id === label.orderId)
-        : null;
-
-      const draft = slTpDraftsRef.current[targetKey];
-
-      dragDataRef.current = {
-        key: label.key,
-        field: label.field,
-        targetKey,
-        positionId: label.positionId,
-        orderId: label.orderId,
-        currentSl: label.currentSl ?? null,
-        currentTp: label.currentTp ?? null,
-        currentOpenPrice: draft?.openPrice ?? pendingOrder?.openPrice ?? null,
-        originPointerY: e.clientY,
-        originLabelY: label.y,
-        entryPrice: overlay?.entryPrice ?? pendingOrder?.openPrice ?? null,
-        volume: overlay?.volume ?? pendingOrder?.volume ?? 0,
-        side: (overlay?.side ?? pendingOrder?.side ?? "buy") as "buy" | "sell",
-        color: label.color,
-      };
-
-      const startPrice =
-        label.field === "sl"
-          ? (label.currentSl ?? 0)
-          : label.field === "tp"
-            ? (label.currentTp ?? 0)
-            : (draft?.openPrice ?? pendingOrder?.openPrice ?? overlay?.entryPrice ?? 0);
-
-      setDragState({
-        key: label.key,
-        y: label.y,
-        price: startPrice,
-        text: label.text,
-        color: label.color,
-        field: label.field ?? "sl",
-        dashed: label.field !== "entry",
-      });
-    },
-    [],
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMoveAt = useCallback(
+    (clientY: number) => {
       if (!isDraggingRef.current || !dragDataRef.current) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const drag = dragDataRef.current;
-      const delta = e.clientY - drag.originPointerY;
+      const delta = clientY - drag.originPointerY;
       const newY = drag.originLabelY + delta;
       const newPrice = canvas.coordinateToPrice(newY);
       if (newPrice == null || !Number.isFinite(newPrice) || newPrice <= 0) return;
@@ -528,8 +468,8 @@ export function PositionLabelsOverlay({
     [canvasRef],
   );
 
-  const handlePointerUp = useCallback(
-    async (e: React.PointerEvent<HTMLDivElement>) => {
+  const finishDragAt = useCallback(
+    async (clientY: number) => {
       if (!isDraggingRef.current || !dragDataRef.current) return;
       const canvas = canvasRef.current;
       const drag = dragDataRef.current;
@@ -537,18 +477,12 @@ export function PositionLabelsOverlay({
       isDraggingRef.current = false;
       dragDataRef.current = null;
 
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {
-        /* noop */
-      }
-
       if (!canvas || !brokerAccountId) {
         setDragState(null);
         return;
       }
 
-      const delta = e.clientY - drag.originPointerY;
+      const delta = clientY - drag.originPointerY;
       const newY = drag.originLabelY + delta;
       const newPrice = canvas.coordinateToPrice(newY);
 
@@ -584,6 +518,89 @@ export function PositionLabelsOverlay({
     [brokerAccountId, canvasRef, instantSlTpModify, onSlTpDraftChange, submitModify],
   );
 
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, label: LabelItem) => {
+      if (!label.draggable || !label.field || (!label.positionId && !label.orderId)) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const targetKey = label.positionId
+        ? slTpDraftKeyForPosition(label.positionId)
+        : slTpDraftKeyForOrder(label.orderId!);
+
+      const overlay = label.positionId
+        ? overlaysRef.current.find((o) => o.id === label.positionId)
+        : null;
+      const pendingOrder = label.orderId
+        ? pendingOrdersRef.current.find((o) => o.id === label.orderId)
+        : null;
+
+      const draft = slTpDraftsRef.current[targetKey];
+
+      isDraggingRef.current = true;
+
+      dragDataRef.current = {
+        key: label.key,
+        field: label.field,
+        targetKey,
+        positionId: label.positionId,
+        orderId: label.orderId,
+        currentSl: label.currentSl ?? null,
+        currentTp: label.currentTp ?? null,
+        currentOpenPrice: draft?.openPrice ?? pendingOrder?.openPrice ?? null,
+        originPointerY: e.clientY,
+        originLabelY: label.y,
+        entryPrice: overlay?.entryPrice ?? pendingOrder?.openPrice ?? null,
+        volume: overlay?.volume ?? pendingOrder?.volume ?? 0,
+        side: (overlay?.side ?? pendingOrder?.side ?? "buy") as "buy" | "sell",
+        color: label.color,
+      };
+
+      const startPrice =
+        label.field === "sl"
+          ? (label.currentSl ?? 0)
+          : label.field === "tp"
+            ? (label.currentTp ?? 0)
+            : (draft?.openPrice ?? pendingOrder?.openPrice ?? overlay?.entryPrice ?? 0);
+
+      setDragState({
+        key: label.key,
+        y: label.y,
+        price: startPrice,
+        text: label.text,
+        color: label.color,
+        field: label.field ?? "sl",
+        dashed: label.field !== "entry",
+      });
+
+      const onDocCancel = () => {
+        cleanup();
+        isDraggingRef.current = false;
+        dragDataRef.current = null;
+        setDragState(null);
+      };
+      const cleanup = () => {
+        document.removeEventListener("pointermove", onDocMove);
+        document.removeEventListener("pointerup", onDocEnd);
+        document.removeEventListener("pointercancel", onDocCancel);
+      };
+      const onDocMove = (ev: PointerEvent) => {
+        ev.preventDefault();
+        handlePointerMoveAt(ev.clientY);
+      };
+      const onDocEnd = (ev: PointerEvent) => {
+        ev.preventDefault();
+        cleanup();
+        void finishDragAt(ev.clientY);
+      };
+
+      document.addEventListener("pointermove", onDocMove, { passive: false });
+      document.addEventListener("pointerup", onDocEnd, { passive: false });
+      document.addEventListener("pointercancel", onDocCancel);
+    },
+    [finishDragAt, handlePointerMoveAt],
+  );
+
   const handleConfirm = useCallback(
     async (label: LabelItem) => {
       if (!label.confirmTargetKey || confirmingKey) return;
@@ -607,29 +624,21 @@ export function PositionLabelsOverlay({
     [confirmingKey, submitModify],
   );
 
-  const handlePointerCancel = useCallback(() => {
-    isDraggingRef.current = false;
-    dragDataRef.current = null;
-    setDragState(null);
-  }, []);
-
   if (labels.length === 0 && !dragState) return null;
 
   const isDraggingVisible = dragState !== null;
   const axisWidth = canvasRef.current?.getRightAxisWidth() ?? 56;
   const plotRight = Math.max(0, overlaySize.w - Math.max(axisWidth, 56));
+  const lineEnd = Math.max(plotRight, overlaySize.w - 8);
 
   return (
     <div
       ref={overlayRootRef}
-      className="absolute inset-0 overflow-hidden z-10"
+      className={`absolute inset-0 overflow-hidden ${isDraggingVisible ? "z-[35]" : "z-10"}`}
       style={{
         pointerEvents: isDraggingVisible ? "auto" : "none",
         touchAction: "none",
       }}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
     >
       {labels.map((label) => {
         if (dragState && dragState.key === label.key) return null;
@@ -705,13 +714,14 @@ export function PositionLabelsOverlay({
         >
           <g transform={`translate(0,${dragState.y})`}>
             <line
-              x1={4}
-              x2={plotRight}
+              x1={0}
+              x2={lineEnd}
               y1={0}
               y2={0}
               stroke={dragState.color}
-              strokeWidth={dragState.field === "entry" ? 1.5 : 1}
+              strokeWidth={dragState.field === "entry" ? 1.75 : 1.25}
               strokeDasharray={dragState.dashed ? "6 4" : undefined}
+              opacity={0.95}
             />
             <text
               x={6}
