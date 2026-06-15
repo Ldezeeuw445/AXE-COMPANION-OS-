@@ -88,6 +88,7 @@ type AccountStream = {
   subscribedSymbols: Set<string>;
   /** Display→broker lookup for this account. */
   symbolMap: Record<string, string>;
+  listener: MultiSymbolListener;
 };
 
 // Track all active account streams
@@ -463,6 +464,21 @@ class MultiSymbolListener {
         source: "metaapi_mt5",
       }));
     }
+
+    // Clear pending overlays on symbols that no longer have resting orders
+    for (const sym of this.config.watchlistSymbols) {
+      const broker = this.config.symbolMap[sym] ?? sym;
+      if (!bySymbol.has(broker)) {
+        broadcastToAllTfRooms(this.env, this.config, broker, sym, () => ({
+          type: "orders_update",
+          userId: this.config.userId,
+          accountId: this.config.accountId,
+          total: accountTotal,
+          onSymbol: [],
+          source: "metaapi_mt5",
+        }));
+      }
+    }
   }
 
   async onPendingOrdersUpdated(
@@ -656,6 +672,7 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
     connection,
     subscribedSymbols,
     symbolMap: config.symbolMap,
+    listener: rawListener,
   };
 
   activeStreams.set(config.metaApiAccountId, stream);
@@ -699,11 +716,13 @@ async function addSymbolsToStream(
     }
   }
 
-  // Update the stream's config
+  // Update the stream's config (listener reads config.symbolMap for display labels)
   stream.config.watchlistSymbols = [
     ...new Set([...stream.config.watchlistSymbols, ...newSymbols]),
   ];
-  stream.symbolMap = { ...stream.symbolMap, ...symbolMap };
+  stream.config.symbolMap = { ...stream.config.symbolMap, ...symbolMap };
+  stream.symbolMap = stream.config.symbolMap;
+  stream.listener.rebuildReverseMap();
 }
 
 /* ------------------------------------------------------------------ */

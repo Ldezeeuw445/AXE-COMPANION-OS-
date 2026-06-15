@@ -1,4 +1,4 @@
-import { ChatMessageList } from "@/components/chat/ChatMessageList";
+import { ChatThread } from "@/components/chat/ChatThread";
 import { Composer } from "@/components/chat/Composer";
 import { ChatComposerDock } from "@/components/chat/ChatComposerDock";
 import { PinnedContext } from "@/components/chat/PinnedContext";
@@ -67,7 +67,11 @@ export default async function ChatPage() {
           </p>
         ) : null}
         <PinnedContext text={conversation.pinnedContext} />
-        <ChatMessageList messages={messages} />
+        <ChatThread
+          conversationId={conversation.id}
+          initialMessages={messages}
+          realtimeEnabled={!CHAT_USES_MOCK_DATA}
+        />
       </div>
       <ChatComposerDock>
         <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />

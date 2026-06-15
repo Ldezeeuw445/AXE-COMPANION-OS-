@@ -474,27 +474,79 @@ async function fetchCongressFromUW(headers: Record<string, string>): Promise<Sen
 }
 
 async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
-  const res = await fetchWithTimeout(
-    "https://api.quiverquant.com/beta/live/congresstrading",
-    10_000,
-    { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-  );
-  if (!res.ok) throw new Error(`quiver_${res.status}`);
-  const raw = await res.json();
-  if (!Array.isArray(raw)) throw new Error("quiver_bad_response");
+  const headers = { Authorization: `Bearer ${apiKey}`, Accept: "application/json" };
 
-  return raw.slice(0, 25).map((r: Record<string, unknown>) => {
-    const txType = String(r.Transaction ?? r.transaction ?? "").toLowerCase();
-    const isPurchase = txType.includes("purchase") || txType.includes("buy");
-    return {
-      politician: String(r.Representative ?? r.representative ?? "Unknown"),
-      chamber: String(r.House ?? r.house ?? "Congress"),
-      ticker: String(r.Ticker ?? r.ticker ?? ""),
-      direction: isPurchase ? "BUY" as const : "SELL" as const,
-      size: String(r.Range ?? r.amount ?? "N/A"),
-      date: String(r.TransactionDate ?? r.transaction_date ?? r.Date ?? ""),
-    };
-  }).filter((t) => t.ticker && t.date);
+  async function parseResponse(res: Response): Promise<SenateTrade[]> {
+    if (!res.ok) throw new Error(`quiver_${res.status}`);
+    const body = await res.json();
+    const raw = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.data)
+        ? body.data
+        : Array.isArray(body?.results)
+          ? body.results
+          : [];
+    if (raw.length === 0) throw new Error("quiver_empty");
+
+    return raw.slice(0, 25).map((r: Record<string, unknown>) => {
+      const txType = String(
+        r.Transaction ?? r.transaction ?? r.TradeType ?? r.trade_type ?? "",
+      ).toLowerCase();
+      const isPurchase =
+        txType.includes("purchase") ||
+        txType.includes("buy") ||
+        txType.includes("acquisition");
+      const politician = String(
+        r.Representative ??
+          r.representative ??
+          r.Name ??
+          r.name ??
+          r.Politician ??
+          "Unknown",
+      );
+      const chamber = String(
+        r.House ?? r.house ?? r.Chamber ?? r.chamber ?? "Congress",
+      );
+      const ticker = String(r.Ticker ?? r.ticker ?? r.Symbol ?? r.symbol ?? "");
+      const size = String(
+        r.Range ?? r.range ?? r.Amount ?? r.amount ?? r.transaction_amount ?? "N/A",
+      );
+      const date = String(
+        r.TransactionDate ??
+          r.transaction_date ??
+          r.Traded ??
+          r.traded ??
+          r.Filed ??
+          r.filed ??
+          r.Date ??
+          r.date ??
+          "",
+      );
+      return {
+        politician,
+        chamber,
+        ticker,
+        direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
+        size,
+        date,
+      };
+    }).filter((t) => t.ticker && t.date);
+  }
+
+  // Prefer bulk endpoint (current Quiver API); fall back to legacy live path.
+  for (const url of [
+    "https://api.quiverquant.com/beta/bulk/congresstrading?version=V2",
+    "https://api.quiverquant.com/beta/live/congresstrading",
+  ]) {
+    try {
+      const trades = await parseResponse(await fetchWithTimeout(url, 12_000, headers));
+      if (trades.length > 0) return trades;
+    } catch {
+      /* try next endpoint */
+    }
+  }
+
+  throw new Error("quiver_no_data");
 }
 
 async function fetchCongressFromFmp(fmpKey: string): Promise<SenateTrade[]> {

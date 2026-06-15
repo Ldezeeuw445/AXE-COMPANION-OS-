@@ -845,11 +845,21 @@ export async function streamChatMessage(
     } else if (tc.tool === "save_note") {
       const { content, tag } = tc.args;
       const entryKey = `note-${Date.now()}`;
+      const noteBody = tag ? `[${tag}] ${content}` : content;
       const { error: noteError } = await supabase.from("assistant_memory_entries").insert({
         user_id: user.id, scope: "notes", entry_key: entryKey,
-        content: tag ? `[${tag}] ${content}` : content,
+        content: noteBody,
       });
-      return noteError ? `Note failed: ${noteError.message}` : "Note saved to your journal.";
+      const { error: journalError } = await supabase.from("user_journal_entries").insert({
+        user_id: user.id,
+        symbol: "NOTE",
+        notes: noteBody,
+        tags: tag ? [tag] : [],
+      });
+      if (noteError && journalError) {
+        return `Note failed: ${noteError.message}`;
+      }
+      return "Note saved to your journal.";
     }
     return "Unknown tool.";
   }

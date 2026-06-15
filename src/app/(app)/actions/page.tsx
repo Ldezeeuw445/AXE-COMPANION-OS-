@@ -52,7 +52,7 @@ async function detectActionRuntime(): Promise<ActionRuntime> {
       }) ?? data[0]
     : null;
   const accountId = activeAccount?.id as string | undefined;
-  const [positions, trades, journal, memory] = await Promise.all([
+  const [positions, trades, journalNotes, tradeLabels, memory] = await Promise.all([
     accountId
       ? supabase.from("mt5_positions").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("account_id", accountId)
       : Promise.resolve({ count: 0 }),
@@ -60,13 +60,15 @@ async function detectActionRuntime(): Promise<ActionRuntime> {
       ? supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("account_id", accountId)
       : Promise.resolve({ count: 0 }),
     supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("trade_journal_labels").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
   ]);
+  const journalActivity = (journalNotes.count ?? 0) + (tradeLabels.count ?? 0);
   return {
     hasActiveAccount: Boolean(activeAccount),
     hasOpenPositions: (positions.count ?? 0) > 0,
     hasTradeHistory: (trades.count ?? 0) > 0,
-    hasJournal: (journal.count ?? 0) > 0,
+    hasJournal: journalActivity > 0,
     hasMemory: (memory.count ?? 0) > 0,
   };
 }

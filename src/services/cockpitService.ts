@@ -198,18 +198,20 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
 
   const { supabase, user } = authed;
 
-  const [messageCount, memoryCount, journalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
+  const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("trade_journal_labels").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_learning_metrics").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_learning_signals").select("id", { count: "exact", head: true }).eq("user_id", user.id),
   ]);
+  const journalCount = countOrZero(journalNotesCount) + countOrZero(tradeJournalCount);
   const counts = {
     messageCount: countOrZero(messageCount),
     memoryCount: countOrZero(memoryCount),
-    journalCount: countOrZero(journalCount),
+    journalCount,
     tradeCount: countOrZero(tradeCount),
     metricsCount: countOrZero(metricsCount),
     learningSignalCount: countOrZero(learningSignalCount),
