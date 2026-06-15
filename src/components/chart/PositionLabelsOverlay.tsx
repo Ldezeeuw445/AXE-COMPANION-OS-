@@ -127,6 +127,7 @@ export function PositionLabelsOverlay({
   onSlTpDraftChange,
   onSlTpDraftClear,
   onDemoModify,
+  onDemoOrderModify,
   onModifyFeedback,
   isDark = true,
 }: {
@@ -148,6 +149,12 @@ export function PositionLabelsOverlay({
     positionId: string;
     stopLoss: number | null;
     takeProfit: number | null;
+  }) => void;
+  onDemoOrderModify?: (input: {
+    orderId: string;
+    openPrice?: number;
+    stopLoss?: number | null;
+    takeProfit?: number | null;
   }) => void;
   onModifyFeedback?: (result: { ok: boolean; message?: string }) => void;
   isDark?: boolean;
@@ -241,6 +248,21 @@ export function PositionLabelsOverlay({
         return;
       }
 
+      if (isDemoAccount && input.orderId && onDemoOrderModify) {
+        const newSl = input.field === "sl" ? input.newPrice : input.currentSl;
+        const newTp = input.field === "tp" ? input.newPrice : input.currentTp;
+        const newOpen = input.field === "entry" ? input.newPrice : input.currentOpenPrice;
+        onDemoOrderModify({
+          orderId: input.orderId,
+          openPrice: newOpen ?? undefined,
+          stopLoss: newSl,
+          takeProfit: newTp,
+        });
+        onSlTpDraftClear?.(input.targetKey);
+        onModifyFeedback?.({ ok: true, message: "Demo order updated" });
+        return;
+      }
+
       // Pending limit/stop entry: apply on release (MT5-style direct modify).
       if (input.orderId && input.field === "entry") {
         await submitModify({
@@ -278,7 +300,7 @@ export function PositionLabelsOverlay({
         orderId: input.orderId,
       });
     },
-    [instantSlTpModify, onSlTpDraftChange, submitModify, canSubmitToBroker, isDemoAccount, onModifyFeedback],
+    [instantSlTpModify, onSlTpDraftChange, onSlTpDraftClear, submitModify, canSubmitToBroker, isDemoAccount, onDemoOrderModify, onModifyFeedback],
   );
 
   const computeEntryLabels = useCallback(() => {

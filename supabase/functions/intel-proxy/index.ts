@@ -21,6 +21,13 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { getMergedEdgeEnv } from "../_shared/mergeEdgeEnv.ts";
+
+/** Per-request env (merged JSON blob + individual Supabase secrets). */
+let edgeEnv: Record<string, string> = {};
+function env(key: string): string {
+  return (edgeEnv[key] ?? Deno.env.get(key) ?? "").trim();
+}
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -110,7 +117,7 @@ const SEC_HEADERS = {
 
 // ── Unusual Whales helper ──────────────────────────────────────────
 function uwHeaders(): Record<string, string> | null {
-  const token = Deno.env.get("UNUSUAL_WHALES_TOKEN");
+  const token = env("UNUSUAL_WHALES_TOKEN");
   if (!token) return null;
   return {
     Authorization: `Bearer ${token}`,
@@ -359,7 +366,7 @@ async function handleSenateTrades(): Promise<Response> {
   }
 
   // 2. Try Quiver Quantitative (free API key)
-  const quiverKey = Deno.env.get("QUIVER_API_KEY");
+  const quiverKey = env("QUIVER_API_KEY");
   if (quiverKey) {
     try {
       const trades = await fetchCongressFromQuiver(quiverKey);
@@ -373,7 +380,7 @@ async function handleSenateTrades(): Promise<Response> {
   }
 
   // 3. Try FMP fallback (paid)
-  const fmpKey = Deno.env.get("FMP_API_KEY");
+  const fmpKey = env("FMP_API_KEY");
   if (fmpKey) {
     try {
       const trades = await fetchCongressFromFmp(fmpKey);
@@ -566,7 +573,7 @@ async function handleDarkPoolPrints(symbol?: string): Promise<Response> {
   }
 
   // 2. Finnhub volume anomaly fallback
-  const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
+  const finnhubKey = env("FINNHUB_API_KEY") || env("FINNHUB_KEY");
   if (!finnhubKey) {
     const fallback = await readDarkPoolFromDb(symbol);
     if (fallback.length > 0) return json({ ok: true, data: fallback });
@@ -770,7 +777,7 @@ async function handleUnusualOptions(symbol?: string): Promise<Response> {
   }
 
   // 2. Finnhub recommendation fallback
-  const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
+  const finnhubKey = env("FINNHUB_API_KEY") || env("FINNHUB_KEY");
   if (!finnhubKey) {
     const fallback = await readOptionsFromDb(symbol);
     if (fallback.length > 0) return json({ ok: true, data: fallback });
@@ -948,8 +955,15 @@ async function handleMarketTide(): Promise<Response> {
     }
   }
 
-  const finnhubKey = Deno.env.get("FINNHUB_API_KEY");
-  if (!finnhubKey) return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
+  const finnhubKey = env("FINNHUB_API_KEY") || env("FINNHUB_KEY");
+  if (!finnhubKey) {
+    const stale = await readTideFromDb();
+    if (stale) {
+      setCache(cacheKey, stale);
+      return json({ ok: true, data: stale });
+    }
+    return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
+  }
 
   try {
     const [quoteRes, recRes] = await Promise.all([
@@ -2455,9 +2469,12 @@ serve(async (req: Request) => {
   }
 
   try {
+    edgeEnv = getMergedEdgeEnv();
     const body = await req.json();
     const action = body?.action as string;
-    const symbol = (body?.symbol as string)?.trim()?.toUpperCase() || undefined;
+    const args = body?.args && typeof body.args === "object" ? body.args : {};
+    const symbol =
+      ((args.symbol as string) ?? (body?.symbol as string))?.trim()?.toUpperCase() || undefined;
 
     switch (action) {
       case "insiderTrades":

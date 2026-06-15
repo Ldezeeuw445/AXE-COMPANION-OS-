@@ -370,7 +370,7 @@ export async function sendChatMessage(
         const focus = (tc.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
         const intel = await loadIntelSnapshot({ symbol: focus });
         if (!intel.hasLiveData) {
-          return "Smart-money intel unavailable. Either Unusual Whales is not configured or all upstream rows are empty right now.";
+          return "Smart-money intel is limited right now. SEC insider filings and cached DB rows may still be available once feeds warm — Unusual Whales premium flow requires a valid UNUSUAL_WHALES_TOKEN on Supabase.";
         }
         const lines: string[] = [];
         if (intel.tide) {

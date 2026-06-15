@@ -39,6 +39,7 @@ function capitalizeWords(s: string): string {
 
 export function accountMethodLabel(connectionMethod: string | null | undefined, hasExternalId: boolean): string {
   const m = (connectionMethod ?? "").toLowerCase();
+  if (m === "demo_paper") return "AXE Demo (paper)";
   if (m === "cloud_alpaca") return "Alpaca Paper";
   if (m === "cloud_mt5" && hasExternalId) return "AXE MT5 Cloud";
   if (m === "cloud_mt5" || m === "cloud_mt5_disconnected") return "AXE MT5 Cloud";

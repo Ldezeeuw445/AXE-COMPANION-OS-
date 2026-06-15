@@ -58,7 +58,7 @@ export function detectProviders(): ProviderStatus[] {
       id: "finnhub",
       label: "AXE Calendar",
       state: getFinnhubKey() ? "live" : "missing_config",
-      description: "Economic calendar (Finnhub premium) with Forex Factory fallback.",
+      description: "Economic calendar (Finnhub premium). Forex Factory mirror is always available as fallback.",
       env: ["FINNHUB_API_KEY"],
     },
     {
@@ -79,7 +79,7 @@ export function detectProviders(): ProviderStatus[] {
       id: "unusualWhales",
       label: "AXE Intel",
       state: getUnusualWhalesKey() ? "live" : "missing_config",
-      description: "Smart money: insider, congress, dark pool, options flow, tide.",
+      description: "Premium smart-money flow (UW). Insider trades use free SEC EDGAR without this key.",
       env: ["UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY"],
     },
   ];

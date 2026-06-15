@@ -762,9 +762,8 @@ export default async function IntelPage({ searchParams }: PageProps) {
       </div>
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
-        AXE Intel runs 13 feeds through the Supabase intel-proxy — smart money (insider, congress, dark pool, options, tide)
-        and alt-data (corporate jets, military radar, emergency monitor, vessels, chokepoints, conflict, energy, cyber). AXE serializes requests and reuses cached snapshots.
-        Nothing here is fabricated.
+        AXE Intel runs 13 feeds through the Supabase intel-proxy — smart money (insider via SEC EDGAR, congress, dark pool, options, tide)
+        and alt-data (corporate jets, military radar, emergency monitor, vessels, chokepoints, conflict, energy, cyber). Premium UW flow needs a valid token; some panels use Finnhub estimates or cached DB rows when upstream is offline.
       </p>
 
       {/* AXE Intel AI — floating chat panel + FAB */}

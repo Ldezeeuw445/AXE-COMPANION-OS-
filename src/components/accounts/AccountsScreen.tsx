@@ -720,7 +720,9 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
             ? "Account data could not load."
             : connectedCount > 0
               ? `${connectedCount} MT5 Cloud account${connectedCount > 1 ? "s" : ""} connected.`
-              : "No live MT5 connection yet."
+              : onlyDemo
+                ? "Demo paper account ready — open Chart to practice MT5-style trading."
+                : "No live MT5 connection yet."
         }
         scope="accounts"
       />
@@ -737,7 +739,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
         <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-2.5 text-[11px] text-white/50">
           <Shield className="h-4 w-4 shrink-0 text-white/30" />
           <span>
-            You&apos;re on <strong className="text-white/70">AXE Demo</strong> — connect a real MT5 account below for live data.
+            You&apos;re on <strong className="text-white/70">AXE Demo</strong> — open Chart to place paper trades with live-style ticks. Connect MT5 below when you&apos;re ready for a real broker.
           </span>
         </div>
       )}

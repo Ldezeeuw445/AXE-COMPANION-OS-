@@ -103,6 +103,8 @@ import {
   type OrderConfirmStatus,
 } from "@/components/chart/ChartOrderConfirm";
 import { computeLivePnl, useDemoPositions } from "@/components/chart/useDemoPositions";
+import { useDemoPendingOrders } from "@/components/chart/useDemoPendingOrders";
+import { useDemoLivePrice } from "@/components/chart/useDemoLivePrice";
 import { useInstantSlTpModify } from "@/lib/chart/instantSlTpModify";
 import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
@@ -622,8 +624,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   const isVisible = usePageVisible();
   const liveEnabled =
     data.failure === "ok" && data.source === "MetaApi MT5" && Boolean(accountId) && isVisible;
+  const isDemoAccount = data.account?.connectionMethod === "demo_paper";
   const sessionState = useMemo(() => marketSessionState(data.symbol), [data.symbol]);
   const closedCanonicalPrice = useMemo(() => data.lastPrice ?? data.candles.at(-1)?.close ?? null, [data.candles, data.lastPrice]);
+  const demoTickPrice = useDemoLivePrice(isDemoAccount, data.symbol, closedCanonicalPrice);
+  useEffect(() => {
+    if (!isDemoAccount || demoTickPrice == null || !Number.isFinite(demoTickPrice)) return;
+    setLivePrice(demoTickPrice);
+    setLastTickAt(new Date().toISOString());
+  }, [isDemoAccount, demoTickPrice]);
 
   /* ── Landscape fullscreen mode ───────────────────────────────── */
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1113,7 +1122,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   const liveTrading = useLiveTradingFlag(liveTradingEnabled);
   const slTpModifyPref = useInstantSlTpModify(instantSlTpModify);
   const [slTpDrafts, setSlTpDrafts] = useState<Record<string, SlTpDraft>>({});
-  const isDemoAccount = data.account?.connectionMethod === "demo_paper";
   const isAlpacaAccount = data.account?.connectionMethod === "cloud_alpaca";
   const demoBook = useDemoPositions(
     data.account?.brokerAccountId ?? null,
@@ -1127,6 +1135,30 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     title: string;
     body?: string;
   } | null>(null);
+  const handleDemoOrderFill = useCallback(
+    (input: {
+      symbol: string;
+      side: "buy" | "sell";
+      volume: number;
+      entryPrice: number;
+      stopLoss: number | null;
+      takeProfit: number | null;
+    }) => {
+      demoBook.open(input);
+      setTradeToast({
+        kind: "demo",
+        title: `Demo ${input.side.toUpperCase()} ${input.symbol} filled`,
+        body: `${input.volume.toFixed(2)} lots @ ${formatBrokerPrice(data.brokerSymbol, input.entryPrice)} — pending order triggered.`,
+      });
+    },
+    [data.brokerSymbol, demoBook],
+  );
+  const demoPending = useDemoPendingOrders(
+    data.account?.brokerAccountId ?? null,
+    data.symbol,
+    livePrice,
+    handleDemoOrderFill,
+  );
 
   // Auto-clear toast after 4s.
   useEffect(() => {
@@ -1134,6 +1166,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     const id = setTimeout(() => setTradeToast(null), 4_000);
     return () => clearTimeout(id);
   }, [tradeToast]);
+
+  // First demo visit: surface the MT5-style execution bar automatically.
+  useEffect(() => {
+    if (!isDemoAccount || typeof window === "undefined") return;
+    const key = "axe.chart.demo.oneclick";
+    if (window.localStorage.getItem(key) === "1") return;
+    window.localStorage.setItem(key, "1");
+    setOneClickVisible(true);
+  }, [isDemoAccount]);
 
   const showPendingTradePlan = useCallback(
     (side: "buy" | "sell", type?: PendingOrderTicketType) => {
@@ -1280,19 +1321,56 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     }
 
     if (isDemoAccount) {
+      if (!isMarketOrder) {
+        const pendType = pendingOrderType;
+        if (
+          pendType !== "buy_limit" &&
+          pendType !== "sell_limit" &&
+          pendType !== "buy_stop" &&
+          pendType !== "sell_stop"
+        ) {
+          setTradeToast({ kind: "error", title: "Pick a limit or stop type" });
+          return;
+        }
+        const placed = demoPending.place({
+          symbol: data.symbol,
+          type: pendType,
+          side,
+          volume: tradeVolumeNum,
+          openPrice: entry,
+          stopLoss: pendingStopLossPrice,
+          takeProfit: pendingTakeProfitPrice,
+        });
+        if (placed) {
+          setPendingOrderVisible(false);
+          setTradeToast({
+            kind: "demo",
+            title: `Demo ${orderTypeLabel(pendType)} placed`,
+            body: `${tradeVolumeNum.toFixed(2)} lots @ ${formatBrokerPrice(data.brokerSymbol, entry)}. Resting on chart — tap line to adjust.`,
+          });
+        } else {
+          setTradeToast({
+            kind: "error",
+            title: "Couldn't place demo order",
+            body: "Try reloading the chart.",
+          });
+        }
+        return;
+      }
+
       const opened = demoBook.open({
         symbol: data.symbol,
         side,
         volume: tradeVolumeNum,
         entryPrice: entry,
-        stopLoss: isMarketOrder ? null : pendingStopLossPrice,
-        takeProfit: isMarketOrder ? null : pendingTakeProfitPrice,
+        stopLoss: pendingStopLossPrice,
+        takeProfit: pendingTakeProfitPrice,
       });
       if (opened) {
         setPendingOrderVisible(false);
         setTradeToast({
           kind: "demo",
-          title: `Demo ${side.toUpperCase()} ${data.symbol} ${isMarketOrder ? "market filled" : "plan filled"}`,
+          title: `Demo ${side.toUpperCase()} ${data.symbol} market filled`,
           body: `${tradeVolumeNum.toFixed(2)} lots @ ${formatBrokerPrice(data.brokerSymbol, entry)}. Virtual position only — no broker order sent.`,
         });
       } else {
@@ -1309,8 +1387,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     if (!isAlpacaAccount && !liveTrading.enabled) {
       setTradeToast({
         kind: "info",
-        title: "Live trading is OFF on this device",
-        body: "Open Settings → Live trading to activate. Demo Account paper trading still works.",
+        title: "Live trading is OFF",
+        body: "Open Settings → Live trading to send real broker orders. Demo paper trading still works without this.",
       });
       return;
     }
@@ -1338,6 +1416,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     data.lastPrice,
     data.symbol,
     demoBook,
+    demoPending,
     deviationPoints,
     isAlpacaAccount,
     isDemoAccount,
@@ -1664,20 +1743,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     [baseOverlays, slTpDrafts],
   );
 
-  const displayPendingOrders = useMemo(
-    () =>
-      pendingOrders.map((o) => {
-        const draft = slTpDrafts[slTpDraftKeyForOrder(o.id)];
-        if (!draft) return o;
-        return {
-          ...o,
-          openPrice: draft.openPrice ?? o.openPrice,
-          stopLoss: draft.stopLoss ?? o.stopLoss,
-          takeProfit: draft.takeProfit ?? o.takeProfit,
-        };
-      }),
-    [pendingOrders, slTpDrafts],
-  );
+  const displayPendingOrders = useMemo(() => {
+    const base = isDemoAccount ? demoPending.forSymbol : pendingOrders;
+    return base.map((o) => {
+      const draft = slTpDrafts[slTpDraftKeyForOrder(o.id)];
+      if (!draft) return o;
+      return {
+        ...o,
+        openPrice: draft.openPrice ?? o.openPrice,
+        stopLoss: draft.stopLoss ?? o.stopLoss,
+        takeProfit: draft.takeProfit ?? o.takeProfit,
+      };
+    });
+  }, [demoPending.forSymbol, isDemoAccount, pendingOrders, slTpDrafts]);
 
   useEffect(() => {
     setSlTpDrafts((prev) => {
@@ -2705,6 +2783,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           }}
           onDemoModify={({ positionId, stopLoss, takeProfit }) => {
             demoBook.modify(positionId, { stopLoss, takeProfit });
+          }}
+          onDemoOrderModify={({ orderId, openPrice, stopLoss, takeProfit }) => {
+            demoPending.modify(orderId, { openPrice, stopLoss, takeProfit });
           }}
           onModifyFeedback={(result) => {
             setTradeToast({
@@ -4034,6 +4115,15 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           >
             Dismiss
           </button>
+        </div>
+      ) : null}
+
+      {/* Demo mode indicator — always visible on demo account */}
+      {isDemoAccount ? (
+        <div className="pointer-events-none absolute left-3 top-[4.25rem] z-30">
+          <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-200/90">
+            Demo · paper
+          </span>
         </div>
       ) : null}
 
