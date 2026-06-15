@@ -891,7 +891,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   const [chartGridStyle, setChartGridStyle] = useState<ChartGridStyle>(() => readGridStyle());
   const chartTheme = useMemo(() => getChartTheme(chartThemeKey), [chartThemeKey]);
   const isVisible = usePageVisible();
-  const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
+  const liveEnabled =
+    data.failure === "ok" && data.source === "MetaApi MT5" && Boolean(accountId) && isVisible;
   const sessionState = useMemo(() => marketSessionState(data.symbol), [data.symbol]);
   const closedCanonicalPrice = useMemo(() => data.lastPrice ?? data.candles.at(-1)?.close ?? null, [data.candles, data.lastPrice]);
 

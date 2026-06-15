@@ -18,8 +18,11 @@ import {
   isDemoAccount,
 } from "@/lib/broker/demoAccount";
 import { fetchAlpacaCandles } from "@/lib/alpaca/bars";
-import { isAlpacaConfigured } from "@/lib/alpaca/env";
-import { isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
+import { listAlpacaOrders, listAlpacaPositions } from "@/lib/alpaca/client";
+import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
+import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { axeSymbolFromAlpaca, isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
+import type { AlpacaOrder, AlpacaPosition } from "@/lib/alpaca/types";
 import {
   candidateBrokerSymbols,
   cleanDisplaySymbol,
@@ -37,6 +40,8 @@ import {
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
 const DEFAULT_SYMBOL = "XAUUSD";
+const ALPACA_DEFAULT_SYMBOL = "TSLA";
+const ALPACA_SYMBOL_OPTIONS = ["AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "SPY", "TSLA"] as const;
 const FALLBACK_SYMBOLS = [...CANONICAL_BROKER_SYMBOLS];
 const POSITIONS_RENDER_BUDGET_MS = 12_000;
 const SYMBOLS_RENDER_BUDGET_MS = 8_000;
@@ -146,8 +151,50 @@ export type ChartPageData = {
   /** ISO of the last candle close time (broker time). */
   lastCandleTime: string | null;
   /** Keeps copy honest: either real broker data or AXE's built-in paper feed. */
-  source: "MetaApi MT5" | "AXE Demo";
+  source: "MetaApi MT5" | "AXE Demo" | "Alpaca Paper";
 };
+
+function mapAlpacaPositionRow(p: AlpacaPosition): ChartOverlayRow {
+  const qty = Math.abs(Number(p.qty) || 0);
+  return {
+    id: p.asset_id || p.symbol,
+    side: p.side === "short" ? "sell" : "buy",
+    volume: qty,
+    entryPrice: Number(p.avg_entry_price) || null,
+    stopLoss: null,
+    takeProfit: null,
+    profit: Number(p.unrealized_pl) || null,
+    openTime: null,
+    currentPrice: Number(p.current_price) || null,
+  };
+}
+
+function mapAlpacaPendingOrder(o: AlpacaOrder): PendingOrderOverlay | null {
+  const openStatuses = new Set(["new", "accepted", "pending_new", "held", "partially_filled"]);
+  if (!openStatuses.has(o.status)) return null;
+  const price = Number(o.limit_price ?? o.stop_price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  const orderType =
+    o.order_type === "limit"
+      ? `${o.side}_limit`
+      : o.order_type === "stop"
+        ? `${o.side}_stop`
+        : o.order_type === "stop_limit"
+          ? `${o.side}_stop_limit`
+          : `${o.side}_${o.order_type}`;
+  return {
+    id: o.id,
+    symbol: axeSymbolFromAlpaca(o.symbol),
+    type: orderType,
+    side: o.side,
+    volume: Number(o.qty) || 0,
+    openPrice: price,
+    currentPrice: null,
+    stopLoss: null,
+    takeProfit: null,
+    openTime: o.submitted_at ?? o.created_at ?? null,
+  };
+}
 
 function mapSide(t: string | undefined): string {
   const u = (t ?? "").toUpperCase();
@@ -507,6 +554,7 @@ export async function loadChartPageData(
     .filter(
       (r) =>
         isDemoAccount(r) ||
+        isAlpacaAccount(r) ||
         (r.connection_method === "cloud_mt5" &&
           typeof r.external_connection_id === "string" &&
           r.external_connection_id.length > 0),
@@ -516,8 +564,12 @@ export async function loadChartPageData(
       const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
       return {
         brokerAccountId: r.id as string,
-        metaApiAccountId: isDemoAccount(r) ? DEMO_EXTERNAL_ID : (r.external_connection_id as string),
-        label: (r.label as string) ?? (isDemoAccount(r) ? "AXE Demo Account" : "MT5 Account"),
+        metaApiAccountId: isDemoAccount(r)
+          ? DEMO_EXTERNAL_ID
+          : ((r.external_connection_id as string) ?? r.id),
+        label:
+          (r.label as string) ??
+          (isDemoAccount(r) ? "AXE Demo Account" : isAlpacaAccount(r) ? "AXE Alpaca Paper" : "MT5 Account"),
         mt5Server: (r.mt5_server as string) ?? null,
         active: prefs?.active_account_id === r.id,
         connectionMethod: (r.connection_method as string) ?? null,
@@ -534,6 +586,81 @@ export async function loadChartPageData(
 
   const watchSyms = watchlistRows.map((w) => w.symbol.trim().toUpperCase()).filter(Boolean);
   const isDemo = account?.connectionMethod === "demo_paper";
+  const isAlpaca = account?.connectionMethod === "cloud_alpaca";
+
+  if (isAlpaca && account) {
+    const config = getAlpacaPaperConfig();
+    const watchAlpaca = watchSyms.filter((s) => isAlpacaSupportedSymbol(s));
+    const requestedRaw = normalizeSymbol(symbolParam);
+    const requested =
+      requestedRaw && isAlpacaSupportedSymbol(requestedRaw)
+        ? safeDisplaySymbol(requestedRaw)
+        : watchAlpaca[0] ?? ALPACA_DEFAULT_SYMBOL;
+
+    const alpacaCandles =
+      config && isAlpacaConfigured() ? await fetchAlpacaCandles(requested, timeframeKey, 500) : null;
+    const candles = alpacaCandles?.length ? alpacaCandles : generateDemoCandles(requested, timeframeKey, 500);
+    const last = candles.at(-1)?.close ?? null;
+    const lastTime = candles.at(-1)?.time ?? null;
+
+    let positionsOnSymbol: ChartOverlayRow[] = [];
+    let pendingOrdersOnSymbol: PendingOrderOverlay[] = [];
+    let totalPositions = 0;
+    let totalPendingOrders = 0;
+
+    if (config) {
+      try {
+        const [positions, orders] = await Promise.all([
+          listAlpacaPositions(config),
+          listAlpacaOrders(config, { status: "open", limit: 100 }),
+        ]);
+        totalPositions = positions.length;
+        positionsOnSymbol = positions
+          .filter((p) => axeSymbolFromAlpaca(p.symbol) === requested)
+          .map(mapAlpacaPositionRow);
+        const pending = orders
+          .map(mapAlpacaPendingOrder)
+          .filter((o): o is PendingOrderOverlay => o != null);
+        totalPendingOrders = pending.length;
+        pendingOrdersOnSymbol = pending.filter((o) => o.symbol === requested);
+      } catch (error) {
+        console.warn("[loadChartPageData] alpaca positions/orders failed", error);
+      }
+    }
+
+    const symbolOptions = Array.from(
+      new Set([...ALPACA_SYMBOL_OPTIONS, ...watchAlpaca.map(cleanDisplaySymbol).filter(Boolean)]),
+    ).sort();
+
+    return {
+      symbol: requested,
+      brokerSymbol: requested,
+      timeframeKey,
+      metaApiTimeframe,
+      candles,
+      positionsOnSymbol,
+      positionsOnSymbolCount: positionsOnSymbol.length,
+      totalPositions,
+      pendingOrdersOnSymbol,
+      totalPendingOrders,
+      lastPrice: last,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: lastTime,
+      providerStatus: alpacaCandles?.length ? "connected" : "alpaca_fallback",
+      failure: "ok",
+      dataError: null,
+      hint: alpacaCandles?.length
+        ? "Alpaca paper — US equities with live market data. Switch symbol to TSLA, AAPL, NVDA, etc."
+        : `${requested} is not on Alpaca. Try TSLA or AAPL for live US equity data.`,
+      symbolOptions,
+      attemptedSymbols: [requested],
+      account,
+      accountChoices,
+      lastCandleTime: lastTime,
+      source: "Alpaca Paper",
+    };
+  }
 
   if (isDemo && account) {
     const requestedRaw = normalizeSymbol(symbolParam) || watchSyms[0] || DEFAULT_SYMBOL;
