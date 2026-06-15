@@ -1,5 +1,6 @@
 import "server-only";
-import { getSupabaseKey, getSupabaseServiceRoleKey } from "@/lib/env";
+import { getSupabaseKey } from "@/lib/env";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
 const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
 const SNAPSHOT_FRESH_MS = 15 * 60 * 1000;
@@ -256,19 +257,423 @@ const snapshotInflight = intelSnapshotCache.__axeIntelSnapshotInflight ?? new Ma
 intelSnapshotCache.__axeIntelSnapshotCache = snapshotCache;
 intelSnapshotCache.__axeIntelSnapshotInflight = snapshotInflight;
 
+/** Deployed intel-proxy (v81+) expects `{ action, args }` and anon JWT for public reads. */
+const PROXY_ACTION_MAP: Partial<Record<IntelAction, string>> = {
+  vesselTracking: "vesselStream",
+  conflictEvents: "gdeltEvents",
+};
+
+/** Feeds not implemented on deployed intel-proxy — load from Postgres instead. */
+const DB_ONLY_ACTIONS = new Set<IntelAction>([
+  "chokepoints",
+  "militaryRadar",
+  "emergencyMonitor",
+  "energyFlows",
+  "cyberThreats",
+]);
+
+const STATIC_CHOKEPOINTS: Chokepoint[] = [
+  {
+    id: 1,
+    name: "Strait of Hormuz",
+    region: "Middle East / Persian Gulf",
+    latitude: 26.5667,
+    longitude: 56.25,
+    radiusNm: 60,
+    riskLevel: "critical",
+    riskFactors: "Iran tensions, oil tanker risk. ~21% of global oil transit.",
+    dailyShipCount: 65,
+    percentageGlobalTrade: 21,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 2,
+    name: "Strait of Malacca",
+    region: "Southeast Asia",
+    latitude: 2.5,
+    longitude: 101.5,
+    radiusNm: 80,
+    riskLevel: "medium",
+    riskFactors: "Piracy risk, China-ASEAN tensions. ~25% of global trade.",
+    dailyShipCount: 83,
+    percentageGlobalTrade: 25,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 3,
+    name: "Suez Canal",
+    region: "Egypt / Mediterranean",
+    latitude: 30.4167,
+    longitude: 32.3444,
+    radiusNm: 40,
+    riskLevel: "high",
+    riskFactors: "Canal blockage risk, Red Sea spillover.",
+    dailyShipCount: 52,
+    percentageGlobalTrade: 12,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 4,
+    name: "Bab-el-Mandeb Strait",
+    region: "Yemen / Horn of Africa",
+    latitude: 12.5833,
+    longitude: 43.3167,
+    radiusNm: 50,
+    riskLevel: "critical",
+    riskFactors: "Active shipping attacks; major Red Sea reroutes.",
+    dailyShipCount: 48,
+    percentageGlobalTrade: 10,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 5,
+    name: "Taiwan Strait",
+    region: "East Asia",
+    latitude: 24.25,
+    longitude: 119.5,
+    radiusNm: 70,
+    riskLevel: "high",
+    riskFactors: "China-Taiwan tensions; semiconductor supply chain risk.",
+    dailyShipCount: 55,
+    percentageGlobalTrade: 8,
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+function mapProxyJetRow(row: Record<string, unknown>): CorporateJet {
+  return {
+    icao24: String(row.icao24 ?? ""),
+    callsign: String(row.aircraft ?? row.callsign ?? "UNKNOWN"),
+    company: String(row.company ?? "Unknown"),
+    ticker: String(row.ticker ?? "—"),
+    tailNumber: String(row.origin ?? "—").trim() || "—",
+    originCountry: String(row.company ?? "Unknown"),
+    latitude: typeof row.lat === "number" ? row.lat : Number(row.latitude) || null,
+    longitude: typeof row.lon === "number" ? row.lon : Number(row.longitude) || null,
+    altitude: typeof row.altitude === "number" ? row.altitude : null,
+    velocity: typeof row.speed === "number" ? row.speed : null,
+    onGround: false,
+  };
+}
+
+function mapProxyVesselRow(row: Record<string, unknown>): VesselTrack {
+  return {
+    mmsi: String(row.mmsi ?? ""),
+    vesselName: String(row.name ?? row.vesselName ?? "Unknown"),
+    vesselType: String(row.type ?? row.vesselType ?? "Vessel"),
+    owner: "—",
+    ownerType: "unknown",
+    significance: "",
+    isTracked: true,
+    lastSeen: new Date().toISOString(),
+    lastLatitude: typeof row.lat === "number" ? row.lat : Number(row.latitude) || null,
+    lastLongitude: typeof row.lon === "number" ? row.lon : Number(row.longitude) || null,
+    speedKnots: typeof row.speed === "number" ? row.speed : null,
+    heading: null,
+    destination: String(row.destination ?? null),
+    nearChokepoint: null,
+    alertLevel: "normal",
+  };
+}
+
+function mapGdeltToConflict(row: Record<string, unknown>, i: number): ConflictEvent {
+  return {
+    eventId: `gdelt:${i}:${String(row.url ?? row.title ?? i).slice(0, 40)}`,
+    eventDate: String(row.date ?? row.seendate ?? "").slice(0, 10) || new Date().toISOString().slice(0, 10),
+    country: String(row.country ?? "—"),
+    region: String(row.country ?? "—"),
+    eventType: "Conflict",
+    subEventType: "GDELT",
+    actor1: "—",
+    fatalities: 0,
+    notes: String(row.title ?? ""),
+    latitude: typeof row.lat === "number" ? row.lat : null,
+    longitude: typeof row.lon === "number" ? row.lon : null,
+  };
+}
+
+function normalizeProxyPayload<T>(action: IntelAction, raw: unknown): T {
+  if (action === "corporateJets" && Array.isArray(raw)) {
+    return raw.map((row) => mapProxyJetRow(row as Record<string, unknown>)) as T;
+  }
+  if (action === "vesselTracking" && raw && typeof raw === "object") {
+    const vessels = (raw as { vessels?: unknown[] }).vessels ?? [];
+    if (Array.isArray(vessels)) {
+      return vessels.map((row) => mapProxyVesselRow(row as Record<string, unknown>)) as T;
+    }
+  }
+  if (action === "conflictEvents" && Array.isArray(raw)) {
+    return raw.map((row, i) => mapGdeltToConflict(row as Record<string, unknown>, i)) as T;
+  }
+  return raw as T;
+}
+
+async function loadIntelFromDb<T>(
+  action: IntelAction,
+  args: Record<string, unknown>,
+): Promise<IntelEnvelope<T>> {
+  const sb = createServiceRoleSupabaseClient();
+  if (!sb) return { ok: false, error: "intel_db_unavailable" };
+
+  try {
+    switch (action) {
+      case "insiderTrades": {
+        let q = sb
+          .from("intel_insider_trades")
+          .select("ticker,insider_name,insider_role,trade_type,shares,total_value,trade_date")
+          .order("trade_date", { ascending: false })
+          .limit(40);
+        if (typeof args.symbol === "string" && args.symbol.trim()) {
+          q = q.eq("ticker", String(args.symbol).toUpperCase());
+        }
+        const { data, error } = await q;
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          ticker: r.ticker,
+          insider: r.insider_role ? `${r.insider_name} · ${r.insider_role}` : r.insider_name,
+          type: r.trade_type as "BUY" | "SELL",
+          shares: r.shares ?? undefined,
+          value: Number(r.total_value ?? 0),
+          date: String(r.trade_date),
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "senateTrades": {
+        const { data, error } = await sb
+          .from("intel_congress_trades")
+          .select("politician,chamber,ticker,trade_type,amount_range,trade_date")
+          .order("trade_date", { ascending: false })
+          .limit(40);
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          politician: r.politician,
+          chamber: r.chamber,
+          ticker: r.ticker,
+          direction: r.trade_type as "BUY" | "SELL",
+          size: r.amount_range ?? "—",
+          date: String(r.trade_date),
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "darkPoolPrints": {
+        let q = sb
+          .from("intel_dark_pool")
+          .select("symbol,price,block_size,notional,side,snapshot_time")
+          .order("snapshot_time", { ascending: false })
+          .limit(50);
+        if (typeof args.symbol === "string" && args.symbol.trim()) {
+          q = q.eq("symbol", String(args.symbol).toUpperCase());
+        }
+        const { data, error } = await q;
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          symbol: r.symbol,
+          price: Number(r.price),
+          size: r.block_size,
+          notional: Number(r.notional),
+          side: (r.side as DarkPoolPrint["side"]) ?? undefined,
+          time: r.snapshot_time ? String(r.snapshot_time).slice(11, 16) : undefined,
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "unusualOptions": {
+        let q = sb
+          .from("intel_unusual_options")
+          .select("symbol,strike,expiry,volume,open_interest,side,premium,is_sweep,rule")
+          .order("snapshot_time", { ascending: false })
+          .limit(25);
+        if (typeof args.symbol === "string" && args.symbol.trim()) {
+          q = q.eq("symbol", String(args.symbol).toUpperCase());
+        }
+        const { data, error } = await q;
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          symbol: r.symbol,
+          strike: Number(r.strike),
+          exp: String(r.expiry),
+          vol: r.volume,
+          oi: r.open_interest,
+          side: r.side as "CALL" | "PUT",
+          premium: Number(r.premium),
+          sweep: Boolean(r.is_sweep),
+          rule: r.rule,
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "marketTide": {
+        const { data, error } = await sb
+          .from("intel_market_tide")
+          .select("net_call_premium,net_put_premium,call_put_ratio,bias,snapshot_time")
+          .order("snapshot_time", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) return { ok: false, error: error.message };
+        if (!data) return { ok: true, data: null as T };
+        return {
+          ok: true,
+          data: {
+            timestamp: String(data.snapshot_time),
+            netCallPremium: Number(data.net_call_premium),
+            netPutPremium: Number(data.net_put_premium),
+            callPutRatio: Number(data.call_put_ratio),
+            bias: data.bias as MarketTide["bias"],
+          } as T,
+        };
+      }
+      case "vesselTracking": {
+        const { data, error } = await sb
+          .from("intel_vessel_tracking")
+          .select("mmsi,vessel_name,vessel_type,latitude,longitude,speed,destination,snapshot_time")
+          .order("snapshot_time", { ascending: false })
+          .limit(300);
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          mmsi: r.mmsi,
+          vesselName: r.vessel_name,
+          vesselType: r.vessel_type,
+          owner: "—",
+          ownerType: "unknown" as const,
+          significance: "",
+          isTracked: true,
+          lastSeen: r.snapshot_time ? String(r.snapshot_time) : null,
+          lastLatitude: r.latitude,
+          lastLongitude: r.longitude,
+          speedKnots: r.speed,
+          heading: null,
+          destination: r.destination,
+          nearChokepoint: null,
+          alertLevel: "normal" as const,
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "chokepoints":
+        return { ok: true, data: STATIC_CHOKEPOINTS as T };
+      case "conflictEvents": {
+        const { data, error } = await sb
+          .from("intel_conflict_events")
+          .select("event_id,event_date,country,region,event_type,sub_event_type,actor1,fatalities,notes,latitude,longitude")
+          .order("snapshot_time", { ascending: false })
+          .limit(40);
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          eventId: r.event_id,
+          eventDate: r.event_date,
+          country: r.country,
+          region: r.region,
+          eventType: r.event_type,
+          subEventType: r.sub_event_type,
+          actor1: r.actor1,
+          fatalities: r.fatalities ?? 0,
+          notes: r.notes ?? "",
+          latitude: r.latitude,
+          longitude: r.longitude,
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "energyFlows": {
+        const { data, error } = await sb
+          .from("intel_energy_flows")
+          .select("series_id,series_name,period,value,unit")
+          .order("snapshot_time", { ascending: false })
+          .limit(30);
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          seriesId: r.series_id,
+          seriesName: r.series_name,
+          period: r.period,
+          value: r.value,
+          unit: r.unit,
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "cyberThreats": {
+        const { data, error } = await sb
+          .from("intel_cyber_threats")
+          .select("ip,classification,name,noise,riot,last_seen,tags,category")
+          .order("snapshot_time", { ascending: false })
+          .limit(30);
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          ip: r.ip,
+          classification: r.classification,
+          name: r.name,
+          noise: Boolean(r.noise),
+          riot: Boolean(r.riot),
+          lastSeen: r.last_seen,
+          tags: r.tags ?? [],
+          category: r.category,
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "militaryRadar": {
+        const { data, error } = await sb
+          .from("intel_military_radar")
+          .select("hex,registration,aircraft_type,callsign,altitude,ground_speed,latitude,longitude,on_ground,category,last_seen")
+          .order("snapshot_time", { ascending: false })
+          .limit(50);
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          hex: r.hex,
+          registration: r.registration ?? "",
+          aircraftType: r.aircraft_type ?? "",
+          callsign: r.callsign ?? "",
+          altitude: r.altitude,
+          groundSpeed: r.ground_speed,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          onGround: Boolean(r.on_ground),
+          category: r.category ?? "",
+          lastSeen: r.last_seen ? String(r.last_seen) : new Date().toISOString(),
+        }));
+        return { ok: true, data: rows as T };
+      }
+      case "emergencyMonitor": {
+        const { data, error } = await sb
+          .from("intel_emergency_monitor")
+          .select("hex,registration,aircraft_type,callsign,squawk,altitude,ground_speed,latitude,longitude,on_ground,last_seen")
+          .order("snapshot_time", { ascending: false })
+          .limit(30);
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => ({
+          hex: r.hex,
+          registration: r.registration ?? "",
+          aircraftType: r.aircraft_type ?? "",
+          callsign: r.callsign ?? "",
+          squawk: r.squawk ?? "",
+          altitude: r.altitude,
+          groundSpeed: r.ground_speed,
+          latitude: r.latitude,
+          longitude: r.longitude,
+          onGround: Boolean(r.on_ground),
+          lastSeen: r.last_seen ? String(r.last_seen) : new Date().toISOString(),
+        }));
+        return { ok: true, data: rows as T };
+      }
+      default:
+        return { ok: false, error: "intel_db_unsupported_action" };
+    }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 async function callIntelProxy<T>(
   action: IntelAction,
   args: Record<string, unknown> = {},
 ): Promise<IntelEnvelope<T>> {
+  if (DB_ONLY_ACTIONS.has(action)) {
+    const db = await loadIntelFromDb<T>(action, args);
+    if (db.ok) return db;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
   const anonKey = getSupabaseKey();
-  if (!url || !anonKey) return { ok: false, error: "missing_supabase_env" };
-  // Use the service-role key for the Authorization Bearer token when
-  // available — this gives the Edge Function elevated server-side context
-  // and avoids JWT-verification failures that occur with the anon key on
-  // functions deployed with default settings.  The `apikey` header always
-  // uses the anon key (Supabase API gateway routing).
-  const bearerKey = getSupabaseServiceRoleKey() ?? anonKey;
+  if (!url || !anonKey) {
+    const db = await loadIntelFromDb<T>(action, args);
+    return db.ok ? db : { ok: false, error: "missing_supabase_env" };
+  }
+
+  const proxyAction = PROXY_ACTION_MAP[action] ?? action;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), INTEL_PROXY_TIMEOUT_MS);
   try {
@@ -276,24 +681,42 @@ async function callIntelProxy<T>(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${bearerKey}`,
+        Authorization: `Bearer ${anonKey}`,
         apikey: anonKey,
       },
       signal: ctrl.signal,
-      body: JSON.stringify({ action, ...args }),
-      // Edge function is rate-limited and the data is slow-moving. Keep each
-      // action cached for long enough that page reloads and chat context refreshes
-      // don't hammer a paid provider account.
+      body: JSON.stringify({ action: proxyAction, args }),
       next: { revalidate: REVALIDATE_SECONDS, tags: [`intel:${action}`] },
     });
     if (!res.ok) {
+      const db = await loadIntelFromDb<T>(action, args);
+      if (db.ok) return db;
       const body = await res.text().catch(() => "");
       return { ok: false, error: `intel_proxy_${res.status}:${body.slice(0, 120)}` };
     }
-    const json = (await res.json()) as { ok?: boolean; data?: T; error?: string };
-    if (!json.ok) return { ok: false, error: json.error ?? "intel_proxy_unknown_error" };
-    return { ok: true, data: (json.data ?? null) as T };
+    const json = (await res.json()) as { ok?: boolean; data?: unknown; error?: string };
+    if (!json.ok) {
+      const db = await loadIntelFromDb<T>(action, args);
+      if (db.ok) return db;
+      return { ok: false, error: json.error ?? "intel_proxy_unknown_error" };
+    }
+    const normalized = normalizeProxyPayload<T>(action, json.data);
+    if (action === "marketTide" && (normalized == null || normalized === undefined)) {
+      const db = await loadIntelFromDb<T>(action, args);
+      if (db.ok && db.data != null) return db;
+    }
+    if (
+      Array.isArray(normalized) &&
+      normalized.length === 0 &&
+      !DB_ONLY_ACTIONS.has(action)
+    ) {
+      const db = await loadIntelFromDb<T>(action, args);
+      if (db.ok && Array.isArray(db.data) && db.data.length > 0) return db;
+    }
+    return { ok: true, data: normalized };
   } catch (e) {
+    const db = await loadIntelFromDb<T>(action, args);
+    if (db.ok) return db;
     if (e instanceof Error && e.name === "AbortError") {
       return { ok: false, error: `intel_proxy_timeout_${INTEL_PROXY_TIMEOUT_MS}ms` };
     }

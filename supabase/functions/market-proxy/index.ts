@@ -7,9 +7,11 @@
 //
 // Deploy:  supabase functions deploy market-proxy --no-verify-jwt
 // Secrets: supabase secrets set FRED_API_KEY=xxx FINNHUB_API_KEY=yyy
+// Optional: EDGE_PROVIDER_KEYS_JSON='{"FRED_API_KEY":"…","FINNHUB_API_KEY":"…"}'
 // ─────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getMergedEdgeEnv } from "../_shared/mergeEdgeEnv.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -23,8 +25,21 @@ function json(data: unknown, status = 200) {
   });
 }
 
+function resolveFredKey(env: Record<string, string>): string {
+  return (
+    env.FRED_API_KEY ||
+    env.FRED_KEY ||
+    env.STLOUISFED_API_KEY ||
+    env.STLOUISFED_KEY ||
+    ""
+  ).trim();
+}
+
+function resolveFinnhubKey(env: Record<string, string>): string {
+  return (env.FINNHUB_API_KEY || env.FINNHUB_KEY || "").trim();
+}
+
 // ── FRED macro snapshot ────────────────────────────────────────────────
-// Returns the latest observation for a set of well-known macro series.
 const FRED_SERIES: { id: string; label: string; units: string }[] = [
   { id: "DGS10", label: "US 10Y Yield", units: "%" },
   { id: "DGS2", label: "US 2Y Yield", units: "%" },
@@ -36,9 +51,18 @@ const FRED_SERIES: { id: string; label: string; units: string }[] = [
   { id: "T10Y2Y", label: "10Y-2Y Spread", units: "%" },
 ];
 
-async function handleMacroSnapshot(): Promise<Response> {
-  const apiKey = Deno.env.get("FRED_API_KEY");
-  if (!apiKey) return json({ ok: false, error: "FRED_API_KEY not configured" }, 503);
+async function handleMacroSnapshot(env: Record<string, string>): Promise<Response> {
+  const apiKey = resolveFredKey(env);
+  if (!apiKey) {
+    return json(
+      {
+        ok: false,
+        error: "FRED_API_KEY not configured",
+        hint: "Set FRED_API_KEY on Supabase Edge secrets or in EDGE_PROVIDER_KEYS_JSON",
+      },
+      503,
+    );
+  }
 
   const points: {
     seriesId: string;
@@ -48,8 +72,6 @@ async function handleMacroSnapshot(): Promise<Response> {
     observedAt: string | null;
   }[] = [];
 
-  // Fetch each series individually — FRED doesn't have a batch endpoint.
-  // Keep it serial to stay well within rate limits.
   for (const series of FRED_SERIES) {
     try {
       const params = new URLSearchParams({
@@ -60,10 +82,16 @@ async function handleMacroSnapshot(): Promise<Response> {
         limit: "1",
       });
       const res = await fetch(
-        `https://api.stlouisfed.org/fred/series/observations?${params.toString()}`
+        `https://api.stlouisfed.org/fred/series/observations?${params.toString()}`,
       );
       if (!res.ok) {
-        points.push({ seriesId: series.id, label: series.label, value: null, units: series.units, observedAt: null });
+        points.push({
+          seriesId: series.id,
+          label: series.label,
+          value: null,
+          units: series.units,
+          observedAt: null,
+        });
         continue;
       }
       const body = await res.json();
@@ -78,8 +106,19 @@ async function handleMacroSnapshot(): Promise<Response> {
         observedAt: obs?.date ?? null,
       });
     } catch {
-      points.push({ seriesId: series.id, label: series.label, value: null, units: series.units, observedAt: null });
+      points.push({
+        seriesId: series.id,
+        label: series.label,
+        value: null,
+        units: series.units,
+        observedAt: null,
+      });
     }
+  }
+
+  const hasAny = points.some((p) => p.value != null);
+  if (!hasAny) {
+    return json({ ok: false, error: "fred_no_observations", hint: "Check FRED_API_KEY validity" }, 503);
   }
 
   return json({
@@ -89,9 +128,18 @@ async function handleMacroSnapshot(): Promise<Response> {
 }
 
 // ── Finnhub economic calendar ──────────────────────────────────────────
-async function handleEconomicCalendar(daysAhead = 5): Promise<Response> {
-  const apiKey = Deno.env.get("FINNHUB_API_KEY");
-  if (!apiKey) return json({ ok: false, error: "FINNHUB_API_KEY not configured" }, 503);
+async function handleEconomicCalendar(env: Record<string, string>, daysAhead = 5): Promise<Response> {
+  const apiKey = resolveFinnhubKey(env);
+  if (!apiKey) {
+    return json(
+      {
+        ok: false,
+        error: "FINNHUB_API_KEY not configured",
+        hint: "Set FINNHUB_API_KEY on Supabase Edge secrets or in EDGE_PROVIDER_KEYS_JSON",
+      },
+      503,
+    );
+  }
 
   const now = new Date();
   const from = new Date(now.getTime() - 12 * 60 * 60 * 1000);
@@ -107,7 +155,18 @@ async function handleEconomicCalendar(daysAhead = 5): Promise<Response> {
   try {
     const res = await fetch(`https://finnhub.io/api/v1/calendar/economic?${params.toString()}`);
     if (!res.ok) {
-      return json({ ok: false, error: `finnhub_${res.status}` }, 502);
+      const status = res.status === 401 || res.status === 403 ? 503 : 502;
+      return json(
+        {
+          ok: false,
+          error: `finnhub_${res.status}`,
+          hint:
+            res.status === 401 || res.status === 403
+              ? "FINNHUB_API_KEY invalid or missing on Supabase Edge secrets"
+              : "Finnhub upstream error",
+        },
+        status,
+      );
     }
     const body = await res.json();
     const events = (body?.economicCalendar ?? []).map(
@@ -123,7 +182,7 @@ async function handleEconomicCalendar(daysAhead = 5): Promise<Response> {
         forecast: e.estimate ?? null,
         previous: e.prev ?? null,
         unit: e.unit ?? null,
-      })
+      }),
     );
     return json({ ok: true, data: { generatedAt: new Date().toISOString(), events } });
   } catch (e) {
@@ -146,15 +205,17 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: CORS_HEADERS });
   }
 
+  const env = getMergedEdgeEnv();
+
   try {
     const body = await req.json();
     const action = body?.action as string;
 
     switch (action) {
       case "macroSnapshot":
-        return await handleMacroSnapshot();
+        return await handleMacroSnapshot(env);
       case "economicCalendar":
-        return await handleEconomicCalendar(body?.daysAhead ?? 5);
+        return await handleEconomicCalendar(env, body?.daysAhead ?? 5);
       default:
         return json({ ok: false, error: `unknown action: ${action}` }, 400);
     }
