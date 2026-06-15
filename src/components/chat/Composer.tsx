@@ -17,6 +17,7 @@ import { Mic, MicOff, Paperclip, Send, X, ImageIcon } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
+import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
 
 declare global {
   interface Window {
@@ -331,8 +332,20 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         </div>
       ) : null}
 
-      {/* ── Composer row ─────────────────────────────────────────────── */}
-      <div className="relative flex items-end gap-2 overflow-visible rounded-[1.15rem] border border-white/[0.06] bg-white/[0.02] p-2">
+      {/* ── Composer row — opaque bar masks lower half of orb ───────── */}
+      <div className="relative overflow-visible">
+        <div
+          className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center md:hidden"
+          aria-hidden
+        >
+          <AxeAuraWave variant="composer" />
+        </div>
+        <div
+          className="relative z-10 flex items-end gap-2 overflow-hidden rounded-[1.15rem] border border-white/[0.08] p-2 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+          style={{
+            background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
+          }}
+        >
         {/* Attach button */}
         <button
           type="button"
@@ -414,6 +427,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         >
           <Send className="h-4 w-4 text-black" />
         </button>
+      </div>
       </div>
 
       {error ? (

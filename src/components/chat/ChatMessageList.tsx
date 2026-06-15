@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUpRight, Bookmark, Check } from "lucide-react";
 import type { ChatMessage } from "@/types/domain";
 import { ActionCard } from "@/components/chat/ActionCard";
@@ -289,27 +289,34 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
 
   // Scroll to bottom on first mount and whenever messages change while user
   // is still parked near the bottom. Honour reading older messages otherwise.
-  useEffect(() => {
+  const scrollToBottom = (force = false) => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    if (!stickToBottomRef.current) {
-      queueMicrotask(() => setShowJump(true));
-      return;
-    }
-    queueMicrotask(() => {
-      bottomRef.current?.scrollIntoView({ block: "end" });
-    });
-  }, [messages.length]);
+    if (!force && !stickToBottomRef.current) return;
+    scroller.scrollTop = scroller.scrollHeight;
+  };
 
-  // Mount: snap to bottom and prime the stickiness flag.
+  const lastMessageId = messages.at(-1)?.id;
+
+  useLayoutEffect(() => {
+    stickToBottomRef.current = true;
+    scrollToBottom(true);
+    const raf = requestAnimationFrame(() => scrollToBottom(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  useLayoutEffect(() => {
+    scrollToBottom(true);
+  }, [messages.length, lastMessageId]);
+
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    queueMicrotask(() => {
-      bottomRef.current?.scrollIntoView({ block: "end" });
-      stickToBottomRef.current = true;
-      setShowJump(false);
+    const ro = new ResizeObserver(() => {
+      if (stickToBottomRef.current) scrollToBottom(true);
     });
+    ro.observe(scroller);
+    return () => ro.disconnect();
   }, []);
 
   // Auto-scroll to the typing/streaming bubble when AXE starts thinking,
@@ -329,7 +336,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   }
 
   function jumpToLatest() {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    scrollToBottom(true);
     stickToBottomRef.current = true;
     setShowJump(false);
   }
@@ -339,8 +346,9 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[11rem] pr-1 md:pb-2"
+        className="tos-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pb-[10rem] pr-1 md:pb-2"
       >
+        <div className="mt-auto flex flex-col gap-5">
         {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
         {messages.map((m) => (
           <article
@@ -428,7 +436,8 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         ) : thinking ? (
           <TypingBubble />
         ) : null}
-        <div ref={bottomRef} />
+        </div>
+        <div ref={bottomRef} aria-hidden />
       </div>
 
       {showJump ? (
