@@ -13,7 +13,7 @@ import { ArrowRight } from "lucide-react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME, getChartTheme } from "@/components/chart/chartTheme";
-import { TradePlanLine } from "@/components/chart/TradePlanLine";
+import { PositionSlTpLine } from "@/components/chart/PositionSlTpLine";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
 export type SlTpDraft = {
@@ -419,25 +419,6 @@ export function PositionLabelsOverlay({
     const tp = draft?.takeProfit ?? o.takeProfit;
     const pendingDisabled = !canModify || isDemoAccount;
 
-    if (entryPrice != null && entryPrice > 0) {
-      lineItems.push({
-        key: `pend-entry-${o.id}`,
-        price: entryPrice,
-        label: o.type.replace(/_/g, " "),
-        color: entryColor(side),
-        dashed: false,
-        field: "entry",
-        targetKey,
-        orderId: o.id,
-        currentSl: sl,
-        currentTp: tp,
-        currentOpenPrice: entryPrice,
-        entryPrice,
-        volume: o.volume,
-        side,
-        disabled: pendingDisabled,
-      });
-    }
     if (sl != null && sl > 0) {
       lineItems.push({
         key: `pend-sl-${o.id}`,
@@ -481,9 +462,9 @@ export function PositionLabelsOverlay({
   if (entryLabels.length === 0 && lineItems.length === 0) return null;
 
   return (
-    <div className="absolute inset-0 z-[22] overflow-hidden">
+    <div className="pointer-events-none absolute inset-0 z-[22] overflow-hidden">
       {lineItems.map((line) => (
-        <TradePlanLine
+        <PositionSlTpLine
           key={line.key}
           canvasRef={canvasRef}
           price={line.price}
@@ -491,12 +472,10 @@ export function PositionLabelsOverlay({
           color={line.color}
           digits={digits}
           symbol={symbol}
-          dashed={line.dashed}
           entryPrice={line.entryPrice}
           volume={line.volume}
           side={line.side}
           disabled={line.disabled}
-          zIndex={24}
           onChange={(newPrice) => {
             void handleLevelChange({
               targetKey: line.targetKey,
