@@ -42,7 +42,12 @@ import { isPhoneLandscapeViewport } from "@/components/ui/AxeAuraWave";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
-import { formatBrokerPrice, priceDigitsForSymbol, pointValueForSymbol } from "@/lib/broker/symbolFormat";
+import {
+  estimateSlTpPnlUsd,
+  formatBrokerPrice,
+  formatSlTpPnlUsd,
+  priceDigitsForSymbol,
+} from "@/lib/broker/symbolFormat";
 import type { ChartOverlayRow, ChartPageData, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
 import {
@@ -494,49 +499,20 @@ function ResizablePane({
 }
 
 /**
- * Compute estimated USD profit/loss for TP/SL labels.
- *
- * Uses `pointValueForSymbol()` for the per-point-per-lot dollar value:
- *   Forex *USD — $1/point/lot   (100k × 0.00001)
- *   XAUUSD     — $1/point/lot   (100 oz × 0.01)
- *   BTCUSD     — $0.01/point/lot (1 BTC × 0.01)
- *
- * This gives a useful on-chart estimate without needing full contract specs.
+ * Compute estimated USD profit/loss for TP/SL labels via contract-size math.
  */
-/**
- * Format a number with space as thousands separator and always 2 decimal
- * places, matching the MT5 SL/TP label style: `1 123.69`
- */
-function fmtUsdMt5(value: number): string {
-  const abs = Math.abs(value);
-  const [intPart, decPart] = abs.toFixed(2).split(".");
-  // Insert spaces as thousands separator (MT5 uses thin space / regular space)
-  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${withSpaces}.${decPart}`;
-}
-
 function slTpInfo(
   entryPrice: number | null,
   levelPrice: number | null,
   volume: string | number,
   side: "buy" | "sell",
-  digits: number,
+  _digits: number,
   symbol: string,
 ): { label: string } | null {
   if (entryPrice == null || levelPrice == null) return null;
-  const pointSize = Math.pow(10, -digits);
-  const dist = levelPrice - entryPrice;
-  const pointsRaw = Math.round(dist / pointSize);
-  const signedPoints = side === "buy" ? pointsRaw : -pointsRaw;
   const vol = typeof volume === "string" ? parseFloat(volume) || 0 : volume;
-  const pv = pointValueForSymbol(symbol);
-  const usd = signedPoints * vol * pv;
-  // MT5 format: negative gets "-", positive has no sign
-  //   SL, -1 123.69 USD
-  //   TP, 5 711.01 USD
-  const sign = usd < 0 ? "-" : "";
-  const formatted = fmtUsdMt5(usd);
-  return { label: `${sign}${formatted} USD` };
+  const usd = estimateSlTpPnlUsd(symbol, entryPrice, levelPrice, vol, side);
+  return { label: formatSlTpPnlUsd(usd) };
 }
 
 const TradePlanLine = memo(function TradePlanLine({
@@ -955,9 +931,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       document.body.style.removeProperty("height");
       document.documentElement.style.removeProperty("height");
       window.scrollTo(0, 0);
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new Event("resize"));
-      });
     }
 
     function syncLandscape() {
@@ -1458,6 +1431,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     if (executionMode === "pending" && pendingOrderVisible) {
       setExecutionMode("market");
       setPendingOrderVisible(false);
+      setOneClickVisible(false);
+      setLotMenuOpen(false);
+      setOrderTypeMenuOpen(false);
     } else {
       setOneClickVisible(true);
       showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
@@ -1712,6 +1688,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       setOrderTypeMenuOpen(false);
     }
   }, [oneClickVisible]);
+
+  // Keep portrait viewport stable when the execution bar opens/closes.
+  useEffect(() => {
+    if (typeof window === "undefined" || isFullscreen) return;
+    const timer = window.setTimeout(() => window.scrollTo(0, 0), 120);
+    return () => window.clearTimeout(timer);
+  }, [oneClickVisible, executionMode, pendingOrderVisible, isFullscreen]);
 
   useEffect(() => {
     if (lotMenuOpen) setLotVolumeDraft(tradeVolume);

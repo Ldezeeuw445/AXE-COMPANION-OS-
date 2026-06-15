@@ -19,8 +19,9 @@ import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME, getChartTheme } from "@/components/chart/chartTheme";
 import {
+  estimateSlTpPnlUsd,
+  formatSlTpPnlUsd,
   priceDigitsForSymbol,
-  pointValueForSymbol,
 } from "@/lib/broker/symbolFormat";
 
 export type SlTpDraft = {
@@ -103,18 +104,8 @@ function slTpPnl(
   symbol: string,
 ): string {
   if (entryPrice == null || entryPrice <= 0) return "";
-  const digits = priceDigitsForSymbol(symbol);
-  const pointSize = Math.pow(10, -digits);
-  const dist = levelPrice - entryPrice;
-  const pointsRaw = Math.round(dist / pointSize);
-  const signedPoints = side === "buy" ? pointsRaw : -pointsRaw;
-  const pv = pointValueForSymbol(symbol);
-  const usd = signedPoints * volume * pv;
-  const sign = usd < 0 ? "-" : "";
-  const abs = Math.abs(usd);
-  const [intPart, decPart] = abs.toFixed(2).split(".");
-  const withSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${sign}${withSpaces}.${decPart} USD`;
+  const usd = estimateSlTpPnlUsd(symbol, entryPrice, levelPrice, volume, side);
+  return formatSlTpPnlUsd(usd);
 }
 
 function formatPnl(profit: number | null | undefined): string {

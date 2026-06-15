@@ -45,18 +45,21 @@ export function BottomNav() {
 
   // iOS can report stale safe-area after chart landscape → portrait; force a reflow.
   useEffect(() => {
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
     function settleNav() {
       if (document.body.classList.contains("chart-landscape-active")) return;
-      window.scrollTo(0, 0);
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new Event("resize"));
-      });
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        window.scrollTo(0, 0);
+        settleTimer = null;
+      }, 180);
     }
+
     window.addEventListener("orientationchange", settleNav);
-    window.visualViewport?.addEventListener("resize", settleNav);
     return () => {
+      if (settleTimer) clearTimeout(settleTimer);
       window.removeEventListener("orientationchange", settleNav);
-      window.visualViewport?.removeEventListener("resize", settleNav);
     };
   }, []);
 
