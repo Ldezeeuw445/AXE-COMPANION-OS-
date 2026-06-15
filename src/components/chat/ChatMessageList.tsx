@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { ArrowDown, ArrowUpRight, Bookmark, Check } from "lucide-react";
 import type { ChatMessage } from "@/types/domain";
 import { ActionCard } from "@/components/chat/ActionCard";
@@ -210,9 +211,10 @@ type OptimisticUserMessage = {
 const NEAR_BOTTOM_PX = 96;
 
 export function ChatMessageList({ messages }: ChatMessageListProps) {
+  const pathname = usePathname();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  const scrollLockRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [pending, setPending] = useState<OptimisticUserMessage[]>([]);
@@ -287,57 +289,80 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     return () => clearTimeout(t);
   }, [pending.length]);
 
-  // Scroll to bottom on first mount and whenever messages change while user
-  // is still parked near the bottom. Honour reading older messages otherwise.
-  const scrollToBottom = (force = false) => {
+  const lastMessageId = messages.at(-1)?.id;
+
+  const pinToLatest = useCallback((force = false) => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     if (!force && !stickToBottomRef.current) return;
-    scroller.scrollTop = scroller.scrollHeight;
-  };
-
-  const lastMessageId = messages.at(-1)?.id;
-
-  useLayoutEffect(() => {
-    stickToBottomRef.current = true;
-    scrollToBottom(true);
-    const raf = requestAnimationFrame(() => scrollToBottom(true));
-    return () => cancelAnimationFrame(raf);
+    // flex-col-reverse: scrollTop 0 = newest messages near composer
+    scroller.scrollTop = 0;
   }, []);
 
+  const runPinSequence = useCallback(
+    (force = true) => {
+      scrollLockRef.current = true;
+      if (force) stickToBottomRef.current = true;
+      pinToLatest(force);
+      requestAnimationFrame(() => pinToLatest(force));
+      const timers = [50, 150, 400, 800].map((ms) =>
+        window.setTimeout(() => pinToLatest(force), ms),
+      );
+      const unlock = window.setTimeout(() => {
+        scrollLockRef.current = false;
+      }, 850);
+      return () => {
+        timers.forEach((id) => window.clearTimeout(id));
+        window.clearTimeout(unlock);
+      };
+    },
+    [pinToLatest],
+  );
+
+  useLayoutEffect(() => runPinSequence(true), [runPinSequence]);
+
   useLayoutEffect(() => {
-    scrollToBottom(true);
-  }, [messages.length, lastMessageId]);
+    return runPinSequence(true);
+  }, [messages.length, lastMessageId, runPinSequence]);
+
+  useLayoutEffect(() => {
+    if (pathname === "/chat" || pathname.startsWith("/chat/")) {
+      return runPinSequence(true);
+    }
+  }, [pathname, messages.length, lastMessageId, runPinSequence]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     const ro = new ResizeObserver(() => {
-      if (stickToBottomRef.current) scrollToBottom(true);
+      if (stickToBottomRef.current) pinToLatest(true);
     });
     ro.observe(scroller);
+    for (const el of scroller.querySelectorAll("article")) {
+      ro.observe(el);
+    }
     return () => ro.disconnect();
-  }, []);
+  }, [pinToLatest, messages.length, pending.length, thinking, streamText]);
 
   // Auto-scroll to the typing/streaming bubble when AXE starts thinking,
   // tokens stream in, or an optimistic user bubble is added.
   useEffect(() => {
     if ((thinking || pending.length > 0 || streamText) && stickToBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+      pinToLatest(true);
     }
-  }, [thinking, pending.length, streamText]);
+  }, [thinking, pending.length, streamText, pinToLatest]);
 
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (scrollLockRef.current) return;
     const el = e.currentTarget;
-    const distanceFromBottom = el.scrollHeight - el.clientHeight - el.scrollTop;
-    const nearBottom = distanceFromBottom <= NEAR_BOTTOM_PX;
+    const nearBottom = el.scrollTop <= NEAR_BOTTOM_PX;
     stickToBottomRef.current = nearBottom;
     setShowJump(!nearBottom && messages.length > 0);
   }
 
   function jumpToLatest() {
-    scrollToBottom(true);
     stickToBottomRef.current = true;
+    runPinSequence(true);
     setShowJump(false);
   }
 
@@ -346,11 +371,39 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="tos-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pb-[10rem] pr-1 md:pb-2"
+        className="tos-scrollbar flex min-h-0 flex-1 flex-col-reverse gap-5 overflow-y-auto pb-[10rem] pr-1 md:pb-2"
       >
-        <div className="mt-auto flex flex-col gap-5">
-        {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
-        {messages.map((m) => (
+        {thinking && streamText ? (
+          <StreamingBubble text={streamText} phase={streamPhase} />
+        ) : thinking ? (
+          <TypingBubble />
+        ) : null}
+        {pending.map((p) => (
+          <article key={p.id} className="group flex flex-col items-end">
+            <div className="mb-1.5 flex flex-row-reverse items-center gap-1.5 px-1.5">
+              <span className="h-1 w-1 rounded-full bg-tos-gold/70" />
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-gold/80">You said</p>
+            </div>
+            <div className="tos-bubble-user text-tos-text max-w-[92%] rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed opacity-90">
+              <div>
+                {p.hasImage && p.content === "(chart attached)" ? (
+                  <span className="italic text-tos-muted">Chart attached…</span>
+                ) : (
+                  renderUserBody(p.content)
+                )}
+              </div>
+            </div>
+            <div className="flex flex-row-reverse items-center gap-1.5 px-1.5">
+              <time className="text-[10px] text-tos-dim" dateTime={p.createdAt}>
+                {formatTimeHm(p.createdAt)}
+              </time>
+              <span className="text-[9.5px] uppercase tracking-wider text-tos-dim/80" aria-label="sending">
+                · sending
+              </span>
+            </div>
+          </article>
+        ))}
+        {[...messages].reverse().map((m) => (
           <article
             key={m.id}
             className={`group flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}
@@ -405,39 +458,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
             </div>
           </article>
         ))}
-        {pending.map((p) => (
-          <article key={p.id} className="group flex flex-col items-end">
-            <div className="mb-1.5 flex flex-row-reverse items-center gap-1.5 px-1.5">
-              <span className="h-1 w-1 rounded-full bg-tos-gold/70" />
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-tos-gold/80">You said</p>
-            </div>
-            <div className="tos-bubble-user text-tos-text max-w-[92%] rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed opacity-90">
-              <div>
-                {p.hasImage && p.content === "(chart attached)" ? (
-                  <span className="italic text-tos-muted">Chart attached…</span>
-                ) : (
-                  renderUserBody(p.content)
-                )}
-              </div>
-            </div>
-            <div className="flex flex-row-reverse items-center gap-1.5 px-1.5">
-              <time className="text-[10px] text-tos-dim" dateTime={p.createdAt}>
-                {formatTimeHm(p.createdAt)}
-              </time>
-              <span className="text-[9.5px] uppercase tracking-wider text-tos-dim/80" aria-label="sending">
-                · sending
-              </span>
-            </div>
-          </article>
-        ))}
-        {/* Streaming / thinking indicator */}
-        {thinking && streamText ? (
-          <StreamingBubble text={streamText} phase={streamPhase} />
-        ) : thinking ? (
-          <TypingBubble />
-        ) : null}
-        </div>
-        <div ref={bottomRef} aria-hidden />
+        {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
       </div>
 
       {showJump ? (
