@@ -490,13 +490,13 @@ class MultiSymbolListener {
     const completed = Array.isArray(completedOrderIds) ? completedOrderIds : [];
     for (const orderId of completed) this.forgetPendingOrder(orderId);
     for (const order of arr) this.rememberPendingOrder(order);
-    this.broadcastPendingOrders(arr, this.pendingOrderTotal);
+    this.broadcastPendingOrders([...this.pendingOrdersById.values()], this.pendingOrderTotal);
   }
 
   async onPendingOrderUpdated(_account: unknown, order: OrderEvent) {
     if (!order) return;
     this.rememberPendingOrder(order);
-    this.broadcastPendingOrders([order], this.pendingOrderTotal);
+    this.broadcastPendingOrders([...this.pendingOrdersById.values()], this.pendingOrderTotal);
   }
 
   async onPendingOrdersReplaced(_account: unknown, orders: OrderEvent[]) {
