@@ -507,6 +507,7 @@ class MultiSymbolListener {
 
   async onPendingOrderCompleted(_account: unknown, orderId: unknown) {
     this.forgetPendingOrder(orderId);
+    this.broadcastPendingOrders([...this.pendingOrdersById.values()], this.pendingOrderTotal);
   }
 
   // ── SDK v29 required callbacks (no-ops to suppress "not a function" errors) ─
