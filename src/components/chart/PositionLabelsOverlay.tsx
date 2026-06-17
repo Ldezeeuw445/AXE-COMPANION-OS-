@@ -102,78 +102,16 @@ function pnlAwareColor(side: string | null, profit: number | null | undefined): 
   return entryColor(side);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Modify-position API call                                           */
-/* ------------------------------------------------------------------ */
-
-async function callModifyPosition(
-  brokerAccountId: string,
-  positionId: string,
-  stopLoss: number | null | undefined,
-  takeProfit: number | null | undefined,
-): Promise<{ ok: boolean; message?: string }> {
-  try {
-    const body: Record<string, unknown> = { brokerAccountId, positionId };
-    if (stopLoss != null) body.stopLoss = stopLoss;
-    if (takeProfit != null) body.takeProfit = takeProfit;
-    const res = await fetch("/api/mt5/modify-position", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = (await res.json()) as { ok?: boolean; message?: string };
-    return { ok: !!json.ok, message: json.message };
-  } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Network error" };
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Modify-order API call (pending limit/stop orders)                  */
-/* ------------------------------------------------------------------ */
-
-async function callModifyOrder(
-  brokerAccountId: string,
-  orderId: string,
-  stopLoss: number | null | undefined,
-  takeProfit: number | null | undefined,
-): Promise<{ ok: boolean; message?: string }> {
-  try {
-    const body: Record<string, unknown> = { brokerAccountId, orderId };
-    if (stopLoss != null) body.stopLoss = stopLoss;
-    if (takeProfit != null) body.takeProfit = takeProfit;
-    const res = await fetch("/api/mt5/modify-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = (await res.json()) as { ok?: boolean; message?: string };
-    return { ok: !!json.ok, message: json.message };
-  } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Network error" };
-  }
-}
-
-async function callCancelOrder(
-  brokerAccountId: string,
-  orderId: string,
-): Promise<{ ok: boolean; message?: string }> {
-  try {
-    const res = await fetch("/api/mt5/cancel-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ brokerAccountId, orderId }),
-    });
-    const json = (await res.json()) as { ok?: boolean; message?: string };
-    return { ok: !!json.ok, message: json.message };
-  } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message : "Network error" };
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
+type EntryLabel = {
+  key: string;
+  y: number;
+  text: string;
+  color: string;
+  showConfirm: boolean;
+  confirmTargetKey: string;
+  positionId?: string;
+  orderId?: string;
+};
 
 export function PositionLabelsOverlay({
   canvasRef,
@@ -221,14 +159,11 @@ export function PositionLabelsOverlay({
   onModifyFeedback?: (result: { ok: boolean; message?: string }) => void;
   isDark?: boolean;
 }) {
-  const [labels, setLabels] = useState<LabelItem[]>([]);
-  const [armedPendingOrderId, setArmedPendingOrderId] = useState<string | null>(null);
-  const overlaysRef = useRef(overlays);
-  overlaysRef.current = overlays;
-  const pendingOrdersRef = useRef(pendingOrders);
-  pendingOrdersRef.current = pendingOrders;
-  const symbolRef = useRef(symbol);
-  symbolRef.current = symbol;
+  const theme = isDark ? CHART_THEME : getChartTheme("paper");
+  const labelShadow = isDark
+    ? "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)"
+    : "0 1px 0 rgba(255,255,255,0.82)";
+  const digits = priceDigitsForSymbol(symbol);
 
   const [entryLabels, setEntryLabels] = useState<EntryLabel[]>([]);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
@@ -398,64 +333,8 @@ export function PositionLabelsOverlay({
       }
     }
 
-    // ── Pending orders (limit / stop) ──
-    for (const o of pendingOrdersRef.current) {
-      const side = o.side as "buy" | "sell";
-      const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
-      const canDragOrder = liveTradingEnabled && !!brokerAccountId;
-
-      // Entry / trigger price (not draggable — entry price modification is complex)
-      if (o.openPrice != null && o.openPrice > 0) {
-        const y = canvas.priceToCoordinate(o.openPrice);
-        if (y != null) {
-          next.push({
-            key: `pend-entry-${o.id}`,
-            y,
-            text: `${typeLabel} ${o.volume}`,
-            color: entryColor(side),
-            draggable: false,
-            orderId: o.id,
-          });
-        }
-      }
-
-      // SL (draggable)
-      if (o.stopLoss != null && o.stopLoss > 0) {
-        const y = canvas.priceToCoordinate(o.stopLoss);
-        if (y != null) {
-          const pnl = slTpPnl(o.openPrice, o.stopLoss, o.volume, side, symbolRef.current);
-          next.push({
-            key: `pend-sl-${o.id}`,
-            y,
-            text: `SL${pnl ? `, ${pnl}` : ""}`,
-            color: CHART_THEME.stopLine,
-            draggable: canDragOrder,
-            field: "sl",
-            orderId: o.id,
-            currentSl: o.stopLoss,
-            currentTp: o.takeProfit,
-          });
-        }
-      }
-
-      // TP (draggable)
-      if (o.takeProfit != null && o.takeProfit > 0) {
-        const y = canvas.priceToCoordinate(o.takeProfit);
-        if (y != null) {
-          const pnl = slTpPnl(o.openPrice, o.takeProfit, o.volume, side, symbolRef.current);
-          next.push({
-            key: `pend-tp-${o.id}`,
-            y,
-            text: `TP${pnl ? `, ${pnl}` : ""}`,
-            color: CHART_THEME.takeLine,
-            draggable: canDragOrder,
-            field: "tp",
-            orderId: o.id,
-            currentSl: o.stopLoss,
-            currentTp: o.takeProfit,
-          });
-        }
-      }
+    for (const o of pendingOrders) {
+      // Pending broker entry labels are rendered as draggable TradePlanLine overlays.
     }
 
     setEntryLabels(next);
@@ -510,19 +389,19 @@ export function PositionLabelsOverlay({
     disabled: boolean;
   }> = [];
 
-  const handlePendingCancel = useCallback(
-    async (orderId: string) => {
-      if (!brokerAccountId) return;
-      const res = await callCancelOrder(brokerAccountId, orderId);
-      if (!res.ok) {
-        console.warn("[PositionLabelsOverlay] Cancel pending order failed:", res.message);
-      }
-      setArmedPendingOrderId(null);
-    },
-    [brokerAccountId],
-  );
-
-  if (labels.length === 0 && !dragState) return null;
+  const pendingEntryLines: Array<{
+    key: string;
+    price: number;
+    label: string;
+    color: string;
+    targetKey: string;
+    orderId: string;
+    currentSl: number | null;
+    currentTp: number | null;
+    side: "buy" | "sell";
+    volume: number;
+    disabled: boolean;
+  }> = [];
 
   for (const o of overlays) {
     const side = (o.side ?? "buy") as "buy" | "sell";
@@ -640,113 +519,31 @@ export function PositionLabelsOverlay({
   if (entryLabels.length === 0 && lineItems.length === 0 && pendingEntryLines.length === 0) return null;
 
   return (
-    <div
-      className="absolute inset-0 overflow-hidden z-10"
-      style={{
-        pointerEvents: isDraggingVisible ? "auto" : "none",
-        touchAction: "none",
-      }}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-    >
-      {labels.map((label) => {
-        // Hide the static label if it's currently being dragged
-        if (dragState && dragState.key === label.key) return null;
-
-        return (
-          <div
-            key={label.key}
-            className="absolute left-0 -translate-y-1/2 whitespace-nowrap"
-            style={{
-              top: label.y,
-              pointerEvents:
-                label.draggable || label.key.startsWith("pend-entry-") ? "auto" : "none",
-              touchAction: "none",
-            }}
-          >
-            {/* Drag touch area — wider than visible text for easy grab */}
-            {label.draggable ? (
-              <div
-                className="flex items-center cursor-ns-resize"
-                style={{ padding: "12px 8px", margin: "-12px -8px" }}
-                onPointerDown={(e) => handlePointerDown(e, label)}
-              >
-                <span
-                  style={{
-                    color: label.color,
-                    fontSize: "10px",
-                    fontWeight: 600,
-                    letterSpacing: "0.02em",
-                    textShadow:
-                      "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)",
-                    paddingLeft: 6,
-                  }}
-                >
-                  {label.text}
-                </span>
-              </div>
-            ) : label.key.startsWith("pend-entry-") && label.orderId ? (
-              <div className="flex items-center gap-1 pl-1">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setArmedPendingOrderId((prev) => (prev === label.orderId ? null : label.orderId ?? null));
-                  }}
-                  style={{
-                    color: label.color,
-                    fontSize: "10px",
-                    fontWeight: 600,
-                    letterSpacing: "0.02em",
-                    textShadow:
-                      "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)",
-                  }}
-                >
-                  {label.text}
-                </button>
-                {armedPendingOrderId === label.orderId ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void handlePendingCancel(label.orderId!);
-                    }}
-                    className="grid h-4 w-4 place-items-center rounded-full border border-white/25 bg-black/75 text-[9px] text-white/80"
-                    aria-label="Cancel pending order"
-                  >
-                    ✕
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <span
-                style={{
-                  color: label.color,
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  letterSpacing: "0.02em",
-                  textShadow:
-                    "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.8)",
-                  paddingLeft: 6,
-                }}
-              >
-                {label.text}
-              </span>
-            )}
-          </div>
-        );
-      })}
-
-      {/* Dragging ghost label */}
-      {dragState && (
-        <div
-          className="absolute left-0 -translate-y-1/2 whitespace-nowrap"
-          style={{
-            top: dragState.y,
-            pointerEvents: "none",
+    <div className="pointer-events-none absolute inset-0 z-[22] overflow-hidden">
+      {pendingEntryLines.map((line) => (
+        <TradePlanLine
+          key={line.key}
+          canvasRef={canvasRef}
+          price={line.price}
+          label={line.label}
+          color={line.color}
+          digits={digits}
+          symbol={symbol}
+          volume={line.volume}
+          side={line.side}
+          disabled={line.disabled}
+          tapToArm
+          zIndex={25}
+          onChange={(newPrice) => {
+            void handleLevelChange({
+              targetKey: line.targetKey,
+              field: "entry",
+              orderId: line.orderId,
+              currentSl: line.currentSl,
+              currentTp: line.currentTp,
+              currentOpenPrice: line.price,
+              newPrice,
+            });
           }}
         />
       ))}

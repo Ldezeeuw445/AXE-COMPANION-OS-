@@ -8,7 +8,8 @@
  * Position rows: tap → SL/TP editor sheet, X → close confirm.
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { X, AlertTriangle, Loader2, LineChart, Pencil } from "lucide-react";

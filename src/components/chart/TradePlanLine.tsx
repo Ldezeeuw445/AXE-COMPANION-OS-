@@ -41,6 +41,7 @@ export const TradePlanLine = memo(function TradePlanLine({
   side = "buy",
   onDragStart,
   onDragEnd,
+  onSelect,
   disabled = false,
   zIndex = 24,
   /** Broker pending orders: hide drag ball until the trader taps the line (MT5-style). */
@@ -59,6 +60,7 @@ export const TradePlanLine = memo(function TradePlanLine({
   side?: "buy" | "sell";
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  onSelect?: () => void;
   disabled?: boolean;
   zIndex?: number;
   tapToArm?: boolean;
@@ -86,6 +88,8 @@ export const TradePlanLine = memo(function TradePlanLine({
   onDragStartRef.current = onDragStart;
   const onDragEndRef = useRef(onDragEnd);
   onDragEndRef.current = onDragEnd;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
 
   const digitsRef = useRef(digits);
   digitsRef.current = digits;
@@ -175,6 +179,7 @@ export const TradePlanLine = memo(function TradePlanLine({
       if (disabledRef.current) return;
       e.preventDefault();
       e.stopPropagation();
+      onSelectRef.current?.();
       isDraggingRef.current = true;
       dragPriceRef.current = null;
 
