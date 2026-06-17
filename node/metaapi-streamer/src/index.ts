@@ -135,6 +135,9 @@ interface StreamingConnection {
   subscribeToMarketData: (symbol: string) => Promise<void>;
   unsubscribeFromMarketData: (symbol: string) => Promise<void>;
   addSynchronizationListener: (listener: Record<string, unknown>) => void;
+  terminalState?: {
+    orders?: OrderEvent[];
+  };
   close: () => Promise<void>;
 }
 
@@ -199,7 +202,8 @@ class MultiSymbolListener {
 
   constructor(
     private readonly env: Env,
-    private readonly config: AccountConfig
+    private readonly config: AccountConfig,
+    private readonly getTerminalPendingOrders?: () => OrderEvent[] | undefined
   ) {
     this.brokerToDisplay = new Map();
     this.snapshotBuffer = new SnapshotBuffer(config.userId, config.accountId);
@@ -428,6 +432,16 @@ class MultiSymbolListener {
     }
   }
 
+  private broadcastCurrentPendingOrders(): void {
+    const terminalOrders = this.getTerminalPendingOrders?.();
+    if (Array.isArray(terminalOrders)) {
+      this.replacePendingOrderCache(terminalOrders);
+      this.broadcastPendingOrders(terminalOrders);
+      return;
+    }
+    this.broadcastPendingOrders([...this.pendingOrdersById.values()], this.pendingOrderTotal);
+  }
+
   private broadcastPendingOrders(orders: OrderEvent[], total?: number) {
     const arr = Array.isArray(orders) ? orders : [];
     const accountTotal = total ?? arr.length;
@@ -490,13 +504,13 @@ class MultiSymbolListener {
     const completed = Array.isArray(completedOrderIds) ? completedOrderIds : [];
     for (const orderId of completed) this.forgetPendingOrder(orderId);
     for (const order of arr) this.rememberPendingOrder(order);
-    this.broadcastPendingOrders([...this.pendingOrdersById.values()], this.pendingOrderTotal);
+    this.broadcastCurrentPendingOrders();
   }
 
   async onPendingOrderUpdated(_account: unknown, order: OrderEvent) {
     if (!order) return;
     this.rememberPendingOrder(order);
-    this.broadcastPendingOrders([...this.pendingOrdersById.values()], this.pendingOrderTotal);
+    this.broadcastCurrentPendingOrders();
   }
 
   async onPendingOrdersReplaced(_account: unknown, orders: OrderEvent[]) {
@@ -507,7 +521,7 @@ class MultiSymbolListener {
 
   async onPendingOrderCompleted(_account: unknown, orderId: unknown) {
     this.forgetPendingOrder(orderId);
-    this.broadcastPendingOrders([...this.pendingOrdersById.values()], this.pendingOrderTotal);
+    this.broadcastCurrentPendingOrders();
   }
 
   // ── SDK v29 required callbacks (no-ops to suppress "not a function" errors) ─
@@ -525,7 +539,9 @@ class MultiSymbolListener {
   async onPositionRemoved(..._a: unknown[]) { /* no-op */ }
   async onPositionsReplaced(..._a: unknown[]) { /* no-op */ }
   async onPositionsSynchronized(..._a: unknown[]) { /* no-op */ }
-  async onPendingOrdersSynchronized(..._a: unknown[]) { /* no-op */ }
+  async onPendingOrdersSynchronized(..._a: unknown[]) {
+    this.broadcastCurrentPendingOrders();
+  }
   // Note: onSymbolPriceUpdated is defined above (delegates to handlePriceTick)
   async onDowngradeSubscription(..._a: unknown[]) { /* no-op */ }
   async onAccountsUpdated(..._a: unknown[]) { /* no-op */ }
@@ -601,22 +617,7 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
   }
 
   const connection = account.getStreamingConnection();
-  await connection.connect();
-
-  // Wait for sync with timeout
-  const SYNC_TIMEOUT_MS = 30_000;
-  try {
-    await Promise.race([
-      connection.waitSynchronized(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("waitSynchronized timed out after 30s")), SYNC_TIMEOUT_MS)
-      ),
-    ]);
-  } catch (e) {
-    log("warn", `[${config.metaApiAccountId}] waitSynchronized timed out — proceeding with subscriptions`);
-  }
-
-  const rawListener = new MultiSymbolListener(env, config);
+  const rawListener = new MultiSymbolListener(env, config, () => connection.terminalState?.orders);
 
   // Wrap in Proxy: any SDK callback we haven't explicitly implemented
   // becomes an async no-op instead of crashing with "not a function".
@@ -634,6 +635,20 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
   }) as unknown as Record<string, unknown>;
 
   connection.addSynchronizationListener(listener);
+  await connection.connect();
+
+  // Wait for sync with timeout
+  const SYNC_TIMEOUT_MS = 30_000;
+  try {
+    await Promise.race([
+      connection.waitSynchronized(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("waitSynchronized timed out after 30s")), SYNC_TIMEOUT_MS)
+      ),
+    ]);
+  } catch (e) {
+    log("warn", `[${config.metaApiAccountId}] waitSynchronized timed out — proceeding with subscriptions`);
+  }
 
   // Subscribe to ALL watchlist symbols
   const subscribedSymbols = new Set<string>();
