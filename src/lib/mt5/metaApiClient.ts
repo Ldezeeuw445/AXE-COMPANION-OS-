@@ -753,6 +753,60 @@ export async function clientModifyOrder(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+//   ORDER CANCEL
+// ────────────────────────────────────────────────────────────────────────────
+
+export type CancelOrderInput = {
+  accountId: string;
+  /** MT5 order id (string). */
+  orderId: string;
+  region?: string | null;
+};
+
+/**
+ * Cancel a pending order via MetaApi.
+ * Uses the same `/trade` endpoint, with `actionType: "ORDER_CANCEL"`.
+ */
+export async function clientCancelOrder(
+  input: CancelOrderInput,
+): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl(input.region);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body: Record<string, unknown> = {
+    actionType: "ORDER_CANCEL",
+    orderId: input.orderId,
+  };
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Cancel order failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 //   POSITION CLOSE
 // ────────────────────────────────────────────────────────────────────────────
 

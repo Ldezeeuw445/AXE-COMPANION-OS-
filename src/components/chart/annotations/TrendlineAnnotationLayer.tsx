@@ -32,6 +32,7 @@ type TrendGeom = {
   extend: boolean;
   /** "up" = lower trendline (through swing lows), "down" = upper (through swing highs). */
   direction: "up" | "down" | null;
+  locked: boolean;
 };
 
 /**
@@ -164,6 +165,7 @@ export function TrendlineAnnotationLayer({
         const settings = (ann.settings ?? {}) as Record<string, unknown>;
         const extend = Boolean(settings.extendRight);
         const direction = (settings.direction ?? null) as "up" | "down" | null;
+        const locked = Boolean(settings.locked);
         // Honour `settings.extendRight`: project the slope forward so the
         // line keeps going past the second swing all the way to the chart's
         // right edge (or to the future-projection cursor when supplied).
@@ -179,7 +181,7 @@ export function TrendlineAnnotationLayer({
             ry = yB + slope * (targetX - xB);
           }
         }
-        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB, rx, ry, extend, direction });
+        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB, rx, ry, extend, direction, locked });
       }
       setGeoms(next);
     }
@@ -204,6 +206,13 @@ export function TrendlineAnnotationLayer({
     stopChartPointer(e);
     const ann = annotations.find((a) => a.id === annotationId);
     if (!ann || ann.type !== "trendline") return;
+    const settings = (ann.settings ?? {}) as Record<string, unknown>;
+    const locked = Boolean(settings.locked);
+    if (activeId !== annotationId) {
+      setActiveId(annotationId);
+      return;
+    }
+    if (locked) return;
     svgRef.current?.setPointerCapture(e.pointerId);
     dragRef.current = {
       annotationId,
@@ -294,6 +303,8 @@ export function TrendlineAnnotationLayer({
           const isActive = activeId === g.id;
           const mx = (g.ax + g.bx) / 2;
           const my = (g.ay + g.by) / 2;
+          const controlX = Math.max(6, Math.min(g.ax, g.bx) - 28);
+          const controlY = Math.max(6, Math.min(g.ay, g.by) - 34);
           const color = lineColor(g.direction, isActive, isDark);
           const projColor = projectionColor(g.direction, isActive, isDark);
           const dotColor = handleColor(g.direction, isDark);
@@ -344,10 +355,9 @@ export function TrendlineAnnotationLayer({
                 />
               ) : null}
 
-              {/* Always-visible drag handles at both endpoints.
-                  Large invisible touch target (r=28, 56px) for
-                  reliable portrait-mode dragging. Starts drag
-                  immediately — no "tap-to-select" gate. */}
+              {/* Drag handles are shown only while selected to reduce
+                  accidental moves; selection reveals lock + delete controls. */}
+              {isActive ? (
               <g style={{ pointerEvents: "auto" }}>
                   {/* Handle A */}
                   <circle cx={g.ax} cy={g.ay} r={28}
@@ -376,35 +386,73 @@ export function TrendlineAnnotationLayer({
                     strokeWidth={isActive ? 1.5 : 1}
                     pointerEvents="none" />
               </g>
+              ) : null}
 
               {onRemove && isActive ? (
-                <g
-                  style={{ pointerEvents: "auto", cursor: "pointer" }}
-                  onPointerDown={(e) => {
-                    stopChartPointer(e);
-                    onRemove(g.id);
-                  }}
-                >
-                  <rect
-                    x={mx - 10}
-                    y={my - 18}
-                    width={20}
-                    height={14}
-                    rx={3}
-                    fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
-                    stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
-                  />
-                  <text
-                    x={mx}
-                    y={my - 8}
-                    textAnchor="middle"
-                    fontFamily="ui-sans-serif, system-ui"
-                    fontSize="9"
-                    fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
+                <>
+                  <g
+                    style={{ pointerEvents: "auto", cursor: "pointer" }}
+                    onPointerDown={(e) => {
+                      stopChartPointer(e);
+                      const ann = annotations.find((a) => a.id === g.id);
+                      if (!ann || ann.type !== "trendline") return;
+                      const settings = (ann.settings ?? {}) as Record<string, unknown>;
+                      const locked = Boolean(settings.locked);
+                      onUpdate({
+                        ...ann,
+                        settings: { ...settings, locked: !locked },
+                        updatedAt: new Date().toISOString(),
+                      });
+                    }}
                   >
-                    ✕
-                  </text>
-                </g>
+                    <rect
+                      x={controlX}
+                      y={controlY}
+                      width={20}
+                      height={14}
+                      rx={3}
+                      fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
+                      stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
+                    />
+                    <text
+                      x={controlX + 10}
+                      y={controlY + 9.5}
+                      textAnchor="middle"
+                      fontFamily="ui-sans-serif, system-ui"
+                      fontSize="8"
+                      fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
+                    >
+                      {g.locked ? "LK" : "UL"}
+                    </text>
+                  </g>
+                  <g
+                    style={{ pointerEvents: "auto", cursor: "pointer" }}
+                    onPointerDown={(e) => {
+                      stopChartPointer(e);
+                      onRemove(g.id);
+                    }}
+                  >
+                    <rect
+                      x={controlX + 22}
+                      y={controlY}
+                      width={20}
+                      height={14}
+                      rx={3}
+                      fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
+                      stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
+                    />
+                    <text
+                      x={controlX + 32}
+                      y={controlY + 10}
+                      textAnchor="middle"
+                      fontFamily="ui-sans-serif, system-ui"
+                      fontSize="9"
+                      fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
+                    >
+                      ✕
+                    </text>
+                  </g>
+                </>
               ) : null}
             </g>
           );

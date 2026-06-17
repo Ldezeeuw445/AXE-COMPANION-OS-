@@ -77,6 +77,7 @@ type FibGeom = {
   diagAY: number;
   diagBX: number;
   diagBY: number;
+  locked: boolean;
 };
 
 /* ── Colour helpers ─────────────────────────────────────────────── */
@@ -110,7 +111,7 @@ function diagonalColor(dark: boolean) {
  * Interactive Fibonacci retracement layer — TradingView / broker-style:
  * - SOLID horizontal levels (green/teal interior, gold boundary)
  * - SOLID diagonal trendline corner-to-corner (purple accent)
- * - % label LEFT, price label RIGHT
+ * - % and price labels on the RIGHT
  * - Two always-visible drag handles at diagonal endpoints
  * - Freely draggable, resizable, flippable
  */
@@ -207,6 +208,7 @@ export function FibAnnotationLayer({
         const extendLeft = Boolean(settings.extendLeft);
         const style: "levels" | "premium_discount" =
           settings.style === "premium_discount" ? "premium_discount" : "levels";
+        const locked = Boolean(settings.locked);
 
         // Right-edge: extend past live candle when enabled
         let rightX = endX;
@@ -243,6 +245,7 @@ export function FibAnnotationLayer({
           diagAY,
           diagBX,
           diagBY,
+          locked,
         });
       }
       setGeoms(next);
@@ -284,6 +287,13 @@ export function FibAnnotationLayer({
     stopChartPointer(e);
     const ann = annotations.find((a) => a.id === annotationId);
     if (!ann || ann.type !== "fib_retracement") return;
+    const settings = (ann.settings ?? {}) as Record<string, unknown>;
+    const locked = Boolean(settings.locked);
+    if (activeId !== annotationId) {
+      setActiveId(annotationId);
+      return;
+    }
+    if (locked) return;
     svgRef.current?.setPointerCapture(e.pointerId);
     dragRef.current = {
       annotationId,
@@ -380,13 +390,12 @@ export function FibAnnotationLayer({
           const anchorLine = g.lines.find((ln) => ln.level === 0);
           const swingExtreme = g.lines.find((ln) => ln.level === 1);
 
-          /* Label X positions: % on LEFT, price on RIGHT */
-          const pctLabelX = g.startX + 4;
+          /* Label X positions: both % and price on the right rail */
           const priceLabelX = g.rightX - 4;
 
           /* Remove pill near top-left corner */
-          const removeX = Math.max(8, g.startX - 30);
-          const removeY = Math.max(8, Math.min(g.anchorY, g.swingY) - 28);
+          const removeX = Math.max(6, g.startX - 36);
+          const removeY = Math.max(6, Math.min(g.anchorY, g.swingY) - 36);
 
           /* Premium / discount visible lines */
           const visibleLines =
@@ -465,10 +474,10 @@ export function FibAnnotationLayer({
                       strokeWidth={style.width}
                       pointerEvents="none"
                     />
-                    {/* % label — LEFT side of the line */}
+                    {/* % label — right side, tighter to price for MT5 readability */}
                     <text
-                      x={pctLabelX} y={ln.y - 3}
-                      textAnchor="start"
+                      x={priceLabelX - 34} y={ln.y - 3}
+                      textAnchor="end"
                       fontFamily="ui-sans-serif, system-ui, -apple-system"
                       fontSize="10"
                       fontWeight={isFocus ? 650 : 500}
@@ -476,7 +485,7 @@ export function FibAnnotationLayer({
                       stroke={textStroke} strokeWidth="2.5" paintOrder="stroke"
                       pointerEvents="none"
                     >
-                      {(ln.level * 100).toFixed(1).replace(".", ",")}%
+                      {(ln.level * 100).toFixed(1)}%
                     </text>
                     {/* Price label — RIGHT side of the line */}
                     <text
@@ -495,12 +504,9 @@ export function FibAnnotationLayer({
                 );
               })}
 
-              {/* ── Always-visible drag handles ────────────────────
-                  At diagonal endpoints (A and B). Dragging a handle
-                  moves the corresponding annotation point (0 or 1).
-                  Large invisible touch target (r=28, 56px) behind
-                  visible dot — exceeds Apple 44pt minimum for reliable
-                  portrait-mode interaction. */}
+              {/* Drag handles only when selected: avoids accidental
+                  repositioning and mirrors MT5-like "tap to arm". */}
+              {isActive ? (
               <g style={{ pointerEvents: "auto" }}>
                 {/* Point A handle (index 0) */}
                 <circle cx={g.diagAX} cy={g.diagAY} r={28}
@@ -526,18 +532,45 @@ export function FibAnnotationLayer({
                   strokeWidth={isActive ? 1.5 : 1}
                   pointerEvents="none" />
               </g>
+              ) : null}
 
-              {/* Remove button — only when active */}
-              {onRemove && isActive ? (
-                <g
-                  style={{ pointerEvents: "auto", cursor: "pointer" }}
-                  onPointerDown={(e) => { stopChartPointer(e); onRemove(g.id); }}
-                >
-                  <rect x={removeX} y={removeY} width={20} height={14} rx={3}
-                    fill={gripFill} stroke={gripStroke} />
-                  <text x={removeX + 10} y={removeY + 10} textAnchor="middle"
-                    fontFamily="ui-sans-serif, system-ui" fontSize="9" fill={gripLabel}>✕</text>
-                </g>
+              {/* Lock + remove controls — only when active */}
+              {isActive ? (
+                <>
+                  <g
+                    style={{ pointerEvents: "auto", cursor: "pointer" }}
+                    onPointerDown={(e) => {
+                      stopChartPointer(e);
+                      const ann = annotations.find((a) => a.id === g.id);
+                      if (!ann || ann.type !== "fib_retracement") return;
+                      const settings = (ann.settings ?? {}) as Record<string, unknown>;
+                      const locked = Boolean(settings.locked);
+                      onUpdate({
+                        ...ann,
+                        settings: { ...settings, locked: !locked },
+                        updatedAt: new Date().toISOString(),
+                      });
+                    }}
+                  >
+                    <rect x={removeX - 22} y={removeY} width={20} height={14} rx={3}
+                      fill={gripFill} stroke={gripStroke} />
+                    <text x={removeX - 12} y={removeY + 9.5} textAnchor="middle"
+                      fontFamily="ui-sans-serif, system-ui" fontSize="8" fill={gripLabel}>
+                      {g.locked ? "LK" : "UL"}
+                    </text>
+                  </g>
+                  {onRemove ? (
+                    <g
+                      style={{ pointerEvents: "auto", cursor: "pointer" }}
+                      onPointerDown={(e) => { stopChartPointer(e); onRemove(g.id); }}
+                    >
+                      <rect x={removeX} y={removeY} width={20} height={14} rx={3}
+                        fill={gripFill} stroke={gripStroke} />
+                      <text x={removeX + 10} y={removeY + 10} textAnchor="middle"
+                        fontFamily="ui-sans-serif, system-ui" fontSize="9" fill={gripLabel}>✕</text>
+                    </g>
+                  ) : null}
+                </>
               ) : null}
             </g>
           );

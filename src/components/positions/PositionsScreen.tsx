@@ -8,8 +8,7 @@
  * Position rows: tap → SL/TP editor sheet, X → close confirm.
  */
 
-import { useState, useCallback, useEffect, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { X, AlertTriangle, Loader2, LineChart, Pencil } from "lucide-react";
@@ -45,6 +44,24 @@ type EditState = {
   sl: string;
   tp: string;
   status: "idle" | "saving" | "success" | "error";
+  errorMsg?: string;
+};
+
+type OrderActionState = {
+  orderId: string;
+};
+
+type EditOrderState = {
+  orderId: string;
+  sl: string;
+  tp: string;
+  status: "idle" | "saving" | "success" | "error";
+  errorMsg?: string;
+};
+
+type CancelOrderState = {
+  orderId: string;
+  status: "confirm" | "canceling" | "success" | "error";
   errorMsg?: string;
 };
 
@@ -104,6 +121,9 @@ export function PositionsScreen({
   const [activeTab, setActiveTab] = useState<Tab>("positions");
   const [closeState, setCloseState] = useState<CloseState | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+  const [orderActionState, setOrderActionState] = useState<OrderActionState | null>(null);
+  const [editOrderState, setEditOrderState] = useState<EditOrderState | null>(null);
+  const [cancelOrderState, setCancelOrderState] = useState<CancelOrderState | null>(null);
   const router = useRouter();
   const { playSound, vibrate } = useAmbient();
 
@@ -264,6 +284,125 @@ export function PositionsScreen({
     setEditState(null);
   }, []);
 
+  const handleOrderActionRequest = useCallback(
+    (o: PendingOrderRow) => {
+      vibrate("light");
+      playSound("tap");
+      setOrderActionState({ orderId: o.id });
+    },
+    [vibrate, playSound],
+  );
+
+  const handleOrderActionClose = useCallback(() => {
+    setOrderActionState(null);
+  }, []);
+
+  const handleOrderEditOpen = useCallback(() => {
+    if (!orderActionState) return;
+    const order = pendingOrders.find((o) => o.id === orderActionState.orderId);
+    if (!order) return;
+    const digits = priceDigits(order.openPrice);
+    setEditOrderState({
+      orderId: order.id,
+      sl: order.stopLoss != null ? order.stopLoss.toFixed(digits) : "",
+      tp: order.takeProfit != null ? order.takeProfit.toFixed(digits) : "",
+      status: "idle",
+    });
+    setOrderActionState(null);
+  }, [orderActionState, pendingOrders]);
+
+  const handleOrderCancelOpen = useCallback(() => {
+    if (!orderActionState) return;
+    setCancelOrderState({ orderId: orderActionState.orderId, status: "confirm" });
+    setOrderActionState(null);
+  }, [orderActionState]);
+
+  const handleEditOrderSave = useCallback(async () => {
+    if (!editOrderState || !brokerAccountId) return;
+    const { orderId, sl, tp } = editOrderState;
+    const slNum = sl.trim() ? parseFloat(sl) : null;
+    const tpNum = tp.trim() ? parseFloat(tp) : null;
+
+    if (slNum != null && (!Number.isFinite(slNum) || slNum <= 0)) {
+      setEditOrderState((s) => (s ? { ...s, status: "error", errorMsg: "Invalid SL value." } : null));
+      return;
+    }
+    if (tpNum != null && (!Number.isFinite(tpNum) || tpNum <= 0)) {
+      setEditOrderState((s) => (s ? { ...s, status: "error", errorMsg: "Invalid TP value." } : null));
+      return;
+    }
+    if (slNum == null && tpNum == null) {
+      setEditOrderState((s) =>
+        s ? { ...s, status: "error", errorMsg: "Set at least one of SL or TP." } : null,
+      );
+      return;
+    }
+
+    setEditOrderState((s) => (s ? { ...s, status: "saving", errorMsg: undefined } : null));
+
+    try {
+      const res = await fetch("/api/mt5/modify-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brokerAccountId,
+          orderId,
+          stopLoss: slNum,
+          takeProfit: tpNum,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setEditOrderState((s) => (s ? { ...s, status: "success" } : null));
+        setTimeout(() => {
+          setEditOrderState(null);
+          router.refresh();
+        }, 900);
+      } else {
+        setEditOrderState((s) =>
+          s ? { ...s, status: "error", errorMsg: data.message ?? "Modify rejected by broker." } : null,
+        );
+      }
+    } catch (err) {
+      setEditOrderState((s) =>
+        s ? { ...s, status: "error", errorMsg: err instanceof Error ? err.message : "Network error." } : null,
+      );
+    }
+  }, [editOrderState, brokerAccountId, router]);
+
+  const handleCancelOrderConfirm = useCallback(async () => {
+    if (!cancelOrderState || !brokerAccountId) return;
+    const { orderId } = cancelOrderState;
+    setCancelOrderState({ orderId, status: "canceling" });
+    try {
+      const res = await fetch("/api/mt5/cancel-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brokerAccountId, orderId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCancelOrderState({ orderId, status: "success" });
+        setTimeout(() => {
+          setCancelOrderState(null);
+          router.refresh();
+        }, 900);
+      } else {
+        setCancelOrderState({
+          orderId,
+          status: "error",
+          errorMsg: data.message ?? "Cancel rejected by broker.",
+        });
+      }
+    } catch (err) {
+      setCancelOrderState({
+        orderId,
+        status: "error",
+        errorMsg: err instanceof Error ? err.message : "Network error.",
+      });
+    }
+  }, [cancelOrderState, brokerAccountId, router]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-2">
       <LiveStatusReporter
@@ -343,7 +482,13 @@ export function PositionsScreen({
         (pendingOrders.length > 0 ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             {pendingOrders.map((o, i) => (
-              <OrderRow key={o.id} order={o} index={i} />
+              <OrderRow
+                key={o.id}
+                order={o}
+                index={i}
+                onOpenActions={handleOrderActionRequest}
+                onNavigate={(symbol) => router.push(`/chart?symbol=${encodeURIComponent(symbol)}`)}
+              />
             ))}
           </div>
         ) : (
@@ -367,6 +512,34 @@ export function PositionsScreen({
           onSave={handleEditSave}
           onCancel={handleEditCancel}
           onChange={setEditState}
+        />
+      )}
+
+      {orderActionState && (
+        <OrderActionsModal
+          order={pendingOrders.find((o) => o.id === orderActionState.orderId) ?? null}
+          onClose={handleOrderActionClose}
+          onEdit={handleOrderEditOpen}
+          onCancelOrder={handleOrderCancelOpen}
+        />
+      )}
+
+      {editOrderState && (
+        <EditOrderModal
+          editState={editOrderState}
+          order={pendingOrders.find((o) => o.id === editOrderState.orderId) ?? null}
+          onChange={setEditOrderState}
+          onSave={handleEditOrderSave}
+          onClose={() => setEditOrderState(null)}
+        />
+      )}
+
+      {cancelOrderState && cancelOrderState.status !== "success" && (
+        <CancelOrderModal
+          cancelState={cancelOrderState}
+          order={pendingOrders.find((o) => o.id === cancelOrderState.orderId) ?? null}
+          onClose={() => setCancelOrderState(null)}
+          onConfirm={handleCancelOrderConfirm}
         />
       )}
     </div>
@@ -471,18 +644,85 @@ function PositionRow({
 }
 
 /* ── Order Row (read-only for now) ─────────────────────────────────── */
-function OrderRow({ order: o, index: i }: { order: PendingOrderRow; index: number }) {
+function OrderRow({
+  order: o,
+  index: i,
+  onOpenActions,
+  onNavigate,
+}: {
+  order: PendingOrderRow;
+  index: number;
+  onOpenActions: (order: PendingOrderRow) => void;
+  onNavigate: (symbol: string) => void;
+}) {
   const digits = priceDigits(o.openPrice);
   const isBuy = o.type.includes("buy");
   const typeColor = isBuy ? "text-cyan-400/80" : "text-rose-400/80";
   const typeLabel = o.type.replace("_", " ");
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearPressTimer = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    longPressTriggeredRef.current = false;
+    pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    clearPressTimer();
+    pressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      onOpenActions(o);
+    }, 460);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const origin = pointerStartRef.current;
+    if (!origin) return;
+    const dist = Math.hypot(e.clientX - origin.x, e.clientY - origin.y);
+    if (dist > 8) clearPressTimer();
+  };
+
+  const onPointerUp = () => {
+    const wasLongPress = longPressTriggeredRef.current;
+    clearPressTimer();
+    pointerStartRef.current = null;
+    if (!wasLongPress) onNavigate(o.symbol);
+  };
+
+  const onPointerCancel = () => {
+    clearPressTimer();
+    pointerStartRef.current = null;
+  };
 
   return (
-    <Link
-      href={`/chart?symbol=${encodeURIComponent(o.symbol)}`}
+    <div
+      role="button"
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        clearPressTimer();
+        onOpenActions(o);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onNavigate(o.symbol);
+        }
+      }}
       className={`block border-b border-white/[0.04] px-4 py-2.5 active:bg-white/[0.04] ${
         i % 2 === 1 ? "bg-white/[0.015]" : ""
       }`}
+      aria-label={`Pending order ${o.symbol} ${typeLabel}`}
     >
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-1.5 min-w-0">
@@ -505,7 +745,7 @@ function OrderRow({ order: o, index: i }: { order: PendingOrderRow; index: numbe
           {o.takeProfit != null ? fmtPrice(o.takeProfit, digits) : "—"}
         </span>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -866,6 +1106,196 @@ function CloseConfirmModal({
           </button>
         </div>
     </TradeSheetShell>
+  );
+}
+
+function OrderActionsModal({
+  order,
+  onClose,
+  onEdit,
+  onCancelOrder,
+}: {
+  order: PendingOrderRow | null;
+  onClose: () => void;
+  onEdit: () => void;
+  onCancelOrder: () => void;
+}) {
+  if (!order) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-white/[0.08] bg-[#111115] px-5 pb-[max(env(safe-area-inset-bottom,20px),20px)] pt-5">
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/10" />
+        <h3 className="text-[14px] font-semibold text-white">Order actions</h3>
+        <p className="mb-4 text-[11px] text-white/40">{order.symbol} · {order.type.replace("_", " ")}</p>
+        <div className="grid gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-xl border border-cyan-500/25 bg-cyan-500/12 py-3 text-[13px] font-semibold text-cyan-300"
+          >
+            Edit SL / TP
+          </button>
+          <button
+            type="button"
+            onClick={onCancelOrder}
+            className="rounded-xl border border-rose-500/25 bg-rose-500/12 py-3 text-[13px] font-semibold text-rose-300"
+          >
+            Cancel pending order
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/[0.08] bg-white/[0.04] py-3 text-[13px] font-semibold text-white/60"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditOrderModal({
+  editState,
+  order,
+  onChange,
+  onSave,
+  onClose,
+}: {
+  editState: EditOrderState;
+  order: PendingOrderRow | null;
+  onChange: (s: EditOrderState) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  if (!order) return null;
+  const digits = priceDigits(order.openPrice);
+  const step = stepForPrice(order.openPrice);
+  const isSaving = editState.status === "saving";
+  const isSuccess = editState.status === "success";
+  const isError = editState.status === "error";
+
+  const nudgeSl = (dir: 1 | -1) => {
+    const cur = editState.sl ? parseFloat(editState.sl) : order.openPrice ?? 0;
+    const next = Math.max(0, cur + dir * step);
+    onChange({ ...editState, sl: next.toFixed(digits), status: "idle", errorMsg: undefined });
+  };
+
+  const nudgeTp = (dir: 1 | -1) => {
+    const cur = editState.tp ? parseFloat(editState.tp) : order.openPrice ?? 0;
+    const next = Math.max(0, cur + dir * step);
+    onChange({ ...editState, tp: next.toFixed(digits), status: "idle", errorMsg: undefined });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={isSaving ? undefined : onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-white/[0.08] bg-[#111115] px-5 pb-[max(env(safe-area-inset-bottom,20px),20px)] pt-5">
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/10" />
+        <h3 className="text-[14px] font-semibold text-white">Edit pending order</h3>
+        <p className="mb-4 text-[11px] text-white/40">{order.symbol} · {order.type.replace("_", " ")}</p>
+        <div className="mb-3">
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-rose-400/70">Stop Loss</label>
+          <PriceInput
+            value={editState.sl}
+            placeholder={`e.g. ${fmtPrice(order.openPrice, digits)}`}
+            onValueChange={(v) => onChange({ ...editState, sl: v, status: "idle", errorMsg: undefined })}
+            onNudge={nudgeSl}
+            disabled={isSaving}
+            accentClass="focus:border-rose-500/40 focus:ring-rose-500/20"
+          />
+        </div>
+        <div className="mb-4">
+          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-cyan-400/70">Take Profit</label>
+          <PriceInput
+            value={editState.tp}
+            placeholder={`e.g. ${fmtPrice(order.openPrice, digits)}`}
+            onValueChange={(v) => onChange({ ...editState, tp: v, status: "idle", errorMsg: undefined })}
+            onNudge={nudgeTp}
+            disabled={isSaving}
+            accentClass="focus:border-cyan-500/40 focus:ring-cyan-500/20"
+          />
+        </div>
+        {isError && editState.errorMsg ? (
+          <div className="mb-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300">
+            {editState.errorMsg}
+          </div>
+        ) : null}
+        {isSuccess ? (
+          <div className="mb-3 rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-[11px] text-cyan-300">
+            ✓ Pending order updated
+          </div>
+        ) : null}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.04] py-3 text-[13px] font-semibold text-white/60 disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving || isSuccess}
+            className="flex-1 rounded-xl border border-cyan-500/30 bg-cyan-500/20 py-3 text-[13px] font-semibold text-cyan-300 disabled:opacity-40"
+          >
+            {isSaving ? "Saving..." : isError ? "Retry" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CancelOrderModal({
+  cancelState,
+  order,
+  onClose,
+  onConfirm,
+}: {
+  cancelState: CancelOrderState;
+  order: PendingOrderRow | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!order) return null;
+  const isCanceling = cancelState.status === "canceling";
+  const isError = cancelState.status === "error";
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={isCanceling ? undefined : onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-t-2xl border-t border-white/[0.08] bg-[#111115] px-5 pb-[max(env(safe-area-inset-bottom,20px),20px)] pt-5">
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/10" />
+        <h3 className="text-[14px] font-semibold text-white">Cancel pending order</h3>
+        <p className="mb-4 text-[11px] text-white/40">{order.symbol} · {order.type.replace("_", " ")}</p>
+        {isError && cancelState.errorMsg ? (
+          <div className="mb-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-300">
+            {cancelState.errorMsg}
+          </div>
+        ) : null}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isCanceling}
+            className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.04] py-3 text-[13px] font-semibold text-white/60 disabled:opacity-40"
+          >
+            Keep order
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isCanceling}
+            className="flex-1 rounded-xl border border-rose-500/30 bg-rose-500/20 py-3 text-[13px] font-semibold text-rose-300 disabled:opacity-60"
+          >
+            {isCanceling ? "Canceling..." : isError ? "Retry" : "Cancel order"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
