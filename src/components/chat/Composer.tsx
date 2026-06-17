@@ -335,7 +335,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       {/* ── Composer row — opaque bar masks lower half of orb ───────── */}
       <div className="relative overflow-visible">
         <div
-          className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center md:hidden"
+          className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
           aria-hidden
         >
           <AxeAuraWave variant="composer" />

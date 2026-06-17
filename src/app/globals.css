@@ -318,7 +318,7 @@ body.trade-sheet-open .tos-nav-pill {
 
 /* Phone landscape keeps the mobile shell — wide-but-short viewports
    (rotated phones) must not trigger the desktop rail / hide bottom nav. */
-@media (min-width: 768px) and (min-height: 520px) {
+@media (min-width: 1280px) and (min-height: 720px) {
   .tos-shell-mobile-chrome {
     display: none !important;
   }
@@ -349,7 +349,7 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
-@media not all and (min-width: 768px) and (min-height: 520px) {
+@media not all and (min-width: 1280px) and (min-height: 720px) {
   .tos-shell-desktop-rail {
     display: none !important;
   }
@@ -475,7 +475,7 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
 .tos-app-content {
   padding-bottom: calc(var(--tos-nav-offset) + 0.35rem);
 }
-@media (min-width: 768px) {
+@media (min-width: 1280px) and (min-height: 720px) {
   .tos-app-content {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }

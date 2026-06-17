@@ -214,6 +214,11 @@ export const PositionSlTpLine = memo(function PositionSlTpLine({
       if (disabled) return;
       e.preventDefault();
       e.stopPropagation();
+      if (e.pointerType === "touch" || e.pointerType === "pen") {
+        setArmed(true);
+        startDragSession(e.currentTarget, e.pointerId, e.clientY);
+        return;
+      }
       setArmed(true);
 
       const el = e.currentTarget;

@@ -53,7 +53,7 @@ export function ChatComposerDock({ children }: Props) {
 
   const stack = (
     <div
-      className="pointer-events-none fixed inset-x-0 z-[85] px-3 max-md:block md:hidden"
+      className="pointer-events-none fixed inset-x-0 z-[85] block px-3 xl:hidden"
       style={{ bottom: dockBottom }}
     >
       <div className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">

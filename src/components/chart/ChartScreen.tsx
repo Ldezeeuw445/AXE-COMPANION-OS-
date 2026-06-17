@@ -1114,6 +1114,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   const [deviationPoints, setDeviationPoints] = useState(10);
   const [oneClickVisible, setOneClickVisible] = useState(false);
   const [pendingSheetExpanded, setPendingSheetExpanded] = useState(false);
+  const executionSwipeStartYRef = useRef<number | null>(null);
   const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
 
   // Order send wiring — demo fills locally, live opens a confirm modal that
@@ -1212,13 +1213,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     [data.candles, data.lastPrice, livePrice, pendingOrderPrice, pendingOrderSide],
   );
 
-  const toggleOneClickTrade = useCallback(() => {
-    if (oneClickVisible) {
+  const dismissExecutionBar = useCallback(
+    (withFeedback = true) => {
       setOneClickVisible(false);
       setExecutionMode("market");
       setPendingOrderVisible(false);
       setLotMenuOpen(false);
       setOrderTypeMenuOpen(false);
+      setPendingSheetExpanded(false);
+      if (withFeedback) {
+        vibrate("light");
+        playSound("tap");
+      }
+    },
+    [playSound, vibrate],
+  );
+
+  const toggleOneClickTrade = useCallback(() => {
+    if (oneClickVisible) {
+      dismissExecutionBar(false);
     } else {
       setOneClickVisible(true);
       setExecutionMode("market");
@@ -1226,16 +1239,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     }
     vibrate("light");
     playSound("tap");
-  }, [oneClickVisible, vibrate, playSound]);
+  }, [dismissExecutionBar, oneClickVisible, vibrate, playSound]);
 
   const togglePendingTrade = useCallback(() => {
     if (executionMode === "pending" && pendingOrderVisible) {
-      setExecutionMode("market");
-      setPendingOrderVisible(false);
-      setOneClickVisible(false);
-      setLotMenuOpen(false);
-      setOrderTypeMenuOpen(false);
-      setPendingSheetExpanded(false);
+      dismissExecutionBar(false);
     } else {
       setOneClickVisible(true);
       showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
@@ -1243,6 +1251,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     vibrate("light");
     playSound("tap");
   }, [
+    dismissExecutionBar,
     executionMode,
     pendingOrderVisible,
     pendingOrderSide,
@@ -3702,6 +3711,27 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         className={`shrink-0 ${isFullscreen ? "chart-immersive-exec" : ""}`}
         style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}
       >
+        <div className="flex justify-center pt-1 pb-0.5">
+          <button
+            type="button"
+            className="h-1.5 w-12 rounded-full bg-white/20 active:bg-white/35"
+            aria-label="Swipe down to close execution bar"
+            onPointerDown={(e) => {
+              executionSwipeStartYRef.current = e.clientY;
+            }}
+            onPointerUp={(e) => {
+              const startY = executionSwipeStartYRef.current;
+              executionSwipeStartYRef.current = null;
+              if (startY == null) return;
+              if (e.clientY - startY > 44) {
+                dismissExecutionBar();
+              }
+            }}
+            onPointerCancel={() => {
+              executionSwipeStartYRef.current = null;
+            }}
+          />
+        </div>
         {executionMode === "pending" && isFullscreen ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
           <div className="flex h-[2.75rem] items-center gap-0 px-0">
@@ -4205,6 +4235,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           onToggleExpand={() => {
             setPendingSheetExpanded((v) => !v);
             vibrate("light");
+          }}
+          onDismiss={() => {
+            dismissExecutionBar();
           }}
           onSubmit={() => {
             vibrate("medium");

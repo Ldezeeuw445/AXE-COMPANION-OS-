@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
@@ -13,6 +14,7 @@ type Props = {
   takeProfit: number | null;
   expanded: boolean;
   onToggleExpand: () => void;
+  onDismiss?: () => void;
   onSubmit: () => void;
   onOpenLot: () => void;
   onOpenType: () => void;
@@ -33,6 +35,7 @@ export function ChartPendingOrderSheet({
   takeProfit,
   expanded,
   onToggleExpand,
+  onDismiss,
   onSubmit,
   onOpenLot,
   onOpenType,
@@ -42,6 +45,7 @@ export function ChartPendingOrderSheet({
   onSlChange,
   onTpChange,
 }: Props) {
+  const swipeStartY = useRef<number | null>(null);
   const accent = side === "buy" ? "#22D3EE" : "#E13947";
   const priceText = price != null ? formatBrokerPrice(symbol, price) : "—";
 
@@ -57,6 +61,18 @@ export function ChartPendingOrderSheet({
       <button
         type="button"
         onClick={onToggleExpand}
+        onPointerDown={(e) => {
+          swipeStartY.current = e.clientY;
+        }}
+        onPointerUp={(e) => {
+          if (swipeStartY.current == null) return;
+          const delta = e.clientY - swipeStartY.current;
+          swipeStartY.current = null;
+          if (delta > 44) {
+            onDismiss?.();
+            return;
+          }
+        }}
         className="flex w-full items-center justify-center py-1.5"
         aria-label={expanded ? "Collapse order panel" : "Expand order panel"}
       >
