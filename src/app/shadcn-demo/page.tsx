@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { BackgroundGradient } from "@/components/ui/background-gradient";
+import { CardSpotlight } from "@/components/ui/card-spotlight";
 import {
   ChartConfig,
   ChartContainer,
@@ -153,6 +154,16 @@ export default function ShadcnDemoPage() {
               />
             </LineChart>
           </ChartContainer>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+          <p className="mb-3 text-sm font-medium">Card spotlight</p>
+          <CardSpotlight className="rounded-2xl border-cyan-500/30 bg-zinc-950 p-6" color="#0e7490">
+            <h3 className="text-lg font-semibold">Aceternity CardSpotlight</h3>
+            <p className="mt-2 text-sm text-white/70">
+              Hover hier om de spotlight + canvas reveal te zien.
+            </p>
+          </CardSpotlight>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
