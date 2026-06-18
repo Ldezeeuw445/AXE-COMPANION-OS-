@@ -78,6 +78,23 @@ function mapOrderType(t: string | undefined): string {
   return raw || "unknown";
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs / 1000}s`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Per-account streaming manager                                      */
 /* ------------------------------------------------------------------ */
@@ -605,14 +622,10 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
   // Wait for broker connection with timeout (don't block other accounts)
   const CONNECT_TIMEOUT_MS = 30_000;
   try {
-    await Promise.race([
-      account.waitConnected(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("waitConnected timed out after 30s")), CONNECT_TIMEOUT_MS)
-      ),
-    ]);
+    await withTimeout(account.waitConnected(), CONNECT_TIMEOUT_MS, "waitConnected");
   } catch (e) {
-    log("warn", `[${config.metaApiAccountId}] waitConnected timed out — proceeding anyway`);
+    log("warn", `[${config.metaApiAccountId}] waitConnected failed — stream start will retry`, e);
+    throw e;
   }
 
   const connection = account.getStreamingConnection();
@@ -639,14 +652,15 @@ async function startAccountStream(env: Env, config: AccountConfig): Promise<Acco
   // Wait for sync with timeout
   const SYNC_TIMEOUT_MS = 30_000;
   try {
-    await Promise.race([
-      connection.waitSynchronized(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("waitSynchronized timed out after 30s")), SYNC_TIMEOUT_MS)
-      ),
-    ]);
+    await withTimeout(connection.waitSynchronized(), SYNC_TIMEOUT_MS, "waitSynchronized");
   } catch (e) {
-    log("warn", `[${config.metaApiAccountId}] waitSynchronized timed out — proceeding with subscriptions`);
+    log("warn", `[${config.metaApiAccountId}] waitSynchronized failed — stream start will retry`, e);
+    try {
+      await connection.close();
+    } catch {
+      /* ignore cleanup errors */
+    }
+    throw e;
   }
 
   // Subscribe to ALL watchlist symbols

@@ -14,7 +14,7 @@ METAAPI_MARKET_DATA_URL = "https://mt-market-data-client-api-v1.london.agiliumtr
 # "poll" (default) → DO polls MetaApi REST itself.
 # "push"            → DO uses WebSocket Hibernation API and only fans out
 #                     events from /internal/publish (Node streamer required).
-WORKER_MODE = "push"
+WORKER_MODE = "poll"
 
 [[durable_objects.bindings]]
 name = "CHART_LIVE_ROOM"

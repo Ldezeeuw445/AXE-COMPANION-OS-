@@ -101,7 +101,10 @@ function resolveWatchlistSymbols(
 ): string[] {
   if (Object.keys(symbolMap).length === 0) return [];
 
-  const candidates = new Set<string>([...CORE_SYMBOLS]);
+  const candidates = new Set<string>([
+    ...CORE_SYMBOLS,
+    ...Object.keys(symbolMap),
+  ]);
   for (const raw of userWatchlist) {
     const normalized = normalizeWatchlistSymbol(raw);
     if (normalized) candidates.add(normalized);
