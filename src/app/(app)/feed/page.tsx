@@ -14,7 +14,7 @@ export default function FeedPage() {
         reason="What AXE noticed — trades, drafts, risk, and chart actions."
         scope="feed"
       />
-      <PageTitleInjector title="AXE Feed" />
+      <PageTitleInjector title="AXE Feed" premium />
       <div className="-mt-1 border-l-2 border-cyan-400/35 pl-3.5">
         <p className="text-[13px] leading-relaxed text-tos-text/95">
           Your timeline with AXE — proactive alerts, trade drafts, and session context in one place.

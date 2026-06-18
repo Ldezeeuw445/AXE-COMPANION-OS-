@@ -45,7 +45,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/chat", label: "Chat", Icon: MessageSquare },
-  { href: "/feed", label: "AXE Feed", Icon: Rss },
+  { href: "/feed", label: "AXE Feed", Icon: Rss, premium: true },
   { href: "/accounts", label: "Accounts", Icon: Landmark },
   { href: "/positions", label: "Positions", Icon: Layers },
   { href: "/chart", label: "Chart", Icon: LineChart },
@@ -73,6 +73,7 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const premium = item.premium;
 
   return (
     <Link
@@ -81,13 +82,25 @@ function NavLink({
       onClick={onNavigate}
       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
         active
-          ? "bg-white/[0.07] text-white ring-1 ring-white/[0.10]"
-          : "text-tos-muted hover:bg-white/[0.04] hover:text-tos-text"
+          ? premium
+            ? "bg-cyan-400/[0.08] text-cyan-100 ring-1 ring-cyan-400/25"
+            : "bg-white/[0.07] text-white ring-1 ring-white/[0.10]"
+          : premium
+            ? "text-cyan-200/80 hover:bg-cyan-400/[0.06] hover:text-cyan-100"
+            : "text-tos-muted hover:bg-white/[0.04] hover:text-tos-text"
       } ${compact ? "justify-center px-0 py-3" : ""}`}
       title={item.label}
     >
       <item.Icon
-        className={`h-5 w-5 shrink-0 ${active ? "text-white" : "text-tos-dim"}`}
+        className={`h-5 w-5 shrink-0 ${
+          premium
+            ? active
+              ? "text-cyan-300"
+              : "text-cyan-400/80"
+            : active
+              ? "text-white"
+              : "text-tos-dim"
+        }`}
         strokeWidth={active ? 2 : 1.6}
       />
       {!compact ? (
@@ -97,9 +110,9 @@ function NavLink({
             <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-tos-dim">
               soon
             </span>
-          ) : item.premium ? (
-            <span className="rounded border border-cyan-400/20 bg-cyan-400/[0.08] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-cyan-300/70">
-              pro
+          ) : premium ? (
+            <span className="rounded border border-cyan-400/20 bg-cyan-400/[0.08] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-300/80">
+              PRO
             </span>
           ) : null}
         </span>
