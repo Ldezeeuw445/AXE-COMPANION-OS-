@@ -45,7 +45,7 @@ The trader is using AXE Companion. These are the pages they can open and what ea
 - /alerts — standalone in-app alert manager. Price alerts (above/below threshold) work even without push notifications; if VAPID is configured the alert also pushes. Alerts evaluate on every live tick.
 - /positions — open MT5 positions with distance to SL/TP, R:R, floating P/L.
 - /history — closed trades (broker truth).
-- /journal — trader-written entries + label tags per trade.
+- /journal — AXE auto-journals every closed trade (alignment score 0–100, axe_label, breakdown). Trader can add manual tags too.
 - /intel — Unusual Whales smart money: insiders, congress, dark pool, options flow, market tide.
 - /watchlist — symbols the trader actively tracks.
 - /market — wider macro & news feed (Perigon, Finnhub, EODHD, FRED).
@@ -78,6 +78,7 @@ ALERTS / MEMORY / NAV (act, don't suggest):
 - save_note — store an observation/rule/level. Persists across sessions.
 - track_commitment — non-negotiable when you promise to monitor, follow up, or come back to a topic.
 - read_journal — pull recent journal entries + closed trades for review/coaching.
+- auto_journal_trades — score and journal closed broker trades (alignment 0–100, axe_label, axe_note, breakdown). Runs automatically after MT5 sync; call when the trader asks to journal, score, or auto-label recent closes.
 - navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
 
 AXE MEMORY — YOUR LONG-TERM BRAIN
@@ -117,6 +118,7 @@ CHAINED TOOL WORKFLOWS — DO THESE AUTOMATICALLY
 - "Show me / open / take me to X": run the data tool if useful, then navigate_to with a button.
 - "What alerts do I have on X / pause my X alert": list_alerts → update_alert.
 - "Review my week / find my mistake": read_journal → coaching response, suggest one specific rule, optionally save_note + track_commitment.
+- "Journal my trades / score my closes / auto-journal": auto_journal_trades → summarize axe_label + alignment scores → navigate_to journal if useful.
 
 FORMAT
 - Plain text. No markdown headers or bullet walls unless the trader asks for a structured breakdown.
@@ -443,6 +445,29 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "auto_journal_trades",
+      description:
+        "Run AXE auto-journal on closed broker trades — produces alignment_score (0-100), axe_label (Perfect/Good/OK/Impatient/Poor/Emotional), axe_note, and a breakdown vs playbooks/rules/memories. Use when the trader asks to journal trades, score recent closes, auto-label history, or 'journal my last trades'. Defaults to un-journaled trades on the active account; pass trade_ids to target specific closes.",
+      parameters: {
+        type: "object",
+        properties: {
+          account_id: {
+            type: "string",
+            description: "Broker account id. Defaults to the trader's active linked account.",
+          },
+          trade_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional specific broker_trades ids to journal.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "navigate_to",
       description:
         "Surface a deep-link button to a specific app page so the trader can jump there with one tap. Use when you want to send them somewhere (e.g. 'open the chart on XAUUSD H1', 'go to your alerts', 'pull up the intel page'). Don't pretend to navigate yourself — call this and the UI will render a button.",
@@ -561,6 +586,7 @@ export type GetSmartMoneyIntelArgs = { symbol?: string };
 export type ListAlertsArgs = { symbol?: string; include_paused?: boolean };
 export type UpdateAlertArgs = { alert_id: string; action: "pause" | "resume" | "delete" };
 export type ReadJournalArgs = { symbol?: string; days?: number };
+export type AutoJournalTradesArgs = { account_id?: string; trade_ids?: string[] };
 export type NavigateToArgs = {
   page:
     | "chart"
@@ -597,6 +623,7 @@ export type AxeToolCall =
   | { id: string; tool: "list_alerts"; args: ListAlertsArgs }
   | { id: string; tool: "update_alert"; args: UpdateAlertArgs }
   | { id: string; tool: "read_journal"; args: ReadJournalArgs }
+  | { id: string; tool: "auto_journal_trades"; args: AutoJournalTradesArgs }
   | { id: string; tool: "navigate_to"; args: NavigateToArgs };
 
 export function computeFibonacci(args: FibonacciArgs): string {
@@ -1228,6 +1255,7 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
   "list_alerts",
   "update_alert",
   "read_journal",
+  "auto_journal_trades",
   "navigate_to",
 ]);
 

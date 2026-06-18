@@ -27,6 +27,7 @@ import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
 import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
 import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
+import { autoJournalTrades } from "@/services/journalingService";
 import type { ChatMessage, ConversationSummary } from "@/types/domain";
 import type OpenAI from "openai";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
@@ -107,6 +108,41 @@ function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradin
     `Freshness: ${freshness}`,
     "Use this broker context only. Do not substitute Yahoo, generic provider, memory, or stale snapshot prices.",
   ].join("\n");
+}
+
+function resolveJournalAccountId(
+  accountId: string | undefined,
+  tradingContext: Awaited<ReturnType<typeof fetchTradingOSContext>>,
+): string | null {
+  if (accountId?.trim()) return accountId.trim();
+  return (
+    tradingContext.axe_context?.accounts?.activeAccountId ??
+    tradingContext.companion_active_account_id ??
+    null
+  );
+}
+
+async function runAutoJournalTool(
+  supabase: NonNullable<Awaited<ReturnType<typeof getAuthedServiceSupabase>>>["supabase"],
+  userId: string,
+  tradingContext: Awaited<ReturnType<typeof fetchTradingOSContext>>,
+  args: { account_id?: string; trade_ids?: string[] },
+): Promise<string> {
+  const accountId = resolveJournalAccountId(args.account_id, tradingContext);
+  if (!accountId) {
+    return "No active MT5 account linked. Connect one under Accounts, then ask me to journal again.";
+  }
+
+  const result = await autoJournalTrades(supabase, userId, accountId, args.trade_ids);
+  if (!result.ok) return `Auto-journal failed: ${result.error}`;
+  if (result.journaled === 0) {
+    return result.message ?? "All recent closed trades already have AXE journal scores.";
+  }
+
+  const lines = result.results.map(
+    (r) => `${r.symbol} → ${r.axe_label} (${r.alignment_score}/100)`,
+  );
+  return `Journaled ${result.journaled} trade(s):\n${lines.join("\n")}\nOpen [[link:/journal|Journal]] to review.`;
 }
 
 export async function ensurePrimaryConversation(userId: string): Promise<ConversationSummary | null> {
@@ -524,6 +560,9 @@ export async function sendChatMessage(
       }
       return out.join("\n");
 
+    } else if (tc.tool === "auto_journal_trades") {
+      return runAutoJournalTool(supabase, user.id, context, tc.args);
+
     } else if (tc.tool === "navigate_to") {
       const { page } = tc.args;
       const params: string[] = [];
@@ -834,6 +873,8 @@ export async function streamChatMessage(
       return computePdhPdl(tc.args);
     } else if (tc.tool === "calculate_trendline") {
       return computeTrendline(tc.args);
+    } else if (tc.tool === "auto_journal_trades") {
+      return runAutoJournalTool(supabase, user.id, context, tc.args);
     } else if (tc.tool === "navigate_to") {
       const { page } = tc.args;
       const params: string[] = [];

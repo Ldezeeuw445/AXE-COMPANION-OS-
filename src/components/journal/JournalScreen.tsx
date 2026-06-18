@@ -9,7 +9,7 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
@@ -357,6 +357,23 @@ export function JournalScreen({
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(tradeHighlight?.id ?? null);
   const [filter, setFilter] = useState<FilterMode>("all");
+  const autoJournalAttemptedRef = useRef(false);
+  const router = useRouter();
+
+  // Catch up trades that closed before background auto-journal ran.
+  useEffect(() => {
+    if (!activeAccountId || autoJournalAttemptedRef.current) return;
+    const needsAxeJournal = journalTrades.some((t) => !t.axe_label);
+    if (!needsAxeJournal) return;
+    autoJournalAttemptedRef.current = true;
+    void fetch("/api/axe-journal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId: activeAccountId }),
+    })
+      .then((res) => (res.ok ? router.refresh() : undefined))
+      .catch(() => undefined);
+  }, [activeAccountId, journalTrades, router]);
 
   const focusSymbol = tradeHighlight?.symbol ?? journalTrades[0]?.symbol ?? null;
 
