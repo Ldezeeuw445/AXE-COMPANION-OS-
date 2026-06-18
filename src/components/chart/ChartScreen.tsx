@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
-import { isPhoneLandscapeViewport, isTabletChartLayout } from "@/lib/viewport/tablet";
+import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } from "@/lib/viewport/tablet";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
 import { SquawkBar } from "@/components/market/SquawkBar";
@@ -668,8 +668,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     const sync = () => setIsTabletLayout(isTabletChartLayout());
     sync();
     window.addEventListener("resize", sync);
-    return () => window.removeEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isTabletLayout) return;
+    lockTabletLandscape();
+  }, [isTabletLayout]);
 
   // Auto-enter immersive chart on phone landscape; restore portrait layout on exit.
   useEffect(() => {
@@ -3058,7 +3067,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
                 ? "border-white/[0.10] bg-black/42 text-white/82"
                 : "border-black/[0.10] bg-white/78 text-black/60"
           }`}
-          style={{ top: "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
+          style={{ top: isTabletLayout ? "calc(env(safe-area-inset-top, 0px) + 2.4rem)" : "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
           aria-label="Toggle chart tools drawer"
         >
           <span className="h-7 w-1 rounded-full bg-current opacity-75" aria-hidden />
@@ -3077,9 +3086,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               : "pointer-events-none -translate-x-full opacity-0"
           }`}
           style={{
-            top: "calc(env(safe-area-inset-top, 0px) + 4.6rem)",
-            width: "calc(100% - 80px)",
-            maxHeight: "calc(100% - env(safe-area-inset-top, 0px) - 5rem)",
+            top: isTabletLayout ? "calc(env(safe-area-inset-top, 0px) + 2.1rem)" : "calc(env(safe-area-inset-top, 0px) + 4.6rem)",
+            width: isTabletLayout ? "min(22rem, calc(100% - 5rem))" : "calc(100% - 80px)",
+            maxHeight: isTabletLayout
+              ? "calc(100% - env(safe-area-inset-top, 0px) - 2.5rem)"
+              : "calc(100% - env(safe-area-inset-top, 0px) - 5rem)",
             backdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
             WebkitBackdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
           }}

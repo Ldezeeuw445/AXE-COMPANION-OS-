@@ -316,20 +316,24 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
-/* Tablet chart — left rail, full-width canvas, bottom nav stays visible */
-@media (min-width: 768px) and (not ((min-width: 1280px) and (min-height: 720px))) {
+/* Touch tablet (iPad) — left rail, full-width content, landscape-first shell */
+@media (min-width: 768px) and (pointer: coarse) {
+  .tos-shell-desktop-layout {
+    max-width: none !important;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 4.25rem;
+    flex-direction: column;
+  }
+  .tos-shell-desktop-rail {
+    display: flex !important;
+  }
   body.tos-route-chart .tos-shell-desktop-layout {
     max-width: none;
     width: 100%;
     margin-left: 0;
     margin-right: 0;
-  }
-  .tos-shell-desktop-rail {
-    display: flex !important;
-  }
-  .tos-shell-desktop-layout {
-    padding-left: 4.25rem;
-    flex-direction: row;
   }
   /* Chart uses in-chart toolbar on tablet — hide global top bar only on chart */
   body.tos-route-chart .tos-shell-mobile-chrome {
@@ -357,9 +361,6 @@ body.trade-sheet-open .tos-nav-pill {
   body.tos-route-chart .tos-chart-fullscreen-btn {
     display: none !important;
   }
-  body.tos-route-chart .tos-chart-tablet-header {
-    display: flex !important;
-  }
   body.tos-route-chart .tos-chart-phone-header {
     display: none !important;
   }
@@ -369,13 +370,26 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
-@media (min-width: 768px) {
+/* Tablet chart header — show when JS marks landscape tablet (incl. iPad Pro) */
+body.tos-tablet-landscape .tos-chart-tablet-header {
+  display: flex !important;
+}
+body.tos-tablet-landscape .tos-chart-phone-header {
+  display: none !important;
+}
+body.tos-tablet-landscape.tos-route-chart .tos-shell-desktop-content {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 768px) and (pointer: fine) and (not (pointer: coarse)) {
   .tos-shell-desktop-rail {
     display: flex !important;
   }
   .tos-shell-desktop-layout {
     padding-left: 4.25rem;
-    flex-direction: row;
+    flex-direction: column;
   }
   .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
     padding-left: 0;
@@ -400,15 +414,9 @@ body.trade-sheet-open .tos-nav-pill {
 }
 
 /* Full desktop — hide bottom tab bar; chart is edge-to-edge vertically */
-@media (min-width: 1280px) and (min-height: 720px) {
+@media (min-width: 1280px) and (min-height: 720px) and (pointer: fine) and (not (pointer: coarse)) {
   .tos-shell-mobile-nav {
     display: none !important;
-  }
-  /* Large touch tablets (iPad Pro landscape) keep chat nav + composer clearance */
-  @media (pointer: coarse) {
-    body.tos-route-chat .tos-shell-mobile-nav {
-      display: block !important;
-    }
   }
   .tos-shell-desktop-content {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
@@ -418,19 +426,30 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
+/* Touch tablets at any width (iPad Pro landscape) — keep bottom nav */
+@media (pointer: coarse) and (min-width: 768px) {
+  .tos-shell-mobile-nav {
+    display: block !important;
+  }
+  body.tos-route-chat .tos-shell-mobile-nav {
+    display: block !important;
+  }
+}
+
 /* Chat composer dock — pinned above bottom nav (or safe-area on mouse desktop) */
 :root {
   --tos-chat-composer-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem);
 }
 
-@media (min-width: 1280px) and (min-height: 720px) {
+@media (min-width: 1280px) and (min-height: 720px) and (pointer: fine) and (not (pointer: coarse)) {
   :root {
     --tos-chat-composer-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   }
-  @media (pointer: coarse) {
-    body.tos-route-chat {
-      --tos-chat-composer-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem);
-    }
+}
+
+@media (pointer: coarse) and (min-width: 768px) {
+  body.tos-route-chat {
+    --tos-chat-composer-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem);
   }
 }
 

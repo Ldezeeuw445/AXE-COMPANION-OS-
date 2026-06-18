@@ -8,6 +8,7 @@ import { SwipeNavProvider } from "@/components/shell/SwipeNavContext";
 import { SwipeContentWrapper } from "@/components/shell/SwipeContentWrapper";
 import { ContentShell } from "@/components/shell/ContentShell";
 import { RouteBodyFlags } from "@/components/shell/RouteBodyFlags";
+import { TabletShellEffects } from "@/components/shell/TabletShellEffects";
 
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
@@ -24,6 +25,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
   return (
     <AppTopBarProvider>
       <RouteBodyFlags />
+      <TabletShellEffects />
       <AmbientProvider>
         <SwipeNavProvider>
           <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col [touch-action:pan-y] tos-shell-desktop-layout">
