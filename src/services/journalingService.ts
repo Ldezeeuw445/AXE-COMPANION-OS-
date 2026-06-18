@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordLearningSignal } from "@/services/learningService";
+import { scheduleCockpitRefresh } from "@/services/cockpitSnapshotService";
 
 /**
  * AXE auto-journaling — shared logic used by both the `/api/axe-journal`
@@ -186,6 +187,10 @@ async function journalTrades(
         axe_label: result.axe_label,
       });
     }
+  }
+
+  if (journaled > 0) {
+    scheduleCockpitRefresh(supabase, userId);
   }
 
   return { ok: true, journaled, results };

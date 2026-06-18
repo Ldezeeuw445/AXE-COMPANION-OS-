@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 
 export function CockpitAutoRefresh({ shouldRefresh }: { shouldRefresh: boolean }) {
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -25,15 +26,15 @@ export function CockpitAutoRefresh({ shouldRefresh }: { shouldRefresh: boolean }
       try {
         const res = await fetch("/api/cockpit/generate", { method: "POST" });
         if (cancelled) return;
-        const json = (await res.json()) as { ok?: boolean };
+        const json = (await res.json()) as { ok?: boolean; error?: string };
         if (!cancelled && res.ok && json.ok) {
           setStatus("done");
-          // Brief pause so the user sees "Recalibrated ✓" before page refreshes
           setTimeout(() => {
             if (!cancelled) router.refresh();
           }, 900);
         } else {
           setStatus("error");
+          setErrorMessage(json.error ?? "Recalibration failed");
         }
       } catch {
         if (!cancelled) setStatus("error");
@@ -72,7 +73,7 @@ export function CockpitAutoRefresh({ shouldRefresh }: { shouldRefresh: boolean }
         </>
       )}
       {status === "error" && (
-        <span>Recalibration skipped — will retry later</span>
+        <span>{errorMessage ?? "Recalibration skipped — will retry later"}</span>
       )}
     </div>
   );

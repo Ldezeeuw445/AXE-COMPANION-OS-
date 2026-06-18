@@ -77,14 +77,14 @@ function calibrationState(input: {
     missingSignals,
     lastCalculatedAt: input.lastCalculatedAt,
   };
-  if (input.signalCount < 5) {
+  if (input.signalCount < 2) {
     return {
       ...base,
       state: "insufficient_data",
       message: "Not enough real signals yet. Chat, journal notes, trades, and saved memory will calibrate AXE.",
     };
   }
-  if (!input.hasSnapshot || input.signalCount < 8 || missingSignals.length >= 4) {
+  if (!input.hasSnapshot || input.signalCount < 5 || missingSignals.length >= 3) {
     return {
       ...base,
       state: "calibrating",
@@ -270,7 +270,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   // Check if meaningful new signals arrived since the last snapshot.
   // We count rows created after `captured_at` in the key tables.
   const cutoff = latest.captured_at;
-  const [newMsgs, newTrades, newJournals, newMemory, newLearningSignals] = await Promise.all([
+  const [newMsgs, newTrades, newJournals, newMemory, newLearningSignals, newTradeLabels] = await Promise.all([
     supabase
       .from("messages")
       .select("id", { count: "exact", head: true })
@@ -296,19 +296,24 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
       .gt("created_at", cutoff),
+    supabase
+      .from("trade_journal_labels")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gt("updated_at", cutoff),
   ]);
-  const newSignalCount =
-    countOrZero(newMsgs) +
-    countOrZero(newTrades) +
-    countOrZero(newJournals) +
-    countOrZero(newMemory) +
-    countOrZero(newLearningSignals);
+  const newTradeSignals = countOrZero(newTrades) + countOrZero(newTradeLabels) + countOrZero(newLearningSignals);
+  const newOtherSignals =
+    countOrZero(newMsgs) + countOrZero(newJournals) + countOrZero(newMemory);
+  const newSignalCount = newTradeSignals + newOtherSignals;
 
-  // Auto-refresh when: ≥3 new signals, OR snapshot is >24h old and ≥1 new signal
+  // Auto-refresh when a trade closes/journals, or meaningful new chat/memory arrives.
   const snapshotAgeMs = Date.now() - new Date(cutoff).getTime();
   const staleHours = snapshotAgeMs / (1000 * 60 * 60);
   const shouldAutoRefresh =
-    newSignalCount >= 3 || (staleHours >= 24 && newSignalCount >= 1);
+    newTradeSignals >= 1 ||
+    newOtherSignals >= 2 ||
+    (staleHours >= 12 && newSignalCount >= 1);
 
   return {
     snapshotId: latest.id,
