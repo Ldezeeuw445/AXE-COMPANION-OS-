@@ -724,6 +724,15 @@ async function startAccountStreamIfNeeded(
   }
 }
 
+async function closeAccountStream(stream: AccountStream): Promise<void> {
+  stream.listener.snapshotBuffer.stop();
+  if (stream.connection) {
+    try {
+      await stream.connection.close();
+    } catch { /* ignore */ }
+  }
+}
+
 async function addSymbolsToStream(
   env: Env,
   stream: AccountStream,
@@ -785,11 +794,7 @@ async function reconcile(env: Env, currentConfigs: AccountConfig[]): Promise<Acc
       log("info", `Reconcile: ${diff.removed.length} account(s) removed`);
       for (const config of diff.removed) {
         const stream = activeStreams.get(config.metaApiAccountId);
-        if (stream?.connection) {
-          try {
-            await stream.connection.close();
-          } catch { /* ignore */ }
-        }
+        if (stream) await closeAccountStream(stream);
         activeStreams.delete(config.metaApiAccountId);
       }
     }
@@ -801,11 +806,7 @@ async function reconcile(env: Env, currentConfigs: AccountConfig[]): Promise<Acc
         if (!stream) continue;
 
         log("info", `Reconcile: symbol map changed for ${config.metaApiAccountId}; restarting stream`);
-        if (stream.connection) {
-          try {
-            await stream.connection.close();
-          } catch { /* ignore */ }
-        }
+        await closeAccountStream(stream);
         activeStreams.delete(config.metaApiAccountId);
         restartedAccounts.add(config.metaApiAccountId);
         try {
@@ -948,12 +949,8 @@ async function main() {
     clearInterval(heartbeatTimer);
 
     for (const [id, stream] of activeStreams) {
-      if (stream.connection) {
-        try {
-          await stream.connection.close();
-          log("info", `Closed connection for ${id}`);
-        } catch { /* ignore */ }
-      }
+      await closeAccountStream(stream);
+      log("info", `Closed connection for ${id}`);
     }
 
     process.exit(0);

@@ -568,11 +568,24 @@ export class ChartLiveRoom implements DurableObject {
             onSymbol,
             source: "metaapi_mt5",
           });
+        } else {
+          this.clearOrdersOverlay(r);
         }
       } catch {
-        /* tolerate */
+        this.clearOrdersOverlay(r);
       }
     }
+  }
+
+  private clearOrdersOverlay(r: RoomState) {
+    this.broadcast({
+      type: "orders_update",
+      userId: r.userId,
+      accountId: r.accountId,
+      total: 0,
+      onSymbol: [],
+      source: "metaapi_mt5",
+    });
   }
 
   private setStatus(next: ChartLiveStatus, reason?: string) {
