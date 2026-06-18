@@ -49,11 +49,11 @@ export function ChatComposerDock({ children }: Props) {
     };
   }, []);
 
-  const dockBottom = `calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem + ${keyboardInset}px)`;
+  const dockBottom = `calc(var(--tos-chat-composer-bottom, var(--tos-nav-h)) + ${keyboardInset}px)`;
 
   const stack = (
     <div
-      className="pointer-events-none fixed inset-x-0 z-[85] block px-3 xl:hidden"
+      className="tos-chat-composer-dock pointer-events-none fixed inset-x-0 z-[85] block px-3"
       style={{ bottom: dockBottom }}
     >
       <div className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">

@@ -331,40 +331,40 @@ body.trade-sheet-open .tos-nav-pill {
     padding-left: 4.25rem;
     flex-direction: row;
   }
-  /* Chart uses app top bar slots on phone only — tablet toolbar is in-chart */
-  .tos-shell-mobile-chrome {
+  /* Chart uses in-chart toolbar on tablet — hide global top bar only on chart */
+  body.tos-route-chart .tos-shell-mobile-chrome {
     display: none !important;
   }
   .tos-shell-mobile-nav {
     display: block !important;
   }
-  .tos-shell-desktop-content {
+  body.tos-route-chart .tos-shell-desktop-content {
     padding-left: 0;
     padding-right: 0;
     padding-top: 0;
   }
-  .tos-shell-desktop-content.tos-flush-route {
+  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
     padding-bottom: 0;
   }
-  .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
+  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
     padding-left: 0;
     padding-right: 0;
     padding-bottom: 0;
   }
-  .tos-shell-desktop-only {
+  body.tos-route-chart .tos-shell-desktop-only {
     display: none !important;
   }
-  .tos-chart-fullscreen-btn {
+  body.tos-route-chart .tos-chart-fullscreen-btn {
     display: none !important;
   }
-  .tos-chart-tablet-header {
+  body.tos-route-chart .tos-chart-tablet-header {
     display: flex !important;
   }
-  .tos-chart-phone-header {
+  body.tos-route-chart .tos-chart-phone-header {
     display: none !important;
   }
   /* Execution sheets float above bottom nav (MT5-style) */
-  .tos-chart-exec-overlay {
+  body.tos-route-chart .tos-chart-exec-overlay {
     z-index: 70;
   }
 }
@@ -404,11 +404,33 @@ body.trade-sheet-open .tos-nav-pill {
   .tos-shell-mobile-nav {
     display: none !important;
   }
+  /* Large touch tablets (iPad Pro landscape) keep chat nav + composer clearance */
+  @media (pointer: coarse) {
+    body.tos-route-chat .tos-shell-mobile-nav {
+      display: block !important;
+    }
+  }
   .tos-shell-desktop-content {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
   .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
     padding-bottom: 0;
+  }
+}
+
+/* Chat composer dock — pinned above bottom nav (or safe-area on mouse desktop) */
+:root {
+  --tos-chat-composer-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem);
+}
+
+@media (min-width: 1280px) and (min-height: 720px) {
+  :root {
+    --tos-chat-composer-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+  @media (pointer: coarse) {
+    body.tos-route-chat {
+      --tos-chat-composer-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem);
+    }
   }
 }
 

@@ -12,8 +12,13 @@ export function RouteBodyFlags() {
 
   useEffect(() => {
     document.body.classList.toggle("tos-route-chart", isChart);
-    return () => document.body.classList.remove("tos-route-chart");
-  }, [isChart]);
+    const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
+    document.body.classList.toggle("tos-route-chat", isChat);
+    return () => {
+      document.body.classList.remove("tos-route-chart");
+      document.body.classList.remove("tos-route-chat");
+    };
+  }, [isChart, pathname]);
 
   return null;
 }
