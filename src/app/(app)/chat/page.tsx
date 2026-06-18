@@ -3,6 +3,7 @@ import { Composer } from "@/components/chat/Composer";
 import { ChatComposerDock } from "@/components/chat/ChatComposerDock";
 import { PinnedContext } from "@/components/chat/PinnedContext";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
+import { ChatFeedStrip } from "@/components/feed/ChatFeedStrip";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
@@ -67,6 +68,7 @@ export default async function ChatPage() {
           </p>
         ) : null}
         <PinnedContext text={conversation.pinnedContext} />
+        <ChatFeedStrip />
         <ChatThread
           conversationId={conversation.id}
           initialMessages={messages}

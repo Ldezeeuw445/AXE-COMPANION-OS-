@@ -23,6 +23,8 @@ import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { SquawkStationPicker } from "@/components/settings/SquawkStationPicker";
 import { getSquawkStationIdsServerState } from "@/lib/squawk/serverPrefs";
+import { TradeExecutionPrefsPanel } from "@/components/settings/TradeExecutionPrefsPanel";
+import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
 async function getPrimaryConversation() {
@@ -44,7 +46,7 @@ async function getPrimaryConversation() {
 }
 
 export default async function SettingsPage() {
-  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds] = await Promise.all([
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
@@ -53,6 +55,7 @@ export default async function SettingsPage() {
     getLiveTradingServerState(),
     getInstantSlTpModifyServerState(),
     getSquawkStationIdsServerState(),
+    getTradeExecutionPrefsServerState(),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -191,6 +194,13 @@ export default async function SettingsPage() {
 
       <div className="mb-4">
         <SlTpModifyPanel initialInstant={instantSlTpModify} />
+      </div>
+
+      <div className="mb-4">
+        <TradeExecutionPrefsPanel
+          initialVolume={tradeExecutionPrefs.defaultVolume}
+          initialAlertAutoTrade={tradeExecutionPrefs.alertAutoTradeEnabled}
+        />
       </div>
 
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}
