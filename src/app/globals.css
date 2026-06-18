@@ -377,6 +377,42 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
+/* Tablet — collapsible bottom nav (swipe down to hide, peek handle to restore) */
+body.tos-tablet-device.tos-tablet-nav-collapsed {
+  --tos-nav-offset: max(0.4rem, env(safe-area-inset-bottom, 0px));
+}
+
+body.tos-tablet-device .tos-tablet-nav-pill {
+  transition:
+    transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.22s ease;
+}
+
+body.tos-tablet-device .tos-tablet-nav-pill-hidden {
+  transform: translateX(-50%) translateY(calc(100% + 1.25rem)) !important;
+  opacity: 0;
+  pointer-events: none !important;
+}
+
+body.tos-tablet-device.tos-tablet-nav-collapsed.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
+  padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
+}
+
+body.tos-tablet-device .tos-tablet-nav-peek {
+  animation: tos-tablet-nav-peek-in 0.25s ease;
+}
+
+@keyframes tos-tablet-nav-peek-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 /* Tablet chart header — show when JS marks landscape tablet (incl. iPad Pro) */
 body.tos-tablet-landscape .tos-chart-tablet-header {
   display: flex !important;

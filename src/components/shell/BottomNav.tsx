@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useSwipeNav } from "./SwipeNavContext";
+import { useTabletNavCollapse, useTabletNavSwipe } from "@/components/shell/TabletNavCollapse";
 
 const CYAN = "#00d4f5";
 const GOLD = "#d4af37";
@@ -64,6 +65,8 @@ export function BottomNav() {
   }, []);
 
   const { progress, currentTabIdx } = useSwipeNav();
+  const { enabled: tabletNav, collapsed: navCollapsed, collapse: collapseNav } = useTabletNavCollapse();
+  const navSwipe = useTabletNavSwipe("collapse", collapseNav);
 
   // Conditional 6th tab
   const sixthTab = isAxeView
@@ -79,7 +82,7 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className="tos-nav-pill tos-shell-mobile-nav pointer-events-auto"
+      className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${tabletNav ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-tablet-nav-pill-hidden" : ""}`}
       style={{
         background: "linear-gradient(180deg, rgba(22,22,24,0.86) 0%, rgba(12,12,14,0.9) 100%)",
         borderRadius: 22,
@@ -88,7 +91,13 @@ export function BottomNav() {
         WebkitTextSizeAdjust: "100%",
       }}
       aria-label="Primary"
+      {...(tabletNav ? navSwipe : {})}
     >
+      {tabletNav && !navCollapsed ? (
+        <div className="flex justify-center pb-0.5 pt-0.5" aria-hidden>
+          <span className="h-1 w-10 rounded-full bg-white/20" title="Swipe down to hide nav" />
+        </div>
+      ) : null}
       {/* Inner glow highlight along top edge */}
       <div
         className="pointer-events-none absolute inset-x-4 top-[1px] h-px"

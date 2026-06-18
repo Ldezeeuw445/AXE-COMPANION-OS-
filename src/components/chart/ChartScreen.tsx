@@ -39,6 +39,7 @@ import {
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } from "@/lib/viewport/tablet";
+import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
 import { SquawkBar } from "@/components/market/SquawkBar";
@@ -642,6 +643,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   /* ── Landscape fullscreen mode ───────────────────────────────── */
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isTabletLayout, setIsTabletLayout] = useState(false);
+  const { enabled: tabletNavCollapse, collapsed: tabletNavCollapsed, collapse: collapseTabletNav } =
+    useTabletNavCollapse();
   const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
   const userDismissedLandscapeRef = useRef(false);
@@ -1206,6 +1209,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     window.localStorage.setItem(key, "1");
     setOneClickVisible(true);
   }, [isDemoAccount]);
+
+  // iPad: tuck nav away when execution bar opens so buy/sell row isn't stacked under tabs.
+  useEffect(() => {
+    if (!isTabletLayout || !oneClickVisible || !tabletNavCollapse) return;
+    collapseTabletNav();
+  }, [collapseTabletNav, isTabletLayout, oneClickVisible, tabletNavCollapse]);
 
   const showPendingTradePlan = useCallback(
     (side: "buy" | "sell", type?: PendingOrderTicketType) => {
@@ -2832,7 +2841,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   ]);
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
-  const execBarOverNav = !isFullscreen && !isTabletLayout;
+  const execBarOverNav = !isFullscreen && (!isTabletLayout || tabletNavCollapsed);
 
   return (
     <div

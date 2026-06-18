@@ -9,6 +9,8 @@ import { SwipeContentWrapper } from "@/components/shell/SwipeContentWrapper";
 import { ContentShell } from "@/components/shell/ContentShell";
 import { RouteBodyFlags } from "@/components/shell/RouteBodyFlags";
 import { TabletShellEffects } from "@/components/shell/TabletShellEffects";
+import { TabletNavCollapseProvider } from "@/components/shell/TabletNavCollapse";
+import { TabletNavPeekHandle } from "@/components/shell/TabletNavPeekHandle";
 
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
@@ -24,6 +26,7 @@ import { TabletShellEffects } from "@/components/shell/TabletShellEffects";
 export function AppChrome({ children }: { children: ReactNode }) {
   return (
     <AppTopBarProvider>
+      <TabletNavCollapseProvider>
       <RouteBodyFlags />
       <TabletShellEffects />
       <AmbientProvider>
@@ -36,10 +39,12 @@ export function AppChrome({ children }: { children: ReactNode }) {
               </SwipeContentWrapper>
             </div>
             <ClientBottomNav />
+            <TabletNavPeekHandle />
           </div>
         </SwipeNavProvider>
       </AmbientProvider>
       <ClientSplashOverlay />
+      </TabletNavCollapseProvider>
     </AppTopBarProvider>
   );
 }
