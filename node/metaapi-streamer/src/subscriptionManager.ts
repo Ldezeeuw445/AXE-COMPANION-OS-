@@ -253,7 +253,7 @@ export function diffConfigs(
       currentMapKeys.length !== nextMapKeys.length ||
       currentMapKeys.some((key) => currentSymbolMap[key] !== nextSymbolMap[key]);
 
-    if (symbolMapChanged) {
+    if (currentConfig.region !== nextConfig.region || symbolMapChanged) {
       mappingsChanged.push(nextConfig);
     }
 

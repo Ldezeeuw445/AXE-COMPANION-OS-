@@ -576,17 +576,19 @@ class MultiSymbolListener {
 /*  Account stream lifecycle                                           */
 /* ------------------------------------------------------------------ */
 
-let metaApiSingleton: MetaApiInstance | null = null;
+const metaApiInstances = new Map<string, MetaApiInstance>();
 
 async function getMetaApi(token: string, region: string): Promise<MetaApiInstance> {
-  if (metaApiSingleton) return metaApiSingleton;
+  const cached = metaApiInstances.get(region);
+  if (cached) return cached;
   // Use the Node.js ESM entry point — the default "import" export resolves
   // to esm-web which references `window` and crashes in Node.
   const sdkMod = (await import("metaapi.cloud-sdk/esm-node")) as unknown as {
     default: new (token: string, opts?: { region?: string }) => MetaApiInstance;
   };
-  metaApiSingleton = new sdkMod.default(token, { region });
-  return metaApiSingleton;
+  const api = new sdkMod.default(token, { region });
+  metaApiInstances.set(region, api);
+  return api;
 }
 
 async function startAccountStream(env: Env, config: AccountConfig): Promise<AccountStream> {
