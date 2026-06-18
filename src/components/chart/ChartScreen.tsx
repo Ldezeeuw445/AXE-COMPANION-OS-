@@ -3092,7 +3092,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           </>
         ) : null}
 
-        {/* Tablet — compact toolbar: left meta, centered squawk | depth/news | exec, right account */}
+        {/* Tablet — compact toolbar: left meta, centered depth/news | squawk | exec, right account */}
         <div className="tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden items-center gap-2 border-b border-white/[0.06] bg-black/72 px-2 py-1.5 backdrop-blur-lg">
           <div className="flex min-w-0 shrink-0 items-center gap-1">
             <div className="relative">

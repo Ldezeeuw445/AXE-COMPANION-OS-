@@ -21,6 +21,8 @@ import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
 import { getInstantSlTpModifyServerState } from "@/lib/chart/serverSlTpPrefs";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { SquawkStationPicker } from "@/components/settings/SquawkStationPicker";
+import { getSquawkStationIdsServerState } from "@/lib/squawk/serverPrefs";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
 async function getPrimaryConversation() {
@@ -42,7 +44,7 @@ async function getPrimaryConversation() {
 }
 
 export default async function SettingsPage() {
-  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify] = await Promise.all([
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
@@ -50,6 +52,7 @@ export default async function SettingsPage() {
     getAccountName(),
     getLiveTradingServerState(),
     getInstantSlTpModifyServerState(),
+    getSquawkStationIdsServerState(),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -290,6 +293,16 @@ export default async function SettingsPage() {
           Pick a background for the chart canvas. Syncs across devices.
         </p>
         <ChartThemeSelector />
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Squawk channels
+        </h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Choose which live news audio channels rotate on the chart squawk bar. Syncs across devices.
+        </p>
+        <SquawkStationPicker initialIds={squawkStationIds} />
       </GlassPanel>
 
       <GlassPanel className="mb-4 p-4">

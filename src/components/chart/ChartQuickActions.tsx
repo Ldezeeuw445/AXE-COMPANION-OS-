@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart2, Crosshair, Newspaper, Zap } from "lucide-react";
+import { BarChart2, Crosshair, Newspaper, Zap, type LucideIcon } from "lucide-react";
 import { SquawkChip } from "@/components/market/SquawkChip";
 
 const baseBtn =
@@ -19,13 +19,13 @@ function ToolbarDivider() {
 
 function Mt5SplitButton({
   size,
-  glyph,
+  icon: Icon,
   active,
   onClick,
   label,
 }: {
   size: string;
-  glyph: string;
+  icon: LucideIcon;
   active: boolean;
   onClick: () => void;
   label: string;
@@ -46,12 +46,7 @@ function Mt5SplitButton({
       title={label}
       aria-pressed={active}
     >
-      <span
-        className="relative z-10 text-[15px] leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
-        aria-hidden
-      >
-        {glyph}
-      </span>
+      <Icon className="relative z-10 h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]" />
     </button>
   );
 }
@@ -87,10 +82,9 @@ export function ChartQuickActions({
   const tabletSize = "h-8 w-8";
 
   if (variant === "tablet") {
+    const tabletIcon = "h-3.5 w-3.5";
     return (
       <div className="flex max-w-full shrink-0 items-center justify-center">
-        <SquawkChip variant="tablet" />
-        <ToolbarDivider />
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -100,9 +94,7 @@ export function ChartQuickActions({
             title="Depth"
             aria-pressed={orderBookOpen}
           >
-            <span className="text-[15px] leading-none" aria-hidden>
-              📊
-            </span>
+            <BarChart2 className={tabletIcon} />
           </button>
           <button
             type="button"
@@ -112,23 +104,23 @@ export function ChartQuickActions({
             title="News"
             aria-pressed={newsOpen}
           >
-            <span className="text-[15px] leading-none" aria-hidden>
-              📰
-            </span>
+            <Newspaper className={tabletIcon} />
           </button>
         </div>
+        <ToolbarDivider />
+        <SquawkChip variant="tablet" />
         <ToolbarDivider />
         <div className="flex items-center gap-1.5">
           <Mt5SplitButton
             size={tabletSize}
-            glyph="⚡️"
+            icon={Zap}
             active={oneClickVisible && executionMode === "market"}
             onClick={onOneClick}
             label="1-Click Trade"
           />
           <Mt5SplitButton
             size={tabletSize}
-            glyph="🛞"
+            icon={Crosshair}
             active={executionMode === "pending" && pendingOrderVisible}
             onClick={onPending}
             label="Limit / Stop order"
