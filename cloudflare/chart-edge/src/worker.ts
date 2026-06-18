@@ -557,7 +557,7 @@ export class ChartLiveRoom implements DurableObject {
                 currentPrice: q.currentPrice != null ? Number(q.currentPrice) : null,
                 stopLoss: q.stopLoss != null ? Number(q.stopLoss) : null,
                 takeProfit: q.takeProfit != null ? Number(q.takeProfit) : null,
-                openTime: (q.time as string) ?? (q.doneTime as string) ?? null,
+                openTime: (q.time as string) ?? null,
               };
             });
           this.broadcast({
