@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Pause, Play, Radio, SkipForward } from "lucide-react";
-import { SQUAWK_STATIONS } from "@/lib/squawk/streams";
-import { useAmbient } from "@/components/ambient/AmbientProvider";
+import { useSquawkPlayer } from "@/hooks/useSquawkPlayer";
 
 /** Compact inline squawk control for chart top bar (tablet). */
 export function SquawkChip({
@@ -13,43 +11,7 @@ export function SquawkChip({
   className?: string;
   variant?: "default" | "tablet";
 }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [stationIdx, setStationIdx] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const { vibrate } = useAmbient();
-  const station = SQUAWK_STATIONS[stationIdx % SQUAWK_STATIONS.length];
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.src = station.url;
-    audio.load();
-  }, [station.url]);
-
-  const togglePlay = useCallback(() => {
-    vibrate("light");
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) {
-      audio.pause();
-      setPlaying(false);
-      return;
-    }
-    void audio.play().then(() => setPlaying(true)).catch(() => {
-      if (station.fallbackUrl) {
-        audio.src = station.fallbackUrl;
-        audio.load();
-        void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-      }
-    });
-  }, [playing, station.fallbackUrl, vibrate]);
-
-  const nextStation = useCallback(() => {
-    vibrate("light");
-    setPlaying(false);
-    setStationIdx((i) => (i + 1) % SQUAWK_STATIONS.length);
-  }, [vibrate]);
-
+  const { audioRef, station, playing, togglePlay, nextStation } = useSquawkPlayer();
   const isTablet = variant === "tablet";
 
   return (

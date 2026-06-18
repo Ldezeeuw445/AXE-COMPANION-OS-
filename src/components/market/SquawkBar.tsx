@@ -1,98 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Pause, Play, Radio, SkipForward, Volume2 } from "lucide-react";
-import { SQUAWK_STATIONS } from "@/lib/squawk/streams";
-import { useAmbient } from "@/components/ambient/AmbientProvider";
+import { useSquawkPlayer } from "@/hooks/useSquawkPlayer";
 
 /**
  * Live squawk bar — 24/7 business/news audio for traders.
  * Sits above the bottom nav; auto-fails over to the next station on error.
  */
 export function SquawkBar({ className = "" }: { className?: string }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [stationIdx, setStationIdx] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { vibrate } = useAmbient();
-
-  const station = SQUAWK_STATIONS[stationIdx % SQUAWK_STATIONS.length];
-
-  const loadStation = useCallback(
-    (idx: number, autoplay = false) => {
-      const audio = audioRef.current;
-      if (!audio) return;
-      const next = SQUAWK_STATIONS[idx % SQUAWK_STATIONS.length];
-      setError(null);
-      audio.src = next.url;
-      audio.load();
-      if (autoplay) {
-        void audio.play().then(() => setPlaying(true)).catch(() => {
-          if (next.fallbackUrl) {
-            audio.src = next.fallbackUrl;
-            audio.load();
-            void audio.play().then(() => setPlaying(true)).catch(() => {
-              setPlaying(false);
-              setError("Stream unavailable");
-            });
-          } else {
-            setPlaying(false);
-            setError("Stream unavailable");
-          }
-        });
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    loadStation(stationIdx, false);
-  }, [stationIdx, loadStation]);
-
-  const togglePlay = useCallback(() => {
-    vibrate("light");
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) {
-      audio.pause();
-      setPlaying(false);
-      return;
-    }
-    void audio.play().then(() => {
-      setPlaying(true);
-      setError(null);
-    }).catch(() => {
-      if (station.fallbackUrl) {
-        audio.src = station.fallbackUrl;
-        audio.load();
-        void audio.play().then(() => setPlaying(true)).catch(() => setError("Stream unavailable"));
-      } else {
-        setError("Stream unavailable");
-      }
-    });
-  }, [playing, station.fallbackUrl, vibrate]);
-
-  const nextStation = useCallback(() => {
-    vibrate("light");
-    setPlaying(false);
-    setStationIdx((i) => (i + 1) % SQUAWK_STATIONS.length);
-  }, [vibrate]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onEnded = () => nextStation();
-    const onError = () => {
-      if (playing) nextStation();
-      else setError("Stream unavailable");
-    };
-    audio.addEventListener("ended", onEnded);
-    audio.addEventListener("error", onError);
-    return () => {
-      audio.removeEventListener("ended", onEnded);
-      audio.removeEventListener("error", onError);
-    };
-  }, [nextStation, playing]);
+  const { audioRef, station, playing, error, togglePlay, nextStation } = useSquawkPlayer();
 
   return (
     <div
