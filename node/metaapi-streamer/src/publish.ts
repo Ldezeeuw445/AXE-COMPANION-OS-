@@ -9,21 +9,40 @@ type PublishConfig = {
 
 const MAX_INFLIGHT = 40; // max concurrent HTTP requests
 let inflight = 0;
+const pendingSlots: Array<() => void> = [];
+
+async function acquireSlot(): Promise<void> {
+  if (inflight < MAX_INFLIGHT) {
+    inflight++;
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    pendingSlots.push(resolve);
+  });
+}
+
+function releaseSlot(): void {
+  const next = pendingSlots.shift();
+  if (next) {
+    next();
+    return;
+  }
+
+  inflight--;
+}
 
 /**
  * Publisher to the Cloudflare ChartLiveRoom with bounded concurrency.
- * Drops events when inflight limit is reached — better to skip a tick
- * than OOM the process.
+ * Queues events when the inflight limit is reached so fan-out bursts do not
+ * silently shed chart updates.
  */
 export async function publishEvent(
   config: PublishConfig,
   roomKey: string,
   event: ChartLiveEvent,
 ): Promise<boolean> {
-  // Shed load when too many requests are in flight
-  if (inflight >= MAX_INFLIGHT) return false;
-
-  inflight++;
+  await acquireSlot();
   try {
     const url = `${config.workerUrl.replace(/\/$/, "")}/internal/publish`;
     const res = await fetch(url, {
@@ -40,7 +59,7 @@ export async function publishEvent(
   } catch {
     return false;
   } finally {
-    inflight--;
+    releaseSlot();
   }
 }
 
