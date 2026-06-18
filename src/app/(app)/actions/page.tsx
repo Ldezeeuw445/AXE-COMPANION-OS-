@@ -9,6 +9,7 @@ import {
   listExecutionRequests,
   listSetupReviews,
 } from "@/services/actionsService";
+import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   getEodhdKey,
@@ -74,10 +75,11 @@ async function detectActionRuntime(): Promise<ActionRuntime> {
 }
 
 export default async function ActionsPage() {
-  const [executions, setups, runtime] = await Promise.all([
+  const [executions, setups, runtime, tradePrefs] = await Promise.all([
     listExecutionRequests(),
     listSetupReviews(),
     detectActionRuntime(),
+    getTradeExecutionPrefsServerState(),
   ]);
 
   // Headlines / curated news come from Perigon, Finnhub, EODHD. Macro time
@@ -133,7 +135,7 @@ export default async function ActionsPage() {
               </h3>
               <div className="flex flex-col gap-3">
                 {executions.map((c) => (
-                  <ExecutionCard key={c.id} card={c} />
+                  <ExecutionCard key={c.id} card={c} defaultVolume={tradePrefs.defaultVolume} />
                 ))}
               </div>
             </section>

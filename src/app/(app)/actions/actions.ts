@@ -19,17 +19,54 @@ export async function approveExecutionRequestAction(
   return { ok: true, message: result.message };
 }
 
-export async function rejectExecutionRequestAction(id: string): Promise<{ ok: boolean; message?: string }> {
+export async function rejectExecutionRequestAction(
+  id: string,
+  reason?: string,
+): Promise<{ ok: boolean; message?: string }> {
   const authed = await getAuthedServiceSupabase();
   if (!authed) return { ok: false, message: "Sign in required." };
 
+  const { data: row } = await authed.supabase
+    .from("execution_requests")
+    .select("instrument,direction,entry_price,rationale,notes")
+    .eq("id", id)
+    .eq("user_id", authed.user.id)
+    .maybeSingle();
+
+  const trimmedReason = reason?.trim() ?? "";
+  const rejectNote = trimmedReason ? `Rejected: ${trimmedReason}` : null;
+  const mergedNotes = [row?.notes, rejectNote].filter(Boolean).join(" | ") || null;
+
   const { error } = await authed.supabase
     .from("execution_requests")
-    .update({ status: "cancelled" })
+    .update({
+      status: "cancelled",
+      notes: mergedNotes,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .eq("user_id", authed.user.id);
 
   if (error) return { ok: false, message: error.message };
+
+  if (trimmedReason && row) {
+    const instrument = String(row.instrument ?? "trade");
+    const direction = String(row.direction ?? "").toUpperCase();
+    const entry = row.entry_price != null ? ` @ ${row.entry_price}` : "";
+    await authed.supabase.from("assistant_memory_entries").insert({
+      user_id: authed.user.id,
+      scope: "execution_feedback",
+      entry_key: `reject-${id}`,
+      content: `[execution_reject] ${instrument} ${direction}${entry}: ${trimmedReason}`,
+    });
+  }
+
   revalidatePath("/actions");
-  return { ok: true };
+  revalidatePath("/feed");
+  return {
+    ok: true,
+    message: trimmedReason
+      ? "Draft rejected — AXE will remember your feedback."
+      : "Draft rejected.",
+  };
 }
