@@ -81,6 +81,11 @@
   --tos-nav-h: 4.1rem;
   --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.55rem);
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
+  /* Tablet status bar clearance — thin edge before in-chart toolbar */
+  --tos-tablet-safe-top: max(env(safe-area-inset-top, 0px), 0.65rem);
+  --tos-tablet-safe-left: max(env(safe-area-inset-left, 0px), 0.5rem);
+  --tos-tablet-safe-right: max(env(safe-area-inset-right, 0px), 0.5rem);
+  --tos-tablet-chart-header-h: calc(var(--tos-tablet-safe-top) + 2.15rem);
 }
 
 @theme inline {
@@ -328,6 +333,8 @@ body.trade-sheet-open .tos-nav-pill {
   }
   .tos-shell-desktop-rail {
     display: flex !important;
+    padding-top: var(--tos-tablet-safe-top);
+    padding-left: max(env(safe-area-inset-left, 0px), 0.25rem);
   }
   body.tos-route-chart .tos-shell-desktop-layout {
     max-width: none;
@@ -373,6 +380,9 @@ body.trade-sheet-open .tos-nav-pill {
 /* Tablet chart header — show when JS marks landscape tablet (incl. iPad Pro) */
 body.tos-tablet-landscape .tos-chart-tablet-header {
   display: flex !important;
+  padding-top: var(--tos-tablet-safe-top);
+  padding-left: var(--tos-tablet-safe-left);
+  padding-right: var(--tos-tablet-safe-right);
 }
 body.tos-tablet-landscape .tos-chart-phone-header {
   display: none !important;
@@ -381,6 +391,13 @@ body.tos-tablet-landscape.tos-route-chart .tos-shell-desktop-content {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+}
+
+/* Non-chart tablet routes — keep global top bar below status icons */
+body.tos-tablet-landscape .tos-shell-mobile-chrome {
+  padding-top: var(--tos-tablet-safe-top) !important;
+  padding-left: var(--tos-tablet-safe-left);
+  padding-right: var(--tos-tablet-safe-right);
 }
 
 @media (min-width: 768px) and (pointer: fine) and (not (pointer: coarse)) {

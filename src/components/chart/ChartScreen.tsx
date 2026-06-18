@@ -3067,7 +3067,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
                 ? "border-white/[0.10] bg-black/42 text-white/82"
                 : "border-black/[0.10] bg-white/78 text-black/60"
           }`}
-          style={{ top: isTabletLayout ? "calc(env(safe-area-inset-top, 0px) + 2.4rem)" : "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
+          style={{ top: isTabletLayout ? "var(--tos-tablet-chart-header-h)" : "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
           aria-label="Toggle chart tools drawer"
         >
           <span className="h-7 w-1 rounded-full bg-current opacity-75" aria-hidden />
@@ -3086,10 +3086,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               : "pointer-events-none -translate-x-full opacity-0"
           }`}
           style={{
-            top: isTabletLayout ? "calc(env(safe-area-inset-top, 0px) + 2.1rem)" : "calc(env(safe-area-inset-top, 0px) + 4.6rem)",
+            top: isTabletLayout ? "calc(var(--tos-tablet-chart-header-h) - 0.35rem)" : "calc(env(safe-area-inset-top, 0px) + 4.6rem)",
             width: isTabletLayout ? "min(22rem, calc(100% - 5rem))" : "calc(100% - 80px)",
             maxHeight: isTabletLayout
-              ? "calc(100% - env(safe-area-inset-top, 0px) - 2.5rem)"
+              ? "calc(100% - var(--tos-tablet-chart-header-h) - 0.5rem)"
               : "calc(100% - env(safe-area-inset-top, 0px) - 5rem)",
             backdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
             WebkitBackdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
