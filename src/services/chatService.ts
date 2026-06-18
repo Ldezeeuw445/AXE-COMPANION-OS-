@@ -28,6 +28,7 @@ import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
 import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
 import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
 import { autoJournalTrades } from "@/services/journalingService";
+import { handlePrepareExecutionRequest, handleRouteChartAction } from "@/services/axeToolHandlers";
 import type { ChatMessage, ConversationSummary } from "@/types/domain";
 import type OpenAI from "openai";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
@@ -572,6 +573,14 @@ export async function sendChatMessage(
       const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
       // The chat UI parses [[link:...]] markers and renders them as buttons.
       return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
+
+    } else if (tc.tool === "route_chart_action") {
+      return handleRouteChartAction(supabase, user.id, tc.args);
+
+    } else if (tc.tool === "prepare_execution_request") {
+      return handlePrepareExecutionRequest(supabase, user.id, tc.args, (title, body, url) => {
+        firePush(title, body, url);
+      });
     }
     return "Unknown tool.";
   }
@@ -883,6 +892,12 @@ export async function streamChatMessage(
       const href = `/${page}${params.length ? `?${params.join("&")}` : ""}`;
       const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
       return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
+    } else if (tc.tool === "route_chart_action") {
+      return handleRouteChartAction(supabase, user.id, tc.args);
+    } else if (tc.tool === "prepare_execution_request") {
+      return handlePrepareExecutionRequest(supabase, user.id, tc.args, (title, body, url) => {
+        firePush(title, body, url);
+      });
     } else if (tc.tool === "save_note") {
       const { content, tag } = tc.args;
       const entryKey = `note-${Date.now()}`;

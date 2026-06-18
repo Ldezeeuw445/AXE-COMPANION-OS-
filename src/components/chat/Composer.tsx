@@ -56,11 +56,26 @@ function toChartTfKey(raw: string): string {
   return "h1";
 }
 
-function chartActionHref(action: string, symbol: string, tf: string): string {
+function inferIndicatorLayers(text: string): string[] {
+  const n = text.toLowerCase();
+  const layers: string[] = [];
+  if (n.includes("ifvg")) layers.push("ifvg");
+  else if (n.includes("fvg")) layers.push("fvg");
+  if (n.includes("structure")) layers.push("structure");
+  if (n.includes("order block") || n.includes("orderblock") || n.includes(" ob")) layers.push("orderBlocks");
+  if (n.includes("rsi")) layers.push("rsi");
+  if (n.includes("rsi") === false && n.includes(" ma")) layers.push("ma");
+  return layers;
+}
+
+function chartActionHref(action: string, symbol: string, tf: string, layers?: string[]): string {
   const params = new URLSearchParams();
   params.set("symbol", symbol || "XAUUSD");
   params.set("tf", toChartTfKey(tf || "h1"));
   params.set("action", action);
+  if (action === "add_indicator" && layers?.length) {
+    params.set("layers", layers.join(","));
+  }
   return `/chart?${params.toString()}`;
 }
 

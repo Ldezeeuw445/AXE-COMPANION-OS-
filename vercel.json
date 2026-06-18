@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/mt5-sync",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/axe-watcher",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

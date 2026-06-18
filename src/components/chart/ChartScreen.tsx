@@ -79,6 +79,8 @@ import {
 import { usePageVisible } from "@/components/chart/usePageVisible";
 import { getChartTheme, readChartThemeKey, readGridStyle, type ChartThemeKey, type ChartGridStyle } from "@/components/chart/chartTheme";
 import { seedGlobalsFromAccount, seedGlobalsFromSymbol, writeSymbolPref } from "@/lib/accountPreferences";
+import { describeResolvedLayers, resolveIndicatorNames } from "@/lib/axeChartActions/indicatorMapping";
+import { consumeLocalChartActions } from "@/lib/axeChartActions/chartActionQueue";
 import {
   AxeContextToolbar,
   type AxeToolbarSection,
@@ -2126,6 +2128,40 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     [data.symbol, data.timeframeKey],
   );
 
+  const applyLayerFlags = useCallback(
+    (smc: Partial<Record<string, boolean>>, indicators: Partial<Record<string, boolean>>, enable = true) => {
+      if (Object.keys(smc).length > 0) {
+        setActiveToolFlags((prev) => {
+          const next = { ...prev };
+          for (const [key, value] of Object.entries(smc)) {
+            next[key] = enable ? Boolean(value) : false;
+          }
+          try {
+            savePref("axe.chart.smcFlags", JSON.stringify(next));
+          } catch {
+            /* localStorage may be blocked */
+          }
+          return next;
+        });
+      }
+      if (Object.keys(indicators).length > 0) {
+        setIndicatorToolFlags((prev) => {
+          const next = { ...prev };
+          for (const [key, value] of Object.entries(indicators)) {
+            next[key] = enable ? Boolean(value) : false;
+          }
+          try {
+            savePref("axe.chart.indicatorFlags", JSON.stringify(next));
+          } catch {
+            /* localStorage may be blocked */
+          }
+          return next;
+        });
+      }
+    },
+    [savePref],
+  );
+
   const executeChartAction = useCallback(
     (command: ChartActionCommand): ChartActionResult => {
       const bus = new AxeChartActionBus({
@@ -2242,12 +2278,34 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
             annotation,
           };
         },
-        addIndicator: (cmd) => ({
-          id: cmd.id,
-          type: cmd.type,
-          status: "prepared",
-          message: "Indicator layer prepared, renderer not connected yet.",
-        }),
+        addIndicator: (cmd) => {
+          const rawNames = Array.isArray(cmd.payload.indicators) ? cmd.payload.indicators : [];
+          const names = rawNames.map((n) => String(n));
+          const enable = cmd.payload.enable !== false;
+          const { smc, indicators, unknown } = resolveIndicatorNames(names);
+          if (smc.length === 0 && indicators.length === 0) {
+            return {
+              id: cmd.id,
+              type: cmd.type,
+              status: "failed",
+              message:
+                unknown.length > 0
+                  ? `AXE could not map: ${unknown.join(", ")}`
+                  : "No indicator layers specified.",
+            };
+          }
+          const smcPatch: Record<string, boolean> = {};
+          const indPatch: Record<string, boolean> = {};
+          for (const key of smc) smcPatch[key] = true;
+          for (const key of indicators) indPatch[key] = true;
+          applyLayerFlags(smcPatch, indPatch, enable);
+          return {
+            id: cmd.id,
+            type: cmd.type,
+            status: "rendered",
+            message: `AXE ${enable ? "enabled" : "disabled"}: ${describeResolvedLayers(smc, indicators)}.`,
+          };
+        },
         clearAiDrawings: (cmd) => {
           saveAnnotations(cmd.symbol, cmd.timeframe, []);
           setAnnotations([]);
@@ -2266,7 +2324,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       setTimeout(() => setSnapshotMessage(null), 4_000);
       return result;
     },
-    [appendAndRenderAnnotation, startDrawing],
+    [appendAndRenderAnnotation, applyLayerFlags, startDrawing],
   );
 
   const executeActionByType = useCallback(
@@ -2433,26 +2491,146 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     if (data.failure !== "ok") return;
 
     const normalized = initialAction.toLowerCase();
-    const action =
-      normalized === "draw_fibonacci" || normalized === "draw_trendline" || normalized === "clear_ai_drawings"
-        ? normalized
-        : null;
-    if (!action) return;
+    const supported = new Set([
+      "draw_fibonacci",
+      "draw_trendline",
+      "clear_ai_drawings",
+      "add_indicator",
+      "mark_key_level",
+    ]);
+    if (!supported.has(normalized)) return;
 
-    executeActionByType(action);
+    if (normalized === "add_indicator") {
+      const params = new URLSearchParams(window.location.search);
+      const layers = (params.get("layers") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      executeChartAction({
+        id: newAnnotationId(),
+        type: "add_indicator",
+        source: "axe",
+        symbol: data.symbol,
+        timeframe: data.timeframeKey,
+        accountId: accountId ?? undefined,
+        payload: { indicators: layers, enable: true },
+      });
+    } else if (normalized === "mark_key_level") {
+      const params = new URLSearchParams(window.location.search);
+      const price = Number(params.get("price"));
+      executeChartAction({
+        id: newAnnotationId(),
+        type: "mark_key_level",
+        source: "axe",
+        symbol: data.symbol,
+        timeframe: data.timeframeKey,
+        accountId: accountId ?? undefined,
+        payload: {
+          price,
+          label: params.get("label") ?? undefined,
+        },
+      });
+    } else {
+      executeActionByType(normalized as ChartActionCommand["type"]);
+    }
 
     const params = new URLSearchParams(window.location.search);
     params.delete("action");
+    params.delete("layers");
+    params.delete("price");
+    params.delete("label");
+    params.delete("queued");
     const next = params.toString();
     router.replace(next ? `/chart?${next}` : "/chart", { scroll: false });
   }, [
+    accountId,
     annotationsLoadedKey,
     data.failure,
     data.symbol,
     data.timeframeKey,
     executeActionByType,
+    executeChartAction,
     initialAction,
     router,
+  ]);
+
+  useEffect(() => {
+    if (annotationsLoadedKey !== `${data.symbol}|${data.timeframeKey}`) return;
+    if (data.failure !== "ok") return;
+
+    const runQueued = async () => {
+      const local = consumeLocalChartActions(data.symbol, data.timeframeKey);
+      for (const item of local) {
+        if (item.type === "add_indicator" || item.type === "mark_key_level") {
+          executeChartAction({
+            id: item.id,
+            type: item.type,
+            source: "axe",
+            symbol: item.symbol,
+            timeframe: item.timeframe,
+            accountId: item.accountId ?? accountId ?? undefined,
+            payload: item.payload ?? {},
+          });
+        } else {
+          executeActionByType(item.type, "axe");
+        }
+      }
+
+      try {
+        const qs = new URLSearchParams({
+          symbol: data.symbol,
+          tf: data.timeframeKey,
+        });
+        const res = await fetch(`/api/chart/pending-actions?${qs.toString()}`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          actions?: Array<{
+            id: string;
+            action_type: ChartActionCommand["type"];
+            payload: Record<string, unknown>;
+          }>;
+        };
+        for (const action of json.actions ?? []) {
+          if (
+            action.action_type === "draw_fibonacci" ||
+            action.action_type === "draw_trendline" ||
+            action.action_type === "clear_ai_drawings"
+          ) {
+            executeActionByType(action.action_type, "axe");
+          } else {
+            executeChartAction({
+              id: action.id,
+              type: action.action_type,
+              source: "axe",
+              symbol: data.symbol,
+              timeframe: data.timeframeKey,
+              accountId: accountId ?? undefined,
+              payload: action.payload ?? {},
+            });
+          }
+          await fetch("/api/chart/pending-actions", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ id: action.id }),
+          });
+        }
+      } catch {
+        /* network may be unavailable */
+      }
+    };
+
+    void runQueued();
+  }, [
+    accountId,
+    annotationsLoadedKey,
+    data.failure,
+    data.symbol,
+    data.timeframeKey,
+    executeActionByType,
+    executeChartAction,
   ]);
 
   const saveSnapshotToVault = useCallback(async () => {

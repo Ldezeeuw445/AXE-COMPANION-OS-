@@ -363,6 +363,45 @@ export type CorrelationInsight = {
   evidence: string[];
 };
 
+export type TradingSpacePendingExecution = {
+  instrument: string;
+  direction: string | null;
+  status: string | null;
+  entry: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  rationale: string | null;
+};
+
+export type TradingSpaceContext = {
+  generatedAt: string;
+  activeAccountId: string | null;
+  activeAccountLabel: string | null;
+  symbol: string | null;
+  timeframe: string | null;
+  openPositions: Array<{
+    symbol: string;
+    side: string;
+    volume: number;
+    entryPrice: number | null;
+    stopLoss: number | null;
+    takeProfit: number | null;
+    profit: number | null;
+  }>;
+  pendingExecutions: TradingSpacePendingExecution[];
+  symbolTrades: Array<{
+    symbol: string;
+    side: string;
+    pnl: number;
+    closeTime: string | null;
+  }>;
+  symbolLabels: string[];
+  activeAlerts: number;
+  cockpitAlignment: string | null;
+  riskPatterns: string[];
+  compactBrief: string;
+};
+
 export type AxeCompanionContext = {
   generatedAt: string;
   symbol: string | null;
@@ -378,4 +417,5 @@ export type AxeCompanionContext = {
   correlations: CorrelationInsight[];
   health: ContextHealth[];
   summary: string;
+  tradingSpace: TradingSpaceContext | null;
 };

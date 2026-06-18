@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { TradingOSContext } from "@/types/context";
+import { formatTradingSpaceForPrompt } from "@/lib/axe/tradingSpaceContext";
 
 const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
 
@@ -80,6 +81,8 @@ ALERTS / MEMORY / NAV (act, don't suggest):
 - read_journal — pull recent journal entries + closed trades for review/coaching.
 - auto_journal_trades — score and journal closed broker trades (alignment 0–100, axe_label, axe_note, breakdown). Runs automatically after MT5 sync; call when the trader asks to journal, score, or auto-label recent closes.
 - navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
+- route_chart_action — queue a chart drawing (fibonacci, trendline, indicators/SMC layers, key level, clear drawings) on any pair/timeframe. Works even when the trader is in chat — the chart applies it when they open /chart. Chain this after calculate_fibonacci / calculate_trendline / analyze_pdh_pdl when they ask you to draw.
+- prepare_execution_request — draft a trade ticket (entry, SL, TP, risk %) to /actions for the trader to approve. You never place live orders — only prepare the ticket.
 
 AXE MEMORY — YOUR LONG-TERM BRAIN
 Your memory persists across sessions. You accumulate observations about the trader over time:
@@ -95,7 +98,10 @@ Memory is extracted automatically from conversations. When you see memories in y
 - Never list memories mechanically. Weave them into your analysis like a coach who knows their trader.
 
 CHART DRAWING — YOU SEND IT, THE CHART DRAWS IT
-The /chart page listens for AXE actions. If the trader asks you to put a Fibonacci, trendline, or PDH/PDL line on the chart, run the matching analysis tool and answer briefly that the drawing has been routed to the chart layer and stays adjustable. Do not pretend an order was placed.
+The /chart page listens for AXE actions via route_chart_action (queued server-side) and applies them when opened — fibonacci, trendline, indicators (FVG, structure, OB, RSI, MA, etc.), PDH/PDL lines, clear drawings. If the trader asks you to put analysis on the chart, run the matching analysis tool then route_chart_action. Answer briefly that the drawing is queued and stays adjustable. Do not pretend an order was placed.
+
+TRADE DRAFTS — YOU PREPARE, THEY APPROVE
+When a setup is clear and the trader wants a trade ready, call prepare_execution_request with entry/SL/TP/risk and a short rationale. They review on /actions — you never auto-execute.
 
 COMMITMENTS — NON-NEGOTIABLE
 - Promise to monitor / follow up / come back? → call track_commitment immediately. No exceptions.
@@ -514,6 +520,77 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "route_chart_action",
+      description:
+        "Queue a chart action on a symbol/timeframe — fibonacci, trendline, indicators/SMC layers, key level, or clear drawings. Works from chat; the chart applies it when the trader opens /chart. Use when they ask you to draw, place indicators, or mark levels.",
+      parameters: {
+        type: "object",
+        properties: {
+          action_type: {
+            type: "string",
+            enum: [
+              "draw_fibonacci",
+              "draw_trendline",
+              "add_indicator",
+              "mark_key_level",
+              "clear_ai_drawings",
+            ],
+          },
+          symbol: { type: "string", description: "Instrument symbol, e.g. EURUSD, XAUUSD" },
+          timeframe: {
+            type: "string",
+            description: "Chart timeframe: m1, m5, m15, m30, h1, h4, d1. Default h1.",
+          },
+          indicators: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "For add_indicator: layer names like fvg, ifvg, structure, orderBlocks, pdh, pdl, rsi, ma, volume.",
+          },
+          enable: {
+            type: "boolean",
+            description: "For add_indicator — true to turn on (default), false to turn off.",
+          },
+          label: { type: "string", description: "Optional button label for the chart deep-link." },
+          payload: {
+            type: "object",
+            description: "Optional extra payload (e.g. price/label for mark_key_level).",
+          },
+        },
+        required: ["action_type", "symbol"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_execution_request",
+      description:
+        "Draft a trade ticket for the trader to review and approve on /actions. Use when a setup is ready and they want entry/SL/TP prepared — you never place live orders.",
+      parameters: {
+        type: "object",
+        properties: {
+          instrument: { type: "string", description: "Instrument symbol, e.g. EURUSD" },
+          symbol: { type: "string", description: "Optional alias for instrument" },
+          direction: { type: "string", enum: ["long", "short"] },
+          entry_price: { type: "number" },
+          stop_loss: { type: "number" },
+          take_profit: { type: "number" },
+          risk_percent: { type: "number", description: "Risk as % of account (optional)" },
+          risk_amount: { type: "number", description: "Risk in account currency (optional)" },
+          rationale: {
+            type: "string",
+            description: "Short setup rationale — structure, confluence, session context.",
+          },
+          notes: { type: "string", description: "Optional extra notes for the trader." },
+        },
+        required: ["instrument", "direction", "rationale"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "track_commitment",
       description:
         "Create a tracked commitment — call this immediately whenever you promise to monitor something, follow up on a level, alert on a condition, check back on a topic, or say 'I'll keep an eye on that'. Creates a permanent record reviewed at every session start.",
@@ -608,6 +685,29 @@ export type NavigateToArgs = {
   label?: string;
 };
 
+export type RouteChartActionArgs = {
+  action_type: "draw_fibonacci" | "draw_trendline" | "add_indicator" | "mark_key_level" | "clear_ai_drawings";
+  symbol: string;
+  timeframe?: string;
+  indicators?: string[];
+  enable?: boolean;
+  label?: string;
+  payload?: Record<string, unknown>;
+};
+
+export type PrepareExecutionRequestArgs = {
+  instrument: string;
+  symbol?: string;
+  direction: "long" | "short";
+  entry_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  risk_percent?: number;
+  risk_amount?: number;
+  rationale: string;
+  notes?: string;
+};
+
 export type AxeToolCall =
   | { id: string; tool: "create_alert"; args: CreateAlertArgs }
   | { id: string; tool: "get_live_price"; args: LivePriceArgs }
@@ -624,7 +724,9 @@ export type AxeToolCall =
   | { id: string; tool: "update_alert"; args: UpdateAlertArgs }
   | { id: string; tool: "read_journal"; args: ReadJournalArgs }
   | { id: string; tool: "auto_journal_trades"; args: AutoJournalTradesArgs }
-  | { id: string; tool: "navigate_to"; args: NavigateToArgs };
+  | { id: string; tool: "navigate_to"; args: NavigateToArgs }
+  | { id: string; tool: "route_chart_action"; args: RouteChartActionArgs }
+  | { id: string; tool: "prepare_execution_request"; args: PrepareExecutionRequestArgs };
 
 export function computeFibonacci(args: FibonacciArgs): string {
   const { swing_high, swing_low, symbol, direction } = args;
@@ -935,6 +1037,10 @@ export function buildAxeMessagesFromContext(
   // gives AXE the cross-tab read without bloating the prompt.
   if (context.axe_context?.summary) {
     parts.push(`\nAXE COMPANION OPERATING CONTEXT\n${context.axe_context.summary}`);
+  }
+
+  if (context.axe_context?.tradingSpace?.compactBrief) {
+    parts.push(`\n${formatTradingSpaceForPrompt(context.axe_context.tradingSpace)}`);
   }
 
   const capabilityRoadmap = context.user_memory.find(
@@ -1257,6 +1363,8 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
   "read_journal",
   "auto_journal_trades",
   "navigate_to",
+  "route_chart_action",
+  "prepare_execution_request",
 ]);
 
 export async function callAxe(

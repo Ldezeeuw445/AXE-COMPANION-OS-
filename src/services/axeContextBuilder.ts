@@ -26,6 +26,7 @@ import type {
   SettingsUserContext,
   TradesJournalContext,
   TradingOSContext,
+  TradingSpaceContext,
 } from "@/types/context";
 import type { TerminalAlert, TerminalExecution, WatchlistEntry } from "@/services/axeService";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
@@ -37,6 +38,7 @@ import {
   AXE_CAPABILITY_ROADMAP_KEY,
   AXE_CAPABILITY_ROADMAP_SCOPE,
 } from "@/lib/axe/capabilityRoadmap";
+import { buildTradingSpaceContext } from "@/lib/axe/tradingSpaceContext";
 import { BROKER_ACCOUNT_MEMORY_SCOPE, buildAccountPersona } from "@/lib/axe/accountPersona";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
@@ -1040,7 +1042,55 @@ function buildCorrelations(ctx: {
   return insights.slice(0, 6);
 }
 
-function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
+async function buildTradingSpaceExtras(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{
+  pendingExecutions: TradingSpaceContext["pendingExecutions"];
+  cockpitAlignment: string | null;
+}> {
+  const [execRes, cockpitRes] = await Promise.all([
+    supabase
+      .from("execution_requests")
+      .select("instrument,direction,entry_price,stop_loss,take_profit,rationale,status")
+      .eq("user_id", userId)
+      .in("status", ["pending", "pending_approval", "draft"])
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("assistant_cockpit_snapshots")
+      .select("alignment_score,learning_progress,captured_at")
+      .eq("user_id", userId)
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const pendingExecutions = (execRes.data ?? []).map((row) => ({
+    instrument: String(row.instrument ?? "Unknown"),
+    direction: (row.direction as string | null) ?? null,
+    status: (row.status as string | null) ?? null,
+    entry: row.entry_price != null ? Number(row.entry_price) : null,
+    stopLoss: row.stop_loss != null ? Number(row.stop_loss) : null,
+    takeProfit: row.take_profit != null ? Number(row.take_profit) : null,
+    rationale: (row.rationale as string | null) ?? null,
+  }));
+
+  let cockpitAlignment: string | null = null;
+  if (cockpitRes.data) {
+    const score = cockpitRes.data.alignment_score;
+    const progress = cockpitRes.data.learning_progress as { headline?: string } | null;
+    const headline = progress?.headline?.trim();
+    cockpitAlignment =
+      score != null
+        ? `alignment ${Number(score).toFixed(0)}/100${headline ? ` — ${headline}` : ""}`
+        : headline ?? null;
+  }
+
+  return { pendingExecutions, cockpitAlignment };
+}
+
+function buildSummary(ctx: Omit<AxeCompanionContext, "summary" | "tradingSpace">): string {
   const lines: string[] = [];
   lines.push(`AXE Companion operating brief generated ${ctx.generatedAt}.`);
   lines.push(`Focus: ${ctx.symbol ?? "no active symbol"}${ctx.timeframe ? ` · ${ctx.timeframe}` : ""}.`);
@@ -1191,9 +1241,13 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
     ],
   };
 
+  const tradingExtras = await buildTradingSpaceExtras(args.supabase, args.userId);
+  const tradingSpace = buildTradingSpaceContext(contextWithoutSummary, tradingExtras);
+
   return {
     ...contextWithoutSummary,
     summary: buildSummary(contextWithoutSummary),
+    tradingSpace,
   };
 }
 
