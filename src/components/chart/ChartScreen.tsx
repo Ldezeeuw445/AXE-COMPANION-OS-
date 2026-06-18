@@ -42,6 +42,7 @@ import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } fr
 import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
+import { ChartDismissibleNotice, useChartDismissedNotices } from "@/components/chart/ChartDismissibleNotice";
 import { SquawkBar } from "@/components/market/SquawkBar";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
@@ -2841,6 +2842,47 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
   const execBarOverNav = !isFullscreen && (!isTabletLayout || tabletNavCollapsed);
+  const { dismiss: dismissChartNotice, isDismissed: isChartNoticeDismissed } = useChartDismissedNotices();
+  const chartNoticeBottom = oneClickVisible ? "3.35rem" : "0.75rem";
+
+  const chartNotices = useMemo(() => {
+    const items: { key: string; tone: "muted" | "amber"; content: React.ReactNode }[] = [];
+    if (routeFallbackMessage) {
+      items.push({ key: `route:${routeFallbackMessage}`, tone: "amber", content: routeFallbackMessage });
+    }
+    if ((liveStatus === "stale" || liveStatus === "offline") && data.candles.length > 0) {
+      items.push({
+        key: `live:${liveStatus}:${liveAge ?? ""}`,
+        tone: "muted",
+        content: (
+          <>
+            <p className="font-semibold text-tos-text/90">
+              {liveStatus === "offline" ? "Using cached broker chart" : "Recovering live broker feed"}
+            </p>
+            <p className="mt-0.5">
+              Showing the last stable broker candles
+              {liveAge ? ` from ${liveAge}` : ""}.{" "}
+              {liveReason ?? "AXE is keeping the chart responsive while the realtime path reconnects."}
+              {reconnectAttempt > 0 ? ` Attempt ${reconnectAttempt}.` : ""}
+            </p>
+          </>
+        ),
+      });
+    }
+    if (data.hint && !failureCopy && liveStatus !== "stale" && liveStatus !== "offline") {
+      items.push({ key: `hint:${data.hint}`, tone: "muted", content: data.hint });
+    }
+    return items;
+  }, [
+    data.candles.length,
+    data.hint,
+    failureCopy,
+    liveAge,
+    liveReason,
+    liveStatus,
+    reconnectAttempt,
+    routeFallbackMessage,
+  ]);
 
   return (
     <div
@@ -3093,8 +3135,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         ) : null}
 
         {/* Tablet — compact toolbar: left meta, centered depth/news | squawk | exec, right account */}
-        <div className="tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden items-center gap-2 border-b border-white/[0.06] bg-black/72 px-2 py-1.5 backdrop-blur-lg">
-          <div className="flex min-w-0 shrink-0 items-center gap-1">
+        <div className="tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/[0.06] bg-black/72 px-2 py-1.5 backdrop-blur-lg">
+          <div className="flex min-w-0 items-center justify-self-start gap-1">
             <div className="relative">
               <select
                 value={data.symbol}
@@ -3131,7 +3173,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               </span>
             ) : null}
           </div>
-          <div className="flex min-w-0 flex-1 items-center justify-center px-1">
+          <div className="justify-self-center px-1">
             <ChartQuickActions
               variant="tablet"
               orderBookOpen={orderBookOpen}
@@ -3146,7 +3188,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
             />
           </div>
           {data.accountChoices.length > 0 ? (
-            <div className="relative shrink-0">
+            <div className="relative shrink-0 justify-self-end">
               <select
                 value={accountId ?? ""}
                 onChange={(e) => goAccount(e.target.value)}
@@ -3159,7 +3201,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               </select>
               <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
             </div>
-          ) : null}
+          ) : (
+            <div aria-hidden className="justify-self-end" />
+          )}
         </div>
 
         {/* Phone — two-row toolbar (unchanged layout) */}
@@ -3906,29 +3950,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         {/* "Running TF" orb removed — the AxeBreatheLoader particle globe
             was visually distracting on every TF/symbol switch. The chart
             already shows candles appearing; no extra indicator needed. */}
-        {routeFallbackMessage ? (
-          <div className="pointer-events-none absolute right-3 top-12 z-30 max-w-[18rem] rounded-xl border border-amber-300/20 bg-black/82 px-3 py-2 text-[10.5px] font-medium leading-snug text-amber-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-            {routeFallbackMessage}
-          </div>
-        ) : null}
-        {(liveStatus === "stale" || liveStatus === "offline") && data.candles.length > 0 ? (
-          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-white/10 bg-black/82 px-3 py-2 text-[10.5px] leading-snug text-tos-muted shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-            <p className="font-semibold text-tos-text/90">
-              {liveStatus === "offline" ? "Using cached broker chart" : "Recovering live broker feed"}
-            </p>
-            <p className="mt-0.5">
-              Showing the last stable broker candles
-              {liveAge ? ` from ${liveAge}` : ""}.{" "}
-              {liveReason ?? "AXE is keeping the chart responsive while the realtime path reconnects."}
-              {reconnectAttempt > 0 ? ` Attempt ${reconnectAttempt}.` : ""}
-            </p>
-          </div>
-        ) : null}
-        {data.hint && !failureCopy && liveStatus !== "stale" && liveStatus !== "offline" ? (
-          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-white/[0.06] bg-black/76 px-3 py-2 text-[10.5px] leading-snug text-white/82 shadow-[0_10px_30px_rgba(0,0,0,0.42)] backdrop-blur">
-            {data.hint}
-          </div>
-        ) : null}
+        {chartNotices.map((notice, idx) => (
+          <ChartDismissibleNotice
+            key={notice.key}
+            noticeKey={notice.key}
+            tone={notice.tone}
+            dismissed={isChartNoticeDismissed(notice.key)}
+            onDismiss={dismissChartNotice}
+            bottomOffset={chartNoticeBottom}
+            stackIndex={idx}
+          >
+            {notice.content}
+          </ChartDismissibleNotice>
+        ))}
       </div>
       </div>
 

@@ -415,7 +415,7 @@ body.tos-tablet-device .tos-tablet-nav-peek {
 
 /* Tablet chart header — show when JS marks landscape tablet (incl. iPad Pro) */
 body.tos-tablet-landscape .tos-chart-tablet-header {
-  display: flex !important;
+  display: grid !important;
   padding-top: var(--tos-tablet-safe-top);
   padding-left: var(--tos-tablet-safe-left);
   padding-right: var(--tos-tablet-safe-right);

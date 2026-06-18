@@ -3,43 +3,45 @@
 import { BarChart2, Crosshair, Newspaper, Zap, type LucideIcon } from "lucide-react";
 import { SquawkChip } from "@/components/market/SquawkChip";
 
+export const MT5_SPLIT_BG =
+  "linear-gradient(90deg, rgba(34,211,238,0.44) 0%, rgba(34,211,238,0.44) 50%, rgba(225,57,71,0.44) 50%, rgba(225,57,71,0.44) 100%)";
+export const MT5_SPLIT_ACTIVE =
+  "linear-gradient(90deg, rgba(34,211,238,0.64) 0%, rgba(34,211,238,0.64) 50%, rgba(225,57,71,0.64) 50%, rgba(225,57,71,0.64) 100%)";
+
 const baseBtn =
-  "inline-flex items-center justify-center rounded-lg border bg-black/72 text-white/80 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95";
+  "inline-flex items-center justify-center border bg-black/78 text-white/85 shadow-[0_4px_14px_rgba(0,0,0,0.4)] backdrop-blur active:scale-[0.97] transition-transform";
 const idle = "border-white/[0.10]";
 const activeWhite = "border-white/[0.22] bg-white/[0.08] text-white";
-
-const MT5_SPLIT_BG =
-  "linear-gradient(90deg, rgba(34,211,238,0.42) 0%, rgba(34,211,238,0.42) 50%, rgba(225,57,71,0.42) 50%, rgba(225,57,71,0.42) 100%)";
-const MT5_SPLIT_ACTIVE =
-  "linear-gradient(90deg, rgba(34,211,238,0.62) 0%, rgba(34,211,238,0.62) 50%, rgba(225,57,71,0.62) 50%, rgba(225,57,71,0.62) 100%)";
 
 function ToolbarDivider() {
   return <div className="mx-1.5 h-6 w-px shrink-0 rounded-full bg-white/[0.14]" aria-hidden />;
 }
 
-function Mt5SplitButton({
+export function Mt5SplitButton({
   size,
   icon: Icon,
   active,
   onClick,
   label,
+  rounded = "rounded-lg",
 }: {
   size: string;
   icon: LucideIcon;
   active: boolean;
   onClick: () => void;
   label: string;
+  rounded?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`${baseBtn} ${size} relative overflow-hidden`}
+      className={`${baseBtn} ${size} ${rounded} relative overflow-hidden`}
       style={{
         background: active ? MT5_SPLIT_ACTIVE : MT5_SPLIT_BG,
-        borderColor: active ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.14)",
+        borderColor: active ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.12)",
         boxShadow: active
-          ? "0 0 14px rgba(34,211,238,0.2), 0 0 14px rgba(225,57,71,0.15), inset 0 1px 0 rgba(255,255,255,0.12)"
+          ? "0 0 12px rgba(34,211,238,0.18), 0 0 12px rgba(225,57,71,0.12), inset 0 1px 0 rgba(255,255,255,0.10)"
           : undefined,
       }}
       aria-label={label}
@@ -80,6 +82,7 @@ export function ChartQuickActions({
   const size = compact ? "h-7 w-7" : "h-8 w-8";
   const icon = compact ? "h-3 w-3" : "h-3.5 w-3.5";
   const tabletSize = "h-8 w-8";
+  const whiteBtnRound = variant === "tablet" ? "rounded-lg" : "rounded-md";
 
   if (variant === "tablet") {
     const tabletIcon = "h-3.5 w-3.5";
@@ -89,7 +92,7 @@ export function ChartQuickActions({
           <button
             type="button"
             onClick={onDepth}
-            className={`${baseBtn} ${tabletSize} ${orderBookOpen ? activeWhite : idle}`}
+            className={`${baseBtn} ${tabletSize} ${whiteBtnRound} ${orderBookOpen ? activeWhite : idle}`}
             aria-label="Market depth"
             title="Depth"
             aria-pressed={orderBookOpen}
@@ -99,7 +102,7 @@ export function ChartQuickActions({
           <button
             type="button"
             onClick={onNews}
-            className={`${baseBtn} ${tabletSize} ${newsOpen ? activeWhite : idle}`}
+            className={`${baseBtn} ${tabletSize} ${whiteBtnRound} ${newsOpen ? activeWhite : idle}`}
             aria-label="News and intel"
             title="News"
             aria-pressed={newsOpen}
@@ -135,7 +138,7 @@ export function ChartQuickActions({
       <button
         type="button"
         onClick={onDepth}
-        className={`${baseBtn} ${size} rounded-full ${orderBookOpen ? activeWhite : idle}`}
+        className={`${baseBtn} ${size} ${whiteBtnRound} ${orderBookOpen ? activeWhite : idle}`}
         aria-label="Market depth"
         title="Market depth"
         aria-pressed={orderBookOpen}
@@ -145,7 +148,7 @@ export function ChartQuickActions({
       <button
         type="button"
         onClick={onNews}
-        className={`${baseBtn} ${size} rounded-full ${newsOpen ? activeWhite : idle}`}
+        className={`${baseBtn} ${size} ${whiteBtnRound} ${newsOpen ? activeWhite : idle}`}
         aria-label="News and intel"
         title="News & intel"
         aria-pressed={newsOpen}
@@ -153,34 +156,20 @@ export function ChartQuickActions({
         <Newspaper className={icon} />
       </button>
       <div className="mx-0.5 h-4 w-px rounded-full bg-white/[0.08]" />
-      <button
-        type="button"
+      <Mt5SplitButton
+        size={size}
+        icon={Zap}
+        active={oneClickVisible && executionMode === "market"}
         onClick={onOneClick}
-        className={`${baseBtn} ${size} rounded-full ${oneClickVisible && executionMode === "market" ? activeWhite : idle}`}
-        style={
-          oneClickVisible && executionMode === "market"
-            ? { borderColor: "rgba(0,212,245,0.35)", boxShadow: "0 0 10px rgba(0,212,245,0.18)" }
-            : undefined
-        }
-        aria-label="1-Click Trade"
-        title="1-Click Trade"
-        aria-pressed={oneClickVisible && executionMode === "market"}
-      >
-        <Zap
-          className={icon}
-          style={oneClickVisible && executionMode === "market" ? { color: "#00d4f5" } : undefined}
-        />
-      </button>
-      <button
-        type="button"
+        label="1-Click Trade"
+      />
+      <Mt5SplitButton
+        size={size}
+        icon={Crosshair}
+        active={executionMode === "pending" && pendingOrderVisible}
         onClick={onPending}
-        className={`${baseBtn} ${size} rounded-full ${executionMode === "pending" && pendingOrderVisible ? activeWhite : idle}`}
-        aria-label="Limit / Stop order"
-        title="Limit / Stop order"
-        aria-pressed={executionMode === "pending" && pendingOrderVisible}
-      >
-        <Crosshair className={icon} />
-      </button>
+        label="Limit / Stop order"
+      />
     </div>
   );
 }
