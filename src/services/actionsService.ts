@@ -36,6 +36,8 @@ export async function listExecutionRequests(): Promise<ExecutionRequestCard[]> {
     status:
       row.status === "pending"
         ? "pending_approval"
+        : row.status === "executed"
+          ? "executed"
         : row.status === "cancelled"
           ? "cancelled"
           : row.status ?? "pending_approval",
