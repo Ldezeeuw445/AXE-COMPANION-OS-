@@ -24,6 +24,7 @@ import {
   probeBrokerSymbolReport,
 } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
+import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { withActionBudget } from "@/lib/mt5/mt5ActionBudget";
 import { mapMetaApiActionError } from "@/lib/mt5/mapMetaApiActionError";
 
@@ -284,6 +285,17 @@ export async function runCloudMt5Sync(
       if (inErr) {
         await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
         return { ok: false, code: "sync_failed", message: inErr.message };
+      }
+      if (payload.close_time) {
+        const pnl = Number(payload.pnl ?? 0);
+        void recordProactiveFeedEvent(
+          supabase,
+          userId,
+          `trade_close:${t.external_trade_id}`,
+          `Trade closed: ${payload.symbol}`,
+          `${payload.side} ${pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} — journal updated`,
+          "/cockpit",
+        );
       }
     }
     dealsUpserted += 1;
