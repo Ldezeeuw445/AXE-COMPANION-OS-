@@ -13,7 +13,6 @@ import { ArrowRight } from "lucide-react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { CHART_THEME, getChartTheme } from "@/components/chart/chartTheme";
-import { PositionSlTpLine } from "@/components/chart/PositionSlTpLine";
 import { TradePlanLine } from "@/components/chart/TradePlanLine";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
@@ -172,7 +171,8 @@ export function PositionLabelsOverlay({
 
   const canBrokerInteract = !!brokerAccountId && !isDemoAccount;
   const canSubmitToBroker = canBrokerInteract && (liveTradingEnabled || isAlpacaAccount);
-  const canModify = canBrokerInteract;
+  /** Allow chart drag UI for demo + linked accounts; submit path enforces live flag. */
+  const canModify = Boolean(brokerAccountId) || isDemoAccount;
 
   const submitModify = useCallback(
     async (input: {
@@ -549,7 +549,7 @@ export function PositionLabelsOverlay({
       ))}
 
       {lineItems.map((line) => (
-        <PositionSlTpLine
+        <TradePlanLine
           key={line.key}
           canvasRef={canvasRef}
           price={line.price}
@@ -557,10 +557,13 @@ export function PositionLabelsOverlay({
           color={line.color}
           digits={digits}
           symbol={symbol}
+          dashed
+          tapToArm
           entryPrice={line.entryPrice}
           volume={line.volume}
           side={line.side}
           disabled={line.disabled}
+          zIndex={27}
           onChange={(newPrice) => {
             void handleLevelChange({
               targetKey: line.targetKey,

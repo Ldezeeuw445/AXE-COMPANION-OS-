@@ -2843,6 +2843,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               symbol={data.brokerSymbol}
               onChange={setPendingStopLossPrice}
               dashed
+              tapToArm
               entryPrice={pendingOrderPrice}
               volume={tradeVolume}
               side={pendingOrderSide}
@@ -2858,6 +2859,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               symbol={data.brokerSymbol}
               onChange={setPendingTakeProfitPrice}
               dashed
+              tapToArm
               entryPrice={pendingOrderPrice}
               volume={tradeVolume}
               side={pendingOrderSide}
