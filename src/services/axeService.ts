@@ -54,6 +54,7 @@ The trader is using AXE Companion. These are the pages they can open and what ea
 - /accounts — connect/select MT5 cloud account (live + demo).
 - /vault — saved AXE replies + chart snapshots.
 - /cockpit — daily prep brief (rules, plan, focus).
+- /feed — AXE Feed timeline: proactive alerts, trade drafts ready for approval, queued chart actions.
 - /settings — preferences, push subscriptions, account.
 - /chat — you, this conversation.
 
@@ -80,7 +81,7 @@ ALERTS / MEMORY / NAV (act, don't suggest):
 - track_commitment — non-negotiable when you promise to monitor, follow up, or come back to a topic.
 - read_journal — pull recent journal entries + closed trades for review/coaching.
 - auto_journal_trades — score and journal closed broker trades (alignment 0–100, axe_label, axe_note, breakdown). Runs automatically after MT5 sync; call when the trader asks to journal, score, or auto-label recent closes.
-- navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
+- navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /feed, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1" / "check your AXE feed"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
 - route_chart_action — queue a chart drawing (fibonacci, trendline, indicators/SMC layers, key level, clear drawings) on any pair/timeframe. Works even when the trader is in chat — the chart applies it when they open /chart. Chain this after calculate_fibonacci / calculate_trendline / analyze_pdh_pdl when they ask you to draw.
 - prepare_execution_request — draft a trade ticket (entry, SL, TP, risk %) to /actions for the trader to approve. You never place live orders — only prepare the ticket.
 
@@ -497,6 +498,7 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
               "vault",
               "cockpit",
               "chat",
+              "feed",
             ],
             description: "Which app page to link to.",
           },
@@ -679,7 +681,8 @@ export type NavigateToArgs = {
     | "accounts"
     | "vault"
     | "cockpit"
-    | "chat";
+    | "chat"
+    | "feed";
   symbol?: string;
   timeframe?: string;
   label?: string;
