@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getFeedLastSeenAt } from "@/components/feed/AxeFeedClient";
+import { getFeedLastSeenAt } from "@/lib/feed/feedSeen";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 import type { AxeFeedItem } from "@/types/feed";
 

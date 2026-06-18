@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Rss } from "lucide-react";
-import { getFeedLastSeenAt } from "@/components/feed/AxeFeedClient";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
+import { getFeedLastSeenAt, markAllFeedItemsRead } from "@/lib/feed/feedSeen";
 import type { AxeFeedItem } from "@/types/feed";
 
 function formatWhen(iso: string): string {
@@ -19,6 +19,7 @@ function formatWhen(iso: string): string {
 /** Compact AXE feed strip above chat — latest notices with link to full feed. */
 export function ChatFeedStrip() {
   const [items, setItems] = useState<AxeFeedItem[]>([]);
+  const [allItems, setAllItems] = useState<AxeFeedItem[]>([]);
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export function ChatFeedStrip() {
         const json = (await res.json()) as { items?: AxeFeedItem[] };
         const list = json.items ?? [];
         if (!cancelled) {
+          setAllItems(list);
           setItems(list.slice(0, 2));
           setUnread(countUnreadFeedItems(list, getFeedLastSeenAt()));
         }
@@ -50,6 +52,11 @@ export function ChatFeedStrip() {
     };
   }, []);
 
+  const handleMarkRead = () => {
+    markAllFeedItemsRead(allItems);
+    setUnread(0);
+  };
+
   if (items.length === 0) return null;
 
   return (
@@ -64,12 +71,23 @@ export function ChatFeedStrip() {
             </span>
           ) : null}
         </span>
-        <Link
-          href="/feed"
-          className="text-[9px] font-semibold uppercase tracking-wider text-cyan-400/80 hover:text-cyan-300"
-        >
-          Open feed →
-        </Link>
+        <div className="flex items-center gap-2.5">
+          {unread > 0 ? (
+            <button
+              type="button"
+              onClick={handleMarkRead}
+              className="text-[9px] font-semibold uppercase tracking-wider text-white/45 transition-colors hover:text-white/70"
+            >
+              Mark read
+            </button>
+          ) : null}
+          <Link
+            href="/feed"
+            className="text-[9px] font-semibold uppercase tracking-wider text-cyan-400/80 hover:text-cyan-300"
+          >
+            Open feed →
+          </Link>
+        </div>
       </div>
       <ul className="flex flex-col gap-1">
         {items.map((item) => (

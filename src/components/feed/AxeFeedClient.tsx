@@ -1,11 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
+import {
+  getFeedLastSeenAt,
+  markAllFeedItemsRead,
+  AXE_FEED_LAST_SEEN_KEY,
+} from "@/lib/feed/feedSeen";
 import type { AxeFeedItem } from "@/types/feed";
 
-const LAST_SEEN_KEY = "axe.feed.lastSeenAt";
+export { getFeedLastSeenAt, AXE_FEED_LAST_SEEN_KEY };
 
 function formatWhen(iso: string): string {
   const d = new Date(iso);
@@ -27,23 +33,32 @@ function kindLabel(kind: AxeFeedItem["kind"]): string {
 
 export function AxeFeedClient() {
   const [items, setItems] = useState<AxeFeedItem[]>([]);
+  const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const applyItems = useCallback((list: AxeFeedItem[], markSeen: boolean) => {
+    setItems(list);
+    if (markSeen) {
+      markAllFeedItemsRead(list);
+      setUnread(0);
+    } else {
+      setUnread(countUnreadFeedItems(list, getFeedLastSeenAt()));
+    }
+  }, []);
+
+  const loadFeed = useCallback(async (markSeen: boolean) => {
+    const res = await fetch("/api/feed", { credentials: "include" });
+    if (!res.ok) throw new Error("Could not load feed");
+    const json = (await res.json()) as { items?: AxeFeedItem[] };
+    applyItems(json.items ?? [], markSeen);
+  }, [applyItems]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/feed", { credentials: "include" });
-        if (!res.ok) throw new Error("Could not load feed");
-        const json = (await res.json()) as { items?: AxeFeedItem[] };
-        if (!cancelled) setItems(json.items ?? []);
-        try {
-          localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString());
-          window.dispatchEvent(new CustomEvent("axe:feed-seen"));
-        } catch {
-          /* ignore */
-        }
+        await loadFeed(true);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
@@ -53,7 +68,18 @@ export function AxeFeedClient() {
     return () => {
       cancelled = true;
     };
+  }, [loadFeed]);
+
+  useEffect(() => {
+    const onSeen = () => setUnread(0);
+    window.addEventListener("axe:feed-seen", onSeen);
+    return () => window.removeEventListener("axe:feed-seen", onSeen);
   }, []);
+
+  const handleMarkAllRead = () => {
+    markAllFeedItemsRead(items);
+    setUnread(0);
+  };
 
   if (loading) {
     return (
@@ -83,46 +109,59 @@ export function AxeFeedClient() {
   }
 
   return (
-    <ul className="flex flex-col gap-2.5">
-      {items.map((item) => (
-        <li key={item.id}>
-          <GlassPanel className="p-4 transition-colors hover:border-white/12">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-400/80">
-                  {kindLabel(item.kind)}
-                </p>
-                <p className="mt-1 text-sm font-medium text-tos-text">{item.title}</p>
-                {item.body ? (
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">{item.body}</p>
-                ) : null}
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => void loadFeed(false)}
+          className="text-[10px] font-semibold uppercase tracking-[0.12em] text-tos-dim transition-colors hover:text-tos-muted"
+        >
+          Refresh
+        </button>
+        {unread > 0 ? (
+          <button
+            type="button"
+            onClick={handleMarkAllRead}
+            className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-400/90 transition-colors hover:text-cyan-300"
+          >
+            Mark all read ({unread > 9 ? "9+" : unread})
+          </button>
+        ) : (
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-tos-dim">
+            All caught up
+          </span>
+        )}
+      </div>
+      <ul className="flex flex-col gap-2.5">
+        {items.map((item) => (
+          <li key={item.id}>
+            <GlassPanel className="p-4 transition-colors hover:border-white/12">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-400/80">
+                    {kindLabel(item.kind)}
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-tos-text">{item.title}</p>
+                  {item.body ? (
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">{item.body}</p>
+                  ) : null}
+                </div>
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-tos-dim">
+                  {formatWhen(item.createdAt)}
+                </span>
               </div>
-              <span className="shrink-0 text-[10px] uppercase tracking-wide text-tos-dim">
-                {formatWhen(item.createdAt)}
-              </span>
-            </div>
-            {item.url ? (
-              <Link
-                href={item.url}
-                className="mt-3 inline-flex text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-400/90 hover:text-cyan-300"
-              >
-                Open →
-              </Link>
-            ) : null}
-          </GlassPanel>
-        </li>
-      ))}
-    </ul>
+              {item.url ? (
+                <Link
+                  href={item.url}
+                  className="mt-3 inline-flex text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-400/90 hover:text-cyan-300"
+                >
+                  Open →
+                </Link>
+              ) : null}
+            </GlassPanel>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
-
-export function getFeedLastSeenAt(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(LAST_SEEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export const AXE_FEED_LAST_SEEN_KEY = LAST_SEEN_KEY;
