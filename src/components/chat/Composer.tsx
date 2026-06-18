@@ -151,7 +151,8 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     const chartAction = detectFallbackChartActionIntent(text);
     if (chartAction && !image) {
       setValue("");
-      router.push(chartActionHref(chartAction, symbol || "XAUUSD", tf || "h1"));
+      const layers = chartAction === "add_indicator" ? inferIndicatorLayers(text) : undefined;
+      router.push(chartActionHref(chartAction, symbol || "XAUUSD", tf || "h1", layers));
       return;
     }
 
