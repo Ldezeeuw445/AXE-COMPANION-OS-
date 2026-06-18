@@ -38,9 +38,11 @@ import {
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
-import { isPhoneLandscapeViewport } from "@/lib/viewport/tablet";
+import { isPhoneLandscapeViewport, isTabletChartLayout } from "@/lib/viewport/tablet";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
+import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
 import { SquawkBar } from "@/components/market/SquawkBar";
+import { SquawkChip } from "@/components/market/SquawkChip";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import {
@@ -637,6 +639,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
 
   /* ── Landscape fullscreen mode ───────────────────────────────── */
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isTabletLayout, setIsTabletLayout] = useState(false);
   const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
   const userDismissedLandscapeRef = useRef(false);
@@ -658,6 +661,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       }
       return next;
     });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => setIsTabletLayout(isTabletChartLayout());
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
   }, []);
 
   // Auto-enter immersive chart on phone landscape; restore portrait layout on exit.
@@ -2568,7 +2579,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   // the chart screen.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    if (isFullscreen) {
+    if (isFullscreen || isTabletLayout) {
       setCenter(null);
       setRight(null);
       return () => {
@@ -2577,56 +2588,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       };
     }
 
-    const baseBtn =
-      "inline-flex h-8 w-8 items-center justify-center rounded-full border bg-black/72 text-white/80 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95";
-    const idle = "border-white/[0.10]";
-    const active = "border-white/[0.18] bg-white/[0.06] text-white";
     setCenter(
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
-          className={`${baseBtn} ${orderBookOpen ? active : idle}`}
-          aria-label="Market depth"
-          title="Market depth"
-          aria-pressed={orderBookOpen}
-        >
-          <BarChart2 className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => (newsOpen ? setNewsOpen(false) : openNews())}
-          className={`${baseBtn} ${newsOpen ? active : idle}`}
-          aria-label="News and intel"
-          title="News & intel"
-          aria-pressed={newsOpen}
-        >
-          <Newspaper className="h-3.5 w-3.5" />
-        </button>
-        {/* Subtle divider — separates info (depth/news) from execution (⚡/crosshair) */}
-        <div className="mx-0.5 h-4 w-px rounded-full bg-white/[0.08]" />
-        <button
-          type="button"
-          onClick={toggleOneClickTrade}
-          className={`${baseBtn} ${oneClickVisible && executionMode === "market" ? active : idle}`}
-          style={oneClickVisible && executionMode === "market" ? { borderColor: "rgba(0,212,245,0.35)", boxShadow: "0 0 10px rgba(0,212,245,0.18)" } : undefined}
-          aria-label="1-Click Trade"
-          title="1-Click Trade"
-          aria-pressed={oneClickVisible && executionMode === "market"}
-        >
-          <Zap className="h-3.5 w-3.5" style={oneClickVisible && executionMode === "market" ? { color: "#00d4f5" } : undefined} />
-        </button>
-        <button
-          type="button"
-          onClick={togglePendingTrade}
-          className={`${baseBtn} ${executionMode === "pending" && pendingOrderVisible ? active : idle}`}
-          aria-label="Limit / Stop order"
-          title="Limit / Stop order"
-          aria-pressed={executionMode === "pending" && pendingOrderVisible}
-        >
-          <Crosshair className="h-3.5 w-3.5" />
-        </button>
-      </div>,
+      <ChartQuickActions
+        orderBookOpen={orderBookOpen}
+        newsOpen={newsOpen}
+        oneClickVisible={oneClickVisible}
+        executionMode={executionMode}
+        pendingOrderVisible={pendingOrderVisible}
+        onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+        onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+        onOneClick={toggleOneClickTrade}
+        onPending={togglePendingTrade}
+      />,
     );
     setRight(
       <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />,
@@ -2653,6 +2626,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     toggleOneClickTrade,
     togglePendingTrade,
     isFullscreen,
+    isTabletLayout,
   ]);
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
@@ -2905,10 +2879,80 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           </>
         ) : null}
 
-        <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.06] bg-black/72 px-2.5 py-1.5 backdrop-blur-lg">
+        {/* Tablet — single compact toolbar row */}
+        <div className="tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden items-center gap-2 border-b border-white/[0.06] bg-black/72 px-2 py-1 backdrop-blur-lg">
+          <div className="flex min-w-0 shrink-0 items-center gap-1">
+            <div className="relative">
+              <select
+                value={data.symbol}
+                onChange={(e) => goSymbol(e.target.value)}
+                className="max-w-[6.5rem] appearance-none rounded-lg border border-white/[0.10] bg-white/[0.05] px-2 py-0.5 pr-5 font-mono text-[11px] font-bold uppercase text-cyan-400 outline-none"
+                aria-label="Symbol"
+              >
+                {data.symbolOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-cyan-400/60" />
+            </div>
+            <div className="relative">
+              <select
+                value={pendingTfKey ?? data.timeframeKey}
+                onChange={(e) => goTf(e.target.value)}
+                className="appearance-none rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 pr-5 font-mono text-[11px] font-semibold uppercase text-white/80 outline-none"
+                aria-label="Timeframe"
+              >
+                {CHART_TF_OPTIONS.map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
+            </div>
+            <span className="font-mono text-[11px] font-medium text-white/85">{lastPriceText}</span>
+            {transportBadge ? (
+              <span
+                className={`shrink-0 rounded border px-1 py-0.5 font-mono text-[7px] font-bold uppercase ${transportBadge.className}`}
+                title={transportBadge.title}
+              >
+                {transportBadge.label}
+              </span>
+            ) : null}
+          </div>
+          <ChartQuickActions
+            compact
+            orderBookOpen={orderBookOpen}
+            newsOpen={newsOpen}
+            oneClickVisible={oneClickVisible}
+            executionMode={executionMode}
+            pendingOrderVisible={pendingOrderVisible}
+            onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+            onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+            onOneClick={toggleOneClickTrade}
+            onPending={togglePendingTrade}
+          />
+          <div className="min-w-0 flex-1" />
+          <SquawkChip />
+          {data.accountChoices.length > 0 ? (
+            <div className="relative shrink-0">
+              <select
+                value={accountId ?? ""}
+                onChange={(e) => goAccount(e.target.value)}
+                className="max-w-[9rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2 py-0.5 pr-5 text-[9px] font-semibold text-emerald-100/90 outline-none"
+                aria-label="Account"
+              >
+                {data.accountChoices.map((a) => (
+                  <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
+            </div>
+          ) : null}
+        </div>
+
+        {/* Phone — two-row toolbar (unchanged layout) */}
+        <div className="tos-chart-phone-header absolute left-0 right-0 top-0 z-30 border-b border-white/[0.06] bg-black/72 px-2.5 py-1.5 backdrop-blur-lg">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
-              {/* Symbol chip */}
               <div className="relative">
                 <select
                   value={data.symbol}
@@ -2917,14 +2961,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
                   aria-label="Symbol"
                 >
                   {data.symbolOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
+                    <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-cyan-400/60" />
               </div>
-              {/* Timeframe chip */}
               <div className="relative">
                 <select
                   value={pendingTfKey ?? data.timeframeKey}
@@ -2933,9 +2974,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
                   aria-label="Timeframe"
                 >
                   {CHART_TF_OPTIONS.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
+                    <option key={t.key} value={t.key}>{t.label}</option>
                   ))}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
@@ -2951,28 +2990,22 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
                     aria-label="Account"
                   >
                     {data.accountChoices.map((a) => (
-                      <option key={a.brokerAccountId} value={a.brokerAccountId}>
-                        {a.label}
-                      </option>
+                      <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
                     ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
                 </div>
               ) : null}
-              {/* Fullscreen / landscape toggle */}
               <button
                 type="button"
                 onClick={toggleFullscreen}
                 className="tos-chart-fullscreen-btn grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/70"
                 aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               >
-                {isFullscreen
-                  ? <Minimize2 className="h-3 w-3" />
-                  : <Maximize2 className="h-3 w-3" />}
+                {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
               </button>
             </div>
           </div>
-
           <div className="mt-1 flex w-full items-center gap-2 overflow-hidden">
             <span className="shrink-0 font-mono text-[9.5px] font-semibold uppercase tracking-[0.11em] text-cyan-300/80">
               {data.symbol}
@@ -4281,7 +4314,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         />
       ) : null}
 
-      {!isFullscreen ? <SquawkBar /> : null}
+      {!isFullscreen && !isTabletLayout ? <SquawkBar /> : null}
 
     </div>
   );

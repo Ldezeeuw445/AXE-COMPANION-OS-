@@ -1,3 +1,11 @@
+/** Tablet chart layout: left rail + bottom nav, not full desktop. */
+export function isTabletChartLayout(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  return w >= 768 && !(w >= 1280 && h >= 720);
+}
+
 /** Tablet = wide enough for persistent left rail, but not full desktop layout. */
 export function isTabletViewport(): boolean {
   if (typeof window === "undefined") return false;

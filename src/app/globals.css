@@ -316,11 +316,13 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
-/* Tablet+ — persistent left icon rail; chart uses full remaining width.
-   Bottom nav stays visible until full desktop breakpoint below. */
-@media (min-width: 768px) {
-  .tos-shell-mobile-chrome {
-    display: none !important;
+/* Tablet chart — left rail, full-width canvas, bottom nav stays visible */
+@media (min-width: 768px) and (not ((min-width: 1280px) and (min-height: 720px))) {
+  body.tos-route-chart .tos-shell-desktop-layout {
+    max-width: none;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
   }
   .tos-shell-desktop-rail {
     display: flex !important;
@@ -329,9 +331,17 @@ body.trade-sheet-open .tos-nav-pill {
     padding-left: 4.25rem;
     flex-direction: row;
   }
+  /* Chart uses app top bar slots on phone only — tablet toolbar is in-chart */
+  .tos-shell-mobile-chrome {
+    display: none !important;
+  }
+  .tos-shell-mobile-nav {
+    display: block !important;
+  }
   .tos-shell-desktop-content {
-    padding-left: 1.5rem;
-    padding-top: max(0.75rem, env(safe-area-inset-top));
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
   }
   .tos-shell-desktop-content.tos-flush-route {
     padding-bottom: 0;
@@ -339,12 +349,38 @@ body.trade-sheet-open .tos-nav-pill {
   .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
     padding-left: 0;
     padding-right: 0;
-    padding-bottom: var(--tos-nav-offset);
+    padding-bottom: 0;
   }
   .tos-shell-desktop-only {
-    display: grid !important;
+    display: none !important;
   }
-  /* Fullscreen expand is phone-only — tablets already have enough canvas */
+  .tos-chart-fullscreen-btn {
+    display: none !important;
+  }
+  .tos-chart-tablet-header {
+    display: flex !important;
+  }
+  .tos-chart-phone-header {
+    display: none !important;
+  }
+  /* Execution sheets float above bottom nav (MT5-style) */
+  .tos-chart-exec-overlay {
+    z-index: 70;
+  }
+}
+
+@media (min-width: 768px) {
+  .tos-shell-desktop-rail {
+    display: flex !important;
+  }
+  .tos-shell-desktop-layout {
+    padding-left: 4.25rem;
+    flex-direction: row;
+  }
+  .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
+    padding-left: 0;
+    padding-right: 0;
+  }
   .tos-chart-fullscreen-btn {
     display: none !important;
   }
@@ -352,6 +388,9 @@ body.trade-sheet-open .tos-nav-pill {
 
 @media (max-width: 767px) {
   .tos-shell-desktop-rail {
+    display: none !important;
+  }
+  .tos-chart-tablet-header {
     display: none !important;
   }
 }
