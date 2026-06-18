@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExecutionRequestCard } from "@/types/domain";
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -20,6 +20,8 @@ function statusBadge(status: ExecutionRequestCard["status"]) {
       return <Badge variant="warm">Pending approval</Badge>;
     case "approved":
       return <Badge variant="long">Approved</Badge>;
+    case "executed":
+      return <Badge variant="long">On MT5</Badge>;
     case "rejected":
       return <Badge variant="risk">Rejected</Badge>;
     case "draft":
@@ -37,6 +39,7 @@ function dirBadge(dir: ExecutionRequestCard["direction"]) {
 
 export function ExecutionCard({ card }: ExecutionCardProps) {
   const [pending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const router = useRouter();
 
   const run = (action: "approve" | "reject") => {
@@ -45,9 +48,12 @@ export function ExecutionCard({ card }: ExecutionCardProps) {
         action === "approve"
           ? await approveExecutionRequestAction(card.id)
           : await rejectExecutionRequestAction(card.id);
-      if (!result.ok && result.message) {
-        console.warn("[ExecutionCard]", result.message);
+      if (!result.ok) {
+        setFeedback({ kind: "err", text: result.message ?? "Something went wrong." });
         return;
+      }
+      if (result.message) {
+        setFeedback({ kind: "ok", text: result.message });
       }
       router.refresh();
     });
@@ -98,6 +104,17 @@ export function ExecutionCard({ card }: ExecutionCardProps) {
           ))}
         </ul>
       ) : null}
+      {feedback ? (
+        <p
+          className={`mt-3 rounded-lg border px-3 py-2 text-[11px] leading-relaxed ${
+            feedback.kind === "ok"
+              ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-100/90"
+              : "border-rose-400/25 bg-rose-400/[0.08] text-rose-100/90"
+          }`}
+        >
+          {feedback.text}
+        </p>
+      ) : null}
       {card.status === "pending_approval" ? (
         <div className="mt-4 flex gap-2">
           <button
@@ -114,7 +131,7 @@ export function ExecutionCard({ card }: ExecutionCardProps) {
             onClick={() => run("approve")}
             className="tos-btn-cyan flex-1 rounded-xl py-2.5 text-xs font-semibold disabled:opacity-50"
           >
-            {pending ? "Saving…" : "Confirm trade"}
+            {pending ? "Sending to MT5…" : "Place on MT5"}
           </button>
         </div>
       ) : null}
