@@ -78,7 +78,7 @@ import {
 } from "@/components/chart/useLiveChart";
 import { usePageVisible } from "@/components/chart/usePageVisible";
 import { getChartTheme, readChartThemeKey, readGridStyle, type ChartThemeKey, type ChartGridStyle } from "@/components/chart/chartTheme";
-import { seedGlobalsFromAccount, writePref } from "@/lib/accountPreferences";
+import { seedGlobalsFromAccount, seedGlobalsFromSymbol, writeSymbolPref } from "@/lib/accountPreferences";
 import {
   AxeContextToolbar,
   type AxeToolbarSection,
@@ -615,10 +615,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     }
   }, [accountId]);
 
-  /** Write to both global + account-scoped localStorage. */
+  /** Write to symbol-scoped + global localStorage for the active pair. */
   const savePref = useCallback(
-    (key: string, value: string) => writePref(accountId, key, value),
-    [accountId],
+    (key: string, value: string) => writeSymbolPref(accountId, data.symbol, key, value),
+    [accountId, data.symbol],
   );
 
   const [chartThemeKey, setChartThemeKey] = useState<ChartThemeKey>(() => readChartThemeKey());
@@ -823,10 +823,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   type FibMode = "auto" | "swing" | "pd" | "sd";
   const [fibMode, setFibMode] = useState<FibMode>("auto");
   const [fibSwingOffset, setFibSwingOffset] = useState<0 | 1 | 2 | 3>(0);
+
+  // Hydrate SMC + indicator prefs per account + symbol whenever either changes.
   useEffect(() => {
     try {
-      const raw = Number(localStorage.getItem("axe.chart.obCount") ?? "");
-      if (raw === 1 || raw === 2 || raw === 3) setOrderBlockCount(raw);
+      seedGlobalsFromSymbol(accountId, data.symbol);
+      const rawOb = Number(localStorage.getItem("axe.chart.obCount") ?? "");
+      if (rawOb === 1 || rawOb === 2 || rawOb === 3) setOrderBlockCount(rawOb);
       const rawIfvg = Number(localStorage.getItem("axe.chart.ifvgCount") ?? "");
       if (rawIfvg === 1 || rawIfvg === 2 || rawIfvg === 3) setInverseFvgCount(rawIfvg);
       const rawFvg = Number(localStorage.getItem("axe.chart.fvgCount") ?? "");
@@ -834,7 +837,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       const rawProj = Number(localStorage.getItem("axe.chart.projectionCount") ?? "");
       if (rawProj === 1 || rawProj === 2 || rawProj === 3) setProjectionCount(rawProj);
       const rawMaPeriod = Number(localStorage.getItem("axe.chart.maPeriod") ?? "");
-      if (rawMaPeriod === 9 || rawMaPeriod === 20 || rawMaPeriod === 50 || rawMaPeriod === 200) setMaPeriod(rawMaPeriod);
+      if (rawMaPeriod === 9 || rawMaPeriod === 20 || rawMaPeriod === 50 || rawMaPeriod === 200) {
+        setMaPeriod(rawMaPeriod);
+      }
       const rawMaType = localStorage.getItem("axe.chart.maType");
       if (rawMaType === "sma" || rawMaType === "ema") setMaType(rawMaType);
       const rawIndicatorFlags = localStorage.getItem("axe.chart.indicatorFlags");
@@ -850,22 +855,31 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           poc: Boolean(parsed.poc),
         });
       } else {
-        // Carry existing users forward: VOL / MA / RSI used to live in
-        // the SMC rail under activeToolFlags. New installs default to
-        // off, but if those old flags are in localStorage later this
-        // leaves room for a non-breaking migration.
         setIndicatorToolFlags({});
+      }
+      const rawSmcFlags = localStorage.getItem("axe.chart.smcFlags");
+      if (rawSmcFlags) {
+        const parsed = JSON.parse(rawSmcFlags) as Record<string, unknown>;
+        setActiveToolFlags({
+          structure: Boolean(parsed.structure),
+          orderBlocks: Boolean(parsed.orderBlocks),
+          fvg: Boolean(parsed.fvg),
+          ifvg: Boolean(parsed.ifvg),
+          pdh: Boolean(parsed.pdh),
+          pdl: Boolean(parsed.pdl),
+          pdq: Boolean(parsed.pdq),
+          swingPoints: Boolean(parsed.swingPoints),
+          supplyDemand: Boolean(parsed.supplyDemand),
+        });
+      } else {
+        setActiveToolFlags({});
       }
       const rawFib = localStorage.getItem("axe.chart.fibMode");
       if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd" || rawFib === "sd") {
         setFibMode(rawFib);
       } else if (rawFib === "pd_band") {
-        // Legacy mode replaced by the standalone S/D indicator. Migrate
-        // the saved preference forward so the next launch picks the
-        // closest equivalent (S/D fib mode) instead of resetting to
-        // "auto".
         setFibMode("sd");
-        try { savePref("axe.chart.fibMode", "sd"); } catch { /* ignore */ }
+        try { writeSymbolPref(accountId, data.symbol, "axe.chart.fibMode", "sd"); } catch { /* ignore */ }
       }
       const rawFibSwing = Number(localStorage.getItem("axe.chart.fibSwingOffset") ?? "");
       if (rawFibSwing === 0 || rawFibSwing === 1 || rawFibSwing === 2 || rawFibSwing === 3) {
@@ -874,7 +888,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     } catch {
       /* localStorage may be blocked */
     }
-  }, []);
+  }, [accountId, data.symbol]);
 
   // ── Cache candles to localStorage so the next visit renders instantly ──
   useEffect(() => {
@@ -1009,7 +1023,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     macd: 112,
   });
 
-  // Hydrate pane heights from localStorage once on mount.
+  const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
+    setPaneHeights((prev) => ({ ...prev, [mode]: next }));
+    try {
+      savePref(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
+    } catch {
+      /* ignore — best-effort persistence */
+    }
+  }, [savePref]);
+
+  // Indicator pane display order — persisted per account + symbol.
+  const [paneOrder, setPaneOrder] = useState<PaneMode[]>(PANE_MODE_DEFAULT);
+
   useEffect(() => {
     try {
       const v = Number(localStorage.getItem("axe.chart.paneHeight.volume") ?? "");
@@ -1020,35 +1045,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
         rsi: Number.isFinite(r) && r >= 70 ? r : prev.rsi,
         macd: Number.isFinite(m) && m >= 70 ? m : prev.macd,
       }));
-    } catch {
-      /* localStorage may be blocked — fall back to defaults */
-    }
-  }, []);
-
-  const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
-    setPaneHeights((prev) => ({ ...prev, [mode]: next }));
-    try {
-      savePref(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
-    } catch {
-      /* ignore — best-effort persistence */
-    }
-  }, []);
-
-  // Indicator pane display order — persisted to localStorage.
-  const [paneOrder, setPaneOrder] = useState<PaneMode[]>(PANE_MODE_DEFAULT);
-
-  // Hydrate pane order from localStorage once on mount.
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("axe.chart.paneOrder");
-      if (stored) {
-        const parsed: unknown = JSON.parse(stored);
+      const storedPaneOrder = localStorage.getItem("axe.chart.paneOrder");
+      if (storedPaneOrder) {
+        const parsed: unknown = JSON.parse(storedPaneOrder);
         if (Array.isArray(parsed) && parsed.length === 3) {
           setPaneOrder(parsed as PaneMode[]);
         }
       }
-    } catch { /* noop */ }
-  }, []);
+    } catch {
+      /* localStorage may be blocked */
+    }
+  }, [accountId, data.symbol]);
 
   const movePaneInOrder = useCallback((mode: PaneMode, dir: -1 | 1) => {
     setPaneOrder((prev) => {
@@ -1058,10 +1065,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       if (swapIdx < 0 || swapIdx >= prev.length) return prev;
       const next = [...prev];
       [next[idx]!, next[swapIdx]!] = [next[swapIdx]!, next[idx]!];
-      try { localStorage.setItem("axe.chart.paneOrder", JSON.stringify(next)); } catch { /* noop */ }
+      try { savePref("axe.chart.paneOrder", JSON.stringify(next)); } catch { /* noop */ }
       return next;
     });
-  }, []);
+  }, [savePref]);
 
   const hasFibAnnotation = useMemo(
     () => annotations.some((a) => a.type === "fib_retracement"),
@@ -2482,8 +2489,16 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   }, [scaleModeIndex]);
 
   const toggleToolFlag = useCallback((id: string) => {
-    setActiveToolFlags((prev) => ({ ...prev, [id]: !prev[id] }));
-  }, []);
+    setActiveToolFlags((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try {
+        savePref("axe.chart.smcFlags", JSON.stringify(next));
+      } catch {
+        /* localStorage may be blocked */
+      }
+      return next;
+    });
+  }, [savePref]);
 
   const toggleIndicatorFlag = useCallback((id: string) => {
     setIndicatorToolFlags((prev) => {
@@ -2495,7 +2510,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       }
       return next;
     });
-  }, []);
+  }, [savePref]);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
     return [
@@ -2630,6 +2645,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
   ]);
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
+  const execBarOverNav = !isFullscreen && !isTabletLayout;
 
   return (
     <div
@@ -3744,8 +3760,17 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       {/* ─── MT5-style execution bar (market) + landscape pending inline ─── */}
       {oneClickVisible && (executionMode === "market" || (executionMode === "pending" && isFullscreen)) ? (
       <div
-        className={`shrink-0 ${isFullscreen ? "chart-immersive-exec" : ""}`}
-        style={{ background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}
+        className={
+          execBarOverNav
+            ? "tos-chart-exec-overlay pointer-events-auto fixed inset-x-0 bottom-0 z-[70] border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+            : `shrink-0 ${isFullscreen ? "chart-immersive-exec" : ""}`
+        }
+        style={{
+          background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)",
+          borderTop: execBarOverNav ? undefined : "1px solid rgba(255,255,255,0.05)",
+          boxShadow: execBarOverNav ? undefined : "inset 0 1px 0 rgba(255,255,255,0.04)",
+          paddingBottom: execBarOverNav ? "max(env(safe-area-inset-bottom, 0px), 0.35rem)" : undefined,
+        }}
       >
         <div className="flex justify-center pt-1 pb-0.5">
           <button

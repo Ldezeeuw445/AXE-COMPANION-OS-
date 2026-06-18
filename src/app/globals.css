@@ -393,6 +393,10 @@ body.trade-sheet-open .tos-nav-pill {
   .tos-chart-tablet-header {
     display: none !important;
   }
+  /* Execution bar floats above bottom nav on phone (MT5-style) */
+  body.tos-route-chart .tos-chart-exec-overlay {
+    z-index: 70;
+  }
 }
 
 /* Full desktop — hide bottom tab bar; chart is edge-to-edge vertically */

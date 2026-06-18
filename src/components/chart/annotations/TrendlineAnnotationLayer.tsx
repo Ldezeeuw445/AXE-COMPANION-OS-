@@ -389,6 +389,33 @@ export function TrendlineAnnotationLayer({
               </g>
               ) : null}
 
+              {/* Locked badge — always visible so you know the drawing is pinned */}
+              {g.locked ? (
+                <g pointerEvents="none">
+                  <rect
+                    x={controlX}
+                    y={controlY - 18}
+                    width={58}
+                    height={15}
+                    rx={3}
+                    fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
+                    stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
+                  />
+                  <text
+                    x={controlX + 29}
+                    y={controlY - 7}
+                    textAnchor="middle"
+                    fontFamily="ui-sans-serif, system-ui"
+                    fontSize="8.5"
+                    fontWeight={700}
+                    letterSpacing="0.6"
+                    fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
+                  >
+                    LOCKED
+                  </text>
+                </g>
+              ) : null}
+
               {onRemove && isActive ? (
                 <>
                   <g
@@ -409,17 +436,17 @@ export function TrendlineAnnotationLayer({
                     <rect
                       x={controlX}
                       y={controlY}
-                      width={20}
-                      height={14}
-                      rx={3}
+                      width={26}
+                      height={18}
+                      rx={4}
                       fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
                       stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
                     />
                     <LockIconSvg
                       locked={g.locked}
-                      x={controlX + 10}
-                      y={controlY + 7}
-                      size={10}
+                      x={controlX + 13}
+                      y={controlY + 9}
+                      size={13}
                       fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
                     />
                   </g>
@@ -431,20 +458,21 @@ export function TrendlineAnnotationLayer({
                     }}
                   >
                     <rect
-                      x={controlX + 22}
+                      x={controlX + 28}
                       y={controlY}
-                      width={20}
-                      height={14}
-                      rx={3}
+                      width={26}
+                      height={18}
+                      rx={4}
                       fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
                       stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
                     />
                     <text
-                      x={controlX + 32}
-                      y={controlY + 10}
+                      x={controlX + 41}
+                      y={controlY + 13}
                       textAnchor="middle"
                       fontFamily="ui-sans-serif, system-ui"
-                      fontSize="9"
+                      fontSize="11"
+                      fontWeight={600}
                       fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
                     >
                       ✕

@@ -12,7 +12,14 @@
 
 /* ── Key list (matches ChartScreen's existing localStorage keys) ─── */
 
-export const PREF_KEYS = [
+/** Per-account only (theme, grid — not symbol-specific). */
+export const ACCOUNT_PREF_KEYS = [
+  "axe-chart-theme",
+  "axe-chart-grid",
+] as const;
+
+/** Per account + symbol (indicators, SMC tools, pane layout). */
+export const SYMBOL_PREF_KEYS = [
   "axe.chart.obCount",
   "axe.chart.ifvgCount",
   "axe.chart.fvgCount",
@@ -20,14 +27,16 @@ export const PREF_KEYS = [
   "axe.chart.maPeriod",
   "axe.chart.maType",
   "axe.chart.indicatorFlags",
+  "axe.chart.smcFlags",
   "axe.chart.fibMode",
   "axe.chart.fibSwingOffset",
   "axe.chart.paneHeight.volume",
   "axe.chart.paneHeight.rsi",
   "axe.chart.paneHeight.macd",
-  "axe-chart-theme",
-  "axe-chart-grid",
+  "axe.chart.paneOrder",
 ] as const;
+
+export const PREF_KEYS = [...ACCOUNT_PREF_KEYS, ...SYMBOL_PREF_KEYS] as const;
 
 export type PrefKey = (typeof PREF_KEYS)[number];
 
@@ -37,6 +46,12 @@ function scopedKey(accountId: string | null, key: string): string {
   // If no accountId (e.g. demo mode), use the raw key (backward compat)
   if (!accountId) return key;
   return `${key}::${accountId}`;
+}
+
+function symbolScopedKey(accountId: string | null, symbol: string, key: string): string {
+  const sym = symbol.trim().toUpperCase();
+  if (!accountId) return `${key}::${sym}`;
+  return `${key}::${accountId}::${sym}`;
 }
 
 /**
@@ -84,8 +99,54 @@ export function writePref(
  */
 export function seedGlobalsFromAccount(accountId: string): void {
   if (typeof window === "undefined") return;
-  for (const key of PREF_KEYS) {
+  for (const key of ACCOUNT_PREF_KEYS) {
     const val = localStorage.getItem(scopedKey(accountId, key));
+    if (val !== null) {
+      localStorage.setItem(key, val);
+    }
+  }
+}
+
+/**
+ * Read a per-symbol chart preference. Falls back to account-scoped, then global.
+ */
+export function readSymbolPref(
+  accountId: string | null,
+  symbol: string,
+  key: string,
+): string | null {
+  if (typeof window === "undefined") return null;
+  const symVal = localStorage.getItem(symbolScopedKey(accountId, symbol, key));
+  if (symVal !== null) return symVal;
+  if (accountId) {
+    const acctVal = localStorage.getItem(scopedKey(accountId, key));
+    if (acctVal !== null) return acctVal;
+  }
+  return localStorage.getItem(key);
+}
+
+/**
+ * Write a per-symbol chart preference and mirror to global for live reads.
+ */
+export function writeSymbolPref(
+  accountId: string | null,
+  symbol: string,
+  key: string,
+  value: string,
+): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(symbolScopedKey(accountId, symbol, key), value);
+  localStorage.setItem(key, value);
+}
+
+/**
+ * Seed global chart keys from the given account + symbol scope.
+ * Call on symbol or account switch so downstream reads stay in sync.
+ */
+export function seedGlobalsFromSymbol(accountId: string | null, symbol: string): void {
+  if (typeof window === "undefined") return;
+  for (const key of SYMBOL_PREF_KEYS) {
+    const val = readSymbolPref(accountId, symbol, key);
     if (val !== null) {
       localStorage.setItem(key, val);
     }
@@ -98,10 +159,20 @@ export function seedGlobalsFromAccount(accountId: string): void {
  */
 export function snapshotGlobalsToAccount(accountId: string): void {
   if (typeof window === "undefined") return;
-  for (const key of PREF_KEYS) {
+  for (const key of ACCOUNT_PREF_KEYS) {
     const val = localStorage.getItem(key);
     if (val !== null) {
       localStorage.setItem(scopedKey(accountId, key), val);
+    }
+  }
+}
+
+export function snapshotGlobalsToSymbol(accountId: string | null, symbol: string): void {
+  if (typeof window === "undefined") return;
+  for (const key of SYMBOL_PREF_KEYS) {
+    const val = localStorage.getItem(key);
+    if (val !== null) {
+      localStorage.setItem(symbolScopedKey(accountId, symbol, key), val);
     }
   }
 }

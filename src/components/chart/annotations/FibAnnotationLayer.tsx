@@ -536,6 +536,33 @@ export function FibAnnotationLayer({
               </g>
               ) : null}
 
+              {/* Locked badge — always visible so you know the drawing is pinned */}
+              {g.locked ? (
+                <g pointerEvents="none">
+                  <rect
+                    x={removeX - 30}
+                    y={removeY - 18}
+                    width={58}
+                    height={15}
+                    rx={3}
+                    fill={gripFill}
+                    stroke={gripStroke}
+                  />
+                  <text
+                    x={removeX - 1}
+                    y={removeY - 7}
+                    textAnchor="middle"
+                    fontFamily="ui-sans-serif, system-ui"
+                    fontSize="8.5"
+                    fontWeight={700}
+                    letterSpacing="0.6"
+                    fill={gripLabel}
+                  >
+                    LOCKED
+                  </text>
+                </g>
+              ) : null}
+
               {/* Lock + remove controls — only when active */}
               {isActive ? (
                 <>
@@ -554,19 +581,19 @@ export function FibAnnotationLayer({
                       });
                     }}
                   >
-                    <rect x={removeX - 22} y={removeY} width={20} height={14} rx={3}
+                    <rect x={removeX - 30} y={removeY} width={26} height={18} rx={4}
                       fill={gripFill} stroke={gripStroke} />
-                    <LockIconSvg locked={g.locked} x={removeX - 12} y={removeY + 7} size={10} fill={gripLabel} />
+                    <LockIconSvg locked={g.locked} x={removeX - 17} y={removeY + 9} size={13} fill={gripLabel} />
                   </g>
                   {onRemove ? (
                     <g
                       style={{ pointerEvents: "auto", cursor: "pointer" }}
                       onPointerDown={(e) => { stopChartPointer(e); onRemove(g.id); }}
                     >
-                      <rect x={removeX} y={removeY} width={20} height={14} rx={3}
+                      <rect x={removeX} y={removeY} width={26} height={18} rx={4}
                         fill={gripFill} stroke={gripStroke} />
-                      <text x={removeX + 10} y={removeY + 10} textAnchor="middle"
-                        fontFamily="ui-sans-serif, system-ui" fontSize="9" fill={gripLabel}>✕</text>
+                      <text x={removeX + 13} y={removeY + 13} textAnchor="middle"
+                        fontFamily="ui-sans-serif, system-ui" fontSize="11" fontWeight={600} fill={gripLabel}>✕</text>
                     </g>
                   ) : null}
                 </>
