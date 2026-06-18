@@ -85,7 +85,7 @@
   --tos-tablet-safe-top: max(env(safe-area-inset-top, 0px), 0.65rem);
   --tos-tablet-safe-left: max(env(safe-area-inset-left, 0px), 0.5rem);
   --tos-tablet-safe-right: max(env(safe-area-inset-right, 0px), 0.5rem);
-  --tos-tablet-chart-header-h: calc(var(--tos-tablet-safe-top) + 2.15rem);
+  --tos-tablet-chart-header-h: calc(var(--tos-tablet-safe-top) + 2.45rem);
 }
 
 @theme inline {

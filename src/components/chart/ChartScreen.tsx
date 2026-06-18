@@ -43,7 +43,6 @@ import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
 import { SquawkBar } from "@/components/market/SquawkBar";
-import { SquawkChip } from "@/components/market/SquawkChip";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import {
@@ -3093,8 +3092,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           </>
         ) : null}
 
-        {/* Tablet — single compact toolbar row */}
-        <div className="tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden items-center gap-2 border-b border-white/[0.06] bg-black/72 px-2 py-1 backdrop-blur-lg">
+        {/* Tablet — compact toolbar: left meta, centered squawk | depth/news | exec, right account */}
+        <div className="tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden items-center gap-2 border-b border-white/[0.06] bg-black/72 px-2 py-1.5 backdrop-blur-lg">
           <div className="flex min-w-0 shrink-0 items-center gap-1">
             <div className="relative">
               <select
@@ -3132,20 +3131,20 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               </span>
             ) : null}
           </div>
-          <ChartQuickActions
-            compact
-            orderBookOpen={orderBookOpen}
-            newsOpen={newsOpen}
-            oneClickVisible={oneClickVisible}
-            executionMode={executionMode}
-            pendingOrderVisible={pendingOrderVisible}
-            onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
-            onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
-            onOneClick={toggleOneClickTrade}
-            onPending={togglePendingTrade}
-          />
-          <div className="min-w-0 flex-1" />
-          <SquawkChip />
+          <div className="flex min-w-0 flex-1 items-center justify-center px-1">
+            <ChartQuickActions
+              variant="tablet"
+              orderBookOpen={orderBookOpen}
+              newsOpen={newsOpen}
+              oneClickVisible={oneClickVisible}
+              executionMode={executionMode}
+              pendingOrderVisible={pendingOrderVisible}
+              onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+              onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+              onOneClick={toggleOneClickTrade}
+              onPending={togglePendingTrade}
+            />
+          </div>
           {data.accountChoices.length > 0 ? (
             <div className="relative shrink-0">
               <select

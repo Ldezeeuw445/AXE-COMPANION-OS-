@@ -14,6 +14,7 @@ import {
   LineChart,
   Menu,
   MessageSquare,
+  Rss,
   ScrollText,
   Settings,
   Sparkles,
@@ -44,6 +45,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/chat", label: "Chat", Icon: MessageSquare },
+  { href: "/feed", label: "AXE Feed", Icon: Rss },
   { href: "/accounts", label: "Accounts", Icon: Landmark },
   { href: "/positions", label: "Positions", Icon: Layers },
   { href: "/chart", label: "Chart", Icon: LineChart },

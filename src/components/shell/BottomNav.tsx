@@ -26,6 +26,7 @@ import {
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useSwipeNav } from "./SwipeNavContext";
 import { useTabletNavCollapse, useTabletNavSwipe } from "@/components/shell/TabletNavCollapse";
+import { FeedNavBadge } from "@/components/feed/FeedNavBadge";
 
 const CYAN = "#00d4f5";
 const GOLD = "#d4af37";
@@ -144,6 +145,7 @@ export function BottomNav() {
               className="group relative flex flex-col items-center gap-[2px] active:scale-95 transition-transform"
               style={{ minWidth: 0, flex: "1 1 0%" }}
             >
+              {href === "/chat" ? <FeedNavBadge /> : null}
               {/* Icon well */}
               <div
                 className="relative flex h-[var(--tos-nav-icon-size)] w-[var(--tos-nav-icon-size)] items-center justify-center rounded-[10px] transition-all duration-150"
