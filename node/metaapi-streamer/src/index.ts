@@ -414,10 +414,7 @@ class MultiSymbolListener {
 
   private rememberPendingOrder(order: OrderEvent): void {
     const key = this.pendingOrderKey(order);
-    if (!key) {
-      this.pendingOrderTotal = Math.max(this.pendingOrderTotal, 1);
-      return;
-    }
+    if (!key) return;
     const wasKnown = this.pendingOrdersById.has(key);
     this.pendingOrdersById.set(key, order);
     if (!wasKnown) this.pendingOrderTotal += 1;
@@ -840,7 +837,7 @@ async function main() {
   startHealthServer();
 
   // ── Static mode (v1 compatibility) ─────────────────────────────
-  if (env.STATIC_MODE && env.SUBSCRIPTIONS) {
+  if (env.STATIC_MODE) {
     const subs = parseSubscriptions(env.SUBSCRIPTIONS);
     log("info", `STATIC_MODE: loaded ${subs.length} subscription(s) from SUBSCRIPTIONS env`);
 
