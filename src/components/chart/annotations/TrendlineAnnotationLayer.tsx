@@ -1,5 +1,6 @@
 "use client";
 
+import { LockIconSvg } from "@/components/chart/annotations/LockIconSvg";
 import { useEffect, useRef, useState } from "react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { AnnotationPoint, ChartAnnotation } from "@/components/chart/annotations/types";
@@ -414,16 +415,13 @@ export function TrendlineAnnotationLayer({
                       fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
                       stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
                     />
-                    <text
+                    <LockIconSvg
+                      locked={g.locked}
                       x={controlX + 10}
-                      y={controlY + 9.5}
-                      textAnchor="middle"
-                      fontFamily="ui-sans-serif, system-ui"
-                      fontSize="8"
+                      y={controlY + 7}
+                      size={10}
                       fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
-                    >
-                      {g.locked ? "LK" : "UL"}
-                    </text>
+                    />
                   </g>
                   <g
                     style={{ pointerEvents: "auto", cursor: "pointer" }}

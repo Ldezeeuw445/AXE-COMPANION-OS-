@@ -38,8 +38,9 @@ import {
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
-import { isPhoneLandscapeViewport } from "@/components/ui/AxeAuraWave";
+import { isPhoneLandscapeViewport } from "@/lib/viewport/tablet";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
+import { SquawkBar } from "@/components/market/SquawkBar";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import {
@@ -2962,7 +2963,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+                className="tos-chart-fullscreen-btn grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/70"
                 aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               >
                 {isFullscreen
@@ -4279,6 +4280,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
           onTpChange={setPendingTakeProfitPrice}
         />
       ) : null}
+
+      {!isFullscreen ? <SquawkBar /> : null}
 
     </div>
   );

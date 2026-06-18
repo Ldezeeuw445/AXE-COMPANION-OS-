@@ -316,17 +316,14 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
-/* Phone landscape keeps the mobile shell — wide-but-short viewports
-   (rotated phones) must not trigger the desktop rail / hide bottom nav. */
-@media (min-width: 1280px) and (min-height: 720px) {
+/* Tablet+ — persistent left icon rail; chart uses full remaining width.
+   Bottom nav stays visible until full desktop breakpoint below. */
+@media (min-width: 768px) {
   .tos-shell-mobile-chrome {
     display: none !important;
   }
   .tos-shell-desktop-rail {
     display: flex !important;
-  }
-  .tos-shell-mobile-nav {
-    display: none !important;
   }
   .tos-shell-desktop-layout {
     padding-left: 4.25rem;
@@ -335,7 +332,6 @@ body.trade-sheet-open .tos-nav-pill {
   .tos-shell-desktop-content {
     padding-left: 1.5rem;
     padding-top: max(0.75rem, env(safe-area-inset-top));
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
   .tos-shell-desktop-content.tos-flush-route {
     padding-bottom: 0;
@@ -343,15 +339,33 @@ body.trade-sheet-open .tos-nav-pill {
   .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
     padding-left: 0;
     padding-right: 0;
+    padding-bottom: var(--tos-nav-offset);
   }
   .tos-shell-desktop-only {
     display: grid !important;
   }
+  /* Fullscreen expand is phone-only — tablets already have enough canvas */
+  .tos-chart-fullscreen-btn {
+    display: none !important;
+  }
 }
 
-@media not all and (min-width: 1280px) and (min-height: 720px) {
+@media (max-width: 767px) {
   .tos-shell-desktop-rail {
     display: none !important;
+  }
+}
+
+/* Full desktop — hide bottom tab bar; chart is edge-to-edge vertically */
+@media (min-width: 1280px) and (min-height: 720px) {
+  .tos-shell-mobile-nav {
+    display: none !important;
+  }
+  .tos-shell-desktop-content {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
+    padding-bottom: 0;
   }
 }
 

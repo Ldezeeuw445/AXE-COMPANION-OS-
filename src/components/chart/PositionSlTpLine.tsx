@@ -3,7 +3,8 @@
 /**
  * MT5-style SL/TP level for open positions and broker pending orders.
  * Idle: small left label only (chart stays pannable).
- * Press label → show P&L + drag ball + horizontal line.
+ * Tap label → show P&L + drag ball + horizontal line.
+ * Release after drag → commit + return to idle line.
  */
 
 import {
@@ -209,40 +210,15 @@ export const PositionSlTpLine = memo(function PositionSlTpLine({
     [disabled, startDragSession],
   );
 
+  /** Tap label to arm — drag starts from the handle zone, not the label itself. */
   const handleLabelPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (disabled) return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.pointerType === "touch" || e.pointerType === "pen") {
-        setArmed(true);
-        startDragSession(e.currentTarget, e.pointerId, e.clientY);
-        return;
-      }
       setArmed(true);
-
-      const el = e.currentTarget;
-      const originY = e.clientY;
-      let dragging = false;
-
-      const onMove = (ev: PointerEvent) => {
-        if (dragging) return;
-        if (Math.abs(ev.clientY - originY) < 6) return;
-        dragging = true;
-        startDragSession(el, ev.pointerId, originY);
-      };
-
-      const onUp = () => {
-        el.removeEventListener("pointermove", onMove);
-        el.removeEventListener("pointerup", onUp);
-        el.removeEventListener("pointercancel", onUp);
-      };
-
-      el.addEventListener("pointermove", onMove, { passive: false });
-      el.addEventListener("pointerup", onUp);
-      el.addEventListener("pointercancel", onUp);
     },
-    [disabled, startDragSession],
+    [disabled],
   );
 
   if (baseY == null || size.w <= 0 || size.h <= 0) {
@@ -350,9 +326,9 @@ export const PositionSlTpLine = memo(function PositionSlTpLine({
               letterSpacing: "0.02em",
               textShadow: "0 0 4px rgba(0,0,0,0.9)",
               paddingLeft: 6,
-              paddingTop: 8,
-              paddingBottom: 8,
-              paddingRight: 10,
+              paddingTop: 12,
+              paddingBottom: 12,
+              paddingRight: 14,
             }}
           >
             {idleLabel}

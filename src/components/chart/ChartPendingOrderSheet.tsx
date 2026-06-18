@@ -51,8 +51,9 @@ export function ChartPendingOrderSheet({
 
   return (
     <div
-      className="pointer-events-auto fixed inset-x-0 bottom-0 z-[60] border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+      className="pointer-events-auto fixed inset-x-0 z-[60] border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
       style={{
+        bottom: "var(--tos-nav-offset)",
         background: "linear-gradient(180deg, rgba(14,16,20,0.97) 0%, rgba(6,6,8,0.99) 100%)",
         paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0.35rem)",
         maxHeight: expanded ? "min(52vh, 420px)" : undefined,

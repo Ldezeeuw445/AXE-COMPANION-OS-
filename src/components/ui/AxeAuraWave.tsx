@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { isPhoneLandscapeViewport as detectPhoneLandscape } from "@/lib/viewport/tablet";
 
 type AuraState = "idle" | "thinking" | "tools" | "responding" | "recording" | "speaking";
 
@@ -200,13 +201,8 @@ function lerpProfile(current: MotionProfile, target: MotionProfile, t: number): 
   };
 }
 
-function isPhoneLandscapeViewport(): boolean {
-  if (typeof window === "undefined") return false;
-  const landscape = window.matchMedia("(orientation: landscape)").matches;
-  if (!landscape) return false;
-  const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const short = window.matchMedia("(max-height: 520px)").matches;
-  return coarse || short || window.innerHeight < 520;
+export function isPhoneLandscapeViewport(): boolean {
+  return detectPhoneLandscape();
 }
 
 export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer" }) {
@@ -515,5 +511,3 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
     </div>
   );
 }
-
-export { isPhoneLandscapeViewport };

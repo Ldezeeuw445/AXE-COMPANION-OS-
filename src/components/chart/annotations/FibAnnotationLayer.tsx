@@ -1,5 +1,6 @@
 "use client";
 
+import { LockIconSvg } from "@/components/chart/annotations/LockIconSvg";
 import { useEffect, useRef, useState } from "react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import {
@@ -390,8 +391,9 @@ export function FibAnnotationLayer({
           const anchorLine = g.lines.find((ln) => ln.level === 0);
           const swingExtreme = g.lines.find((ln) => ln.level === 1);
 
-          /* Label X positions: both % and price on the right rail */
+          /* Label X positions: % and price both on the right with clear gap */
           const priceLabelX = g.rightX - 4;
+          const pctLabelX = priceLabelX - 52;
 
           /* Remove pill near top-left corner */
           const removeX = Math.max(6, g.startX - 36);
@@ -474,9 +476,9 @@ export function FibAnnotationLayer({
                       strokeWidth={style.width}
                       pointerEvents="none"
                     />
-                    {/* % label — right side, tighter to price for MT5 readability */}
+                    {/* % label — right side, spaced from price pill */}
                     <text
-                      x={priceLabelX - 34} y={ln.y - 3}
+                      x={pctLabelX} y={ln.y - 3}
                       textAnchor="end"
                       fontFamily="ui-sans-serif, system-ui, -apple-system"
                       fontSize="10"
@@ -554,10 +556,7 @@ export function FibAnnotationLayer({
                   >
                     <rect x={removeX - 22} y={removeY} width={20} height={14} rx={3}
                       fill={gripFill} stroke={gripStroke} />
-                    <text x={removeX - 12} y={removeY + 9.5} textAnchor="middle"
-                      fontFamily="ui-sans-serif, system-ui" fontSize="8" fill={gripLabel}>
-                      {g.locked ? "LK" : "UL"}
-                    </text>
+                    <LockIconSvg locked={g.locked} x={removeX - 12} y={removeY + 7} size={10} fill={gripLabel} />
                   </g>
                   {onRemove ? (
                     <g
