@@ -77,10 +77,10 @@ self.addEventListener("push", (event) => {
     // — we still want to show *something* so the user knows AXE pinged them.
   }
 
-  const title = payload.title || "AXE";
+  const title = payload.title || "Trading OS";
   const body = payload.body || "New activity in Trading OS";
   const url = payload.url || "/chat";
-  const tag = payload.tag || "axe-notification";
+  const tag = payload.tag || "trading-os-notification";
   const severity = payload.severity || "alert";
   const requireInteraction = payload.requireInteraction ?? severity === "risk";
 
