@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bell, Check, Loader2, Pause, Play, Plus, Trash2 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -9,6 +10,8 @@ import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { PushPermission } from "@/components/push/PushPermission";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
+import { chatHrefWithPrefill, stageChatPrefill } from "@/lib/chat/chatPrefill";
+import type { TradeExecutionPrefs } from "@/lib/trading/tradeExecutionPrefs";
 
 type AlertRow = {
   id: string;
@@ -124,7 +127,40 @@ function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
   };
 }
 
-export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
+function priceAlertRuntimeOk(state: AlertRuntimeCheck["state"]): boolean {
+  return state === "valid" || state === "degraded";
+}
+
+function buildAlertRefineDraft(args: {
+  symbol: string;
+  type: string;
+  condition: string;
+  threshold: string;
+  keyword: string;
+  defaultVolume: number;
+  alertAutoTradeEnabled: boolean;
+}): string {
+  const sym = args.symbol.trim().toUpperCase() || "XAUUSD";
+  return `[AXE · alerts]
+Refine this alert rule for ${sym}:
+- Type: ${args.type}
+- Condition: ${args.condition}
+- Threshold: ${args.threshold || "?"}
+- Keyword: ${args.keyword || "—"}
+- My default size: ${args.defaultVolume.toFixed(2)} lots
+- Alert auto-trade: ${args.alertAutoTradeEnabled ? "ON (market, no SL/TP yet)" : "OFF"}
+
+Return one crisp alert I can save, with a suggested threshold and a one-line rationale.`;
+}
+
+export function AlertsClient({
+  initialSymbol,
+  tradePrefs,
+}: {
+  initialSymbol: string;
+  tradePrefs: TradeExecutionPrefs;
+}) {
+  const router = useRouter();
   const focusSymbol = initialSymbol.trim().toUpperCase();
 
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
@@ -244,8 +280,8 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       setError("Price alerts need a valid threshold.");
       return;
     }
-    if (type === "price" && runtimeCheck.state !== "valid") {
-      setError(runtimeCheck.reason);
+    if (type === "price" && !priceAlertRuntimeOk(runtimeCheck.state)) {
+      setError(runtimeCheck.reason || "Broker runtime not ready for this symbol.");
       return;
     }
     if ((type === "news" || type === "macro") && !keyword) {
@@ -320,6 +356,33 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
     },
     [refresh],
   );
+
+  const refineDraft = useMemo(
+    () =>
+      buildAlertRefineDraft({
+        symbol: formSymbol,
+        type: formType,
+        condition: formCondition,
+        threshold: formThreshold,
+        keyword: formKeyword,
+        defaultVolume: tradePrefs.defaultVolume,
+        alertAutoTradeEnabled: tradePrefs.alertAutoTradeEnabled,
+      }),
+    [
+      formSymbol,
+      formType,
+      formCondition,
+      formThreshold,
+      formKeyword,
+      tradePrefs.defaultVolume,
+      tradePrefs.alertAutoTradeEnabled,
+    ],
+  );
+
+  const goRefineInChat = useCallback(() => {
+    stageChatPrefill(refineDraft);
+    router.push(chatHrefWithPrefill(refineDraft));
+  }, [refineDraft, router]);
 
   const delivery = deliveryPill(push);
 
@@ -488,6 +551,35 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           </span>
           {runtimeCheck.brokerSymbol ? <span className="font-mono"> · {runtimeCheck.brokerSymbol}</span> : null}
           <span> · {runtimeCheck.reason}</span>
+          {formType === "price" && runtimeCheck.state === "degraded" ? (
+            <span className="mt-1 block text-amber-200/85">
+              Live price is warming — you can still save the alert; evaluation runs when Chart is open.
+            </span>
+          ) : null}
+        </div>
+
+        <div className="mt-3 rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2.5 text-[11px] leading-relaxed text-tos-muted">
+          <span className="font-semibold text-cyan-100/90">Your trade size (saved per account):</span>{" "}
+          <span className="font-mono text-white/85">{tradePrefs.defaultVolume.toFixed(2)} lots</span>
+          {" · "}
+          Alert auto-trade:{" "}
+          <span className={tradePrefs.alertAutoTradeEnabled ? "text-amber-200/90" : "text-white/70"}>
+            {tradePrefs.alertAutoTradeEnabled ? "ON" : "OFF"}
+          </span>
+          {tradePrefs.alertAutoTradeEnabled ? (
+            <span className="mt-1 block text-tos-dim">
+              Above → market buy, below → market sell at your default lots. No SL/TP on alert auto-trade yet — manage
+              risk on the chart or in positions.
+            </span>
+          ) : (
+            <span className="mt-1 block text-tos-dim">
+              Change in{" "}
+              <Link href="/settings" className="text-cyan-300/85 hover:underline">
+                Settings → Trade size &amp; alerts
+              </Link>
+              .
+            </span>
+          )}
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -566,21 +658,20 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           <button
             type="button"
             onClick={() => void createAlert()}
-            disabled={saving || (formType === "price" && runtimeCheck.state !== "valid")}
+            disabled={saving || (formType === "price" && runtimeCheck.state === "checking")}
             className="inline-flex items-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2 text-[12px] font-semibold text-white/90 hover:bg-white/[0.08] disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
             Create
           </button>
-          <Link
-            href={chatQ(
-              `[AXE · alerts]\nDraft a single alert for ${formSymbol || "my account"}.\nType: ${formType}\nCondition: ${formCondition}\nThreshold: ${formThreshold || "?"}\nKeyword: ${formKeyword || "?"}\nReturn a crisp rule + suggested values.`,
-            )}
+          <button
+            type="button"
+            onClick={goRefineInChat}
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[12px] font-semibold text-tos-muted hover:bg-white/[0.06]"
           >
             <Check className="h-4 w-4 text-white/60" aria-hidden />
             Ask AXE to refine
-          </Link>
+          </button>
         </div>
       </GlassPanel>
 

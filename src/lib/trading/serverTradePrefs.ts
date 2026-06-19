@@ -2,11 +2,9 @@ import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { DEFAULT_TRADE_VOLUME_LOTS, normalizeTradeVolume } from "@/lib/trading/tradeVolume";
+import type { TradeExecutionPrefs } from "@/lib/trading/tradeExecutionPrefs";
 
-export type TradeExecutionPrefs = {
-  defaultVolume: number;
-  alertAutoTradeEnabled: boolean;
-};
+export type { TradeExecutionPrefs };
 
 export async function getTradeExecutionPrefsForUser(userId: string): Promise<TradeExecutionPrefs> {
   const supabase = await createServerSupabaseClient();

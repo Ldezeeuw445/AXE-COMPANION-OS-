@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
+import { feedItemLinkLabel, inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import {
   getFeedLastSeenAt,
   markAllFeedItemsRead,
@@ -133,8 +134,10 @@ export function AxeFeedClient() {
         )}
       </div>
       <ul className="flex flex-col gap-2.5">
-        {items.map((item) => (
-          <li key={item.id}>
+        {items.map((item) => {
+          const href = inferFeedItemUrl(item);
+          const linkLabel = feedItemLinkLabel(item);
+          const panel = (
             <GlassPanel className="p-4 transition-colors hover:border-white/12">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -150,17 +153,26 @@ export function AxeFeedClient() {
                   {formatWhen(item.createdAt)}
                 </span>
               </div>
-              {item.url ? (
-                <Link
-                  href={item.url}
-                  className="mt-3 inline-flex text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-400/90 hover:text-cyan-300"
-                >
-                  Open →
-                </Link>
+              {href ? (
+                <span className="mt-3 inline-flex text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-400/90">
+                  {linkLabel} →
+                </span>
               ) : null}
             </GlassPanel>
-          </li>
-        ))}
+          );
+
+          return (
+            <li key={item.id}>
+              {href ? (
+                <Link href={href} className="block rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400/50">
+                  {panel}
+                </Link>
+              ) : (
+                panel
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

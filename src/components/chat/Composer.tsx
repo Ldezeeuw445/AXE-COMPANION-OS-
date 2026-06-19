@@ -13,6 +13,7 @@
 
 import { Suspense, useState, useRef, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { consumeStagedChatPrefill } from "@/lib/chat/chatPrefill";
 import { Mic, MicOff, Paperclip, Send, X, ImageIcon } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
@@ -101,12 +102,13 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     try { return localStorage.getItem(LS_TF) ?? ""; } catch { return ""; }
   }, []);
 
-  // Prefill from ?q= query param
+  // Prefill from staged session draft or ?q= query param
   useEffect(() => {
+    const staged = consumeStagedChatPrefill();
     const q = searchParams.get("q");
-    if (!q) return;
-    const decoded = decodeURIComponent(q);
-    setValue((prev) => (prev.trim() ? prev : decoded));
+    const draft = staged ?? (q ? decodeURIComponent(q) : null);
+    if (!draft) return;
+    setValue(draft);
     if (typeof window !== "undefined") {
       const u = new URL(window.location.href);
       if (u.searchParams.has("q")) {

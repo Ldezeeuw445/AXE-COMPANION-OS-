@@ -1,4 +1,5 @@
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
+import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import type { AxeFeedItem } from "@/types/feed";
 
 export { countUnreadFeedItems } from "@/lib/feed/feedUnread";
@@ -39,14 +40,17 @@ export async function listAxeFeedItems(limit = 40): Promise<AxeFeedItem[]> {
     createdAt: String(row.created_at),
   }));
 
-  const drafts: AxeFeedItem[] = (execRes.data ?? []).map((row) => ({
-    id: `exec:${row.id}`,
-    kind: "trade_draft" as const,
-    title: `Trade ready: ${row.instrument}`,
-    body: `${String(row.direction ?? "").toUpperCase()} @ ${row.entry_price ?? "market"} — ${row.rationale ?? "Review and approve"}`,
-    url: "/actions",
-    createdAt: String(row.created_at),
-  }));
+  const drafts: AxeFeedItem[] = (execRes.data ?? []).map((row) => {
+    const instrument = String(row.instrument ?? "").trim().toUpperCase();
+    return {
+      id: `exec:${row.id}`,
+      kind: "trade_draft" as const,
+      title: `Trade ready: ${instrument || "—"}`,
+      body: `${String(row.direction ?? "").toUpperCase()} @ ${row.entry_price ?? "market"} — ${row.rationale ?? "Review and approve"}`,
+      url: "/actions",
+      createdAt: String(row.created_at),
+    };
+  });
 
   const chartActions: AxeFeedItem[] = (chartRes.data ?? []).map((row) => {
     const tf = String(row.timeframe ?? "h1").toUpperCase();
@@ -57,7 +61,7 @@ export async function listAxeFeedItems(limit = 40): Promise<AxeFeedItem[]> {
       kind: "chart_action" as const,
       title: `Chart queued: ${sym} ${tf}`,
       body: action.charAt(0).toUpperCase() + action.slice(1),
-      url: `/chart?symbol=${encodeURIComponent(sym)}&tf=${encodeURIComponent(tf)}`,
+      url: chartDeepLink(sym, String(row.timeframe ?? "h1")),
       createdAt: String(row.created_at),
     };
   });

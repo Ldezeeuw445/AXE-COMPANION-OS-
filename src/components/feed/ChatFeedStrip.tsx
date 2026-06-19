@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Rss } from "lucide-react";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
+import { inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import { getFeedLastSeenAt, markAllFeedItemsRead } from "@/lib/feed/feedSeen";
 import type { AxeFeedItem } from "@/types/feed";
 
@@ -93,7 +94,7 @@ export function ChatFeedStrip() {
         {items.map((item) => (
           <li key={item.id}>
             <Link
-              href={item.url ?? "/feed"}
+              href={inferFeedItemUrl(item) ?? "/feed"}
               className="flex items-start justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/30 px-2.5 py-1.5 transition-colors hover:border-cyan-400/20 hover:bg-cyan-400/[0.06]"
             >
               <span className="min-w-0 text-[11px] leading-snug text-white/85">

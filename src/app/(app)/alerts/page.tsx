@@ -1,4 +1,5 @@
 import { AlertsClient } from "@/app/(app)/alerts/AlertsClient";
+import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 
 type PageProps = {
   searchParams: Promise<{ symbol?: string }>;
@@ -7,5 +8,6 @@ type PageProps = {
 export default async function AlertsPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const symbol = (sp.symbol ?? "").trim().toUpperCase();
-  return <AlertsClient initialSymbol={symbol} />;
+  const tradePrefs = await getTradeExecutionPrefsServerState();
+  return <AlertsClient initialSymbol={symbol} tradePrefs={tradePrefs} />;
 }

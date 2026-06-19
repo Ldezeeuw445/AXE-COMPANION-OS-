@@ -14,6 +14,7 @@
  * user when the price oscillates around the threshold.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     body.message ??
     buildDefaultMessage(existing.symbol, existing.condition, existing.threshold, body.price);
 
-  const feedUrl = existing.symbol ? `/chart?symbol=${existing.symbol}` : "/alerts";
+  const feedUrl = existing.symbol ? chartDeepLink(existing.symbol) : "/alerts";
   await recordProactiveFeedEvent(
     supabase,
     user.id,
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         userId: user.id,
         title: `Alert · ${existing.symbol ?? existing.type}`,
         body: message,
-        url: existing.symbol ? `/chart?symbol=${existing.symbol}` : "/alerts",
+        url: existing.symbol ? chartDeepLink(existing.symbol) : "/alerts",
         tag: `alert-${id}`,
       }),
     });
