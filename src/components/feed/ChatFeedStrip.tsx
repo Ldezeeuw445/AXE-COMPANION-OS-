@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 import { inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import { getFeedLastSeenAt, markAllFeedItemsRead } from "@/lib/feed/feedSeen";
+import { isTabletViewport } from "@/lib/viewport/tablet";
 import type { AxeFeedItem } from "@/types/feed";
 
 function formatWhen(iso: string): string {
@@ -21,6 +22,18 @@ export function ChatFeedStrip() {
   const [items, setItems] = useState<AxeFeedItem[]>([]);
   const [allItems, setAllItems] = useState<AxeFeedItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [isTablet, setIsTablet] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setIsTablet(isTabletViewport());
+    sync();
+    window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +46,8 @@ export function ChatFeedStrip() {
         const list = json.items ?? [];
         if (!cancelled) {
           setAllItems(list);
-          setItems(list.slice(0, 2));
+          const visibleCount = isTablet ? 1 : 2;
+          setItems(list.slice(0, visibleCount));
           setUnread(countUnreadFeedItems(list, getFeedLastSeenAt()));
         }
       } catch {
@@ -50,7 +64,7 @@ export function ChatFeedStrip() {
       window.removeEventListener("axe:feed-seen", onSeen);
       clearInterval(id);
     };
-  }, []);
+  }, [isTablet]);
 
   const handleMarkRead = () => {
     markAllFeedItemsRead(allItems);
@@ -59,10 +73,20 @@ export function ChatFeedStrip() {
 
   if (items.length === 0) return null;
 
+  const bodyLimit = isTablet ? 48 : 72;
+
   return (
-    <div className="shrink-0 border-b border-white/[0.06] bg-gradient-to-b from-[#0e0e12] to-[#060608] px-3 py-2">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/82">
+    <div
+      className={`shrink-0 border-b border-white/[0.06] bg-gradient-to-b from-[#0e0e12] to-[#060608] ${
+        isTablet ? "px-2 py-1" : "px-3 py-2"
+      }`}
+    >
+      <div className={`flex items-center justify-between gap-2 ${isTablet ? "mb-1" : "mb-1.5"}`}>
+        <span
+          className={`flex items-center gap-1.5 font-semibold uppercase tracking-[0.16em] text-white/82 ${
+            isTablet ? "text-[8px]" : "text-[9px]"
+          }`}
+        >
           <span className="tos-accent-dot tos-accent-dot--cyan" aria-hidden />
           AXE Feed
           {unread > 0 ? (
@@ -71,38 +95,55 @@ export function ChatFeedStrip() {
             </span>
           ) : null}
         </span>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           {unread > 0 ? (
             <button
               type="button"
               onClick={handleMarkRead}
-              className="text-[9px] font-semibold uppercase tracking-wider text-white/45 transition-colors hover:text-white/70"
+              className={`font-semibold uppercase tracking-wider text-white/45 transition-colors hover:text-white/70 ${
+                isTablet ? "text-[8px]" : "text-[9px]"
+              }`}
             >
               Mark read
             </button>
           ) : null}
           <Link
             href="/feed"
-            className="text-[9px] font-semibold uppercase tracking-wider text-cyan-400/80 hover:text-cyan-300"
+            className={`font-semibold uppercase tracking-wider text-cyan-400/80 hover:text-cyan-300 ${
+              isTablet ? "text-[8px]" : "text-[9px]"
+            }`}
           >
-            Open feed →
+            {isTablet ? "Feed →" : "Open feed →"}
           </Link>
         </div>
       </div>
-      <ul className="flex flex-col gap-1">
+      <ul className={isTablet ? "flex flex-col gap-0.5" : "flex flex-col gap-1"}>
         {items.map((item) => (
           <li key={item.id}>
             <Link
               href={inferFeedItemUrl(item) ?? "/feed"}
-              className="tos-matte-banner flex items-start justify-between gap-2 transition-colors hover:border-white/[0.1]"
+              className={`tos-matte-banner flex items-center justify-between gap-2 transition-colors hover:border-white/[0.1] ${
+                isTablet ? "px-2 py-1" : ""
+              }`}
             >
-              <span className="min-w-0 text-[11px] leading-snug text-white/85">
+              <span
+                className={`min-w-0 leading-snug text-white/85 ${
+                  isTablet ? "truncate text-[10px] leading-tight" : "text-[11px] leading-snug"
+                }`}
+              >
                 <span className="font-medium text-cyan-100/90">{item.title}</span>
-                {item.body ? (
-                  <span className="text-white/55"> — {item.body.length > 72 ? `${item.body.slice(0, 72)}…` : item.body}</span>
+                {!isTablet && item.body ? (
+                  <span className="text-white/55">
+                    {" "}
+                    — {item.body.length > bodyLimit ? `${item.body.slice(0, bodyLimit)}…` : item.body}
+                  </span>
                 ) : null}
               </span>
-              <span className="shrink-0 text-[9px] uppercase tracking-wide text-white/35">
+              <span
+                className={`shrink-0 uppercase tracking-wide text-white/35 ${
+                  isTablet ? "text-[8px]" : "text-[9px]"
+                }`}
+              >
                 {formatWhen(item.createdAt)}
               </span>
             </Link>

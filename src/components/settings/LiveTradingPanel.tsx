@@ -12,7 +12,8 @@
  * remains the last gate before any order leaves the app.
  */
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, ShieldCheck, ShieldOff, X } from "lucide-react";
+import { AlertTriangle, ShieldCheck, ShieldOff, X } from "lucide-react";
+import { TosMatteBanner } from "@/components/ui/TosNotice";
 import { REQUIRED_PHRASE, useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 
 export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }) {
@@ -62,14 +63,11 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
 
       {!live.enabled ? (
         <div className="mt-4 space-y-3">
-          <div className="flex items-start gap-2 rounded-xl border border-amber-400/22 bg-amber-400/[0.05] px-3 py-2.5 text-[11.5px] leading-relaxed text-amber-200/90">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden />
-            <p>
-              Activating live trading lets BUY / SELL on a connected MT5 account send real orders to
-              your broker. AXE never auto-executes, but a wrong tap can lose real money. Make sure
-              you understand the risks before enabling.
-            </p>
-          </div>
+          <TosMatteBanner accent="amber">
+            Activating live trading lets BUY / SELL on a connected MT5 account send real orders to
+            your broker. AXE never auto-executes, but a wrong tap can lose real money. Make sure
+            you understand the risks before enabling.
+          </TosMatteBanner>
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -82,13 +80,10 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
         </div>
       ) : (
         <div className="mt-4 space-y-3">
-          <div className="flex items-start gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5 text-[11.5px] leading-relaxed text-white/90">
-            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden />
-            <p>
-              Live trading is enabled on your account. BUY / SELL on a connected MT5 account opens a
-              final 2-tap confirm before any order leaves the app.
-            </p>
-          </div>
+          <TosMatteBanner accent="emerald">
+            Live trading is enabled on your account. BUY / SELL on a connected MT5 account opens a
+            final 2-tap confirm before any order leaves the app.
+          </TosMatteBanner>
 
           <button
             type="button"

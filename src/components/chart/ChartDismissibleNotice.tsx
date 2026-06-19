@@ -8,7 +8,15 @@ const STORAGE_KEY = "axe.chart.dismissedNotices";
 function readDismissed(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      const legacy = sessionStorage.getItem(STORAGE_KEY);
+      if (legacy) {
+        localStorage.setItem(STORAGE_KEY, legacy);
+        sessionStorage.removeItem(STORAGE_KEY);
+        raw = legacy;
+      }
+    }
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return new Set();
@@ -20,7 +28,7 @@ function readDismissed(): Set<string> {
 
 function writeDismissed(set: Set<string>) {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
   } catch {
     /* ignore */
   }

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { Zap } from "lucide-react";
+import { TosMatteBanner } from "@/components/ui/TosNotice";
 import {
   DEFAULT_TRADE_VOLUME_LOTS,
   MAX_TRADE_VOLUME_LOTS,
@@ -184,7 +185,11 @@ export function TradeExecutionPrefsPanel({
         </span>
       </label>
 
-      {error ? <p className="mt-2 text-[11px] text-amber-200/90">{error}</p> : null}
+      {error ? (
+        <TosMatteBanner accent="amber" className="mt-2">
+          {error}
+        </TosMatteBanner>
+      ) : null}
       <p className="mt-3 text-[10px] text-tos-dim">
         {saving ? "Saving…" : saved ? "Saved to your workspace." : "Syncs across devices."}
       </p>

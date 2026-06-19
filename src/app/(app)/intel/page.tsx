@@ -102,12 +102,13 @@ export default async function IntelPage({ searchParams }: PageProps) {
       />
 
       {intel.cache.message ? (
-        <GlassPanel className="p-3">
-          <p className="text-xs leading-relaxed text-tos-muted">
+        <div className="tos-matte-banner">
+          <span className="tos-accent-dot tos-accent-dot--amber mt-0.5 shrink-0" aria-hidden />
+          <p className="text-xs leading-relaxed text-white/78">
             {intel.cache.message}
             {intel.cache.ageSeconds != null ? ` Last cached ${formatAge(intel.cache.ageSeconds)} ago.` : ""}
           </p>
-        </GlassPanel>
+        </div>
       ) : null}
 
       {/* ── AXE CONVICTION ENGINE ──────────────────────────────── */}
@@ -506,9 +507,12 @@ export default async function IntelPage({ searchParams }: PageProps) {
               ))}
             </ul>
           ) : (
-            <div className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.04] px-3 py-3 text-center">
-              <span className="font-mono text-[11px] font-semibold text-emerald-300/80">ALL CLEAR</span>
-              <p className="mt-1 text-[10px] text-tos-dim">No aircraft broadcasting emergency squawk 7700</p>
+            <div className="tos-matte-banner mt-3 justify-center text-center">
+              <span className="tos-accent-dot tos-accent-dot--emerald mt-0.5 shrink-0" aria-hidden />
+              <div>
+                <span className="font-mono text-[11px] font-semibold text-white/90">ALL CLEAR</span>
+                <p className="mt-1 text-[10px] text-white/55">No aircraft broadcasting emergency squawk 7700</p>
+              </div>
             </div>
           )}
         </GlassPanel>
@@ -790,47 +794,42 @@ function ProviderBadges({
         ? `${liveCount}/${providers.length} ready · cached ${cache.ageSeconds != null ? formatAge(cache.ageSeconds) : "snapshot"}`
         : "Feed warming";
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+    <div className="tos-matte-banner flex-col items-stretch gap-2 px-3 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-tos-dim">Live feed health</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-white/55">Live feed health</span>
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-            degraded
-              ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/90"
-              : "border-white/[0.08] bg-white/[0.05] text-white/90"
-          }`}
+          className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/85"
           title={cache.message}
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${degraded ? "bg-amber-300/85" : "bg-emerald-300"}`} aria-hidden />
+          <span
+            className={`tos-accent-dot shrink-0 ${degraded ? "tos-accent-dot--amber" : "tos-accent-dot--emerald"}`}
+            aria-hidden
+          />
           {summary}
         </span>
-        {offCount > 0 ? <span className="text-[10px] text-tos-dim">{offCount} optional off</span> : null}
+        {offCount > 0 ? <span className="text-[10px] text-white/45">{offCount} optional off</span> : null}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {providers.map((p) => {
-          const tone =
-            p.state === "live"
-              ? "border-white/[0.10] bg-white/[0.05] text-white/90"
-              : p.state === "error"
-                ? "border-amber-400/25 bg-amber-400/[0.07] text-amber-100/90"
-                : "border-white/12 bg-white/[0.04] text-tos-dim";
-          return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {providers.map((p) => (
+          <span
+            key={p.id}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/75"
+            title={p.description}
+          >
             <span
-              key={p.id}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${tone}`}
-              title={p.description}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  p.state === "live" ? "bg-emerald-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25"
-                }`}
-                aria-hidden
-              />
-              {intelHealthLabel(p.id)}
-              {p.state === "live" ? "" : ` · ${p.state}`}
-            </span>
-          );
-        })}
+              className={`tos-accent-dot shrink-0 ${
+                p.state === "live"
+                  ? "tos-accent-dot--emerald"
+                  : p.state === "error"
+                    ? "tos-accent-dot--amber"
+                    : ""
+              }`}
+              aria-hidden
+            />
+            {intelHealthLabel(p.id)}
+            {p.state === "live" ? "" : ` · ${p.state}`}
+          </span>
+        ))}
       </div>
     </div>
   );

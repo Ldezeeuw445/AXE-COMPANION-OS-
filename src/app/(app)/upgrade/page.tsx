@@ -187,13 +187,15 @@ export default async function SubscriptionsPage() {
               Upgrade to Pro
             </a>
           ) : billingConfigured ? (
-            <div className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/[0.05] px-3 py-2 text-[11px] text-amber-200/95">
-              Sign in first — Pro is linked to your account.
+            <div className="tos-matte-banner mt-5">
+              <span className="tos-accent-dot tos-accent-dot--amber mt-0.5 shrink-0" aria-hidden />
+              <p className="text-[11px] text-white/78">Sign in first — Pro is linked to your account.</p>
             </div>
           ) : (
             <div className="mt-5 space-y-2">
-              <div className="rounded-xl border border-amber-400/20 bg-amber-400/[0.05] px-3 py-2 text-[11px] text-amber-200/95">
-                Pro checkout is being prepared.
+              <div className="tos-matte-banner">
+                <span className="tos-accent-dot tos-accent-dot--amber mt-0.5 shrink-0" aria-hidden />
+                <p className="text-[11px] text-white/78">Pro checkout is being prepared.</p>
               </div>
               <Link
                 href={`mailto:${process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@tradingosapp.com"}?subject=AXE%20Pro%20waitlist`}

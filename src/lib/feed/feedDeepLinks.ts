@@ -21,7 +21,17 @@ export function feedItemLinkLabel(item: AxeFeedItem): string {
 }
 
 export function inferFeedItemUrl(item: AxeFeedItem): string | null {
-  if (item.url) return item.url;
+  if (item.url) {
+    if (
+      item.kind === "proactive" &&
+      item.title.startsWith("Trade closed:") &&
+      item.url.startsWith("/chart")
+    ) {
+      return "/cockpit";
+    }
+    return item.url;
+  }
   if (item.kind === "trade_draft") return "/actions";
+  if (item.kind === "proactive" && item.title.startsWith("Trade closed:")) return "/cockpit";
   return null;
 }

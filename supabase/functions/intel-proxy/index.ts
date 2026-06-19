@@ -14,6 +14,7 @@
 //
 // Deploy:  supabase functions deploy intel-proxy --no-verify-jwt
 // Secrets: FINNHUB_API_KEY        (required)
+//          AISSTREAM_API_KEY       (optional — live vessel AIS positions)
 //          UNUSUAL_WHALES_TOKEN   (optional — congress, dark pool, options)
 //          QUIVER_API_KEY         (optional — paid Quiver Hobbyist+ for congress)
 //          FMP_API_KEY            (optional — congress fallback)
