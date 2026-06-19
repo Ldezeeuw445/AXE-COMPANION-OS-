@@ -109,8 +109,9 @@ DNS instellen bij je registrar zoals Vercel aangeeft.
 |----------|--------|
 | AXE Companion volledige app | ✅ `/workspace` (repo root) |
 | AXE Companion op Vercel | ✅ `axecompanion.com` |
-| Trading OS volledige app | ❌ **niet in deze repo** — moet in `TRADING-AXE-OS-APPS/TRADING-OS-` |
-| Org GitHub repo | ❌ 404 — nog aanmaken + code pushen |
+| Trading OS volledige app | ✅ staat in `TRADING-AXE-OS-APPS/TRADING-OS-` (privé org-repo) |
+| Cursor Agent GitHub toegang | ❌ alleen `Ldezeeuw445/AXE-COMPANION-OS-` — org-repo niet zichtbaar → 404 voor agent |
+| Org GitHub repo | ✅ bestaat voor jou; agent/integration ziet hem niet zonder extra rechten |
 | `tradingosapp.com` | ❌ 404 — wacht op Vercel project |
 
 ## Connect tussen apps
@@ -121,4 +122,21 @@ DNS instellen bij je registrar zoals Vercel aangeeft.
 
 ---
 
-**Kort:** twee repos, twee Vercel projecten, twee domeinen, twee Stripe producten — **één Supabase**. De blocker voor Trading OS op Vercel is dat de Trading OS codebase nog niet in `TRADING-AXE-OS-APPS/TRADING-OS-` staat.
+**Kort:** twee repos, twee Vercel projecten, twee domeinen, twee Stripe producten — **één Supabase**. De repo bestaat waarschijnlijk al; de blocker is **GitHub/Vercel koppeling**, niet ontbrekende code.
+
+## Waarom Cursor/agent “404” zegt terwijl jij wél code ziet
+
+De GitHub-koppeling in deze Cloud Agent heeft toegang tot **één repo**: `Ldezeeuw445/AXE-COMPANION-OS-`.
+
+Private org-repos (`TRADING-AXE-OS-APPS/*`) geven voor die token **404 Not Found** — dat betekent “geen toegang”, niet “repo bestaat niet”.
+
+Jij ziet `package.json` wel → repo is er, jij bent org-lid. Ik kan hem hier niet clonen tot de GitHub App ook die org/repo mag zien.
+
+### GitHub App uitbreiden (zodat agent + Vercel de repo zien)
+
+1. GitHub → **Settings** → **Applications** → **Installed GitHub Apps**
+2. Open **Cursor** (of de app die aan dit project hangt) → **Configure**
+3. Onder **Repository access**: kies org **TRADING-AXE-OS-APPS** en geef toegang tot **`TRADING-OS-`**
+4. Eventueel org SSO autoriseren als GitHub dat vraagt
+
+Daarna kan de agent de repo clonen en kan Vercel hem importeren (als Vercel dezelfde GitHub-koppeling gebruikt).
