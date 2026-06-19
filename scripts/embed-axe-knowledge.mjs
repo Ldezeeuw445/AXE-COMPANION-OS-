@@ -26,7 +26,7 @@ if (!apiKey) {
 const supabase = createClient(url, key, { auth: { persistSession: false } });
 const openai = new OpenAI({ apiKey });
 
-async function embedBatch(texts: string[]): Promise<number[][]> {
+async function embedBatch(texts) {
   const res = await openai.embeddings.create({
     model: EMBEDDING_MODEL,
     input: texts,
