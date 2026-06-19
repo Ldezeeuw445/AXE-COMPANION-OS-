@@ -17,7 +17,7 @@ export default function FeedPage() {
       <PageTitleInjector title="AXE Feed" premium />
       <div className="-mt-1 border-l-2 border-cyan-400/35 pl-3.5">
         <p className="text-[13px] leading-relaxed text-tos-text/95">
-          Your timeline with AXE — proactive alerts, trade drafts, and session context in one place.
+          Your timeline with AXE — proactive alerts, trade drafts, and session context. Last 7 days.
         </p>
       </div>
       <AxeFeedClient />
