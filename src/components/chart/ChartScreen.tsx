@@ -42,6 +42,7 @@ import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } fr
 import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
+import { ChartWorkflowFavorites } from "@/components/chart/ChartWorkflowFavorites";
 import { ChartDismissibleNotice, useChartDismissedNotices } from "@/components/chart/ChartDismissibleNotice";
 import { SquawkBar } from "@/components/market/SquawkBar";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
@@ -115,6 +116,7 @@ import { useInstantSlTpModify } from "@/lib/chart/instantSlTpModify";
 import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
+import type { WorkflowRuntime } from "@/lib/workflows/status";
 import { writeCachedChart, prefetchTimeframes } from "@/lib/chart/clientChartCache";
 import { setActiveAccountAction } from "@/app/actions/brokerAccounts";
 
@@ -135,6 +137,8 @@ type Props = {
   liveTradingEnabled?: boolean;
   /** Server-loaded instant SL/TP on drag release preference. */
   instantSlTpModify?: boolean;
+  favoriteWorkflowIds?: string[];
+  workflowRuntime?: WorkflowRuntime;
 };
 
 type DrawingMode = "fib_retracement" | "trendline" | null;
@@ -562,7 +566,14 @@ function ResizablePane({
   );
 }
 
-export function ChartScreen({ data, initialAction, liveTradingEnabled = false, instantSlTpModify = false }: Props) {
+export function ChartScreen({
+  data,
+  initialAction,
+  liveTradingEnabled = false,
+  instantSlTpModify = false,
+  favoriteWorkflowIds = [],
+  workflowRuntime,
+}: Props) {
   const router = useRouter();
   const { playSound, vibrate } = useAmbient();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
@@ -2799,18 +2810,29 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
       };
     }
 
+    const favoritesChip =
+      workflowRuntime && favoriteWorkflowIds.length > 0 ? (
+        <ChartWorkflowFavorites
+          favoriteIds={favoriteWorkflowIds}
+          runtime={workflowRuntime}
+        />
+      ) : null;
+
     setCenter(
-      <ChartQuickActions
-        orderBookOpen={orderBookOpen}
-        newsOpen={newsOpen}
-        oneClickVisible={oneClickVisible}
-        executionMode={executionMode}
-        pendingOrderVisible={pendingOrderVisible}
-        onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
-        onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
-        onOneClick={toggleOneClickTrade}
-        onPending={togglePendingTrade}
-      />,
+      <div className="flex items-center justify-center gap-1">
+        {favoritesChip}
+        <ChartQuickActions
+          orderBookOpen={orderBookOpen}
+          newsOpen={newsOpen}
+          oneClickVisible={oneClickVisible}
+          executionMode={executionMode}
+          pendingOrderVisible={pendingOrderVisible}
+          onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+          onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+          onOneClick={toggleOneClickTrade}
+          onPending={togglePendingTrade}
+        />
+      </div>,
     );
     setRight(
       <AxeContextToolbar title="Chart" subtitle={`${data.symbol} · ${tfLabel}`} sections={toolbarSections} />,
@@ -2827,6 +2849,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
     data.symbol,
     tfLabel,
     toolbarSections,
+    favoriteWorkflowIds,
+    workflowRuntime,
     orderBookOpen,
     newsOpen,
     openOrderBook,
@@ -3173,7 +3197,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
               </span>
             ) : null}
           </div>
-          <div className="justify-self-center px-1">
+          <div className="flex items-center justify-center gap-1 justify-self-center px-1">
+            {workflowRuntime && favoriteWorkflowIds.length > 0 ? (
+              <ChartWorkflowFavorites
+                favoriteIds={favoriteWorkflowIds}
+                runtime={workflowRuntime}
+                compact
+              />
+            ) : null}
             <ChartQuickActions
               variant="tablet"
               orderBookOpen={orderBookOpen}

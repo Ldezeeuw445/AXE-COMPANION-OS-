@@ -1,4 +1,11 @@
-import { ChevronDown } from "lucide-react";
+import { detectActionRuntime, buildWorkflowRuntime } from "@/lib/workflows/runtime";
+import { getFavoriteWorkflowIdsServerState } from "@/lib/workflows/serverFavorites";
+import {
+  getEodhdKey,
+  getFinnhubKey,
+  getFredKey,
+  getPerigonKey,
+} from "@/lib/market/providerStatus";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
@@ -10,87 +17,21 @@ import {
   listSetupReviews,
 } from "@/services/actionsService";
 import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import {
-  getEodhdKey,
-  getFinnhubKey,
-  getFredKey,
-  getPerigonKey,
-} from "@/lib/market/providerStatus";
-
-type ActionRuntime = {
-  hasActiveAccount: boolean;
-  hasOpenPositions: boolean;
-  hasTradeHistory: boolean;
-  hasJournal: boolean;
-  hasMemory: boolean;
-};
-
-async function detectActionRuntime(): Promise<ActionRuntime> {
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) {
-    return { hasActiveAccount: false, hasOpenPositions: false, hasTradeHistory: false, hasJournal: false, hasMemory: false };
-  }
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { hasActiveAccount: false, hasOpenPositions: false, hasTradeHistory: false, hasJournal: false, hasMemory: false };
-  }
-  const { data } = await supabase
-    .from("user_broker_accounts")
-    .select("id,connection_method,external_connection_id,provider_status")
-    .eq("user_id", user.id)
-    .in("connection_method", ["cloud_mt5", "cloud_alpaca", "demo_paper"])
-    .limit(20);
-  const activeAccount = Array.isArray(data)
-    ? data.find((a) => {
-        const statusOk = ["connected", "provisioned"].includes(String(a.provider_status ?? "").toLowerCase());
-        if (a.connection_method === "cloud_mt5") {
-          return statusOk && Boolean(a.external_connection_id);
-        }
-        return statusOk;
-      }) ?? data[0]
-    : null;
-  const accountId = activeAccount?.id as string | undefined;
-  const [positions, trades, journalNotes, tradeLabels, memory] = await Promise.all([
-    accountId
-      ? supabase.from("mt5_positions").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("account_id", accountId)
-      : Promise.resolve({ count: 0 }),
-    accountId
-      ? supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("account_id", accountId)
-      : Promise.resolve({ count: 0 }),
-    supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-    supabase.from("trade_journal_labels").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-    supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-  ]);
-  const journalActivity = (journalNotes.count ?? 0) + (tradeLabels.count ?? 0);
-  return {
-    hasActiveAccount: Boolean(activeAccount),
-    hasOpenPositions: (positions.count ?? 0) > 0,
-    hasTradeHistory: (trades.count ?? 0) > 0,
-    hasJournal: journalActivity > 0,
-    hasMemory: (memory.count ?? 0) > 0,
-  };
-}
+import { ChevronDown } from "lucide-react";
 
 export default async function ActionsPage() {
-  const [executions, setups, runtime, tradePrefs] = await Promise.all([
+  const [executions, setups, runtime, tradePrefs, favoriteIds] = await Promise.all([
     listExecutionRequests(),
     listSetupReviews(),
     detectActionRuntime(),
     getTradeExecutionPrefsServerState(),
+    getFavoriteWorkflowIdsServerState(),
   ]);
 
-  // Headlines / curated news come from Perigon, Finnhub, EODHD. Macro time
-  // series (rates, yields, CPI prints) come from FRED. Whichever set is
-  // configured flips the "Needs news / Needs macro" gates on the workflow
-  // tiles so traders aren't stuck behind cosmetic badges.
   const hasNews = Boolean(getPerigonKey() || getFinnhubKey() || getEodhdKey());
   const hasMacro = Boolean(getFredKey()) || hasNews;
+  const workflowRuntime = buildWorkflowRuntime(runtime, hasNews, hasMacro);
 
-  // Pulse: green when both Supabase reads delivered and we have at
-  // least one capability (active MT5 account, news, or macro).
   const capabilities = (runtime.hasActiveAccount ? 1 : 0) + (hasNews ? 1 : 0) + (hasMacro ? 1 : 0);
 
   return (
@@ -103,17 +44,8 @@ export default async function ActionsPage() {
       />
       <PageTitleInjector title="Actions" />
 
-      <AxeWorkflowsHub
-        hasActiveAccount={runtime.hasActiveAccount}
-        hasOpenPositions={runtime.hasOpenPositions}
-        hasTradeHistory={runtime.hasTradeHistory}
-        hasJournal={runtime.hasJournal}
-        hasMemory={runtime.hasMemory}
-        hasNews={hasNews}
-        hasMacro={hasMacro}
-      />
+      <AxeWorkflowsHub runtime={workflowRuntime} favoriteIds={favoriteIds} />
 
-      {/* Existing review pipelines moved into a folded section so the hub owns the page */}
       <details
         className="group mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0a0a0d]/90"
         open={executions.length > 0 || setups.length > 0}

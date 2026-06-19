@@ -23,7 +23,9 @@ import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { SquawkStationPicker } from "@/components/settings/SquawkStationPicker";
 import { getSquawkStationIdsServerState } from "@/lib/squawk/serverPrefs";
+import { FavoriteWorkflowsPicker } from "@/components/settings/FavoriteWorkflowsPicker";
 import { TradeExecutionPrefsPanel } from "@/components/settings/TradeExecutionPrefsPanel";
+import { getFavoriteWorkflowIdsServerState } from "@/lib/workflows/serverFavorites";
 import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 
@@ -46,7 +48,7 @@ async function getPrimaryConversation() {
 }
 
 export default async function SettingsPage() {
-  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs] = await Promise.all([
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs, favoriteWorkflowIds] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
@@ -56,6 +58,7 @@ export default async function SettingsPage() {
     getInstantSlTpModifyServerState(),
     getSquawkStationIdsServerState(),
     getTradeExecutionPrefsServerState(),
+    getFavoriteWorkflowIdsServerState(),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -297,6 +300,16 @@ export default async function SettingsPage() {
       </GlassPanel>
 
       {/* Chart Theme */}
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Chart quick actions
+        </h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Pin up to 5 AXE workflows on the chart toolbar star menu — same actions as the Actions page.
+        </p>
+        <FavoriteWorkflowsPicker initialIds={favoriteWorkflowIds} />
+      </GlassPanel>
+
       <GlassPanel className="mb-4 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
           Chart theme
