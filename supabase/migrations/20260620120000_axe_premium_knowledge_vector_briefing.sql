@@ -33,10 +33,12 @@ create table if not exists public.axe_knowledge_chunks (
   chunk_index integer not null default 0,
   chunk_text text not null,
   tags text[] not null default '{}'::text[],
-  embedding vector(1536),
   created_at timestamptz not null default timezone('utc', now()),
   unique (document_id, chunk_index)
 );
+
+alter table public.axe_knowledge_chunks
+  add column if not exists embedding vector(1536);
 
 create index if not exists axe_knowledge_chunks_document_idx
   on public.axe_knowledge_chunks (document_id, chunk_index);
