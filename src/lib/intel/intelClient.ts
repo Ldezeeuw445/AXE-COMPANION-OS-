@@ -257,11 +257,53 @@ const snapshotInflight = intelSnapshotCache.__axeIntelSnapshotInflight ?? new Ma
 intelSnapshotCache.__axeIntelSnapshotCache = snapshotCache;
 intelSnapshotCache.__axeIntelSnapshotInflight = snapshotInflight;
 
-/** Deployed intel-proxy (v81+) expects `{ action, args }` and anon JWT for public reads. */
-const PROXY_ACTION_MAP: Partial<Record<IntelAction, string>> = {
-  vesselTracking: "vesselStream",
-  conflictEvents: "gdeltEvents",
-};
+/** Deployed intel-proxy action aliases (legacy names only). */
+const PROXY_ACTION_MAP: Partial<Record<IntelAction, string>> = {};
+
+function mapProxyVesselRow(row: Record<string, unknown>): VesselTrack {
+  const ownerType = String(row.ownerType ?? "unknown");
+  const alertLevel = String(row.alertLevel ?? "normal");
+  return {
+    mmsi: String(row.mmsi ?? ""),
+    vesselName: String(row.vesselName ?? row.name ?? "Unknown"),
+    vesselType: String(row.vesselType ?? row.type ?? "Vessel"),
+    owner: String(row.owner ?? "—"),
+    ownerType:
+      ownerType === "corporate" || ownerType === "state" || ownerType === "oligarch"
+        ? ownerType
+        : "unknown",
+    significance: String(row.significance ?? ""),
+    isTracked: row.isTracked !== false,
+    lastSeen: row.lastSeen != null ? String(row.lastSeen) : null,
+    lastLatitude:
+      typeof row.lastLatitude === "number"
+        ? row.lastLatitude
+        : typeof row.lat === "number"
+          ? row.lat
+          : typeof row.latitude === "number"
+            ? row.latitude
+            : null,
+    lastLongitude:
+      typeof row.lastLongitude === "number"
+        ? row.lastLongitude
+        : typeof row.lon === "number"
+          ? row.lon
+          : typeof row.longitude === "number"
+            ? row.longitude
+            : null,
+    speedKnots:
+      typeof row.speedKnots === "number"
+        ? row.speedKnots
+        : typeof row.speed === "number"
+          ? row.speed
+          : null,
+    heading: typeof row.heading === "number" ? row.heading : null,
+    destination: row.destination != null ? String(row.destination) : null,
+    nearChokepoint: row.nearChokepoint != null ? String(row.nearChokepoint) : null,
+    alertLevel:
+      alertLevel === "warning" || alertLevel === "critical" ? alertLevel : "normal",
+  };
+}
 
 /** Feeds not implemented on deployed intel-proxy — load from Postgres instead. */
 const DB_ONLY_ACTIONS = new Set<IntelAction>([
@@ -356,26 +398,6 @@ function mapProxyJetRow(row: Record<string, unknown>): CorporateJet {
   };
 }
 
-function mapProxyVesselRow(row: Record<string, unknown>): VesselTrack {
-  return {
-    mmsi: String(row.mmsi ?? ""),
-    vesselName: String(row.name ?? row.vesselName ?? "Unknown"),
-    vesselType: String(row.type ?? row.vesselType ?? "Vessel"),
-    owner: "—",
-    ownerType: "unknown",
-    significance: "",
-    isTracked: true,
-    lastSeen: new Date().toISOString(),
-    lastLatitude: typeof row.lat === "number" ? row.lat : Number(row.latitude) || null,
-    lastLongitude: typeof row.lon === "number" ? row.lon : Number(row.longitude) || null,
-    speedKnots: typeof row.speed === "number" ? row.speed : null,
-    heading: null,
-    destination: String(row.destination ?? null),
-    nearChokepoint: null,
-    alertLevel: "normal",
-  };
-}
-
 function mapGdeltToConflict(row: Record<string, unknown>, i: number): ConflictEvent {
   return {
     eventId: `gdelt:${i}:${String(row.url ?? row.title ?? i).slice(0, 40)}`,
@@ -396,8 +418,11 @@ function normalizeProxyPayload<T>(action: IntelAction, raw: unknown): T {
   if (action === "corporateJets" && Array.isArray(raw)) {
     return raw.map((row) => mapProxyJetRow(row as Record<string, unknown>)) as T;
   }
-  if (action === "vesselTracking" && raw && typeof raw === "object") {
-    const vessels = (raw as { vessels?: unknown[] }).vessels ?? [];
+  if (action === "vesselTracking" && Array.isArray(raw)) {
+    return raw.map((row) => mapProxyVesselRow(row as Record<string, unknown>)) as T;
+  }
+  if (action === "vesselTracking" && raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const vessels = (raw as { vessels?: unknown[] }).vessels;
     if (Array.isArray(vessels)) {
       return vessels.map((row) => mapProxyVesselRow(row as Record<string, unknown>)) as T;
     }

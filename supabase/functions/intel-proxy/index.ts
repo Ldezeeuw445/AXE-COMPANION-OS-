@@ -2542,8 +2542,10 @@ serve(async (req: Request) => {
       case "corporateJets":
         return await handleCorporateJets();
       case "vesselTracking":
+      case "vesselStream":
         return await handleVesselTracking();
       case "conflictEvents":
+      case "gdeltEvents":
         return await handleConflictEvents();
       case "energyFlows":
         return await handleEnergyFlows();
