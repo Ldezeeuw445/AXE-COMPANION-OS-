@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { embedQuery } from "@/lib/axe/embeddings";
 
 export type KnowledgeHit = {
   slug: string;
@@ -31,16 +32,67 @@ function scoreChunk(text: string, terms: string[], symbol?: string | null): numb
   return s;
 }
 
-/**
- * Retrieves top relevant knowledge chunks for AXE (tag/category/text match).
- * Embeddings can replace ranking later; RLS applies on the caller's client.
- */
-export async function getRelevantKnowledge(
+type SemanticRow = {
+  slug: string;
+  title: string;
+  category: string;
+  chunk_text: string;
+  tags: string[] | null;
+  similarity: number;
+};
+
+async function getSemanticKnowledge(
   supabase: SupabaseClient,
   query: string,
   userId: string,
-  symbol?: string | null,
-  limit = 12,
+  limit: number,
+): Promise<KnowledgeHit[] | null> {
+  const embedding = await embedQuery(query);
+  if (!embedding) return null;
+
+  const { data, error } = await supabase.rpc("match_axe_knowledge_chunks", {
+    query_embedding: embedding,
+    match_count: limit,
+    match_user_id: userId,
+  });
+
+  if (error) {
+    if (error.code === "42883" || error.message?.includes("match_axe_knowledge_chunks")) return null;
+    console.error("[knowledgeRetrieval] semantic search failed", error.message);
+    return null;
+  }
+
+  const rows = (data ?? []) as SemanticRow[];
+  if (!rows.length) return null;
+
+  return rows.map((row) => ({
+    slug: row.slug,
+    title: row.title,
+    category: row.category,
+    chunkText: row.chunk_text,
+    tags: row.tags ?? [],
+    score: Math.round((row.similarity ?? 0) * 100),
+  }));
+}
+
+function dedupeHits(hits: KnowledgeHit[], limit: number): KnowledgeHit[] {
+  const seen = new Set<string>();
+  const dedup: KnowledgeHit[] = [];
+  for (const h of hits) {
+    const k = `${h.slug}:${h.chunkText.slice(0, 120)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    dedup.push(h);
+  }
+  return dedup.slice(0, limit);
+}
+
+async function getKeywordKnowledge(
+  supabase: SupabaseClient,
+  query: string,
+  userId: string,
+  symbol: string | null | undefined,
+  limit: number,
 ): Promise<KnowledgeHit[]> {
   const terms = extractTerms(query);
   const effectiveTerms =
@@ -91,14 +143,22 @@ export async function getRelevantKnowledge(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, limit);
-  const seen = new Set<string>();
-  const dedup: KnowledgeHit[] = [];
-  for (const h of top) {
-    const k = `${h.slug}:${h.chunkText.slice(0, 120)}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    dedup.push(h);
-  }
-  return dedup.slice(0, limit);
+  return dedupeHits(scored, limit);
+}
+
+/**
+ * Retrieves top relevant knowledge chunks for AXE.
+ * Tries pgvector semantic search first; falls back to keyword scoring.
+ */
+export async function getRelevantKnowledge(
+  supabase: SupabaseClient,
+  query: string,
+  userId: string,
+  symbol?: string | null,
+  limit = 12,
+): Promise<KnowledgeHit[]> {
+  const semantic = await getSemanticKnowledge(supabase, query, userId, limit);
+  if (semantic?.length) return semantic;
+
+  return getKeywordKnowledge(supabase, query, userId, symbol, limit);
 }

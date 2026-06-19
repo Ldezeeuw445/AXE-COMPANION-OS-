@@ -159,4 +159,19 @@ export const mockCockpitDashboard: CockpitDashboard = {
     feedEvents: 3,
     journalNotes: 1,
   },
+  learningArc: {
+    headline: "Mock arc: invalidation language and NY size discipline are your strongest teaching signals this month.",
+    weeklyFocus: [
+      { label: "Reasoning fixes", count: 14 },
+      { label: "Trade alignment", count: 9 },
+      { label: "Chat response quality", count: 6 },
+    ],
+    messageFeedback: { up: 11, down: 3 },
+    weeklyFeedbackTrend: [
+      { weekLabel: "3 Mar", up: 2, down: 1 },
+      { weekLabel: "10 Mar", up: 3, down: 0 },
+      { weekLabel: "17 Mar", up: 4, down: 1 },
+      { weekLabel: "24 Mar", up: 2, down: 1 },
+    ],
+  },
 };

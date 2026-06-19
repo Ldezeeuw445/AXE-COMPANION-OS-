@@ -13,7 +13,8 @@ import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 export type LearningSignalType =
   | "journal_label" // user manually tagged a closed trade
   | "trade_alignment" // AXE auto-journaled a trade with an alignment score
-  | "ai_correction"; // user corrected AXE in chat
+  | "ai_correction" // user corrected AXE in chat
+  | "message_feedback"; // thumbs up/down on an AXE reply
 
 export async function recordLearningSignal(
   supabase: SupabaseClient,
@@ -84,6 +85,13 @@ export async function summarizeLearningSignals(
       } else if (row.signal_type === "ai_correction") {
         summary.corrections += 1;
         summary.misaligned += 1;
+      } else if (row.signal_type === "message_feedback") {
+        const rating = String(payload.rating ?? "").toLowerCase();
+        if (rating === "up") summary.aligned += 1;
+        else if (rating === "down") {
+          summary.misaligned += 1;
+          summary.corrections += 1;
+        }
       }
     }
     return summary;

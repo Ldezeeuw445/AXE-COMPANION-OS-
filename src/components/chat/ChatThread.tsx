@@ -17,11 +17,15 @@ type ChatThreadProps = {
 };
 
 function mapRow(row: Record<string, unknown>): ChatMessage {
+  const metadata = (row.metadata as Record<string, unknown> | null) ?? {};
+  const feedbackRaw = metadata.feedback;
+  const feedback = feedbackRaw === "up" || feedbackRaw === "down" ? feedbackRaw : null;
   return {
     id: String(row.id),
     role: row.role as ChatMessage["role"],
     content: String(row.content ?? ""),
     createdAt: String(row.created_at ?? new Date().toISOString()),
+    feedback,
   };
 }
 

@@ -92,6 +92,7 @@ export type CockpitDashboard = {
     message: string;
   };
   today: CockpitTodaySummary;
+  learningArc: CockpitLearningArc;
 };
 
 export type CockpitTodaySummary = {
@@ -100,4 +101,11 @@ export type CockpitTodaySummary = {
   tradesClosed: number;
   feedEvents: number;
   journalNotes: number;
+};
+
+export type CockpitLearningArc = {
+  headline: string;
+  weeklyFocus: { label: string; count: number }[];
+  messageFeedback: { up: number; down: number };
+  weeklyFeedbackTrend: { weekLabel: string; up: number; down: number }[];
 };

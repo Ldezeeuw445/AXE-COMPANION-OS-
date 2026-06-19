@@ -8,7 +8,9 @@ import type {
   CockpitConfidencePoint,
   CockpitLearningMilestone,
   CockpitTodaySummary,
+  CockpitLearningArc,
 } from "@/types/cockpit";
+import { fetchLearningArc } from "@/services/learningArcService";
 
 const EMPTY_TODAY: CockpitTodaySummary = {
   alignmentScore: 0,
@@ -41,6 +43,12 @@ const EMPTY_DASHBOARD: CockpitDashboard = {
     message: "AXE needs real chat, journal, memory, or trade signals before it can score alignment.",
   },
   today: EMPTY_TODAY,
+  learningArc: {
+    headline: "",
+    weeklyFocus: [],
+    messageFeedback: { up: 0, down: 0 },
+    weeklyFeedbackTrend: [],
+  },
 };
 
 function safeArray<T>(val: unknown): T[] {
@@ -254,7 +262,10 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   }
 
   const { supabase, user } = authed;
-  const today = await fetchCockpitTodaySummary(supabase, user.id);
+  const [today, learningArc] = await Promise.all([
+    fetchCockpitTodaySummary(supabase, user.id),
+    fetchLearningArc(supabase, user.id),
+  ]);
 
   const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -295,6 +306,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     return {
       ...EMPTY_DASHBOARD,
       today,
+      learningArc,
       calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
     };
   }
@@ -303,6 +315,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     return {
       ...EMPTY_DASHBOARD,
       today,
+      learningArc,
       calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
     };
   }
@@ -397,5 +410,6 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
       user.id,
       mapAlignment(latest.alignment_score ?? 0, latest.captured_at, null).score,
     ),
+    learningArc,
   };
 }

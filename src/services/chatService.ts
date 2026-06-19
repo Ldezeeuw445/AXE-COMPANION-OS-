@@ -47,6 +47,7 @@ type MessageRow = {
   role: ChatMessage["role"];
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 function mapConversation(row: ConversationRow): ConversationSummary {
@@ -59,11 +60,15 @@ function mapConversation(row: ConversationRow): ConversationSummary {
 }
 
 function mapMessage(row: MessageRow): ChatMessage {
+  const metadata = row.metadata ?? {};
+  const feedbackRaw = metadata.feedback;
+  const feedback = feedbackRaw === "up" || feedbackRaw === "down" ? feedbackRaw : null;
   return {
     id: row.id,
     role: row.role,
     content: row.content,
     createdAt: row.created_at,
+    feedback,
   };
 }
 
@@ -200,7 +205,7 @@ export async function getChatThread(): Promise<{
     if (conversation) {
       const { data, error } = await authed.supabase
         .from("messages")
-        .select("id,role,content,created_at")
+        .select("id,role,content,created_at,metadata")
         .eq("conversation_id", conversation.id)
         .eq("user_id", authed.user.id)
         .order("created_at", { ascending: true });

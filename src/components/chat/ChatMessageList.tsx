@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowDown, ArrowUpRight, Bookmark, Check } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Bookmark, Check, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { ChatMessage } from "@/types/domain";
 import { ActionCard } from "@/components/chat/ActionCard";
 import { TtsButton } from "@/components/chat/TtsButton";
@@ -450,6 +450,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
               </time>
               {m.role === "assistant" ? (
                 <>
+                  <MessageFeedbackButtons messageId={m.id} initialRating={m.feedback ?? null} />
                   <TtsButton text={m.content} />
                   <SaveToVaultButton message={m} />
                 </>
@@ -502,6 +503,74 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         </button>
       ) : null}
     </div>
+  );
+}
+
+function MessageFeedbackButtons({
+  messageId,
+  initialRating,
+}: {
+  messageId: string;
+  initialRating: "up" | "down" | null;
+}) {
+  const [rating, setRating] = useState<"up" | "down" | null>(initialRating);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    setRating(initialRating);
+  }, [initialRating, messageId]);
+
+  async function submit(next: "up" | "down") {
+    if (pending) return;
+    const value = rating === next ? null : next;
+    setPending(true);
+    try {
+      if (value === null) return;
+      const res = await fetch(`/api/chat/messages/${messageId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ rating: value }),
+      });
+      if (res.ok) setRating(value);
+    } catch {
+      /* ignore */
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={() => void submit("up")}
+        disabled={pending}
+        aria-label="Helpful reply"
+        title="Helpful"
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors ${
+          rating === "up"
+            ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-200/95"
+            : "border-white/[0.06] text-tos-dim hover:border-white/[0.15] hover:text-white/80"
+        }`}
+      >
+        <ThumbsUp className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void submit("down")}
+        disabled={pending}
+        aria-label="Off-target reply"
+        title="Off-target"
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors ${
+          rating === "down"
+            ? "border-rose-400/35 bg-rose-400/10 text-rose-200/95"
+            : "border-white/[0.06] text-tos-dim hover:border-white/[0.15] hover:text-white/80"
+        }`}
+      >
+        <ThumbsDown className="h-3 w-3" />
+      </button>
+    </span>
   );
 }
 

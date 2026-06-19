@@ -394,6 +394,16 @@ function buildLearningProgress(
       progress: Math.min(100, data.messages.length * 4),
       narrative: `${data.messages.length} chat messages inform pacing, doubt, and coaching tone.`,
     },
+    {
+      id: "chat-feedback",
+      label: "Response quality",
+      periodLabel: signalSummary.total >= 6 ? "Strong" : signalSummary.total >= 2 ? "Calibrating" : "Early",
+      progress: Math.min(100, signalSummary.aligned * 10),
+      narrative:
+        signalSummary.aligned + signalSummary.misaligned > 0
+          ? `${signalSummary.aligned} helpful vs ${signalSummary.misaligned} off-target signals from journal and chat feedback.`
+          : "Thumbs on AXE replies and journal tags sharpen how coaching lands.",
+    },
   ];
 
   const headline =

@@ -4,6 +4,7 @@ import { CockpitConfidenceChart } from "@/components/cockpit/CockpitConfidenceCh
 import { CockpitFeedbackImpact } from "@/components/cockpit/CockpitFeedbackImpact";
 import { CockpitFooterNote } from "@/components/cockpit/CockpitFooterNote";
 import { CockpitLearningProgress } from "@/components/cockpit/CockpitLearningProgress";
+import { CockpitLearningArc } from "@/components/cockpit/CockpitLearningArc";
 import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
 import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
 import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
@@ -52,6 +53,8 @@ export default async function CockpitPage() {
       <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
 
       <CockpitTodayStrip initial={dash.today} />
+
+      <CockpitLearningArc data={dash.learningArc} />
 
       {!hasSnapshot ? (
         <GlassPanel className="p-6 text-center">
