@@ -11,6 +11,7 @@ import { RouteBodyFlags } from "@/components/shell/RouteBodyFlags";
 import { TabletShellEffects } from "@/components/shell/TabletShellEffects";
 import { TabletNavCollapseProvider } from "@/components/shell/TabletNavCollapse";
 import { TabletNavPeekHandle } from "@/components/shell/TabletNavPeekHandle";
+import { Toaster } from "@/components/ui/sonner";
 
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
@@ -44,6 +45,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
         </SwipeNavProvider>
       </AmbientProvider>
       <ClientSplashOverlay />
+      <Toaster />
       </TabletNavCollapseProvider>
     </AppTopBarProvider>
   );

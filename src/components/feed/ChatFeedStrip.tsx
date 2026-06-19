@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Rss } from "lucide-react";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 import { inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import { getFeedLastSeenAt, markAllFeedItemsRead } from "@/lib/feed/feedSeen";
@@ -61,10 +60,10 @@ export function ChatFeedStrip() {
   if (items.length === 0) return null;
 
   return (
-    <div className="shrink-0 border-b border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2">
+    <div className="shrink-0 border-b border-white/[0.06] bg-gradient-to-b from-[#0e0e12] to-[#060608] px-3 py-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-300/85">
-          <Rss className="h-3 w-3" aria-hidden />
+        <span className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/82">
+          <span className="tos-accent-dot tos-accent-dot--cyan" aria-hidden />
           AXE Feed
           {unread > 0 ? (
             <span className="rounded-full bg-cyan-400 px-1.5 py-0.5 text-[7px] font-bold text-black">
@@ -95,7 +94,7 @@ export function ChatFeedStrip() {
           <li key={item.id}>
             <Link
               href={inferFeedItemUrl(item) ?? "/feed"}
-              className="flex items-start justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/30 px-2.5 py-1.5 transition-colors hover:border-cyan-400/20 hover:bg-cyan-400/[0.06]"
+              className="tos-matte-banner flex items-start justify-between gap-2 transition-colors hover:border-white/[0.1]"
             >
               <span className="min-w-0 text-[11px] leading-snug text-white/85">
                 <span className="font-medium text-cyan-100/90">{item.title}</span>

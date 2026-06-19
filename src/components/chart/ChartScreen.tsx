@@ -10,7 +10,6 @@ import {
   ArrowUpDown,
   BarChart2,
   BarChart3,
-  Bell,
   BookOpen,
   ChevronDown,
   ChevronUp,
@@ -37,6 +36,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { TosNotice, type TosNoticeAccent } from "@/components/ui/TosNotice";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } from "@/lib/viewport/tablet";
 import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
@@ -4417,64 +4417,42 @@ export function ChartScreen({
 
       {/* Standalone alert fired toast */}
       {firedAlert ? (
-        <div
-          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-white/[0.14] bg-[#0c0c0c]/95 px-3 py-2 text-[11px] text-white shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
-          role="status"
-        >
-          <Bell className="h-4 w-4 text-emerald-300" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">Alert · {firedAlert.message}</p>
-            <p className="text-[10px] text-white/50">
-              {firedAlert.pushed ? "Push delivered" : "Delivered in-app"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setFiredAlert(null)}
-            className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-tos-muted"
-          >
-            Dismiss
-          </button>
-        </div>
+        <TosNotice
+          accent="emerald"
+          className="pointer-events-auto absolute left-1/2 top-16 z-50 max-w-[88%] -translate-x-1/2"
+          title={`Alert · ${firedAlert.message}`}
+          body={firedAlert.pushed ? "Push delivered" : "Delivered in-app"}
+          onDismiss={() => setFiredAlert(null)}
+        />
       ) : null}
 
       {/* Trade toast — demo / live confirm + soft errors */}
       {tradeToast ? (
-        <div
-          className={`pointer-events-auto absolute left-1/2 bottom-[8.5rem] z-[60] flex max-w-[88%] -translate-x-1/2 items-start gap-2 rounded-xl border px-3 py-2 text-[11px] shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur ${
-            tradeToast.kind === "demo"
-              ? "border-white/[0.12] bg-white/[0.05] text-white"
-              : tradeToast.kind === "live"
-                ? "border-emerald-200/55 bg-emerald-300/14 text-white/90"
-                : tradeToast.kind === "error"
-                  ? "border-rose-400/45 bg-rose-400/12 text-rose-100"
-                  : "border-amber-400/35 bg-amber-400/8 text-amber-100"
-          }`}
-          role="status"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold">{tradeToast.title}</p>
-            {tradeToast.body ? (
-              <p className="mt-0.5 text-[10.5px] opacity-85">{tradeToast.body}</p>
-            ) : null}
-          </div>
-          {tradeToast.kind === "info" ? (
-            <Link
-              href="/settings"
-              className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold"
-              onClick={() => setTradeToast(null)}
-            >
-              Settings
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setTradeToast(null)}
-            className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold opacity-90"
-          >
-            Dismiss
-          </button>
-        </div>
+        <TosNotice
+          accent={
+            ({
+              demo: "cyan",
+              live: "emerald",
+              error: "rose",
+              info: "amber",
+            } satisfies Record<typeof tradeToast.kind, TosNoticeAccent>)[tradeToast.kind]
+          }
+          className="pointer-events-auto absolute left-1/2 bottom-[8.5rem] z-[60] max-w-[88%] -translate-x-1/2"
+          title={tradeToast.title}
+          body={tradeToast.body}
+          action={
+            tradeToast.kind === "info" ? (
+              <Link
+                href="/settings"
+                className="rounded-full border border-white/12 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold text-white/85"
+                onClick={() => setTradeToast(null)}
+              >
+                Settings
+              </Link>
+            ) : undefined
+          }
+          onDismiss={() => setTradeToast(null)}
+        />
       ) : null}
 
       {/* Demo mode indicator — always visible on demo account */}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { TosNotice, type TosNoticeAccent } from "@/components/ui/TosNotice";
 
 const STORAGE_KEY = "axe.chart.dismissedNotices";
 
@@ -70,28 +70,18 @@ export function ChartDismissibleNotice({
 }) {
   if (dismissed) return null;
 
-  const toneClass =
-    tone === "amber"
-      ? "border-amber-300/20 text-amber-100/90"
-      : "border-white/10 text-tos-muted";
+  const accent: TosNoticeAccent = tone === "amber" ? "amber" : "cyan";
 
   return (
-    <div
-      className={`pointer-events-auto absolute right-3 z-30 max-w-[min(18rem,calc(100%-1.5rem))] rounded-xl border bg-black/84 px-3 py-2 pr-8 text-[10.5px] leading-snug shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur ${toneClass} ${className}`}
+    <TosNotice
+      accent={accent}
+      className={`pointer-events-auto absolute right-3 z-30 max-w-[min(18rem,calc(100%-1.5rem))] pr-9 text-[10.5px] leading-snug ${className}`}
       style={{
         bottom: `calc(${bottomOffset} + ${stackIndex * 4.75}rem + env(safe-area-inset-bottom, 0px))`,
       }}
-      role="status"
+      onDismiss={() => onDismiss(noticeKey)}
     >
-      {children}
-      <button
-        type="button"
-        onClick={() => onDismiss(noticeKey)}
-        className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-md text-white/45 transition-colors hover:bg-white/10 hover:text-white/80"
-        aria-label="Dismiss notice"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </div>
+      <div className="text-white/72">{children}</div>
+    </TosNotice>
   );
 }

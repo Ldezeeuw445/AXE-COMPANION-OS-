@@ -5,16 +5,16 @@ import { Toaster as Sonner, type ToasterProps } from "sonner";
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
+      theme="dark"
       className="toaster group"
+      position="top-center"
+      richColors={false}
+      closeButton
       toastOptions={{
         classNames: {
-          toast:
-            "group toast group-[.toaster]:bg-zinc-950 group-[.toaster]:text-zinc-100 group-[.toaster]:border-zinc-800 group-[.toaster]:shadow-lg",
-          description: "group-[.toast]:text-zinc-400",
-          actionButton:
-            "group-[.toast]:bg-zinc-100 group-[.toast]:text-zinc-950",
-          cancelButton:
-            "group-[.toast]:bg-zinc-800 group-[.toast]:text-zinc-100",
+          toast: "tos-sonner-toast",
+          title: "tos-matte-notice-title",
+          description: "tos-matte-notice-body",
         },
       }}
       {...props}

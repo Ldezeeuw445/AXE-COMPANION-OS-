@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ExecutionRequestCard } from "@/types/domain";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { TosNotice } from "@/components/ui/TosNotice";
 import { Badge } from "@/components/ui/Badge";
 import {
   approveExecutionRequestAction,
@@ -125,15 +126,11 @@ export function ExecutionCard({ card, defaultVolume }: ExecutionCardProps) {
         </ul>
       ) : null}
       {feedback ? (
-        <p
-          className={`mt-3 rounded-lg border px-3 py-2 text-[11px] leading-relaxed ${
-            feedback.kind === "ok"
-              ? "border-emerald-400/25 bg-emerald-400/[0.08] text-emerald-100/90"
-              : "border-rose-400/25 bg-rose-400/[0.08] text-rose-100/90"
-          }`}
-        >
-          {feedback.text}
-        </p>
+        <TosNotice
+          accent={feedback.kind === "ok" ? "emerald" : "rose"}
+          className="mt-3"
+          title={feedback.text}
+        />
       ) : null}
       {card.status === "pending_approval" ? (
         <div className="mt-4 space-y-2">

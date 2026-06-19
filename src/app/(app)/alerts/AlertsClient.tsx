@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bell, Check, Loader2, Pause, Play, Plus, Trash2 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { TosMatteBanner } from "@/components/ui/TosNotice";
 import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
@@ -623,9 +624,9 @@ export function AlertsClient({
             </span>
           </p>
         </div>
-        <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-2 text-[11px] text-tos-muted">
-          Runtime:{" "}
-          <span className="font-semibold text-tos-text">
+        <TosMatteBanner className="mt-3">
+          <span className="font-semibold text-white/92">Runtime:</span>{" "}
+          <span className="font-semibold text-white/88">
             {runtimeCheck.state === "valid"
               ? "Broker verified"
               : runtimeCheck.state === "checking"
@@ -643,32 +644,32 @@ export function AlertsClient({
               Live price is warming — you can still save the alert; evaluation runs when Chart is open.
             </span>
           ) : null}
-        </div>
+        </TosMatteBanner>
 
-        <div className="mt-3 rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2.5 text-[11px] leading-relaxed text-tos-muted">
-          <span className="font-semibold text-cyan-100/90">Your trade size (saved per account):</span>{" "}
-          <span className="font-mono text-white/85">{tradePrefs.defaultVolume.toFixed(2)} lots</span>
+        <TosMatteBanner accent="cyan" className="mt-3">
+          <span className="font-semibold text-white/92">Your trade size (saved per account):</span>{" "}
+          <span className="font-mono text-white/88">{tradePrefs.defaultVolume.toFixed(2)} lots</span>
           {" · "}
           Alert auto-trade:{" "}
-          <span className={tradePrefs.alertAutoTradeEnabled ? "text-amber-200/90" : "text-white/70"}>
+          <span className={tradePrefs.alertAutoTradeEnabled ? "text-amber-200/90" : "text-white/72"}>
             {tradePrefs.alertAutoTradeEnabled ? "ON" : "OFF"}
           </span>
           {tradePrefs.alertAutoTradeEnabled ? (
-            <span className="mt-1 block text-tos-dim">
-              When an alert fires, AXE places a <strong className="text-white/75">market</strong> order in
-              your chosen direction (buy/sell) with your SL/TP <strong className="text-white/75">prices</strong>.
+            <span className="mt-1 block text-white/58">
+              When an alert fires, AXE places a <strong className="text-white/82">market</strong> order in
+              your chosen direction (buy/sell) with your SL/TP <strong className="text-white/82">prices</strong>.
               Trigger (above/below) and trade direction are separate.
             </span>
           ) : (
-            <span className="mt-1 block text-tos-dim">
+            <span className="mt-1 block text-white/58">
               Change in{" "}
-              <Link href="/settings" className="text-cyan-300/85 hover:underline">
+              <Link href="/settings" className="text-cyan-300/90 hover:underline">
                 Settings → Trade size &amp; alerts
               </Link>
               .
             </span>
           )}
-        </div>
+        </TosMatteBanner>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="text-[11px] text-tos-dim">
