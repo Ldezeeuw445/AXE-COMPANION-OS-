@@ -1,4 +1,5 @@
 -- AXE premium: knowledge base, vector RAG, daily briefings
+-- Safe on fresh DBs and on projects where axe_knowledge_* already existed without embeddings.
 
 create extension if not exists vector;
 
