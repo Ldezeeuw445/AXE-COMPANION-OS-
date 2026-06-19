@@ -8,7 +8,7 @@ export function LegalPagesShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto max-w-3xl px-4 py-12">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
           <Link href="/" className="font-medium text-tos-warm hover:underline">
-            ← AXE Companion home
+            ← Trading OS home
           </Link>
           <Link href="/legal" className="text-tos-muted hover:text-tos-warm hover:underline">
             Legal overview

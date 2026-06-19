@@ -53,7 +53,7 @@ export function SplashOverlay() {
           border: "none",
           display: "block",
         }}
-        title="AXE Companion OS"
+        title="Trading OS"
         sandbox="allow-scripts"
       />
       <button

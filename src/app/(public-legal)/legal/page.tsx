@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Legal · AXE Companion",
+  title: "Legal · Trading OS",
   description: "Terms, privacy, risk and AI disclaimers, cookies, refunds, subprocessors and contact.",
 };
 
@@ -21,7 +21,7 @@ export default function LegalIndexPage() {
   return (
     <>
       <h1>Legal</h1>
-      <p>Policies for AXE Companion and Trading OS (operated by Trading OS). Draft — needs legal review.</p>
+      <p>Policies for Trading OS and Trading OS (operated by Trading OS). Draft — needs legal review.</p>
       <ul className="mt-6 space-y-2">
         {LINKS.map((l) => (
           <li key={l.href}>

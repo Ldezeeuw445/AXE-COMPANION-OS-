@@ -3,14 +3,13 @@ import Image from "next/image";
 type BrandMarkProps = {
   size?: number;
   className?: string;
-  /** Defaults to the AXE companion mark served from `public/`. */
   src?: string;
 };
 
 export function BrandMark({
   size = 28,
   className = "",
-  src = "/axe-logo-companion.png",
+  src = "/trading-os-logo.png",
 }: BrandMarkProps) {
   return (
     <div

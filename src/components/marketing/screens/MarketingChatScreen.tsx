@@ -14,7 +14,7 @@ export function MarketingChatScreen() {
         <header className="flex items-start justify-between gap-2 pt-1">
           <div className="flex min-w-0 items-start gap-2">
             <Image
-              src="/axe-logo-companion.png"
+              src="/trading-os-logo.png"
               alt=""
               width={28}
               height={28}

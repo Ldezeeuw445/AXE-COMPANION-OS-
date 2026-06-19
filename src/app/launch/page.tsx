@@ -28,9 +28,9 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "AXE Companion Launch",
+  title: "Trading OS Launch",
   description:
-    "Premium dark launch page for AXE Companion — real app screenshots, chart, depth, intel, execution and AXE in one phone-first workflow.",
+    "Premium dark launch page for Trading OS — real app screenshots, chart, depth, intel, execution and AXE in one phone-first workflow.",
 };
 
 const FEATURE_STRIP = [
@@ -104,7 +104,7 @@ const FAQ = [
     a: "Real app screens. The new route just gives them a more premium launch presentation.",
   },
   {
-    q: "Can AXE Companion run without Trading OS desktop?",
+    q: "Can Trading OS run without Trading OS desktop?",
     a: "Yes. Chart, depth, news, intel, accounts, journal and AXE all work as a standalone phone-first product.",
   },
   {
@@ -181,8 +181,8 @@ export default function LaunchPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-5 px-5 py-3.5 sm:px-8">
           <Link href="/" className="flex items-center gap-3">
             <Image
-              src="/axe-companion-wordmark.png"
-              alt="AXE Companion"
+              src="/trading-os-wordmark.png"
+              alt="Trading OS"
               width={180}
               height={28}
               className="h-6 w-auto object-contain opacity-95"
@@ -286,7 +286,7 @@ export default function LaunchPage() {
             <div className="launch-wide-image-frame mt-10">
               <Image
                 src="/launch/570_1x_shots_so.png"
-                alt="AXE Companion gallery trio"
+                alt="Trading OS gallery trio"
                 width={1920}
                 height={1080}
                 className="relative z-10 w-full rounded-[2rem] object-cover"
@@ -357,7 +357,7 @@ export default function LaunchPage() {
       <footer className="relative z-10 border-t border-white/7 px-5 py-10 text-center text-[11px] text-white/34 sm:px-8">
         <div className="mx-auto max-w-5xl">
           <p className="font-medium uppercase tracking-[0.24em] text-white/38">
-            AXE Companion OS
+            Trading OS
           </p>
           <p className="mt-3 text-white/42">
             Chart, intel and execution in one phone-first workspace.

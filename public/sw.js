@@ -1,5 +1,5 @@
 /**
- * AXE Companion Service Worker
+ * Trading OS Service Worker
  *
  * Handles:
  *  • Web push delivery — sound, vibration, lock-screen banner, action buttons
@@ -12,8 +12,8 @@
 
 const CACHE_NAME = "axe-v4";
 const OFFLINE_URL = "/chat";
-const FALLBACK_ICON = "/axe-icon-512.png";
-const FALLBACK_BADGE = "/axe-icon.png";
+const FALLBACK_ICON = "/trading-os-icon-512.png";
+const FALLBACK_BADGE = "/trading-os-icon.png";
 
 // ── Install: cache offline shell ─────────────────────────────────────────────
 self.addEventListener("install", (event) => {
@@ -78,7 +78,7 @@ self.addEventListener("push", (event) => {
   }
 
   const title = payload.title || "AXE";
-  const body = payload.body || "New activity in AXE Companion";
+  const body = payload.body || "New activity in Trading OS";
   const url = payload.url || "/chat";
   const tag = payload.tag || "axe-notification";
   const severity = payload.severity || "alert";

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Standalone alert evaluator for the AXE Companion app.
+ * Standalone alert evaluator for the Trading OS app.
  *
  * Loads the user's active price alerts for the active symbol and watches a
  * caller-supplied live price. When the price crosses an `above` / `below`

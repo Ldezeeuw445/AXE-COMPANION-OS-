@@ -253,7 +253,7 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
       return {
         title: "Connect MT5 account to unlock broker chart",
         body:
-          "AXE Companion uses your MetaApi-connected MT5 account as the only chart source. No external feed.",
+          "Trading OS uses your MetaApi-connected MT5 account as the only chart source. No external feed.",
       };
     case "broker_symbol_not_found":
       return {

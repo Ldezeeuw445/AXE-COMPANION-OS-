@@ -1,5 +1,5 @@
 /**
- * Global "is everything actually live?" bus for the AXE Companion mobile app.
+ * Global "is everything actually live?" bus for the Trading OS mobile app.
  *
  * Mirrors the pattern in the Trading OS terminal so the two products share
  * the same honest semantics:

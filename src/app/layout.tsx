@@ -12,20 +12,20 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   metadataBase: new URL(getPublicAppBaseUrl()),
-  title: "AXE Companion",
+  title: "Trading OS",
   description:
     "Private AI trading companion — chat, alerts, vault, and guarded approvals.",
-  applicationName: "AXE Companion",
+  applicationName: "Trading OS",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "AXE Companion",
+    title: "Trading OS",
     statusBarStyle: "black-translucent",
-    startupImage: "/axe-icon-512.png",
+    startupImage: "/trading-os-icon-512.png",
   },
   icons: {
-    apple: "/axe-icon-512.png",
-    icon: "/axe-icon-512.png",
+    apple: "/trading-os-icon-512.png",
+    icon: "/trading-os-icon-512.png",
   },
   formatDetection: {
     telephone: false,

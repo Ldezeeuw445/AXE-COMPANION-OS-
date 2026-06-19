@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getPublicAppBaseUrl } from "@/lib/env";
 
 export const metadata = {
-  title: "AXE Companion — welcome",
+  title: "Trading OS — welcome",
   description:
     "AXE with knowledge layer, accounts, and chat. Add to your home screen or sign in.",
 };
@@ -32,8 +32,8 @@ export default function WelcomePage() {
 
       <div className="relative z-10 mx-auto w-full max-w-md text-center">
         <Image
-          src="/axe-companion-wordmark.png"
-          alt="AXE Companion"
+          src="/trading-os-wordmark.png"
+          alt="Trading OS"
           width={420}
           height={80}
           priority

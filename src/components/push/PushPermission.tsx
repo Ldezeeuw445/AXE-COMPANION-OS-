@@ -235,7 +235,7 @@ export function PushPermission() {
         <p className="text-xs text-tos-muted">Push notifications are blocked in your system settings.</p>
         <p className="text-[10px] text-tos-dim">
           {platform?.isIos
-            ? "Open Settings → Notifications → AXE Companion → Allow Notifications."
+            ? "Open Settings → Notifications → Trading OS → Allow Notifications."
             : "Open browser site settings → Notifications → Allow this site."}
         </p>
       </div>

@@ -10,7 +10,7 @@
  * so we never imply we're showing true Level 2 (MT5 retail accounts
  * don't expose DOM through MetaApi).
  *
- * Styling intentionally mirrors the AXE Companion aesthetic: deep
+ * Styling intentionally mirrors the Trading OS aesthetic: deep
  * black background, cyan accents for the bid side, rose for the ask
  * side, monospace prices, and a single highlight stripe for the
  * inner-most level so the eye lands on the live spread first.

@@ -1,8 +1,8 @@
 {
-  "name": "tradingos-companion",
+  "name": "trading-os",
   "version": "0.1.0",
   "private": true,
-  "description": "TradingOS Companion — private AI chat, alerts, vault, and guarded approvals",
+  "description": "Trading OS — private AI trading companion, chat, alerts, vault, and guarded approvals",
   "scripts": {
     "dev": "next dev -p 5000 -H 0.0.0.0",
     "dev:5001": "next dev -p 5001 -H 0.0.0.0",
@@ -10,6 +10,7 @@
     "start": "next start -p 5000 -H 0.0.0.0",
     "lint": "eslint",
     "capture:marketing": "node scripts/capture-marketing.mjs",
+    "generate-icons": "node scripts/generate-trading-os-icons.mjs",
     "copy-logo": "node scripts/copy-logo.mjs",
     "seed:axe-knowledge": "node scripts/seed-axe-knowledge.mjs",
     "verify:legal": "node scripts/check-legal-routes.mjs"

@@ -918,7 +918,7 @@ function buildCorrelations(ctx: {
 
 function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
   const lines: string[] = [];
-  lines.push(`AXE Companion operating brief generated ${ctx.generatedAt}.`);
+  lines.push(`Trading OS operating brief generated ${ctx.generatedAt}.`);
   lines.push(`Focus: ${ctx.symbol ?? "no active symbol"}${ctx.timeframe ? ` · ${ctx.timeframe}` : ""}.`);
   if (ctx.accounts.activeLabel) {
     const sync = ctx.accounts.syncFreshness;

@@ -1,7 +1,7 @@
 /**
  * POST /api/alerts/[id]/trigger
  *
- * Stand-alone alert delivery for AXE Companion. Called by the in-app
+ * Stand-alone alert delivery for Trading OS. Called by the in-app
  * evaluator (e.g. when a live tick on the chart crosses a price threshold).
  *
  * Behaviour:

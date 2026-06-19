@@ -26,9 +26,9 @@ import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 
 export const metadata: Metadata = {
-  title: "AXE Companion — chart, intel and execution in one tap",
+  title: "Trading OS — chart, intel and execution in one tap",
   description:
-    "AXE Companion is the trader phone OS: live MT5 chart with auto-Fib/structure/OB/FVG, market depth drawer, cached multi-source news, smart-money intel, and one-tap execution — all on the same Supabase brain Trading OS uses.",
+    "Trading OS is the trader phone OS: live MT5 chart with auto-Fib/structure/OB/FVG, market depth drawer, cached multi-source news, smart-money intel, and one-tap execution — all on the same Supabase brain Trading OS uses.",
 };
 
 const TICKER = [
@@ -81,7 +81,7 @@ const LANDING_FEATURES = [
     color: "text-emerald-300",
   },
   {
-    title: "AXE — copilot that knows the app",
+    title: "Trading OS — AI copilot",
     desc: "Chat that can read your chart, your accounts, your journal, news and intel. It explains structure, suggests journal labels, and answers honestly when there's nothing to say.",
     Icon: Brain,
     color: "text-cyan-300",
@@ -136,7 +136,7 @@ const SCREEN_TABS = [
 const FAQ = [
   {
     q: "Is this a real chart with live data, or just a marketing illustration?",
-    a: "It's the real chart engine. AXE Companion ships Lightweight Charts wired to MT5 ticks, with auto-Fib (Auto / Swing / Day), auto-trend, OB / FVG / iFVG, PDH / PDL, swing points, BOS/CHoCH, and a market-depth drawer over the live spread. The phone in the hero cycles through the actual screens — same components, same palette.",
+    a: "It's the real chart engine. Trading OS ships Lightweight Charts wired to MT5 ticks, with auto-Fib (Auto / Swing / Day), auto-trend, OB / FVG / iFVG, PDH / PDL, swing points, BOS/CHoCH, and a market-depth drawer over the live spread. The phone in the hero cycles through the actual screens — same components, same palette.",
   },
   {
     q: "Can I really execute trades from AXE, or is it analytics only?",
@@ -180,8 +180,8 @@ export default function HomeLandingPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/axe-companion-wordmark.png"
-              alt="AXE Companion OS"
+              src="/trading-os-wordmark.png"
+              alt="Trading OS"
               width={200}
               height={36}
               priority
@@ -265,7 +265,7 @@ export default function HomeLandingPage() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300 opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-300" />
               </span>
-              <span className="text-cyan-200/95">AXE Companion · live on MT5</span>
+              <span className="text-cyan-200/95">Trading OS · live on MT5</span>
             </div>
 
             <h1 className="mt-7 max-w-[600px] text-[2.6rem] font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.35rem]">
@@ -277,7 +277,7 @@ export default function HomeLandingPage() {
             </h1>
 
             <p className="mt-5 max-w-[560px] text-[15px] leading-relaxed text-white/60 sm:text-base">
-              AXE Companion is what an MT5 native phone app should feel like — calm dark canvas, auto-Fib /
+              Trading OS is what an MT5 native phone app should feel like — calm dark canvas, auto-Fib /
               structure / OB / FVG that actually extend, a real depth ladder anchored on your broker&apos;s
               bid / ask, multi-source news cached to save credits, and a one-tap execution dock that talks
               straight to your account.
@@ -288,7 +288,7 @@ export default function HomeLandingPage() {
                 href="/login"
                 className="axe-landing-cta inline-flex h-12 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-7 text-sm font-semibold text-[#04161B] shadow-[0_18px_44px_-14px_rgba(34,211,238,0.65)] transition hover:from-cyan-300 hover:to-teal-300"
               >
-                Open AXE on web or PWA
+                Open Trading OS on web or PWA
                 <ChevronRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link
@@ -302,7 +302,7 @@ export default function HomeLandingPage() {
                 href="/chat"
                 className="text-center text-xs text-white/40 transition hover:text-white/65 sm:text-left"
               >
-                Already signed in? → Open AXE
+                Already signed in? → Open Trading OS
               </Link>
             </div>
 
@@ -380,7 +380,7 @@ export default function HomeLandingPage() {
       <section className="relative z-10 px-5 py-10">
         <p className="mx-auto max-w-3xl text-center text-sm italic leading-relaxed text-white/45 md:text-base">
           &ldquo;The same calm dark canvas as Trading OS, the same execution model as MT5, the same brain that
-          journals what you actually did. AXE Companion is the phone-first half of one trading workspace —
+          journals what you actually did. Trading OS is the phone-first half of one trading workspace —
           not another second-screen dashboard.&rdquo;
         </p>
       </section>
@@ -433,13 +433,13 @@ export default function HomeLandingPage() {
               <span className="axe-landing-heading-shimmer">One workspace.</span>
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-white/65 md:text-base">
-              AXE Companion is the phone-first OS — chart, depth, news, intel, execution, journal, AXE — and
+              Trading OS is the phone-first OS — chart, depth, news, intel, execution, journal, Trading OS — and
               it&apos;s standalone today. Trading OS is the desktop terminal that lights up the same Supabase
               account on a multi-monitor desk: live charts, multi-source intelligence, alerts, execution
               workflows, watchlists. One login. One memory. One trading brain on phone and on desk.
             </p>
             <p className="mt-4 text-sm font-semibold text-cyan-100/95">
-              AXE Companion is the brain in your pocket. Trading OS is the desk it plugs into.
+              Trading OS is the brain in your pocket. Trading OS is the desk it plugs into.
             </p>
           </div>
 
@@ -597,7 +597,7 @@ export default function HomeLandingPage() {
 
       {/* ─── footer ─── */}
       <footer className="relative z-10 border-t border-white/[0.04] px-5 py-8 text-center text-[11px] text-tos-dim">
-        <p>AXE Companion OS · not financial advice · trade responsibly</p>
+        <p>Trading OS · not financial advice · trade responsibly</p>
         <p className="mt-2 text-tos-muted">
           Trading OS — desktop terminal in private beta · same Supabase spine ·{" "}
           <a

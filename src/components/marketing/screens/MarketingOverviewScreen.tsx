@@ -47,7 +47,7 @@ export function MarketingOverviewScreen() {
         <header className="pt-1">
           <div className="flex items-start gap-2.5">
             <Image
-              src="/axe-logo-companion.png"
+              src="/trading-os-logo.png"
               alt=""
               width={36}
               height={36}

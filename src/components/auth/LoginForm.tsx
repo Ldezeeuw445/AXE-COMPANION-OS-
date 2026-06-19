@@ -33,7 +33,7 @@ export function LoginForm() {
         <h2 className="text-sm font-bold text-tos-text">{mode === "signin" ? "Sign in" : "Create account"}</h2>
         <p className="mt-1 text-xs text-tos-muted">
           {mode === "signin"
-            ? "Use the email and password for your AXE Companion Supabase user."
+            ? "Use the email and password for your Trading OS Supabase user."
             : "Create a new user in the same Supabase project. If email confirmation is on, check your inbox then sign in."}
         </p>
       </div>

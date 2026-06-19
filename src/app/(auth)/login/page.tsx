@@ -36,8 +36,8 @@ export default function LoginPage() {
             }}
           >
             <Image
-              src="/axe-companion-wordmark.png"
-              alt="AXE Companion OS"
+              src="/trading-os-wordmark.png"
+              alt="Trading OS"
               width={420}
               height={80}
               priority

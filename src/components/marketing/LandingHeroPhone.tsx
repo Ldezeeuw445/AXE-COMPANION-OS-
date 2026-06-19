@@ -3,7 +3,7 @@
 /**
  * LandingHeroPhone
  *
- * Premium interactive phone mock for the AXE Companion landing page.
+ * Premium interactive phone mock for the Trading OS landing page.
  * Auto-cycles through five real-app screens (Chart → Depth → News →
  * Execution → AXE chat) with subtle live motion: ticking candles,
  * flashing inside-spread rows, headlines fading in, BUY pulse, AXE
@@ -187,7 +187,7 @@ export function LandingHeroPhone() {
               }`}
             >
               <Image
-                src="/axe-icon.png"
+                src="/trading-os-icon.png"
                 alt=""
                 width={20}
                 height={20}
@@ -823,7 +823,7 @@ function AxeFrame({ seed }: { seed: number }) {
       <header className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
           <Image
-            src="/axe-logo-companion.png"
+            src="/trading-os-logo.png"
             alt=""
             width={26}
             height={26}

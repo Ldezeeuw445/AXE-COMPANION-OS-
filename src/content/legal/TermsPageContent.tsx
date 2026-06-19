@@ -9,9 +9,9 @@ export function TermsPageContent() {
         <strong>Effective date:</strong> {LEGAL.effectiveDate}
       </p>
       <p>
-        These Terms of Service apply to AXE Companion, Trading OS and related websites, applications, APIs,
+        These Terms of Service apply to Trading OS, Trading OS and related websites, applications, APIs,
         dashboards, account tools, AI features, journal features, trading-account integrations and any connected
-        services provided by {L.companyLegalName}, trading as AXE Companion and/or Trading OS.
+        services provided by {L.companyLegalName}, trading as Trading OS and/or Trading OS.
       </p>
       <p>
         By creating an account, using the app, starting a subscription or accessing our services, you agree to these
@@ -34,17 +34,17 @@ export function TermsPageContent() {
         </a>
       </p>
 
-      <h2>2. What AXE Companion is</h2>
+      <h2>2. What Trading OS is</h2>
       <p>
-        AXE Companion is an AI-powered trading intelligence and journaling assistant. It helps users structure trading
+        Trading OS is an AI-powered trading intelligence and journaling assistant. It helps users structure trading
         notes, review trades, analyse trading behaviour, connect trading accounts for analytics, and build a personal
         trading memory.
       </p>
       <p>
-        AXE Companion may use user-provided data, journal entries, connected account data, trading history, watchlists,
+        Trading OS may use user-provided data, journal entries, connected account data, trading history, watchlists,
         notes, market context and knowledge-base content to generate analytical and educational output.
       </p>
-      <p>AXE Companion is not a broker, exchange, asset manager, investment adviser or financial adviser.</p>
+      <p>Trading OS is not a broker, exchange, asset manager, investment adviser or financial adviser.</p>
 
       <h2>3. What Trading OS is</h2>
       <p>
@@ -53,7 +53,7 @@ export function TermsPageContent() {
         intelligence.
       </p>
       <p>
-        Trading OS may be launched separately, with separate features, pricing or access rules. AXE Companion may work
+        Trading OS may be launched separately, with separate features, pricing or access rules. Trading OS may work
         standalone before Trading OS is available.
       </p>
 
@@ -64,7 +64,7 @@ export function TermsPageContent() {
         advice, tax advice or legal advice.
       </p>
       <p>
-        You are solely responsible for your trading decisions. You should not rely on AXE Companion, Trading OS, AI
+        You are solely responsible for your trading decisions. You should not rely on Trading OS, Trading OS, AI
         outputs, analytics, market data, journal insights or alerts as the sole basis for any trading or investment
         decision.
       </p>
@@ -109,7 +109,7 @@ export function TermsPageContent() {
 
       <h2>9. Connected trading accounts</h2>
       <p>
-        AXE Companion may allow you to connect trading accounts such as MT5 accounts through supported methods,
+        Trading OS may allow you to connect trading accounts such as MT5 accounts through supported methods,
         including cloud connectors or local bridge/token flows.
       </p>
       <p>
@@ -126,7 +126,7 @@ export function TermsPageContent() {
       </p>
 
       <h2>10. Execution and orders</h2>
-      <p>AXE Companion does not execute trades by default.</p>
+      <p>Trading OS does not execute trades by default.</p>
       <p>
         If Trading OS or AXE later offers execution-related features, those features will require explicit setup, safety
         controls and additional terms. Until such features are clearly enabled, buttons, panels or execution interfaces
@@ -134,7 +134,7 @@ export function TermsPageContent() {
       </p>
 
       <h2>11. Subscriptions, free plan and billing</h2>
-      <p>AXE Companion may offer a Free plan and paid plans.</p>
+      <p>Trading OS may offer a Free plan and paid plans.</p>
       <p>
         <strong>Free plan example:</strong> 20 AI queries per period, unless changed.
       </p>

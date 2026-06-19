@@ -164,7 +164,7 @@ export type TradingOSContext = {
   closed_positions: Mt5ClosedPosition[];
   /** Assembled retrieval block (knowledge + journal + broker snapshot + rules). */
   knowledge_layer: string | null;
-  /** AXE Companion — linked broker rows (RLS). */
+  /** Trading OS — linked broker rows (RLS). */
   companion_accounts: CompanionBrokerAccount[];
   companion_active_account_id: string | null;
   companion_broker_trades: CompanionBrokerTrade[];
@@ -172,7 +172,7 @@ export type TradingOSContext = {
   companion_journal_entries: CompanionJournalEntry[];
   /** Compact UnusualWhales smart-money snapshot for the active symbol (top rows only). */
   intel_summary: IntelSummary | null;
-  /** AXE Companion-native context, kept alongside legacy fields during migration. */
+  /** Trading OS-native context, kept alongside legacy fields during migration. */
   axe_context?: AxeCompanionContext;
 };
 

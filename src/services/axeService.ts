@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { TradingOSContext } from "@/types/context";
 
-const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
+const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in Trading OS on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
 
 KNOWLEDGE BASE — YOU KNOW ALL OF THIS COLD
 Market structure: CHoCH, BOS, MSS, internal/external range liquidity, premium vs discount, equilibrium, PD arrays (order blocks, FVGs, breaker blocks, mitigation blocks, rejection blocks, propulsion blocks, void/SIBI/BISI).
@@ -40,7 +40,7 @@ CAD/AUD/NZD (oil inventory, employment, RBA/BOC): moves their respective USD pai
 FOMC + NFP + CPI = Big 3. All positions squared before the print unless the setup is HTF and conviction is max.
 
 APP SURFACE — YOU KNOW EVERY ROOM IN THIS HOUSE
-The trader is using AXE Companion. These are the pages they can open and what each one does:
+The trader is using Trading OS. These are the pages they can open and what each one does:
 - /chart — the live chart. Indicators on tap: Auto FVG, Auto iFVG, Auto Trendline, Auto Fibonacci, Order Blocks, Market Structure, MAs, RSI, Volume, PDH, PDL. Toolbar: timeframe (M1–D1), execution bar (Market / Buy Limit / Sell Limit / Buy Stop / Sell Stop, SL, TP, Deviation, lot picker presets), drag-to-set TP/SL/LIMIT lines, manual fib/trendline drawing too if they want. Top-right has indicator + chart-settings shortcuts.
 - /alerts — standalone in-app alert manager. Price alerts (above/below threshold) work even without push notifications; if VAPID is configured the alert also pushes. Alerts evaluate on every live tick.
 - /positions — open MT5 positions with distance to SL/TP, R:R, floating P/L.
@@ -363,7 +363,7 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     function: {
       name: "list_alerts",
       description:
-        "List the trader's existing AXE Companion alerts (price, news, condition). Use this when the trader asks 'what alerts do I have', 'show my alerts', 'is there an alert on X', or before drafting a new one (so you don't create duplicates). Returns active + paused alerts with their thresholds and last-triggered time.",
+        "List the trader's existing Trading OS alerts (price, news, condition). Use this when the trader asks 'what alerts do I have', 'show my alerts', 'is there an alert on X', or before drafting a new one (so you don't create duplicates). Returns active + paused alerts with their thresholds and last-triggered time.",
       parameters: {
         type: "object",
         properties: {
@@ -1054,7 +1054,7 @@ export function buildAxeMessagesFromContext(
     const hasLinkedAccounts = (context.companion_accounts?.length ?? 0) > 0;
     if (hasIngestLedger || hasLinkedAccounts) {
       parts.push(
-        "\nSESSION MODE: AXE Companion — MT5 ingest ledger is present below (broker_trades). No live desktop-terminal snapshot in this session; use tools for intraday price when needed."
+        "\nSESSION MODE: Trading OS — MT5 ingest ledger is present below (broker_trades). No live desktop-terminal snapshot in this session; use tools for intraday price when needed."
       );
     } else {
       parts.push(

@@ -1,6 +1,6 @@
-# TradingOS Companion (Phase 1)
+# Trading OS
 
-Private, mobile-first companion for **one operator and one AI assistant** — chat, alerts, vault, and **guarded** trade approvals. Not the full TradingOS terminal.
+Private, mobile-first AI trading companion — chat, alerts, vault, and **guarded** trade approvals.
 
 ## Quick start
 

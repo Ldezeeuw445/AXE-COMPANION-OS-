@@ -54,7 +54,7 @@ export default async function SettingsPage() {
       items: [
         {
           id: "profile",
-          label: "Tune my AXE session brief",
+          label: "Tune my session brief",
           description: "Bias, style, pairs, rules",
           href: `/chat?q=${encodeURIComponent(
             "[AXE · setup]\nHelp me write a strong pinned context: my trading style, risk rules, active pairs, and what you should always remember.",
@@ -65,7 +65,7 @@ export default async function SettingsPage() {
           label: "Push notification setup",
           description: "What’s live today + what’s needed",
           href: `/chat?q=${encodeURIComponent(
-            "[AXE · push]\nExplain how push notifications work in AXE Companion today. What is wired, what’s missing, and what I should do on iOS/Android/PWA.",
+            "[AXE · push]\nExplain how push notifications work in Trading OS today. What is wired, what’s missing, and what I should do on iOS/Android/PWA.",
           )}`,
         },
       ],
@@ -110,8 +110,8 @@ export default async function SettingsPage() {
           Active account label
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          A short name so AXE can reference your account in conversation — e.g. &quot;FTMO Challenge&quot; or &quot;Live IC Markets&quot;.
-          AXE uses your connected MT5 account (MetaApi cloud) to understand balance, equity, margin, trades and open positions — no manual entry.
+          A short name so the AI can reference your account in conversation — e.g. &quot;FTMO Challenge&quot; or &quot;Live IC Markets&quot;.
+          Trading OS uses your connected MT5 account (MetaApi cloud) to understand balance, equity, margin, trades and open positions — no manual entry.
         </p>
         <div className="mt-3">
           <AccountNameEditor initialValue={accountName} />
@@ -121,10 +121,10 @@ export default async function SettingsPage() {
       {/* Pinned Context */}
       <GlassPanel className="mb-4 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-          AXE session brief
+          Session brief
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          AXE reads this at the top of every message. Use it to set your bias, key levels,
+          AI reads this at the top of every message. Use it to set your bias, key levels,
           active pairs, and trading style — so you never have to repeat yourself.
         </p>
         <div className="mt-3">
@@ -147,7 +147,7 @@ export default async function SettingsPage() {
           My watchlist
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          AXE uses your watchlist to filter chat context, news, macro and alerts. Add the pairs you care about most.
+          Trading OS uses your watchlist to filter chat context, news, macro and alerts. Add the pairs you care about most.
         </p>
         <div className="mt-3">
           <WatchlistManager items={watchlist} />
@@ -161,7 +161,7 @@ export default async function SettingsPage() {
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
           Lock-screen alerts with sound and vibration — for price triggers,
-          AXE pings, position-risk and high-impact news. AXE Companion is a
+          Trading OS pings, position-risk and high-impact news. Trading OS is a
           standalone app: install it on this device and you don&apos;t need
           Trading OS for anything.
         </p>
@@ -190,8 +190,8 @@ export default async function SettingsPage() {
           <Badge variant="long">Same Supabase</Badge>
         </div>
         <p className="mt-2 text-xs leading-relaxed text-tos-muted">
-          AXE Companion is the brain. Trading OS is the upcoming premium terminal — live charts, market intelligence,
-          alerts, execution review and multi-source context, with AXE embedded in every workflow. Your account, memory
+          Trading OS is the brain. Trading OS is the upcoming premium terminal — live charts, market intelligence,
+          alerts, execution review and multi-source context, with AI embedded in every workflow. Your account, memory
           and journal carry over when the terminal ships.
         </p>
         <p className="mt-2 text-[11px] text-tos-dim">
@@ -210,8 +210,8 @@ export default async function SettingsPage() {
         </h2>
         {metrics.length === 0 ? (
           <p className="mt-3 text-xs leading-relaxed text-tos-muted">
-            AXE hasn&apos;t collected enough signal yet. Send a few chats, save trades
-            to the journal, and accept or reject AXE&apos;s setup proposals — your
+            AI has not collected enough signal yet. Send a few chats, save trades
+            to the journal, and accept or reject setup proposals — your
             alignment, confidence and feedback metrics will populate here within a
             few sessions.
           </p>
@@ -293,7 +293,7 @@ export default async function SettingsPage() {
         </summary>
         <div className="border-t border-white/[0.05] px-4 py-4">
           <p className="text-xs text-tos-muted">
-            Scan or open the signed-in chat route on your phone to install AXE as a mobile app.
+            Scan or open the signed-in chat route on your phone to install Trading OS as a mobile app.
           </p>
           <div className="mt-3">
             <LandingOpenAppQr />

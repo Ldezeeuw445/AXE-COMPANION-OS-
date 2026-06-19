@@ -10,15 +10,15 @@ import { skipChatQuota } from "@/lib/chatQuota";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 
 const FREE_FEATURES = [
-  "Full AXE Companion experience",
+  "Full Trading OS experience",
   "MT5 broker chart with live stream",
-  "Journal, Vault and AXE memory",
+  "Journal, Vault and AI memory",
   "20 chat sends per day (UTC reset)",
 ];
 
 const PRO_FEATURES = [
   "Unlimited chat sends (fair use)",
-  "AXE memory grows with you",
+  "AI memory grows with you",
   "Weekly journal reviews",
   "Account intelligence + cockpit",
   "Priority on upcoming Trading OS terminal",
@@ -127,7 +127,7 @@ export default async function SubscriptionsPage() {
             <p className="text-sm font-semibold text-cyan-200/95">You are on Pro</p>
           </div>
           <p className="mt-1 text-xs text-tos-muted">
-            Unlimited chat sends (fair use). Thank you for supporting AXE.
+            Unlimited chat sends (fair use). Thank you for supporting Trading OS.
           </p>
           <Link
             href="/chat"
@@ -216,7 +216,7 @@ export default async function SubscriptionsPage() {
         </div>
         <p className="mt-2 text-xs leading-relaxed text-tos-muted">
           Trading OS is the upcoming premium terminal powered by the same AXE brain — charts, workspace
-          intelligence, alerts, execution review and multi-source market context. AXE Companion is the
+          intelligence, alerts, execution review and multi-source market context. Trading OS is the
           mobile command layer today; your account, memory and journal carry over when the terminal ships.
         </p>
       </GlassPanel>

@@ -9,7 +9,7 @@ export function RiskDisclaimerPageContent() {
         <strong>Effective date:</strong> {L.effectiveDate}
       </p>
       <p>
-        AXE Companion and Trading OS provide educational, analytical and informational tools for traders. They do not
+        Trading OS and Trading OS provide educational, analytical and informational tools for traders. They do not
         provide licensed financial advice, investment advice, portfolio management, asset management, tax advice or
         legal advice.
       </p>
@@ -63,7 +63,7 @@ export function RiskDisclaimerPageContent() {
 
       <h2>Execution</h2>
       <p>
-        AXE Companion does not execute trades by default. If execution features are added later, they require explicit
+        Trading OS does not execute trades by default. If execution features are added later, they require explicit
         configuration and safety controls.
       </p>
       <p>You are responsible for every order placed through any connected broker, platform or bridge.</p>

@@ -69,7 +69,7 @@ export default function MarketingPosterPage() {
     >
       <header className="mx-auto max-w-4xl text-center">
         <Image
-          src="/axe-logo-companion.png"
+          src="/trading-os-logo.png"
           alt=""
           width={56}
           height={56}

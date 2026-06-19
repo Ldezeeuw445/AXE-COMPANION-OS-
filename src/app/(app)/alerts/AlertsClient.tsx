@@ -50,7 +50,7 @@ type DeliveryDescriptor = {
 };
 
 function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
-  // AXE Companion alerts are evaluated in-app: the chart screen watches live
+  // Trading OS alerts are evaluated in-app: the chart screen watches live
   // ticks and trips alerts even when web-push is unavailable. So the default
   // "delivery" status is in-app-on-this-device, and push (if configured) is
   // an additional channel — never a hard requirement.
@@ -254,7 +254,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             label: "How does push work?",
             description: "Status, setup, what is live today",
             href: chatQ(
-              `[AXE · push]\nExplain push notifications status for AXE Companion: what is wired today, what needs setup, and how TradingOS can trigger alerts.`,
+              `[AXE · push]\nExplain push notifications status for Trading OS: what is wired today, what needs setup, and how TradingOS can trigger alerts.`,
             ),
           },
         ],
@@ -534,7 +534,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       )}
 
       <p className="text-center text-[10px] leading-relaxed text-tos-dim">
-        Alerts evaluate live inside AXE Companion when the chart is open — push is an optional
+        Alerts evaluate live inside Trading OS when the chart is open — push is an optional
         extra channel. TradingOS can also fire push via{" "}
         <code className="text-tos-muted">POST /api/push/alert</code> when both apps are online.
       </p>
