@@ -1,11 +1,11 @@
 /**
- * Legal entity placeholders — Trading OS is the company; AXE Companion is the product.
+ * Legal entity placeholders for Trading OS.
  * Draft — needs legal review (see LegalDraftNote in UI).
  * Do not publish a private home address; keep [BUSINESS ADDRESS] until a business address is confirmed.
  */
 export const LEGAL = {
   companyLegalName: "Trading OS",
-  tradeNames: "AXE Companion / Trading OS",
+  tradeNames: "Trading OS",
   kvk: "74239422",
   vat: "NL002314900B21",
   /** Intentionally left as placeholder until a statutory business address is chosen. */

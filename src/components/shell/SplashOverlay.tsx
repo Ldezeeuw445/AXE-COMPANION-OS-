@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const SEEN_KEY = "axe.splashSeen.v1";
+const SEEN_KEY = "trading-os.splashSeen.v1";
 const AUTO_DISMISS_MS = 9400;
 
 export function SplashOverlay() {
@@ -53,7 +53,7 @@ export function SplashOverlay() {
           border: "none",
           display: "block",
         }}
-        title="AXE Companion OS"
+        title="Trading OS"
         sandbox="allow-scripts"
       />
       <button

@@ -36,8 +36,8 @@ export default function LoginPage() {
             }}
           >
             <Image
-              src="/axe-companion-wordmark.png"
-              alt="AXE Companion OS"
+              src="/trading-os-wordmark.svg"
+              alt="Trading OS"
               width={420}
               height={80}
               priority
@@ -58,7 +58,7 @@ export default function LoginPage() {
           />
 
           <p className="text-center text-xs leading-relaxed text-tos-muted">
-            Private command channel.{" "}
+            Private trading workspace.{" "}
             <span className="text-tos-dim">Not a social feed.</span>
           </p>
         </div>

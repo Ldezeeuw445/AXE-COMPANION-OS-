@@ -4,7 +4,7 @@ type Props = {
 };
 
 export function AxeWordmark({ className = "", size = "xs" }: Props) {
-  const textSize = size === "sm" ? "text-[12px]" : "text-[11px]";
+  const textSize = size === "sm" ? "text-[10px]" : "text-[9px]";
   return (
     <span
       className={`select-none font-extrabold uppercase tracking-[0.22em] ${textSize} ${className}`}
@@ -15,9 +15,9 @@ export function AxeWordmark({ className = "", size = "xs" }: Props) {
         backgroundClip: "text",
         color: "transparent",
       }}
-      aria-label="AXE"
+      aria-label="Trading OS"
     >
-      AXE
+      TRADING OS
     </span>
   );
 }

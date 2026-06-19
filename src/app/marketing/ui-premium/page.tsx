@@ -5,7 +5,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Mic, Paperclip, Send } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Premium UI — Marketing · TradingOS Companion",
+  title: "Premium UI — Marketing · Trading OS",
   robots: { index: false, follow: false },
 };
 
@@ -198,7 +198,7 @@ export default function MarketingUIPremiumPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-2.5">
                       <Image
-                        src="/axe-logo-companion.png"
+                        src="/trading-os-mark.svg"
                         alt=""
                         width={32}
                         height={32}
@@ -206,7 +206,7 @@ export default function MarketingUIPremiumPage() {
                       />
                       <div>
                         <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-tos-warm">
-                          AXE Companion
+                          Trading OS
                         </p>
                         <h2 className="text-base font-bold tracking-tight text-tos-text">
                           Private channel

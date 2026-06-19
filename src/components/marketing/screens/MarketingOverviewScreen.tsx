@@ -47,7 +47,7 @@ export function MarketingOverviewScreen() {
         <header className="pt-1">
           <div className="flex items-start gap-2.5">
             <Image
-              src="/axe-logo-companion.png"
+              src="/trading-os-mark.svg"
               alt=""
               width={36}
               height={36}
@@ -55,10 +55,10 @@ export function MarketingOverviewScreen() {
             />
             <div className="min-w-0">
               <p className="text-[10px] font-medium uppercase tracking-[0.28em] text-tos-warm">
-                TradingOS
+                Trading OS
               </p>
               <h1 className="mt-1 text-lg font-bold tracking-tight text-tos-text">
-                Companion
+                Workspace
               </h1>
               <p className="mt-1 text-[12px] leading-snug text-tos-muted">{o.headline}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">

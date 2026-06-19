@@ -10,7 +10,7 @@ import { MarketingAlertsScreen } from "@/components/marketing/screens/MarketingA
 import { MarketingVaultScreen } from "@/components/marketing/screens/MarketingVaultScreen";
 
 export const metadata: Metadata = {
-  title: "Marketing poster — TradingOS Companion",
+  title: "Marketing poster — Trading OS",
   robots: { index: false, follow: false },
 };
 
@@ -69,14 +69,14 @@ export default function MarketingPosterPage() {
     >
       <header className="mx-auto max-w-4xl text-center">
         <Image
-          src="/axe-logo-companion.png"
+          src="/trading-os-mark.svg"
           alt=""
           width={56}
           height={56}
           className="mx-auto h-14 w-14 object-contain"
         />
         <p className="mt-4 text-[10px] font-medium uppercase tracking-[0.35em] text-tos-warm">
-          TradingOS Companion
+          Trading OS
         </p>
         <h1 className="mt-3 text-xl font-bold tracking-tight text-white sm:text-2xl lg:text-3xl">
           Private command channel

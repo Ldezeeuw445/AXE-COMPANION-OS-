@@ -1,7 +1,7 @@
 {
-  "name": "AXE Companion",
-  "short_name": "AXE",
-  "description": "Private AI trading companion — alerts, chat, and market intelligence.",
+  "name": "Trading OS",
+  "short_name": "Trading OS",
+  "description": "Private trading workspace — chart, intelligence, execution, journal and AI guidance.",
   "start_url": "/chat",
   "display": "standalone",
   "orientation": "portrait",
@@ -9,13 +9,13 @@
   "background_color": "#06070a",
   "icons": [
     {
-      "src": "/axe-icon.png",
+      "src": "/icon.svg",
       "sizes": "any",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/axe-icon-512.png",
+      "src": "/icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

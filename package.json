@@ -1,8 +1,8 @@
 {
-  "name": "tradingos-companion",
+  "name": "trading-os",
   "version": "0.1.0",
   "private": true,
-  "description": "TradingOS Companion — private AI chat, alerts, vault, and guarded approvals",
+  "description": "Trading OS — private trading workspace with chart, intelligence, execution, and AI guidance",
   "scripts": {
     "dev": "next dev -p 5000 -H 0.0.0.0",
     "dev:5001": "next dev -p 5001 -H 0.0.0.0",

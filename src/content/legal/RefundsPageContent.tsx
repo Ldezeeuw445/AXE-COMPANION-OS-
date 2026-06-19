@@ -8,7 +8,7 @@ export function RefundsPageContent() {
       <p>
         <strong>Effective date:</strong> {L.effectiveDate}
       </p>
-      <p>This policy explains cancellations, renewals and refunds for AXE Companion and Trading OS subscriptions.</p>
+      <p>This policy explains cancellations, renewals and refunds for Trading OS subscriptions.</p>
 
       <h2>Subscriptions</h2>
       <p>Paid subscriptions renew automatically unless cancelled before the next billing date.</p>

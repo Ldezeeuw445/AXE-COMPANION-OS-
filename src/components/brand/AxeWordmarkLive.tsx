@@ -58,7 +58,7 @@ export function AxeWordmarkLive({
     titleParts.push(`refreshed ${status.freshestAgeSec}s ago`);
   }
   if (titleParts.length === 0) {
-    titleParts.push("AXE — no live feeds claimed on this page");
+    titleParts.push("Trading OS — no live feeds claimed on this page");
   }
   const title = titleParts.join(" · ");
 

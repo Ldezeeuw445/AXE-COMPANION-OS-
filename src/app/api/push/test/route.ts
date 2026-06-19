@@ -42,13 +42,13 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
   }
 
   const payload = JSON.stringify({
-    title: "AXE — test notification",
+    title: "Trading OS — test notification",
     body: "If you can see this on the lock screen with sound or vibration, push is wired correctly.",
     url: "/settings",
-    tag: "axe-test",
+    tag: "trading-os-test",
     severity: "alert",
     requireInteraction: false,
-    actions: [{ action: "open", title: "Open AXE" }],
+    actions: [{ action: "open", title: "Open Trading OS" }],
   });
 
   const results = await Promise.allSettled(

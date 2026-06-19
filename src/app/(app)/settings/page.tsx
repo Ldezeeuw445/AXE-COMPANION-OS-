@@ -65,7 +65,7 @@ export default async function SettingsPage() {
           label: "Push notification setup",
           description: "What’s live today + what’s needed",
           href: `/chat?q=${encodeURIComponent(
-            "[AXE · push]\nExplain how push notifications work in AXE Companion today. What is wired, what’s missing, and what I should do on iOS/Android/PWA.",
+            "[AXE · push]\nExplain how push notifications work in Trading OS today. What is wired, what’s missing, and what I should do on iOS/Android/PWA.",
           )}`,
         },
       ],
@@ -161,9 +161,9 @@ export default async function SettingsPage() {
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
           Lock-screen alerts with sound and vibration — for price triggers,
-          AXE pings, position-risk and high-impact news. AXE Companion is a
+          AXE pings, position-risk and high-impact news. Trading OS is a
           standalone app: install it on this device and you don&apos;t need
-          Trading OS for anything.
+          any separate desktop terminal.
         </p>
         <div className="mt-3">
           <PushPermission />
@@ -190,9 +190,8 @@ export default async function SettingsPage() {
           <Badge variant="long">Same Supabase</Badge>
         </div>
         <p className="mt-2 text-xs leading-relaxed text-tos-muted">
-          AXE Companion is the brain. Trading OS is the upcoming premium terminal — live charts, market intelligence,
-          alerts, execution review and multi-source context, with AXE embedded in every workflow. Your account, memory
-          and journal carry over when the terminal ships.
+          Trading OS keeps the same account, memory and journal across mobile and terminal flows — live charts,
+          market intelligence, alerts, execution review and multi-source context, with AXE embedded in every workflow.
         </p>
         <p className="mt-2 text-[11px] text-tos-dim">
           Need a local MT5 bridge token? It lives under{" "}

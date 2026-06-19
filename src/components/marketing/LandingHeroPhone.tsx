@@ -178,7 +178,7 @@ export function LandingHeroPhone() {
             </div>
             <button
               type="button"
-              aria-label="AXE"
+              aria-label="Trading OS"
               onClick={() => handlePick(4)}
               className={`grid h-7 w-7 place-items-center rounded-lg border bg-black transition ${
                 activeId === "axe"
@@ -187,7 +187,7 @@ export function LandingHeroPhone() {
               }`}
             >
               <Image
-                src="/axe-icon.png"
+                src="/trading-os-mark.svg"
                 alt=""
                 width={20}
                 height={20}
@@ -823,7 +823,7 @@ function AxeFrame({ seed }: { seed: number }) {
       <header className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
           <Image
-            src="/axe-logo-companion.png"
+            src="/trading-os-mark.svg"
             alt=""
             width={26}
             height={26}

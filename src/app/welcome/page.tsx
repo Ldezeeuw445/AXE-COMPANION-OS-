@@ -3,9 +3,9 @@ import Link from "next/link";
 import { getPublicAppBaseUrl } from "@/lib/env";
 
 export const metadata = {
-  title: "AXE Companion — welcome",
+  title: "Trading OS — welcome",
   description:
-    "AXE with knowledge layer, accounts, and chat. Add to your home screen or sign in.",
+    "Trading OS with chart, intelligence, accounts, and AI guidance. Add it to your home screen or sign in.",
 };
 
 export default function WelcomePage() {
@@ -32,8 +32,8 @@ export default function WelcomePage() {
 
       <div className="relative z-10 mx-auto w-full max-w-md text-center">
         <Image
-          src="/axe-companion-wordmark.png"
-          alt="AXE Companion"
+          src="/trading-os-wordmark.svg"
+          alt="Trading OS"
           width={420}
           height={80}
           priority
@@ -42,8 +42,8 @@ export default function WelcomePage() {
           style={{ mixBlendMode: "screen" }}
         />
         <p className="mt-4 text-sm leading-relaxed text-tos-muted">
-          Your personal trading copilot with memory and knowledge — on your phone. Optionally link broker/MT5 later;
-          no desktop terminal required to start.
+          Your personal trading workspace with memory and knowledge — on your phone. Optionally link broker/MT5
+          later; no desktop terminal required to start.
         </p>
 
         <p className="mt-4 text-center">
@@ -66,7 +66,7 @@ export default function WelcomePage() {
             href="/chat"
             className="rounded-2xl border border-white/15 py-3 text-center text-sm font-medium text-tos-text hover:bg-white/5"
           >
-            Go to chat (if already signed in)
+            Go to workspace (if already signed in)
           </Link>
         </div>
 
@@ -85,7 +85,7 @@ export default function WelcomePage() {
             </li>
           </ul>
           <p className="mt-3 text-[11px] text-tos-dim">
-            Then open AXE from your home screen; sign-in stays on Supabase.
+            Then open Trading OS from your home screen; sign-in stays on Supabase.
           </p>
         </div>
 

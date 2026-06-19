@@ -210,7 +210,7 @@ export function PushPermission() {
             in Safari.
           </li>
           <li>Choose &quot;Add to Home Screen&quot;.</li>
-          <li>Open AXE from the home screen, then come back to Settings.</li>
+          <li>Open Trading OS from the home screen, then come back to Settings.</li>
         </ol>
         <p className="text-[10px] text-tos-dim">
           Once installed, you can enable lock-screen alerts with sound and vibration here.
@@ -223,7 +223,7 @@ export function PushPermission() {
     return (
       <p className="text-xs text-tos-muted">
         This browser doesn&apos;t support web push notifications. Try Chrome on
-        Android or install AXE on iOS via Safari → Add to Home Screen.
+        Android or install Trading OS on iOS via Safari → Add to Home Screen.
       </p>
     );
   }
@@ -235,7 +235,7 @@ export function PushPermission() {
         <p className="text-xs text-tos-muted">Push notifications are blocked in your system settings.</p>
         <p className="text-[10px] text-tos-dim">
           {platform?.isIos
-            ? "Open Settings → Notifications → AXE Companion → Allow Notifications."
+            ? "Open Settings → Notifications → Trading OS → Allow Notifications."
             : "Open browser site settings → Notifications → Allow this site."}
         </p>
       </div>

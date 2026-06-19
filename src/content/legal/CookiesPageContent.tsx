@@ -8,7 +8,7 @@ export function CookiesPageContent() {
       <p>
         <strong>Effective date:</strong> {L.effectiveDate}
       </p>
-      <p>This Cookie Policy explains how AXE Companion and Trading OS use cookies and similar technologies.</p>
+      <p>This Cookie Policy explains how Trading OS uses cookies and similar technologies.</p>
 
       <h2>What cookies are</h2>
       <p>

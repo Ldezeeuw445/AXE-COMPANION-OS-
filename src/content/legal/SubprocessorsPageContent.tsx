@@ -8,7 +8,7 @@ export function SubprocessorsPageContent() {
       <p>
         <strong>Effective date:</strong> {L.effectiveDate}
       </p>
-      <p>We use third-party providers to operate AXE Companion, Trading OS and related services.</p>
+      <p>We use third-party providers to operate Trading OS and related services.</p>
       <p>This list may change over time.</p>
 
       <div className="mt-4 overflow-x-auto">

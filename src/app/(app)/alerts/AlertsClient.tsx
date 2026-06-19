@@ -534,7 +534,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       )}
 
       <p className="text-center text-[10px] leading-relaxed text-tos-dim">
-        Alerts evaluate live inside AXE Companion when the chart is open — push is an optional
+        Alerts evaluate live inside Trading OS when the chart is open — push is an optional
         extra channel. TradingOS can also fire push via{" "}
         <code className="text-tos-muted">POST /api/push/alert</code> when both apps are online.
       </p>

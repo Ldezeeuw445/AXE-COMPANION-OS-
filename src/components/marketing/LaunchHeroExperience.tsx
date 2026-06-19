@@ -163,17 +163,17 @@ export function LaunchHeroExperience() {
       <div className="relative z-10 text-center">
         <div className="launch-kicker mx-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.26em] text-white/72">
           <Sparkles className="h-3.5 w-3.5 text-[var(--launch-accent)]" />
-          AXE Companion OS · Early access
+          Trading OS · Early access
         </div>
 
         <h1 className="mt-8 text-balance font-[family-name:var(--font-space)] text-5xl leading-none tracking-[-0.06em] text-white sm:text-6xl lg:text-[5.7rem]">
-          AXE Companion.
+          Trading OS.
           <br />
           <span className="launch-logo-gradient">The trader&apos;s phone OS.</span>
         </h1>
 
         <p className="mx-auto mt-6 max-w-3xl text-balance text-[15px] leading-7 text-white/58 sm:text-[17px]">
-          AXE Companion is what an MT5-native phone workflow should feel like:
+          Trading OS is what an MT5-native phone workflow should feel like:
           live chart, depth, news, intel, execution, journal and AXE in one
           calm dark operating surface.
         </p>
@@ -241,7 +241,7 @@ export function LaunchHeroExperience() {
           <div className="launch-phone-frame relative w-full rounded-[3.3rem] border border-white/12 p-2 sm:p-2.5">
             <div className="relative overflow-hidden rounded-[3rem] border border-white/8 bg-[#050507]">
               <div className="launch-phone-header flex items-center justify-between px-5 py-4 text-xs text-white/84">
-                <span>AXE Companion</span>
+                <span>Trading OS</span>
                 <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-white/42">
                   {activeTab.label}
                 </span>

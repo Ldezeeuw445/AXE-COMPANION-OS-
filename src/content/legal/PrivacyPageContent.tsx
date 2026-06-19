@@ -9,9 +9,8 @@ export function PrivacyPageContent() {
         <strong>Effective date:</strong> {L.effectiveDate}
       </p>
       <p>
-        This Privacy Policy explains how {L.companyLegalName}, trading as AXE Companion and/or Trading OS, processes
-        personal data when you use our websites, apps, dashboards, AI features, account tools, journal features and
-        connected services.
+        This Privacy Policy explains how {L.companyLegalName} processes personal data when you use Trading OS and its
+        related websites, apps, dashboards, AI features, account tools, journal features and connected services.
       </p>
 
       <h2>1. Controller</h2>
