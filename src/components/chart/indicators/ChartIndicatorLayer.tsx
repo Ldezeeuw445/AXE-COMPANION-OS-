@@ -50,6 +50,8 @@ type Props = {
     pdl?: boolean;
     /** Previous Day Equilibrium — midpoint of yesterday's H+L. */
     pdq?: boolean;
+    /** Current session (UTC day) open — first candle open of today. */
+    sessionOpen?: boolean;
     /** Compact swing high/low levels used as Fib anchor references. */
     swingPoints?: boolean;
     /**
@@ -201,6 +203,7 @@ function overlayPalette(dark: boolean) {
       pdhStroke: "rgba(34,211,238,0.92)", pdhLabel: "rgba(125,235,255,0.98)",
       pdlStroke: "rgba(244,63,94,0.92)", pdlLabel: "rgba(252,165,165,0.98)",
       pdqStroke: "rgba(96,165,250,0.88)", pdqLabel: "rgba(186,212,255,0.98)",
+      sessionOpenStroke: "rgba(250,204,21,0.92)", sessionOpenLabel: "rgba(253,224,71,0.98)",
       structBullLine: "rgba(8,153,129,0.90)", structBullText: "rgba(8,153,129,0.95)",
       structBearLine: "rgba(242,54,69,0.90)", structBearText: "rgba(242,54,69,0.95)",
       pivotHigh: "rgba(34,211,238,0.88)", pivotLow: "rgba(45,212,191,0.88)",
@@ -237,6 +240,7 @@ function overlayPalette(dark: boolean) {
     pdhStroke: "rgba(0,100,120,0.95)", pdhLabel: "rgba(0,80,100,0.98)",
     pdlStroke: "rgba(150,18,35,0.95)", pdlLabel: "rgba(120,10,25,0.98)",
     pdqStroke: "rgba(30,70,150,0.95)", pdqLabel: "rgba(20,50,120,0.98)",
+    sessionOpenStroke: "rgba(160,110,0,0.95)", sessionOpenLabel: "rgba(140,95,0,0.98)",
     structBullLine: "rgba(0,90,70,0.95)", structBullText: "rgba(0,80,60,0.98)",
     structBearLine: "rgba(150,18,25,0.95)", structBearText: "rgba(130,10,20,0.98)",
     pivotHigh: "rgba(0,90,110,0.95)", pivotLow: "rgba(0,100,85,0.95)",
@@ -326,6 +330,7 @@ export function ChartIndicatorLayer({
         previousDayHigh: null as { y: number; price: number } | null,
         previousDayLow: null as { y: number; price: number } | null,
         previousDayEq: null as { y: number; price: number } | null,
+        sessionOpen: null as { y: number; price: number } | null,
         swingPointLevels: [] as SwingPointLevel[],
         swingFailures: [] as StructureArrow[],
         supplyDemand: null as SupplyDemandGeom | null,
@@ -423,6 +428,7 @@ export function ChartIndicatorLayer({
     );
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
       buildPreviousDayLevels(visibleWithTime, handle);
+    const sessionOpen = buildSessionOpenLevel(visibleWithTime, handle);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
     const supplyDemand = buildSupplyDemandBands(visibleWithTime, handle);
     // Total tickVolume across the visible window — used as the
@@ -473,6 +479,7 @@ export function ChartIndicatorLayer({
       previousDayHigh,
       previousDayLow,
       previousDayEq,
+      sessionOpen,
       swingPointLevels,
       swingFailures: structureOverlay.swingFailures,
       supplyDemand,
@@ -605,6 +612,34 @@ export function ChartIndicatorLayer({
               paintOrder="stroke"
             >
               PDQ
+            </text>
+          </g>
+        ) : null}
+
+        {active.sessionOpen && geometry.sessionOpen ? (
+          <g>
+            <line
+              x1={LEFT_RAIL_OFFSET}
+              x2={size.w - RIGHT_RAIL_OFFSET}
+              y1={geometry.sessionOpen.y}
+              y2={geometry.sessionOpen.y}
+              stroke={pal.sessionOpenStroke}
+              strokeWidth={1.1}
+              strokeDasharray="6 4"
+            />
+            <text
+              x={LEFT_RAIL_OFFSET}
+              y={geometry.sessionOpen.y - 4}
+              textAnchor="start"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize="9.5"
+              fontWeight="700"
+              fill={pal.sessionOpenLabel}
+              stroke={pal.textStroke11}
+              strokeWidth="2.6"
+              paintOrder="stroke"
+            >
+              OPEN
             </text>
           </g>
         ) : null}
@@ -2261,6 +2296,29 @@ function buildInverseFvgs(
  * Compute previous trading day's high/low. We bucket candles by UTC date and
  * pick the bucket immediately before the current one.
  */
+function buildSessionOpenLevel(
+  candles: Array<IndicatorCandle & { time: number }>,
+  handle: ChartCanvasHandle,
+): { y: number; price: number } | null {
+  if (candles.length === 0) return null;
+
+  const todayKey = utcDateKey(candles[candles.length - 1].time);
+  let firstToday: (IndicatorCandle & { time: number }) | null = null;
+  for (const candle of candles) {
+    if (utcDateKey(candle.time) !== todayKey) continue;
+    if (!firstToday || candle.time < firstToday.time) {
+      firstToday = candle;
+    }
+  }
+  if (!firstToday) return null;
+
+  const openPrice = Number(firstToday.open);
+  if (!Number.isFinite(openPrice)) return null;
+  const y = handle.priceToCoordinate(openPrice);
+  if (y == null) return null;
+  return { y, price: openPrice };
+}
+
 function buildPreviousDayLevels(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,

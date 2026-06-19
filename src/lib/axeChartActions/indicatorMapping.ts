@@ -8,6 +8,7 @@ export const SMC_FLAG_KEYS = [
   "pdh",
   "pdl",
   "pdq",
+  "sessionOpen",
   "swingPoints",
   "supplyDemand",
 ] as const;
@@ -44,6 +45,10 @@ const SMC_ALIASES: Record<string, SmcFlagKey> = {
   pdl: "pdl",
   "previous day low": "pdl",
   pdq: "pdq",
+  sessionopen: "sessionOpen",
+  "session open": "sessionOpen",
+  open: "sessionOpen",
+  "day open": "sessionOpen",
   swing: "swingPoints",
   "swing points": "swingPoints",
   "supply demand": "supplyDemand",

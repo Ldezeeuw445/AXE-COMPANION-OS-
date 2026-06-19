@@ -30,6 +30,7 @@ import {
   Save,
   Settings2,
   Sparkles,
+  Sun,
   Trash2,
   Zap,
   Spline,
@@ -943,6 +944,7 @@ export function ChartScreen({
           pdh: Boolean(parsed.pdh),
           pdl: Boolean(parsed.pdl),
           pdq: Boolean(parsed.pdq),
+          sessionOpen: Boolean(parsed.sessionOpen),
           swingPoints: Boolean(parsed.swingPoints),
           supplyDemand: Boolean(parsed.supplyDemand),
         });
@@ -3143,6 +3145,7 @@ export function ChartScreen({
             pdh: activeToolFlags.pdh,
             pdl: activeToolFlags.pdl,
             pdq: activeToolFlags.pdq,
+            sessionOpen: activeToolFlags.sessionOpen,
             swingPoints: activeToolFlags.swingPoints,
             supplyDemand: activeToolFlags.supplyDemand,
           }}
@@ -3461,6 +3464,7 @@ export function ChartScreen({
             { id: "pdh", label: "PDH", icon: Maximize2, active: Boolean(activeToolFlags.pdh), action: () => toggleToolFlag("pdh") },
             { id: "pdl", label: "PDL", icon: Maximize2, active: Boolean(activeToolFlags.pdl), action: () => toggleToolFlag("pdl") },
             { id: "pdq", label: "PDQ", icon: Maximize2, active: Boolean(activeToolFlags.pdq), action: () => toggleToolFlag("pdq") },
+            { id: "sessionOpen", label: "Open", icon: Sun, active: Boolean(activeToolFlags.sessionOpen), action: () => toggleToolFlag("sessionOpen") },
             { id: "supplyDemand", label: "S/D", icon: Layers, active: Boolean(activeToolFlags.supplyDemand), action: () => toggleToolFlag("supplyDemand") },
             { id: "swingPoints", label: "Swings", icon: GitBranch, active: Boolean(activeToolFlags.swingPoints), action: () => toggleToolFlag("swingPoints") },
             // Future projection cursor — toggleable so traders who don't
