@@ -28,7 +28,7 @@ import {
   type ChartAnnotation,
 } from "@/components/chart/annotations/types";
 
-type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | null;
+type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | "horizontal_level" | null;
 
 type Props = {
   /** Initial OHLC dataset; replaced on symbol/timeframe change. */
@@ -528,7 +528,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     }
     annotationLineSeriesRef.current = [];
 
-    annotations.forEach((ann, idx) => {
+    annotations.forEach((ann) => {
       if (ann.type === "fib_retracement") {
         // handled by FibAnnotationLayer
         return;
@@ -537,16 +537,12 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         // handled by TrendlineAnnotationLayer (interactive SVG overlay)
         return;
       }
-      if (ann.type === "horizontal_level" && ann.points.length >= 1) {
-        annotationPriceLinesRef.current.push(
-          series.createPriceLine({
-            price: ann.points[0].price,
-            title: `Level ${idx + 1}`,
-            color: "rgba(168,180,196,0.55)",
-            lineWidth: 1,
-            lineStyle: LineStyle.Dashed,
-          }),
-        );
+      if (ann.type === "horizontal_level") {
+        // handled by HorizontalLevelAnnotationLayer
+        return;
+      }
+      if (ann.type === "rectangle" || ann.type === "text") {
+        return;
       }
     });
   }, [annotations]);

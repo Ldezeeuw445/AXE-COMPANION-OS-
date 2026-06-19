@@ -30,6 +30,7 @@ import {
   Save,
   Settings2,
   Sparkles,
+  Trash2,
   Zap,
   Spline,
   Square,
@@ -110,6 +111,7 @@ import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotation
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
 import { RectangleAnnotationLayer } from "@/components/chart/annotations/RectangleAnnotationLayer";
 import { TextAnnotationLayer } from "@/components/chart/annotations/TextAnnotationLayer";
+import { HorizontalLevelAnnotationLayer } from "@/components/chart/annotations/HorizontalLevelAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
@@ -152,13 +154,14 @@ type Props = {
   workflowRuntime?: WorkflowRuntime;
 };
 
-type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | null;
+type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | "horizontal_level" | null;
 
 const DRAWING_POINT_COUNT: Record<Exclude<DrawingMode, null>, number> = {
   fib_retracement: 2,
   trendline: 2,
   rectangle: 2,
   text: 1,
+  horizontal_level: 1,
 };
 
 function drawingStartHint(mode: Exclude<DrawingMode, null>): string {
@@ -171,6 +174,8 @@ function drawingStartHint(mode: Exclude<DrawingMode, null>): string {
       return "Tap one corner, then the opposite corner";
     case "text":
       return "Tap where the label should sit";
+    case "horizontal_level":
+      return "Tap the price level for the horizontal line";
   }
 }
 
@@ -183,6 +188,7 @@ function drawingNextHint(mode: Exclude<DrawingMode, null>): string {
     case "rectangle":
       return "Now tap the opposite corner to complete the rectangle";
     case "text":
+    case "horizontal_level":
       return "";
   }
 }
@@ -2141,8 +2147,16 @@ export function ChartScreen({
           symbol: data.symbol,
           timeframe: data.timeframeKey,
           type: drawingMode,
-          points: drawingMode === "text" ? [pt] : next.slice(-2),
-          settings: drawingMode === "text" ? { text: "Note" } : undefined,
+          points:
+            drawingMode === "text" || drawingMode === "horizontal_level"
+              ? [pt]
+              : next.slice(-2),
+          settings:
+            drawingMode === "text"
+              ? { text: "Note" }
+              : drawingMode === "horizontal_level"
+                ? { label: "Level" }
+                : undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -2176,6 +2190,14 @@ export function ChartScreen({
     },
     [data.symbol, data.timeframeKey],
   );
+
+  const clearAllDrawings = useCallback(() => {
+    cancelDrawing();
+    saveAnnotations(data.symbol, data.timeframeKey, []);
+    setAnnotations([]);
+    setSnapshotMessage("Cleared all chart drawings.");
+    setTimeout(() => setSnapshotMessage(null), 3000);
+  }, [cancelDrawing, data.symbol, data.timeframeKey]);
 
   const appendAndRenderAnnotation = useCallback(
     (annotation: ChartAnnotation): ChartAnnotation[] => {
@@ -3509,6 +3531,23 @@ export function ChartScreen({
                   active: drawingMode === "text",
                   action: () => (drawingMode === "text" ? cancelDrawing() : startDrawing("text")),
                 },
+                {
+                  id: "draw-hline",
+                  label: "H-Line",
+                  icon: Minus,
+                  active: drawingMode === "horizontal_level",
+                  action: () =>
+                    drawingMode === "horizontal_level"
+                      ? cancelDrawing()
+                      : startDrawing("horizontal_level"),
+                },
+                {
+                  id: "draw-clear",
+                  label: "Clear",
+                  icon: Trash2,
+                  active: false,
+                  action: () => clearAllDrawings(),
+                },
               ].map((item) => {
                 const Icon = item.icon;
                 return (
@@ -4002,6 +4041,14 @@ export function ChartScreen({
           />
 
           <TextAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
+            isDark={chartTheme.isDark}
+          />
+
+          <HorizontalLevelAnnotationLayer
             annotations={annotations}
             canvasRef={canvasRef}
             onUpdate={updateAnnotation}
