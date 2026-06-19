@@ -2865,7 +2865,7 @@ export function ChartScreen({
   ]);
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
-  const execBarOverNav = !isFullscreen && (!isTabletLayout || tabletNavCollapsed);
+  const execBarOverNav = !isFullscreen;
   const { dismiss: dismissChartNotice, isDismissed: isChartNoticeDismissed } = useChartDismissedNotices();
   const chartNoticeBottom = oneClickVisible ? "3.35rem" : "0.75rem";
 
@@ -2987,7 +2987,9 @@ export function ChartScreen({
 
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        className="relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] select-none md:min-h-[420px] md:rounded-none"
+        className={`relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden select-none md:min-h-[420px] md:rounded-none ${
+          chartTheme.isDark ? "border-t border-white/[0.08]" : ""
+        }`}
         style={{
           background: chartTheme.background,
           userSelect: "none",
@@ -3159,7 +3161,11 @@ export function ChartScreen({
         ) : null}
 
         {/* Tablet — compact toolbar: left meta, centered depth/news | squawk | exec, right account */}
-        <div className="tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-white/[0.06] bg-black/72 px-2 py-1.5 backdrop-blur-lg">
+        <div
+          className={`tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 bg-black/72 px-2 py-1.5 backdrop-blur-lg ${
+            chartTheme.isDark ? "border-b border-white/[0.06]" : ""
+          }`}
+        >
           <div className="flex min-w-0 items-center justify-self-start gap-1">
             <div className="relative">
               <select

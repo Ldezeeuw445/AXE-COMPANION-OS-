@@ -354,13 +354,14 @@ body.trade-sheet-open .tos-nav-pill {
     padding-right: 0;
     padding-top: 0;
   }
-  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
+  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route:not(.tos-chart-route) {
     padding-bottom: 0;
   }
   body.tos-route-chart .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
     padding-left: 0;
     padding-right: 0;
-    padding-bottom: 0;
+    /* Match phone chart — keep canvas above fixed bottom nav + exec overlay */
+    padding-bottom: calc(var(--tos-nav-offset) - 0.24rem);
   }
   body.tos-route-chart .tos-shell-desktop-only {
     display: none !important;
