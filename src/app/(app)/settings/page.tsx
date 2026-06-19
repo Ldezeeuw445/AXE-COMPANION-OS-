@@ -200,6 +200,8 @@ export default async function SettingsPage() {
         <TradeExecutionPrefsPanel
           initialVolume={tradeExecutionPrefs.defaultVolume}
           initialAlertAutoTrade={tradeExecutionPrefs.alertAutoTradeEnabled}
+          initialAlertSlOffset={tradeExecutionPrefs.alertSlOffset}
+          initialAlertTpOffset={tradeExecutionPrefs.alertTpOffset}
         />
       </div>
 

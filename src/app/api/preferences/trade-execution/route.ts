@@ -9,34 +9,38 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function parseOffset(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export async function GET() {
   const supabase = await createServerSupabaseClient();
-  if (!supabase) {
-    return Response.json({
-      defaultVolume: DEFAULT_TRADE_VOLUME_LOTS,
-      alertAutoTradeEnabled: false,
-    });
-  }
+  const empty = {
+    defaultVolume: DEFAULT_TRADE_VOLUME_LOTS,
+    alertAutoTradeEnabled: false,
+    alertSlOffset: null,
+    alertTpOffset: null,
+  };
+  if (!supabase) return Response.json(empty);
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    return Response.json({
-      defaultVolume: DEFAULT_TRADE_VOLUME_LOTS,
-      alertAutoTradeEnabled: false,
-    });
-  }
+  if (!user) return Response.json(empty);
 
   const { data } = await supabase
     .from("user_workspace_preferences")
-    .select("default_trade_volume,alert_auto_trade_enabled")
+    .select("default_trade_volume,alert_auto_trade_enabled,alert_sl_offset,alert_tp_offset")
     .eq("user_id", user.id)
     .maybeSingle();
 
   return Response.json({
     defaultVolume: normalizeTradeVolume(data?.default_trade_volume ?? DEFAULT_TRADE_VOLUME_LOTS),
     alertAutoTradeEnabled: Boolean(data?.alert_auto_trade_enabled),
+    alertSlOffset: parseOffset(data?.alert_sl_offset),
+    alertTpOffset: parseOffset(data?.alert_tp_offset),
   });
 }
 
@@ -49,7 +53,12 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  let body: { defaultVolume?: number; alertAutoTradeEnabled?: boolean };
+  let body: {
+    defaultVolume?: number;
+    alertAutoTradeEnabled?: boolean;
+    alertSlOffset?: number | null;
+    alertTpOffset?: number | null;
+  };
   try {
     body = await req.json();
   } catch {
@@ -58,12 +67,23 @@ export async function POST(req: Request) {
 
   const defaultVolume = normalizeTradeVolume(body.defaultVolume ?? DEFAULT_TRADE_VOLUME_LOTS);
   const alertAutoTradeEnabled = Boolean(body.alertAutoTradeEnabled);
+  const alertSlOffset = parseOffset(body.alertSlOffset);
+  const alertTpOffset = parseOffset(body.alertTpOffset);
+
+  if (alertAutoTradeEnabled && (alertSlOffset == null || alertTpOffset == null)) {
+    return Response.json(
+      { error: "Set default SL and TP distance before enabling alert auto-trade." },
+      { status: 400 },
+    );
+  }
 
   const { error } = await supabase.from("user_workspace_preferences").upsert(
     {
       user_id: user.id,
       default_trade_volume: defaultVolume,
       alert_auto_trade_enabled: alertAutoTradeEnabled,
+      alert_sl_offset: alertSlOffset,
+      alert_tp_offset: alertTpOffset,
     },
     { onConflict: "user_id" },
   );
@@ -74,6 +94,8 @@ export async function POST(req: Request) {
     ok: true,
     defaultVolume,
     alertAutoTradeEnabled,
+    alertSlOffset,
+    alertTpOffset,
     minVolume: MIN_TRADE_VOLUME_LOTS,
     maxVolume: MAX_TRADE_VOLUME_LOTS,
   });
