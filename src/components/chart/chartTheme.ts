@@ -189,6 +189,10 @@ export const CHART_THEMES: Record<ChartThemeKey, ChartThemeConfig> = {
 
 export const CHART_THEME_KEYS: ChartThemeKey[] = ["midnight", "paper"];
 
+/** Solid order lines on chart canvas (TradePlanLine, pending entry). */
+export const CHART_ORDER_BUY_COLOR = "#1A729E";
+export const CHART_ORDER_SELL_COLOR = "#E13947";
+
 /** Get a theme config by key. Falls back to midnight. */
 export function getChartTheme(key?: string | null): ChartThemeConfig {
   if (key && key in CHART_THEMES) return CHART_THEMES[key as ChartThemeKey];

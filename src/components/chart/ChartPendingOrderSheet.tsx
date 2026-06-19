@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
+import { CHART_ORDER_BUY_COLOR, CHART_ORDER_SELL_COLOR } from "@/components/chart/chartTheme";
 
 type Props = {
   symbol: string;
@@ -46,7 +47,7 @@ export function ChartPendingOrderSheet({
   onTpChange,
 }: Props) {
   const swipeStartY = useRef<number | null>(null);
-  const accent = side === "buy" ? "#22D3EE" : "#E13947";
+  const accent = side === "buy" ? CHART_ORDER_BUY_COLOR : CHART_ORDER_SELL_COLOR;
   const priceText = price != null ? formatBrokerPrice(symbol, price) : "—";
 
   return (

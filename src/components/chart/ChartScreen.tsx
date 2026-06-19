@@ -79,7 +79,15 @@ import {
   type LiveUiStatus,
 } from "@/components/chart/useLiveChart";
 import { usePageVisible } from "@/components/chart/usePageVisible";
-import { getChartTheme, readChartThemeKey, readGridStyle, type ChartThemeKey, type ChartGridStyle } from "@/components/chart/chartTheme";
+import {
+  getChartTheme,
+  readChartThemeKey,
+  readGridStyle,
+  CHART_ORDER_BUY_COLOR,
+  CHART_ORDER_SELL_COLOR,
+  type ChartThemeKey,
+  type ChartGridStyle,
+} from "@/components/chart/chartTheme";
 import { seedGlobalsFromAccount, seedGlobalsFromSymbol, writeSymbolPref } from "@/lib/accountPreferences";
 import { describeResolvedLayers, resolveIndicatorNames } from "@/lib/axeChartActions/indicatorMapping";
 import { consumeLocalChartActions } from "@/lib/axeChartActions/chartActionQueue";
@@ -3106,7 +3114,7 @@ export function ChartScreen({
               canvasRef={canvasRef}
               price={pendingOrderPrice}
               label={`${orderTypeLabel(pendingOrderType)} ${tradeVolume}`}
-              color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
+              color={pendingOrderSide === "buy" ? CHART_ORDER_BUY_COLOR : CHART_ORDER_SELL_COLOR}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               symbol={data.brokerSymbol}
               onChange={handlePendingEntryPriceChange}
@@ -4083,7 +4091,7 @@ export function ChartScreen({
             </button>
             {/* Order label + volume — center (volume tappable → opens lot picker) */}
             <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold">
-              <span className={pendingOrderSide === "buy" ? "text-[#22D3EE]" : "text-[#E13947]"}>{orderTypeLabel(pendingOrderType)}</span>
+              <span className={pendingOrderSide === "buy" ? "text-[#1A729E]" : "text-[#E13947]"}>{orderTypeLabel(pendingOrderType)}</span>
               <button
                 type="button"
                 onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}

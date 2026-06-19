@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { ArrowRight } from "lucide-react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
-import { CHART_THEME, getChartTheme } from "@/components/chart/chartTheme";
+import { CHART_THEME, CHART_ORDER_BUY_COLOR, getChartTheme } from "@/components/chart/chartTheme";
 import { TradePlanLine } from "@/components/chart/TradePlanLine";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
@@ -90,7 +90,7 @@ function formatPnl(profit: number | null | undefined): string {
 
 function entryColor(side: string | null): string {
   if (side === "sell") return CHART_THEME.negativeText;
-  if (side === "buy") return CHART_THEME.cyanAccent;
+  if (side === "buy") return CHART_ORDER_BUY_COLOR;
   return CHART_THEME.entryLine;
 }
 

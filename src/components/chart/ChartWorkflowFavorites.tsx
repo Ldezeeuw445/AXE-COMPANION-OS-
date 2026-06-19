@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import Link from "next/link";
 import { WorkflowActionLink } from "@/components/workflows/WorkflowActionLink";
@@ -12,6 +12,9 @@ import type { WorkflowRuntime } from "@/lib/workflows/status";
 const baseBtn =
   "inline-flex items-center justify-center border bg-black/78 text-white/85 shadow-[0_4px_14px_rgba(0,0,0,0.4)] backdrop-blur active:scale-[0.97] transition-transform";
 
+const MENU_MARGIN = 8;
+const MENU_WIDTH_MAX = 288;
+
 export function ChartWorkflowFavorites({
   favoriteIds,
   runtime,
@@ -22,8 +25,36 @@ export function ChartWorkflowFavorites({
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  );
   const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const actions = resolveFavoriteActions(favoriteIds, runtime);
+
+  const updateMenuPosition = () => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const width = Math.min(MENU_WIDTH_MAX, window.innerWidth - MENU_MARGIN * 2);
+    let left = rect.left + rect.width / 2 - width / 2;
+    left = Math.max(MENU_MARGIN, Math.min(left, window.innerWidth - width - MENU_MARGIN));
+    setMenuPos({ top: rect.bottom + 8, left, width });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("orientationchange", updateMenuPosition);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("orientationchange", updateMenuPosition);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -42,6 +73,7 @@ export function ChartWorkflowFavorites({
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`${baseBtn} ${size} rounded-md border-cyan-400/25 bg-cyan-400/[0.10] text-cyan-100 hover:border-cyan-400/40`}
@@ -52,8 +84,15 @@ export function ChartWorkflowFavorites({
         <Star className={`${icon} fill-cyan-400/20`} />
       </button>
 
-      {open ? (
-        <div className="absolute left-1/2 top-[calc(100%+8px)] z-[80] w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/[0.10] bg-[#0a0b0e]/98 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+      {open && menuPos ? (
+        <div
+          className="fixed z-[80] overflow-hidden rounded-2xl border border-white/[0.10] bg-[#0a0b0e]/98 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+          style={{
+            top: menuPos.top,
+            left: menuPos.left,
+            width: menuPos.width,
+          }}
+        >
           <div className="border-b border-white/[0.06] px-3 py-2">
             <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-300/85">
               Quick actions
