@@ -1755,7 +1755,7 @@ function findErcZone(
     const baseCandles: typeof candles = [];
     for (let k = i - 1; k >= Math.max(0, i - 3); k -= 1) {
       const bBody = Math.abs(candles[k].close - candles[k].open);
-      if (bBody >= 1.5 * avg) break; // base candles are quiet (relaxed from 1.2×)
+      if (bBody >= 1.25 * avg) break;
       baseCandles.unshift(candles[k]);
     }
     if (baseCandles.length === 0) continue;
@@ -1785,13 +1785,74 @@ function findErcZone(
   return null;
 }
 
+/** Latest confirmed swing high / low walking backwards from the live bar. */
+function findLatestSwingExtremes(
+  candles: Array<IndicatorCandle & { time: number }>,
+  strength = 4,
+): { swingHigh: number | null; swingLow: number | null } {
+  if (candles.length < strength * 2 + 4) {
+    return { swingHigh: null, swingLow: null };
+  }
+  let swingHigh: number | null = null;
+  let swingLow: number | null = null;
+  for (let index = candles.length - strength - 1; index >= strength; index -= 1) {
+    const candle = candles[index];
+    const neighbors = [
+      ...candles.slice(index - strength, index),
+      ...candles.slice(index + 1, index + strength + 1),
+    ];
+    if (
+      swingHigh == null &&
+      neighbors.every((other) => candle.high > other.high)
+    ) {
+      swingHigh = candle.high;
+    }
+    if (
+      swingLow == null &&
+      neighbors.every((other) => candle.low < other.low)
+    ) {
+      swingLow = candle.low;
+    }
+    if (swingHigh != null && swingLow != null) break;
+  }
+  return { swingHigh, swingLow };
+}
+
+/**
+ * Fallback S/D when ERC zones are missing: top 25% of the latest swing
+ * range = Supply, bottom 25% = Demand (matches toolbar copy).
+ */
+function buildSwingRangeZones(
+  swingHigh: number,
+  swingLow: number,
+): { supply: { top: number; bottom: number } | null; demand: { top: number; bottom: number } | null } {
+  const range = swingHigh - swingLow;
+  if (!Number.isFinite(range) || range <= 0) {
+    return { supply: null, demand: null };
+  }
+  return {
+    supply: { top: swingHigh, bottom: swingHigh - range * 0.25 },
+    demand: { top: swingLow + range * 0.25, bottom: swingLow },
+  };
+}
+
 function buildSupplyDemandBands(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
 ): SupplyDemandGeom | null {
   if (candles.length < 20) return null;
-  const supply = findErcZone(candles, "supply");
-  const demand = findErcZone(candles, "demand");
+  let supply = findErcZone(candles, "supply");
+  let demand = findErcZone(candles, "demand");
+
+  if (!supply || !demand) {
+    const { swingHigh, swingLow } = findLatestSwingExtremes(candles);
+    if (swingHigh != null && swingLow != null && swingHigh > swingLow) {
+      const fallback = buildSwingRangeZones(swingHigh, swingLow);
+      if (!supply) supply = fallback.supply;
+      if (!demand) demand = fallback.demand;
+    }
+  }
+
   // Render whichever zone(s) exist — don't require both. EQ line only
   // shows when both are present (it's the midpoint between them).
   if (!supply && !demand) return null;

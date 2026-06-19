@@ -28,7 +28,7 @@ import {
   type ChartAnnotation,
 } from "@/components/chart/annotations/types";
 
-type DrawingMode = "fib_retracement" | "trendline" | null;
+type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | null;
 
 type Props = {
   /** Initial OHLC dataset; replaced on symbol/timeframe change. */

@@ -3,6 +3,8 @@
 export type ChartAnnotationType =
   | "fib_retracement"
   | "trendline"
+  | "rectangle"
+  | "text"
   | "horizontal_level"
   | "order_block"
   | "fvg";

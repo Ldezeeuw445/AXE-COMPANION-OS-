@@ -34,6 +34,7 @@ import {
   Spline,
   Square,
   TrendingUp,
+  Type,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { TosNotice, type TosNoticeAccent } from "@/components/ui/TosNotice";
@@ -107,6 +108,8 @@ import type {
 } from "@/components/chart/annotations/types";
 import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotationLayer";
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
+import { RectangleAnnotationLayer } from "@/components/chart/annotations/RectangleAnnotationLayer";
+import { TextAnnotationLayer } from "@/components/chart/annotations/TextAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
@@ -149,7 +152,40 @@ type Props = {
   workflowRuntime?: WorkflowRuntime;
 };
 
-type DrawingMode = "fib_retracement" | "trendline" | null;
+type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | null;
+
+const DRAWING_POINT_COUNT: Record<Exclude<DrawingMode, null>, number> = {
+  fib_retracement: 2,
+  trendline: 2,
+  rectangle: 2,
+  text: 1,
+};
+
+function drawingStartHint(mode: Exclude<DrawingMode, null>): string {
+  switch (mode) {
+    case "fib_retracement":
+      return "Tap the swing high, then the swing low";
+    case "trendline":
+      return "Tap the first anchor, then the second";
+    case "rectangle":
+      return "Tap one corner, then the opposite corner";
+    case "text":
+      return "Tap where the label should sit";
+  }
+}
+
+function drawingNextHint(mode: Exclude<DrawingMode, null>): string {
+  switch (mode) {
+    case "fib_retracement":
+      return "Now tap the swing low to complete Fibonacci";
+    case "trendline":
+      return "Now tap the second anchor to complete the trendline";
+    case "rectangle":
+      return "Now tap the opposite corner to complete the rectangle";
+    case "text":
+      return "";
+  }
+}
 type OrderTicketType = "market" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop";
 type PendingOrderTicketType = Exclude<OrderTicketType, "market">;
 
@@ -2084,11 +2120,7 @@ export function ChartScreen({
   const startDrawing = useCallback((mode: Exclude<DrawingMode, null>) => {
     drawingPointsRef.current = [];
     setDrawingMode(mode);
-    setDrawingHint(
-      mode === "fib_retracement"
-        ? "Tap the swing high, then the swing low"
-        : "Tap the first anchor, then the second",
-    );
+    setDrawingHint(drawingStartHint(mode));
   }, []);
 
   const cancelDrawing = useCallback(() => {
@@ -2100,15 +2132,17 @@ export function ChartScreen({
   const handlePointClick = useCallback(
     (pt: AnnotationPoint) => {
       if (!drawingMode) return;
+      const needed = DRAWING_POINT_COUNT[drawingMode];
       const next = [...drawingPointsRef.current, pt];
       drawingPointsRef.current = next;
-      if (next.length >= 2) {
+      if (next.length >= needed) {
         const annotation: ChartAnnotation = {
           id: newAnnotationId(),
           symbol: data.symbol,
           timeframe: data.timeframeKey,
           type: drawingMode,
-          points: next.slice(-2),
+          points: drawingMode === "text" ? [pt] : next.slice(-2),
+          settings: drawingMode === "text" ? { text: "Note" } : undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -2118,11 +2152,7 @@ export function ChartScreen({
         setDrawingMode(null);
         setDrawingHint(null);
       } else {
-        setDrawingHint(
-          drawingMode === "fib_retracement"
-            ? "Now tap the swing low to complete Fibonacci"
-            : "Now tap the second anchor to complete the trendline",
-        );
+        setDrawingHint(drawingNextHint(drawingMode));
       }
     },
     [drawingMode, data.symbol, data.timeframeKey],
@@ -2979,7 +3009,7 @@ export function ChartScreen({
 
       {/* Drawing mode hint */}
       {drawingHint ? (
-        <div className="mt-2 hidden items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] text-white/90 md:flex">
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] text-white/90">
           <span>
             Drawing: <span className="font-semibold">{drawingHint}</span>
           </span>
@@ -3454,6 +3484,61 @@ export function ChartScreen({
 
           <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
             <div className={`mb-1 text-[8px] font-bold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-white/60" : "text-black/55"}`}>
+              Draw
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                {
+                  id: "draw-line",
+                  label: "Line",
+                  icon: TrendingUp,
+                  active: drawingMode === "trendline",
+                  action: () => (drawingMode === "trendline" ? cancelDrawing() : startDrawing("trendline")),
+                },
+                {
+                  id: "draw-rect",
+                  label: "Rect",
+                  icon: Square,
+                  active: drawingMode === "rectangle",
+                  action: () => (drawingMode === "rectangle" ? cancelDrawing() : startDrawing("rectangle")),
+                },
+                {
+                  id: "draw-text",
+                  label: "Text",
+                  icon: Type,
+                  active: drawingMode === "text",
+                  action: () => (drawingMode === "text" ? cancelDrawing() : startDrawing("text")),
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={item.action}
+                    title={item.label}
+                    className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                      item.active
+                        ? chartTheme.isDark
+                          ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-white"
+                          : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-black"
+                    }`}
+                    aria-label={item.label}
+                    aria-pressed={item.active}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                    <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
+            <div className={`mb-1 text-[8px] font-bold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-white/60" : "text-black/55"}`}>
               Indicators
             </div>
             <div className="grid grid-cols-4 gap-1.5">
@@ -3905,6 +3990,22 @@ export function ChartScreen({
             onUpdate={updateAnnotation}
             onRemove={removeAnnotationById}
             futureProjectionX={futureProjectionX}
+            isDark={chartTheme.isDark}
+          />
+
+          <RectangleAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
+            isDark={chartTheme.isDark}
+          />
+
+          <TextAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
             isDark={chartTheme.isDark}
           />
         </div>
