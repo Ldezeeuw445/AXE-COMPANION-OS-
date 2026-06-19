@@ -13,10 +13,12 @@ import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import { chatHrefWithPrefill, stageChatPrefill } from "@/lib/chat/chatPrefill";
 import {
   parseOptionalPrice,
-  sideForAlertCondition,
+  readAlertStopsFromMetadata,
+  readTradeSideFromMetadata,
+  slTpHints,
   suggestAlertStopsFromOffsets,
   validateAlertTradeStops,
-  readAlertStopsFromMetadata,
+  type AlertTradeSide,
 } from "@/lib/trading/alertTradeStops";
 import type { TradeExecutionPrefs } from "@/lib/trading/tradeExecutionPrefs";
 
@@ -142,6 +144,7 @@ function buildAlertRefineDraft(args: {
   symbol: string;
   type: string;
   condition: string;
+  tradeSide: string;
   threshold: string;
   keyword: string;
   defaultVolume: number;
@@ -153,10 +156,11 @@ function buildAlertRefineDraft(args: {
   return `[AXE · alerts]
 Refine this alert rule for ${sym}:
 - Type: ${args.type}
-- Condition: ${args.condition}
-- Threshold: ${args.threshold || "?"}
-- Stop loss: ${args.stopLoss || "?"}
-- Take profit: ${args.takeProfit || "?"}
+- Fires when price: ${args.condition === "below" ? "drops to" : "rises to"} ${args.threshold || "?"}
+- Auto-trade direction: ${args.tradeSide.toUpperCase()}
+- Entry price: ${args.threshold || "?"}
+- Stop loss price: ${args.stopLoss || "?"}
+- Take profit price: ${args.takeProfit || "?"}
 - Keyword: ${args.keyword || "—"}
 - My default size: ${args.defaultVolume.toFixed(2)} lots
 - Alert auto-trade: ${args.alertAutoTradeEnabled ? "ON (market + SL/TP required)" : "OFF"}
@@ -187,7 +191,8 @@ export function AlertsClient({
 
   const [formType, setFormType] = useState<string>("price");
   const [formSymbol, setFormSymbol] = useState<string>(focusSymbol || "");
-  const [formCondition, setFormCondition] = useState<string>("above");
+  const [formCondition, setFormCondition] = useState<string>("below");
+  const [formTradeSide, setFormTradeSide] = useState<AlertTradeSide>("buy");
   const [formThreshold, setFormThreshold] = useState<string>("");
   const [formStopLoss, setFormStopLoss] = useState<string>("");
   const [formTakeProfit, setFormTakeProfit] = useState<string>("");
@@ -245,7 +250,7 @@ export function AlertsClient({
     const threshold = parseOptionalPrice(formThreshold);
     if (threshold == null) return;
     const suggested = suggestAlertStopsFromOffsets(
-      formCondition,
+      formTradeSide,
       threshold,
       tradePrefs.alertSlOffset,
       tradePrefs.alertTpOffset,
@@ -255,7 +260,7 @@ export function AlertsClient({
   }, [
     formType,
     formThreshold,
-    formCondition,
+    formTradeSide,
     tradePrefs.alertSlOffset,
     tradePrefs.alertTpOffset,
     stopsTouched,
@@ -332,8 +337,8 @@ export function AlertsClient({
         setError("Alert auto-trade is on — set stop loss and take profit on this alert.");
         return;
       }
-      const side = sideForAlertCondition(condition);
-      if (side && threshold != null) {
+      const side = formTradeSide;
+      if (threshold != null) {
         const stopErr = validateAlertTradeStops(side, threshold, stopLoss, takeProfit);
         if (stopErr) {
           setError(stopErr);
@@ -358,6 +363,7 @@ export function AlertsClient({
           status: "active",
           metadata: {
             delivery: push?.hasSubscription && push?.vapidConfigured ? "push" : "in_app",
+            ...(type === "price" ? { trade_side: formTradeSide } : {}),
             ...(type === "price" && stopLoss != null ? { stop_loss: stopLoss } : {}),
             ...(type === "price" && takeProfit != null ? { take_profit: takeProfit } : {}),
           },
@@ -383,6 +389,7 @@ export function AlertsClient({
     formType,
     formSymbol,
     formCondition,
+    formTradeSide,
     formThreshold,
     formStopLoss,
     formTakeProfit,
@@ -435,6 +442,7 @@ export function AlertsClient({
         symbol: formSymbol,
         type: formType,
         condition: formCondition,
+        tradeSide: formTradeSide,
         threshold: formThreshold,
         keyword: formKeyword,
         defaultVolume: tradePrefs.defaultVolume,
@@ -446,6 +454,7 @@ export function AlertsClient({
       formSymbol,
       formType,
       formCondition,
+      formTradeSide,
       formThreshold,
       formStopLoss,
       formTakeProfit,
@@ -461,6 +470,8 @@ export function AlertsClient({
   }, [refineDraft, router]);
 
   const delivery = deliveryPill(push);
+  const entryPrice = parseOptionalPrice(formThreshold);
+  const priceHints = slTpHints(formTradeSide, entryPrice);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(
     () => [
@@ -644,9 +655,9 @@ export function AlertsClient({
           </span>
           {tradePrefs.alertAutoTradeEnabled ? (
             <span className="mt-1 block text-tos-dim">
-              Above → market buy, below → market sell at your default lots.{" "}
-              <strong className="text-amber-200/85">SL/TP required</strong> on each alert — no naked
-              auto-trades.
+              When an alert fires, AXE places a <strong className="text-white/75">market</strong> order in
+              your chosen direction (buy/sell) with your SL/TP <strong className="text-white/75">prices</strong>.
+              Trigger (above/below) and trade direction are separate.
             </span>
           ) : (
             <span className="mt-1 block text-tos-dim">
@@ -692,59 +703,87 @@ export function AlertsClient({
 
           {formType === "price" ? (
             <>
-              <label className="text-[11px] text-tos-dim">
-                Condition
+              <label className="text-[11px] text-tos-dim sm:col-span-2">
+                Alert fires when price
                 <select
                   value={formCondition}
                   onChange={(e) => setFormCondition(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 >
-                  <option value="above">above</option>
-                  <option value="below">below</option>
+                  <option value="below">Drops to level (price falls)</option>
+                  <option value="above">Rises to level (price climbs)</option>
                 </select>
+                <span className="mt-1 block text-[10px] leading-relaxed text-tos-dim">
+                  Example: gold at 4110 now, you want 4099 → choose <strong className="text-white/70">Drops to 4099</strong>.
+                  That only controls <em>when</em> the alert fires — not buy vs sell.
+                </span>
               </label>
               <label className="text-[11px] text-tos-dim">
-                Threshold
+                Price level
                 <input
                   value={formThreshold}
                   onChange={(e) => setFormThreshold(e.target.value)}
-                  placeholder="2356.50"
+                  placeholder="4099.00"
                   inputMode="decimal"
                   className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 />
               </label>
+              {(tradePrefs.alertAutoTradeEnabled || formStopLoss || formTakeProfit) ? (
+                <label className="text-[11px] text-tos-dim">
+                  Auto-trade direction
+                  <select
+                    value={formTradeSide}
+                    onChange={(e) => setFormTradeSide(e.target.value as AlertTradeSide)}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+                  >
+                    <option value="buy">Buy (long)</option>
+                    <option value="sell">Sell (short)</option>
+                  </select>
+                  <span className="mt-1 block text-[10px] text-tos-dim">
+                    {formCondition === "below" && formTradeSide === "buy"
+                      ? "Buy on dip — like a buy limit when price reaches your level."
+                      : formCondition === "above" && formTradeSide === "sell"
+                        ? "Sell on rally — like a sell limit when price reaches your level."
+                        : formCondition === "below" && formTradeSide === "sell"
+                          ? "Sell breakdown — short when price breaks below your level."
+                          : "Buy breakout — long when price breaks above your level."}
+                  </span>
+                </label>
+              ) : null}
               <label className="text-[11px] text-tos-dim">
-                Stop loss {tradePrefs.alertAutoTradeEnabled ? "(required)" : "(optional)"}
+                Stop loss price {tradePrefs.alertAutoTradeEnabled ? "(required)" : "(optional)"}
                 <input
                   value={formStopLoss}
                   onChange={(e) => {
                     setStopsTouched(true);
                     setFormStopLoss(e.target.value);
                   }}
-                  placeholder={formCondition === "below" ? "above entry" : "below entry"}
+                  placeholder={priceHints.stopLossPlaceholder}
                   inputMode="decimal"
                   className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 />
               </label>
               <label className="text-[11px] text-tos-dim">
-                Take profit {tradePrefs.alertAutoTradeEnabled ? "(required)" : "(optional)"}
+                Take profit price {tradePrefs.alertAutoTradeEnabled ? "(required)" : "(optional)"}
                 <input
                   value={formTakeProfit}
                   onChange={(e) => {
                     setStopsTouched(true);
                     setFormTakeProfit(e.target.value);
                   }}
-                  placeholder={formCondition === "below" ? "below entry" : "above entry"}
+                  placeholder={priceHints.takeProfitPlaceholder}
                   inputMode="decimal"
                   className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 />
               </label>
               {tradePrefs.alertAutoTradeEnabled ? (
                 <p className="sm:col-span-2 text-[10px] leading-relaxed text-tos-dim">
-                  Auto-trade sends market + these SL/TP levels to MT5 when the alert fires.{" "}
-                  {formCondition === "below"
-                    ? "Sell: SL above threshold, TP below."
-                    : "Buy: SL below threshold, TP above."}
+                  SL and TP are absolute prices sent to MT5. {priceHints.summary}
+                  {entryPrice != null ? (
+                    <span className="mt-1 block text-white/45">
+                      Entry ≈ {entryPrice} when the alert fires.
+                    </span>
+                  ) : null}
                 </p>
               ) : null}
             </>
@@ -805,6 +844,7 @@ export function AlertsClient({
           {visibleAlerts.map((a) => {
             const paused = a.status === "paused";
             const stops = readAlertStopsFromMetadata(a.metadata);
+            const tradeSide = readTradeSideFromMetadata(a.metadata, a.condition);
             return (
               <GlassPanel key={a.id} className="!p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -833,8 +873,13 @@ export function AlertsClient({
                   </div>
                 </div>
                 <p className="mt-1 text-[11px] text-tos-dim">
-                  {a.condition ? `${a.condition}` : null}
-                  {a.threshold != null ? ` · ${a.threshold}` : ""}
+                  {a.condition === "below"
+                    ? "Fires below"
+                    : a.condition === "above"
+                      ? "Fires above"
+                      : a.condition ?? ""}
+                  {a.threshold != null ? ` ${a.threshold}` : ""}
+                  {tradeSide ? ` · ${tradeSide.toUpperCase()}` : ""}
                   {stops.stopLoss != null ? ` · SL ${stops.stopLoss}` : ""}
                   {stops.takeProfit != null ? ` · TP ${stops.takeProfit}` : ""}
                   {a.keyword ? ` · “${a.keyword}”` : ""}

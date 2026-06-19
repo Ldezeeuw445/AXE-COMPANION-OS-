@@ -178,9 +178,8 @@ export function TradeExecutionPrefsPanel({
             Alert → auto-trade (market + SL/TP)
           </span>
           <span className="mt-1 block text-[11px] leading-relaxed text-tos-muted">
-            When a price alert fires: <strong className="font-medium text-white/75">above</strong> →
-            market buy, <strong className="font-medium text-white/75">below</strong> → market sell.
-            Orders include the SL/TP from the alert — no naked trades.
+            When a price alert fires: choose buy or sell separately from the trigger (above/below).
+            Orders always include SL/TP prices — no naked trades.
           </span>
         </span>
       </label>

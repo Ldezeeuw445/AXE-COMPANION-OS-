@@ -3,7 +3,6 @@ import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import {
   resolveAlertAutoTradeStops,
-  sideForAlertCondition,
 } from "@/lib/trading/alertTradeStops";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
 import { placeMt5QuickOrder } from "@/services/mt5QuickOrderService";
@@ -66,8 +65,7 @@ export async function maybeAutoTradeOnAlert(
     return { traded: false, message: stops.error };
   }
 
-  const side = sideForAlertCondition(alert.condition);
-  if (!side) return { traded: false };
+  const side = stops.tradeSide;
 
   const symbol = alert.symbol.trim().toUpperCase();
 
