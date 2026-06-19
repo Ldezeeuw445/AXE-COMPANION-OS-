@@ -78,6 +78,7 @@ export type ExecutionRequestCard = {
   stopLoss: number | null;
   takeProfit: number | null;
   riskPercent: number | null;
+  volumeLots: number | null;
   rationale: string;
   status: ExecutionStatus;
   warnings?: string[];

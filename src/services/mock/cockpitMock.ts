@@ -152,4 +152,11 @@ export const mockCockpitDashboard: CockpitDashboard = {
     lastCalculatedAt: "2026-03-29T06:30:00.000Z",
     message: "Mock dashboard only: real cockpit scores stay conservative until live user signals exist.",
   },
+  today: {
+    alignmentScore: 72,
+    chatMessages: 4,
+    tradesClosed: 1,
+    feedEvents: 3,
+    journalNotes: 1,
+  },
 };

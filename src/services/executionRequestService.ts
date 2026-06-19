@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 
 export type PrepareExecutionArgs = {
   instrument: string;
@@ -9,6 +10,7 @@ export type PrepareExecutionArgs = {
   take_profit?: number;
   risk_percent?: number;
   risk_amount?: number;
+  volume?: number;
   rationale: string;
   notes?: string;
 };
@@ -33,6 +35,7 @@ export async function createExecutionRequest(
       take_profit: args.take_profit ?? null,
       risk_percent: args.risk_percent ?? null,
       risk_amount: args.risk_amount ?? null,
+      volume_lots: args.volume != null ? normalizeTradeVolume(args.volume) : null,
       rationale: args.rationale,
       notes: args.notes ?? null,
       status: "pending",

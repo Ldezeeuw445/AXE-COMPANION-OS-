@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Check, Loader2, Pause, Play, Plus, Trash2 } from "lucide-react";
+import { Bell, Check, Loader2, Pause, Play, Plus, Shield, Trash2, Zap } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { TosMatteBanner } from "@/components/ui/TosNotice";
 import { Badge } from "@/components/ui/Badge";
@@ -22,6 +22,8 @@ import {
   type AlertTradeSide,
 } from "@/lib/trading/alertTradeStops";
 import type { TradeExecutionPrefs } from "@/lib/trading/tradeExecutionPrefs";
+import { readAlertAutoTradeEnabled } from "@/lib/trading/alertMetadata";
+import { alertAutoTradeArmedRemainingMs } from "@/lib/trading/alertAutoTradeArmed";
 
 type AlertRow = {
   id: string;
@@ -198,6 +200,10 @@ export function AlertsClient({
   const [formStopLoss, setFormStopLoss] = useState<string>("");
   const [formTakeProfit, setFormTakeProfit] = useState<string>("");
   const [formKeyword, setFormKeyword] = useState<string>("");
+  const [armed, setArmed] = useState(tradePrefs.alertAutoTradeArmed);
+  const [armedAt, setArmedAt] = useState<string | null>(tradePrefs.alertAutoTradeArmedAt);
+  const [armPending, setArmPending] = useState(false);
+  const [armTick, setArmTick] = useState(0);
   const [stopsTouched, setStopsTouched] = useState(false);
 
   useEffect(() => {
@@ -304,6 +310,69 @@ export function AlertsClient({
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!armed) return;
+    const id = setInterval(() => setArmTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [armed]);
+
+  const armedRemainingMin = useMemo(() => {
+    void armTick;
+    if (!armedAt) return 0;
+    return Math.ceil(alertAutoTradeArmedRemainingMs(armedAt) / 60_000);
+  }, [armTick, armedAt]);
+
+  useEffect(() => {
+    if (!armed || !armedAt) return;
+    if (alertAutoTradeArmedRemainingMs(armedAt) <= 0) setArmed(false);
+  }, [armTick, armed, armedAt]);
+
+  const setArmState = useCallback(async (nextArm: boolean) => {
+    setArmPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/preferences/alert-armed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ arm: nextArm }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(j?.error ?? "Could not update arm state.");
+        return;
+      }
+      const json = (await res.json()) as { armed?: boolean; armedAt?: string | null };
+      setArmed(Boolean(json.armed));
+      setArmedAt(json.armedAt ?? null);
+    } finally {
+      setArmPending(false);
+    }
+  }, []);
+
+  const toggleAlertAutoTrade = useCallback(
+    async (alert: AlertRow, enabled: boolean) => {
+      setError(null);
+      const metadata = {
+        ...(alert.metadata && typeof alert.metadata === "object" ? alert.metadata : {}),
+        auto_trade_enabled: enabled,
+      };
+      const res = await fetch(`/api/alerts/${encodeURIComponent(alert.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ metadata }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(j?.error ?? "Could not update alert.");
+        return;
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   const visibleAlerts = useMemo(() => {
     if (!focusSymbol) return alerts;
     return alerts.filter((a) => (a.symbol ?? "").toUpperCase() === focusSymbol);
@@ -365,6 +434,9 @@ export function AlertsClient({
           metadata: {
             delivery: push?.hasSubscription && push?.vapidConfigured ? "push" : "in_app",
             ...(type === "price" ? { trade_side: formTradeSide } : {}),
+            ...(type === "price" && tradePrefs.alertAutoTradeEnabled
+              ? { auto_trade_enabled: true }
+              : {}),
             ...(type === "price" && stopLoss != null ? { stop_loss: stopLoss } : {}),
             ...(type === "price" && takeProfit != null ? { take_profit: takeProfit } : {}),
           },
@@ -655,11 +727,35 @@ export function AlertsClient({
             {tradePrefs.alertAutoTradeEnabled ? "ON" : "OFF"}
           </span>
           {tradePrefs.alertAutoTradeEnabled ? (
-            <span className="mt-1 block text-white/58">
-              When an alert fires, AXE places a <strong className="text-white/82">market</strong> order in
-              your chosen direction (buy/sell) with your SL/TP <strong className="text-white/82">prices</strong>.
-              Trigger (above/below) and trade direction are separate.
-            </span>
+            <>
+              {" · "}
+              Armed:{" "}
+              <span className={armed ? "text-emerald-200/90" : "text-amber-200/90"}>
+                {armed ? `YES (${armedRemainingMin}m left)` : "NO — tap Arm below"}
+              </span>
+              <span className="mt-1 block text-white/58">
+                Global auto-trade is on, but orders only fire while armed (30 min window) and when each alert has auto-trade enabled.
+              </span>
+              <span className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={armPending || armed}
+                  onClick={() => void setArmState(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-100/90 disabled:opacity-50"
+                >
+                  <Shield className="h-3 w-3" aria-hidden />
+                  Arm 30m
+                </button>
+                <button
+                  type="button"
+                  disabled={armPending || !armed}
+                  onClick={() => void setArmState(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70 disabled:opacity-50"
+                >
+                  Disarm
+                </button>
+              </span>
+            </>
           ) : (
             <span className="mt-1 block text-white/58">
               Change in{" "}
@@ -846,6 +942,10 @@ export function AlertsClient({
             const paused = a.status === "paused";
             const stops = readAlertStopsFromMetadata(a.metadata);
             const tradeSide = readTradeSideFromMetadata(a.metadata, a.condition);
+            const alertAutoOn =
+              a.type === "price" &&
+              tradePrefs.alertAutoTradeEnabled &&
+              readAlertAutoTradeEnabled(a.metadata, true);
             return (
               <GlassPanel key={a.id} className="!p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -853,8 +953,23 @@ export function AlertsClient({
                     <span className="font-mono text-sm text-tos-text">{a.symbol ?? "—"}</span>
                     <Badge variant={badgeVariantForType(a.type)}>{humanAlertType(a.type)}</Badge>
                     <Badge variant={paused ? "neutral" : "long"}>{paused ? "paused" : "active"}</Badge>
+                    {a.type === "price" && tradePrefs.alertAutoTradeEnabled ? (
+                      <Badge variant={alertAutoOn ? "warm" : "neutral"}>
+                        {alertAutoOn ? "auto-trade" : "notify only"}
+                      </Badge>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {a.type === "price" && tradePrefs.alertAutoTradeEnabled ? (
+                      <button
+                        type="button"
+                        onClick={() => void toggleAlertAutoTrade(a, !alertAutoOn)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-semibold text-tos-muted hover:bg-white/[0.06]"
+                      >
+                        <Zap className="h-3.5 w-3.5" aria-hidden />
+                        {alertAutoOn ? "Disable auto" : "Enable auto"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void setAlertStatus(a.id, paused ? "active" : "paused")}

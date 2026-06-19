@@ -139,6 +139,7 @@ export const mockExecutionCards: ExecutionRequestCard[] = [
     stopLoss: 5980.5,
     takeProfit: 6012,
     riskPercent: 0.5,
+    volumeLots: 0.1,
     rationale:
       "Long continuation after defended 5984 shelf; target prior HVN at 6012.",
     status: "pending_approval",
@@ -152,6 +153,7 @@ export const mockExecutionCards: ExecutionRequestCard[] = [
     stopLoss: 21540,
     takeProfit: 21320,
     riskPercent: 0.35,
+    volumeLots: 0.1,
     rationale: "Fade into overnight gap — draft only, needs LVN confirmation.",
     status: "draft",
   },

@@ -4,6 +4,8 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import {
   resolveAlertAutoTradeStops,
 } from "@/lib/trading/alertTradeStops";
+import { readAlertAutoTradeEnabled } from "@/lib/trading/alertMetadata";
+import { isAlertAutoTradeArmed } from "@/lib/trading/alertAutoTradeArmed";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
 import { placeMt5QuickOrder } from "@/services/mt5QuickOrderService";
 
@@ -25,6 +27,22 @@ export async function maybeAutoTradeOnAlert(
 
   const prefs = await getTradeExecutionPrefsForUser(userId);
   if (!prefs.alertAutoTradeEnabled) return { traded: false };
+
+  if (!readAlertAutoTradeEnabled(alert.metadata, true)) {
+    return { traded: false, message: "Auto-trade off for this alert." };
+  }
+
+  if (!isAlertAutoTradeArmed(prefs.alertAutoTradeArmedAt)) {
+    await recordProactiveFeedEvent(
+      supabase,
+      userId,
+      `alert_trade_blocked:${alert.id}:${Date.now()}`,
+      `Alert auto-trade blocked: ${alert.symbol}`,
+      "Auto-trade is not armed — tap Arm on Alerts before the next fire.",
+      "/alerts",
+    );
+    return { traded: false, message: "Alert auto-trade not armed." };
+  }
 
   const entry =
     triggerPrice != null && Number.isFinite(triggerPrice)

@@ -83,7 +83,7 @@ ALERTS / MEMORY / NAV (act, don't suggest):
 - auto_journal_trades — score and journal closed broker trades (alignment 0–100, axe_label, axe_note, breakdown). Runs automatically after MT5 sync; call when the trader asks to journal, score, or auto-label recent closes.
 - navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /feed, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1" / "check your AXE feed"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
 - route_chart_action — queue a chart drawing (fibonacci, trendline, indicators/SMC layers, key level, clear drawings) on any pair/timeframe. Works even when the trader is in chat — the chart applies it when they open /chart. Chain this after calculate_fibonacci / calculate_trendline / analyze_pdh_pdl when they ask you to draw.
-- prepare_execution_request — draft a trade ticket (entry, SL, TP, risk %) to /actions for the trader to approve. On approve, AXE sends a pending/market order to their connected MT5 account (0.10 lots default). You never auto-execute without their tap on Place on MT5.
+- prepare_execution_request — draft a trade ticket (entry, SL, TP, lot size, risk %) to /actions for the trader to approve. On approve, AXE sends a pending/market order to their connected MT5 account (uses their saved default lots unless you pass volume). You never auto-execute without their tap on Place on MT5.
 
 AXE MEMORY — YOUR LONG-TERM BRAIN
 Your memory persists across sessions. You accumulate observations about the trader over time:
@@ -580,6 +580,10 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           take_profit: { type: "number" },
           risk_percent: { type: "number", description: "Risk as % of account (optional)" },
           risk_amount: { type: "number", description: "Risk in account currency (optional)" },
+          volume: {
+            type: "number",
+            description: "Lot size for the draft (optional — defaults to trader's saved default lots).",
+          },
           rationale: {
             type: "string",
             description: "Short setup rationale — structure, confluence, session context.",
@@ -707,6 +711,7 @@ export type PrepareExecutionRequestArgs = {
   take_profit?: number;
   risk_percent?: number;
   risk_amount?: number;
+  volume?: number;
   rationale: string;
   notes?: string;
 };

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChartActionType } from "@/lib/axeChartActions/chartActionTypes";
+import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
+import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import { queueChartAction } from "@/services/chartActionQueueService";
 import { createExecutionRequest, type PrepareExecutionArgs } from "@/services/executionRequestService";
 
@@ -48,13 +50,18 @@ export async function handlePrepareExecutionRequest(
   args: PrepareExecutionArgs,
   firePush?: (title: string, body: string, url: string) => void,
 ): Promise<string> {
-  const { id, href } = await createExecutionRequest(supabase, userId, args);
+  const prefs = await getTradeExecutionPrefsForUser(userId);
+  const volume =
+    args.volume != null && Number.isFinite(Number(args.volume))
+      ? normalizeTradeVolume(Number(args.volume))
+      : prefs.defaultVolume;
+  const { id, href } = await createExecutionRequest(supabase, userId, { ...args, volume });
   const title = `Trade ready: ${args.instrument}`;
-  const body = `${args.direction.toUpperCase()} entry ${args.entry_price ?? "market"} — review and approve`;
+  const body = `${args.direction.toUpperCase()} ${volume.toFixed(2)} lots @ ${args.entry_price ?? "market"} — review and approve`;
   firePush?.(`AXE · ${title}`, body, href);
   return (
     `Execution request drafted (id: ${id}). Status: pending your approval on /actions. ` +
-    `Entry ${args.entry_price ?? "—"}, SL ${args.stop_loss ?? "—"}, TP ${args.take_profit ?? "—"}. ` +
+    `Size ${volume.toFixed(2)} lots · entry ${args.entry_price ?? "—"}, SL ${args.stop_loss ?? "—"}, TP ${args.take_profit ?? "—"}. ` +
     `Render this as a button: [[link:${href}|Review trade]]`
   );
 }

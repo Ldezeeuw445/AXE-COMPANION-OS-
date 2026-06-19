@@ -1,34 +1,47 @@
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
+import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import type { AxeFeedItem } from "@/types/feed";
 
 export { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 
-export async function listAxeFeedItems(limit = 40): Promise<AxeFeedItem[]> {
+/** How far back the feed timeline reaches. */
+export const FEED_HISTORY_DAYS = 7;
+
+function feedSinceIso(): string {
+  return new Date(Date.now() - FEED_HISTORY_DAYS * 86_400_000).toISOString();
+}
+
+export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
   const authed = await getAuthedServiceSupabase();
   if (!authed) return [];
+
+  const since = feedSinceIso();
 
   const [eventsRes, execRes, chartRes] = await Promise.all([
     authed.supabase
       .from("axe_proactive_events")
       .select("id,title,body,url,created_at")
       .eq("user_id", authed.user.id)
+      .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(limit),
     authed.supabase
       .from("execution_requests")
-      .select("id,instrument,direction,entry_price,rationale,created_at")
+      .select("id,instrument,direction,entry_price,volume_lots,rationale,created_at")
       .eq("user_id", authed.user.id)
+      .gte("created_at", since)
       .in("status", ["pending", "pending_approval", "draft"])
       .order("created_at", { ascending: false })
-      .limit(10),
+      .limit(15),
     authed.supabase
       .from("axe_pending_chart_actions")
       .select("id,action_type,symbol,timeframe,created_at")
       .eq("user_id", authed.user.id)
       .eq("status", "pending")
+      .gte("created_at", since)
       .order("created_at", { ascending: false })
-      .limit(10),
+      .limit(15),
   ]);
 
   const proactive: AxeFeedItem[] = (eventsRes.data ?? []).map((row) => ({
@@ -42,11 +55,16 @@ export async function listAxeFeedItems(limit = 40): Promise<AxeFeedItem[]> {
 
   const drafts: AxeFeedItem[] = (execRes.data ?? []).map((row) => {
     const instrument = String(row.instrument ?? "").trim().toUpperCase();
+    const lots =
+      row.volume_lots != null
+        ? normalizeTradeVolume(Number(row.volume_lots)).toFixed(2)
+        : null;
+    const sizeText = lots ? `${lots} lots · ` : "";
     return {
       id: `exec:${row.id}`,
       kind: "trade_draft" as const,
       title: `Trade ready: ${instrument || "—"}`,
-      body: `${String(row.direction ?? "").toUpperCase()} @ ${row.entry_price ?? "market"} — ${row.rationale ?? "Review and approve"}`,
+      body: `${sizeText}${String(row.direction ?? "").toUpperCase()} @ ${row.entry_price ?? "market"} — ${row.rationale ?? "Review and approve"}`,
       url: "/actions",
       createdAt: String(row.created_at),
     };

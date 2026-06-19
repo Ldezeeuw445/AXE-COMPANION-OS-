@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import type {
   CockpitDashboard,
@@ -6,7 +7,16 @@ import type {
   CockpitFeedbackImpact,
   CockpitConfidencePoint,
   CockpitLearningMilestone,
+  CockpitTodaySummary,
 } from "@/types/cockpit";
+
+const EMPTY_TODAY: CockpitTodaySummary = {
+  alignmentScore: 0,
+  chatMessages: 0,
+  tradesClosed: 0,
+  feedEvents: 0,
+  journalNotes: 0,
+};
 
 const EMPTY_DASHBOARD: CockpitDashboard = {
   snapshotId: "",
@@ -30,6 +40,7 @@ const EMPTY_DASHBOARD: CockpitDashboard = {
     lastCalculatedAt: null,
     message: "AXE needs real chat, journal, memory, or trade signals before it can score alignment.",
   },
+  today: EMPTY_TODAY,
 };
 
 function safeArray<T>(val: unknown): T[] {
@@ -101,6 +112,52 @@ function calibrationState(input: {
 function countOrZero(result: { count: number | null; error?: unknown }): number {
   if (result.error) return 0;
   return result.count ?? 0;
+}
+
+function todayUtcStartIso(): string {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+export async function fetchCockpitTodaySummary(
+  supabase: SupabaseClient,
+  userId: string,
+  alignmentScore = 0,
+): Promise<CockpitTodaySummary> {
+  const since = todayUtcStartIso();
+  const [chatRes, tradesRes, feedRes, journalRes] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("role", "user")
+      .gte("created_at", since),
+    supabase
+      .from("broker_trades")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .not("close_time", "is", null)
+      .gte("close_time", since),
+    supabase
+      .from("axe_proactive_events")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", since),
+    supabase
+      .from("user_journal_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", since),
+  ]);
+
+  return {
+    alignmentScore,
+    chatMessages: countOrZero(chatRes),
+    tradesClosed: countOrZero(tradesRes),
+    feedEvents: countOrZero(feedRes),
+    journalNotes: countOrZero(journalRes),
+  };
 }
 
 function mapConfidenceTrend(raw: unknown): CockpitConfidencePoint[] {
@@ -197,6 +254,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   }
 
   const { supabase, user } = authed;
+  const today = await fetchCockpitTodaySummary(supabase, user.id);
 
   const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -236,6 +294,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     console.error("[cockpitService] snapshot error:", snapErr.message);
     return {
       ...EMPTY_DASHBOARD,
+      today,
       calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
     };
   }
@@ -243,6 +302,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   if (!snapshots || snapshots.length === 0) {
     return {
       ...EMPTY_DASHBOARD,
+      today,
       calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
     };
   }
@@ -332,5 +392,10 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     behavior: mapBehavior(latest.behavior_map),
     metricKeysSample,
     calibration,
+    today: await fetchCockpitTodaySummary(
+      supabase,
+      user.id,
+      mapAlignment(latest.alignment_score ?? 0, latest.captured_at, null).score,
+    ),
   };
 }

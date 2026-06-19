@@ -40,7 +40,7 @@ function dirBadge(dir: ExecutionRequestCard["direction"]) {
 }
 
 function formatOrderPreview(card: ExecutionRequestCard, defaultVolume: number): string {
-  const lots = defaultVolume.toFixed(2);
+  const lots = (card.volumeLots ?? defaultVolume).toFixed(2);
   const isLong = card.direction === "long";
   const hasEntry = card.entry != null && Number.isFinite(Number(card.entry));
   if (hasEntry) {
@@ -109,6 +109,12 @@ export function ExecutionCard({ card, defaultVolume }: ExecutionCardProps) {
         <div>
           <dt className="text-tos-dim">Target</dt>
           <dd className="font-mono text-tos-text">{card.takeProfit ?? "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-tos-dim">Size</dt>
+          <dd className="font-mono text-tos-text">
+            {(card.volumeLots ?? defaultVolume).toFixed(2)} lots
+          </dd>
         </div>
         <div>
           <dt className="text-tos-dim">Risk</dt>

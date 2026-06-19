@@ -91,4 +91,13 @@ export type CockpitDashboard = {
     lastCalculatedAt: string | null;
     message: string;
   };
+  today: CockpitTodaySummary;
+};
+
+export type CockpitTodaySummary = {
+  alignmentScore: number;
+  chatMessages: number;
+  tradesClosed: number;
+  feedEvents: number;
+  journalNotes: number;
 };

@@ -6,6 +6,7 @@ import { CockpitFooterNote } from "@/components/cockpit/CockpitFooterNote";
 import { CockpitLearningProgress } from "@/components/cockpit/CockpitLearningProgress";
 import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
 import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
+import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -49,6 +50,8 @@ export default async function CockpitPage() {
       </div>
 
       <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
+
+      <CockpitTodayStrip initial={dash.today} />
 
       {!hasSnapshot ? (
         <GlassPanel className="p-6 text-center">

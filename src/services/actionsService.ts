@@ -14,7 +14,7 @@ export async function listExecutionRequests(): Promise<ExecutionRequestCard[]> {
 
   const { data, error } = await authed.supabase
     .from("execution_requests")
-    .select("id,instrument,direction,entry_price,stop_loss,take_profit,risk_amount,risk_percent,rationale,status")
+    .select("id,instrument,direction,entry_price,stop_loss,take_profit,risk_amount,risk_percent,volume_lots,rationale,status")
     .eq("user_id", authed.user.id)
     .in("status", ["pending", "pending_approval", "draft"])
     .order("created_at", { ascending: false });
@@ -32,6 +32,7 @@ export async function listExecutionRequests(): Promise<ExecutionRequestCard[]> {
     stopLoss: row.stop_loss ?? null,
     takeProfit: row.take_profit ?? null,
     riskPercent: row.risk_percent ?? null,
+    volumeLots: row.volume_lots != null ? Number(row.volume_lots) : null,
     rationale: row.rationale ?? "",
     status:
       row.status === "pending"

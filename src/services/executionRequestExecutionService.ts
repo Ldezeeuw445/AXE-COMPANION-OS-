@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
+import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
+import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import { placeMt5QuickOrder } from "@/services/mt5QuickOrderService";
 
 export type ExecuteExecutionRequestResult =
@@ -14,6 +16,7 @@ type ExecutionRow = {
   entry_price: number | null;
   stop_loss: number | null;
   take_profit: number | null;
+  volume_lots: number | null;
   status: string;
   notes: string | null;
 };
@@ -37,7 +40,7 @@ export async function executeExecutionRequestOnMt5(
 ): Promise<ExecuteExecutionRequestResult> {
   const { data: row, error: rowErr } = await supabase
     .from("execution_requests")
-    .select("id,instrument,symbol,direction,entry_price,stop_loss,take_profit,status,notes")
+    .select("id,instrument,symbol,direction,entry_price,stop_loss,take_profit,volume_lots,status,notes")
     .eq("id", executionRequestId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -61,10 +64,16 @@ export async function executeExecutionRequestOnMt5(
   const takeProfit = exec.take_profit != null ? Number(exec.take_profit) : null;
   const { side, orderType } = mapOrderType(direction, entryPrice);
 
+  const prefsVolume = await getTradeExecutionPrefsForUser(userId);
+  const volumeLots = normalizeTradeVolume(
+    exec.volume_lots != null ? Number(exec.volume_lots) : prefsVolume.defaultVolume,
+  );
+
   const placed = await placeMt5QuickOrder(supabase, userId, {
     symbol: displaySymbol,
     side,
     orderType,
+    volume: volumeLots,
     openPrice: orderType === "market" ? null : entryPrice,
     stopLoss: stopLoss != null && Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
     takeProfit: takeProfit != null && Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
