@@ -1,0 +1,19 @@
+{
+  "name": "Trading OS",
+  "short_name": "Trading OS",
+  "description": "Premium desktop trading terminal — same Supabase brain as AXE Companion.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "icons": [
+    {
+      "src": "/trading-os-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "productivity"],
+  "lang": "en"
+}
