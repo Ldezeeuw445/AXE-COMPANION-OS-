@@ -1,18 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="public-icon-gradient" x1="72" y1="128" x2="430" y2="388" gradientUnits="userSpaceOnUse">
+    <linearGradient id="public-icon-gradient" x1="72" y1="120" x2="420" y2="392" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#D7F548" />
       <stop offset="0.52" stop-color="#34D6D0" />
       <stop offset="1" stop-color="#7456FF" />
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="96" fill="#05070B" />
-  <path
+  <text
+    x="58"
+    y="342"
     fill="url(#public-icon-gradient)"
-    d="M88 150c0-10 8-18 18-18h153c10 0 18 8 18 18 0 3-1 6-3 9l-18 31c-3 6-9 9-15 9H185v126c0 7-4 13-10 16l-41 23c-12 7-27-2-27-16V199h-1c-10 0-18-8-18-18v-31Z"
-  />
-  <path
-    fill="url(#public-icon-gradient)"
-    d="M308 132h90c36 0 62 7 82 25 19 18 28 40 28 70 0 46-21 76-63 91l59 60c11 11 3 30-12 30h-47c-5 0-10-2-13-6l-58-62h-36v47c0 10-8 18-18 18h-42c-10 0-18-8-18-18V243c0-3 1-6 2-8l29-52c3-5 9-9 15-9Zm30 68v68h56c18 0 31-3 39-10 9-7 13-17 13-30 0-19-7-28-18-33-10-5-21-5-36-5h-54Z"
-  />
+    font-family="Arial Black, Inter, sans-serif"
+    font-size="278"
+    font-weight="900"
+    letter-spacing="-34"
+  >
+    TR
+  </text>
 </svg>

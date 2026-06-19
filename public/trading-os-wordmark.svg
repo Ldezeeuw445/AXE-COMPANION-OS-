@@ -1,14 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 180" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 180" fill="none">
   <defs>
-    <linearGradient id="trading-os-wordmark-gradient" x1="32" y1="34" x2="540" y2="176" gradientUnits="userSpaceOnUse">
+    <linearGradient id="trading-os-wordmark-gradient" x1="24" y1="32" x2="566" y2="172" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#D7F548" />
       <stop offset="0.52" stop-color="#34D6D0" />
       <stop offset="1" stop-color="#7456FF" />
     </linearGradient>
   </defs>
   <g fill="url(#trading-os-wordmark-gradient)">
-    <path d="M32 56c0-8 6-14 14-14h116c8 0 14 6 14 14 0 2-1 5-2 7l-14 24c-3 4-7 7-12 7H106v96c0 6-3 10-8 13l-30 17c-9 5-20-1-20-13V94h-2c-8 0-14-6-14-14V56Z" />
-    <path d="M202 42h70c29 0 50 6 66 20 15 14 23 33 23 57 0 38-17 63-51 75l48 49c9 9 2 25-11 25h-36c-4 0-8-2-11-5l-47-50h-28v38c0 8-6 14-14 14h-32c-8 0-14-6-14-14V131c0-2 1-5 2-7l23-40c3-5 7-8 12-8Zm23 52v55h44c15 0 26-3 32-8 7-6 11-14 11-24 0-15-5-23-15-27-8-4-18-4-30-4h-42Z" />
-    <text x="408" y="113" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="8">TRADING OS</text>
+    <text
+      x="22"
+      y="132"
+      font-family="Arial Black, Inter, sans-serif"
+      font-size="136"
+      font-weight="900"
+      letter-spacing="-18"
+    >
+      TR
+    </text>
+    <text x="254" y="112" font-family="Inter, Arial, sans-serif" font-size="62" font-weight="800" letter-spacing="8">
+      TRADING OS
+    </text>
   </g>
 </svg>
