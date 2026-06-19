@@ -56,8 +56,6 @@ export default function ShadcnDemoPage() {
 
   return (
     <main className="min-h-dvh bg-[#060608] px-5 py-10 text-white sm:px-8">
-      <Toaster richColors position="top-right" />
-
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <header className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/90">
