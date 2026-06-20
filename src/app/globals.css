@@ -742,6 +742,13 @@ body.chart-landscape-active .tos-shell-desktop-layout {
   }
 }
 
+/* Chart theme toggle — scoped view transition (midnight ↔ paper) */
+::view-transition-old(axe-chart-theme),
+::view-transition-new(axe-chart-theme) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 /* Chart route — edge-to-edge canvas on phone portrait (no side gutters) */
 body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route {
   padding-left: 0 !important;

@@ -66,6 +66,7 @@ import type {
   ChartActionResult,
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { ChartThemeTogglerButton, CHART_THEME_VIEW_TRANSITION } from "@/components/chart/ChartThemeTogglerButton";
 import { ChartPendingOrderSheet } from "@/components/chart/ChartPendingOrderSheet";
 import { TradePlanLine } from "@/components/chart/TradePlanLine";
 import {
@@ -86,6 +87,7 @@ import {
   getChartTheme,
   readChartThemeKey,
   readGridStyle,
+  writeChartThemeKey,
   CHART_ORDER_BUY_COLOR,
   CHART_ORDER_SELL_COLOR,
   type ChartThemeKey,
@@ -689,6 +691,16 @@ export function ChartScreen({
   const [chartThemeKey, setChartThemeKey] = useState<ChartThemeKey>(() => readChartThemeKey());
   const [chartGridStyle, setChartGridStyle] = useState<ChartGridStyle>(() => readGridStyle());
   const chartTheme = useMemo(() => getChartTheme(chartThemeKey), [chartThemeKey]);
+  const handleChartThemeChange = useCallback((key: ChartThemeKey) => {
+    writeChartThemeKey(key);
+    setChartThemeKey(key);
+    fetch("/api/preferences/chart-theme", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: key }),
+      credentials: "include",
+    }).catch(() => {});
+  }, []);
   const isVisible = usePageVisible();
   const liveEnabled =
     data.failure === "ok" && data.source === "MetaApi MT5" && Boolean(accountId) && isVisible;
@@ -3067,8 +3079,27 @@ export function ChartScreen({
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
+          viewTransitionName: CHART_THEME_VIEW_TRANSITION,
         }}
       >
+        <div
+          className="absolute right-2 z-40"
+          style={{
+            top: isTabletLayout
+              ? "calc(var(--tos-tablet-chart-header-h) + 0.35rem)"
+              : isFullscreen
+                ? "0.5rem"
+                : "calc(env(safe-area-inset-top, 0px) + 5.25rem)",
+          }}
+        >
+          <ChartThemeTogglerButton
+            themeKey={chartThemeKey}
+            tone={chartTheme.isDark ? "dark" : "light"}
+            direction="ttb"
+            size="sm"
+            onThemeChange={handleChartThemeChange}
+          />
+        </div>
         <ChartCanvas
           ref={canvasRef}
           candles={data.candles}
