@@ -174,4 +174,16 @@ export const mockCockpitDashboard: CockpitDashboard = {
       { weekLabel: "24 Mar", up: 2, down: 1 },
     ],
   },
+  traderScores: {
+    periodDays: 90,
+    sampleSize: 64,
+    tradeCount: 28,
+    scores: [
+      { key: "discipline", label: "Discipline", score: 68, available: true, hint: "Mock — emotional discipline from journal breakdowns." },
+      { key: "execution", label: "Execution", score: 74, available: true, hint: "Mock — playbook + rule adherence." },
+      { key: "risk", label: "Risk", score: 71, available: true, hint: "Mock — risk management dimension." },
+      { key: "patience", label: "Patience", score: 62, available: true, hint: "Mock — label + frequency rollup." },
+      { key: "alignment", label: "Alignment", score: 72, available: true, hint: "Mock — mean trade alignment score." },
+    ],
+  },
 };

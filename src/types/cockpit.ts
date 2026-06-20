@@ -93,6 +93,7 @@ export type CockpitDashboard = {
   };
   today: CockpitTodaySummary;
   learningArc: CockpitLearningArc;
+  traderScores: CockpitTraderScores;
 };
 
 export type CockpitTodaySummary = {
@@ -108,4 +109,26 @@ export type CockpitLearningArc = {
   weeklyFocus: { label: string; count: number }[];
   messageFeedback: { up: number; down: number };
   weeklyFeedbackTrend: { weekLabel: string; up: number; down: number }[];
+};
+
+export type CockpitTraderScoreKey =
+  | "discipline"
+  | "execution"
+  | "risk"
+  | "patience"
+  | "alignment";
+
+export type CockpitTraderScoreItem = {
+  key: CockpitTraderScoreKey;
+  label: string;
+  score: number;
+  available: boolean;
+  hint: string;
+};
+
+export type CockpitTraderScores = {
+  periodDays: number;
+  sampleSize: number;
+  tradeCount: number;
+  scores: CockpitTraderScoreItem[];
 };
