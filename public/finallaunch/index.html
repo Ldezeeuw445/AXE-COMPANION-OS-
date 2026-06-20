@@ -649,70 +649,6 @@
     .mock-stage { padding: 12px; }
     .mock-screen { display: none; min-height: 620px; }
     .mock-screen.active { display: block; }
-    .live-tabs {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0,1fr));
-      gap: 6px;
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      background: rgba(9,10,12,0.74);
-    }
-
-    .live-tabs--tablet {
-      grid-template-columns: repeat(6, minmax(0,1fr));
-    }
-
-    .live-tab {
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.02);
-      color: rgba(255,255,255,0.78);
-      border-radius: 10px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .01em;
-      padding: 7px 8px;
-      cursor: pointer;
-      transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
-    }
-
-    .live-tab.active {
-      border-color: rgba(72,222,246,0.5);
-      color: rgba(190,245,255,1);
-      background: rgba(72,222,246,0.12);
-      box-shadow: 0 0 16px rgba(72,222,246,0.14);
-    }
-
-    .live-app-stage {
-      padding: 10px;
-    }
-
-    .live-frame-wrap {
-      position: relative;
-      border-radius: 18px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: #050608;
-      overflow: hidden;
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.05),
-        0 12px 28px rgba(0,0,0,0.34);
-    }
-
-    .live-frame-wrap--phone {
-      height: 640px;
-    }
-
-    .live-frame-wrap--tablet {
-      height: 640px;
-    }
-
-    .live-frame {
-      width: 100%;
-      height: 100%;
-      border: 0;
-      display: block;
-      background: #050608;
-    }
-
     .mock-toolbar {
       display: flex;
       gap: 8px;
@@ -3684,65 +3620,17 @@
           <div class="hero-mock-block"></div>
           <div class="hero-device-stage">
             <div class="hero-phone-wrap">
-              <div class="mock-device mock-device--phone reveal" data-device="phone">
-                <div class="mock-shell">
-                  <div class="mock-topbar">
-                    <span class="mock-dot"></span>
-                    <span class="mock-title">AXE Mobile · Live App</span>
-                    <span class="mock-badge">DEMO</span>
-                  </div>
-                  <div class="live-tabs" role="tablist" aria-label="Phone app sections">
-                    <button class="live-tab active" data-live-phone="chart">Chart</button>
-                    <button class="live-tab" data-live-phone="intel">Intel</button>
-                    <button class="live-tab" data-live-phone="cockpit">Cockpit</button>
-                    <button class="live-tab" data-live-phone="market">Market</button>
-                    <button class="live-tab" data-live-phone="chat">Chat</button>
-                  </div>
-                  <div class="live-app-stage">
-                    <div class="live-frame-wrap live-frame-wrap--phone">
-                      <iframe
-                        id="phoneLiveFrame"
-                        class="live-frame"
-                        title="AXE mobile live app frame"
-                        loading="lazy"
-                        referrerpolicy="no-referrer-when-downgrade"
-                      ></iframe>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <a href="https://axecompanion.com/chat" target="_blank" rel="noopener noreferrer" aria-label="Open AXE mobile demo">
+                <img class="hero-mock reveal" src="../figma-assets/images/chart-xauusd.png" alt="AXE mobile app preview" />
+              </a>
             </div>
             <div class="hero-ipad-stack">
-              <div class="mock-device mock-device--tablet reveal" data-device="tablet">
-                <div class="mock-shell tablet-shell">
-                  <div style="padding: 12px; width: 100%;">
-                    <div class="mock-topbar" style="border-radius: 12px; margin-bottom: 10px;">
-                      <span class="mock-dot"></span>
-                      <span class="mock-title">AXE Tablet · Live App</span>
-                      <span class="mock-badge">Synced demo</span>
-                    </div>
-                    <div class="live-tabs live-tabs--tablet" role="tablist" aria-label="Tablet app sections">
-                      <button class="live-tab active" data-live-tablet="chart">Chart</button>
-                      <button class="live-tab" data-live-tablet="intel">Intel</button>
-                      <button class="live-tab" data-live-tablet="cockpit">Cockpit</button>
-                      <button class="live-tab" data-live-tablet="history">History</button>
-                      <button class="live-tab" data-live-tablet="journal">Journal</button>
-                      <button class="live-tab" data-live-tablet="chat">Chat</button>
-                    </div>
-                    <div class="live-app-stage" style="padding: 10px 0 0;">
-                      <div class="live-frame-wrap live-frame-wrap--tablet">
-                        <iframe
-                          id="tabletLiveFrame"
-                          class="live-frame"
-                          title="AXE tablet live app frame"
-                          loading="lazy"
-                          referrerpolicy="no-referrer-when-downgrade"
-                        ></iframe>
-                      </div>
-                    </div>
-                  </div>
+              <a href="https://axecompanion.com/launch" target="_blank" rel="noopener noreferrer" aria-label="Open AXE tablet demo">
+                <div class="hero-ipad-stack-inner">
+                  <img class="hero-ipad hero-ipad--dark reveal" src="../figma-assets/images/hero-ipad-dark-web.png" alt="AXE iPad dark theme preview" />
+                  <img class="hero-ipad hero-ipad--light reveal" src="../figma-assets/images/hero-ipad-light-web.png" alt="AXE iPad light theme preview" />
                 </div>
-              </div>
+              </a>
             </div>
           </div>
         </div>
@@ -4350,59 +4238,6 @@
     wireDemoChat('phoneChatInput', 'phoneChatSend', 'phoneChatLog');
     wireDemoChat('tabletChatInput', 'tabletChatSend', 'tabletChatLog');
 
-    const appOrigin = window.location.protocol === 'file:'
-      ? 'https://axecompanion.com'
-      : window.location.origin;
-
-    const phoneFrame = document.getElementById('phoneLiveFrame');
-    const tabletFrame = document.getElementById('tabletLiveFrame');
-
-    const phoneRoutes = {
-      chart: '/chart?symbol=XAUUSD&tf=H1',
-      intel: '/intel?symbol=XAUUSD',
-      cockpit: '/cockpit',
-      market: '/market?symbol=XAUUSD',
-      chat: '/chat?q=' + encodeURIComponent('Give me today context on XAUUSD and quick plan'),
-    };
-
-    const tabletRoutes = {
-      chart: '/chart?symbol=XAUUSD&tf=H1',
-      intel: '/intel?symbol=XAUUSD',
-      cockpit: '/cockpit',
-      history: '/history',
-      journal: '/journal',
-      chat: '/chat?q=' + encodeURIComponent('Summarize current market context and risk in 3 bullets'),
-    };
-
-    const loadFrame = (frame, path) => {
-      if (!frame || !path) return;
-      frame.src = `${appOrigin}${path}`;
-    };
-
-    loadFrame(phoneFrame, phoneRoutes.chart);
-    loadFrame(tabletFrame, tabletRoutes.chart);
-
-    const phoneLiveTabs = document.querySelectorAll('[data-live-phone]');
-    phoneLiveTabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const key = tab.getAttribute('data-live-phone');
-        if (!key || !phoneRoutes[key]) return;
-        phoneLiveTabs.forEach((btn) => btn.classList.remove('active'));
-        tab.classList.add('active');
-        loadFrame(phoneFrame, phoneRoutes[key]);
-      });
-    });
-
-    const tabletLiveTabs = document.querySelectorAll('[data-live-tablet]');
-    tabletLiveTabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const key = tab.getAttribute('data-live-tablet');
-        if (!key || !tabletRoutes[key]) return;
-        tabletLiveTabs.forEach((btn) => btn.classList.remove('active'));
-        tab.classList.add('active');
-        loadFrame(tabletFrame, tabletRoutes[key]);
-      });
-    });
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
