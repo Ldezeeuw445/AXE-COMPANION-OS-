@@ -7,6 +7,8 @@ export type UserAxeEntitlement = {
   proUntil: string | null;
   chatQuotaExempt: boolean;
   label: string;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
 };
 
 export type BillingCatalogState = {

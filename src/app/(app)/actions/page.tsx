@@ -30,6 +30,8 @@ const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
   founderBadge: false,
   proUntil: null,
   chatQuotaExempt: false,
+  stripeCustomerId: null,
+  stripeSubscriptionId: null,
   label: "Free",
 };
 

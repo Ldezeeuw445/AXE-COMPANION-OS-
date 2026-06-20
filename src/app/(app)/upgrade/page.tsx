@@ -5,10 +5,12 @@ import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { UpgradeTierGrid } from "@/components/billing/UpgradeTierGrid";
+import { ManageBillingButton } from "@/components/billing/ManageBillingButton";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import type { AxePlanId } from "@/lib/billing/tiers";
+import type { UserAxeEntitlement } from "@/lib/billing/types";
 import {
   getBillingCatalogState,
   getUserAxeEntitlement,
@@ -16,16 +18,20 @@ import {
   paymentLinkForTier,
 } from "@/services/billingService";
 
+const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
+  plan: "free",
+  isPaid: false,
+  founderBadge: false,
+  proUntil: null,
+  chatQuotaExempt: false,
+  stripeCustomerId: null,
+  stripeSubscriptionId: null,
+  label: "Free",
+};
+
 export default async function SubscriptionsPage() {
   const supabase = await createServerSupabaseClient();
-  let entitlement = {
-    plan: "free" as AxePlanId,
-    isPaid: false,
-    founderBadge: false,
-    proUntil: null as string | null,
-    chatQuotaExempt: false,
-    label: "Free",
-  };
+  let entitlement = EMPTY_ENTITLEMENT;
   let catalog = {
     founderSeatsUsed: 0,
     founderSeatsCap: 100,
@@ -132,6 +138,9 @@ export default async function SubscriptionsPage() {
                 ? "Founder status is permanent — including Trading OS Founder pricing eligibility."
                 : "Thank you for supporting AXE."}
           </p>
+          {entitlement.stripeCustomerId ? (
+            <ManageBillingButton className="mt-4" />
+          ) : null}
           <Link
             href="/chat"
             className="mt-3 inline-flex text-xs font-medium text-tos-muted hover:text-tos-text hover:underline"

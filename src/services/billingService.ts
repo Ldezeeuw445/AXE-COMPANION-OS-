@@ -43,6 +43,8 @@ export async function getUserAxeEntitlement(
     founderBadge,
     proUntil,
     chatQuotaExempt,
+    stripeCustomerId: (data?.stripe_customer_id as string | null) ?? null,
+    stripeSubscriptionId: (data?.stripe_subscription_id as string | null) ?? null,
     label:
       founderBadge || plan === "founder"
         ? "Founder"

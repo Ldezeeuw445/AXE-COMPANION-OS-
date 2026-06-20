@@ -13,7 +13,8 @@
     "copy-logo": "node scripts/copy-logo.mjs",
     "seed:axe-knowledge": "node scripts/seed-axe-knowledge.mjs",
     "embed:axe-knowledge": "node scripts/embed-axe-knowledge.mjs",
-    "verify:legal": "node scripts/check-legal-routes.mjs"
+    "verify:legal": "node scripts/check-legal-routes.mjs",
+    "setup:stripe": "node scripts/setup-stripe-billing.mjs"
   },
   "engines": {
     "node": "22.x"
