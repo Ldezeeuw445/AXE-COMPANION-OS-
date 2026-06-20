@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { stageChatPrefill } from "@/lib/chat/chatPrefill";
+import { applyChatPrefill } from "@/lib/chat/chatPrefill";
 import type { ResolvedWorkflowAction } from "@/lib/workflows/catalog";
 
 export function WorkflowActionLink({
@@ -25,7 +25,7 @@ export function WorkflowActionLink({
         type="button"
         className={className}
         onClick={() => {
-          stageChatPrefill(action.chatPrompt!);
+          applyChatPrefill(action.chatPrompt!);
           router.push(action.href);
           onNavigate?.();
         }}

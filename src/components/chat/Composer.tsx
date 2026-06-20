@@ -13,7 +13,11 @@
 
 import { Suspense, useState, useRef, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { consumeStagedChatPrefill } from "@/lib/chat/chatPrefill";
+import {
+  CHAT_PREFILL_EVENT,
+  clearStagedChatPrefill,
+  readStagedChatPrefill,
+} from "@/lib/chat/chatPrefill";
 import { Mic, MicOff, Paperclip, Send, X, ImageIcon } from "lucide-react";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
@@ -91,8 +95,21 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const [listening, setListening] = useState(false);
   const [image, setImage] = useState<{ base64: string; type: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+
+  const applyDraft = useCallback((draft: string) => {
+    if (!draft.trim()) return;
+    setValue(draft);
+    clearStagedChatPrefill();
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(draft.length, draft.length);
+    });
+  }, []);
 
   // Read pair/TF from localStorage (PinnedContext writes these)
   const getSymbol = useCallback(() => {
@@ -104,11 +121,11 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
   // Prefill from staged session draft or ?q= query param
   useEffect(() => {
-    const staged = consumeStagedChatPrefill();
+    const staged = readStagedChatPrefill();
     const q = searchParams.get("q");
     const draft = staged ?? (q ? decodeURIComponent(q) : null);
     if (!draft) return;
-    setValue(draft);
+    applyDraft(draft);
     if (typeof window !== "undefined") {
       const u = new URL(window.location.href);
       if (u.searchParams.has("q")) {
@@ -116,7 +133,18 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         window.history.replaceState({}, "", `${u.pathname}${u.search}${u.hash}`);
       }
     }
-  }, [searchParams]);
+  }, [searchParams, applyDraft]);
+
+  // Same-route prefill from Actions / chart workflows while Composer stays mounted
+  useEffect(() => {
+    function onPrefill(e: Event) {
+      const ce = e as CustomEvent<{ text?: string }>;
+      const text = ce.detail?.text;
+      if (text) applyDraft(text);
+    }
+    window.addEventListener(CHAT_PREFILL_EVENT, onPrefill);
+    return () => window.removeEventListener(CHAT_PREFILL_EVENT, onPrefill);
+  }, [applyDraft]);
 
   useEffect(() => {
     setQuota(initialQuota);
@@ -414,6 +442,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           Message
         </label>
         <textarea
+          ref={textareaRef}
           id="composer-input"
           rows={1}
           value={value}

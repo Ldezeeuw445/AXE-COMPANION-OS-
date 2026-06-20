@@ -2928,6 +2928,10 @@ export function ChartScreen({
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
   const execBarOverNav = !isFullscreen;
+  const tabletExecPad =
+    oneClickVisible && isTabletLayout && !isFullscreen
+      ? "calc(3.35rem + max(env(safe-area-inset-bottom, 0px), 0.35rem))"
+      : undefined;
   const { dismiss: dismissChartNotice, isDismissed: isChartNoticeDismissed } = useChartDismissedNotices();
   const chartNoticeBottom = oneClickVisible ? "3.35rem" : "0.75rem";
 
@@ -2978,15 +2982,21 @@ export function ChartScreen({
           ? "chart-immersive-shell fixed inset-0 z-[9999]"
           : "flex-1"
       }`}
-      style={isFullscreen ? {
-        paddingTop: "env(safe-area-inset-top, 0px)",
-        paddingLeft: "env(safe-area-inset-left, 0px)",
-        paddingRight: "env(safe-area-inset-right, 0px)",
-        height: "100dvh",
-        maxHeight: "100dvh",
-        boxSizing: "border-box",
-        background: "#000",
-      } : undefined}
+      style={
+        isFullscreen
+          ? {
+              paddingTop: "env(safe-area-inset-top, 0px)",
+              paddingLeft: "env(safe-area-inset-left, 0px)",
+              paddingRight: "env(safe-area-inset-right, 0px)",
+              height: "100dvh",
+              maxHeight: "100dvh",
+              boxSizing: "border-box",
+              background: "#000",
+            }
+          : tabletExecPad
+            ? { paddingBottom: tabletExecPad }
+            : undefined
+      }
     >
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${

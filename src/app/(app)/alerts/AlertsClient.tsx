@@ -11,7 +11,7 @@ import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { PushPermission } from "@/components/push/PushPermission";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
-import { chatHrefWithPrefill, stageChatPrefill } from "@/lib/chat/chatPrefill";
+import { applyChatPrefill, chatHrefWithPrefill } from "@/lib/chat/chatPrefill";
 import {
   parseOptionalPrice,
   readAlertStopsFromMetadata,
@@ -538,7 +538,7 @@ export function AlertsClient({
   );
 
   const goRefineInChat = useCallback(() => {
-    stageChatPrefill(refineDraft);
+    applyChatPrefill(refineDraft);
     router.push(chatHrefWithPrefill(refineDraft));
   }, [refineDraft, router]);
 

@@ -77,6 +77,7 @@ export function ChatFeedStrip() {
 
   return (
     <div
+      id="chat-feed-strip"
       className={`shrink-0 border-b border-white/[0.06] bg-gradient-to-b from-[#0e0e12] to-[#060608] ${
         isTablet ? "px-2 py-1" : "px-3 py-2"
       }`}

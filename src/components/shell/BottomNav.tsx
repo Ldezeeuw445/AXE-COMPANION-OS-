@@ -138,9 +138,13 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              onClick={() => {
+              onClick={(e) => {
                 vibrate("light");
                 playSound("tap");
+                if (href === "/chat" && active) {
+                  e.preventDefault();
+                  window.dispatchEvent(new CustomEvent("axe:chat-scroll-top"));
+                }
               }}
               className="group relative flex flex-col items-center gap-[2px] active:scale-95 transition-transform"
               style={{ minWidth: 0, flex: "1 1 0%" }}

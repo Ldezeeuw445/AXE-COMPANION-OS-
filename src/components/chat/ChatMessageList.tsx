@@ -334,6 +334,21 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     [clearPinTimers, pinToLatest],
   );
 
+  const scrollToFeedTop = useCallback(() => {
+    clearPinTimers();
+    stickToBottomRef.current = false;
+    scrollLockRef.current = false;
+    const scroller = scrollerRef.current;
+    if (scroller) {
+      scroller.scrollTop = 0;
+    }
+    document.getElementById("chat-feed-strip")?.scrollIntoView({
+      block: "start",
+      behavior: "smooth",
+    });
+    setShowJump(messages.length > 0);
+  }, [clearPinTimers, messages.length]);
+
   useLayoutEffect(() => {
     if (pathname !== "/chat" && !pathname.startsWith("/chat/")) return;
     runPinSequence(true);
@@ -344,20 +359,25 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     function onPinRequest() {
       runPinSequence(true);
     }
+    function onScrollFeedTop() {
+      scrollToFeedTop();
+    }
     function onPageShow() {
       runPinSequence(true);
     }
     window.addEventListener("axe:chat-pin", onPinRequest);
+    window.addEventListener("axe:chat-scroll-top", onScrollFeedTop);
     window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") runPinSequence(true);
     });
     return () => {
       window.removeEventListener("axe:chat-pin", onPinRequest);
+      window.removeEventListener("axe:chat-scroll-top", onScrollFeedTop);
       window.removeEventListener("pageshow", onPageShow);
       clearPinTimers();
     };
-  }, [runPinSequence, clearPinTimers]);
+  }, [runPinSequence, clearPinTimers, scrollToFeedTop]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
