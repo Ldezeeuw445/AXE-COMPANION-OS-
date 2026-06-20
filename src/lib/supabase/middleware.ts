@@ -48,6 +48,12 @@ export async function updateSession(request: NextRequest) {
   if (pathEarly.startsWith("/api/stripe/") || pathEarly === "/api/stripe") {
     return NextResponse.next({ request });
   }
+  if (pathEarly.startsWith("/demo/embed")) {
+    const res = NextResponse.next({ request });
+    res.headers.set("X-Frame-Options", "SAMEORIGIN");
+    res.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+    return res;
+  }
 
   let supabaseResponse = NextResponse.next({ request });
 
@@ -105,6 +111,11 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/chat";
     return NextResponse.redirect(url);
+  }
+
+  if (request.nextUrl.searchParams.get("embed") === "1") {
+    supabaseResponse.headers.set("X-Frame-Options", "SAMEORIGIN");
+    supabaseResponse.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
   }
 
   return supabaseResponse;

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AXE Companion Launch V2</title>
+  <link rel="stylesheet" href="./hero-devices.css" />
   <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
   <script>
     if (window.location.hash.includes('figmacapture')) {
@@ -3612,25 +3613,54 @@
         <h1>AXE Companion.<br /><span class="hero-gradient">The trader’s phone OS.</span></h1>
         <p class="hero-copy">AXE Companion is what an MT5-native phone workflow should feel like: live chart, depth, news, intel, execution, journal and AXE in one calm dark operating surface.</p>
         <div class="hero-actions">
-          <a class="btn-primary" href="/demo?to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1" target="_blank" rel="noopener noreferrer">Open Mobile Demo</a>
-          <a class="btn-secondary" href="/demo?to=%2Fintel%3Fsymbol%3DXAUUSD" target="_blank" rel="noopener noreferrer">Open Tablet Demo</a>
+          <a class="btn-primary" href="#hero-devices">Try the live demo</a>
+          <a class="btn-secondary" href="#pricing">See pricing</a>
         </div>
-        <div class="hero-mock-wrap">
+        <div class="hero-mock-wrap" id="hero-devices">
           <div class="hero-grid-mask"></div>
           <div class="hero-mock-block"></div>
-          <div class="hero-device-stage">
-            <div class="hero-phone-wrap">
-              <a href="/demo?to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1" target="_blank" rel="noopener noreferrer" aria-label="Open AXE mobile demo">
-                <img class="hero-mock reveal" src="../figma-assets/images/chart-xauusd.png" alt="AXE mobile app preview" />
-              </a>
-            </div>
-            <div class="hero-ipad-stack">
-              <a href="/demo?to=%2Fintel%3Fsymbol%3DXAUUSD" target="_blank" rel="noopener noreferrer" aria-label="Open AXE tablet demo">
-                <div class="hero-ipad-stack-inner">
-                  <img class="hero-ipad hero-ipad--dark reveal" src="../figma-assets/images/hero-ipad-dark-web.png" alt="AXE iPad dark theme preview" />
-                  <img class="hero-ipad hero-ipad--light reveal" src="../figma-assets/images/hero-ipad-light-web.png" alt="AXE iPad light theme preview" />
+          <div class="hero-device-stage axe-3d-scene">
+            <div class="device-3d device-3d--phone" data-tilt>
+              <div class="device-bezel">
+                <div class="device-notch" aria-hidden="true"></div>
+                <span class="device-label">Live · Founder</span>
+                <div class="device-screen">
+                  <iframe
+                    title="AXE iPhone 15 Pro demo"
+                    src="/demo/embed?device=phone&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                    loading="eager"
+                    allow="clipboard-write"
+                  ></iframe>
                 </div>
-              </a>
+              </div>
+            </div>
+            <div class="hero-ipad-stack-live">
+              <div class="device-3d device-3d--ipad device-3d--dark" data-tilt>
+                <div class="device-bezel">
+                  <span class="device-label">iPad Pro 13 · Dark</span>
+                  <div class="device-screen">
+                    <iframe
+                      title="AXE iPad Pro demo dark"
+                      src="/demo/embed?device=tablet&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                      loading="lazy"
+                      allow="clipboard-write"
+                    ></iframe>
+                  </div>
+                </div>
+              </div>
+              <div class="device-3d device-3d--ipad device-3d--light" data-tilt aria-hidden="true">
+                <div class="device-bezel">
+                  <span class="device-label">iPad Pro 13 · Paper</span>
+                  <div class="device-screen">
+                    <iframe
+                      title="AXE iPad Pro demo light"
+                      src="/demo/embed?device=tablet&amp;theme=paper&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                      loading="lazy"
+                      allow="clipboard-write"
+                    ></iframe>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -4349,5 +4379,6 @@
       proCard.addEventListener('pointerleave', resetProCard);
     }
   </script>
+  <script src="./hero-devices.js"></script>
 </body>
 </html>

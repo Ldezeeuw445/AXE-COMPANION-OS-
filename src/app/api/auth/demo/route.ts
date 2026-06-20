@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
 function demoCreds() {
   const email = process.env.DEMO_USER_EMAIL?.trim();
@@ -26,10 +27,27 @@ export async function POST() {
     },
   });
   if (!anon.error) {
+    const userId = anon.data.user?.id ?? null;
+    if (userId) {
+      const service = createServiceRoleSupabaseClient();
+      if (service) {
+        await service.from("axe_user_entitlements").upsert(
+          {
+            user_id: userId,
+            plan: "founder",
+            founder_badge: true,
+            chat_quota_exempt: true,
+            pro_until: null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+      }
+    }
     return NextResponse.json({
       ok: true,
       mode: "anonymous",
-      userId: anon.data.user?.id ?? null,
+      userId,
     });
   }
 

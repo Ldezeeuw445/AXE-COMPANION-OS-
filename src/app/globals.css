@@ -2025,3 +2025,22 @@ select {
     border-radius: 1.5rem;
   }
 }
+
+/* Landing-page iframe embed — full app demo inside device mock */
+html.axe-embed-demo,
+body.axe-embed-demo {
+  overflow: hidden;
+}
+
+body.axe-embed-demo .tos-splash-overlay,
+body.axe-embed-demo [data-sonner-toaster] {
+  display: none !important;
+}
+
+body.axe-embed-demo .tos-shell-desktop-layout {
+  max-width: none;
+}
+
+body.axe-embed-demo .tos-app-content {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+}
