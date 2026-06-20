@@ -649,6 +649,69 @@
     .mock-stage { padding: 12px; }
     .mock-screen { display: none; min-height: 620px; }
     .mock-screen.active { display: block; }
+    .live-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0,1fr));
+      gap: 6px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(9,10,12,0.74);
+    }
+
+    .live-tabs--tablet {
+      grid-template-columns: repeat(6, minmax(0,1fr));
+    }
+
+    .live-tab {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.02);
+      color: rgba(255,255,255,0.78);
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .01em;
+      padding: 7px 8px;
+      cursor: pointer;
+      transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+    }
+
+    .live-tab.active {
+      border-color: rgba(72,222,246,0.5);
+      color: rgba(190,245,255,1);
+      background: rgba(72,222,246,0.12);
+      box-shadow: 0 0 16px rgba(72,222,246,0.14);
+    }
+
+    .live-app-stage {
+      padding: 10px;
+    }
+
+    .live-frame-wrap {
+      position: relative;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #050608;
+      overflow: hidden;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.05),
+        0 12px 28px rgba(0,0,0,0.34);
+    }
+
+    .live-frame-wrap--phone {
+      height: 640px;
+    }
+
+    .live-frame-wrap--tablet {
+      height: 640px;
+    }
+
+    .live-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #050608;
+    }
 
     .mock-toolbar {
       display: flex;
@@ -3625,82 +3688,26 @@
                 <div class="mock-shell">
                   <div class="mock-topbar">
                     <span class="mock-dot"></span>
-                    <span class="mock-title">AXE Mobile</span>
+                    <span class="mock-title">AXE Mobile · Live App</span>
                     <span class="mock-badge">DEMO</span>
                   </div>
-                  <div class="mock-phone-tabs" role="tablist" aria-label="Phone app sections">
-                    <button class="mock-tab active" data-phone-tab="chart">Chart</button>
-                    <button class="mock-tab" data-phone-tab="intel">Intel</button>
-                    <button class="mock-tab" data-phone-tab="cockpit">Cockpit</button>
-                    <button class="mock-tab" data-phone-tab="trade">Trade</button>
-                    <button class="mock-tab" data-phone-tab="chat">Chat</button>
+                  <div class="live-tabs" role="tablist" aria-label="Phone app sections">
+                    <button class="live-tab active" data-live-phone="chart">Chart</button>
+                    <button class="live-tab" data-live-phone="intel">Intel</button>
+                    <button class="live-tab" data-live-phone="cockpit">Cockpit</button>
+                    <button class="live-tab" data-live-phone="market">Market</button>
+                    <button class="live-tab" data-live-phone="chat">Chat</button>
                   </div>
-
-                  <div class="mock-stage">
-                    <section class="mock-screen active" data-phone-screen="chart">
-                      <div class="mock-toolbar">
-                        <button class="mini-btn" data-indicator="fib">Auto Fib</button>
-                        <button class="mini-btn" data-indicator="ma">MA</button>
-                        <button class="mini-btn" data-indicator="vwap">VWAP</button>
-                      </div>
-                      <div class="mock-chart">
-                        <div class="mock-grid"></div>
-                        <div class="mock-candles">
-                          <span style="--h:38%;--o:62%"></span>
-                          <span style="--h:44%;--o:58%"></span>
-                          <span style="--h:52%;--o:50%"></span>
-                          <span style="--h:64%;--o:38%"></span>
-                          <span style="--h:56%;--o:46%"></span>
-                          <span style="--h:68%;--o:34%"></span>
-                          <span style="--h:72%;--o:30%"></span>
-                          <span style="--h:66%;--o:36%"></span>
-                        </div>
-                        <div class="mock-line fib-line" hidden>Fib 50%</div>
-                        <div class="mock-line ma-line" hidden>MA(50)</div>
-                        <div class="mock-line vwap-line" hidden>VWAP</div>
-                      </div>
-                    </section>
-
-                    <section class="mock-screen" data-phone-screen="intel">
-                      <div class="mock-list">
-                        <article><b>Intel Tide</b><span>Net call premium +1.71B</span></article>
-                        <article><b>Macro</b><span>Rates: hold bias, USD mixed</span></article>
-                        <article><b>Policy Flow</b><span>2 congressional buys flagged</span></article>
-                        <article><b>Emergency Monitor</b><span>No active global distress spikes</span></article>
-                      </div>
-                    </section>
-
-                    <section class="mock-screen" data-phone-screen="cockpit">
-                      <div class="mock-kpi-grid">
-                        <div><label>FIT</label><strong>84</strong></div>
-                        <div><label>Rules kept</label><strong>18</strong></div>
-                        <div><label>Rules passed</label><strong>6</strong></div>
-                        <div><label>Session</label><strong>London + NY</strong></div>
-                      </div>
-                    </section>
-
-                    <section class="mock-screen" data-phone-screen="trade">
-                      <div class="mock-trade-box">
-                        <div><span>Pair</span><b>XAUUSD</b></div>
-                        <div><span>Price</span><b>4215.15</b></div>
-                        <div><span>Lot</span><b>0.10</b></div>
-                        <div class="mock-trade-actions">
-                          <button class="sell">SELL</button>
-                          <button class="buy">BUY</button>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section class="mock-screen" data-phone-screen="chat">
-                      <div class="mock-chat-log" id="phoneChatLog">
-                        <div class="bubble ai">AXE: Ask me about XAUUSD context, flow or risk.</div>
-                        <div class="bubble user">What is the current setup?</div>
-                      </div>
-                      <div class="mock-chat-input">
-                        <input id="phoneChatInput" type="text" value="Give me a quick plan." />
-                        <button id="phoneChatSend">Send</button>
-                      </div>
-                    </section>
+                  <div class="live-app-stage">
+                    <div class="live-frame-wrap live-frame-wrap--phone">
+                      <iframe
+                        id="phoneLiveFrame"
+                        class="live-frame"
+                        title="AXE mobile live app frame"
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"
+                      ></iframe>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3708,62 +3715,31 @@
             <div class="hero-ipad-stack">
               <div class="mock-device mock-device--tablet reveal" data-device="tablet">
                 <div class="mock-shell tablet-shell">
-                  <aside class="tablet-sidebar">
-                    <h4>Workspace</h4>
-                    <button class="tablet-nav active" data-tablet-tab="overview">Overview</button>
-                    <button class="tablet-nav" data-tablet-tab="chart">Chart Desk</button>
-                    <button class="tablet-nav" data-tablet-tab="intel">Intel Matrix</button>
-                    <button class="tablet-nav" data-tablet-tab="journal">Journal</button>
-                    <button class="tablet-nav" data-tablet-tab="assistant">AXE Chat</button>
-                  </aside>
-                  <div class="tablet-main">
-                    <div class="tablet-header">
+                  <div style="padding: 12px; width: 100%;">
+                    <div class="mock-topbar" style="border-radius: 12px; margin-bottom: 10px;">
                       <span class="mock-dot"></span>
-                      <strong id="tabletTitle">Overview</strong>
+                      <span class="mock-title">AXE Tablet · Live App</span>
                       <span class="mock-badge">Synced demo</span>
                     </div>
-
-                    <section class="tablet-screen active" data-tablet-screen="overview">
-                      <div class="tablet-cards">
-                        <article><h5>Execution FIT</h5><p>84 · stable</p></article>
-                        <article><h5>Live Feeds</h5><p>19 active</p></article>
-                        <article><h5>Open Context</h5><p>XAUUSD · H1 · London+NY</p></article>
+                    <div class="live-tabs live-tabs--tablet" role="tablist" aria-label="Tablet app sections">
+                      <button class="live-tab active" data-live-tablet="chart">Chart</button>
+                      <button class="live-tab" data-live-tablet="intel">Intel</button>
+                      <button class="live-tab" data-live-tablet="cockpit">Cockpit</button>
+                      <button class="live-tab" data-live-tablet="history">History</button>
+                      <button class="live-tab" data-live-tablet="journal">Journal</button>
+                      <button class="live-tab" data-live-tablet="chat">Chat</button>
+                    </div>
+                    <div class="live-app-stage" style="padding: 10px 0 0;">
+                      <div class="live-frame-wrap live-frame-wrap--tablet">
+                        <iframe
+                          id="tabletLiveFrame"
+                          class="live-frame"
+                          title="AXE tablet live app frame"
+                          loading="lazy"
+                          referrerpolicy="no-referrer-when-downgrade"
+                        ></iframe>
                       </div>
-                    </section>
-
-                    <section class="tablet-screen" data-tablet-screen="chart">
-                      <div class="tablet-chart">
-                        <div class="mock-grid"></div>
-                        <div class="tablet-chart-line"></div>
-                        <div class="tablet-chart-note">Chart + execution bridge + indicators</div>
-                      </div>
-                    </section>
-
-                    <section class="tablet-screen" data-tablet-screen="intel">
-                      <div class="tablet-feed">
-                        <article><b>AXE Intel Tide</b><span>Call/put skew bullish intraday.</span></article>
-                        <article><b>AXE Chokepoints</b><span>No new disruptions in key lanes.</span></article>
-                        <article><b>AXE Correlation</b><span>Gold tracking yields divergence.</span></article>
-                      </div>
-                    </section>
-
-                    <section class="tablet-screen" data-tablet-screen="journal">
-                      <div class="tablet-journal">
-                        <article><b>XAUUSD +450</b><span>Tagged: Perfect · OK 65</span></article>
-                        <article><b>NAS100 -120</b><span>Tagged: Early entry</span></article>
-                      </div>
-                    </section>
-
-                    <section class="tablet-screen" data-tablet-screen="assistant">
-                      <div class="tablet-assistant" id="tabletChatLog">
-                        <div class="bubble ai">AXE: I can bridge chart + feed + journal context.</div>
-                        <div class="bubble user">Summarize risk in 3 bullets.</div>
-                      </div>
-                      <div class="mock-chat-input">
-                        <input id="tabletChatInput" type="text" value="What would invalidate this setup?" />
-                        <button id="tabletChatSend">Send</button>
-                      </div>
-                    </section>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4373,6 +4349,60 @@
 
     wireDemoChat('phoneChatInput', 'phoneChatSend', 'phoneChatLog');
     wireDemoChat('tabletChatInput', 'tabletChatSend', 'tabletChatLog');
+
+    const appOrigin = window.location.protocol === 'file:'
+      ? 'https://axecompanion.com'
+      : window.location.origin;
+
+    const phoneFrame = document.getElementById('phoneLiveFrame');
+    const tabletFrame = document.getElementById('tabletLiveFrame');
+
+    const phoneRoutes = {
+      chart: '/chart?symbol=XAUUSD&tf=H1',
+      intel: '/intel?symbol=XAUUSD',
+      cockpit: '/cockpit',
+      market: '/market?symbol=XAUUSD',
+      chat: '/chat?q=' + encodeURIComponent('Give me today context on XAUUSD and quick plan'),
+    };
+
+    const tabletRoutes = {
+      chart: '/chart?symbol=XAUUSD&tf=H1',
+      intel: '/intel?symbol=XAUUSD',
+      cockpit: '/cockpit',
+      history: '/history',
+      journal: '/journal',
+      chat: '/chat?q=' + encodeURIComponent('Summarize current market context and risk in 3 bullets'),
+    };
+
+    const loadFrame = (frame, path) => {
+      if (!frame || !path) return;
+      frame.src = `${appOrigin}${path}`;
+    };
+
+    loadFrame(phoneFrame, phoneRoutes.chart);
+    loadFrame(tabletFrame, tabletRoutes.chart);
+
+    const phoneLiveTabs = document.querySelectorAll('[data-live-phone]');
+    phoneLiveTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.getAttribute('data-live-phone');
+        if (!key || !phoneRoutes[key]) return;
+        phoneLiveTabs.forEach((btn) => btn.classList.remove('active'));
+        tab.classList.add('active');
+        loadFrame(phoneFrame, phoneRoutes[key]);
+      });
+    });
+
+    const tabletLiveTabs = document.querySelectorAll('[data-live-tablet]');
+    tabletLiveTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.getAttribute('data-live-tablet');
+        if (!key || !tabletRoutes[key]) return;
+        tabletLiveTabs.forEach((btn) => btn.classList.remove('active'));
+        tab.classList.add('active');
+        loadFrame(tabletFrame, tabletRoutes[key]);
+      });
+    });
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
