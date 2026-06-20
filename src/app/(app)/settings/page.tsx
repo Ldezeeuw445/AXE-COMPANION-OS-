@@ -28,6 +28,9 @@ import { TradeExecutionPrefsPanel } from "@/components/settings/TradeExecutionPr
 import { getFavoriteWorkflowIdsServerState } from "@/lib/workflows/serverFavorites";
 import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { PlanStatusLine } from "@/components/billing/FounderBadge";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getUserAxeEntitlement } from "@/services/billingService";
 
 async function getPrimaryConversation() {
   const authed = await getAuthedServiceSupabase();
@@ -48,6 +51,20 @@ async function getPrimaryConversation() {
 }
 
 export default async function SettingsPage() {
+  const supabase = await createServerSupabaseClient();
+  let entitlementLabel = "Free";
+  let founderBadge = false;
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const ent = await getUserAxeEntitlement(supabase, user.id);
+      entitlementLabel = ent.label;
+      founderBadge = ent.founderBadge;
+    }
+  }
+
   const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs, favoriteWorkflowIds] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
@@ -340,8 +357,11 @@ export default async function SettingsPage() {
 
       <GlassPanel className="mb-4 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Subscription</h2>
+        <PlanStatusLine label={entitlementLabel} founderBadge={founderBadge} />
         <p className="mt-1 text-xs text-tos-muted">
-          Free includes the full experience with 20 chat sends per day. Pro removes the daily cap when checkout opens.
+          {founderBadge
+            ? "Founder status is permanent — full Companion access plus Trading OS Founder pricing when the terminal ships."
+            : "Free includes core tools with a daily chat cap. Pro unlocks Cockpit learning, trade prep, and unlimited chat."}
         </p>
         <Link
           href="/upgrade"

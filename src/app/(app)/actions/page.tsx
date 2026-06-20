@@ -13,9 +13,10 @@ import { ExecutionCard } from "@/components/actions/ExecutionCard";
 import { AxeWorkflowsHub } from "@/components/actions/AxeWorkflowsHub";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { UpgradeGate } from "@/components/billing/UpgradeGate";
-import { hasAxeFeature } from "@/lib/billing/features";
+import { hasEntitlementFeature } from "@/lib/billing/access";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getUserAxeEntitlement } from "@/services/billingService";
+import type { UserAxeEntitlement } from "@/lib/billing/types";
 import {
   listExecutionRequests,
   listSetupReviews,
@@ -23,20 +24,30 @@ import {
 import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { ChevronDown } from "lucide-react";
 
+const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
+  plan: "free",
+  isPaid: false,
+  founderBadge: false,
+  proUntil: null,
+  chatQuotaExempt: false,
+  label: "Free",
+};
+
 export default async function ActionsPage() {
   const supabase = await createServerSupabaseClient();
-  let plan = "free";
+  let entitlement = EMPTY_ENTITLEMENT;
+  let userId: string | undefined;
   if (supabase) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      const ent = await getUserAxeEntitlement(supabase, user.id);
-      plan = ent.plan;
+      userId = user.id;
+      entitlement = await getUserAxeEntitlement(supabase, user.id);
     }
   }
-  const canPrepareTrades = hasAxeFeature(plan, "trade_preparation");
-  const canChartActions = hasAxeFeature(plan, "chart_actions");
+  const canPrepareTrades = hasEntitlementFeature(entitlement, "trade_preparation", userId);
+  const canChartActions = hasEntitlementFeature(entitlement, "chart_actions", userId);
 
   const [executions, setups, runtime, tradePrefs, favoriteIds] = await Promise.all([
     listExecutionRequests(),

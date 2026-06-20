@@ -12,25 +12,36 @@ import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { UpgradeGate } from "@/components/billing/UpgradeGate";
-import { hasAxeFeature } from "@/lib/billing/features";
+import { hasEntitlementFeature } from "@/lib/billing/access";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getUserAxeEntitlement } from "@/services/billingService";
+import type { UserAxeEntitlement } from "@/lib/billing/types";
 import { getCockpitDashboard } from "@/services/cockpitService";
+
+const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
+  plan: "free",
+  isPaid: false,
+  founderBadge: false,
+  proUntil: null,
+  chatQuotaExempt: false,
+  label: "Free",
+};
 
 export default async function CockpitPage() {
   const dash = await getCockpitDashboard();
   const supabase = await createServerSupabaseClient();
-  let plan = "free";
+  let entitlement = EMPTY_ENTITLEMENT;
+  let userId: string | undefined;
   if (supabase) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      const ent = await getUserAxeEntitlement(supabase, user.id);
-      plan = ent.plan;
+      userId = user.id;
+      entitlement = await getUserAxeEntitlement(supabase, user.id);
     }
   }
-  const canLearn = hasAxeFeature(plan, "cockpit_learning");
+  const canLearn = hasEntitlementFeature(entitlement, "cockpit_learning", userId);
   const hasSnapshot = Boolean(dash.snapshotId);
   const cockpitCalibrated = hasSnapshot && dash.calibration.state === "active";
   const cockpitPreview = hasSnapshot && dash.calibration.state !== "active";

@@ -43,7 +43,14 @@ export async function getUserAxeEntitlement(
     founderBadge,
     proUntil,
     chatQuotaExempt,
-    label: founderBadge && plan !== "founder" ? "Founder" : planDisplayLabel(plan),
+    label:
+      founderBadge || plan === "founder"
+        ? "Founder"
+        : plan === "elite"
+          ? "Elite"
+          : isPaid && plan === "free"
+            ? "Pro"
+            : planDisplayLabel(plan),
   };
 }
 
