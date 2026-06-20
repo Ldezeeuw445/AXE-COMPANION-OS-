@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 function DemoEmbedInner() {
   const params = useSearchParams();
   const device = params.get("device") === "tablet" ? "tablet" : "phone";
-  const theme = params.get("theme") === "paper" ? "paper" : "dark";
+  const theme = params.get("theme") === "paper" ? "paper" : "midnight";
   const rawTo = params.get("to") ?? "/chart?symbol=XAUUSD&tf=H1";
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +17,7 @@ function DemoEmbedInner() {
     url.searchParams.set("embed", "1");
     url.searchParams.set("demo", "1");
     if (theme === "paper") url.searchParams.set("chartTheme", "paper");
+    else url.searchParams.set("chartTheme", "midnight");
     return `${url.pathname}${url.search}`;
   }, [rawTo, theme]);
 

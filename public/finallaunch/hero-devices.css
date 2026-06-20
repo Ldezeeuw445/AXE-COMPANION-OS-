@@ -56,13 +56,6 @@
     linear-gradient(180deg, #35363d, #101115);
 }
 
-.device-3d--ipad.device-3d--light .device-bezel {
-  background:
-    linear-gradient(145deg, rgba(255,255,255,0.85), rgba(240,242,248,0.92)),
-    linear-gradient(180deg, #eceef5, #d8dbe5);
-  border-color: rgba(255,255,255,0.65);
-}
-
 .device-notch {
   position: absolute;
   top: 16px;
@@ -121,37 +114,7 @@
 .hero-ipad-stack-live {
   position: relative;
   width: min(920px, 58vw);
-  min-height: 560px;
-}
-
-.hero-ipad-stack-live .device-3d--ipad {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  transition: opacity 280ms ease;
-}
-
-.hero-ipad-stack-live .device-3d--dark {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.hero-ipad-stack-live .device-3d--light {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.hero-mock-wrap:hover .hero-ipad-stack-live .device-3d--dark,
-.hero-mock-wrap:focus-within .hero-ipad-stack-live .device-3d--dark {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.hero-mock-wrap:hover .hero-ipad-stack-live .device-3d--light,
-.hero-mock-wrap:focus-within .hero-ipad-stack-live .device-3d--light {
-  opacity: 1;
-  pointer-events: auto;
+  flex: 0 0 auto;
 }
 
 .device-3d--ipad .device-screen {
@@ -198,15 +161,5 @@
 
   .device-3d--ipad .device-screen {
     min-height: 420px;
-  }
-
-  .hero-mock-wrap:hover .device-3d--ipad.device-3d--dark {
-    opacity: 1;
-    pointer-events: auto;
-    position: relative;
-  }
-
-  .hero-mock-wrap .device-3d--ipad.device-3d--light {
-    display: none;
   }
 }
