@@ -2999,7 +2999,7 @@ export function ChartScreen({
   return (
     <div
       ref={chartFrameRef}
-      className={`tos-ambient-glow relative flex min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden overscroll-none ${
+      className={`${chartTheme.isDark ? "tos-ambient-glow" : ""} relative flex min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden overscroll-none ${
         isFullscreen
           ? "chart-immersive-shell fixed inset-0 z-[9999]"
           : "flex-1"
@@ -3431,14 +3431,14 @@ export function ChartScreen({
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-0 z-40 grid h-14 w-6 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-0 z-40 grid h-14 w-6 place-items-center rounded-r-2xl border border-l-0 transition ${
             toolRailOpen
               ? chartTheme.isDark
-                ? "border-white/[0.18] bg-white/[0.10] text-white shadow-[0_0_14px_rgba(255,255,255,0.12)]"
-                : "border-black/[0.14] bg-black/[0.06] text-black/80 shadow-[0_0_14px_rgba(0,0,0,0.06)]"
+                ? "border-white/[0.18] bg-white/[0.10] text-white shadow-[0_0_14px_rgba(255,255,255,0.12)] backdrop-blur"
+                : "border-black/[0.12] bg-[#d7d6d0]/95 text-black/80 shadow-none"
               : chartTheme.isDark
-                ? "border-white/[0.10] bg-black/42 text-white/82"
-                : "border-black/[0.10] bg-white/78 text-black/60"
+                ? "border-white/[0.10] bg-black/42 text-white/82 backdrop-blur"
+                : "border-transparent bg-transparent text-black/45 shadow-none"
           }`}
           style={{ top: isTabletLayout ? "var(--tos-tablet-chart-header-h)" : "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
           aria-label="Toggle chart tools drawer"
@@ -3455,7 +3455,7 @@ export function ChartScreen({
             toolRailOpen
               ? chartTheme.isDark
                 ? "translate-x-6 opacity-100 shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
-                : "translate-x-6 opacity-100 shadow-[0_10px_24px_rgba(0,0,0,0.12)]"
+                : "translate-x-6 opacity-100 shadow-none"
               : "pointer-events-none -translate-x-full opacity-0"
           }`}
           style={{

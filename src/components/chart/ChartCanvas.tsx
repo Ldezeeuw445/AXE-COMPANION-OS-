@@ -789,11 +789,13 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         }}
       />
 
-      <div
-        aria-hidden
-        className="pointer-events-none absolute"
-        style={{ ...insetStyle, boxShadow: theme.frameGlow }}
-      />
+      {theme.frameGlow && theme.frameGlow !== "none" ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute"
+          style={{ ...insetStyle, boxShadow: theme.frameGlow }}
+        />
+      ) : null}
     </>
   );
 });

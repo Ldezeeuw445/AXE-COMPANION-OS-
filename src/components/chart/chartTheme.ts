@@ -174,7 +174,7 @@ const PAPER: ChartThemeConfig = {
   negativeText: "rgba(242,54,69,0.95)",
   neutralText: "rgba(80,85,95,0.95)",
   cyanAccent: "rgba(0,160,200,0.80)",
-  frameGlow: "0 0 0 1px rgba(0,0,0,0.06) inset",
+  frameGlow: "none",
   isDark: false,
 };
 
