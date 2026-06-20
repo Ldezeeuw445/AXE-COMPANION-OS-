@@ -62,11 +62,13 @@ export async function getFounderSeatsUsed(
   const { count, error } = await supabase
     .from("axe_user_entitlements")
     .select("user_id", { count: "exact", head: true })
-    .eq("founder_badge", true);
+    .eq("founder_badge", true)
+    .neq("chat_quota_exempt", true);
 
   if (error) {
     console.error("[billingService] founder seat count failed", error.message);
-    return 0;
+    // Fail closed — treat as sold out rather than overselling Founder seats.
+    return FOUNDER_SEAT_CAP;
   }
   return count ?? 0;
 }

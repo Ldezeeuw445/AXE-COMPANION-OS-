@@ -108,7 +108,7 @@ async function handleCheckoutCompleted(
     proUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   }
 
-  plan = await validatePlanAvailability(supabase, plan);
+  plan = await validatePlanAvailability(supabase, plan, userId);
 
   await upsertEntitlement(supabase, {
     userId,
@@ -191,6 +191,17 @@ async function validatePlanAvailability(
   plan: AxePlanId,
   existingUserId?: string,
 ): Promise<AxePlanId> {
+  if (existingUserId) {
+    const { data: existing } = await supabase
+      .from("axe_user_entitlements")
+      .select("founder_badge, chat_quota_exempt")
+      .eq("user_id", existingUserId)
+      .maybeSingle();
+    if (existing?.founder_badge === true && plan === "founder") {
+      return "founder";
+    }
+  }
+
   if (plan === "founder") {
     const used = await getFounderSeatsUsed(supabase);
     if (used >= FOUNDER_SEAT_CAP) {

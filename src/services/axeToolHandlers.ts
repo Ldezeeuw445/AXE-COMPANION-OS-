@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChartActionType } from "@/lib/axeChartActions/chartActionTypes";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
 import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import { queueChartAction } from "@/services/chartActionQueueService";
@@ -21,6 +22,11 @@ export async function handleRouteChartAction(
   userId: string,
   args: RouteChartActionArgs,
 ): Promise<string> {
+  const gate = await requireEntitlementFeature(supabase, userId, "chart_actions");
+  if (!gate.ok) {
+    return `${gate.error} [[link:/upgrade|View plans]]`;
+  }
+
   const payload: Record<string, unknown> = { ...(args.payload ?? {}) };
   if (args.indicators?.length) {
     payload.indicators = args.indicators;
@@ -50,6 +56,11 @@ export async function handlePrepareExecutionRequest(
   args: PrepareExecutionArgs,
   firePush?: (title: string, body: string, url: string) => void,
 ): Promise<string> {
+  const gate = await requireEntitlementFeature(supabase, userId, "trade_preparation");
+  if (!gate.ok) {
+    return `${gate.error} [[link:/upgrade|View plans]]`;
+  }
+
   const prefs = await getTradeExecutionPrefsForUser(userId);
   const volume =
     args.volume != null && Number.isFinite(Number(args.volume))

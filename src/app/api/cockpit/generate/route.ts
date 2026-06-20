@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 import { generateCockpitSnapshot } from "@/services/cockpitSnapshotService";
 
 export async function POST() {
@@ -14,6 +15,11 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const gate = await requireEntitlementFeature(supabase, user.id, "cockpit_learning");
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
   const result = await generateCockpitSnapshot(supabase, user.id);

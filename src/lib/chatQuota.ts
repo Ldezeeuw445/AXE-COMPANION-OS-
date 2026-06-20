@@ -7,7 +7,10 @@ export function skipChatQuota(): boolean {
 
 /** Comma-separated auth user UUIDs (Vercel env) — unlimited chat without DB row. */
 export function isUnlimitedChatUserId(userId: string): boolean {
-  const raw = process.env.AXE_UNLIMITED_CHAT_USER_IDS ?? "";
+  const raw =
+    process.env.AXE_FULL_ACCESS_USER_IDS ??
+    process.env.AXE_UNLIMITED_CHAT_USER_IDS ??
+    "";
   const ids = raw
     .split(",")
     .map((s) => s.trim())
