@@ -544,7 +544,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
                     {v.vesselName || v.mmsi}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[10px] text-tos-dim">{v.vesselType}</span>
-                  <span className="font-mono text-[10px] text-tos-muted">{v.destination || v.nearChokepoint || "—"}</span>
+                  <span className="font-mono text-[10px] text-tos-muted">{formatVesselTrail(v)}</span>
                 </li>
               ))}
             </ul>
@@ -975,4 +975,25 @@ function formatEnergyValue(value: number, unit: string): string {
   if (Math.abs(value) >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
   if (Math.abs(value) >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
   return value.toFixed(1);
+}
+
+function formatVesselTrail(v: {
+  destination: string | null;
+  nearChokepoint: string | null;
+  speedKnots: number | null;
+  owner: string;
+  lastLatitude: number | null;
+  lastLongitude: number | null;
+}): string {
+  const dest = v.destination?.trim();
+  if (dest) return dest;
+  if (v.nearChokepoint) return `Near ${v.nearChokepoint}`;
+  if (v.speedKnots != null && Number.isFinite(v.speedKnots)) {
+    return `${v.speedKnots.toFixed(1)} kn`;
+  }
+  if (v.lastLatitude != null && v.lastLongitude != null) {
+    return `${v.lastLatitude.toFixed(1)}°, ${v.lastLongitude.toFixed(1)}°`;
+  }
+  if (v.owner && v.owner !== "—") return v.owner;
+  return "—";
 }

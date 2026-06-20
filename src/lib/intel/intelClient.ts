@@ -382,6 +382,48 @@ const STATIC_CHOKEPOINTS: Chokepoint[] = [
   },
 ];
 
+const VESSEL_FLEET_META: Record<
+  string,
+  { owner: string; ownerType: VesselTrack["ownerType"]; significance: string }
+> = {
+  "477552700": { owner: "Evergreen Marine", ownerType: "corporate", significance: "Ever Given — Suez supply chain bellwether" },
+  "371785000": { owner: "MSC", ownerType: "corporate", significance: "MSC Gülsün class mega container" },
+  "353136000": { owner: "HMM", ownerType: "corporate", significance: "Largest South Korean container vessel" },
+  "477333400": { owner: "Evergreen Marine", ownerType: "corporate", significance: "24k+ TEU mega container" },
+  "228039600": { owner: "CMA CGM", ownerType: "corporate", significance: "French flagship mega container" },
+  "636092799": { owner: "Advantage Tankers", ownerType: "corporate", significance: "Iran seizure flashpoint tanker" },
+  "564421000": { owner: "Eastern Pacific", ownerType: "corporate", significance: "Red Sea / Oman attack history" },
+  "538004315": { owner: "Trafigura", ownerType: "corporate", significance: "Houthi missile target Jan 2024" },
+  "319190200": { owner: "Jeff Bezos", ownerType: "oligarch", significance: "Koru megayacht" },
+  "319085100": { owner: "Unknown Billionaire", ownerType: "oligarch", significance: "Flying Fox charter megayacht" },
+  "319178900": { owner: "US DOJ (seized)", ownerType: "state", significance: "Seized oligarch yacht" },
+  "319013600": { owner: "Alisher Usmanov", ownerType: "oligarch", significance: "Dilbar — sanctions indicator" },
+  "319866000": { owner: "Roman Abramovich", ownerType: "oligarch", significance: "Eclipse — oligarch bellwether" },
+  "319174000": { owner: "Unknown (Putin-linked)", ownerType: "oligarch", significance: "Scheherazade — seized in Italy" },
+};
+
+function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3440.065;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function nearestChokepointForVessel(lat: number, lon: number): string | null {
+  let best: { name: string; dist: number } | null = null;
+  for (const cp of STATIC_CHOKEPOINTS) {
+    const dist = haversineNm(lat, lon, cp.latitude, cp.longitude);
+    if (dist > cp.radiusNm * 2.5) continue;
+    if (!best || dist < best.dist) best = { name: cp.name, dist };
+  }
+  return best?.name ?? null;
+}
+
 function mapProxyJetRow(row: Record<string, unknown>): CorporateJet {
   return {
     icao24: String(row.icao24 ?? ""),
@@ -548,27 +590,41 @@ async function loadIntelFromDb<T>(
       case "vesselTracking": {
         const { data, error } = await sb
           .from("intel_vessel_tracking")
-          .select("mmsi,vessel_name,vessel_type,latitude,longitude,speed,destination,snapshot_time")
+          .select("mmsi,vessel_name,vessel_type,latitude,longitude,speed,destination,region,snapshot_time")
           .order("snapshot_time", { ascending: false })
           .limit(300);
         if (error) return { ok: false, error: error.message };
-        const rows = (data ?? []).map((r) => ({
-          mmsi: r.mmsi,
-          vesselName: r.vessel_name,
-          vesselType: r.vessel_type,
-          owner: "—",
-          ownerType: "unknown" as const,
-          significance: "",
-          isTracked: true,
-          lastSeen: r.snapshot_time ? String(r.snapshot_time) : null,
-          lastLatitude: r.latitude,
-          lastLongitude: r.longitude,
-          speedKnots: r.speed,
-          heading: null,
-          destination: r.destination,
-          nearChokepoint: null,
-          alertLevel: "normal" as const,
-        }));
+        const seen = new Set<string>();
+        const rows: VesselTrack[] = [];
+        for (const r of data ?? []) {
+          const mmsi = String(r.mmsi ?? "");
+          if (!mmsi || seen.has(mmsi)) continue;
+          seen.add(mmsi);
+          const fleet = VESSEL_FLEET_META[mmsi];
+          const lat = r.latitude != null ? Number(r.latitude) : null;
+          const lon = r.longitude != null ? Number(r.longitude) : null;
+          const nearFromCoords =
+            lat != null && lon != null && Number.isFinite(lat) && Number.isFinite(lon)
+              ? nearestChokepointForVessel(lat, lon)
+              : null;
+          rows.push({
+            mmsi,
+            vesselName: String(r.vessel_name ?? mmsi),
+            vesselType: String(r.vessel_type ?? "Vessel"),
+            owner: fleet?.owner ?? "—",
+            ownerType: fleet?.ownerType ?? "unknown",
+            significance: fleet?.significance ?? "",
+            isTracked: lat != null && lon != null,
+            lastSeen: r.snapshot_time ? String(r.snapshot_time) : null,
+            lastLatitude: lat,
+            lastLongitude: lon,
+            speedKnots: r.speed != null ? Number(r.speed) : null,
+            heading: null,
+            destination: r.destination ? String(r.destination) : null,
+            nearChokepoint: nearFromCoords ?? (r.region ? String(r.region) : null),
+            alertLevel: "normal",
+          });
+        }
         return { ok: true, data: rows as T };
       }
       case "chokepoints":

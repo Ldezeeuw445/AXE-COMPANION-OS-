@@ -46,3 +46,17 @@ export function applyChatPrefill(text: string): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(CHAT_PREFILL_EVENT, { detail: { text } }));
 }
+
+/**
+ * Re-dispatch prefill after route changes — mobile/iPad often mount the
+ * chat Composer after the first event fired (Actions → Chat navigation).
+ */
+export function scheduleChatPrefillRedispatch(text: string): void {
+  if (typeof window === "undefined") return;
+  for (const ms of [0, 48, 120, 280]) {
+    window.setTimeout(() => {
+      stageChatPrefill(text);
+      window.dispatchEvent(new CustomEvent(CHAT_PREFILL_EVENT, { detail: { text } }));
+    }, ms);
+  }
+}

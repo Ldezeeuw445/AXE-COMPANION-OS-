@@ -1,4 +1,3 @@
-import { chatHrefWithPrefill } from "@/lib/chat/chatPrefill";
 import {
   WORKFLOW_CATEGORY_DEFS,
   WORKFLOW_DEFINITIONS,
@@ -26,7 +25,7 @@ export type ResolvedWorkflowCategory = {
 
 function resolveAction(def: WorkflowDefinition, runtime: WorkflowRuntime): ResolvedWorkflowAction {
   const chatPrompt = def.chatPrompt ?? null;
-  const href = def.href ?? (chatPrompt ? chatHrefWithPrefill(chatPrompt) : "/actions");
+  const href = def.href ?? (chatPrompt ? "/chat" : "/actions");
   return {
     id: def.id,
     title: def.title,

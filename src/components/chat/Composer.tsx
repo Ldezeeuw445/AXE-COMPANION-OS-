@@ -11,8 +11,8 @@
  * detection, optimistic bubbles, quota refresh) is preserved unchanged.
  */
 
-import { Suspense, useState, useRef, useCallback, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CHAT_PREFILL_EVENT,
   clearStagedChatPrefill,
@@ -86,6 +86,7 @@ function chartActionHref(action: string, symbol: string, tf: string, layers?: st
 
 function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { vibrate } = useAmbient();
   const [value, setValue] = useState("");
@@ -96,20 +97,35 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const [image, setImage] = useState<{ base64: string; type: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const appliedPrefillRef = useRef<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
-  const applyDraft = useCallback((draft: string) => {
-    if (!draft.trim()) return;
-    setValue(draft);
-    clearStagedChatPrefill();
-    requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(draft.length, draft.length);
-    });
+  const focusDraft = useCallback((draft: string) => {
+    const el = textareaRef.current;
+    if (!el) return false;
+    el.focus();
+    el.setSelectionRange(draft.length, draft.length);
+    return true;
   }, []);
+
+  const applyDraft = useCallback(
+    (draft: string) => {
+      const trimmed = draft.trim();
+      if (!trimmed) return;
+      if (appliedPrefillRef.current === trimmed) return;
+      appliedPrefillRef.current = trimmed;
+      setValue(trimmed);
+      clearStagedChatPrefill();
+      requestAnimationFrame(() => {
+        if (focusDraft(trimmed)) return;
+        window.setTimeout(() => {
+          focusDraft(trimmed);
+        }, 64);
+      });
+    },
+    [focusDraft],
+  );
 
   // Read pair/TF from localStorage (PinnedContext writes these)
   const getSymbol = useCallback(() => {
@@ -119,11 +135,22 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     try { return localStorage.getItem(LS_TF) ?? ""; } catch { return ""; }
   }, []);
 
-  // Prefill from staged session draft or ?q= query param
-  useEffect(() => {
+  const resolvePrefillDraft = useCallback((): string | null => {
     const staged = readStagedChatPrefill();
+    if (staged?.trim()) return staged;
     const q = searchParams.get("q");
-    const draft = staged ?? (q ? decodeURIComponent(q) : null);
+    if (!q) return null;
+    try {
+      return decodeURIComponent(q);
+    } catch {
+      return q;
+    }
+  }, [searchParams]);
+
+  // Prefill from staged session draft or ?q= query param (layout effect for mobile/iPad)
+  useLayoutEffect(() => {
+    if (pathname !== "/chat") return;
+    const draft = resolvePrefillDraft();
     if (!draft) return;
     applyDraft(draft);
     if (typeof window !== "undefined") {
@@ -133,7 +160,20 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         window.history.replaceState({}, "", `${u.pathname}${u.search}${u.hash}`);
       }
     }
-  }, [searchParams, applyDraft]);
+  }, [pathname, resolvePrefillDraft, applyDraft]);
+
+  // Retry staged prefill after portal mount on touch devices
+  useEffect(() => {
+    if (pathname !== "/chat") return;
+    const draft = readStagedChatPrefill();
+    if (!draft?.trim()) return;
+    const timers = [96, 240].map((ms) =>
+      window.setTimeout(() => {
+        applyDraft(draft);
+      }, ms),
+    );
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [pathname, applyDraft]);
 
   // Same-route prefill from Actions / chart workflows while Composer stays mounted
   useEffect(() => {
