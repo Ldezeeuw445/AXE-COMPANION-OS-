@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
+import { ensureDemoWorkspace } from "@/lib/broker/demoAccount";
 
 function demoCreds() {
   const email = process.env.DEMO_USER_EMAIL?.trim();
@@ -31,17 +32,20 @@ export async function POST() {
     if (userId) {
       const service = createServiceRoleSupabaseClient();
       if (service) {
-        await service.from("axe_user_entitlements").upsert(
-          {
-            user_id: userId,
-            plan: "founder",
-            founder_badge: true,
-            chat_quota_exempt: true,
-            pro_until: null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" },
-        );
+        await Promise.all([
+          service.from("axe_user_entitlements").upsert(
+            {
+              user_id: userId,
+              plan: "founder",
+              founder_badge: true,
+              chat_quota_exempt: true,
+              pro_until: null,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" },
+          ),
+          ensureDemoWorkspace(service, userId),
+        ]);
       }
     }
     return NextResponse.json({
@@ -56,10 +60,15 @@ export async function POST() {
   if (creds) {
     const seeded = await supabase.auth.signInWithPassword(creds);
     if (!seeded.error) {
+      const userId = seeded.data.user?.id ?? null;
+      const service = createServiceRoleSupabaseClient();
+      if (userId && service) {
+        await ensureDemoWorkspace(service, userId);
+      }
       return NextResponse.json({
         ok: true,
         mode: "shared_demo_user",
-        userId: seeded.data.user?.id ?? null,
+        userId,
       });
     }
     return NextResponse.json(

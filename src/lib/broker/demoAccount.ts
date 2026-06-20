@@ -7,6 +7,18 @@ export const DEMO_EXTERNAL_ID = "axe-demo-paper";
 
 const DEMO_BALANCE = 100_000;
 
+/** Pre-loaded pairs for public demo sessions (Quotes + chart symbol picker). */
+export const DEMO_WATCHLIST_SYMBOLS = [
+  "XAUUSD",
+  "XAGUSD",
+  "EURUSD",
+  "GBPUSD",
+  "USDJPY",
+  "NAS100",
+  "US30",
+  "BTCUSD",
+] as const;
+
 type DemoAccountRow = Pick<
   BrokerAccountRow,
   | "id"
@@ -115,6 +127,98 @@ export async function ensureActiveDemoWhenEmpty(
   return { accounts: nextAccounts, activeAccountId: nextActive };
 }
 
+/** Seed demo account, active workspace, and default watchlist for landing-page demos. */
+export async function ensureDemoWorkspace(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DemoAccountRow | null> {
+  const demo = await ensureDemoAccount(supabase, userId);
+  if (!demo) return null;
+
+  await ensureActiveDemoWhenEmpty(supabase, userId, null, [demo]);
+
+  const { count, error: countErr } = await supabase
+    .from("assistant_memory_entries")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("scope", "watchlist");
+
+  if (countErr) {
+    console.warn("[demoAccount] watchlist count failed", countErr.message ?? countErr);
+    return demo;
+  }
+
+  if ((count ?? 0) === 0) {
+    const now = new Date().toISOString();
+    const rows = DEMO_WATCHLIST_SYMBOLS.map((symbol) => ({
+      user_id: userId,
+      scope: "watchlist",
+      entry_key: symbol,
+      content: symbol,
+      created_at: now,
+      updated_at: now,
+    }));
+    const { error: seedErr } = await supabase.from("assistant_memory_entries").upsert(rows, {
+      onConflict: "user_id,scope,entry_key",
+    });
+    if (seedErr) {
+      console.warn("[demoAccount] watchlist seed failed", seedErr.message ?? seedErr);
+    }
+  }
+
+  return demo;
+}
+
+export function demoBasePrice(symbol: string): number {
+  const s = symbol.toUpperCase();
+  if (s.includes("XAU")) return 4244;
+  if (s.includes("XAG")) return 31.2;
+  if (s.includes("NAS")) return 21_450;
+  if (s.includes("US30") || s === "DJ30") return 43_800;
+  if (s.includes("BTC")) return 68_000;
+  if (s.includes("ETH")) return 3200;
+  if (s.includes("JPY")) return 155.42;
+  if (s.includes("EUR")) return 1.0842;
+  if (s.includes("GBP")) return 1.2685;
+  return 100;
+}
+
+function demoSpread(symbol: string): number {
+  const s = symbol.toUpperCase();
+  if (s.includes("XAU")) return 0.32;
+  if (s.includes("XAG")) return 0.04;
+  if (s.includes("NAS") || s.includes("US30")) return 1.2;
+  if (s.includes("BTC")) return 12;
+  if (s.includes("JPY")) return 0.014;
+  if (s.includes("EUR") || s.includes("GBP")) return 0.00012;
+  return 0.05;
+}
+
+/** Animated demo quote for watchlist polling — anchored to Friday gold close (~4244). */
+export function getDemoQuotePrice(
+  symbol: string,
+  tickMs: number = Date.now(),
+): { bid: number; ask: number; price: number; spread: number } {
+  const base = demoBasePrice(symbol);
+  const mag =
+    symbol.toUpperCase().includes("XAU")
+      ? 0.08
+      : symbol.toUpperCase().includes("BTC")
+        ? base * 0.00008
+        : symbol.toUpperCase().includes("JPY")
+          ? 0.012
+          : base > 1000
+            ? base * 0.00005
+            : 0.00008;
+  const t = Math.floor(tickMs / 1200);
+  const noise = seededNoise(symbol.split("").reduce((sum, c) => sum + c.charCodeAt(0), 0) + t) * mag;
+  const price = Math.max(base * 0.5, base + noise);
+  const spread = demoSpread(symbol);
+  const bid = roundPrice(price - spread / 2, base);
+  const ask = roundPrice(price + spread / 2, base);
+  return { bid, ask, price: roundPrice(price, base), spread };
+}
+
 export function generateDemoCandles(symbol: string, timeframeKey: string, count = 500): MetaApiCandle[] {
   const now = Date.now();
   const stepMs = timeframeMs(timeframeKey);
@@ -159,7 +263,31 @@ export function generateDemoCandles(symbol: string, timeframeKey: string, count 
     });
   }
 
+  anchorDemoCandlesToBase(candles, base);
   return candles;
+}
+
+function anchorDemoCandlesToBase(candles: MetaApiCandle[], base: number): void {
+  if (candles.length === 0) return;
+  const last = candles[candles.length - 1];
+  const target = base;
+  const prevClose = last.close;
+  if (!Number.isFinite(prevClose) || prevClose <= 0) return;
+  const delta = target - prevClose;
+  const tail = Math.min(12, candles.length);
+  for (let i = candles.length - tail; i < candles.length; i += 1) {
+    const c = candles[i];
+    const weight = (i - (candles.length - tail) + 1) / tail;
+    c.open = roundPrice(c.open + delta * weight, base);
+    c.high = roundPrice(c.high + delta * weight, base);
+    c.low = roundPrice(c.low + delta * weight, base);
+    c.close = roundPrice(c.close + delta * weight, base);
+  }
+  const anchored = candles[candles.length - 1];
+  anchored.close = roundPrice(target, base);
+  anchored.open = roundPrice(Math.min(anchored.open, anchored.close + base * 0.001), base);
+  anchored.high = roundPrice(Math.max(anchored.high, anchored.close, anchored.open), base);
+  anchored.low = roundPrice(Math.min(anchored.low, anchored.close, anchored.open), base);
 }
 
 function seededNoise(seed: number): number {
@@ -189,16 +317,6 @@ function timeframeMs(tf: string): number {
     default:
       return 60 * 60_000;
   }
-}
-
-function demoBasePrice(symbol: string): number {
-  const s = symbol.toUpperCase();
-  if (s.includes("XAU")) return 2350;
-  if (s.includes("BTC")) return 68_000;
-  if (s.includes("ETH")) return 3200;
-  if (s.includes("JPY")) return 155;
-  if (s.includes("EUR") || s.includes("GBP")) return 1.08;
-  return 100;
 }
 
 function demoVolatility(symbol: string, timeframeKey: string): number {

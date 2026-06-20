@@ -16,10 +16,11 @@ function DemoEmbedInner() {
     const url = new URL(path, "https://axe.local");
     url.searchParams.set("embed", "1");
     url.searchParams.set("demo", "1");
+    url.searchParams.set("embedDevice", device);
     if (theme === "paper") url.searchParams.set("chartTheme", "paper");
     else url.searchParams.set("chartTheme", "midnight");
     return `${url.pathname}${url.search}`;
-  }, [rawTo, theme]);
+  }, [rawTo, theme, device]);
 
   useEffect(() => {
     let cancelled = false;

@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getDemoQuotePrice, isDemoAccount } from "@/lib/broker/demoAccount";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,52 @@ export async function GET() {
 
   const activeId = prefs?.active_account_id as string | null | undefined;
   if (!activeId) return Response.json({ prices: {} });
+
+  const { data: account } = await supabase
+    .from("user_broker_accounts")
+    .select("connection_method,provider")
+    .eq("user_id", user.id)
+    .eq("id", activeId)
+    .maybeSingle();
+
+  if (isDemoAccount(account)) {
+    const { data: watchlist } = await supabase
+      .from("assistant_memory_entries")
+      .select("entry_key")
+      .eq("user_id", user.id)
+      .eq("scope", "watchlist")
+      .order("created_at", { ascending: true });
+
+    const symbols = (watchlist ?? [])
+      .map((row) => String(row.entry_key ?? "").toUpperCase())
+      .filter(Boolean);
+    const tickMs = Date.now();
+    const prices: Record<
+      string,
+      {
+        bid: number | null;
+        ask: number | null;
+        price: number | null;
+        spread: number | null;
+        tickAt: string | null;
+        status: string | null;
+      }
+    > = {};
+
+    for (const sym of symbols) {
+      const q = getDemoQuotePrice(sym, tickMs);
+      prices[sym] = {
+        bid: q.bid,
+        ask: q.ask,
+        price: q.price,
+        spread: q.spread,
+        tickAt: new Date(tickMs).toISOString(),
+        status: "live",
+      };
+    }
+
+    return Response.json({ prices }, { headers: { "Cache-Control": "no-store" } });
+  }
 
   // Get all "quote" snapshots for this account
   const { data: snapshots, error } = await supabase

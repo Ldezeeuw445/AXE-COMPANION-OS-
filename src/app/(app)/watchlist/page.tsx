@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
+import { getDemoQuotePrice, isDemoAccount } from "@/lib/broker/demoAccount";
 
 export default async function WatchlistPage() {
   const items = await listWatchlistItems();
@@ -35,13 +36,17 @@ export default async function WatchlistPage() {
   const map = getMetadataSymbolMap(metadata);
   const report = getMetadataSymbolReport(metadata);
   const connected = ["connected", "provisioned"].includes(String(account?.provider_status ?? "").toLowerCase());
-  const { data: snapshots } = await supabase
-    .from("chart_live_snapshots")
-    .select("display_symbol,broker_symbol,last_price,last_bid,last_ask,last_tick_at,last_candle_at,status,updated_at")
-    .eq("user_id", user.id)
-    .eq("account_id", activeId)
-    .order("updated_at", { ascending: false })
-    .limit(50);
+  const demoMode = isDemoAccount(account);
+
+  const { data: snapshots } = demoMode
+    ? { data: null }
+    : await supabase
+        .from("chart_live_snapshots")
+        .select("display_symbol,broker_symbol,last_price,last_bid,last_ask,last_tick_at,last_candle_at,status,updated_at")
+        .eq("user_id", user.id)
+        .eq("account_id", activeId)
+        .order("updated_at", { ascending: false })
+        .limit(50);
   const snapshotByDisplay = new Map(
     (snapshots ?? []).map((s) => [String(s.display_symbol ?? "").toUpperCase(), s as Record<string, unknown>]),
   );
@@ -56,46 +61,55 @@ export default async function WatchlistPage() {
       (Boolean(cached) && symbolReport?.resolved !== false) ||
       (universe.length > 0 && universe.some((s) => s === resolved.brokerSymbol));
     const snap = snapshotByDisplay.get(display);
+    const demoQuote = demoMode ? getDemoQuotePrice(display) : null;
     const freshness =
-      (typeof snap?.last_tick_at === "string" ? snap.last_tick_at : null) ??
-      (typeof snap?.last_candle_at === "string" ? snap.last_candle_at : null) ??
-      symbolReport?.priceTime ??
-      null;
-    const pricingState = snap
-      ? brokerPricingState({
-          status: snap.status as string | null,
-          updatedAt: snap.updated_at as string | null,
-          lastTickAt: snap.last_tick_at as string | null,
-          lastCandleAt: snap.last_candle_at as string | null,
-        })
-      : "warming";
-    const bid = snap?.last_bid != null ? Number(snap.last_bid) : symbolReport?.bid ?? null;
-    const ask = snap?.last_ask != null ? Number(snap.last_ask) : symbolReport?.ask ?? null;
-    const spread = bid != null && ask != null && Number.isFinite(bid) && Number.isFinite(ask)
-      ? Math.abs(ask - bid)
-      : symbolReport?.spread ?? null;
+      demoQuote != null
+        ? new Date().toISOString()
+        : (typeof snap?.last_tick_at === "string" ? snap.last_tick_at : null) ??
+          (typeof snap?.last_candle_at === "string" ? snap.last_candle_at : null) ??
+          symbolReport?.priceTime ??
+          null;
+    const pricingState = demoQuote
+      ? "live"
+      : snap
+        ? brokerPricingState({
+            status: snap.status as string | null,
+            updatedAt: snap.updated_at as string | null,
+            lastTickAt: snap.last_tick_at as string | null,
+            lastCandleAt: snap.last_candle_at as string | null,
+          })
+        : "warming";
+    const bid = demoQuote?.bid ?? (snap?.last_bid != null ? Number(snap.last_bid) : symbolReport?.bid ?? null);
+    const ask = demoQuote?.ask ?? (snap?.last_ask != null ? Number(snap.last_ask) : symbolReport?.ask ?? null);
+    const spread =
+      demoQuote?.spread ??
+      (bid != null && ask != null && Number.isFinite(bid) && Number.isFinite(ask)
+        ? Math.abs(ask - bid)
+        : symbolReport?.spread ?? null);
     return {
       ...item,
       symbol: display,
       brokerSymbol: resolved.brokerSymbol,
-      runtimePrice: snap?.last_price != null ? Number(snap.last_price) : null,
+      runtimePrice: demoQuote?.price ?? (snap?.last_price != null ? Number(snap.last_price) : null),
       bid,
       ask,
       spread,
       freshness,
-      runtimeState: supported ? pricingState : "unavailable",
-      supportLabel: supported
-        ? connected
-          ? pricingState === "live"
-            ? "Live"
-            : pricingState === "degraded"
-              ? "Degraded"
-              : "Supported · no price"
-          : "Mapped"
-        : universe.length > 0
-          ? `Unavailable · ${symbolReport?.reason ?? "not on broker"}`
-          : "Resolving",
-      supportTone: supported ? (pricingState === "live" ? ("live" as const) : ("warm" as const)) : universe.length > 0 ? ("blocked" as const) : ("muted" as const),
+      runtimeState: demoMode || supported ? pricingState : "unavailable",
+      supportLabel: demoMode
+        ? "Demo · live ticks"
+        : supported
+          ? connected
+            ? pricingState === "live"
+              ? "Live"
+              : pricingState === "degraded"
+                ? "Degraded"
+                : "Supported · no price"
+            : "Mapped"
+          : universe.length > 0
+            ? `Unavailable · ${symbolReport?.reason ?? "not on broker"}`
+            : "Resolving",
+      supportTone: demoMode || supported ? (pricingState === "live" ? ("live" as const) : ("warm" as const)) : universe.length > 0 ? ("blocked" as const) : ("muted" as const),
     };
   });
 
@@ -104,7 +118,7 @@ export default async function WatchlistPage() {
       items={enriched}
       brokerUniverse={universe}
       symbolMap={map}
-      accountLabel={(account?.label as string | null) ?? "Active account"}
+      accountLabel={(account?.label as string | null) ?? (demoMode ? "AXE Demo Account" : "Active account")}
     />
   );
 }

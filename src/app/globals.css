@@ -2044,3 +2044,61 @@ body.axe-embed-demo .tos-shell-desktop-layout {
 body.axe-embed-demo .tos-app-content {
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
 }
+
+/* Embed tablet mock — force iPad shell layout even on desktop (fine pointer) */
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-layout {
+  max-width: none !important;
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 4.25rem;
+  flex-direction: column;
+}
+
+body.axe-embed-demo.axe-embed-tablet .tos-shell-desktop-rail {
+  display: flex !important;
+  padding-top: var(--tos-tablet-safe-top);
+  padding-left: max(env(safe-area-inset-left, 0px), 0.25rem);
+}
+
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-mobile-chrome {
+  display: none !important;
+}
+
+body.axe-embed-demo.axe-embed-tablet .tos-shell-mobile-nav {
+  display: block !important;
+}
+
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-content {
+  padding-left: 0;
+  padding-right: 0;
+  padding-top: 0;
+}
+
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: calc(var(--tos-nav-offset) - 0.24rem);
+}
+
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-only {
+  display: none !important;
+}
+
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-chart-fullscreen-btn,
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-chart-phone-header {
+  display: none !important;
+}
+
+body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-chart-exec-overlay {
+  z-index: 70;
+}
+
+/* Embed phone mock — keep mobile chrome, hide desktop rail */
+body.axe-embed-demo.axe-embed-phone .tos-shell-desktop-rail {
+  display: none !important;
+}
+
+body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
+  display: block !important;
+}

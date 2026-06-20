@@ -8,6 +8,15 @@ import {
   unlockTabletLandscape,
 } from "@/lib/viewport/tablet";
 
+function isEmbedTabletMock(): boolean {
+  if (typeof document === "undefined") return false;
+  if (document.body.classList.contains("axe-embed-tablet")) return true;
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const device = params.get("embedDevice") ?? params.get("device");
+  return params.get("embed") === "1" && device === "tablet";
+}
+
 /**
  * Touch tablets (iPad) run landscape-only: lock orientation and block
  * portrait with a rotate prompt so the shell layout stays stable.
@@ -17,8 +26,9 @@ export function TabletShellEffects() {
 
   useEffect(() => {
     function sync() {
-      const tablet = isTabletViewport();
-      const landscape = isTabletLandscape();
+      const embedTablet = isEmbedTabletMock();
+      const tablet = embedTablet || isTabletViewport();
+      const landscape = embedTablet || isTabletLandscape();
       document.body.classList.toggle("tos-tablet-device", tablet);
       document.body.classList.toggle("tos-tablet-landscape", tablet && landscape);
       document.body.classList.toggle("tos-tablet-portrait", tablet && !landscape);
@@ -31,13 +41,15 @@ export function TabletShellEffects() {
     window.addEventListener("orientationchange", sync);
     window.visualViewport?.addEventListener("resize", sync);
 
-    if (isTabletViewport()) lockTabletLandscape();
+    if (isTabletViewport() || isEmbedTabletMock()) lockTabletLandscape();
 
     return () => {
       window.removeEventListener("resize", sync);
       window.removeEventListener("orientationchange", sync);
       window.visualViewport?.removeEventListener("resize", sync);
-      document.body.classList.remove("tos-tablet-device", "tos-tablet-landscape", "tos-tablet-portrait");
+      if (!isEmbedTabletMock()) {
+        document.body.classList.remove("tos-tablet-device", "tos-tablet-landscape", "tos-tablet-portrait");
+      }
       unlockTabletLandscape();
     };
   }, []);

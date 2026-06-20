@@ -1,6 +1,15 @@
-/* Interactive 3D device mocks — shots.so-style hero embeds */
+/* Interactive 3D device mocks — full-size 1:1 live app embeds (shots.so-style) */
 
 .hero-device-stage {
+  position: relative;
+  width: min(1540px, 100%);
+  height: clamp(780px, 75vw, 1080px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(20px, 2vw, 36px);
+  padding: 52px 54px 40px;
+  box-sizing: border-box;
   transform: translateX(-68px);
 }
 
@@ -19,18 +28,22 @@
   will-change: transform;
 }
 
+/* Phone — matches original hero-phone-wrap (508px) */
 .device-3d--phone {
-  width: min(320px, 31vw);
+  width: min(508px, 34.5vw);
   flex: 0 0 auto;
   z-index: 3;
+  filter: drop-shadow(0 28px 42px rgba(0, 0, 0, 0.28));
 }
 
+/* iPad — matches original hero-ipad-stack (1210px + 1.1 scale) */
 .device-3d--ipad {
-  width: min(920px, 58vw);
+  width: min(1210px, 86vw);
   flex: 0 0 auto;
   z-index: 1;
-  transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 4deg)) translateZ(var(--tz)) scale(1.06);
+  transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 4deg)) translateZ(var(--tz)) scale(1.1);
   transform-origin: left bottom;
+  filter: drop-shadow(0 30px 46px rgba(0, 0, 0, 0.24));
 }
 
 .device-bezel {
@@ -38,21 +51,21 @@
   border-radius: 42px;
   padding: 12px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04) 38%, rgba(0,0,0,0.35)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 38%, rgba(0, 0, 0, 0.35)),
     linear-gradient(180deg, #2a2b31, #121318);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.12),
-    0 28px 60px rgba(0,0,0,0.45),
-    0 0 0 1px rgba(0,0,0,0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 28px 60px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
 
 .device-3d--ipad .device-bezel {
-  border-radius: 28px;
+  border-radius: 34px;
   padding: 16px;
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.03) 42%, rgba(0,0,0,0.4)),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 42%, rgba(0, 0, 0, 0.4)),
     linear-gradient(180deg, #35363d, #101115);
 }
 
@@ -65,7 +78,7 @@
   height: 24px;
   border-radius: 14px;
   background: #000;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 4;
   pointer-events: none;
 }
@@ -79,8 +92,8 @@
   overflow: hidden;
   border-radius: 32px;
   background: #040508;
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
 }
 
 .device-screen iframe {
@@ -94,49 +107,21 @@
   pointer-events: auto;
 }
 
-.device-label {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 5;
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(72,222,246,0.92);
-  border: 1px solid rgba(72,222,246,0.35);
-  border-radius: 999px;
-  padding: 5px 8px;
-  background: rgba(4,8,12,0.72);
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-}
-
 .hero-ipad-stack-live {
   position: relative;
-  width: min(920px, 58vw);
+  width: min(1210px, 86vw);
   flex: 0 0 auto;
 }
 
 .device-3d--ipad .device-screen {
   border-radius: 16px;
   aspect-ratio: 4 / 3;
-  min-height: 520px;
+  min-height: 680px;
 }
 
 .device-3d--phone .device-screen {
   aspect-ratio: 9 / 19.5;
-  min-height: 640px;
-}
-
-.device-loading {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  color: rgba(255,255,255,0.55);
-  background: radial-gradient(circle at 50% 20%, rgba(72,222,246,0.08), #040508 55%);
-  z-index: 2;
+  min-height: 820px;
 }
 
 @media (max-width: 1100px) {
@@ -145,13 +130,13 @@
     flex-direction: column;
     align-items: center;
     height: auto;
-    padding: 24px 12px 32px;
+    padding: 28px 18px 32px;
   }
 
   .device-3d--phone,
   .device-3d--ipad,
   .hero-ipad-stack-live {
-    width: min(360px, 92vw);
+    width: min(420px, 92vw);
   }
 
   .device-3d--ipad {
@@ -160,6 +145,10 @@
   }
 
   .device-3d--ipad .device-screen {
-    min-height: 420px;
+    min-height: 480px;
+  }
+
+  .device-3d--phone .device-screen {
+    min-height: 680px;
   }
 }
