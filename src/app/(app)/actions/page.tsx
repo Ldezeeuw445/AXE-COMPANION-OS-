@@ -12,6 +12,10 @@ import { Badge } from "@/components/ui/Badge";
 import { ExecutionCard } from "@/components/actions/ExecutionCard";
 import { AxeWorkflowsHub } from "@/components/actions/AxeWorkflowsHub";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { UpgradeGate } from "@/components/billing/UpgradeGate";
+import { hasAxeFeature } from "@/lib/billing/features";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getUserAxeEntitlement } from "@/services/billingService";
 import {
   listExecutionRequests,
   listSetupReviews,
@@ -20,6 +24,20 @@ import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePref
 import { ChevronDown } from "lucide-react";
 
 export default async function ActionsPage() {
+  const supabase = await createServerSupabaseClient();
+  let plan = "free";
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const ent = await getUserAxeEntitlement(supabase, user.id);
+      plan = ent.plan;
+    }
+  }
+  const canPrepareTrades = hasAxeFeature(plan, "trade_preparation");
+  const canChartActions = hasAxeFeature(plan, "chart_actions");
+
   const [executions, setups, runtime, tradePrefs, favoriteIds] = await Promise.all([
     listExecutionRequests(),
     listSetupReviews(),
@@ -44,8 +62,17 @@ export default async function ActionsPage() {
       />
       <PageTitleInjector title="Actions" />
 
+      {!canPrepareTrades ? (
+        <UpgradeGate
+          feature="trade_preparation"
+          title="Trade preparation requires Pro"
+          description="Free tier can browse workflows, but trade tickets, setup reviews, and chart-action handoffs unlock on Pro, Founder, or Elite."
+        />
+      ) : null}
+
       <AxeWorkflowsHub runtime={workflowRuntime} favoriteIds={favoriteIds} />
 
+      {!canPrepareTrades ? null : (
       <details
         className="group mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0a0a0d]/90"
         open={executions.length > 0 || setups.length > 0}
@@ -104,6 +131,13 @@ export default async function ActionsPage() {
           ) : null}
         </div>
       </details>
+      )}
+
+      {!canChartActions ? (
+        <p className="mt-3 text-center text-[10px] text-tos-dim">
+          Chart actions from AXE workflows require Pro or above.
+        </p>
+      ) : null}
     </div>
   );
 }

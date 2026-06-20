@@ -11,10 +11,26 @@ import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { UpgradeGate } from "@/components/billing/UpgradeGate";
+import { hasAxeFeature } from "@/lib/billing/features";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getUserAxeEntitlement } from "@/services/billingService";
 import { getCockpitDashboard } from "@/services/cockpitService";
 
 export default async function CockpitPage() {
   const dash = await getCockpitDashboard();
+  const supabase = await createServerSupabaseClient();
+  let plan = "free";
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const ent = await getUserAxeEntitlement(supabase, user.id);
+      plan = ent.plan;
+    }
+  }
+  const canLearn = hasAxeFeature(plan, "cockpit_learning");
   const hasSnapshot = Boolean(dash.snapshotId);
   const cockpitCalibrated = hasSnapshot && dash.calibration.state === "active";
   const cockpitPreview = hasSnapshot && dash.calibration.state !== "active";
@@ -55,12 +71,31 @@ export default async function CockpitPage() {
       <CockpitTodayStrip
         initial={dash.today}
         traderScores={dash.traderScores}
-        axeAlignment={hasSnapshot ? dash.alignment : null}
+        axeAlignment={hasSnapshot && canLearn ? dash.alignment : null}
       />
 
-      <CockpitLearningArc data={dash.learningArc} />
+      {canLearn ? (
+        <CockpitLearningArc data={dash.learningArc} />
+      ) : (
+        <>
+          <UpgradeGate
+            feature="cockpit_learning"
+            title="Cockpit learning is a Pro feature"
+            description="Free includes a weekly market snapshot. Upgrade for Learning Arc, AXE alignment, confidence trends, and the full Cockpit learning loop."
+          />
+          <GlassPanel className="p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+              Weekly market snapshot · Free
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-tos-muted">
+              Check Market and Intel for this week&apos;s macro and news context. Full Cockpit calibration
+              unlocks on Pro.
+            </p>
+          </GlassPanel>
+        </>
+      )}
 
-      {!hasSnapshot ? (
+      {!canLearn ? null : !hasSnapshot ? (
         <GlassPanel className="p-6 text-center">
           <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-tos-dim">
             {dash.calibration.state === "insufficient_data" ? "Insufficient data" : "Calibrating"}

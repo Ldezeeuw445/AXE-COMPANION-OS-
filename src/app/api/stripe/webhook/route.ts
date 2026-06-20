@@ -4,39 +4,16 @@ import type { NextRequest } from "next/server";
 import Stripe from "stripe";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { getStripeSecretKey, getStripeWebhookSecret } from "@/lib/env";
+import type { AxePlanId } from "@/lib/billing/tiers";
+import { FOUNDER_SEAT_CAP } from "@/lib/billing/tiers";
+import {
+  resolvePlanFromCheckoutMetadata,
+  resolvePlanFromStripePriceId,
+} from "@/lib/billing/stripePlans";
+import { getFounderSeatsUsed } from "@/services/billingService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/**
- * Stripe webhook → axe_user_entitlements sync.
- *
- * Flow:
- *   1. User clicks "Upgrade to Pro" → opens Stripe Payment Link with
- *      `client_reference_id=<auth.users.id>` in the URL.
- *   2. User pays at Stripe-hosted checkout. Stripe sends
- *      `checkout.session.completed` to this endpoint.
- *   3. We resolve user_id from `session.client_reference_id`, link the
- *      Stripe customer + subscription, set plan='pro', set pro_until from
- *      the subscription's current_period_end. UPSERT keyed on user_id.
- *   4. Renewals → `customer.subscription.updated` refreshes pro_until.
- *      Cancellations → `customer.subscription.deleted` drops to 'free'.
- *
- * Idempotent: every handler is an UPSERT keyed on user_id. Stripe may
- * retry the same event multiple times — repeating the upsert is a no-op.
- *
- * Setup checklist (one-time, Stripe Dashboard):
- *   - Create or reuse a Payment Link for the €19 Pro plan
- *     (Products → AXE Pro → Payment Link).
- *   - Copy that link into NEXT_PUBLIC_STRIPE_PAYMENT_LINK.
- *   - Developers → Webhooks → Add endpoint
- *     URL: https://<your-domain>/api/stripe/webhook
- *     Events: checkout.session.completed,
- *             customer.subscription.updated,
- *             customer.subscription.deleted
- *   - Copy the signing secret → STRIPE_WEBHOOK_SECRET.
- *   - Set STRIPE_SECRET_KEY and SUPABASE_SERVICE_ROLE_KEY on the deployment.
- */
 
 export async function POST(request: NextRequest) {
   const secret = getStripeSecretKey();
@@ -76,7 +53,7 @@ export async function POST(request: NextRequest) {
       case "customer.subscription.updated":
       case "customer.subscription.created": {
         const sub = event.data.object as Stripe.Subscription;
-        await handleSubscriptionChange(supabase, sub);
+        await handleSubscriptionChange(stripe, supabase, sub);
         break;
       }
       case "customer.subscription.deleted": {
@@ -85,17 +62,12 @@ export async function POST(request: NextRequest) {
         break;
       }
       default:
-        // Unhandled event types are intentionally a no-op. Stripe needs a 2xx
-        // to stop retrying; we only act on the lifecycle events we care about.
         break;
     }
     return Response.json({ received: true, type: event.type });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[stripe webhook] handler failed", { type: event.type, message });
-    // 5xx → Stripe will retry with backoff. That's correct for transient
-    // failures (DB blip). For permanent failures we still want visibility in
-    // logs rather than silently dropping events.
     return jsonError(500, "handler_failed", message);
   }
 }
@@ -109,8 +81,6 @@ async function handleCheckoutCompleted(
 ): Promise<void> {
   const userId = session.client_reference_id;
   if (!userId) {
-    // No user attached — can't link entitlement. Log and bail; admin must
-    // reconcile manually (e.g. promo via Stripe Dashboard without app flow).
     console.warn("[stripe webhook] checkout.session.completed without client_reference_id", {
       sessionId: session.id,
       customer: session.customer,
@@ -126,26 +96,32 @@ async function handleCheckoutCompleted(
       : session.subscription?.id ?? null;
 
   let proUntil: string | null = null;
+  let plan: AxePlanId = resolvePlanFromCheckoutMetadata(session.metadata) ?? "pro";
+
   if (subscriptionId) {
-    // Pull the subscription once so we have current_period_end accurate.
-    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+      expand: ["items.data.price"],
+    });
     proUntil = subscriptionPeriodEndIso(sub);
+    plan = resolvePlanFromSubscription(sub) ?? plan;
   } else if (session.mode === "payment") {
-    // One-time payment Payment Links: no subscription, fall back to 30d
-    // grace from the checkout time. The user can re-upgrade after expiry.
     proUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   }
 
+  plan = await validatePlanAvailability(supabase, plan);
+
   await upsertEntitlement(supabase, {
     userId,
-    plan: "pro",
+    plan,
     stripeCustomerId: customerId,
     stripeSubscriptionId: subscriptionId,
     proUntil,
+    grantFounderBadge: plan === "founder",
   });
 }
 
 async function handleSubscriptionChange(
+  stripe: Stripe,
   supabase: SupabaseClientLike,
   sub: Stripe.Subscription,
 ): Promise<void> {
@@ -162,12 +138,28 @@ async function handleSubscriptionChange(
   const stillActive =
     sub.status === "active" || sub.status === "trialing" || sub.status === "past_due";
 
+  let plan: AxePlanId = stillActive
+    ? (resolvePlanFromSubscription(sub) ?? "pro")
+    : "free";
+
+  if (stillActive) {
+    plan = await validatePlanAvailability(supabase, plan, userId);
+  }
+
+  const { data: existing } = await supabase
+    .from("axe_user_entitlements")
+    .select("founder_badge")
+    .eq("user_id", userId)
+    .maybeSingle();
+
   await upsertEntitlement(supabase, {
     userId,
-    plan: stillActive ? "pro" : "free",
+    plan,
     stripeCustomerId: typeof sub.customer === "string" ? sub.customer : sub.customer.id,
     stripeSubscriptionId: sub.id,
     proUntil,
+    grantFounderBadge:
+      plan === "founder" || existing?.founder_badge === true,
   });
 }
 
@@ -178,15 +170,54 @@ async function handleSubscriptionDeleted(
   const userId = await resolveUserIdFromSubscription(supabase, sub);
   if (!userId) return;
 
-  // Keep stripe_customer_id (user may resubscribe with same Stripe customer).
-  // Clear subscription id + pro_until — user is back on the free tier.
+  const { data: existing } = await supabase
+    .from("axe_user_entitlements")
+    .select("founder_badge")
+    .eq("user_id", userId)
+    .maybeSingle();
+
   await upsertEntitlement(supabase, {
     userId,
     plan: "free",
     stripeCustomerId: typeof sub.customer === "string" ? sub.customer : sub.customer.id,
     stripeSubscriptionId: null,
     proUntil: null,
+    grantFounderBadge: existing?.founder_badge === true,
   });
+}
+
+async function validatePlanAvailability(
+  supabase: SupabaseClientLike,
+  plan: AxePlanId,
+  existingUserId?: string,
+): Promise<AxePlanId> {
+  if (plan === "founder") {
+    const used = await getFounderSeatsUsed(supabase);
+    if (used >= FOUNDER_SEAT_CAP) {
+      console.warn("[stripe webhook] founder sold out — falling back to elite", { used });
+      return "elite";
+    }
+    return "founder";
+  }
+  if (plan === "elite") {
+    const used = await getFounderSeatsUsed(supabase);
+    if (used < FOUNDER_SEAT_CAP) {
+      console.warn("[stripe webhook] elite not open yet — keeping pro", { used, existingUserId });
+      return "pro";
+    }
+    return "elite";
+  }
+  return plan;
+}
+
+function resolvePlanFromSubscription(sub: Stripe.Subscription): AxePlanId | null {
+  const metaPlan = resolvePlanFromCheckoutMetadata(
+    (sub.metadata ?? {}) as Record<string, string>,
+  );
+  if (metaPlan) return metaPlan;
+
+  const priceId = sub.items?.data?.[0]?.price?.id ?? null;
+  return resolvePlanFromStripePriceId(priceId);
 }
 
 async function resolveUserIdFromSubscription(
@@ -206,9 +237,6 @@ async function resolveUserIdFromSubscription(
 }
 
 function subscriptionPeriodEndIso(sub: Stripe.Subscription): string | null {
-  // `current_period_end` is on the subscription item in newer Stripe API
-  // versions — fall back to the first item's period_end when the top-level
-  // field is absent.
   const epoch =
     (sub as unknown as { current_period_end?: number }).current_period_end ??
     sub.items?.data?.[0]?.current_period_end ??
@@ -219,10 +247,11 @@ function subscriptionPeriodEndIso(sub: Stripe.Subscription): string | null {
 
 type EntitlementUpsert = {
   userId: string;
-  plan: "free" | "pro";
+  plan: AxePlanId;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
   proUntil: string | null;
+  grantFounderBadge: boolean;
 };
 
 async function upsertEntitlement(
@@ -238,6 +267,7 @@ async function upsertEntitlement(
         stripe_customer_id: input.stripeCustomerId,
         stripe_subscription_id: input.stripeSubscriptionId,
         pro_until: input.proUntil,
+        founder_badge: input.grantFounderBadge,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" },
