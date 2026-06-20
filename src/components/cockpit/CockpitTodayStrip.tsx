@@ -4,18 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { CockpitTodaySummary, CockpitTraderScores } from "@/types/cockpit";
 
+const OVERALL_RING = "#67e8f9";
+
 function todayUtcStartIso(): string {
   const d = new Date();
   d.setUTCHours(0, 0, 0, 0);
   return d.toISOString();
-}
-
-function scoreTone(score: number, available: boolean): string {
-  if (!available) return "text-white/35";
-  if (score >= 75) return "text-emerald-300";
-  if (score >= 60) return "text-cyan-300";
-  if (score >= 45) return "text-amber-200";
-  return "text-orange-300";
 }
 
 function ringOffset(score: number, radius: number): number {
@@ -28,17 +22,15 @@ function ScoreChip({
   score,
   available,
   hint,
-  className = "",
 }: {
   label: string;
   score: number;
   available: boolean;
   hint: string;
-  className?: string;
 }) {
   return (
     <div
-      className={`flex flex-col items-center rounded-xl border border-white/[0.06] bg-[#0a0a0d]/80 px-2 py-2 ${className}`}
+      className="flex flex-col items-center rounded-xl border border-white/[0.06] bg-[#0a0a0d]/80 px-2 py-2"
       title={hint}
     >
       <div className="relative h-9 w-9 shrink-0">
@@ -49,7 +41,7 @@ function ScoreChip({
             cy="18"
             r="14"
             fill="none"
-            stroke={available ? "var(--tos-alignment-ring)" : "rgba(255,255,255,0.08)"}
+            stroke={available ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)"}
             strokeWidth="3"
             strokeLinecap="round"
             strokeDasharray={2 * Math.PI * 14}
@@ -57,7 +49,7 @@ function ScoreChip({
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className={`text-[10px] font-bold tabular-nums ${scoreTone(score, available)}`}>
+          <span className="text-[10px] font-bold tabular-nums text-white">
             {available ? Math.round(score) : "—"}
           </span>
         </div>
@@ -136,65 +128,51 @@ export function CockpitTodayStrip({ initial, traderScores = null }: Props) {
       </div>
 
       {pillarScores.length > 0 ? (
-        <div className="flex items-start gap-3">
+        <div className="flex items-stretch gap-2.5">
           <div
-            className="flex w-[5.5rem] shrink-0 flex-col items-center rounded-xl border border-white/[0.08] bg-[#0a0a0d]/90 px-2 py-2.5"
-            title={`Overall alignment — mean of discipline, execution, risk and patience (last ${traderScores?.periodDays ?? 90} days).`}
+            className="flex w-[6.25rem] shrink-0 flex-col items-center justify-center rounded-xl border border-white/[0.08] bg-[#0a0a0d]/90 px-2 py-3"
+            title={`Overall alignment — average of Discipline, Execution, Risk and Patience (last ${traderScores?.periodDays ?? 90} days).`}
           >
-            <div className="relative h-14 w-14 shrink-0">
-              <svg className="h-full w-full -rotate-90" viewBox="0 0 56 56" aria-hidden>
-                <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
+            <div className="relative h-[4.5rem] w-[4.5rem] shrink-0">
+              <svg className="h-full w-full -rotate-90" viewBox="0 0 72 72" aria-hidden>
+                <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
                 <circle
-                  cx="28"
-                  cy="28"
-                  r="22"
+                  cx="36"
+                  cy="36"
+                  r="28"
                   fill="none"
-                  stroke="var(--tos-alignment-ring)"
+                  stroke={overallAvailable ? OVERALL_RING : "rgba(255,255,255,0.08)"}
                   strokeWidth="4"
                   strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 22}
+                  strokeDasharray={2 * Math.PI * 28}
                   strokeDashoffset={
-                    overallAvailable ? ringOffset(overallAlignment, 22) : 2 * Math.PI * 22
+                    overallAvailable ? ringOffset(overallAlignment, 28) : 2 * Math.PI * 28
                   }
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span
-                  className={`text-lg font-bold tabular-nums leading-none ${scoreTone(overallAlignment, overallAvailable)}`}
-                >
+                <span className="text-xl font-bold tabular-nums leading-none text-cyan-300">
                   {overallAvailable ? Math.round(overallAlignment) : "—"}
                 </span>
               </div>
             </div>
-            <span className="mt-2 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/82">
+            <span className="mt-2 text-center text-[8px] font-semibold uppercase leading-tight tracking-[0.12em] text-white/82">
+              Overall
+              <br />
               Alignment
             </span>
-            <span className="mt-0.5 text-[7px] uppercase tracking-wider text-white/40">Overall</span>
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="grid grid-cols-3 gap-2">
-              {pillarScores.slice(0, 3).map((item) => (
-                <ScoreChip
-                  key={item.key}
-                  label={item.label}
-                  score={item.score}
-                  available={item.available}
-                  hint={item.hint}
-                />
-              ))}
-            </div>
-            {pillarScores[3] ? (
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                <ScoreChip
-                  label={pillarScores[3].label}
-                  score={pillarScores[3].score}
-                  available={pillarScores[3].available}
-                  hint={pillarScores[3].hint}
-                  className="col-start-2"
-                />
-              </div>
-            ) : null}
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+            {pillarScores.map((item) => (
+              <ScoreChip
+                key={item.key}
+                label={item.label}
+                score={item.score}
+                available={item.available}
+                hint={item.hint}
+              />
+            ))}
           </div>
         </div>
       ) : null}
