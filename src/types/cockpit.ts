@@ -115,8 +115,7 @@ export type CockpitTraderScoreKey =
   | "discipline"
   | "execution"
   | "risk"
-  | "patience"
-  | "alignment";
+  | "patience";
 
 export type CockpitTraderScoreItem = {
   key: CockpitTraderScoreKey;
@@ -130,5 +129,7 @@ export type CockpitTraderScores = {
   periodDays: number;
   sampleSize: number;
   tradeCount: number;
+  /** Mean of available pillar scores (discipline, execution, risk, patience). */
+  overallAlignment: number | null;
   scores: CockpitTraderScoreItem[];
 };

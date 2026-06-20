@@ -213,11 +213,7 @@ export async function computeTraderScores(
     hint,
   });
 
-  return {
-    periodDays: LOOKBACK_DAYS,
-    sampleSize,
-    tradeCount: trades.length,
-    scores: [
+  const pillarScores = [
       build(
         "discipline",
         "Discipline",
@@ -250,14 +246,19 @@ export async function computeTraderScores(
           ? `${trades.length} closes · ${labeledCount} labeled · ~${tradesPerWeek.toFixed(1)}/wk`
           : "Patience needs a few closed trades with AXE labels.",
       ),
-      build(
-        "alignment",
-        "Alignment",
-        alignmentScores.length ? clampScore(avg(alignmentScores)!) : null,
-        alignmentScores.length
-          ? `Mean alignment across ${alignmentScores.length} trade reviews.`
-          : "Alignment builds from journaled trade reviews.",
-      ),
-    ],
+    ];
+
+  const availablePillars = pillarScores.filter((p) => p.available);
+  const overallAlignment =
+    availablePillars.length > 0
+      ? clampScore(avg(availablePillars.map((p) => p.score))!)
+      : null;
+
+  return {
+    periodDays: LOOKBACK_DAYS,
+    sampleSize,
+    tradeCount: trades.length,
+    overallAlignment,
+    scores: pillarScores,
   };
 }

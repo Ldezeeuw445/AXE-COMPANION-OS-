@@ -17,12 +17,12 @@ const EMPTY_TRADER_SCORES = {
   periodDays: 90,
   sampleSize: 0,
   tradeCount: 0,
+  overallAlignment: null as number | null,
   scores: [
     { key: "discipline" as const, label: "Discipline", score: 0, available: false, hint: "Awaiting journal data." },
     { key: "execution" as const, label: "Execution", score: 0, available: false, hint: "Awaiting journal data." },
     { key: "risk" as const, label: "Risk", score: 0, available: false, hint: "Awaiting journal data." },
     { key: "patience" as const, label: "Patience", score: 0, available: false, hint: "Awaiting trade history." },
-    { key: "alignment" as const, label: "Alignment", score: 0, available: false, hint: "Awaiting trade reviews." },
   ],
 };
 
@@ -277,11 +277,15 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   }
 
   const { supabase, user } = authed;
-  const [today, learningArc, traderScores] = await Promise.all([
+  const [todayBase, learningArc, traderScores] = await Promise.all([
     fetchCockpitTodaySummary(supabase, user.id),
     fetchLearningArc(supabase, user.id),
     computeTraderScores(supabase, user.id),
   ]);
+  const today: CockpitTodaySummary = {
+    ...todayBase,
+    alignmentScore: traderScores.overallAlignment ?? 0,
+  };
 
   const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -426,7 +430,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     today: await fetchCockpitTodaySummary(
       supabase,
       user.id,
-      mapAlignment(latest.alignment_score ?? 0, latest.captured_at, null).score,
+      traderScores.overallAlignment ?? mapAlignment(latest.alignment_score ?? 0, latest.captured_at, null).score,
     ),
     learningArc,
     traderScores,

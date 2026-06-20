@@ -18,9 +18,55 @@ function scoreTone(score: number, available: boolean): string {
   return "text-orange-300";
 }
 
-function ringOffset(score: number, radius = 12): number {
+function ringOffset(score: number, radius: number): number {
   const circumference = 2 * Math.PI * radius;
   return circumference - (score / 100) * circumference;
+}
+
+function ScoreChip({
+  label,
+  score,
+  available,
+  hint,
+  className = "",
+}: {
+  label: string;
+  score: number;
+  available: boolean;
+  hint: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`flex flex-col items-center rounded-xl border border-white/[0.06] bg-[#0a0a0d]/80 px-2 py-2 ${className}`}
+      title={hint}
+    >
+      <div className="relative h-9 w-9 shrink-0">
+        <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36" aria-hidden>
+          <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+          <circle
+            cx="18"
+            cy="18"
+            r="14"
+            fill="none"
+            stroke={available ? "var(--tos-alignment-ring)" : "rgba(255,255,255,0.08)"}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={2 * Math.PI * 14}
+            strokeDashoffset={available ? ringOffset(score, 14) : 2 * Math.PI * 14}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={`text-[10px] font-bold tabular-nums ${scoreTone(score, available)}`}>
+            {available ? Math.round(score) : "—"}
+          </span>
+        </div>
+      </div>
+      <span className="mt-1.5 text-center text-[8px] font-semibold uppercase tracking-[0.1em] text-white/75">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 type Props = {
@@ -54,20 +100,17 @@ export function CockpitTodayStrip({ initial, traderScores = null }: Props) {
     month: "short",
   });
 
-  const scrollScores =
-    traderScores?.scores.filter((item) => item.key !== "alignment") ?? [];
+  const pillarScores = traderScores?.scores ?? [];
+  const overallAlignment = traderScores?.overallAlignment ?? summary.alignmentScore;
+  const overallAvailable = traderScores?.overallAlignment != null;
 
   return (
-    <div className="tos-matte-banner flex flex-col gap-2 px-3 py-2.5">
+    <div className="tos-matte-banner flex flex-col gap-3 px-3 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="tos-accent-dot tos-accent-dot--cyan shrink-0" aria-hidden />
           <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/88">
             Today · {dateLabel}
-          </span>
-          <span className="text-[11px] text-white/55">
-            Alignment{" "}
-            <span className="font-mono font-semibold text-white/85">{summary.alignmentScore}</span>
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-white/50">
@@ -92,56 +135,70 @@ export function CockpitTodayStrip({ initial, traderScores = null }: Props) {
         </div>
       </div>
 
-      {scrollScores.length > 0 ? (
-        <div className="relative min-w-0">
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-[#0c0c0e] to-transparent" />
-          <div className="tos-scrollbar flex gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
-            {scrollScores.map((item) => (
-              <div
-                key={item.key}
-                className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/80 px-2.5 py-1.5"
-                title={item.hint}
-              >
-                <div className="relative h-8 w-8 shrink-0">
-                  <svg className="h-full w-full -rotate-90" viewBox="0 0 32 32" aria-hidden>
-                    <circle
-                      cx="16"
-                      cy="16"
-                      r="12"
-                      fill="none"
-                      stroke="rgba(255,255,255,0.06)"
-                      strokeWidth="3"
-                    />
-                    <circle
-                      cx="16"
-                      cy="16"
-                      r="12"
-                      fill="none"
-                      stroke={item.available ? "var(--tos-alignment-ring)" : "rgba(255,255,255,0.08)"}
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                      strokeDasharray={2 * Math.PI * 12}
-                      strokeDashoffset={item.available ? ringOffset(item.score, 12) : 2 * Math.PI * 12}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span
-                      className={`text-[10px] font-bold tabular-nums ${scoreTone(item.score, item.available)}`}
-                    >
-                      {item.available ? Math.round(item.score) : "—"}
-                    </span>
-                  </div>
-                </div>
-                <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-white/78">
-                  {item.label}
+      {pillarScores.length > 0 ? (
+        <div className="flex items-start gap-3">
+          <div
+            className="flex w-[5.5rem] shrink-0 flex-col items-center rounded-xl border border-white/[0.08] bg-[#0a0a0d]/90 px-2 py-2.5"
+            title={`Overall alignment — mean of discipline, execution, risk and patience (last ${traderScores?.periodDays ?? 90} days).`}
+          >
+            <div className="relative h-14 w-14 shrink-0">
+              <svg className="h-full w-full -rotate-90" viewBox="0 0 56 56" aria-hidden>
+                <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
+                <circle
+                  cx="28"
+                  cy="28"
+                  r="22"
+                  fill="none"
+                  stroke="var(--tos-alignment-ring)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * 22}
+                  strokeDashoffset={
+                    overallAvailable ? ringOffset(overallAlignment, 22) : 2 * Math.PI * 22
+                  }
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span
+                  className={`text-lg font-bold tabular-nums leading-none ${scoreTone(overallAlignment, overallAvailable)}`}
+                >
+                  {overallAvailable ? Math.round(overallAlignment) : "—"}
                 </span>
               </div>
-            ))}
+            </div>
+            <span className="mt-2 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/82">
+              Alignment
+            </span>
+            <span className="mt-0.5 text-[7px] uppercase tracking-wider text-white/40">Overall</span>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="grid grid-cols-3 gap-2">
+              {pillarScores.slice(0, 3).map((item) => (
+                <ScoreChip
+                  key={item.key}
+                  label={item.label}
+                  score={item.score}
+                  available={item.available}
+                  hint={item.hint}
+                />
+              ))}
+            </div>
+            {pillarScores[3] ? (
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <ScoreChip
+                  label={pillarScores[3].label}
+                  score={pillarScores[3].score}
+                  available={pillarScores[3].available}
+                  hint={pillarScores[3].hint}
+                  className="col-start-2"
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
 
-      {/* Hidden anchor so refresh can re-query after snapshot */}
       <span className="sr-only" data-since={todayUtcStartIso()} />
     </div>
   );
