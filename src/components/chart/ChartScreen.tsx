@@ -87,13 +87,12 @@ import {
   getChartTheme,
   readChartThemeKey,
   readGridStyle,
-  writeChartThemeKey,
   CHART_ORDER_BUY_COLOR,
   CHART_ORDER_SELL_COLOR,
   type ChartThemeKey,
   type ChartGridStyle,
 } from "@/components/chart/chartTheme";
-import { seedGlobalsFromAccount, seedGlobalsFromSymbol, writeSymbolPref } from "@/lib/accountPreferences";
+import { seedGlobalsFromAccount, seedGlobalsFromSymbol, writePref, writeSymbolPref } from "@/lib/accountPreferences";
 import { describeResolvedLayers, resolveIndicatorNames } from "@/lib/axeChartActions/indicatorMapping";
 import { consumeLocalChartActions } from "@/lib/axeChartActions/chartActionQueue";
 import {
@@ -692,7 +691,7 @@ export function ChartScreen({
   const [chartGridStyle, setChartGridStyle] = useState<ChartGridStyle>(() => readGridStyle());
   const chartTheme = useMemo(() => getChartTheme(chartThemeKey), [chartThemeKey]);
   const handleChartThemeChange = useCallback((key: ChartThemeKey) => {
-    writeChartThemeKey(key);
+    writePref(accountId ?? null, "axe-chart-theme", key);
     setChartThemeKey(key);
     fetch("/api/preferences/chart-theme", {
       method: "POST",
@@ -700,7 +699,7 @@ export function ChartScreen({
       body: JSON.stringify({ theme: key }),
       credentials: "include",
     }).catch(() => {});
-  }, []);
+  }, [accountId]);
   const isVisible = usePageVisible();
   const liveEnabled =
     data.failure === "ok" && data.source === "MetaApi MT5" && Boolean(accountId) && isVisible;

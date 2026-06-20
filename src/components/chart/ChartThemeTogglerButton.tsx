@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { flushSync } from 'react-dom';
 import { Moon, Sun } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 
@@ -86,7 +85,6 @@ type ChartThemeTogglerButtonProps = React.ComponentProps<'button'> &
     modes?: ChartThemeKey[];
     direction?: ChartThemeDirection;
     onThemeChange: (key: ChartThemeKey) => void;
-    onImmediateChange?: (key: ChartThemeKey) => void;
   };
 
 function ChartThemeTogglerButton({
@@ -94,7 +92,6 @@ function ChartThemeTogglerButton({
   modes = CHART_THEME_KEYS,
   direction = 'ttb',
   onThemeChange,
-  onImmediateChange,
   variant = 'outline',
   size = 'default',
   tone,
@@ -103,58 +100,28 @@ function ChartThemeTogglerButton({
   ...props
 }: ChartThemeTogglerButtonProps) {
   const themeKeyRef = React.useRef(themeKey);
-  const [displayKey, setDisplayKey] = React.useState(themeKey);
   const resolvedTone = tone ?? (chartThemeVisual(themeKey) === 'dark' ? 'dark' : 'light');
   const iconClass = size === 'toolbar' || size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
 
   React.useEffect(() => {
     themeKeyRef.current = themeKey;
-    setDisplayKey(themeKey);
   }, [themeKey]);
 
-  const [fromClip, toClip] = getClipKeyframes(direction);
-
-  const toggleTheme = React.useCallback(
-    async (next: ChartThemeKey) => {
-      const current = themeKeyRef.current;
-      if (next === current) return;
-
-      setDisplayKey(next);
-      onImmediateChange?.(next);
-
-      const applyTheme = () => {
-        flushSync(() => {
-          themeKeyRef.current = next;
-        });
-        onThemeChange(next);
-      };
-
-      try {
-        if (typeof document.startViewTransition !== 'function') {
-          applyTheme();
-          return;
-        }
-
-        const transition = document.startViewTransition(() => {
-          applyTheme();
-        });
-        await transition.ready;
-
-        await document.documentElement
-          .animate(
-            { clipPath: [fromClip, toClip] },
-            {
-              duration: 700,
-              easing: 'ease-in-out',
-              pseudoElement: `::view-transition-new(${CHART_THEME_VIEW_TRANSITION})`,
-            },
-          )
-          .finished;
-      } catch {
-        applyTheme();
-      }
+  const runTransitionAnimation = React.useCallback(
+    (fromClip: string, toClip: string) => {
+      if (typeof document.startViewTransition !== 'function') return;
+      void document.documentElement
+        .animate(
+          { clipPath: [fromClip, toClip] },
+          {
+            duration: 700,
+            easing: 'ease-in-out',
+            pseudoElement: `::view-transition-new(${CHART_THEME_VIEW_TRANSITION})`,
+          },
+        )
+        .finished.catch(() => {});
     },
-    [fromClip, onImmediateChange, onThemeChange, toClip],
+    [],
   );
 
   return (
@@ -162,15 +129,32 @@ function ChartThemeTogglerButton({
       type="button"
       data-slot="chart-theme-toggler-button"
       className={cn(chartThemeButtonVariants({ variant, size, tone: resolvedTone, className }))}
-      aria-label={`Chart theme: ${displayKey === 'paper' ? 'Paper' : 'Midnight'}. Tap to switch.`}
-      title={displayKey === 'paper' ? 'Paper chart' : 'Midnight chart'}
+      aria-label={`Chart theme: ${themeKey === 'paper' ? 'Paper' : 'Midnight'}. Tap to switch.`}
+      title={themeKey === 'paper' ? 'Paper chart' : 'Midnight chart'}
       onClick={(e) => {
         onClick?.(e);
-        void toggleTheme(getNextChartTheme(themeKeyRef.current, modes));
+        const next = getNextChartTheme(themeKeyRef.current, modes);
+        if (next === themeKeyRef.current) return;
+
+        const [fromClip, toClip] = getClipKeyframes(direction);
+        themeKeyRef.current = next;
+        onThemeChange(next);
+
+        try {
+          if (typeof document.startViewTransition === 'function') {
+            void document.startViewTransition(() => {}).finished.finally(() => {
+              runTransitionAnimation(fromClip, toClip);
+            });
+          } else {
+            runTransitionAnimation(fromClip, toClip);
+          }
+        } catch {
+          /* theme already applied */
+        }
       }}
       {...props}
     >
-      {getIcon(displayKey, iconClass)}
+      {getIcon(themeKey, iconClass)}
     </button>
   );
 }

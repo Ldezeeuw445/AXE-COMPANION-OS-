@@ -396,6 +396,57 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     });
   }, [navigationLocked]);
 
+  // Live theme switch — chart is created once; apply palette when themeKey changes.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    chart.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: theme.chartCanvasBackground },
+        textColor: theme.textColor,
+      },
+      grid: {
+        vertLines: {
+          color: gridStyle === "solid" ? "transparent" : theme.grid,
+          style: LineStyle.Solid,
+        },
+        horzLines: {
+          color: gridStyle === "solid" ? "transparent" : theme.grid,
+          style: LineStyle.Solid,
+        },
+      },
+      crosshair: {
+        vertLine: {
+          color: theme.crosshair,
+          labelBackgroundColor: theme.crosshairLabelBg,
+        },
+        horzLine: {
+          color: theme.crosshair,
+          labelBackgroundColor: theme.crosshairLabelBg,
+        },
+      },
+      rightPriceScale: {
+        borderColor: theme.axisSeparator,
+        textColor: theme.textColor,
+      },
+      timeScale: {
+        borderColor: theme.axisSeparator,
+      },
+    });
+
+    series.applyOptions({
+      upColor: theme.bull,
+      downColor: theme.bear,
+      borderVisible: theme.borderVisible,
+      borderUpColor: theme.bullBorder,
+      borderDownColor: theme.bearBorder,
+      wickUpColor: theme.bullWick,
+      wickDownColor: theme.bearWick,
+    });
+  }, [theme, gridStyle]);
+
   // Render open-position overlays.
   useEffect(() => {
     const series = seriesRef.current;
@@ -457,7 +508,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         );
       }
     });
-  }, [overlays, symbol]);
+  }, [overlays, symbol, theme]);
 
   // Render pending-order overlays (limit & stop orders on chart).
   useEffect(() => {
@@ -501,7 +552,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         );
       }
     });
-  }, [pendingOrders, symbol]);
+  }, [pendingOrders, symbol, theme]);
 
   // Render user annotations (trendline + horizontal levels). Fib retracement
   // is rendered as an interactive SVG overlay outside the canvas.
