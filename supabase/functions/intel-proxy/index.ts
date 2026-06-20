@@ -22,7 +22,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { getMergedEdgeEnv } from "../_shared/mergeEdgeEnv.ts";
+import { getMergedEdgeEnv } from "./_shared/mergeEdgeEnv.ts";
 
 /** Per-request env (merged JSON blob + individual Supabase secrets). */
 let edgeEnv: Record<string, string> = {};
@@ -1320,19 +1320,28 @@ async function readJetsFromDb(): Promise<CorporateJet[]> {
       .order("snapshot_time", { ascending: false })
       .limit(20);
     if (!data) return [];
-    return data.map((r: Record<string, unknown>) => ({
-      icao24: String(r.icao24),
-      callsign: String(r.callsign ?? ""),
-      company: String(r.company ?? ""),
-      ticker: String(r.ticker ?? ""),
-      tailNumber: String(r.tail_number ?? ""),
-      originCountry: String(r.origin_country ?? ""),
-      latitude: r.latitude != null ? Number(r.latitude) : null,
-      longitude: r.longitude != null ? Number(r.longitude) : null,
-      altitude: r.altitude != null ? Number(r.altitude) : null,
-      velocity: r.velocity != null ? Number(r.velocity) : null,
-      onGround: Boolean(r.on_ground),
-    }));
+    const seen = new Set<string>();
+    const jets: CorporateJet[] = [];
+    for (const r of data as Record<string, unknown>[]) {
+      const icao24 = String(r.icao24 ?? "").toLowerCase();
+      if (!icao24 || seen.has(icao24)) continue;
+      seen.add(icao24);
+      const fleet = EXEC_JET_FLEET[icao24];
+      jets.push({
+        icao24,
+        callsign: String(r.callsign ?? ""),
+        company: String(r.company ?? fleet?.company ?? ""),
+        ticker: fleet?.ticker ?? "—",
+        tailNumber: fleet?.tailNumber ?? String(r.callsign ?? "").trim() || "—",
+        originCountry: String(r.origin_country ?? ""),
+        latitude: r.latitude != null ? Number(r.latitude) : null,
+        longitude: r.longitude != null ? Number(r.longitude) : null,
+        altitude: r.altitude != null ? Number(r.altitude) : null,
+        velocity: r.velocity != null ? Number(r.velocity) : null,
+        onGround: Boolean(r.on_ground),
+      });
+    }
+    return jets;
   } catch { return []; }
 }
 
@@ -1342,10 +1351,8 @@ async function persistJets(jets: CorporateJet[]) {
     const now = new Date().toISOString();
     const rows = jets.filter((j) => j.latitude != null).map((j) => ({
       icao24: j.icao24,
-      callsign: j.callsign,
+      callsign: j.callsign || j.tailNumber,
       company: j.company,
-      ticker: j.ticker,
-      tail_number: j.tailNumber,
       origin_country: j.originCountry,
       latitude: j.latitude,
       longitude: j.longitude,
@@ -1621,25 +1628,37 @@ async function readVesselsFromDb(): Promise<VesselTrack[]> {
       .from("intel_vessel_tracking")
       .select("*")
       .order("snapshot_time", { ascending: false })
-      .limit(30);
+      .limit(60);
     if (!data) return [];
-    return data.map((r: Record<string, unknown>) => ({
-      mmsi: String(r.mmsi),
-      vesselName: String(r.vessel_name ?? ""),
-      vesselType: String(r.vessel_type ?? ""),
-      owner: String(r.owner ?? ""),
-      ownerType: (String(r.owner_type ?? "unknown")) as VesselTrack["ownerType"],
-      significance: String(r.significance ?? ""),
-      isTracked: Boolean(r.is_tracked),
-      lastSeen: r.last_seen ? String(r.last_seen) : null,
-      lastLatitude: r.latitude != null ? Number(r.latitude) : null,
-      lastLongitude: r.longitude != null ? Number(r.longitude) : null,
-      speedKnots: r.speed != null ? Number(r.speed) : null,
-      heading: r.heading != null ? Number(r.heading) : null,
-      destination: r.destination ? String(r.destination) : null,
-      nearChokepoint: r.near_chokepoint ? String(r.near_chokepoint) : null,
-      alertLevel: (String(r.alert_level ?? "normal")) as VesselTrack["alertLevel"],
-    }));
+    const seen = new Set<string>();
+    const vessels: VesselTrack[] = [];
+    for (const r of data as Record<string, unknown>[]) {
+      const mmsi = String(r.mmsi ?? "");
+      if (!mmsi || seen.has(mmsi)) continue;
+      seen.add(mmsi);
+      const fleet = TRACKED_VESSELS.find((v) => v.mmsi === mmsi);
+      const lat = r.latitude != null ? Number(r.latitude) : null;
+      const lon = r.longitude != null ? Number(r.longitude) : null;
+      vessels.push({
+        mmsi,
+        vesselName: String(r.vessel_name ?? fleet?.name ?? ""),
+        vesselType: String(r.vessel_type ?? fleet?.vesselType ?? ""),
+        owner: fleet?.owner ?? "—",
+        ownerType: fleet?.ownerType ?? "unknown",
+        significance: fleet?.significance ?? "",
+        isTracked: lat != null && lon != null,
+        lastSeen: r.snapshot_time ? String(r.snapshot_time) : null,
+        lastLatitude: lat,
+        lastLongitude: lon,
+        speedKnots: r.speed != null ? Number(r.speed) : null,
+        heading: r.course != null ? Number(r.course) : null,
+        destination: r.destination ? String(r.destination) : null,
+        nearChokepoint:
+          lat != null && lon != null ? nearestChokepoint(lat, lon) : (r.region ? String(r.region) : null),
+        alertLevel: "normal",
+      });
+    }
+    return vessels;
   } catch { return []; }
 }
 
@@ -1651,18 +1670,12 @@ async function persistVessels(vessels: VesselTrack[]) {
       mmsi: v.mmsi,
       vessel_name: v.vesselName,
       vessel_type: v.vesselType,
-      owner: v.owner,
-      owner_type: v.ownerType,
-      significance: v.significance,
-      is_tracked: v.isTracked,
-      last_seen: v.lastSeen,
       latitude: v.lastLatitude,
       longitude: v.lastLongitude,
       speed: v.speedKnots,
-      heading: v.heading,
+      course: v.heading,
       destination: v.destination,
-      near_chokepoint: v.nearChokepoint,
-      alert_level: v.alertLevel,
+      region: v.nearChokepoint,
       snapshot_time: now,
     }));
     if (rows.length > 0) {

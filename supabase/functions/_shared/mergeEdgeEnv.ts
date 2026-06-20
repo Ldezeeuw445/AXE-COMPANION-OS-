@@ -9,8 +9,24 @@ const JSON_BLOB_SECRET_NAMES = [
   "EDGE_SECRETS_JSON",
 ] as const;
 
+function snapshotEnv(): Record<string, string> {
+  const base: Record<string, string> = {};
+  try {
+    if (typeof Deno.env.toObject === "function") {
+      return { ...Deno.env.toObject() };
+    }
+  } catch {
+    /* Edge runtime may not expose toObject */
+  }
+  for (const key of Deno.env.keys()) {
+    const v = Deno.env.get(key);
+    if (v != null) base[key] = v;
+  }
+  return base;
+}
+
 export function getMergedEdgeEnv(): Record<string, string> {
-  const base: Record<string, string> = { ...Deno.env.toObject() };
+  const base: Record<string, string> = snapshotEnv();
 
   for (const blobName of JSON_BLOB_SECRET_NAMES) {
     const raw = (base[blobName] ?? "").trim();
