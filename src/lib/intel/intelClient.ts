@@ -305,14 +305,8 @@ function mapProxyVesselRow(row: Record<string, unknown>): VesselTrack {
   };
 }
 
-/** Feeds not implemented on deployed intel-proxy — load from Postgres instead. */
-const DB_ONLY_ACTIONS = new Set<IntelAction>([
-  "chokepoints",
-  "militaryRadar",
-  "emergencyMonitor",
-  "energyFlows",
-  "cyberThreats",
-]);
+/** Static chokepoints are served locally; all other feeds hit intel-proxy first. */
+const DB_ONLY_ACTIONS = new Set<IntelAction>(["chokepoints"]);
 
 const STATIC_CHOKEPOINTS: Chokepoint[] = [
   {
