@@ -43,12 +43,12 @@ function getNextChartTheme(current: ChartThemeKey, modes: ChartThemeKey[]): Char
   return modes[(i + 1) % modes.length];
 }
 
-function getIcon(key: ChartThemeKey) {
-  return key === 'paper' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />;
+function getIcon(key: ChartThemeKey, iconClass: string) {
+  return key === 'paper' ? <Sun className={iconClass} /> : <Moon className={iconClass} />;
 }
 
 const chartThemeButtonVariants = cva(
-  "flex shrink-0 items-center justify-center rounded-lg border shadow-sm transition-[box-shadow,_color,_background-color,_border-color] outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "flex shrink-0 items-center justify-center border shadow-sm transition-[box-shadow,_color,_background-color,_border-color] outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 active:scale-[0.97]",
   {
     variants: {
       variant: {
@@ -58,11 +58,14 @@ const chartThemeButtonVariants = cva(
           "border-transparent bg-transparent text-white/70 hover:border-white/10 hover:bg-white/[0.06]",
         outline:
           "border-white/14 bg-black/35 text-white/82 backdrop-blur-md hover:border-white/22 hover:bg-black/45",
+        toolbar:
+          "rounded-md border-white/[0.10] bg-black/78 text-white/85 shadow-[0_4px_14px_rgba(0,0,0,0.4)] backdrop-blur hover:border-white/20",
       },
       size: {
-        default: "size-9 [&_svg:not([class*='size-'])]:size-4",
-        sm: "size-8 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "size-10 [&_svg:not([class*='size-'])]:size-[1.125rem]",
+        default: "size-9 rounded-lg [&_svg:not([class*='size-'])]:size-4",
+        sm: "size-8 rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "size-10 rounded-lg [&_svg:not([class*='size-'])]:size-[1.125rem]",
+        toolbar: "h-8 w-8 [&_svg:not([class*='size-'])]:size-3.5",
       },
       tone: {
         dark: "border-white/12 bg-black/45 text-white/82 hover:border-white/20 hover:bg-black/55",
@@ -99,75 +102,76 @@ function ChartThemeTogglerButton({
   onClick,
   ...props
 }: ChartThemeTogglerButtonProps) {
-  const [preview, setPreview] = React.useState<ChartThemeKey | null>(null);
+  const themeKeyRef = React.useRef(themeKey);
   const [displayKey, setDisplayKey] = React.useState(themeKey);
   const resolvedTone = tone ?? (chartThemeVisual(themeKey) === 'dark' ? 'dark' : 'light');
+  const iconClass = size === 'toolbar' || size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
 
   React.useEffect(() => {
-    if (preview && themeKey === preview) {
-      setPreview(null);
-    }
+    themeKeyRef.current = themeKey;
     setDisplayKey(themeKey);
-  }, [themeKey, preview]);
+  }, [themeKey]);
 
   const [fromClip, toClip] = getClipKeyframes(direction);
 
   const toggleTheme = React.useCallback(
     async (next: ChartThemeKey) => {
-      if (next === themeKey) return;
+      const current = themeKeyRef.current;
+      if (next === current) return;
 
       setDisplayKey(next);
       onImmediateChange?.(next);
 
       const applyTheme = () => {
         flushSync(() => {
-          setPreview(next);
+          themeKeyRef.current = next;
         });
         onThemeChange(next);
       };
 
-      if (!document.startViewTransition) {
+      try {
+        if (typeof document.startViewTransition !== 'function') {
+          applyTheme();
+          return;
+        }
+
+        const transition = document.startViewTransition(() => {
+          applyTheme();
+        });
+        await transition.ready;
+
+        await document.documentElement
+          .animate(
+            { clipPath: [fromClip, toClip] },
+            {
+              duration: 700,
+              easing: 'ease-in-out',
+              pseudoElement: `::view-transition-new(${CHART_THEME_VIEW_TRANSITION})`,
+            },
+          )
+          .finished;
+      } catch {
         applyTheme();
-        return;
       }
-
-      await document.startViewTransition(() => {
-        applyTheme();
-      }).ready;
-
-      document.documentElement
-        .animate(
-          { clipPath: [fromClip, toClip] },
-          {
-            duration: 700,
-            easing: 'ease-in-out',
-            pseudoElement: `::view-transition-new(${CHART_THEME_VIEW_TRANSITION})`,
-          },
-        )
-        .finished.catch(() => {});
     },
-    [fromClip, onImmediateChange, onThemeChange, themeKey, toClip],
+    [fromClip, onImmediateChange, onThemeChange, toClip],
   );
 
-  const effectiveKey = preview ?? displayKey;
-
   return (
-    <>
-      <button
-        type="button"
-        data-slot="chart-theme-toggler-button"
-        className={cn(chartThemeButtonVariants({ variant, size, tone: resolvedTone, className }))}
-        aria-label={`Chart theme: ${effectiveKey === 'paper' ? 'Paper' : 'Midnight'}. Tap to switch.`}
-        title={effectiveKey === 'paper' ? 'Paper chart' : 'Midnight chart'}
-        onClick={(e) => {
-          onClick?.(e);
-          void toggleTheme(getNextChartTheme(themeKey, modes));
-        }}
-        {...props}
-      >
-        {getIcon(effectiveKey)}
-      </button>
-    </>
+    <button
+      type="button"
+      data-slot="chart-theme-toggler-button"
+      className={cn(chartThemeButtonVariants({ variant, size, tone: resolvedTone, className }))}
+      aria-label={`Chart theme: ${displayKey === 'paper' ? 'Paper' : 'Midnight'}. Tap to switch.`}
+      title={displayKey === 'paper' ? 'Paper chart' : 'Midnight chart'}
+      onClick={(e) => {
+        onClick?.(e);
+        void toggleTheme(getNextChartTheme(themeKeyRef.current, modes));
+      }}
+      {...props}
+    >
+      {getIcon(displayKey, iconClass)}
+    </button>
   );
 }
 

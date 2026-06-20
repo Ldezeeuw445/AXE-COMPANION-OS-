@@ -2894,7 +2894,14 @@ export function ChartScreen({
 
     setCenter(
       <div className="flex items-center justify-center gap-1">
-        {favoritesChip}
+        <ChartThemeTogglerButton
+          themeKey={chartThemeKey}
+          tone={chartTheme.isDark ? "dark" : "light"}
+          variant="toolbar"
+          size="toolbar"
+          direction="ttb"
+          onThemeChange={handleChartThemeChange}
+        />
         <ChartQuickActions
           orderBookOpen={orderBookOpen}
           newsOpen={newsOpen}
@@ -2905,6 +2912,7 @@ export function ChartScreen({
           onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
           onOneClick={toggleOneClickTrade}
           onPending={togglePendingTrade}
+          trailing={favoritesChip}
         />
       </div>,
     );
@@ -2936,6 +2944,9 @@ export function ChartScreen({
     togglePendingTrade,
     isFullscreen,
     isTabletLayout,
+    chartThemeKey,
+    chartTheme.isDark,
+    handleChartThemeChange,
   ]);
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
@@ -3082,24 +3093,6 @@ export function ChartScreen({
           viewTransitionName: CHART_THEME_VIEW_TRANSITION,
         }}
       >
-        <div
-          className="absolute right-2 z-40"
-          style={{
-            top: isTabletLayout
-              ? "calc(var(--tos-tablet-chart-header-h) + 0.35rem)"
-              : isFullscreen
-                ? "0.5rem"
-                : "calc(env(safe-area-inset-top, 0px) + 5.25rem)",
-          }}
-        >
-          <ChartThemeTogglerButton
-            themeKey={chartThemeKey}
-            tone={chartTheme.isDark ? "dark" : "light"}
-            direction="ttb"
-            size="sm"
-            onThemeChange={handleChartThemeChange}
-          />
-        </div>
         <ChartCanvas
           ref={canvasRef}
           candles={data.candles}
@@ -3308,13 +3301,14 @@ export function ChartScreen({
             ) : null}
           </div>
           <div className="flex items-center justify-center gap-1 justify-self-center px-1">
-            {workflowRuntime && favoriteWorkflowIds.length > 0 ? (
-              <ChartWorkflowFavorites
-                favoriteIds={favoriteWorkflowIds}
-                runtime={workflowRuntime}
-                compact
-              />
-            ) : null}
+            <ChartThemeTogglerButton
+              themeKey={chartThemeKey}
+              tone={chartTheme.isDark ? "dark" : "light"}
+              variant="toolbar"
+              size="toolbar"
+              direction="ttb"
+              onThemeChange={handleChartThemeChange}
+            />
             <ChartQuickActions
               variant="tablet"
               orderBookOpen={orderBookOpen}
@@ -3326,6 +3320,15 @@ export function ChartScreen({
               onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
               onOneClick={toggleOneClickTrade}
               onPending={togglePendingTrade}
+              trailing={
+                workflowRuntime && favoriteWorkflowIds.length > 0 ? (
+                  <ChartWorkflowFavorites
+                    favoriteIds={favoriteWorkflowIds}
+                    runtime={workflowRuntime}
+                    compact
+                  />
+                ) : null
+              }
             />
           </div>
           {data.accountChoices.length > 0 ? (

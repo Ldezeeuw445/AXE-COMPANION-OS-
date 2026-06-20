@@ -152,7 +152,9 @@ export async function computeTraderScores(
   let executionScore = avg(executionDims);
   if (executionScore != null && fillRate != null) {
     executionScore = clampScore(executionScore * 0.75 + fillRate * 100 * 0.25);
-  } else if (executionScore == null && fillRate != null) {
+  } else if (executionScore != null) {
+    executionScore = clampScore(executionScore);
+  } else if (fillRate != null) {
     executionScore = clampScore(fillRate * 100);
   }
 
@@ -206,7 +208,7 @@ export async function computeTraderScores(
   ) => ({
     key,
     label,
-    score: score ?? 0,
+    score: score != null ? clampScore(score) : 0,
     available: score != null,
     hint,
   });

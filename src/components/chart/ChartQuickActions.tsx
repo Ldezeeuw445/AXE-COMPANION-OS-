@@ -1,6 +1,7 @@
 "use client";
 
 import { BarChart2, Crosshair, Newspaper, Zap, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { SquawkChip } from "@/components/market/SquawkChip";
 
 export const MT5_SPLIT_BG =
@@ -65,6 +66,7 @@ export function ChartQuickActions({
   onPending,
   compact = false,
   variant = "default",
+  trailing,
 }: {
   orderBookOpen: boolean;
   newsOpen: boolean;
@@ -77,6 +79,8 @@ export function ChartQuickActions({
   onPending: () => void;
   compact?: boolean;
   variant?: "default" | "tablet";
+  /** Slot after execution buttons — e.g. favorites star */
+  trailing?: ReactNode;
 }) {
   const gap = compact ? "gap-1" : "gap-1.5";
   const size = compact ? "h-7 w-7" : "h-8 w-8";
@@ -128,6 +132,12 @@ export function ChartQuickActions({
             onClick={onPending}
             label="Limit / Stop order"
           />
+          {trailing ? (
+            <>
+              <ToolbarDivider />
+              {trailing}
+            </>
+          ) : null}
         </div>
       </div>
     );
@@ -170,6 +180,12 @@ export function ChartQuickActions({
         onClick={onPending}
         label="Limit / Stop order"
       />
+      {trailing ? (
+        <>
+          <div className="mx-0.5 h-4 w-px rounded-full bg-white/[0.08]" />
+          {trailing}
+        </>
+      ) : null}
     </div>
   );
 }
