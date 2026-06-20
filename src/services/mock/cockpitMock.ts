@@ -153,7 +153,6 @@ export const mockCockpitDashboard: CockpitDashboard = {
     message: "Mock dashboard only: real cockpit scores stay conservative until live user signals exist.",
   },
   today: {
-    alignmentScore: 72,
     chatMessages: 4,
     tradesClosed: 1,
     feedEvents: 3,
@@ -178,7 +177,7 @@ export const mockCockpitDashboard: CockpitDashboard = {
     periodDays: 90,
     sampleSize: 64,
     tradeCount: 28,
-    overallAlignment: 69,
+    traderOverallScore: 69,
     scores: [
       { key: "discipline", label: "Discipline", score: 68, available: true, hint: "Mock — emotional discipline from journal breakdowns." },
       { key: "execution", label: "Execution", score: 74, available: true, hint: "Mock — playbook + rule adherence." },

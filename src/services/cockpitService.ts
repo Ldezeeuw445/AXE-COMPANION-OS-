@@ -17,7 +17,7 @@ const EMPTY_TRADER_SCORES = {
   periodDays: 90,
   sampleSize: 0,
   tradeCount: 0,
-  overallAlignment: null as number | null,
+  traderOverallScore: null as number | null,
   scores: [
     { key: "discipline" as const, label: "Discipline", score: 0, available: false, hint: "Awaiting journal data." },
     { key: "execution" as const, label: "Execution", score: 0, available: false, hint: "Awaiting journal data." },
@@ -27,7 +27,6 @@ const EMPTY_TRADER_SCORES = {
 };
 
 const EMPTY_TODAY: CockpitTodaySummary = {
-  alignmentScore: 0,
   chatMessages: 0,
   tradesClosed: 0,
   feedEvents: 0,
@@ -146,7 +145,6 @@ function todayUtcStartIso(): string {
 export async function fetchCockpitTodaySummary(
   supabase: SupabaseClient,
   userId: string,
-  alignmentScore = 0,
 ): Promise<CockpitTodaySummary> {
   const since = todayUtcStartIso();
   const [chatRes, tradesRes, feedRes, journalRes] = await Promise.all([
@@ -175,7 +173,6 @@ export async function fetchCockpitTodaySummary(
   ]);
 
   return {
-    alignmentScore,
     chatMessages: countOrZero(chatRes),
     tradesClosed: countOrZero(tradesRes),
     feedEvents: countOrZero(feedRes),
@@ -282,10 +279,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     fetchLearningArc(supabase, user.id),
     computeTraderScores(supabase, user.id),
   ]);
-  const today: CockpitTodaySummary = {
-    ...todayBase,
-    alignmentScore: traderScores.overallAlignment ?? 0,
-  };
+  const today: CockpitTodaySummary = todayBase;
 
   const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -427,11 +421,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     behavior: mapBehavior(latest.behavior_map),
     metricKeysSample,
     calibration,
-    today: await fetchCockpitTodaySummary(
-      supabase,
-      user.id,
-      traderScores.overallAlignment ?? mapAlignment(latest.alignment_score ?? 0, latest.captured_at, null).score,
-    ),
+    today: await fetchCockpitTodaySummary(supabase, user.id),
     learningArc,
     traderScores,
   };

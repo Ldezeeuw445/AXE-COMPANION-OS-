@@ -249,7 +249,7 @@ export async function computeTraderScores(
     ];
 
   const availablePillars = pillarScores.filter((p) => p.available);
-  const overallAlignment =
+  const traderOverallScore =
     availablePillars.length > 0
       ? clampScore(avg(availablePillars.map((p) => p.score))!)
       : null;
@@ -258,7 +258,7 @@ export async function computeTraderScores(
     periodDays: LOOKBACK_DAYS,
     sampleSize,
     tradeCount: trades.length,
-    overallAlignment,
+    traderOverallScore,
     scores: pillarScores,
   };
 }

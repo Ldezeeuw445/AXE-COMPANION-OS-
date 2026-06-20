@@ -13,6 +13,7 @@ export type CockpitLearningMilestone = {
   narrative: string;
 };
 
+/** Snapshot score: how well AXE fits *your* book (100 = fully aligned). Not the trader pillar rollup. */
 export type CockpitAlignment = {
   /** 0–100 — mirrors `alignment_score` on snapshots */
   score: number;
@@ -97,7 +98,6 @@ export type CockpitDashboard = {
 };
 
 export type CockpitTodaySummary = {
-  alignmentScore: number;
   chatMessages: number;
   tradesClosed: number;
   feedEvents: number;
@@ -129,7 +129,7 @@ export type CockpitTraderScores = {
   periodDays: number;
   sampleSize: number;
   tradeCount: number;
-  /** Mean of available pillar scores (discipline, execution, risk, patience). */
-  overallAlignment: number | null;
+  /** Mean of available pillar scores (discipline, execution, risk, patience). Not AXE snapshot alignment. */
+  traderOverallScore: number | null;
   scores: CockpitTraderScoreItem[];
 };

@@ -52,7 +52,11 @@ export default async function CockpitPage() {
 
       <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
 
-      <CockpitTodayStrip initial={dash.today} traderScores={dash.traderScores} />
+      <CockpitTodayStrip
+        initial={dash.today}
+        traderScores={dash.traderScores}
+        axeAlignment={hasSnapshot ? dash.alignment : null}
+      />
 
       <CockpitLearningArc data={dash.learningArc} />
 
@@ -96,10 +100,16 @@ export default async function CockpitPage() {
           <CockpitAlignment data={dash.alignment} calibrationMessage={dash.calibration.message} />
 
           <GlassPanel className="p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Score basis</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Two scores</p>
             <p className="mt-1 text-xs leading-relaxed text-tos-muted">
-              {dash.alignment.score} is based on {dash.calibration.signalCount} real workspace signals. Mock/fallback cockpit
-              data is ignored once live user data exists.
+              <span className="font-medium text-tos-text">Trader score</span> (top) averages Discipline,
+              Execution, Risk and Patience from your last 90 days of journal and trade history.
+            </p>
+            <p className="mt-1.5 text-xs leading-relaxed text-tos-muted">
+              <span className="font-medium text-tos-text">AXE alignment {dash.alignment.score}</span> (below)
+              measures how well AXE fits your book —{" "}
+              <span className="font-medium text-tos-text">100 = fully aligned</span>. Based on{" "}
+              {dash.calibration.signalCount} real workspace signals from the latest snapshot.
             </p>
             <p className="mt-1 text-[11px] text-tos-dim">
               Last recalculated:{" "}

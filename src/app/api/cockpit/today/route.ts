@@ -12,13 +12,9 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [todayBase, traderScores] = await Promise.all([
+  const [today, traderScores] = await Promise.all([
     fetchCockpitTodaySummary(supabase, user.id),
     computeTraderScores(supabase, user.id),
   ]);
-  const today = {
-    ...todayBase,
-    alignmentScore: traderScores.overallAlignment ?? 0,
-  };
-  return NextResponse.json({ today });
+  return NextResponse.json({ today, traderScores });
 }

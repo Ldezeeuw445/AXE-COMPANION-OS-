@@ -2,9 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { CockpitTodaySummary, CockpitTraderScores } from "@/types/cockpit";
+import type {
+  CockpitAlignment,
+  CockpitTodaySummary,
+  CockpitTraderScores,
+} from "@/types/cockpit";
 
-const OVERALL_RING = "#67e8f9";
+const TRADER_RING = "#67e8f9";
+const AXE_RING = "var(--tos-alignment-ring)";
 
 function todayUtcStartIso(): string {
   const d = new Date();
@@ -64,17 +69,27 @@ function ScoreChip({
 type Props = {
   initial: CockpitTodaySummary;
   traderScores?: CockpitTraderScores | null;
+  axeAlignment?: CockpitAlignment | null;
 };
 
-export function CockpitTodayStrip({ initial, traderScores = null }: Props) {
+export function CockpitTodayStrip({
+  initial,
+  traderScores: initialTraderScores = null,
+  axeAlignment = null,
+}: Props) {
   const [summary, setSummary] = useState(initial);
+  const [traderScores, setTraderScores] = useState(initialTraderScores);
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/cockpit/today", { credentials: "include" });
       if (!res.ok) return;
-      const json = (await res.json()) as { today?: CockpitTodaySummary };
+      const json = (await res.json()) as {
+        today?: CockpitTodaySummary;
+        traderScores?: CockpitTraderScores;
+      };
       if (json.today) setSummary(json.today);
+      if (json.traderScores) setTraderScores(json.traderScores);
     } catch {
       /* ignore */
     }
@@ -93,8 +108,9 @@ export function CockpitTodayStrip({ initial, traderScores = null }: Props) {
   });
 
   const pillarScores = traderScores?.scores ?? [];
-  const overallAlignment = traderScores?.overallAlignment ?? summary.alignmentScore;
-  const overallAvailable = traderScores?.overallAlignment != null;
+  const traderOverall = traderScores?.traderOverallScore ?? null;
+  const traderAvailable = traderOverall != null;
+  const periodDays = traderScores?.periodDays ?? 90;
 
   return (
     <div className="tos-matte-banner flex flex-col gap-3 px-3 py-2.5">
@@ -128,52 +144,90 @@ export function CockpitTodayStrip({ initial, traderScores = null }: Props) {
       </div>
 
       {pillarScores.length > 0 ? (
-        <div className="flex items-stretch gap-2.5">
-          <div
-            className="flex w-[6.25rem] shrink-0 flex-col items-center justify-center rounded-xl border border-white/[0.08] bg-[#0a0a0d]/90 px-2 py-3"
-            title={`Overall alignment — average of Discipline, Execution, Risk and Patience (last ${traderScores?.periodDays ?? 90} days).`}
-          >
-            <div className="relative h-[4.5rem] w-[4.5rem] shrink-0">
-              <svg className="h-full w-full -rotate-90" viewBox="0 0 72 72" aria-hidden>
-                <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
-                <circle
-                  cx="36"
-                  cy="36"
-                  r="28"
-                  fill="none"
-                  stroke={overallAvailable ? OVERALL_RING : "rgba(255,255,255,0.08)"}
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 28}
-                  strokeDashoffset={
-                    overallAvailable ? ringOffset(overallAlignment, 28) : 2 * Math.PI * 28
-                  }
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-bold tabular-nums leading-none text-cyan-300">
-                  {overallAvailable ? Math.round(overallAlignment) : "—"}
-                </span>
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-stretch gap-2.5">
+            <div
+              className="flex w-[6.25rem] shrink-0 flex-col items-center justify-center rounded-xl border border-white/[0.08] bg-[#0a0a0d]/90 px-2 py-3"
+              title={`Trader score — average of Discipline, Execution, Risk and Patience (last ${periodDays} days). Not AXE alignment.`}
+            >
+              <div className="relative h-[4.5rem] w-[4.5rem] shrink-0">
+                <svg className="h-full w-full -rotate-90" viewBox="0 0 72 72" aria-hidden>
+                  <circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
+                  <circle
+                    cx="36"
+                    cy="36"
+                    r="28"
+                    fill="none"
+                    stroke={traderAvailable ? TRADER_RING : "rgba(255,255,255,0.08)"}
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 28}
+                    strokeDashoffset={
+                      traderAvailable ? ringOffset(traderOverall, 28) : 2 * Math.PI * 28
+                    }
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl font-bold tabular-nums leading-none text-cyan-300">
+                    {traderAvailable ? Math.round(traderOverall) : "—"}
+                  </span>
+                </div>
               </div>
+              <span className="mt-2 text-center text-[8px] font-semibold uppercase leading-tight tracking-[0.12em] text-white/82">
+                Trader
+                <br />
+                score
+              </span>
             </div>
-            <span className="mt-2 text-center text-[8px] font-semibold uppercase leading-tight tracking-[0.12em] text-white/82">
-              Overall
-              <br />
-              Alignment
-            </span>
+
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+              {pillarScores.map((item) => (
+                <ScoreChip
+                  key={item.key}
+                  label={item.label}
+                  score={item.score}
+                  available={item.available}
+                  hint={item.hint}
+                />
+              ))}
+            </div>
           </div>
 
-          <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
-            {pillarScores.map((item) => (
-              <ScoreChip
-                key={item.key}
-                label={item.label}
-                score={item.score}
-                available={item.available}
-                hint={item.hint}
-              />
-            ))}
-          </div>
+          {axeAlignment ? (
+            <div
+              className="flex items-center gap-3 rounded-xl border border-[color:var(--tos-alignment-ring)]/25 bg-[#0a0a0d]/70 px-3 py-2.5"
+              title="AXE alignment — 100 means AXE proposals fully match how you trade."
+            >
+              <div className="relative h-11 w-11 shrink-0">
+                <svg className="h-full w-full -rotate-90" viewBox="0 0 44 44" aria-hidden>
+                  <circle cx="22" cy="22" r="17" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3.5" />
+                  <circle
+                    cx="22"
+                    cy="22"
+                    r="17"
+                    fill="none"
+                    stroke={AXE_RING}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    strokeDasharray={2 * Math.PI * 17}
+                    strokeDashoffset={ringOffset(axeAlignment.score, 17)}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-sm font-bold tabular-nums text-tos-text">{axeAlignment.score}</span>
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-tos-warm/90">
+                  AXE alignment
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-white/70">
+                  <span className="font-medium text-white/90">100 = fully aligned</span> with how you trade.
+                  Different from trader score — measures AXE fit, not your pillar average.
+                </p>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

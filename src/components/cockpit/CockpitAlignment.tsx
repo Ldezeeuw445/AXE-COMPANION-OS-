@@ -20,12 +20,15 @@ export function CockpitAlignment({ data, calibrationMessage }: Props) {
       />
       <div className="relative">
         <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-tos-dim">
-          Alignment
+          AXE alignment
         </p>
         <p className="mt-2 text-sm leading-snug text-tos-text">
-          How often the assistant’s proposals feel like{" "}
-          <span className="text-tos-muted">your</span> book — not a generic
-          playbook.
+          How well AXE’s proposals match{" "}
+          <span className="text-tos-muted">your</span> book — not a generic playbook.
+          <span className="mt-1 block text-[12px] text-tos-muted">
+            <strong className="font-medium text-tos-text">100 = fully aligned</strong> with how you
+            trade. This is separate from your trader score above.
+          </span>
         </p>
         <div className="mt-6 flex items-center gap-6">
           <div className="relative h-[7.25rem] w-[7.25rem] shrink-0">
@@ -56,7 +59,7 @@ export function CockpitAlignment({ data, calibrationMessage }: Props) {
                 {score}
               </span>
               <span className="text-[9px] font-medium uppercase tracking-[0.2em] text-tos-dim">
-                fit · 100
+                / 100
               </span>
             </div>
           </div>
@@ -81,7 +84,7 @@ export function CockpitAlignment({ data, calibrationMessage }: Props) {
             </div>
             <p className="text-[11px] leading-relaxed text-tos-muted">
               {calibrationMessage ??
-                "Alignment moves only when AXE has real chat, journal, memory, and account signals to learn from."}
+                "Moves when AXE has real chat, journal, memory, and account signals to learn from."}
             </p>
             <time
               className="block text-[10px] tabular-nums tracking-wide text-tos-dim"
