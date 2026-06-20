@@ -556,6 +556,392 @@
       transform: translateY(-4px);
     }
 
+    .mock-device {
+      width: 100%;
+      border-radius: 34px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: linear-gradient(180deg, rgba(7,8,10,0.94), rgba(4,5,7,0.98));
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.07),
+        0 24px 54px rgba(0,0,0,0.38);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .mock-device::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle, rgba(103,232,249,0.2) 1px, transparent 1.6px),
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0));
+      background-size: 16px 16px, 100% 100%;
+      opacity: 0.18;
+      z-index: 0;
+    }
+
+    .mock-shell { position: relative; z-index: 1; }
+
+    .mock-device--phone { min-height: 760px; }
+    .mock-device--tablet { min-height: 760px; }
+
+    .mock-topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(10,12,14,0.78);
+    }
+
+    .mock-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #6ef2b1;
+      box-shadow: 0 0 12px rgba(110,242,177,0.45);
+    }
+
+    .mock-title { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.72); }
+    .mock-badge {
+      margin-left: auto;
+      border: 1px solid rgba(72,222,246,0.36);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(131,233,255,0.9);
+      background: rgba(72,222,246,0.08);
+    }
+
+    .mock-phone-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0,1fr));
+      gap: 6px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(9,10,12,0.74);
+    }
+
+    .mock-tab,
+    .tablet-nav,
+    .mini-btn {
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.02);
+      color: rgba(255,255,255,0.72);
+      border-radius: 10px;
+      font-size: 11px;
+      padding: 7px 8px;
+      cursor: pointer;
+    }
+
+    .mock-tab.active,
+    .tablet-nav.active,
+    .mini-btn.active {
+      border-color: rgba(72,222,246,0.5);
+      color: rgba(190,245,255,1);
+      background: rgba(72,222,246,0.12);
+      box-shadow: 0 0 16px rgba(72,222,246,0.14);
+    }
+
+    .mock-stage { padding: 12px; }
+    .mock-screen { display: none; min-height: 620px; }
+    .mock-screen.active { display: block; }
+
+    .mock-toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mock-chart {
+      position: relative;
+      height: 560px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(5,7,10,0.95), rgba(4,5,7,1));
+      overflow: hidden;
+    }
+
+    .mock-grid {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px) 0 0/100% 48px,
+        linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px) 0 0/48px 100%;
+      opacity: 0.35;
+    }
+
+    .mock-candles {
+      position: absolute;
+      inset: 20px 12px 40px;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      align-items: end;
+      gap: 8px;
+    }
+
+    .mock-candles span {
+      position: relative;
+      display: block;
+      height: var(--h);
+      border-radius: 3px;
+      background: linear-gradient(180deg, rgba(66,223,187,0.92), rgba(56,196,170,0.85));
+      box-shadow: 0 0 12px rgba(66,223,187,0.22);
+    }
+
+    .mock-candles span:nth-child(2n) {
+      background: linear-gradient(180deg, rgba(255,105,134,0.92), rgba(210,79,108,0.84));
+      box-shadow: 0 0 12px rgba(255,105,134,0.2);
+    }
+
+    .mock-candles span::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      top: -18%;
+      width: 2px;
+      height: calc(100% + 24%);
+      background: currentColor;
+      opacity: 0.45;
+    }
+
+    .mock-line {
+      position: absolute;
+      left: 10%;
+      right: 6%;
+      padding-left: 8px;
+      font-size: 11px;
+      color: rgba(210,245,255,0.88);
+      border-left: 2px solid rgba(72,222,246,0.8);
+      text-shadow: 0 0 8px rgba(72,222,246,0.2);
+    }
+
+    .fib-line { top: 38%; }
+    .ma-line { top: 52%; border-left-color: rgba(110,242,177,0.8); }
+    .vwap-line { top: 64%; border-left-color: rgba(255,198,77,0.84); }
+
+    .mock-list,
+    .tablet-feed,
+    .tablet-journal {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mock-list article,
+    .tablet-feed article,
+    .tablet-journal article,
+    .tablet-cards article {
+      border: 1px solid rgba(255,255,255,0.09);
+      background: rgba(255,255,255,0.02);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .mock-list article b,
+    .tablet-feed article b,
+    .tablet-journal article b,
+    .tablet-cards article h5 {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      color: rgba(235,247,255,0.95);
+    }
+
+    .mock-list article span,
+    .tablet-feed article span,
+    .tablet-journal article span,
+    .tablet-cards article p {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .mock-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 10px;
+    }
+
+    .mock-kpi-grid > div {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .mock-kpi-grid label {
+      display: block;
+      font-size: 11px;
+      color: rgba(255,255,255,0.48);
+      margin-bottom: 6px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .mock-kpi-grid strong {
+      font-size: 16px;
+      color: rgba(220,248,255,0.98);
+    }
+
+    .mock-trade-box {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mock-trade-box > div {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,0.02);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mock-trade-box span { font-size: 12px; color: rgba(255,255,255,0.54); }
+    .mock-trade-box b { color: rgba(235,246,255,0.96); }
+
+    .mock-trade-actions { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; background: none !important; border: 0 !important; padding: 0 !important; }
+    .mock-trade-actions button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px;
+      font-weight: 700;
+      color: #fff;
+      cursor: pointer;
+    }
+    .mock-trade-actions .sell { background: linear-gradient(135deg, #e0456d, #a91d44); }
+    .mock-trade-actions .buy { background: linear-gradient(135deg, #1da6c4, #0d7990); }
+
+    .mock-chat-log,
+    .tablet-assistant {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.02);
+      min-height: 460px;
+      max-height: 460px;
+      overflow: auto;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .bubble {
+      max-width: 92%;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .bubble.ai { background: rgba(72,222,246,0.14); border: 1px solid rgba(72,222,246,0.24); color: rgba(220,245,255,0.96); }
+    .bubble.user { margin-left: auto; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); color: rgba(245,248,255,0.95); }
+
+    .mock-chat-input {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mock-chat-input input {
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 11px;
+      background: rgba(8,10,12,0.9);
+      color: rgba(240,246,255,0.95);
+      padding: 9px 11px;
+      font-size: 12px;
+    }
+
+    .mock-chat-input button {
+      border: 1px solid rgba(72,222,246,0.42);
+      border-radius: 11px;
+      background: rgba(72,222,246,0.14);
+      color: rgba(201,247,255,0.98);
+      padding: 9px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .tablet-shell {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 760px;
+    }
+
+    .tablet-sidebar {
+      border-right: 1px solid rgba(255,255,255,0.08);
+      background: rgba(8,10,12,0.7);
+      padding: 14px 12px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .tablet-sidebar h4 {
+      margin: 2px 6px 8px;
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .tablet-main { padding: 12px; display: grid; grid-template-rows: auto 1fr; gap: 10px; }
+
+    .tablet-header {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      padding: 9px 11px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tablet-header strong { font-size: 13px; }
+
+    .tablet-screen { display: none; }
+    .tablet-screen.active { display: block; }
+
+    .tablet-cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 10px;
+    }
+
+    .tablet-chart {
+      position: relative;
+      min-height: 650px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(6,8,11,0.96), rgba(4,5,7,1));
+      overflow: hidden;
+    }
+
+    .tablet-chart-line {
+      position: absolute;
+      inset: 20% 8% auto;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(72,222,246,0), rgba(72,222,246,0.8), rgba(72,222,246,0));
+      box-shadow: 0 0 20px rgba(72,222,246,0.2);
+    }
+
+    .tablet-chart-note {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      background: rgba(10,12,15,0.8);
+      padding: 8px 10px;
+      font-size: 12px;
+      color: rgba(220,243,255,0.86);
+    }
+
     .glow-band {
       position: relative;
       overflow: hidden;
@@ -3107,6 +3493,32 @@
 
     @media (max-width: 1100px) {
       .behavior-grid, .pricing { grid-template-columns: 1fr; }
+      .hero-device-stage {
+        transform: none;
+        height: auto;
+        padding: 28px 18px 24px;
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .hero-phone-wrap,
+      .hero-ipad-stack {
+        width: 100%;
+        max-width: 100%;
+      }
+      .mock-device--phone,
+      .mock-device--tablet {
+        min-height: 620px;
+      }
+      .tablet-shell {
+        grid-template-columns: 1fr;
+      }
+      .tablet-sidebar {
+        border-right: 0;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        align-items: center;
+      }
+      .tablet-sidebar h4 { grid-column: 1 / -1; margin-bottom: 2px; }
       .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .fit-top,
       .fit-correction { grid-template-columns: 1fr; }
@@ -3142,6 +3554,29 @@
       .nav-link, .nav-cta { padding: 10px 14px; font-size: 13px; }
       .hero { padding-top: 48px; }
       .hero-copy, .band-copy { font-size: 15px; }
+      .mock-phone-tabs {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .mock-screen {
+        min-height: 480px;
+      }
+      .mock-chart {
+        height: 430px;
+      }
+      .mock-chat-log,
+      .tablet-assistant {
+        min-height: 320px;
+        max-height: 320px;
+      }
+      .tablet-sidebar {
+        grid-template-columns: 1fr;
+      }
+      .tablet-cards {
+        grid-template-columns: 1fr;
+      }
+      .tablet-chart {
+        min-height: 420px;
+      }
       .stats-row { grid-template-columns: 1fr 1fr; }
       .quote { font-size: 18px; }
       .card, .price-card, .metric-card { padding: 22px; }
@@ -3186,12 +3621,151 @@
           <div class="hero-mock-block"></div>
           <div class="hero-device-stage">
             <div class="hero-phone-wrap">
-              <img class="hero-mock" src="../figma-assets/images/chart-xauusd.png" alt="AXE phone chart mock" />
+              <div class="mock-device mock-device--phone reveal" data-device="phone">
+                <div class="mock-shell">
+                  <div class="mock-topbar">
+                    <span class="mock-dot"></span>
+                    <span class="mock-title">AXE Mobile</span>
+                    <span class="mock-badge">DEMO</span>
+                  </div>
+                  <div class="mock-phone-tabs" role="tablist" aria-label="Phone app sections">
+                    <button class="mock-tab active" data-phone-tab="chart">Chart</button>
+                    <button class="mock-tab" data-phone-tab="intel">Intel</button>
+                    <button class="mock-tab" data-phone-tab="cockpit">Cockpit</button>
+                    <button class="mock-tab" data-phone-tab="trade">Trade</button>
+                    <button class="mock-tab" data-phone-tab="chat">Chat</button>
+                  </div>
+
+                  <div class="mock-stage">
+                    <section class="mock-screen active" data-phone-screen="chart">
+                      <div class="mock-toolbar">
+                        <button class="mini-btn" data-indicator="fib">Auto Fib</button>
+                        <button class="mini-btn" data-indicator="ma">MA</button>
+                        <button class="mini-btn" data-indicator="vwap">VWAP</button>
+                      </div>
+                      <div class="mock-chart">
+                        <div class="mock-grid"></div>
+                        <div class="mock-candles">
+                          <span style="--h:38%;--o:62%"></span>
+                          <span style="--h:44%;--o:58%"></span>
+                          <span style="--h:52%;--o:50%"></span>
+                          <span style="--h:64%;--o:38%"></span>
+                          <span style="--h:56%;--o:46%"></span>
+                          <span style="--h:68%;--o:34%"></span>
+                          <span style="--h:72%;--o:30%"></span>
+                          <span style="--h:66%;--o:36%"></span>
+                        </div>
+                        <div class="mock-line fib-line" hidden>Fib 50%</div>
+                        <div class="mock-line ma-line" hidden>MA(50)</div>
+                        <div class="mock-line vwap-line" hidden>VWAP</div>
+                      </div>
+                    </section>
+
+                    <section class="mock-screen" data-phone-screen="intel">
+                      <div class="mock-list">
+                        <article><b>Intel Tide</b><span>Net call premium +1.71B</span></article>
+                        <article><b>Macro</b><span>Rates: hold bias, USD mixed</span></article>
+                        <article><b>Policy Flow</b><span>2 congressional buys flagged</span></article>
+                        <article><b>Emergency Monitor</b><span>No active global distress spikes</span></article>
+                      </div>
+                    </section>
+
+                    <section class="mock-screen" data-phone-screen="cockpit">
+                      <div class="mock-kpi-grid">
+                        <div><label>FIT</label><strong>84</strong></div>
+                        <div><label>Rules kept</label><strong>18</strong></div>
+                        <div><label>Rules passed</label><strong>6</strong></div>
+                        <div><label>Session</label><strong>London + NY</strong></div>
+                      </div>
+                    </section>
+
+                    <section class="mock-screen" data-phone-screen="trade">
+                      <div class="mock-trade-box">
+                        <div><span>Pair</span><b>XAUUSD</b></div>
+                        <div><span>Price</span><b>4215.15</b></div>
+                        <div><span>Lot</span><b>0.10</b></div>
+                        <div class="mock-trade-actions">
+                          <button class="sell">SELL</button>
+                          <button class="buy">BUY</button>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="mock-screen" data-phone-screen="chat">
+                      <div class="mock-chat-log" id="phoneChatLog">
+                        <div class="bubble ai">AXE: Ask me about XAUUSD context, flow or risk.</div>
+                        <div class="bubble user">What is the current setup?</div>
+                      </div>
+                      <div class="mock-chat-input">
+                        <input id="phoneChatInput" type="text" value="Give me a quick plan." />
+                        <button id="phoneChatSend">Send</button>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="hero-ipad-stack">
-              <div class="hero-ipad-stack-inner">
-                <img class="hero-ipad hero-ipad--dark" src="../figma-assets/images/hero-ipad-dark-web.png" alt="AXE iPad interface dark mode" />
-                <img class="hero-ipad hero-ipad--light" src="../figma-assets/images/hero-ipad-light-web.png" alt="AXE iPad interface light mode" />
+              <div class="mock-device mock-device--tablet reveal" data-device="tablet">
+                <div class="mock-shell tablet-shell">
+                  <aside class="tablet-sidebar">
+                    <h4>Workspace</h4>
+                    <button class="tablet-nav active" data-tablet-tab="overview">Overview</button>
+                    <button class="tablet-nav" data-tablet-tab="chart">Chart Desk</button>
+                    <button class="tablet-nav" data-tablet-tab="intel">Intel Matrix</button>
+                    <button class="tablet-nav" data-tablet-tab="journal">Journal</button>
+                    <button class="tablet-nav" data-tablet-tab="assistant">AXE Chat</button>
+                  </aside>
+                  <div class="tablet-main">
+                    <div class="tablet-header">
+                      <span class="mock-dot"></span>
+                      <strong id="tabletTitle">Overview</strong>
+                      <span class="mock-badge">Synced demo</span>
+                    </div>
+
+                    <section class="tablet-screen active" data-tablet-screen="overview">
+                      <div class="tablet-cards">
+                        <article><h5>Execution FIT</h5><p>84 · stable</p></article>
+                        <article><h5>Live Feeds</h5><p>19 active</p></article>
+                        <article><h5>Open Context</h5><p>XAUUSD · H1 · London+NY</p></article>
+                      </div>
+                    </section>
+
+                    <section class="tablet-screen" data-tablet-screen="chart">
+                      <div class="tablet-chart">
+                        <div class="mock-grid"></div>
+                        <div class="tablet-chart-line"></div>
+                        <div class="tablet-chart-note">Chart + execution bridge + indicators</div>
+                      </div>
+                    </section>
+
+                    <section class="tablet-screen" data-tablet-screen="intel">
+                      <div class="tablet-feed">
+                        <article><b>AXE Intel Tide</b><span>Call/put skew bullish intraday.</span></article>
+                        <article><b>AXE Chokepoints</b><span>No new disruptions in key lanes.</span></article>
+                        <article><b>AXE Correlation</b><span>Gold tracking yields divergence.</span></article>
+                      </div>
+                    </section>
+
+                    <section class="tablet-screen" data-tablet-screen="journal">
+                      <div class="tablet-journal">
+                        <article><b>XAUUSD +450</b><span>Tagged: Perfect · OK 65</span></article>
+                        <article><b>NAS100 -120</b><span>Tagged: Early entry</span></article>
+                      </div>
+                    </section>
+
+                    <section class="tablet-screen" data-tablet-screen="assistant">
+                      <div class="tablet-assistant" id="tabletChatLog">
+                        <div class="bubble ai">AXE: I can bridge chart + feed + journal context.</div>
+                        <div class="bubble user">Summarize risk in 3 bullets.</div>
+                      </div>
+                      <div class="mock-chat-input">
+                        <input id="tabletChatInput" type="text" value="What would invalidate this setup?" />
+                        <button id="tabletChatSend">Send</button>
+                      </div>
+                    </section>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -3608,7 +4182,7 @@
   <script>
     const glowBands = document.querySelectorAll('.glow-band');
     const hero = document.querySelector('.hero');
-    const heroMock = document.querySelector('.hero-mock');
+    const heroMock = document.querySelector('.hero-device-stage');
     const nav = document.querySelector('.nav');
     const revealNodes = document.querySelectorAll('.reveal');
 
@@ -3712,6 +4286,93 @@
         card.style.setProperty('--my', `${event.clientY - rect.top}px`);
       });
     });
+
+    const phoneTabs = document.querySelectorAll('[data-phone-tab]');
+    const phoneScreens = document.querySelectorAll('[data-phone-screen]');
+    const indicatorButtons = document.querySelectorAll('[data-indicator]');
+    const indicatorMap = {
+      fib: document.querySelector('.fib-line'),
+      ma: document.querySelector('.ma-line'),
+      vwap: document.querySelector('.vwap-line'),
+    };
+
+    phoneTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.getAttribute('data-phone-tab');
+        phoneTabs.forEach((btn) => btn.classList.remove('active'));
+        tab.classList.add('active');
+        phoneScreens.forEach((screen) => {
+          screen.classList.toggle('active', screen.getAttribute('data-phone-screen') === target);
+        });
+      });
+    });
+
+    indicatorButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-indicator');
+        const line = indicatorMap[key];
+        if (!line) return;
+        const next = !btn.classList.contains('active');
+        btn.classList.toggle('active', next);
+        line.hidden = !next;
+      });
+    });
+
+    const tabletTabs = document.querySelectorAll('[data-tablet-tab]');
+    const tabletScreens = document.querySelectorAll('[data-tablet-screen]');
+    const tabletTitle = document.getElementById('tabletTitle');
+    tabletTabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.getAttribute('data-tablet-tab');
+        tabletTabs.forEach((btn) => btn.classList.remove('active'));
+        tab.classList.add('active');
+        tabletScreens.forEach((screen) => {
+          screen.classList.toggle('active', screen.getAttribute('data-tablet-screen') === target);
+        });
+        if (tabletTitle) tabletTitle.textContent = tab.textContent || 'Workspace';
+      });
+    });
+
+    const cannedResponses = [
+      'Bias remains mildly bullish while 4208 holds. Watch NY open liquidity sweep.',
+      'Risk note: if DXY reclaims intraday high, gold momentum can stall fast.',
+      'Plan: partial at +1R, trail below structure, invalidate on session close below VWAP.',
+      'Context bridge: Intel Tide + Policy Flow both support selective long setups.',
+    ];
+    let cannedIndex = 0;
+
+    const wireDemoChat = (inputId, sendId, logId) => {
+      const input = document.getElementById(inputId);
+      const send = document.getElementById(sendId);
+      const log = document.getElementById(logId);
+      if (!input || !send || !log) return;
+
+      const appendBubble = (text, cls) => {
+        const node = document.createElement('div');
+        node.className = `bubble ${cls}`;
+        node.textContent = text;
+        log.appendChild(node);
+        log.scrollTop = log.scrollHeight;
+      };
+
+      const sendMessage = () => {
+        const value = input.value.trim();
+        if (!value) return;
+        appendBubble(value, 'user');
+        input.value = '';
+        const response = cannedResponses[cannedIndex % cannedResponses.length];
+        cannedIndex += 1;
+        setTimeout(() => appendBubble(`AXE: ${response}`, 'ai'), 320);
+      };
+
+      send.addEventListener('click', sendMessage);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') sendMessage();
+      });
+    };
+
+    wireDemoChat('phoneChatInput', 'phoneChatSend', 'phoneChatLog');
+    wireDemoChat('tabletChatInput', 'tabletChatSend', 'tabletChatLog');
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
