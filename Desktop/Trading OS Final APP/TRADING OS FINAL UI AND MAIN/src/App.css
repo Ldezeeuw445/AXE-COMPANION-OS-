@@ -1,0 +1,256 @@
+/* ===== TRADING OS DASHBOARD STYLES ===== */
+/* This file contains specific component styles */
+/* For the design system, see index.css */
+
+/* ===== INTERACTIVE GRID BACKGROUND ===== */
+.grid-background {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  background: #0a0a0a;
+}
+
+.grid-lines {
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  transform: perspective(500px) rotateX(60deg);
+  transform-origin: center top;
+}
+
+.grid-glow {
+  position: fixed;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(234, 179, 8, 0.25) 0%,
+    rgba(34, 197, 94, 0.2) 25%,
+    rgba(6, 182, 212, 0.15) 50%,
+    rgba(139, 92, 246, 0.08) 75%,
+    transparent 90%
+  );
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+/* ===== DASHBOARD LAYOUT ===== */
+.dashboard-container {
+  position: relative;
+  z-index: 10;
+}
+
+/* ===== SESSION BAR ENHANCEMENTS ===== */
+.session-time-pulse {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 8px #22c55e; }
+  50% { box-shadow: 0 0 16px #22c55e, 0 0 24px rgba(34, 197, 94, 0.5); }
+}
+
+/* ===== TICKER SCROLL ANIMATION ===== */
+.ticker-scroll {
+  animation: ticker-scroll 30s linear infinite;
+}
+
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ===== SIDEBAR COLLAPSE TRANSITION ===== */
+.sidebar-collapse-enter {
+  width: 224px;
+}
+
+.sidebar-collapse-exit {
+  width: 64px;
+}
+
+/* ===== WIDGET HOVER EFFECTS ===== */
+.widget-hover-lift {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widget-hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+/* ===== STAT BOX VARIATIONS ===== */
+.stat-box-positive {
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.stat-box-positive .stat-value {
+  color: #22c55e;
+}
+
+.stat-box-negative {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.stat-box-negative .stat-value {
+  color: #ef4444;
+}
+
+/* ===== CALENDAR DAY STATES ===== */
+.calendar-day-profit {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.08) 100%) !important;
+  border-color: rgba(34, 197, 94, 0.3) !important;
+  color: #22c55e !important;
+}
+
+.calendar-day-loss {
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.08) 100%) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #ef4444 !important;
+}
+
+.calendar-day-today {
+  background: linear-gradient(180deg, rgba(6, 182, 212, 0.12) 0%, rgba(6, 182, 212, 0.06) 100%) !important;
+  border-color: rgba(6, 182, 212, 0.4) !important;
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.2) !important;
+}
+
+/* ===== BUTTON 3D EFFECTS ===== */
+.btn-3d-cyan {
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.btn-3d-cyan::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* ===== SCROLLBAR STYLING ===== */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.3);
+}
+
+/* ===== LOADING SKELETON ===== */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===== TOOLTIP ===== */
+.tooltip {
+  position: relative;
+}
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.tooltip:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-8px);
+}
+
+/* ===== FOCUS STATES ===== */
+.focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.4);
+}
+
+/* ===== GLASS OVERLAY ===== */
+.glass-overlay {
+  background: linear-gradient(
+    180deg,
+    rgba(10, 10, 10, 0) 0%,
+    rgba(10, 10, 10, 0.5) 50%,
+    rgba(10, 10, 10, 0.9) 100%
+  );
+  pointer-events: none;
+}
+
+/* ===== RESPONSIVE BREAKPOINTS ===== */
+@media (max-width: 1280px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .sidebar {
+    width: 64px;
+  }
+  
+  .sidebar-text {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .session-bar {
+    display: none;
+  }
+}

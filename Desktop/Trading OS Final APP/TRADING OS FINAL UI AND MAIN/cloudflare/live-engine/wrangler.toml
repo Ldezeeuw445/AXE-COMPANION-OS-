@@ -1,0 +1,17 @@
+name = "trading-os-live-engine"
+main = "src/index.ts"
+compatibility_date = "2026-04-24"
+account_id = "5a6e6b579d5ad5409279acbe5961c83e"
+
+[[durable_objects.bindings]]
+name = "LIVE_ENGINE"
+class_name = "LiveEngineRoom"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["LiveEngineRoom"]
+
+# Secrets to set:
+# - FMP_API_KEYS, POLYGON_API_KEYS, etc. (comma-separated) for upstream providers
+# - Any upstream WS credentials you add later
+

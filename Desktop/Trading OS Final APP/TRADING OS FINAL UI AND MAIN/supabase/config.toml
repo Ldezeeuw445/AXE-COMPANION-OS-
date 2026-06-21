@@ -1,0 +1,15 @@
+[functions.engine-proxy]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/engine-proxy/index.ts"
+
+[functions.intel-proxy]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/intel-proxy/index.ts"
+
+[functions.onboarding-options]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/onboarding-options/index.ts"
+
