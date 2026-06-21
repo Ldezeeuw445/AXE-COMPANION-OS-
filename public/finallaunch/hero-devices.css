@@ -22,51 +22,46 @@
   --rx: 0deg;
   --ry: 0deg;
   --tz: 0px;
-  transform: rotateX(var(--rx)) rotateY(var(--ry)) translateZ(var(--tz));
-  transform-style: preserve-3d;
+  transform: none;
   transition: transform 180ms ease-out;
-  will-change: transform;
 }
 
-/* Phone — matches original hero-phone-wrap (508px) */
+/* Phone — kept a little smaller than the iPad */
 .device-3d--phone {
-  width: min(508px, 34.5vw);
+  width: min(424px, 28.5vw);
   flex: 0 0 auto;
   z-index: 3;
   filter: drop-shadow(0 28px 42px rgba(0, 0, 0, 0.28));
 }
 
-/* iPad — matches original hero-ipad-stack (1210px + 1.1 scale) */
+/* iPad — the larger device; tilt removed (flat, straight-on) */
 .device-3d--ipad {
   width: min(1210px, 86vw);
   flex: 0 0 auto;
   z-index: 1;
-  transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 4deg)) translateZ(var(--tz)) scale(1.1);
+  transform: scale(1.1);
   transform-origin: left bottom;
   filter: drop-shadow(0 30px 46px rgba(0, 0, 0, 0.24));
 }
 
+/* Thin black frame — shots.so iPhone 16 Pro / iPad 13 3D mock look */
 .device-bezel {
   position: relative;
-  border-radius: 42px;
-  padding: 12px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 38%, rgba(0, 0, 0, 0.35)),
-    linear-gradient(180deg, #2a2b31, #121318);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 48px;
+  padding: 5px;
+  background: #050507;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 28px 60px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(0, 0, 0, 0.35);
+    inset 0 0 0 1px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 60px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 
 .device-3d--ipad .device-bezel {
-  border-radius: 34px;
-  padding: 16px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 42%, rgba(0, 0, 0, 0.4)),
-    linear-gradient(180deg, #35363d, #101115);
+  border-radius: 30px;
+  padding: 6px;
+  background: #050507;
 }
 
 .device-notch {
@@ -90,7 +85,7 @@
 .device-screen {
   position: relative;
   overflow: hidden;
-  border-radius: 32px;
+  border-radius: 43px;
   background: #040508;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
@@ -114,7 +109,7 @@
 }
 
 .device-3d--ipad .device-screen {
-  border-radius: 16px;
+  border-radius: 24px;
   aspect-ratio: 4 / 3;
   min-height: 680px;
 }
@@ -133,14 +128,17 @@
     padding: 28px 18px 32px;
   }
 
-  .device-3d--phone,
   .device-3d--ipad,
   .hero-ipad-stack-live {
-    width: min(420px, 92vw);
+    width: min(460px, 94vw);
+  }
+
+  .device-3d--phone {
+    width: min(360px, 82vw);
   }
 
   .device-3d--ipad {
-    transform: rotateX(var(--rx)) rotateY(var(--ry)) translateZ(var(--tz));
+    transform: none;
     scale: 1;
   }
 
