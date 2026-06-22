@@ -3,7 +3,14 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const ADAPTERS_DIR = path.resolve(process.cwd(), 'src/lib/broker/hub/adapters/AXE-COMPANION-OS-');
+// Prefer the explicit AXE-COMPANION-OS- adapters folder, but fall back to the
+// general adapters folder so CI is robust to small path/layout differences.
+const PREFERRED_DIR = path.resolve(process.cwd(), 'src/lib/broker/hub/adapters/AXE-COMPANION-OS-');
+const FALLBACK_DIR = path.resolve(process.cwd(), 'src/lib/broker/hub/adapters');
+let ADAPTERS_DIR = PREFERRED_DIR;
+if (!fs.existsSync(ADAPTERS_DIR) && fs.existsSync(FALLBACK_DIR)) {
+  ADAPTERS_DIR = FALLBACK_DIR;
+}
 
 function findTsFiles(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -56,12 +63,12 @@ function tryTscCompile(files) {
 
 (async function main(){
   if (!fs.existsSync(ADAPTERS_DIR)) {
-    console.error('Adapters dir not found:', ADAPTERS_DIR);
+    console.error('Adapters dir not found. Tried:', PREFERRED_DIR, 'and', FALLBACK_DIR);
     process.exit(1);
   }
   const tsFiles = findTsFiles(ADAPTERS_DIR);
   if (!tsFiles.length) {
-    console.log('No TypeScript adapter files found to compile.');
+    console.log('No TypeScript adapter files found to compile in', ADAPTERS_DIR);
     process.exit(0);
   }
 
