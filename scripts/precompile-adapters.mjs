@@ -44,6 +44,7 @@ function tryTscCompile(files) {
   console.log('Falling back to tsc via npx (requires network or local typescript)');
   const tmpConfigPath = path.join(process.cwd(), 'tmp-tsconfig.adapters.json');
   const tmpOut = path.join(process.cwd(), 'tmp-adapters');
+  const adaptersRelative = path.relative(process.cwd(), ADAPTERS_DIR).replace(/\\\\/g, '/');
   const cfg = {
     compilerOptions: {
       module: 'CommonJS',
@@ -58,7 +59,10 @@ function tryTscCompile(files) {
         '@/*': ['src/*']
       }
     },
-    files: files
+    include: [
+      'src/**/*',
+      adaptersRelative + '/**/*'
+    ]
   };
   fs.writeFileSync(tmpConfigPath, JSON.stringify(cfg, null, 2));
   const res = spawnSync('npx', ['tsc', '-p', tmpConfigPath], { stdio: 'inherit' });
