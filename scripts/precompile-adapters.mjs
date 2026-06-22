@@ -51,7 +51,12 @@ function tryTscCompile(files) {
       outDir: tmpOut,
       esModuleInterop: true,
       skipLibCheck: true,
-      resolveJsonModule: true
+      resolveJsonModule: true,
+      // Resolve project path aliases like '@/lib/...'
+      baseUrl: '.',
+      paths: {
+        '@/*': ['src/*']
+      }
     },
     files: files
   };
