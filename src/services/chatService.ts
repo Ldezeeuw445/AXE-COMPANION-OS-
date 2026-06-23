@@ -29,8 +29,8 @@ import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
 import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
 import { autoJournalTrades } from "@/services/journalingService";
 import { handlePrepareExecutionRequest, handleRouteChartAction } from "@/services/axeToolHandlers";
-import type { ChatMessage, ConversationSummary } from "@/types/domain";
-import type OpenAI from "openai";
+import type { ChatMessage as DomainChatMessage, ConversationSummary } from "@/types/domain";
+import type { LLMChatMessage } from "@/services/llmClient";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
@@ -44,7 +44,7 @@ type ConversationRow = {
 
 type MessageRow = {
   id: string;
-  role: ChatMessage["role"];
+  role: DomainChatMessage["role"];
   content: string;
   created_at: string;
   metadata?: Record<string, unknown> | null;
@@ -59,7 +59,7 @@ function mapConversation(row: ConversationRow): ConversationSummary {
   };
 }
 
-function mapMessage(row: MessageRow): ChatMessage {
+function mapMessage(row: MessageRow): DomainChatMessage {
   const metadata = row.metadata ?? {};
   const feedbackRaw = metadata.feedback;
   const feedback = feedbackRaw === "up" || feedbackRaw === "down" ? feedbackRaw : null;
@@ -197,7 +197,7 @@ export async function ensurePrimaryConversation(userId: string): Promise<Convers
 
 export async function getChatThread(): Promise<{
   conversation: ConversationSummary;
-  messages: ChatMessage[];
+  messages: DomainChatMessage[];
 }> {
   const authed = await getAuthedServiceSupabase();
   if (authed) {
@@ -591,10 +591,10 @@ export async function sendChatMessage(
   }
 
   function appendToolRound(
-    msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+    msgs: LLMChatMessage[],
     tcs: AxeToolCall[],
     results: { tc: AxeToolCall; result: string }[]
-  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+  ): LLMChatMessage[] {
     return [
       ...msgs,
       {
@@ -605,14 +605,14 @@ export async function sendChatMessage(
           type: "function" as const,
           function: { name: tc.tool, arguments: JSON.stringify(tc.args) },
         })),
-      } as OpenAI.Chat.ChatCompletionAssistantMessageParam,
+      },
       ...results.map(
         ({ tc, result }) =>
           ({
-            role: "tool",
+            role: "tool" as const,
             tool_call_id: tc.id,
             content: result,
-          }) as OpenAI.Chat.ChatCompletionToolMessageParam
+          })
       ),
     ];
   }
@@ -926,14 +926,14 @@ export async function streamChatMessage(
   }
 
   function appendToolRound(
-    msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+    msgs: LLMChatMessage[],
     tcs: AxeToolCall[],
     results: { tc: AxeToolCall; result: string }[],
-  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+  ): LLMChatMessage[] {
     return [
       ...msgs,
-      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.tool, arguments: JSON.stringify(tc.args) } })) } as OpenAI.Chat.ChatCompletionAssistantMessageParam,
-      ...results.map(({ tc, result }) => ({ role: "tool", tool_call_id: tc.id, content: result }) as OpenAI.Chat.ChatCompletionToolMessageParam),
+      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.tool, arguments: JSON.stringify(tc.args) } })) },
+      ...results.map(({ tc, result }) => ({ role: "tool" as const, tool_call_id: tc.id, content: result })),
     ];
   }
 
