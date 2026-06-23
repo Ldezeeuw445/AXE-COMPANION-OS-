@@ -1,37 +1,67 @@
-const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS ?? 15000);import OpenAI from "openai";
+import OpenAI from "openai";
 import type { AxeToolCall } from "./axeService";
 
 /* ───────────────────────────────────────────────────────────────
    Unified LLM Client — Ollama (primary) + OpenAI (fallback)
-   ───────────────────────────────────────────────────────────────
-
-   Designed for AXE Companion's AI assistant.
-   
-   • Tries Ollama first (local/private, $0 per request)
-   • Falls back to OpenAI automatically if Ollama fails
-   • Supports streaming and tool calling for both providers
-   • OLLAMA_HOST is fully configurable via env (for Cloudflare Tunnel)
 
    Environment variables:
-     OLLAMA_HOST          — Ollama base URL (default: http://localhost:11434)
-     OLLAMA_MODEL         — Model name (default: qwen2.5-coder:7b)
-     OPENAI_API_KEY       — OpenAI API key (fallback)
-     FALLBACK_TO_OPENAI   — "true" | "false" (default: true)
-     OLLAMA_TIMEOUT_MS    — Timeout in ms (default: 15000)
+     OLLAMA_HOST / OLLAMA_URL  — Ollama base URL (default: http://localhost:11434)
+     OLLAMA_MODEL              — Model name (default: qwen2.5-coder:7b)
+     OLLAMA_TIMEOUT_MS         — Non-streaming timeout ms (default: 90000)
+     OPENAI_API_KEY            — OpenAI API key (fallback)
+     FALLBACK_TO_OPENAI        — "true" | "false" (default: true)
+     CF_ACCESS_CLIENT_ID       — Cloudflare Access service token (for named tunnels)
+     CF_ACCESS_CLIENT_SECRET   — Cloudflare Access service token secret
    ─────────────────────────────────────────────────────────────── */
 
-const OLLAMA_HOST = (process.env.OLLAMA_HOST ?? "http://localhost:11434").replace(/\/$/, "");
+// Non-streaming local 7B models can take 60-90s; streaming only needs connect timeout
+const OLLAMA_CHAT_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS ?? 90_000);
+const OLLAMA_STREAM_CONNECT_MS = 15_000;
+const OLLAMA_HEALTH_TIMEOUT_MS = 5_000;
+
+const OLLAMA_HOST = (process.env.OLLAMA_HOST ?? process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5-coder:7b";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
-const FALLBACK_TO_OPENAI = (process.env.FALLBACK_TO_OPENAI ?? "true") !== "false";
+const FALLBACK_TO_OPENAI = (process.env.FALLBACK_TO_OPENAI ?? process.env.LLM_FALLBACK_ENABLED ?? "true") !== "false";
 const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID;
 const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET;
 
+// Health cache — avoids hammering a dead Ollama on every request (30s TTL)
+let _ollamaHealthy: boolean | null = null;
+let _ollamaLastCheck = 0;
+const OLLAMA_HEALTH_TTL = 30_000;
+
+async function isOllamaReachable(): Promise<boolean> {
+  if (OLLAMA_HOST === "http://localhost:11434" && process.env.NODE_ENV === "production") return false;
+  const now = Date.now();
+  if (_ollamaHealthy !== null && now - _ollamaLastCheck < OLLAMA_HEALTH_TTL) return _ollamaHealthy;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), OLLAMA_HEALTH_TIMEOUT_MS);
+    const res = await fetch(`${OLLAMA_HOST}/api/tags`, {
+      method: "GET",
+      headers: getOllamaHeaders(),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    _ollamaHealthy = res.ok;
+  } catch {
+    _ollamaHealthy = false;
+  }
+  _ollamaLastCheck = Date.now();
+  return _ollamaHealthy;
+}
+
+function invalidateOllamaHealth() {
+  _ollamaHealthy = false;
+  _ollamaLastCheck = Date.now();
+}
+
 function getOllamaHeaders(): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  // Only send Cloudflare Access headers when connecting to a Cloudflare Tunnel domain
-  const isCloudflareTunnel = OLLAMA_HOST.includes(".axecompanion.com") || OLLAMA_HOST.includes("trycloudflare.com");
-  if (isCloudflareTunnel && CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+  // Send CF Access service token headers for any non-localhost remote URL
+  const isRemote = !OLLAMA_HOST.startsWith("http://localhost") && !OLLAMA_HOST.startsWith("http://127.");
+  if (isRemote && CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
     headers["CF-Access-Client-Id"] = CF_ACCESS_CLIENT_ID;
     headers["CF-Access-Client-Secret"] = CF_ACCESS_CLIENT_SECRET;
   }
@@ -104,7 +134,7 @@ async function ollamaChatCompletion(params: ChatCompletionParams): Promise<ChatC
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_CHAT_TIMEOUT_MS);
 
   try {
     const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -181,7 +211,7 @@ async function ollamaChatCompletionStream(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_STREAM_CONNECT_MS);
 
   try {
     const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -378,32 +408,29 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
   const isVisionModel = OLLAMA_MODEL.includes("vl") || OLLAMA_MODEL.includes("llava") || OLLAMA_MODEL.includes("vision");
   const adaptedParams = needsVision && !isVisionModel ? { ...params, messages: stripImages(params.messages) } : params;
 
-  // Try Ollama first
-  try {
-    console.log(`[llmClient] Trying Ollama at ${OLLAMA_HOST} with model ${OLLAMA_MODEL}`);
-    const result = await ollamaChatCompletion(adaptedParams);
-    console.log(`[llmClient] Ollama success (provider: ${result.provider})`);
-    return result;
-  } catch (ollamaErr) {
-    const errMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
-    console.error(`[llmClient] Ollama failed: ${errMsg}`);
+  // Health pre-check to avoid 90s timeout when Ollama is clearly down
+  const ollamaUp = await isOllamaReachable();
+  if (ollamaUp) {
+    try {
+      const result = await ollamaChatCompletion(adaptedParams);
+      return result;
+    } catch (ollamaErr) {
+      const errMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
+      console.error(`[llmClient] Ollama failed: ${errMsg}`);
+      invalidateOllamaHealth();
 
-    // Fallback to OpenAI
-    if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
-      console.log("[llmClient] Falling back to OpenAI...");
-      try {
-        const result = await openaiChatCompletion(params);
-        console.log(`[llmClient] OpenAI fallback success (provider: ${result.provider})`);
-        return result;
-      } catch (openaiErr) {
-        const openaiMsg = openaiErr instanceof Error ? openaiErr.message : String(openaiErr);
-        console.error(`[llmClient] OpenAI fallback also failed: ${openaiMsg}`);
-        throw new Error(`Both Ollama and OpenAI failed. Ollama: ${errMsg}. OpenAI: ${openaiMsg}`);
+      if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
+        return openaiChatCompletion(params);
       }
+      throw new Error(`Ollama failed and fallback is disabled. Error: ${errMsg}`);
     }
-
-    throw new Error(`Ollama failed and fallback is disabled. Error: ${errMsg}`);
   }
+
+  // Ollama unreachable — go straight to OpenAI
+  if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
+    return openaiChatCompletion(params);
+  }
+  throw new Error("Ollama unreachable and OpenAI fallback is disabled or unconfigured");
 }
 
 /* ── Public: unified streaming chat completion with fallback ── */
@@ -411,35 +438,29 @@ export async function chatCompletionStream(
   params: ChatCompletionParams,
   onToken: (text: string) => void
 ): Promise<ChatCompletionResult> {
-  // If images are present but model is likely non-vision, strip them
   const needsVision = hasImageContent(params.messages);
   const isVisionModel = OLLAMA_MODEL.includes("vl") || OLLAMA_MODEL.includes("llava") || OLLAMA_MODEL.includes("vision");
   const adaptedParams = needsVision && !isVisionModel ? { ...params, messages: stripImages(params.messages) } : params;
 
-  // Try Ollama first
-  try {
-    console.log(`[llmClient] Trying Ollama streaming at ${OLLAMA_HOST} with model ${OLLAMA_MODEL}`);
-    const result = await ollamaChatCompletionStream(adaptedParams, onToken);
-    console.log(`[llmClient] Ollama streaming success (provider: ${result.provider})`);
-    return result;
-  } catch (ollamaErr) {
-    const errMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
-    console.error(`[llmClient] Ollama streaming failed: ${errMsg}`);
+  const ollamaUp = await isOllamaReachable();
+  if (ollamaUp) {
+    try {
+      const result = await ollamaChatCompletionStream(adaptedParams, onToken);
+      return result;
+    } catch (ollamaErr) {
+      const errMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
+      console.error(`[llmClient] Ollama streaming failed: ${errMsg}`);
+      invalidateOllamaHealth();
 
-    // Fallback to OpenAI
-    if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
-      console.log("[llmClient] Falling back to OpenAI streaming...");
-      try {
-        const result = await openaiChatCompletionStream(params, onToken);
-        console.log(`[llmClient] OpenAI streaming fallback success (provider: ${result.provider})`);
-        return result;
-      } catch (openaiErr) {
-        const openaiMsg = openaiErr instanceof Error ? openaiErr.message : String(openaiErr);
-        console.error(`[llmClient] OpenAI streaming fallback also failed: ${openaiMsg}`);
-        throw new Error(`Both Ollama and OpenAI streaming failed. Ollama: ${errMsg}. OpenAI: ${openaiMsg}`);
+      if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
+        return openaiChatCompletionStream(params, onToken);
       }
+      throw new Error(`Ollama streaming failed and fallback is disabled. Error: ${errMsg}`);
     }
-
-    throw new Error(`Ollama streaming failed and fallback is disabled. Error: ${errMsg}`);
   }
+
+  if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
+    return openaiChatCompletionStream(params, onToken);
+  }
+  throw new Error("Ollama unreachable and OpenAI fallback is disabled or unconfigured");
 }
