@@ -29,7 +29,9 @@ const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET;
 
 function getOllamaHeaders(): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+  // Only send Cloudflare Access headers when connecting to a Cloudflare Tunnel domain
+  const isCloudflareTunnel = OLLAMA_HOST.includes(".axecompanion.com") || OLLAMA_HOST.includes("trycloudflare.com");
+  if (isCloudflareTunnel && CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
     headers["CF-Access-Client-Id"] = CF_ACCESS_CLIENT_ID;
     headers["CF-Access-Client-Secret"] = CF_ACCESS_CLIENT_SECRET;
   }
