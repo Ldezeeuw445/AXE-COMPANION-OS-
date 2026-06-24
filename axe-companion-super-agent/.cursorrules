@@ -1,0 +1,97 @@
+# AXE Companion Super Agent - Cursor Rules
+# This file tells Cursor exactly how to understand and work with this codebase
+
+## Project Identity
+- **Name**: AXE Companion - AI Trading Assistant
+- **Type**: Full-stack AI-powered trading analytics platform
+- **Language**: Python 3.12+ (backend), React/TypeScript (frontend)
+- **Database**: Supabase (PostgreSQL + pgvector)
+- **AI**: OpenAI GPT-4 + Embeddings
+
+## Architecture Overview
+- **Pattern**: Modular async microservices-style within monolith
+- **Core Engine**: DailyLearningPipeline orchestrates all operations
+- **Data Layer**: Free web scraping + optional API keys (Yahoo Finance, Finviz, Reddit, GovTrack)
+- **AI Layer**: EmbeddingGenerator, LearningArcManager, InsightsGenerator
+- **Storage**: Supabase with 7 core tables + vector embeddings
+
+## Module Responsibilities
+| Module | File | Purpose |
+|--------|------|---------|
+| Config | `config/settings.py` | All env vars, feature flags, watchlists |
+| DatabaseSchema | `supabase/migrations/` | SQL migrations for all tables |
+| OptionsFlowCollector | `lib/data/collectors/options_flow_free.py` | Options data from Yahoo/Finviz/Reddit |
+| PolicyFlowCollector | `lib/data/collectors/policy_flow_free.py` | Legislation from GovTrack/Federal Register |
+| DarkPoolCollector | `lib/data/collectors/dark_pool_free.py` | Dark pool from TradingView/Yahoo |
+| AlternativeDataCollector | `lib/data/collectors/alternative_data_free.py` | Orchestrates all collectors |
+| EmbeddingGenerator | `lib/ai/processors/embeddings.py` | OpenAI embeddings + Supabase storage |
+| LearningArcManager | `lib/ai/processors/learning_arc.py` | User trading profile + behavior analysis |
+| InsightsGenerator | `lib/ai/processors/insights.py` | Personalized daily insights |
+| DailyLearningPipeline | `lib/scheduler/daily_learning_pipeline.py` | Main orchestration scheduler |
+
+## Coding Standards
+- **Async first**: All I/O operations must use `async`/`await`
+- **Type hints**: Every function must have typed parameters and returns
+- **Context managers**: All external sessions use `__aenter__`/`__aexit__`
+- **Error handling**: Try/except with descriptive print logging
+- **Naming**: English for code, Dutch for user-facing strings
+
+## Database Schema (7 Core Tables)
+1. `users` - User accounts
+2. `trades` - Trade journal entries
+3. `learning_arcs` - AI user profiles (JSONB heavy)
+4. `dark_pool_trades` + `dark_pool_summary` - Dark pool data
+5. `options_flow` + `options_flow_summary` - Options data
+6. `legislation` + `regulatory_changes` - Policy data
+7. `knowledge_embeddings` - Vector embeddings (1536 dim)
+8. `watchlists` - User watchlists
+9. `user_preferences` - Notification/settings
+
+## Key Environment Variables
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
+SCHEDULER_DAILY_RUN_TIME=06:00
+SCHEDULER_TIMEZONE=Europe/Amsterdam
+DATA_COLLECTION_ENABLED=true
+```
+
+## When Adding New Features
+1. Check FEATURE_ROADMAP.md for planned features
+2. Follow the existing async pattern
+3. Add corresponding database migration
+4. Update the daily pipeline if data collection is involved
+5. Add user preference toggle if user-facing
+6. Update API_SPECIFICATION.md for new endpoints
+
+## Testing Commands
+```bash
+python -m pytest tests/           # Run all tests
+python ai_trading_assistant.py test   # Test collectors
+python ai_trading_assistant.py test-pipeline  # Test pipeline
+python ai_trading_assistant.py schema  # Print schema
+```
+
+## NEVER DO
+- Block the event loop with sync I/O
+- Hardcode API keys (always use env vars)
+- Skip error handling on external API calls
+- Modify Config class directly (use env vars)
+- Run DB migrations without backup
+
+## ALWAYS DO
+- Use `aiohttp.ClientSession` for HTTP
+- Close sessions in `__aexit__`
+- Validate env vars before starting
+- Add index on new table columns
+- Log collection statistics
+
+## AI Agents Architecture (Planned)
+- MarketAnalystAgent: Technical analysis + setup generation
+- RiskManagerAgent: Position sizing + risk alerts
+- JournalingAgent: Auto-trade logging + pattern detection
+- LearningAgent: Personalized education paths
+- StrategyAgent: Backtesting + optimization
+- TradingCouncil: Multi-agent consensus system

@@ -1,0 +1,45 @@
+name: Apply Supabase Migrations
+
+on:
+  push:
+    branches:
+      - main
+      - axe-companion-runtime-foundation
+    paths:
+      - "supabase/migrations/**"
+      - ".github/workflows/apply-supabase-migrations.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: apply-supabase-migrations
+  cancel-in-progress: true
+
+jobs:
+  migrate:
+    name: Push runtime migrations
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != '' && env.SUPABASE_DB_PASSWORD != '' }}
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Apply migrations
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != '' && env.SUPABASE_DB_PASSWORD != '' }}
+        run: supabase db push --linked --include-all
+
+      - name: Skip notice (missing secrets)
+        if: ${{ env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_PROJECT_REF == '' || env.SUPABASE_DB_PASSWORD == '' }}
+        run: |
+          echo "::warning::Skipping migration apply — set SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF and SUPABASE_DB_PASSWORD."
