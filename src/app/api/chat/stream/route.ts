@@ -1,6 +1,7 @@
 import { streamChatMessage, type StreamEvent } from "@/services/chatService";
+import { getEdgeAuthedServiceSupabase } from "@/services/serviceSupabase";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
@@ -13,6 +14,15 @@ export async function POST(request: Request) {
   const imageType = typeof body?.imageType === "string" ? body.imageType : undefined;
   const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
   const tf = typeof body?.tf === "string" ? body.tf : undefined;
+
+  // Edge auth
+  const edgeAuth = await getEdgeAuthedServiceSupabase(request);
+  if (!edgeAuth) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "Unauthorized" }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
   const encoder = new TextEncoder();
 
@@ -29,7 +39,7 @@ export async function POST(request: Request) {
       }
 
       try {
-        const result = await streamChatMessage(text, send, imageBase64, imageType, symbol, tf);
+        const result = await streamChatMessage(text, send, imageBase64, imageType, symbol, tf, edgeAuth);
 
         if (!result.ok) {
           if (result.quotaExceeded) {

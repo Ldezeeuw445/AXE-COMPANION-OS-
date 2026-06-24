@@ -1,6 +1,7 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
+import { chatCompletion, type LLMChatMessage } from "@/services/llmClient";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /**
@@ -42,194 +43,197 @@ type ExtractedMemory = {
 
 /* ── GET: list memories ──────────────────────────────────────────── */
 
-export async function GET(req: Request) {
-  const supabase = await createServerSupabaseClient();
+export async function GET(request: Request) {
+  const supabase = createEdgeSupabaseClient(request);
   if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
 
-  const url = new URL(req.url);
-  const type = url.searchParams.get("type");
-  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? 30)));
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type") as MemoryType | null;
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);
 
   let query = supabase
-    .from("axe_memory")
-    .select("id,memory_type,content,symbol,confidence,source,created_at,updated_at")
+    .from("axe_memories")
+    .select("id,memory_type,content,symbol,confidence,created_at")
     .eq("user_id", user.id)
-    .is("resolved_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (type) query = query.eq("memory_type", type);
+  if (type) {
+    query = query.eq("memory_type", type);
+  }
 
   const { data, error } = await query;
-  if (error) return jsonResponse({ ok: false, error: error.message }, 500);
+
+  if (error) {
+    console.error("[axe-memory] GET failed:", error);
+    return jsonResponse({ ok: false, error: "Failed to load memories." }, 500);
+  }
 
   return jsonResponse({ ok: true, memories: data ?? [] });
 }
 
-/* ── DELETE: remove memory ───────────────────────────────────────── */
+/* ── POST: extract & store memories ──────────────────────────────── */
 
-export async function DELETE(req: Request) {
-  const supabase = await createServerSupabaseClient();
+export async function POST(request: Request) {
+  const supabase = createEdgeSupabaseClient(request);
   if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
 
-  const body = (await req.json().catch(() => null)) as { id?: string } | null;
-  if (!body?.id) return jsonResponse({ ok: false, error: "missing id" }, 400);
+  const body = (await request.json().catch(() => ({}))) as {
+    messages?: Array<{ role: string; content: string }>;
+  };
 
-  const { error } = await supabase
-    .from("axe_memory")
-    .update({ resolved_at: new Date().toISOString() })
-    .eq("id", body.id)
-    .eq("user_id", user.id);
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  if (messages.length < 2) {
+    return jsonResponse({ ok: false, error: "Need at least 2 messages to extract memories." }, 400);
+  }
 
-  if (error) return jsonResponse({ ok: false, error: error.message }, 500);
-  return jsonResponse({ ok: true });
-}
-
-/* ── POST: extract memories from conversation ────────────────────── */
-
-export async function POST(req: Request) {
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
-
-  const body = (await req.json().catch(() => null)) as {
-    messages?: { role: string; content: string }[];
-  } | null;
-
-  const messages = body?.messages ?? [];
-  if (messages.length < 2) return jsonResponse({ ok: true, extracted: 0, reason: "too_short" });
-
-  const openaiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
-  if (!openaiKey) return jsonResponse({ ok: false, error: "OPENAI_API_KEY not configured" }, 503);
-
-  // Load existing memories to avoid duplicates
-  const { data: existing } = await supabase
-    .from("axe_memory")
-    .select("content,memory_type")
-    .eq("user_id", user.id)
-    .is("resolved_at", null)
-    .order("created_at", { ascending: false })
-    .limit(30);
+  // Take last 20 messages for context
+  const recentMessages = messages.slice(-20);
 
   try {
-    const extracted = await extractMemories(openaiKey, messages, existing ?? []);
+    const memories = await extractMemories(recentMessages);
 
-    if (extracted.length === 0) return jsonResponse({ ok: true, extracted: 0 });
+    // Store each memory
+    const stored = [];
+    for (const memory of memories) {
+      if (memory.confidence < 0.6) continue; // Only store high-confidence memories
 
-    // Store new memories
-    let stored = 0;
-    for (const mem of extracted) {
-      const { error } = await supabase.from("axe_memory").insert({
-        user_id: user.id,
-        memory_type: mem.memory_type,
-        content: mem.content,
-        symbol: mem.symbol,
-        confidence: mem.confidence,
-        source: "chat",
-        type: mem.memory_type, // legacy column
-      });
-      if (!error) stored++;
+      const { data, error } = await supabase
+        .from("axe_memories")
+        .insert({
+          user_id: user.id,
+          memory_type: memory.memory_type,
+          content: memory.content,
+          symbol: memory.symbol,
+          confidence: memory.confidence,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[axe-memory] Failed to store memory:", error);
+      } else {
+        stored.push(data);
+      }
     }
 
-    return jsonResponse({ ok: true, extracted: stored, memories: extracted });
+    return jsonResponse({ ok: true, extracted: memories.length, stored: stored.length });
   } catch (e) {
-    return jsonResponse(
-      { ok: false, error: e instanceof Error ? e.message : "Extraction failed" },
-      500,
-    );
+    console.error("[axe-memory] Extraction failed:", e);
+    return jsonResponse({ ok: false, error: "Failed to extract memories." }, 500);
   }
 }
 
-/* ── GPT-4o memory extraction ────────────────────────────────────── */
+/* ── DELETE: remove a memory ───────────────────────────────────── */
 
-async function extractMemories(
-  apiKey: string,
-  messages: { role: string; content: string }[],
-  existing: { content: string; memory_type: string }[],
-): Promise<ExtractedMemory[]> {
-  const conversationText = messages
-    .slice(-20) // Last 20 messages max
-    .map((m) => `${m.role.toUpperCase()}: ${m.content.slice(0, 500)}`)
-    .join("\n");
+export async function DELETE(request: Request) {
+  const supabase = createEdgeSupabaseClient(request);
+  if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
 
-  const existingText = existing.length > 0
-    ? `\n\nEXISTING MEMORIES (do not duplicate these):\n${existing.map((e) => `- [${e.memory_type}] ${e.content}`).join("\n")}`
-    : "";
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
 
-  const systemPrompt = `You are AXE MEMORY EXTRACTOR. You analyze conversations between a trader and AXE (their AI trading companion) to extract durable observations about the trader.
+  const body = (await request.json().catch(() => ({}))) as { id?: string };
+  const id = body.id;
 
-You extract ONLY insights that would be valuable for AXE to remember across future sessions. Not temporary things like "currently looking at XAUUSD" but durable patterns like "tends to close winners too early" or "prefers London session for gold entries".
+  if (!id) {
+    return jsonResponse({ ok: false, error: "Memory id is required." }, 400);
+  }
+
+  const { error } = await supabase
+    .from("axe_memories")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("[axe-memory] DELETE failed:", error);
+    return jsonResponse({ ok: false, error: "Failed to delete memory." }, 500);
+  }
+
+  return jsonResponse({ ok: true });
+}
+
+/* ── LLM Memory Extraction ─────────────────────────────────────── */
+
+const MEMORY_SYSTEM_PROMPT = `You are AXE Memory Extractor — an AI that analyzes trading conversations and extracts durable observations about the trader.
+
+Analyze the conversation and extract 0-5 memories that would help AXE provide better personalized advice in future conversations.
 
 Memory types:
-- observation: Factual notes about the trader ("Trades XAUUSD and EURUSD primarily")
-- pattern: Recurring behavior patterns ("Adds to losing positions when frustrated", "Best win rate on Monday-Wednesday")
-- preference: Stated or inferred preferences ("Prefers M15 for entries", "Likes ICT concepts")
-- weakness: Trading weaknesses to watch for ("Breaks risk rules after a loss streak", "Revenge trades after SL hit")
-- strength: Things the trader does well ("Excellent patience on entry confirmation", "Good at identifying order blocks")
-- rule: Trading rules the trader has stated ("Never risk more than 1%", "No trades 30min before NFP")
-- context: Longer-term context ("Building a swing portfolio in gold", "Transitioning from demo to live")
+- observation: "Trades better in London session"
+- pattern: "Closes winners too early 3x this week"
+- preference: "Prefers gold, usually bullish bias"
+- weakness: "Adds to losers under pressure"
+- strength: "Excellent risk management in ranging markets"
+- rule: "Never trade NFP without plan"
+- context: "Currently focused on XAUUSD M15 ICT setups"
 
-Respond in EXACTLY this JSON (no markdown fences):
+Respond in EXACTLY this JSON format (no markdown, no code fences):
 {
   "memories": [
     {
-      "memory_type": "pattern",
-      "content": "Closes winning trades at 1R instead of letting runners hit 2R+ — mentioned this as a weakness",
+      "memory_type": "observation",
+      "content": "Clear, specific observation",
       "symbol": "XAUUSD" or null,
       "confidence": 0.85
     }
   ]
 }
 
-RULES:
-- Extract 0-4 memories per conversation. Most conversations yield 0-2. Quality over quantity.
-- Skip if the conversation is just a quick question/answer with no behavioral insight.
-- confidence: 0.5-1.0. Higher = more certain this is a real pattern, not a one-off comment.
-- Do NOT extract: temporary price levels, current positions, time-of-day things, what they just asked.
-- DO extract: behavioral patterns, emotional tendencies, rule statements, skill assessments, trading style.
-- If something contradicts an existing memory, extract the update with confidence 0.9+.
-- Return empty array if nothing worth remembering.`;
+Rules:
+- Only extract high-confidence observations (confidence >= 0.6)
+- Be specific, not generic
+- Include symbol if relevant
+- If no meaningful observations, return empty array
+- Never fabricate information not in the conversation`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `${conversationText}${existingText}` },
-      ],
-      temperature: 0.3,
-      max_tokens: 1000,
-    }),
+async function extractMemories(
+  messages: Array<{ role: string; content: string }>
+): Promise<ExtractedMemory[]> {
+  const conversationText = messages
+    .map((m) => `${m.role}: ${m.content}`)
+    .join("\n\n");
+
+  const llmMessages: LLMChatMessage[] = [
+    { role: "system", content: MEMORY_SYSTEM_PROMPT },
+    { role: "user", content: `Analyze this conversation and extract memories:\n\n${conversationText}` },
+  ];
+
+  const result = await chatCompletion({
+    messages: llmMessages,
+    temperature: 0.3,
+    maxTokens: 1500,
   });
 
-  if (!res.ok) throw new Error(`OpenAI ${res.status}`);
+  if (!result.content) return [];
 
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) return [];
+  try {
+    const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(cleaned) as {
+      memories: Array<{
+        memory_type: string;
+        content: string;
+        symbol: string | null;
+        confidence: number;
+      }>;
+    };
 
-  const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-  const parsed = JSON.parse(cleaned) as { memories: ExtractedMemory[] };
-
-  return (parsed.memories ?? [])
-    .filter((m) => m.content && m.memory_type)
-    .map((m) => ({
-      memory_type: m.memory_type,
-      content: String(m.content).slice(0, 500),
-      symbol: m.symbol || null,
-      confidence: Math.max(0.5, Math.min(1, Number(m.confidence) || 0.7)),
+    return (parsed.memories ?? []).map((m) => ({
+      memory_type: (["observation", "pattern", "preference", "weakness", "strength", "rule", "context"].includes(m.memory_type)
+        ? m.memory_type
+        : "observation") as MemoryType,
+      content: String(m.content ?? "").slice(0, 500),
+      symbol: m.symbol ? String(m.symbol).slice(0, 20) : null,
+      confidence: Math.max(0, Math.min(1, Number(m.confidence) || 0.5)),
     }));
+  } catch {
+    return [];
+  }
 }

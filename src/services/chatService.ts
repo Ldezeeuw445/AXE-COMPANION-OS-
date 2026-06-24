@@ -31,6 +31,8 @@ import { autoJournalTrades } from "@/services/journalingService";
 import { handlePrepareExecutionRequest, handleRouteChartAction } from "@/services/axeToolHandlers";
 import type { ChatMessage as DomainChatMessage, ConversationSummary } from "@/types/domain";
 import type { LLMChatMessage } from "@/services/llmClient";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
@@ -241,12 +243,13 @@ export async function sendChatMessage(
   imageBase64?: string,
   imageType?: string,
   symbol?: string,
-  tf?: string
+  tf?: string,
+  edgeAuth?: { supabase: SupabaseClient; user: User } | null,
 ): Promise<SendChatMessageResult> {
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
 
-  const authed = await getAuthedServiceSupabase();
+  const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
   const conversation = await ensurePrimaryConversation(authed.user.id);
@@ -684,11 +687,12 @@ export async function streamChatMessage(
   imageType?: string,
   symbol?: string,
   tf?: string,
+  edgeAuth?: { supabase: SupabaseClient; user: User } | null,
 ): Promise<{ ok: boolean; quotaExceeded?: boolean; aiFailed?: boolean }> {
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
 
-  const authed = await getAuthedServiceSupabase();
+  const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
   const conversation = await ensurePrimaryConversation(authed.user.id);

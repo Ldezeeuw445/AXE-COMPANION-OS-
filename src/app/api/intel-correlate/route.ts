@@ -1,16 +1,16 @@
-import type { NextRequest } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
+import { chatCompletion, type LLMChatMessage } from "@/services/llmClient";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/intel-correlate
  *
- * Runs GPT-4o cross-feed correlation analysis on the current intel snapshot.
+ * Runs LLM cross-feed correlation analysis on the current intel snapshot.
  * Takes all 10 feeds (smart money + alt-data), builds a structured context,
- * and asks GPT-4o to find actionable cross-feed correlations.
+ * and asks the LLM to find actionable cross-feed correlations.
  *
  * Body: { symbol?: string }
  * Returns: { ok: true, correlation: {...} } | { ok: false, error: string }
@@ -33,8 +33,8 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-export async function POST(request: NextRequest) {
-  const supabase = await createServerSupabaseClient();
+export async function POST(request: Request) {
+  const supabase = createEdgeSupabaseClient(request);
   if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
 
   const {
@@ -54,21 +54,15 @@ export async function POST(request: NextRequest) {
   // Load the full intel snapshot (all 10 feeds)
   const intel = await loadIntelSnapshot({ symbol });
 
-  // Build structured context for GPT-4o
+  // Build structured context for LLM
   const context = buildIntelContext(intel, symbol);
 
   if (!context.trim()) {
     return jsonResponse({ ok: false, error: "No intel data available for correlation analysis" }, 400);
   }
 
-  // Call GPT-4o for correlation analysis
-  const openaiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
-  if (!openaiKey) {
-    return jsonResponse({ ok: false, error: "OPENAI_API_KEY not configured" }, 503);
-  }
-
   try {
-    const correlation = await runCorrelationAnalysis(openaiKey, context, symbol);
+    const correlation = await runCorrelationAnalysis(context, symbol);
 
     // Save to Supabase
     try {
@@ -89,9 +83,10 @@ export async function POST(request: NextRequest) {
 
     return jsonResponse({ ok: true, correlation });
   } catch (e) {
+    console.error("[intel-correlate] Failed:", e);
     return jsonResponse(
-      { ok: false, error: e instanceof Error ? e.message : "Correlation analysis failed" },
-      500,
+      { ok: false, error: "AXE couldn't analyze correlations right now — please try again in a moment." },
+      503,
     );
   }
 }
@@ -211,7 +206,6 @@ function formatCompact(n: number): string {
 }
 
 async function runCorrelationAnalysis(
-  apiKey: string,
   context: string,
   symbol?: string,
 ): Promise<CorrelationResult> {
@@ -244,36 +238,25 @@ Feed names for feedsUsed: insiderTrades, senateTrades, darkPool, unusualOptions,
 
 If there isn't enough data for a meaningful correlation, still find the best one you can and set confidence to "low".`;
 
-  const userPrompt = `Analyze this intel snapshot and find the most actionable cross-feed correlation${symbol ? ` (focus on ${symbol} if relevant)` : ""}:\n\n${context}`;
+  const userPrompt = `Analyze this intel snapshot and find the most actionable cross-feed correlation${symbol ? ` (focus on ${symbol} if relevant)` : ""}:
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 800,
-    }),
+${context}`;
+
+  const messages: LLMChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
+
+  const result = await chatCompletion({
+    messages,
+    temperature: 0.7,
+    maxTokens: 800,
   });
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    throw new Error(`OpenAI ${res.status}: ${err.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error("Empty GPT-4o response");
+  if (!result.content) throw new Error("Empty LLM response");
 
   // Parse JSON — strip code fences if present
-  const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed = JSON.parse(cleaned) as {
     title: string;
     summary: string;

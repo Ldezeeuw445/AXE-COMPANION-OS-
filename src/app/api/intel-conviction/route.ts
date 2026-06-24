@@ -1,7 +1,8 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
+import { chatCompletion, type LLMChatMessage } from "@/services/llmClient";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /**
@@ -45,7 +46,7 @@ function jsonResponse(body: unknown, status = 200) {
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
 
 async function getCachedConviction(
-  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  supabase: ReturnType<typeof createEdgeSupabaseClient>,
   userId: string,
 ): Promise<ConvictionSnapshot | null> {
   if (!supabase) return null;
@@ -71,8 +72,8 @@ async function getCachedConviction(
 
 /* ── POST handler ─────────────────────────────────────────────────── */
 
-export async function POST() {
-  const supabase = await createServerSupabaseClient();
+export async function POST(request: Request) {
+  const supabase = createEdgeSupabaseClient(request);
   if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
 
   const {
@@ -87,11 +88,8 @@ export async function POST() {
   // Load intel snapshot
   const intel = await loadIntelSnapshot();
 
-  const openaiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
-  if (!openaiKey) return jsonResponse({ ok: false, error: "OPENAI_API_KEY not configured" }, 503);
-
   try {
-    const result = await generateConvictions(openaiKey, intel);
+    const result = await generateConvictions(intel);
 
     // Persist
     try {
@@ -107,17 +105,18 @@ export async function POST() {
 
     return jsonResponse({ ok: true, cached: false, conviction: result });
   } catch (e) {
+    console.error("[intel-conviction] Failed:", e);
     return jsonResponse(
-      { ok: false, error: e instanceof Error ? e.message : "Conviction generation failed" },
-      500,
+      { ok: false, error: "AXE couldn't generate convictions right now — please try again in a moment." },
+      503,
     );
   }
 }
 
 /* ── GET handler — returns cached only ────────────────────────────── */
 
-export async function GET() {
-  const supabase = await createServerSupabaseClient();
+export async function GET(request: Request) {
+  const supabase = createEdgeSupabaseClient(request);
   if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
 
   const {
@@ -320,41 +319,27 @@ RULES:
 - marketSentence should be punchy, trader-style, max 120 chars`;
 
 async function generateConvictions(
-  apiKey: string,
   intel: Awaited<ReturnType<typeof loadIntelSnapshot>>,
 ): Promise<ConvictionSnapshot> {
   const context = buildIntelContext(intel);
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+  const messages: LLMChatMessage[] = [
+    { role: "system", content: CONVICTION_SYSTEM },
+    {
+      role: "user",
+      content: `Current timestamp: ${new Date().toISOString()}\n\nFull AXE Intel Snapshot:\n\n${context}`,
     },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: CONVICTION_SYSTEM },
-        {
-          role: "user",
-          content: `Current timestamp: ${new Date().toISOString()}\n\nFull AXE Intel Snapshot:\n\n${context}`,
-        },
-      ],
-      temperature: 0.4,
-      max_tokens: 3000,
-    }),
+  ];
+
+  const result = await chatCompletion({
+    messages,
+    temperature: 0.4,
+    maxTokens: 3000,
   });
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    throw new Error(`OpenAI ${res.status}: ${err.slice(0, 200)}`);
-  }
+  if (!result.content) throw new Error("Empty LLM response");
 
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error("Empty GPT-4o response");
-
-  const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed = JSON.parse(cleaned) as {
     marketSentence: string;
     convictions: AssetConviction[];

@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
+import { chatCompletionStream, type LLMChatMessage } from "@/services/llmClient";
+
+export const runtime = "edge";
+export const dynamic = "force-dynamic";
 
 /**
  * POST /api/intel-chat
  *
  * Dedicated streaming endpoint for the AXE INTELLIGENT AGENT chat panel.
  * Fetches the latest intel snapshot, builds a focused system prompt,
- * and streams GPT-4o's response back as text/event-stream so the
+ * and streams the LLM response back as text/event-stream so the
  * client gets tokens in real-time.
  */
 
@@ -157,14 +160,6 @@ function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>)
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { ok: false, error: "OPENAI_API_KEY not configured." },
-      { status: 500 }
-    );
-  }
-
   const body = (await request.json().catch(() => null)) as {
     message?: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -187,73 +182,51 @@ export async function POST(request: Request) {
   const intelContext = buildIntelContext(intel);
 
   // Build messages
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+  const messages: LLMChatMessage[] = [
     {
       role: "system",
       content: `${INTEL_SYSTEM_PROMPT}\n\n--- LIVE INTEL SNAPSHOT ---\n\n${intelContext}`,
     },
     // Include recent history for continuity (last 10 exchanges max)
-    ...history.slice(-20).map(
-      (m) =>
-        ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        }) satisfies OpenAI.Chat.ChatCompletionMessageParam
-    ),
+    ...history.slice(-20).map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
     { role: "user", content: userMessage },
   ];
 
-  // Stream the response
-  const client = new OpenAI({ apiKey });
-
-  try {
-    const stream = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages,
-      max_tokens: 1200,
-      temperature: 0.4,
-      stream: true,
-    });
-
-    const encoder = new TextEncoder();
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            const delta = chunk.choices[0]?.delta?.content;
-            if (delta) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({ text: delta })}\n\n`)
-              );
-            }
+  // Stream the response via llmClient
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        await chatCompletionStream(
+          { messages, maxTokens: 1200, temperature: 0.4 },
+          (token) => {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ text: token })}\n\n`)
+            );
           }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        } catch (err) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ error: err instanceof Error ? err.message : "Stream error" })}\n\n`
-            )
-          );
-          controller.close();
-        }
-      },
-    });
+        );
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (err) {
+        console.error("[intel-chat] Stream failed:", err);
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ error: "AXE couldn't generate a reply right now — please try again." })}\n\n`
+          )
+        );
+        controller.close();
+      }
+    },
+  });
 
-    return new Response(readable, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: err instanceof Error ? err.message : "OpenAI call failed.",
-      },
-      { status: 502 }
-    );
-  }
+  return new Response(readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
