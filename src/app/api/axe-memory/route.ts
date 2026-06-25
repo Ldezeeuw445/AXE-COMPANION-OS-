@@ -1,7 +1,6 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { callLLM, type LLMRequest } from "@/services/llmClient";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 /**

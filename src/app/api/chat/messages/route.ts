@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { sendChatMessage } from "@/services/chatService";
 import { getEdgeAuthedServiceSupabase } from "@/services/serviceSupabase";
 
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
