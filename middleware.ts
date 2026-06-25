@@ -199,10 +199,10 @@ export function clearBrokerAccountsCache(userId?: string): { cleared: number } {
 }
 
 // Configure which routes use this middleware
+// Note: Next.js middleware matchers do NOT support ! negation syntax.
+// Use a negative lookahead regex to exclude static assets.
 export const config = {
   matcher: [
-    '/api/:path*',
-    // Exclude static files and images
-    '!(.*\\..*|_next).*',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|eot)$).*)',
   ],
 };
