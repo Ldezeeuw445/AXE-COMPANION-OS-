@@ -1,7 +1,8 @@
 import { streamChatMessage, type StreamEvent } from "@/services/chatService";
 import { getEdgeAuthedServiceSupabase } from "@/services/serviceSupabase";
 
-export const runtime = "edge";
+// Removed: export const runtime = "edge";
+// This route needs Node.js runtime to support metaApiClient (uses node:crypto)
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
@@ -28,44 +29,34 @@ export async function POST(request: Request) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      function send(event: StreamEvent) {
-        try {
-          controller.enqueue(
-            encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`),
-          );
-        } catch {
-          /* controller may be closed */
-        }
-      }
-
       try {
-        const result = await streamChatMessage(text, send, imageBase64, imageType, symbol, tf, edgeAuth);
+        const events = await streamChatMessage({
+          userId: edgeAuth.userId,
+          text,
+          imageBase64,
+          imageType,
+          symbol,
+          tf,
+        });
 
-        if (!result.ok) {
-          if (result.quotaExceeded) {
-            send({
-              type: "error",
-              message: "Daily free message limit reached. Upgrade to Pro for unlimited chat.",
-            });
-          } else if (result.aiFailed) {
-            send({
-              type: "error",
-              message:
-                "AXE couldn't generate a reply right now — please try again in a moment.",
-            });
-          } else {
-            send({ type: "error", message: "Could not process message." });
-          }
+        for await (const event of events) {
+          const line = JSON.stringify(event);
+          controller.enqueue(
+            encoder.encode(`data: ${line}\n`)
+          );
         }
-      } catch (err) {
-        console.error("[chat/stream] Unhandled error:", err);
-        send({ type: "error", message: "Stream failed unexpectedly." });
-      } finally {
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
+        controller.enqueue(encoder.encode("data: [DONE]\n"));
+        controller.close();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorEvent: StreamEvent = {
+          type: "error",
+          message: errorMessage,
+        };
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(errorEvent)}\n`)
+        );
+        controller.close();
       }
     },
   });
@@ -73,9 +64,8 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
+      "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
     },
   });
 }
