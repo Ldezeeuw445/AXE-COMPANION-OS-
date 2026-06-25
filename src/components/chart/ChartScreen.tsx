@@ -1936,6 +1936,7 @@ export function ChartScreen({
   // Canonical chart runtime snapshot. Chat, Watchlist and Alerts read this
   // same Supabase row, so write it as soon as broker candles hydrate and then
   // keep it fresh while live data arrives.
+  // HARDENED: added timeout to prevent UI hangs if snapshot writes fail.
   useEffect(() => {
     if (data.failure !== "ok" || !accountId || !data.brokerSymbol) return;
     const post = () => {
@@ -1952,10 +1953,16 @@ export function ChartScreen({
             : liveStatus === "offline" || liveStatus === "failed"
               ? liveStatus
               : "degraded";
-      void fetch("/api/chart/snapshot", {
+      
+      // Fire-and-forget with timeout to prevent UI hangs
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3_000);
+      
+      fetch("/api/chart/snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: controller.signal,
         body: JSON.stringify({
           accountId,
           displaySymbol: data.symbol,
@@ -1971,7 +1978,9 @@ export function ChartScreen({
           openPositions: overlays,
           status,
         }),
-      }).catch(() => undefined);
+      })
+        .catch(() => undefined)
+        .finally(() => clearTimeout(timeoutId));
     };
     post();
     const t = setInterval(post, SNAPSHOT_INTERVAL_MS);
