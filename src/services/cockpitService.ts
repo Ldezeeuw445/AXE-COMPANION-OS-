@@ -10,7 +10,7 @@ import type {
   CockpitTodaySummary,
   CockpitLearningArc,
 } from "@/types/cockpit";
-import { fetchLearningArc } from "@/services/learningArcService";
+import { getTraderLearningArc } from "@/services/learningArcService";
 import { computeTraderScores } from "@/services/traderScoresService";
 
 const EMPTY_TRADER_SCORES = {
@@ -276,7 +276,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   const { supabase, user } = authed;
   const [todayBase, learningArc, traderScores] = await Promise.all([
     fetchCockpitTodaySummary(supabase, user.id),
-    fetchLearningArc(supabase, user.id),
+    getTraderLearningArc(user.id),
     computeTraderScores(supabase, user.id),
   ]);
   const today: CockpitTodaySummary = todayBase;
