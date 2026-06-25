@@ -1,0 +1,30 @@
+.DS_Store
+dist
+node_modules
+
+# Page snapshots (PNG/HTML); remove this line if you want to commit references
+design-snapshots/
+
+# Local import scratch (zip extract)
+_chart_import/
+
+# Env files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / agent (do not ship to GitHub)
+.cursor/
+.claude/
+.agents/
+
+# Local scratch
+tmp/
+*.zip
+

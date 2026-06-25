@@ -1,0 +1,630 @@
+/* ================================================================
+   News Extras — matches news-context tokens exactly so the three
+   panels read as part of the same terminal island as the context
+   panels around the news feed.
+   ================================================================ */
+
+.panel {
+  --nx-bg:          #0b0d10;
+  --nx-bg-elev:     #101317;
+  --nx-bg-inner:    #0d1014;
+  --nx-border:      rgba(255, 255, 255, 0.06);
+  --nx-border-soft: rgba(255, 255, 255, 0.035);
+  --nx-text:        #e8ecef;
+  --nx-text-muted:  #7b828a;
+  --nx-text-dim:    #4a4f55;
+  --nx-up:          #1fbf75;
+  --nx-down:        #e5484d;
+  --nx-neutral:     #9aa0a6;
+  --nx-accent:      #f5a524;
+  --nx-blue:        #4ea1ff;
+  --nx-purple:      #b974ff;
+  --nx-warm-1:      rgba(255, 247, 230, 0.03);
+  --nx-warm-2:      rgba(255, 247, 230, 0.05);
+  --nx-warm-3:      rgba(255, 247, 230, 0.07);
+  --nx-mono:        inherit;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 14px;
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.95) 0%, rgba(12, 12, 12, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  color: var(--nx-text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  isolation: isolate;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.panel:hover {
+  border-color: rgba(6, 182, 212, 0.15);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 30px rgba(6, 182, 212, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* News page side column: drop inner scroll caps; parent column scrolls once */
+.panelSidebar {
+  overflow: visible;
+}
+.panelSidebar .templateList,
+.panelSidebar .activeList {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.elevation2 {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.02) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.4) inset,
+    0 10px 24px -12px rgba(0, 0, 0, 0.65),
+    0 4px 10px -6px rgba(0, 0, 0, 0.55);
+}
+.elevation2::after {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -22px;
+  height: 28px;
+  background: radial-gradient(ellipse at center, var(--nx-warm-2) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.mono    { font-family: inherit; font-size: 11px; letter-spacing: 0.02em; }
+.muted   { color: var(--nx-text-muted); }
+.up      { color: var(--nx-up); }
+.down    { color: var(--nx-down); }
+.sep     { color: var(--nx-text-dim); margin: 0 4px; }
+
+.panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid var(--nx-border-soft);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nx-text);
+}
+
+.empty,
+.error {
+  padding: 14px 12px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--nx-text-muted);
+}
+.error { color: var(--nx-down); }
+
+.skel {
+  width: 100%;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: nxShim 1.4s linear infinite;
+}
+@keyframes nxShim {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* ================================================================
+   STACK WRAPPER
+   ================================================================ */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.stack::-webkit-scrollbar { width: 4px; }
+.stack::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
+
+/* ================================================================
+   QUICK ALERTS — category chips + template list + active list
+   ================================================================ */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--nx-text-muted);
+  background: transparent;
+  border: 1px solid var(--nx-border);
+  border-radius: 3px;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.chip:hover {
+  color: var(--nx-text);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.chip--active {
+  color: var(--nx-text);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.chipDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nx-text-dim);
+}
+.chipCount {
+  color: var(--nx-text-dim);
+  font-size: 9px;
+}
+
+.templateList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.templateList::-webkit-scrollbar { width: 4px; }
+.templateList::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
+
+.template {
+  display: grid;
+  grid-template-columns: 8px 1fr 22px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid var(--nx-border-soft);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.015);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.template:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.templateDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.templateText { min-width: 0; }
+.templateTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--nx-text);
+}
+.templateTitle {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.badge {
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 1px 4px;
+  border-radius: 2px;
+  color: var(--nx-accent);
+  background: rgba(245, 165, 36, 0.12);
+  border: 1px solid rgba(245, 165, 36, 0.25);
+}
+.templateSub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  margin-top: 2px;
+}
+.addBtn {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--nx-text-muted);
+  text-align: center;
+  line-height: 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.12s ease;
+}
+.template:hover .addBtn {
+  color: var(--nx-up);
+  background: rgba(31, 191, 117, 0.14);
+}
+
+.sectionHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 2px 4px;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--nx-text-muted);
+  border-top: 1px solid var(--nx-border-soft);
+  margin-top: 4px;
+}
+.activeList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.activeList::-webkit-scrollbar { width: 4px; }
+.activeList::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
+
+.active {
+  display: grid;
+  grid-template-columns: 28px 1fr 18px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--nx-border-soft);
+  border-radius: 5px;
+  background: rgba(31, 191, 117, 0.04);
+}
+.active--off {
+  background: rgba(255, 255, 255, 0.015);
+  opacity: 0.7;
+}
+
+.toggle {
+  position: relative;
+  width: 24px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  padding: 0;
+}
+.toggle--on { background: var(--nx-up); }
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  background: var(--nx-text);
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+.toggle--on .toggleKnob { transform: translateX(10px); }
+
+.activeText { min-width: 0; }
+.activeTitle {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--nx-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.activeDetail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+.removeBtn {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--nx-text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  transition: all 0.12s ease;
+}
+.removeBtn:hover {
+  color: var(--nx-down);
+  background: rgba(229, 72, 77, 0.12);
+}
+
+/* ================================================================
+   NEXT CATALYSTS — time-grouped list
+   ================================================================ */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.groupHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--nx-text-muted);
+  padding: 4px 2px 2px;
+}
+.groupHead--urgent {
+  color: var(--nx-up);
+}
+.catList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cat {
+  display: grid;
+  grid-template-columns: 8px 1fr 6px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid var(--nx-border-soft);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.015);
+  transition: all 0.12s ease;
+}
+.cat:hover {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.cat--urgent {
+  border-color: rgba(31, 191, 117, 0.3);
+  background: rgba(31, 191, 117, 0.05);
+}
+.catDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.catText { min-width: 0; }
+.catTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--nx-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catSym {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--nx-text);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 5px;
+  border-radius: 2px;
+  letter-spacing: 0.02em;
+}
+.catNote {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+.catSub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.impact {
+  width: 6px;
+  height: 22px;
+  border-radius: 2px;
+  justify-self: end;
+}
+.impact--high   { background: var(--nx-down);    box-shadow: 0 0 4px rgba(229, 72, 77, 0.5); }
+.impact--medium { background: var(--nx-accent); }
+.impact--low    { background: rgba(255, 255, 255, 0.15); }
+
+/* ================================================================
+   HOTKEY SHEET
+   ================================================================ */
+.hkBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.hkBody::-webkit-scrollbar { width: 4px; }
+.hkBody::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
+
+.hkGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hkGroupLabel {
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--nx-text-muted);
+  padding: 2px 0 4px;
+  border-bottom: 1px solid var(--nx-border-soft);
+}
+.hkRows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hkRow {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 3px 4px;
+  font-size: 11px;
+  border-radius: 3px;
+}
+.hkRow:hover { background: rgba(255, 255, 255, 0.02); }
+.hkKeys {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.hkPlus {
+  color: var(--nx-text-dim);
+  font-size: 10px;
+}
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--nx-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+.hkLabel {
+  color: var(--nx-text-muted);
+  font-size: 11px;
+}
+
+/* ---------- compact hotkey banner (News page top strip) ---------- */
+.hotkeyBanner {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 4px 10px 5px;
+  background: var(--nx-bg-elev);
+  border-bottom: 1px solid var(--nx-border);
+  flex-shrink: 0;
+  min-height: 0;
+}
+.hotkeyBannerTag {
+  flex-shrink: 0;
+  align-self: center;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--nx-text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--nx-border-soft);
+}
+.hotkeyBannerScroll {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding: 1px 0;
+}
+.hotkeyBannerScroll::-webkit-scrollbar {
+  height: 3px;
+}
+.hotkeyBannerScroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+.hotkeyBannerGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--nx-border-soft);
+}
+.hotkeyBannerGroup:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+.hotkeyBannerGroupLabel {
+  font-family: inherit;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--nx-text-dim);
+  flex-shrink: 0;
+}
+.hotkeyBannerChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  max-width: 200px;
+}
+.hotkeyBannerKeys {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.hotkeyBannerChipLabel {
+  font-size: 10px;
+  color: var(--nx-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kbdSm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--nx-text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Wide viewports: three panels in one row (matches news-context density) */
+@media (min-width: 1280px) {
+  .stack {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    align-content: start;
+  }
+}

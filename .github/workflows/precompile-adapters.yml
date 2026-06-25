@@ -1,0 +1,25 @@
+name: Precompile Adapters & Smoke Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies for build
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund || true
+          npm install -D esbuild typescript --no-audit --no-fund
+      - name: Precompile adapters
+        run: node scripts/precompile-adapters.mjs
+      - name: Run adapter smoke tests
+        run: |
+          node scripts/simulate-create-ibkr.mjs
+          node scripts/simulate-create-alpaca.mjs

@@ -1,0 +1,397 @@
+/*
+ * SmartMoney — matches news-context / news-extras / heatmap-v2 / analyses-library
+ * tokens exactly. Monospace, #101317 background, warm underglow.
+ */
+
+.banner,
+.compact {
+  --bg: #101317;
+  --bg-nested: #0d1014;
+  --bg-elevated: #141820;
+  --text: #e8ecef;
+  --muted: #7b828a;
+  --dim: #4a4f55;
+  --green: #1fbf75;
+  --red: #e5484d;
+  --amber: #f5a524;
+  --blue: #4ea1ff;
+  --purple: #b974ff;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-soft: rgba(255, 255, 255, 0.035);
+
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  box-shadow: none;
+  transition: none;
+}
+
+/* -------------------- banner (full width, thin) -------------------- */
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.bannerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, rgba(20, 20, 20, 0.55) 0%, transparent 100%);
+}
+
+.bannerTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bannerDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--dim);
+  box-shadow: 0 0 0 rgba(31, 191, 117, 0);
+}
+
+.bannerDot[data-live="true"] {
+  background-color: var(--green);
+  box-shadow: 0 0 6px rgba(31, 191, 117, 0.6);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.bannerTitle {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bannerSub {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.refreshBtn {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.refreshBtn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.bannerScroller {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  flex: 1;
+  min-height: 0;
+}
+
+.bannerScroller::-webkit-scrollbar {
+  height: 5px;
+}
+
+.bannerScroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bannerScroller::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.state {
+  padding: 12px 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* -------------------- card (used in banner) -------------------- */
+
+.card {
+  appearance: none;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  flex-shrink: 0;
+  width: 224px;
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.92) 0%, rgba(12, 12, 12, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.card:hover {
+  border-color: rgba(6, 182, 212, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 26px rgba(6, 182, 212, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
+}
+
+.card[data-active="true"] {
+  border-color: var(--amber);
+  box-shadow:
+    0 3px 8px 0 rgba(0, 0, 0, 0.40),
+    0 6px 16px -3px rgba(0, 0, 0, 0.30),
+    0 12px 28px -6px rgba(245, 165, 36, 0.14);
+}
+
+.cardTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.cardSymbol {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.cardScore {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cardReason {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 14px;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.cardNotional {
+  font-size: 9px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cardAgo {
+  font-size: 9px;
+  color: var(--dim);
+}
+
+/* -------------------- gauge -------------------- */
+
+.gauge {
+  width: 100%;
+}
+
+.gaugeTrack {
+  position: relative;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.gaugeFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transition: width 0.3s ease;
+}
+
+.gaugeCenter {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+  width: 1px;
+  background-color: rgba(255, 255, 255, 0.18);
+  transform: translateX(-0.5px);
+}
+
+/* -------------------- channels -------------------- */
+
+.channels {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.channelTag {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 1px 3px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+/* -------------------- compact (square next to chart) -------------------- */
+
+.compact {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+}
+
+.compactHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg);
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.30),
+    0 1px 2px -1px rgba(0, 0, 0, 0.25),
+    0 4px 12px -2px rgba(255, 247, 230, 0.03);
+}
+
+.compactTitle {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.compactBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  overflow-y: auto;
+  background-color: var(--bg-nested);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.compactBody::-webkit-scrollbar {
+  width: 6px;
+}
+
+.compactBody::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* -------------------- row (used in compact) -------------------- */
+
+.row {
+  appearance: none;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+
+.row:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+  border-color: var(--border);
+}
+
+.row[data-active="true"] {
+  border-color: var(--amber);
+  background-color: rgba(245, 165, 36, 0.04);
+}
+
+.rowHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.rowSymbol {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.rowScore {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rowReason {
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rowNotional {
+  font-size: 8px;
+  color: var(--dim);
+  letter-spacing: 0.05em;
+}

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TradingOS · News Terminal v2</title>
+  <meta name="description" content="Terminal-grade news feed for TradingOS, powered by Financial Modeling Prep." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="ambient" aria-hidden="true">
+    <div class="blob blob--a"></div>
+    <div class="blob blob--b"></div>
+    <div class="grid"></div>
+  </div>
+
+  <!-- API key modal -->
+  <div id="apiModal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal__card elevation-3">
+      <div class="modal__header">
+        <div class="logo"><span class="logo__dot"></span><span>TradingOS</span><span class="logo__tag">NEWS · v2</span></div>
+        <h2>Connect to Financial Modeling Prep</h2>
+        <p class="muted">Key is stored locally and only sent to <code>financialmodelingprep.com</code>.</p>
+      </div>
+      <form id="apiForm" class="modal__body" autocomplete="off">
+        <label class="field">
+          <span class="field__label">FMP API Key</span>
+          <input id="apiKeyInput" type="password" placeholder="Paste your FMP API key" spellcheck="false" required />
+        </label>
+        <label class="field field--row">
+          <input id="rememberKey" type="checkbox" checked />
+          <span>Remember on this device</span>
+        </label>
+        <div class="modal__actions">
+          <a class="btn btn--ghost" href="https://site.financialmodelingprep.com/developer/docs/dashboard" target="_blank" rel="noopener">Get a free key ↗</a>
+          <button type="submit" class="btn btn--primary">Connect</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div class="app" id="app" hidden>
+
+    <!-- ======================= TOP BAR (Level 1) ======================= -->
+    <header class="topbar elevation-1">
+      <div class="topbar__brand">
+        <span class="logo__dot"></span>
+        <div>
+          <div class="brand__title">TradingOS</div>
+          <div class="brand__sub">NEWS · TERMINAL</div>
+        </div>
+      </div>
+
+      <form id="searchForm" class="cmdbar" role="search">
+        <span class="cmdbar__prefix" title="Focus with /">/</span>
+        <input id="searchInput" type="text" placeholder="Symbol (AAPL) · company name · or keyword — press / to focus" spellcheck="false" autocomplete="off" />
+        <div id="suggestions" class="suggestions elevation-3" hidden></div>
+        <div class="cmdbar__hints">
+          <kbd>/</kbd><kbd>j</kbd><kbd>k</kbd><kbd>1-4</kbd><kbd>r</kbd>
+        </div>
+      </form>
+
+      <div class="topbar__actions">
+        <div id="clock" class="clock mono" title="UTC · Local">--:--:-- UTC</div>
+        <div id="statusDot" class="status" title="API status">
+          <span class="status__indicator"></span>
+          <span class="status__label">Idle</span>
+        </div>
+        <button id="helpBtn" class="iconbtn" title="Keyboard shortcuts (?)">?</button>
+        <button id="resetKeyBtn" class="btn btn--ghost btn--sm" title="Change API key">KEY</button>
+      </div>
+    </header>
+
+    <!-- ======================= TICKER TAPE (Level 2) ======================= -->
+    <div class="tapebar elevation-2">
+      <div class="tape" id="tickerTape"></div>
+    </div>
+
+    <!-- ======================= MAIN GRID ======================= -->
+    <main class="grid-main">
+
+      <!-- =================== LEFT RAIL (Level 2) =================== -->
+      <aside class="rail elevation-2">
+        <div class="rail__section">
+          <div class="rail__head">
+            <span>FEED</span>
+            <span class="mono muted" id="feedCount">0</span>
+          </div>
+          <div class="feedtabs" role="tablist">
+            <button class="feedtab is-active" data-feed="stock" role="tab"><span class="kbdnum">1</span> Stock</button>
+            <button class="feedtab" data-feed="general" role="tab"><span class="kbdnum">2</span> Macro</button>
+            <button class="feedtab" data-feed="press" role="tab"><span class="kbdnum">3</span> Press</button>
+            <button class="feedtab" data-feed="articles" role="tab"><span class="kbdnum">4</span> FMP</button>
+          </div>
+        </div>
+
+        <div class="rail__section">
+          <div class="rail__head">
+            <span>FILTER</span>
+          </div>
+          <div class="pillrow">
+            <button class="pill is-active" data-tag="ALL">ALL</button>
+            <button class="pill" data-tag="BREAKING">BREAKING</button>
+            <button class="pill" data-tag="EARNINGS">EARNINGS</button>
+            <button class="pill" data-tag="UPGRADE">UPGRADE</button>
+            <button class="pill" data-tag="DOWNGRADE">DOWNGRADE</button>
+            <button class="pill" data-tag="M&amp;A">M&amp;A</button>
+            <button class="pill" data-tag="SEC">SEC</button>
+            <button class="pill" data-tag="GUIDANCE">GUIDANCE</button>
+          </div>
+        </div>
+
+        <div class="rail__section">
+          <div class="rail__head">
+            <span>WATCHLIST</span>
+            <button id="addWatchBtn" class="iconbtn iconbtn--xs" title="Add current symbol">+</button>
+          </div>
+          <ul id="watchlist" class="watchlist"></ul>
+        </div>
+
+        <div class="rail__section">
+          <div class="rail__head"><span>TRENDING</span></div>
+          <div class="chips">
+            <button class="chip" data-symbol="AAPL">AAPL</button>
+            <button class="chip" data-symbol="NVDA">NVDA</button>
+            <button class="chip" data-symbol="TSLA">TSLA</button>
+            <button class="chip" data-symbol="MSFT">MSFT</button>
+            <button class="chip" data-symbol="META">META</button>
+            <button class="chip" data-symbol="AMZN">AMZN</button>
+            <button class="chip" data-symbol="GOOGL">GOOGL</button>
+            <button class="chip" data-symbol="BTCUSD">BTCUSD</button>
+          </div>
+        </div>
+
+        <div class="rail__section">
+          <div class="rail__head"><span>STREAM</span></div>
+          <div class="stream">
+            <label class="switch">
+              <input type="checkbox" id="autoStream" checked />
+              <span class="switch__slider"></span>
+              <span class="switch__label">Auto-refresh</span>
+            </label>
+            <div class="mono muted" style="font-size: 10px; margin-top: 8px;">
+              Next poll: <span id="nextPoll">—</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- =================== CENTER: PRIMARY FEED (Level 2) =================== -->
+      <section class="feed elevation-2" id="primaryFeed">
+        <div class="feed__head">
+          <div class="feed__headL">
+            <h2 id="feedTitle" class="mono">STOCK NEWS · LATEST</h2>
+            <span id="newBadge" class="newbadge" hidden>0 NEW</span>
+          </div>
+          <div class="feed__headR">
+            <span class="mono muted" id="lastUpdate">—</span>
+            <button id="refreshBtn" class="iconbtn" title="Refresh (r)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </button>
+          </div>
+        </div>
+        <div id="newsList" class="rowlist" tabindex="0" aria-live="polite"></div>
+        <div class="feed__foot">
+          <button id="loadMoreBtn" class="btn btn--ghost btn--sm">Load more</button>
+          <span class="mono muted" id="feedMeta">—</span>
+        </div>
+      </section>
+
+      <!-- =================== RIGHT: STACK (Level 2 + Level 3 inside) =================== -->
+      <aside class="stack">
+
+        <!-- Quote card (Level 2) -->
+        <div class="quote elevation-2" id="quoteCard">
+          <div class="quote__empty">
+            <div class="empty-icon">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+            </div>
+            <p class="muted mono">SEARCH A SYMBOL</p>
+          </div>
+        </div>
+
+        <!-- Chart hook (Level 2 with inner Level 3 hook area) -->
+        <div class="chartcard elevation-2" id="chartCard">
+          <div class="chartcard__head">
+            <span class="mono">CHART</span>
+            <span class="mono muted" id="chartSym">—</span>
+          </div>
+          <div class="chartcard__body elevation-3" id="chartHook" data-dxcharts-mount>
+            <!-- DXCharts / TradingView integration point.
+                 Listen to: window.addEventListener('tradingos:symbol', e => mount(e.detail.symbol))
+                 Or read:  window.TradingOSNews.state.symbol                               -->
+            <div class="chartcard__placeholder">
+              <div class="mono muted" style="font-size: 11px; letter-spacing: 0.1em;">DXCHARTS MOUNT POINT</div>
+              <div class="muted" style="font-size: 11px; margin-top: 6px;">Hook: <code>#chartHook</code> · Event: <code>tradingos:symbol</code></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Secondary feeds (Level 2 with inner Level 3 rows) -->
+        <div class="mini elevation-2">
+          <div class="mini__head">
+            <span class="mono">MACRO</span>
+            <button class="iconbtn iconbtn--xs" data-mini-refresh="general" title="Refresh">↻</button>
+          </div>
+          <ul class="minilist" id="miniGeneral"></ul>
+        </div>
+
+        <div class="mini elevation-2">
+          <div class="mini__head">
+            <span class="mono">PRESS</span>
+            <button class="iconbtn iconbtn--xs" data-mini-refresh="press" title="Refresh">↻</button>
+          </div>
+          <ul class="minilist" id="miniPress"></ul>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Status bar -->
+    <footer class="statusbar elevation-1">
+      <span class="mono muted">FMP · <a href="https://financialmodelingprep.com" target="_blank" rel="noopener">financialmodelingprep.com</a></span>
+      <span class="mono muted"><span id="reqCount">0</span> req · <span id="errCount">0</span> err</span>
+      <span class="mono muted">TradingOS News Terminal · v2</span>
+    </footer>
+  </div>
+
+  <!-- Keyboard help overlay -->
+  <div id="helpOverlay" class="help" hidden>
+    <div class="help__card elevation-3">
+      <div class="help__head">
+        <span class="mono">KEYBOARD SHORTCUTS</span>
+        <button class="iconbtn" id="helpClose">×</button>
+      </div>
+      <ul class="help__list">
+        <li><kbd>/</kbd><span>Focus search</span></li>
+        <li><kbd>Esc</kbd><span>Blur / close</span></li>
+        <li><kbd>j</kbd> / <kbd>↓</kbd><span>Next headline</span></li>
+        <li><kbd>k</kbd> / <kbd>↑</kbd><span>Previous headline</span></li>
+        <li><kbd>Enter</kbd><span>Open selected headline</span></li>
+        <li><kbd>c</kbd><span>Open selected in chart</span></li>
+        <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><span>Switch feed (Stock · Macro · Press · FMP)</span></li>
+        <li><kbd>r</kbd><span>Refresh current feed</span></li>
+        <li><kbd>a</kbd><span>Add current symbol to watchlist</span></li>
+        <li><kbd>s</kbd><span>Toggle auto-stream</span></li>
+        <li><kbd>?</kbd><span>Show this help</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
