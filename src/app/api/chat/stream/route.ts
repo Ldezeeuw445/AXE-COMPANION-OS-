@@ -29,27 +29,42 @@ export async function POST(request: Request) {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
 
+  const send = (event: StreamEvent) => {
+    writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n`)).catch(() => {});
+  };
+
   // Fire-and-forget — the stream is already attached to the response
   (async () => {
     try {
-      await streamChatMessage(
+      const result = await streamChatMessage(
         text,
-        (event: StreamEvent) => {
-          const line = JSON.stringify(event);
-          // intentionally fire without await — writer.write is ordered/buffered
-          writer.write(encoder.encode(`data: ${line}\n`)).catch(() => {});
-        },
+        send,
         imageBase64,
         imageType,
         symbol,
         tf,
-        edgeAuth,           // { supabase, user } matches the expected shape
+        edgeAuth,
       );
+
+      if (!result.ok) {
+        if (result.quotaExceeded) {
+          send({ type: "error", message: "Daily message limit reached. Upgrade for unlimited access." });
+        } else if (result.aiFailed) {
+          send({
+            type: "error",
+            message:
+              "AXE couldn't reach the AI model. Check that OPENAI_API_KEY is set in Vercel env vars, or that Ollama is reachable.",
+          });
+        } else {
+          send({ type: "error", message: "Chat failed. Please try again." });
+        }
+      }
+
       await writer.write(encoder.encode("data: [DONE]\n"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      const errorEvent: StreamEvent = { type: "error", message: msg };
-      await writer.write(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n`)).catch(() => {});
+      send({ type: "error", message: msg });
+      await writer.write(encoder.encode("data: [DONE]\n")).catch(() => {});
     } finally {
       writer.close().catch(() => {});
     }

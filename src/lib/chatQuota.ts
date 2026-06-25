@@ -51,8 +51,10 @@ export async function tryConsumeChatQuota(
   const { data, error } = await supabase.rpc("axe_chat_try_consume");
 
   if (error) {
-    console.error("[chatQuota] axe_chat_try_consume failed", error);
-    return { ok: false, quotaExceeded: false };
+    // RPC missing (migration not applied) — degrade gracefully, allow chat through.
+    // This prevents silent empty responses when quota DB functions don't exist yet.
+    console.warn("[chatQuota] axe_chat_try_consume failed — allowing chat (quota skipped):", error.message);
+    return { ok: true, consumed: false };
   }
 
   const row = data as TryConsumeRow;
