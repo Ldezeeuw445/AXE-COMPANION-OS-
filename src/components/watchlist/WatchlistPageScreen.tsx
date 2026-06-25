@@ -173,7 +173,7 @@ export function WatchlistPageScreen({
     };
     // Initial fetch + interval
     void poll();
-    const timer = setInterval(poll, 2000);
+    const timer = setInterval(poll, 30_000);
     return () => {
       active = false;
       clearInterval(timer);

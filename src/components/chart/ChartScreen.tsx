@@ -136,7 +136,7 @@ import { writeCachedChart, prefetchTimeframes } from "@/lib/chart/clientChartCac
 import { setActiveAccountAction } from "@/app/actions/brokerAccounts";
 
 const TICK_REACT_THROTTLE_MS = 150;
-const SNAPSHOT_INTERVAL_MS = 10_000;
+const SNAPSHOT_INTERVAL_MS = 60_000;
 const ROUTE_PENDING_VISUAL_BUDGET_MS = 12_000;
 
 const CHART_SCALE_MODES = [
