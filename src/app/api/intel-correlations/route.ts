@@ -1,6 +1,6 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
-import { chatCompletion, type LLMChatMessage } from "@/services/llmClient";
+import { callLLM, type LLMRequest } from "@/services/llmClient";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -252,7 +252,7 @@ async function generateCorrelationSnapshot(
 ): Promise<CorrelationSnapshot> {
   const context = buildIntelContext(intel);
 
-  const messages: LLMChatMessage[] = [
+  const messages: LLMRequest[] = [
     { role: "system", content: CORRELATION_SYSTEM },
     {
       role: "user",
@@ -260,7 +260,7 @@ async function generateCorrelationSnapshot(
     },
   ];
 
-  const result = await chatCompletion({
+  const result = await callLLM({
     messages,
     temperature: 0.6,
     maxTokens: 4000,

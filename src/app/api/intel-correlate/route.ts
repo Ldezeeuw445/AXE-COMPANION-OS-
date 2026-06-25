@@ -1,6 +1,6 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
-import { chatCompletion, type LLMChatMessage } from "@/services/llmClient";
+import { callLLM, type LLMRequest } from "@/services/llmClient";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -242,12 +242,12 @@ If there isn't enough data for a meaningful correlation, still find the best one
 
 ${context}`;
 
-  const messages: LLMChatMessage[] = [
+  const messages: LLMRequest[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
   ];
 
-  const result = await chatCompletion({
+  const result = await callLLM({
     messages,
     temperature: 0.7,
     maxTokens: 800,

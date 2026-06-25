@@ -1,5 +1,5 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
-import { chatCompletion, type LLMChatMessage } from "@/services/llmClient";
+import { callLLM, type LLMRequest } from "@/services/llmClient";
 
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
@@ -201,12 +201,12 @@ async function extractMemories(
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n\n");
 
-  const llmMessages: LLMChatMessage[] = [
+  const llmMessages: LLMRequest[] = [
     { role: "system", content: MEMORY_SYSTEM_PROMPT },
     { role: "user", content: `Analyze this conversation and extract memories:\n\n${conversationText}` },
   ];
 
-  const result = await chatCompletion({
+  const result = await callLLM({
     messages: llmMessages,
     temperature: 0.3,
     maxTokens: 1500,
