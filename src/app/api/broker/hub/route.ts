@@ -5,22 +5,14 @@ import { createAxeBrokerConnectionHubForSession } from "@/lib/broker/hub/createH
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type HubPostBody =
-  | {
-      action?: "doctor";
-      accountId: string;
-    }
-  | {
-      action: "disconnect";
-      accountId: string;
-    }
-  | {
-      action?: "sync";
-      accountId: string;
-      providerStatus?: string | null;
-      hubStatus?: string | null;
-      metadata?: Record<string, unknown> | null;
-    };
+// Flat interface so all fields are accessible without discriminated-union narrowing.
+interface HubPostBody {
+  action?: "doctor" | "disconnect" | "sync";
+  accountId: string;
+  providerStatus?: string | null;
+  hubStatus?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
