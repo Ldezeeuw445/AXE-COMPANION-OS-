@@ -2,10 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile.streamer",
+    "dockerfilePath": "Dockerfile",
     "watchPatterns": [
-      "node/metaapi-streamer/**",
-      "Dockerfile.streamer"
+      "**",
+      "Dockerfile"
     ]
   },
   "deploy": {
