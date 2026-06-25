@@ -67,18 +67,16 @@ export async function POST(request: NextRequest) {
   _lastWrite.set(throttleKey, now);
 
   // --- Ownership check (with timeout) ---
-  let ownerCheck;
+  let ownerCheck: any;
   try {
-    const promise = supabase
-      .from("user_broker_accounts")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("id", body.accountId)
-      .maybeSingle();
-
     // Wrap in a timeout so we never wait >TIMEOUT_MS
     ownerCheck = await Promise.race([
-      promise as Promise<{ data: unknown }>,
+      supabase
+        .from("user_broker_accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("id", body.accountId)
+        .maybeSingle() as any,
       new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS)),
     ]);
   } catch (e) {
@@ -113,15 +111,14 @@ export async function POST(request: NextRequest) {
 
   // --- Route through the deadlock-safe RPC with timeout ---
   try {
-    const promise = supabase.rpc("upsert_chart_live_snapshots_safe", {
-      p_rows: [row],
-    });
-
-    const { error } = await Promise.race([
-      promise as Promise<{ error: unknown }>,
+    const result = await Promise.race([
+      supabase.rpc("upsert_chart_live_snapshots_safe", {
+        p_rows: [row],
+      }) as any,
       new Promise((_, reject) => setTimeout(() => reject(new Error("rpc_timeout")), TIMEOUT_MS)),
     ]);
 
+    const error = (result as any)?.error;
     if (error) {
       const msg = (error as any)?.message || String(error);
       console.warn("[chart/snapshot] RPC warning:", msg);
