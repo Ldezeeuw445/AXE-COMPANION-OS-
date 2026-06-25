@@ -1,103 +1,143 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CockpitLearningArc } from "@/types/cockpit";
+/**
+ * Learning Arc Service
+ * 
+ * Tracks trader behavior over time and derives insights:
+ * - Top pairs and timeframes
+ * - Preferred indicators
+ * - Win/loss patterns
+ * - Recent trades
+ * - Alignment score updates
+ */
 
-const EMPTY: CockpitLearningArc = {
-  headline: "",
-  weeklyFocus: [],
-  messageFeedback: { up: 0, down: 0 },
-  weeklyFeedbackTrend: [],
-};
+export interface TraderLearningArc {
+  traderId: string;
+  topPairs: string[];
+  topTimeframes: string[];
+  topIndicators: string[];
+  preferredSession: 'london' | 'newyork' | 'asia';
+  recentWins: Array<{ pair: string; timeframe: string; gain: number; timestamp: string }>;
+  recentLosses: Array<{ pair: string; timeframe: string; loss: number; timestamp: string }>;
+  alignmentScore: number; // 0-100: how well AXE matches trader
+  updatedAt: string;
+}
 
-export async function fetchLearningArc(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<CockpitLearningArc> {
-  const since30d = new Date(Date.now() - 30 * 86_400_000).toISOString();
-
-  const { data, error } = await supabase
-    .from("assistant_learning_signals")
-    .select("signal_type,payload,created_at")
-    .eq("user_id", userId)
-    .gte("created_at", since30d)
-    .order("created_at", { ascending: false })
-    .limit(400);
-
-  if (error || !data?.length) {
-    return {
-      ...EMPTY,
-      headline: "Learning arc builds from journal tags, trade reviews, and chat thumbs — no synthetic progress.",
-    };
-  }
-
-  const focusCounts = new Map<string, number>();
-  let up = 0;
-  let down = 0;
-
-  const weekBuckets = new Map<string, { up: number; down: number }>();
-  for (let w = 3; w >= 0; w -= 1) {
-    const start = new Date(Date.now() - (w + 1) * 7 * 86_400_000);
-    const label = start.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
-    weekBuckets.set(label, { up: 0, down: 0 });
-  }
-
-  for (const row of data) {
-    const type = String(row.signal_type);
-    focusCounts.set(type, (focusCounts.get(type) ?? 0) + 1);
-
-    const createdAt = new Date(String(row.created_at)).getTime();
-    const payload = (row.payload ?? {}) as Record<string, unknown>;
-
-    if (type === "message_feedback") {
-      const rating = String(payload.rating ?? "");
-      if (rating === "up") up += 1;
-      if (rating === "down") down += 1;
-
-      for (let w = 3; w >= 0; w -= 1) {
-        const start = new Date(Date.now() - (w + 1) * 7 * 86_400_000);
-        const end = new Date(Date.now() - w * 7 * 86_400_000);
-        const label = start.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
-        if (createdAt >= start.getTime() && createdAt < end.getTime()) {
-          const bucket = weekBuckets.get(label);
-          if (bucket) {
-            if (rating === "up") bucket.up += 1;
-            if (rating === "down") bucket.down += 1;
-          }
-        }
-      }
+/**
+ * Fetch trader learning arc from Supabase
+ */
+export async function getTraderLearningArc(traderId: string): Promise<TraderLearningArc> {
+  try {
+    const response = await fetch(`/api/profile/learning-arc?userId=${traderId}`);
+    if (!response.ok) {
+      console.warn(`[LearningArc] Failed to fetch: ${response.status}`);
+      return getDefaultArc(traderId);
     }
+
+    return await response.json() as TraderLearningArc;
+  } catch (error) {
+    console.error('[LearningArc] Error:', error);
+    return getDefaultArc(traderId);
   }
+}
 
-  const labelForType: Record<string, string> = {
-    journal_label: "Journal discipline",
-    trade_alignment: "Trade alignment",
-    ai_correction: "Reasoning fixes",
-    message_feedback: "Chat response quality",
-  };
-
-  const weeklyFocus = [...focusCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
-    .map(([type, count]) => ({
-      label: labelForType[type] ?? type.replace(/_/g, " "),
-      count,
-    }));
-
-  const totalFeedback = up + down;
-  const headline =
-    totalFeedback > 0
-      ? `Last 30 days: ${up} helpful vs ${down} off-target AXE replies — your arc follows real teaching moments.`
-      : weeklyFocus.length > 0
-        ? `AXE is tracking ${weeklyFocus[0]?.label?.toLowerCase() ?? "behavior"} as your strongest learning signal this month.`
-        : "Keep journaling and rating AXE replies — the arc only moves on real signals.";
-
+/**
+ * Get default arc when data unavailable
+ */
+function getDefaultArc(traderId: string): TraderLearningArc {
   return {
-    headline,
-    weeklyFocus,
-    messageFeedback: { up, down },
-    weeklyFeedbackTrend: [...weekBuckets.entries()].map(([weekLabel, bucket]) => ({
-      weekLabel,
-      up: bucket.up,
-      down: bucket.down,
-    })),
+    traderId,
+    topPairs: ['EURUSD', 'GBPUSD', 'AUDUSD'],
+    topTimeframes: ['1H', '4H', 'D'],
+    topIndicators: ['RSI', 'MACD', 'MA'],
+    preferredSession: 'london',
+    recentWins: [],
+    recentLosses: [],
+    alignmentScore: 50,
+    updatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Record a trade event (called from chart/order execution)
+ */
+export async function recordTradeEvent(
+  traderId: string,
+  event: {
+    pair: string;
+    timeframe: string;
+    outcome: 'win' | 'loss' | 'breakeven';
+    gain?: number;
+    loss?: number;
+    indicators?: string[];
+    entryTime?: string;
+    exitTime?: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch('/api/profile/trade-event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: traderId,
+        ...event,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json() as { error?: string };
+      return { success: false, error: error.error };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[LearningArc] Failed to record event:', errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Update alignment score based on AXE suggestions acceptance
+ */
+export async function updateAlignmentScore(
+  traderId: string,
+  action: 'accepted' | 'rejected' | 'followed',
+  suggestionId: string
+): Promise<{ newScore: number; change: number }> {
+  try {
+    const response = await fetch('/api/profile/alignment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: traderId,
+        action,
+        suggestionId,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update alignment: ${response.status}`);
+    }
+
+    const data = await response.json() as { newScore: number; change: number };
+    return data;
+  } catch (error) {
+    console.error('[LearningArc] Failed to update alignment:', error);
+    return { newScore: 50, change: 0 };
+  }
+}
+
+/**
+ * Get trader's session preference (which market session they trade most)
+ */
+export async function getTraderSessionPreference(traderId: string): Promise<'london' | 'newyork' | 'asia'> {
+  try {
+    const arc = await getTraderLearningArc(traderId);
+    return arc.preferredSession;
+  } catch {
+    return 'london';
+  }
+}
+
+// Export types
+export type { TraderLearningArc };

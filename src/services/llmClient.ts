@@ -1,466 +1,343 @@
-import OpenAI from "openai";
-import type { AxeToolCall } from "./axeService";
+/**
+ * LLM Client — Routes between Ollama (local) and OpenAI (fallback)
+ * 
+ * Configuration:
+ * - LLM_TARGET: 'ollama' | 'openai' | 'auto' (default: 'auto')
+ * - OLLAMA_API_URL: https://ollama.axecompanion.com/api (or http://localhost:11434/api)
+ * - OPENAI_API_KEY: sk-...
+ * 
+ * Behavior:
+ * - 'auto': Try Ollama first, fallback to OpenAI on timeout/error
+ * - 'ollama': Ollama only, fail if unreachable
+ * - 'openai': OpenAI only
+ */
 
-/* ───────────────────────────────────────────────────────────────
-   Unified LLM Client — Ollama (primary) + OpenAI (fallback)
-
-   Environment variables:
-     OLLAMA_HOST / OLLAMA_URL  — Ollama base URL (default: http://localhost:11434)
-     OLLAMA_MODEL              — Model name (default: qwen2.5-coder:7b)
-     OLLAMA_TIMEOUT_MS         — Non-streaming timeout ms (default: 90000)
-     OPENAI_API_KEY            — OpenAI API key (fallback)
-     FALLBACK_TO_OPENAI        — "true" | "false" (default: true)
-     CF_ACCESS_CLIENT_ID       — Cloudflare Access service token (for named tunnels)
-     CF_ACCESS_CLIENT_SECRET   — Cloudflare Access service token secret
-   ─────────────────────────────────────────────────────────────── */
-
-// Non-streaming local 7B models can take 60-90s; streaming only needs connect timeout
-const OLLAMA_CHAT_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS ?? 90_000);
-const OLLAMA_STREAM_CONNECT_MS = 15_000;
-const OLLAMA_HEALTH_TIMEOUT_MS = 5_000;
-
-const OLLAMA_HOST = (process.env.OLLAMA_HOST ?? process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5-coder:7b";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
-const FALLBACK_TO_OPENAI = (process.env.FALLBACK_TO_OPENAI ?? process.env.LLM_FALLBACK_ENABLED ?? "true") !== "false";
-const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID;
-const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET;
-
-// Health cache — avoids hammering a dead Ollama on every request (30s TTL)
-let _ollamaHealthy: boolean | null = null;
-let _ollamaLastCheck = 0;
-const OLLAMA_HEALTH_TTL = 30_000;
-
-async function isOllamaReachable(): Promise<boolean> {
-  if (OLLAMA_HOST === "http://localhost:11434" && process.env.NODE_ENV === "production") return false;
-  const now = Date.now();
-  if (_ollamaHealthy !== null && now - _ollamaLastCheck < OLLAMA_HEALTH_TTL) return _ollamaHealthy;
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), OLLAMA_HEALTH_TIMEOUT_MS);
-    const res = await fetch(`${OLLAMA_HOST}/api/tags`, {
-      method: "GET",
-      headers: getOllamaHeaders(),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    _ollamaHealthy = res.ok;
-  } catch {
-    _ollamaHealthy = false;
-  }
-  _ollamaLastCheck = Date.now();
-  return _ollamaHealthy;
-}
-
-function invalidateOllamaHealth() {
-  _ollamaHealthy = false;
-  _ollamaLastCheck = Date.now();
-}
-
-function getOllamaHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  // Send CF Access service token headers for any non-localhost remote URL
-  const isRemote = !OLLAMA_HOST.startsWith("http://localhost") && !OLLAMA_HOST.startsWith("http://127.");
-  if (isRemote && CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
-    headers["CF-Access-Client-Id"] = CF_ACCESS_CLIENT_ID;
-    headers["CF-Access-Client-Secret"] = CF_ACCESS_CLIENT_SECRET;
-  }
-  return headers;
-}
-
-export type LLMChatMessage =
-  | { role: "system"; content: string }
-  | { role: "user"; content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail?: string } }> }
-  | { role: "assistant"; content: string | null; tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> }
-  | { role: "tool"; tool_call_id: string; content: string };
-
-export type ChatCompletionParams = {
-  messages: LLMChatMessage[];
-  tools?: Array<{
-    type: "function";
-    function: {
-      name: string;
-      description: string;
-      parameters: Record<string, unknown>;
-    };
-  }>;
-  toolChoice?: "auto" | "none";
-  maxTokens?: number;
+interface LLMRequest {
+  messages: Array<{ role: string; content: string }>;
   temperature?: number;
+  max_tokens?: number;
   stream?: boolean;
-};
-
-export type ChatCompletionResult = {
-  content: string | null;
-  toolCalls: AxeToolCall[];
-  provider: "ollama" | "openai" | null;
-};
-
-/* ── Helper: detect if messages contain images ─────────────── */
-function hasImageContent(messages: LLMChatMessage[]): boolean {
-  return messages.some((m) => {
-    if (m.role !== "user") return false;
-    if (typeof m.content === "string") return false;
-    return m.content.some((part) => part.type === "image_url");
-  });
 }
 
-/* ── Helper: strip images from messages (for non-vision models) */
-function stripImages(messages: LLMChatMessage[]): LLMChatMessage[] {
-  return messages.map((m) => {
-    if (m.role !== "user" || typeof m.content === "string") return m;
-    const textParts = m.content
-      .filter((part) => part.type === "text")
-      .map((part) => (part as { type: "text"; text: string }).text);
-    return { role: "user", content: textParts.join(" ") + " [chart image omitted — non-vision model]" };
-  });
+interface LLMResponse {
+  content: string;
+  model: string;
+  provider: 'ollama' | 'openai';
+  latency_ms: number;
+  error?: string;
 }
 
-/* ── Ollama: non-streaming chat completion ──────────────────── */
-async function ollamaChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResult> {
-  const body: Record<string, unknown> = {
-    model: OLLAMA_MODEL,
-    messages: params.messages,
-    stream: false,
-    options: {
-      temperature: params.temperature ?? 0.55,
-      num_predict: params.maxTokens ?? 800,
-    },
-  };
+type LLMTarget = 'ollama' | 'openai' | 'auto';
 
-  if (params.tools && params.tools.length > 0) {
-    body.tools = params.tools;
-    body.tool_choice = params.toolChoice ?? "auto";
-  }
+// Configuration
+const LLM_TARGET = (process.env.LLM_TARGET || 'auto') as LLMTarget;
+const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'https://ollama.axecompanion.com/api';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview';
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_CHAT_TIMEOUT_MS);
+// Local model selection based on request type
+const MODEL_FOR_CHAT = 'qwen3:4b'; // Fast, good for general chat
+const MODEL_FOR_INTEL = 'deepseek-r1:8b'; // Better reasoning for correlations
+
+// Timeouts
+const OLLAMA_TIMEOUT_MS = 8000;
+const OPENAI_TIMEOUT_MS = 15000;
+
+interface CallOllamaOptions {
+  model?: string;
+  timeout?: number;
+}
+
+async function callOllama(
+  request: LLMRequest,
+  options: CallOllamaOptions = {}
+): Promise<LLMResponse> {
+  const startTime = Date.now();
+  const model = options.model || MODEL_FOR_CHAT;
+  const timeout = options.timeout || OLLAMA_TIMEOUT_MS;
 
   try {
-    const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
-      method: "POST",
-      headers: getOllamaHeaders(),
-      body: JSON.stringify(body),
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt: formatMessagesForOllama(request.messages),
+        stream: false,
+        temperature: request.temperature ?? 0.7,
+        num_predict: request.max_tokens ?? 2048,
+      }),
       signal: controller.signal,
     });
+
     clearTimeout(timeoutId);
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Ollama HTTP ${res.status}: ${text}`);
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = (await res.json()) as {
-      message?: {
-        content?: string;
-        tool_calls?: Array<{
-          function: { name: string; arguments: Record<string, unknown> | string };
-        }>;
-      };
-    };
+    const data = await response.json() as { response?: string };
+    const latency_ms = Date.now() - startTime;
 
-    const message = data.message;
-    if (!message) {
-      return { content: null, toolCalls: [], provider: "ollama" };
-    }
-
-    // Parse tool calls
-    const toolCalls: Array<{ id: string; tool: string; args: Record<string, unknown> }> = [];
-    if (message.tool_calls && message.tool_calls.length > 0) {
-      for (const tc of message.tool_calls) {
-        const fn = tc.function;
-        let args: Record<string, unknown>;
-        if (typeof fn.arguments === "string") {
-          try { args = JSON.parse(fn.arguments); } catch { args = {}; }
-        } else {
-          args = fn.arguments as Record<string, unknown>;
-        }
-        toolCalls.push({ id: `ollama-${Date.now()}-${toolCalls.length}`, tool: fn.name as AxeToolCall["tool"], args });
-      }
-    }
+    console.log(`[LLM] Ollama (${model}) responded in ${latency_ms}ms`);
 
     return {
-      content: message.content ?? null,
-      toolCalls: toolCalls as AxeToolCall[],
-      provider: "ollama",
+      content: data.response || '',
+      model,
+      provider: 'ollama',
+      latency_ms,
     };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
+  } catch (error) {
+    const latency_ms = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    console.warn(`[LLM] Ollama failed after ${latency_ms}ms: ${errorMessage}`);
+    
+    throw new Error(`Ollama error: ${errorMessage}`);
   }
 }
 
-/* ── Ollama: streaming chat completion ───────────────────────── */
-async function ollamaChatCompletionStream(
-  params: ChatCompletionParams,
-  onToken: (text: string) => void
-): Promise<ChatCompletionResult> {
-  const body: Record<string, unknown> = {
-    model: OLLAMA_MODEL,
-    messages: params.messages,
-    stream: true,
-    options: {
-      temperature: params.temperature ?? 0.55,
-      num_predict: params.maxTokens ?? 800,
-    },
-  };
+async function callOpenAI(
+  request: LLMRequest,
+  timeout: number = OPENAI_TIMEOUT_MS
+): Promise<LLMResponse> {
+  const startTime = Date.now();
 
-  if (params.tools && params.tools.length > 0) {
-    body.tools = params.tools;
-    body.tool_choice = params.toolChoice ?? "auto";
+  if (!OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured');
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), OLLAMA_STREAM_CONNECT_MS);
-
   try {
-    const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
-      method: "POST",
-      headers: getOllamaHeaders(),
-      body: JSON.stringify(body),
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: request.messages,
+        temperature: request.temperature ?? 0.7,
+        max_tokens: request.max_tokens ?? 2048,
+      }),
       signal: controller.signal,
     });
+
     clearTimeout(timeoutId);
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Ollama HTTP ${res.status}: ${text}`);
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
     }
 
-    if (!res.body) {
-      throw new Error("Ollama response has no body");
+    const data = await response.json() as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const latency_ms = Date.now() - startTime;
+
+    const content = data.choices?.[0]?.message?.content || '';
+    console.log(`[LLM] OpenAI (${OPENAI_MODEL}) responded in ${latency_ms}ms`);
+
+    return {
+      content,
+      model: OPENAI_MODEL,
+      provider: 'openai',
+      latency_ms,
+    };
+  } catch (error) {
+    const latency_ms = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    console.error(`[LLM] OpenAI failed after ${latency_ms}ms: ${errorMessage}`);
+    
+    throw new Error(`OpenAI error: ${errorMessage}`);
+  }
+}
+
+/**
+ * Select the appropriate model based on request context
+ */
+function selectModel(requestType: 'chat' | 'intel'): string {
+  return requestType === 'intel' ? MODEL_FOR_INTEL : MODEL_FOR_CHAT;
+}
+
+/**
+ * Format chat messages for Ollama (which expects a prompt string)
+ */
+function formatMessagesForOllama(messages: Array<{ role: string; content: string }>): string {
+  return messages
+    .map(msg => {
+      const prefix = msg.role === 'user' ? 'User: ' : 'Assistant: ';
+      return prefix + msg.content;
+    })
+    .join('\n\n') + '\n\nAssistant: ';
+}
+
+/**
+ * Main LLM call with routing and fallback logic
+ */
+export async function callLLM(
+  request: LLMRequest,
+  requestType: 'chat' | 'intel' = 'chat'
+): Promise<LLMResponse> {
+  const model = selectModel(requestType);
+  
+  console.log(`[LLM] Request type: ${requestType}, target: ${LLM_TARGET}, model: ${model}`);
+
+  if (LLM_TARGET === 'openai') {
+    return callOpenAI(request);
+  }
+
+  if (LLM_TARGET === 'ollama') {
+    return callOllama(request, { model });
+  }
+
+  // 'auto' mode: try Ollama first, fallback to OpenAI
+  try {
+    return await callOllama(request, { model });
+  } catch (ollamaError) {
+    console.warn('[LLM] Ollama failed, falling back to OpenAI...');
+    
+    if (!OPENAI_API_KEY) {
+      throw new Error(
+        'Ollama failed and OpenAI fallback not configured. ' +
+        'Set OPENAI_API_KEY or fix Ollama connectivity.'
+      );
+    }
+    
+    return callOpenAI(request);
+  }
+}
+
+/**
+ * Stream response from LLM (future enhancement)
+ */
+export async function* streamLLM(
+  request: LLMRequest,
+  requestType: 'chat' | 'intel' = 'chat'
+) {
+  const model = selectModel(requestType);
+  
+  if (LLM_TARGET === 'openai') {
+    yield* streamOpenAI(request);
+  } else {
+    yield* streamOllama(request, { model });
+  }
+}
+
+async function* streamOllama(
+  request: LLMRequest,
+  options: CallOllamaOptions = {}
+) {
+  const model = options.model || MODEL_FOR_CHAT;
+
+  try {
+    const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt: formatMessagesForOllama(request.messages),
+        stream: true,
+        temperature: request.temperature ?? 0.7,
+        num_predict: request.max_tokens ?? 2048,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status}`);
     }
 
-    const reader = res.body.getReader();
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
     const decoder = new TextDecoder();
-    let content = "";
-    const pendingToolCalls: Array<{
-      function: { name: string; arguments: Record<string, unknown> | string };
-    }> = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n').filter(Boolean);
+      
+      for (const line of lines) {
+        const data = JSON.parse(line) as { response?: string };
+        if (data.response) {
+          yield data.response;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[LLM] Ollama streaming failed:', error);
+    throw error;
+  }
+}
+
+async function* streamOpenAI(request: LLMRequest) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured');
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: request.messages,
+        temperature: request.temperature ?? 0.7,
+        max_tokens: request.max_tokens ?? 2048,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n").filter((l) => l.trim());
+      buffer += decoder.decode(value);
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
       for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        if (line === 'data: [DONE]') break;
+
         try {
-          const parsed = JSON.parse(line) as {
-            message?: {
-              content?: string;
-              tool_calls?: Array<{
-                function: { name: string; arguments: Record<string, unknown> | string };
-              }>;
-            };
-            done?: boolean;
+          const data = JSON.parse(line.slice(6)) as {
+            choices?: Array<{ delta?: { content?: string } }>;
           };
-
-          if (parsed.message?.content) {
-            content += parsed.message.content;
-            onToken(parsed.message.content);
-          }
-
-          if (parsed.message?.tool_calls) {
-            pendingToolCalls.push(...parsed.message.tool_calls);
+          const content = data.choices?.[0]?.delta?.content;
+          if (content) {
+            yield content;
           }
         } catch {
-          // Ignore malformed JSON lines in stream
+          // Parse error, skip
         }
       }
     }
-
-    // Convert accumulated tool calls
-    const toolCalls: Array<{ id: string; tool: string; args: Record<string, unknown> }> = [];
-    if (pendingToolCalls.length > 0) {
-      for (const tc of pendingToolCalls) {
-        const fn = tc.function;
-        let args: Record<string, unknown>;
-        if (typeof fn.arguments === "string") {
-          try { args = JSON.parse(fn.arguments); } catch { args = {}; }
-        } else {
-          args = fn.arguments as Record<string, unknown>;
-        }
-        toolCalls.push({ id: `ollama-${Date.now()}-${toolCalls.length}`, tool: fn.name as AxeToolCall["tool"], args });
-      }
-    }
-
-    return {
-      content: content || null,
-      toolCalls: toolCalls as AxeToolCall[],
-      provider: "ollama",
-    };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
+  } catch (error) {
+    console.error('[LLM] OpenAI streaming failed:', error);
+    throw error;
   }
 }
 
-/* ── OpenAI: non-streaming chat completion ─────────────────── */
-async function openaiChatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResult> {
-  if (!OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY not set");
-  }
-
-  const client = new OpenAI({ apiKey: OPENAI_API_KEY });
-
-  const response = await client.chat.completions.create({
-    model: "gpt-4o",
-    messages: params.messages as OpenAI.Chat.ChatCompletionMessageParam[],
-    tools: params.tools as OpenAI.Chat.ChatCompletionTool[] | undefined,
-    tool_choice: params.toolChoice === "none" ? "none" : "auto",
-    max_tokens: params.maxTokens ?? 800,
-    temperature: params.temperature ?? 0.55,
-  });
-
-  const choice = response.choices[0];
-  const rawToolCalls = choice.message.tool_calls ?? [];
-  const toolCalls: AxeToolCall[] = [];
-
-  for (const raw of rawToolCalls) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fn = (raw as any).function as { name: string; arguments: string };
-    toolCalls.push({
-      id: raw.id,
-      tool: fn.name as AxeToolCall["tool"],
-      args: JSON.parse(fn.arguments),
-    });
-  }
-
-  return {
-    content: choice.message.content ?? null,
-    toolCalls,
-    provider: "openai",
-  };
-}
-
-/* ── OpenAI: streaming chat completion ─────────────────────── */
-async function openaiChatCompletionStream(
-  params: ChatCompletionParams,
-  onToken: (text: string) => void
-): Promise<ChatCompletionResult> {
-  if (!OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY not set");
-  }
-
-  const client = new OpenAI({ apiKey: OPENAI_API_KEY });
-
-  const stream = await client.chat.completions.create({
-    model: "gpt-4o",
-    messages: params.messages as OpenAI.Chat.ChatCompletionMessageParam[],
-    tools: params.tools as OpenAI.Chat.ChatCompletionTool[] | undefined,
-    tool_choice: params.toolChoice === "none" ? "none" : "auto",
-    max_tokens: params.maxTokens ?? 800,
-    temperature: params.temperature ?? 0.55,
-    stream: true,
-  });
-
-  let content = "";
-  const pendingToolCalls = new Map<number, { id: string; name: string; args: string }>();
-
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta;
-    if (!delta) continue;
-
-    if (delta.content) {
-      content += delta.content;
-      onToken(delta.content);
-    }
-
-    if (delta.tool_calls) {
-      for (const tc of delta.tool_calls) {
-        const existing = pendingToolCalls.get(tc.index) ?? { id: "", name: "", args: "" };
-        if (tc.id) existing.id = tc.id;
-        if (tc.function?.name) existing.name += tc.function.name;
-        if (tc.function?.arguments) existing.args += tc.function.arguments;
-        pendingToolCalls.set(tc.index, existing);
-      }
-    }
-  }
-
-  const toolCalls: AxeToolCall[] = [];
-  if (pendingToolCalls.size > 0) {
-    for (const [, tc] of pendingToolCalls) {
-      try {
-        toolCalls.push({
-          id: tc.id,
-          tool: tc.name as AxeToolCall["tool"],
-          args: JSON.parse(tc.args),
-        });
-      } catch {
-        console.error("[llmClient] Failed to parse OpenAI streamed tool call:", tc);
-      }
-    }
-  }
-
-  return {
-    content: content || null,
-    toolCalls,
-    provider: "openai",
-  };
-}
-
-/* ── Public: unified chat completion with fallback ─────────── */
-export async function chatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResult> {
-  // If images are present but model is likely non-vision, strip them
-  const needsVision = hasImageContent(params.messages);
-  const isVisionModel = OLLAMA_MODEL.includes("vl") || OLLAMA_MODEL.includes("llava") || OLLAMA_MODEL.includes("vision");
-  const adaptedParams = needsVision && !isVisionModel ? { ...params, messages: stripImages(params.messages) } : params;
-
-  // Health pre-check to avoid 90s timeout when Ollama is clearly down
-  const ollamaUp = await isOllamaReachable();
-  if (ollamaUp) {
-    try {
-      const result = await ollamaChatCompletion(adaptedParams);
-      return result;
-    } catch (ollamaErr) {
-      const errMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
-      console.error(`[llmClient] Ollama failed: ${errMsg}`);
-      invalidateOllamaHealth();
-
-      if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
-        return openaiChatCompletion(params);
-      }
-      throw new Error(`Ollama failed and fallback is disabled. Error: ${errMsg}`);
-    }
-  }
-
-  // Ollama unreachable — go straight to OpenAI
-  if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
-    return openaiChatCompletion(params);
-  }
-  throw new Error("Ollama unreachable and OpenAI fallback is disabled or unconfigured");
-}
-
-/* ── Public: unified streaming chat completion with fallback ── */
-export async function chatCompletionStream(
-  params: ChatCompletionParams,
-  onToken: (text: string) => void
-): Promise<ChatCompletionResult> {
-  const needsVision = hasImageContent(params.messages);
-  const isVisionModel = OLLAMA_MODEL.includes("vl") || OLLAMA_MODEL.includes("llava") || OLLAMA_MODEL.includes("vision");
-  const adaptedParams = needsVision && !isVisionModel ? { ...params, messages: stripImages(params.messages) } : params;
-
-  const ollamaUp = await isOllamaReachable();
-  if (ollamaUp) {
-    try {
-      const result = await ollamaChatCompletionStream(adaptedParams, onToken);
-      return result;
-    } catch (ollamaErr) {
-      const errMsg = ollamaErr instanceof Error ? ollamaErr.message : String(ollamaErr);
-      console.error(`[llmClient] Ollama streaming failed: ${errMsg}`);
-      invalidateOllamaHealth();
-
-      if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
-        return openaiChatCompletionStream(params, onToken);
-      }
-      throw new Error(`Ollama streaming failed and fallback is disabled. Error: ${errMsg}`);
-    }
-  }
-
-  if (FALLBACK_TO_OPENAI && OPENAI_API_KEY) {
-    return openaiChatCompletionStream(params, onToken);
-  }
-  throw new Error("Ollama unreachable and OpenAI fallback is disabled or unconfigured");
-}
+// Export types
+export type { LLMRequest, LLMResponse, LLMTarget };

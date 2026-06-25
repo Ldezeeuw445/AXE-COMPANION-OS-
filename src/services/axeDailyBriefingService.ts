@@ -1,287 +1,299 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
-import { loadIntelSnapshot } from "@/lib/intel/intelClient";
-import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
-import { fetchCockpitTodaySummary } from "@/services/cockpitService";
-import { getOpenAiApiKey } from "@/lib/axe/embeddings";
+/**
+ * AXE Daily Briefing Service
+ * 
+ * Generates personalized morning briefs for traders based on:
+ * - Trader profile (name, timezone, preferences)
+ * - Trading history (top pairs, recent wins)
+ * - Alignment score (how well AXE matches trader)
+ * - Market context (weather, calendar, macros)
+ * - Learning arc (personalization over time)
+ */
 
-export type DailyBriefingSummary = {
-  usersChecked: number;
-  briefingsCreated: number;
-  pushesSent: number;
-  errors: string[];
-};
+import { callLLM, type LLMRequest } from '@/services/llmClient';
+import { getTraderProfile } from '@/services/profileEngine';
+import { getTraderLearningArc } from '@/services/learningArcService';
+import { trackAdaptiveEvent } from '@/services/trackAdaptiveEvent';
 
-type BriefingPayload = {
-  title: string;
-  body: string;
-  highlights: string[];
-  chatPrefill: string;
-};
-
-function utcDateKey(d = new Date()): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function briefingEventKey(userId: string, dateKey: string): string {
-  return `daily_briefing:${dateKey}:${userId}`;
-}
-
-async function loadUserContext(supabase: SupabaseClient, userId: string) {
-  const since7d = new Date(Date.now() - 7 * 86_400_000).toISOString();
-
-  const [today, memoryRes, tradesRes, messagesRes, snapshotRes, signalsRes] = await Promise.all([
-    fetchCockpitTodaySummary(supabase, userId),
-    supabase
-      .from("assistant_memory_entries")
-      .select("entry_key,content")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(8),
-    supabase
-      .from("broker_trades")
-      .select("symbol,side,pnl,close_time")
-      .eq("user_id", userId)
-      .not("close_time", "is", null)
-      .gte("close_time", since7d)
-      .order("close_time", { ascending: false })
-      .limit(6),
-    supabase
-      .from("messages")
-      .select("role,content")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(10),
-    supabase
-      .from("assistant_cockpit_snapshots")
-      .select("alignment_score,learning_progress")
-      .eq("user_id", userId)
-      .order("captured_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("assistant_learning_signals")
-      .select("signal_type,payload")
-      .eq("user_id", userId)
-      .gte("created_at", since7d)
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
-
-  let intelSummary = "";
-  try {
-    const intel = await loadIntelSnapshot();
-    const feeds = (intel.providers ?? [])
-      .filter((p) => p.state === "live")
-      .map((p) => p.label)
-      .slice(0, 6);
-    intelSummary = `Intel feeds live: ${feeds.join(", ") || "none"}. Chokepoints: ${(intel.chokepoints ?? []).slice(0, 3).map((c) => c.name).join("; ") || "none"}.`;
-  } catch {
-    intelSummary = "Intel snapshot unavailable.";
-  }
-
-  const alignmentPct = snapshotRes.data?.alignment_score
-    ? Math.round(Number(snapshotRes.data.alignment_score) * (Number(snapshotRes.data.alignment_score) > 1 ? 1 : 100))
-    : 0;
-
-  return {
-    today,
-    alignmentPct,
-    learningHeadline:
-      (snapshotRes.data?.learning_progress as { headline?: string } | null)?.headline ?? "",
-    memory: (memoryRes.data ?? []).map((m) => `${m.entry_key}: ${String(m.content).slice(0, 160)}`),
-    recentTrades: (tradesRes.data ?? []).map(
-      (t) => `${t.symbol} ${t.side} PnL ${t.pnl ?? "—"} @ ${t.close_time}`,
-    ),
-    recentChat: (messagesRes.data ?? [])
-      .filter((m) => m.role === "user")
-      .map((m) => String(m.content).slice(0, 140)),
-    signals: (signalsRes.data ?? []).map((s) => `${s.signal_type}: ${JSON.stringify(s.payload).slice(0, 100)}`),
-    intelSummary,
+interface TraderBriefingContext {
+  traderId: string;
+  name: string;
+  timezone: string;
+  preferredPairs: string[];
+  alignment: number; // 0-100
+  recentWins: Array<{ pair: string; timeframe: string; gain: number }>;
+  topIndicators: string[];
+  preferredSession: 'london' | 'newyork' | 'asia';
+  shouldIncludeWeather: boolean;
+  weather?: {
+    condition: string;
+    temp: number;
+    location: string;
+  };
+  macro?: {
+    events: string[];
+    risks: string[];
   };
 }
 
-function fallbackBriefing(ctx: Awaited<ReturnType<typeof loadUserContext>>): BriefingPayload {
-  const highlights = [
-    ctx.today.chatMessages > 0
-      ? `${ctx.today.chatMessages} chat message${ctx.today.chatMessages === 1 ? "" : "s"} today`
-      : "Quiet chat day — good time to plan setups",
-    ctx.today.tradesClosed > 0
-      ? `${ctx.today.tradesClosed} trade${ctx.today.tradesClosed === 1 ? "" : "s"} closed today`
-      : "No closes yet — protect capital until your A+ setup",
-    ctx.alignmentPct > 0 ? `Cockpit alignment at ${ctx.alignmentPct}%` : "Cockpit still calibrating",
-  ];
-
-  const body = [
-    highlights.join(" · "),
-    ctx.intelSummary,
-    ctx.recentTrades.length ? `Recent: ${ctx.recentTrades.slice(0, 3).join("; ")}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
-  const chatPrefill =
-    "Walk me through today's AXE briefing — what matters for my watchlist, risk, and the next session?";
-
-  return {
-    title: "Your daily AXE briefing",
-    body,
-    highlights,
-    chatPrefill,
-  };
-}
-
-async function generateBriefingWithGpt(
-  ctx: Awaited<ReturnType<typeof loadUserContext>>,
-): Promise<BriefingPayload> {
-  const apiKey = getOpenAiApiKey();
-  if (!apiKey) return fallbackBriefing(ctx);
-
+/**
+ * Fetch trader profile and context from Supabase
+ */
+export async function buildBriefingContext(traderId: string): Promise<TraderBriefingContext> {
   try {
-    const client = new OpenAI({ apiKey });
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.35,
-      max_tokens: 700,
-      messages: [
-        {
-          role: "system",
-          content:
-            'You write a concise daily trading briefing for one trader. Return JSON only: { "title": string, "body": string (3-5 short paragraphs, plain text), "highlights": string[3], "chatPrefill": string (one question they can paste into AXE chat) }. Be specific to their data. No hype.',
-        },
-        {
-          role: "user",
-          content: JSON.stringify(ctx),
-        },
-      ],
-    });
-    const raw = completion.choices[0]?.message?.content ?? "";
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return fallbackBriefing(ctx);
-    const parsed = JSON.parse(match[0]) as Partial<BriefingPayload>;
-    if (!parsed.title || !parsed.body) return fallbackBriefing(ctx);
+    // Get trader profile
+    const profile = await getTraderProfile(traderId);
+    
+    // Get learning arc data
+    const arc = await getTraderLearningArc(traderId);
+
+    // Get local time
+    const now = new Date();
+    const tzDate = new Date(now.toLocaleString('en-US', { timeZone: profile.timezone }));
+    const hour = tzDate.getHours();
+
+    // Determine session
+    let session: 'london' | 'newyork' | 'asia' = 'asia';
+    if (hour >= 7 && hour < 15) session = 'london'; // 8-4pm London time
+    if (hour >= 14 && hour < 22) session = 'newyork'; // 9-5pm NY time
+
+    // Get weather if opted in
+    let weather: TraderBriefingContext['weather'] | undefined;
+    if (profile.preferences.weatherOptIn && profile.location) {
+      weather = await getWeatherForLocation(profile.location);
+    }
+
     return {
-      title: parsed.title,
-      body: parsed.body,
-      highlights: Array.isArray(parsed.highlights) ? parsed.highlights.slice(0, 5) : [],
-      chatPrefill:
-        parsed.chatPrefill ??
-        "Walk me through today's AXE briefing — what matters for my watchlist, risk, and the next session?",
+      traderId,
+      name: profile.displayName,
+      timezone: profile.timezone,
+      preferredPairs: arc.topPairs.slice(0, 3),
+      alignment: arc.alignmentScore,
+      recentWins: arc.recentWins.slice(0, 3),
+      topIndicators: arc.topIndicators.slice(0, 3),
+      preferredSession: session,
+      shouldIncludeWeather: profile.preferences.weatherOptIn,
+      weather,
     };
-  } catch {
-    return fallbackBriefing(ctx);
+  } catch (error) {
+    console.error('[Briefing] Failed to build context:', error);
+    // Return minimal context with defaults
+    return {
+      traderId,
+      name: 'Trader',
+      timezone: 'UTC',
+      preferredPairs: [],
+      alignment: 0,
+      recentWins: [],
+      topIndicators: [],
+      preferredSession: 'asia',
+      shouldIncludeWeather: false,
+    };
   }
 }
 
-export async function runDailyBriefingForUser(
-  supabase: SupabaseClient,
-  userId: string,
-  opts?: { dateKey?: string; push?: boolean },
-): Promise<{ created: boolean; pushed: boolean }> {
-  const dateKey = opts?.dateKey ?? utcDateKey();
+/**
+ * Fetch weather for a location (placeholder - integrate with real weather API)
+ */
+async function getWeatherForLocation(
+  location: string
+): Promise<{ condition: string; temp: number; location: string }> {
+  // TODO: Integrate with OpenWeatherMap or similar
+  return {
+    location,
+    condition: 'Partly cloudy',
+    temp: 20,
+  };
+}
 
-  const { data: existing } = await supabase
-    .from("axe_daily_briefings")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("briefing_date", dateKey)
-    .maybeSingle();
-
-  if (existing?.id) return { created: false, pushed: false };
-
-  const ctx = await loadUserContext(supabase, userId);
-  const briefing = await generateBriefingWithGpt(ctx);
-
-  const { error: saveErr } = await supabase.from("axe_daily_briefings").insert({
-    user_id: userId,
-    briefing_date: dateKey,
-    title: briefing.title,
-    body: briefing.body,
-    highlights: briefing.highlights,
-    chat_prefill: briefing.chatPrefill,
+/**
+ * Build the AXE morning brief prompt
+ */
+function buildBriefingPrompt(context: TraderBriefingContext): string {
+  const timeStr = new Date().toLocaleString('en-US', {
+    timeZone: context.timezone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
   });
 
-  if (saveErr) {
-    if (saveErr.code === "23505") return { created: false, pushed: false };
-    throw new Error(saveErr.message);
-  }
+  let prompt = `You are AXE Companion, generating a personalized morning trading brief for ${context.name}.
 
-  const eventKey = briefingEventKey(userId, dateKey);
-  const chatUrl = `/chat?q=${encodeURIComponent(briefing.chatPrefill)}`;
-  const feedBody =
-    briefing.highlights.length > 0
-      ? briefing.highlights.join(" · ")
-      : briefing.body.slice(0, 220);
+Key information:
+- Local time: ${timeStr} (${context.timezone})
+- Top trading pairs: ${context.preferredPairs.join(', ') || 'Not yet identified'}
+- Alignment score: ${context.alignment}% (how well AXE matches this trader's style)
+- Focus session: ${context.preferredSession}
+- Preferred timeframes: Based on recent wins
+- Key indicators: ${context.topIndicators.join(', ') || 'Standard set'}`;
 
-  const inserted = await recordProactiveFeedEvent(
-    supabase,
-    userId,
-    eventKey,
-    briefing.title,
-    feedBody,
-    chatUrl,
-    { push: opts?.push !== false },
-  );
-
-  return { created: true, pushed: inserted };
-}
-
-export async function runDailyBriefingBatch(
-  supabase: SupabaseClient,
-  opts?: { maxUsers?: number },
-): Promise<DailyBriefingSummary> {
-  const maxUsers = opts?.maxUsers ?? 40;
-  const errors: string[] = [];
-  let briefingsCreated = 0;
-  let pushesSent = 0;
-
-  const seen = new Set<string>();
-  const userIds: string[] = [];
-
-  const { data: pushUsers } = await supabase
-    .from("push_subscriptions")
-    .select("user_id")
-    .limit(maxUsers * 3);
-
-  for (const row of pushUsers ?? []) {
-    const id = row.user_id as string;
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    userIds.push(id);
-    if (userIds.length >= maxUsers) break;
-  }
-
-  if (userIds.length < maxUsers) {
-    const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
-    const { data: activeUsers } = await supabase
-      .from("messages")
-      .select("user_id")
-      .gte("created_at", since)
-      .limit(maxUsers * 2);
-
-    for (const row of activeUsers ?? []) {
-      const id = row.user_id as string;
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      userIds.push(id);
-      if (userIds.length >= maxUsers) break;
+  if (context.recentWins.length > 0) {
+    prompt += `\n\nRecent wins:`;
+    for (const win of context.recentWins) {
+      prompt += `\n- ${win.pair} on ${win.timeframe}: +${win.gain}%`;
     }
   }
 
-  for (const userId of userIds) {
+  if (context.shouldIncludeWeather && context.weather) {
+    prompt += `\n\nWeather: ${context.weather.condition}, ${context.weather.temp}°C in ${context.weather.location}`;
+  }
+
+  prompt += `
+
+Your brief should:
+1. Open with a friendly, personalized greeting (use ${context.name})
+2. Call out the time and timezone (so they know it's for them)
+3. Highlight the top 2-3 pairs for this session
+4. Reference their alignment score in a motivating way
+5. Include one tactical insight tied to their recent wins
+6. Close with something encouraging and actionable
+
+Keep it under 200 words. Use AXE's voice: warm, intelligent, direct. Occasional trading humor is fine.`;
+
+  return prompt;
+}
+
+/**
+ * Generate the morning brief
+ */
+export async function generateMorningBrief(traderId: string): Promise<{
+  brief: string;
+  context: TraderBriefingContext;
+  model: string;
+  provider: 'ollama' | 'openai';
+  latency_ms: number;
+}> {
+  const startTime = Date.now();
+
+  try {
+    // Build context
+    const context = await buildBriefingContext(traderId);
+
+    // Build prompt
+    const userPrompt = buildBriefingPrompt(context);
+
+    // Call LLM (intel model for better quality)
+    const llmRequest: LLMRequest = {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are AXE Companion, a warm and intelligent AI trading partner.',
+        },
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+      temperature: 0.8, // Slightly higher for personality
+      max_tokens: 300,
+    };
+
+    const response = await callLLM(llmRequest, 'intel');
+    const latency_ms = Date.now() - startTime;
+
+    console.log(`[Briefing] Generated for ${traderId} in ${latency_ms}ms via ${response.provider}`);
+
+    // Track the event
     try {
-      const result = await runDailyBriefingForUser(supabase, userId);
-      if (result.created) briefingsCreated += 1;
-      if (result.pushed) pushesSent += 1;
+      await trackAdaptiveEvent({
+        accountId: null,
+        eventType: 'morning_brief_delivered',
+        route: '/cockpit',
+        payload: {
+          traderId,
+          alignment: context.alignment,
+          topPairs: context.preferredPairs,
+        },
+        occurredAt: new Date().toISOString(),
+      });
     } catch (e) {
-      errors.push(`${userId}: ${e instanceof Error ? e.message : "unknown"}`);
+      // Event tracking is best-effort
+      console.warn('[Briefing] Failed to track event:', e);
     }
-  }
 
-  return {
-    usersChecked: userIds.length,
-    briefingsCreated,
-    pushesSent,
-    errors,
-  };
+    return {
+      brief: response.content,
+      context,
+      model: response.model,
+      provider: response.provider,
+      latency_ms,
+    };
+  } catch (error) {
+    const latency_ms = Date.now() - startTime;
+    console.error(`[Briefing] Error after ${latency_ms}ms:`, error);
+    throw error;
+  }
 }
+
+/**
+ * Deliver brief via email (integrates with email service)
+ */
+export async function deliverBriefViaEmail(
+  traderId: string,
+  brief: string,
+  context: TraderBriefingContext
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    // TODO: Integrate with SendGrid or similar
+    // For now, just log
+    console.log(`[Briefing] Would send to trader: ${context.name} at ${context.timezone}`);
+    console.log(`[Briefing] Brief: ${brief.slice(0, 100)}...`);
+
+    return { success: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[Briefing] Email delivery failed:', errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Daily briefing cron job
+ * Should be called via /api/cron/daily-briefing (Vercel Cron)
+ */
+export async function runDailyBriefingCron(): Promise<{
+  processed: number;
+  failed: number;
+  latency_ms: number;
+}> {
+  const startTime = Date.now();
+  let processed = 0;
+  let failed = 0;
+
+  try {
+    // Fetch all traders who opted into daily briefing
+    // TODO: Query Supabase for traders with morningBriefingOptIn = true
+    const traders = await getTraderIdsForBriefing();
+
+    for (const traderId of traders) {
+      try {
+        const result = await generateMorningBrief(traderId);
+        await deliverBriefViaEmail(traderId, result.brief, result.context);
+        processed++;
+      } catch (error) {
+        console.error(`[Briefing] Failed for trader ${traderId}:`, error);
+        failed++;
+      }
+    }
+
+    const latency_ms = Date.now() - startTime;
+    console.log(`[Briefing] Cron complete: ${processed} processed, ${failed} failed in ${latency_ms}ms`);
+
+    return { processed, failed, latency_ms };
+  } catch (error) {
+    const latency_ms = Date.now() - startTime;
+    console.error('[Briefing] Cron failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch trader IDs who opted into morning briefing
+ * TODO: Implement actual Supabase query
+ */
+async function getTraderIdsForBriefing(): Promise<string[]> {
+  // SELECT user_id FROM global_preferences WHERE morning_briefing_opt_in = true;
+  return [];
+}
+
+// Export types
+export type { TraderBriefingContext };

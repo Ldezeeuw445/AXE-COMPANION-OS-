@@ -1,232 +1,197 @@
-import { NextResponse } from "next/server";
-import { loadIntelSnapshot } from "@/lib/intel/intelClient";
-import { chatCompletionStream, type LLMChatMessage } from "@/services/llmClient";
-
-export const runtime = "edge";
-export const dynamic = "force-dynamic";
-
 /**
  * POST /api/intel-chat
- *
- * Dedicated streaming endpoint for the AXE INTELLIGENT AGENT chat panel.
- * Fetches the latest intel snapshot, builds a focused system prompt,
- * and streams the LLM response back as text/event-stream so the
- * client gets tokens in real-time.
+ * 
+ * Chat endpoint with LLM routing.
+ * Detects message type and routes to appropriate model:
+ * - General chat → qwen3:4b (fast)
+ * - Intel/correlation questions → deepseek-r1:8b (reasoning)
+ * 
+ * Request:
+ * {
+ *   "traderId": "user_123",
+ *   "message": "What is my correlation to BTC?",
+ *   "context": { "pairs": ["EURUSD", "GBPUSD"], ... }
+ * }
+ * 
+ * Response:
+ * {
+ *   "content": "Based on your trading...",
+ *   "model": "deepseek-r1:8b",
+ *   "provider": "ollama",
+ *   "latency_ms": 2456
+ * }
  */
 
-const INTEL_SYSTEM_PROMPT = `You are AXE INTELLIGENT AGENT — the intelligent analysis layer of AXE Companion OS.
+import { NextRequest, NextResponse } from 'next/server';
+import { callLLM, type LLMRequest, type LLMResponse } from '@/services/llmClient';
 
-ROLE: You are a senior institutional flow analyst with access to 10 real-time intelligence feeds — both smart-money flow and alternative data. Your job is to find *actionable correlations* across all feeds and translate them into clear trading signals or risk warnings.
+// Patterns that indicate an intel/analysis request
+const INTEL_PATTERNS = [
+  /correlat/i,
+  /analysis/i,
+  /insight/i,
+  /pattern/i,
+  /strategy/i,
+  /edge/i,
+  /advantage/i,
+  /opportunity/i,
+  /risk/i,
+  /relationship/i,
+  /connection/i,
+  /cross-market/i,
+  /macro/i,
+  /fundamental/i,
+  /technical/i,
+  /why\s+(did|does|is)/i,
+  /explain/i,
+  /what.*\b(means?|indicates?|suggests?)\b/i,
+];
 
-FEEDS (Smart Money):
-- Insider trades (Form 4 filings) — executive buying/selling
-- Congressional trades — political disclosure feeds
-- Dark-pool prints — off-exchange block trades
-- Unusual options flow — sweeps, blocks, unusual OI
-- Market tide — net call vs put premium for macro bias
-
-FEEDS (Alternative Data):
-- AXE Mobility — executive jet tracking, C-suite travel patterns
-- AXE Vessel Intel — supply chain & chokepoint monitoring, tanker reroutes
-- AXE Seismic Events — earthquakes, wildfires, storms, armed conflicts with market relevance
-- AXE Energy Flow — crude oil inventories, natural gas storage, WTI/Brent pricing
-- AXE Cyber Intel — network scanning intelligence, financial sector attack signals
-
-CAPABILITIES:
-- Cross-reference insider buys/sells with dark-pool volume to spot accumulation or distribution
-- Correlate congressional trades with upcoming policy catalysts
-- Read options flow (sweeps, blocks, unusual OI) for directional conviction
-- Synthesize market tide (net call vs put premium) for macro bias
-- Identify ticker convergence: when multiple feeds light up the same name
-- Detect executive travel patterns that precede M&A or major announcements
-- Connect geopolitical events to energy prices and defense/commodity sector moves
-- Link supply chain disruptions to affected company flows
-- Assess cyber threats to financial infrastructure for systemic risk
-
-STYLE:
-- Concise, structured, professional. Use bullet points and headers.
-- Always specify the *confidence level* (high / medium / low) and the *data basis* (which feeds agree).
-- If data is thin or contradictory, say so — never fabricate a signal.
-- End with a clear "SIGNAL" or "NO SIGNAL" verdict when asked for direction.
-- Use trading shorthand: long/short, risk-on/off, accumulation/distribution.
-- Format numbers cleanly: $1.2M not $1234567.
-
-CONTEXT: The intel data below is the latest live snapshot from AXE's intel-proxy (10 feeds). Treat it as the ground truth.`;
-
-function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>): string {
-  const sections: string[] = [];
-
-  if (intel.tide) {
-    const callM = (intel.tide.netCallPremium / 1e6).toFixed(2);
-    const putM = (intel.tide.netPutPremium / 1e6).toFixed(2);
-    sections.push(
-      `## MARKET TIDE\n- Bias: ${intel.tide.bias.toUpperCase()}\n- Net call premium: $${callM}M\n- Net put premium: $${putM}M\n- Call/put ratio: ${intel.tide.callPutRatio?.toFixed(2) ?? "—"}`
-    );
-  }
-
-  if (intel.insiders.length > 0) {
-    const rows = intel.insiders
-      .slice(0, 15)
-      .map(
-        (r) =>
-          `- ${r.ticker} | ${r.type} | ${r.insider}${r.role && r.role !== "—" ? ` (${r.role})` : ""} | $${(r.value / 1e6).toFixed(2)}M | ${r.date}`
-      )
-      .join("\n");
-    sections.push(`## INSIDER TRANSACTIONS (Form 4)\n${rows}`);
-  }
-
-  if (intel.senate.length > 0) {
-    const rows = intel.senate
-      .slice(0, 15)
-      .map(
-        (r) =>
-          `- ${r.ticker} | ${r.direction} | ${r.politician} (${r.chamber}) | ${r.size} | ${r.date}`
-      )
-      .join("\n");
-    sections.push(`## CONGRESSIONAL TRADES\n${rows}`);
-  }
-
-  if (intel.darkPool.length > 0) {
-    const rows = intel.darkPool
-      .slice(0, 15)
-      .map(
-        (r) =>
-          `- ${r.symbol} | ${r.size.toLocaleString()} shares @ $${r.price.toFixed(2)} | $${(r.notional / 1e6).toFixed(2)}M${r.side ? ` | ${r.side}` : ""}`
-      )
-      .join("\n");
-    sections.push(`## DARK POOL PRINTS\n${rows}`);
-  }
-
-  if (intel.options.length > 0) {
-    const rows = intel.options
-      .slice(0, 15)
-      .map(
-        (r) =>
-          `- ${r.symbol} | ${r.side} $${r.strike.toFixed(2)} ${r.exp} | Vol: ${r.vol?.toLocaleString() ?? "—"} / OI: ${r.oi?.toLocaleString() ?? "—"} | Premium: $${(r.premium / 1e6).toFixed(2)}M${r.sweep ? " [SWEEP]" : ""}`
-      )
-      .join("\n");
-    sections.push(`## UNUSUAL OPTIONS FLOW\n${rows}`);
-  }
-
-  // Alt-data feeds
-  if (intel.jets?.length > 0) {
-    const airborne = intel.jets.filter((j) => !j.onGround);
-    const rows = airborne.length > 0
-      ? airborne.slice(0, 10).map(
-          (j) => `- ${j.company}: ${j.callsign || j.icao24} | alt: ${j.altitude ? Math.round(j.altitude) + "m" : "?"} | vel: ${j.velocity ? Math.round(j.velocity) + "m/s" : "?"} | from: ${j.originCountry || "?"}`
-        ).join("\n")
-      : `- All ${intel.jets.length} tracked executive jets are currently grounded`;
-    sections.push(`## CORPORATE JET TRACKING (${airborne.length} airborne / ${intel.jets.length} tracked)\n${rows}`);
-  }
-
-  if (intel.vessels?.length > 0) {
-    const rows = intel.vessels.slice(0, 10).map(
-      (v) => `- ${v.vesselName}: ${v.vesselType} | ${v.owner} | ${v.nearChokepoint ? `near ${v.nearChokepoint}` : v.destination || "unknown"} | ${v.alertLevel}`
-    ).join("\n");
-    sections.push(`## SUPPLY CHAIN & VESSEL TRACKING (${intel.vessels.length} entries)\n${rows}`);
-  }
-
-  if (intel.conflicts?.length > 0) {
-    const rows = intel.conflicts.slice(0, 10).map(
-      (c) => `- ${c.country} (${c.eventDate}): ${c.eventType} ${c.subEventType ? `[${c.subEventType}]` : ""} — ${c.notes.slice(0, 150)}${c.fatalities > 0 ? ` [${c.fatalities} fatalities]` : ""}`
-    ).join("\n");
-    sections.push(`## AXE SEISMIC EVENTS (${intel.conflicts.length} events)\n${rows}`);
-  }
-
-  if (intel.energy?.length > 0) {
-    const seen = new Set<string>();
-    const rows = intel.energy.filter((e) => {
-      if (seen.has(e.seriesId)) return false;
-      seen.add(e.seriesId);
-      return true;
-    }).map(
-      (e) => `- ${e.seriesName}: ${e.value != null ? e.value.toFixed(2) : "?"} ${e.unit} (${e.period})`
-    ).join("\n");
-    sections.push(`## AXE ENERGY FLOW\n${rows}`);
-  }
-
-  if (intel.cyber?.length > 0) {
-    const rows = intel.cyber.slice(0, 10).map(
-      (t) => `- ${t.ip}: ${t.classification} — ${t.name || t.category}${t.tags.length > 0 ? ` [${t.tags.join(", ")}]` : ""}`
-    ).join("\n");
-    sections.push(`## CYBER THREAT INTELLIGENCE (${intel.cyber.length} signals)\n${rows}`);
-  }
-
-  if (sections.length === 0) {
-    return "No intel feeds are currently loaded. The intel-proxy may need to warm up.";
-  }
-
-  return sections.join("\n\n");
+interface ChatRequest {
+  traderId: string;
+  message: string;
+  context?: Record<string, unknown>;
+  history?: Array<{ role: string; content: string }>;
 }
 
-export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as {
-    message?: string;
-    history?: Array<{ role: "user" | "assistant"; content: string }>;
-    symbol?: string;
-  } | null;
+interface ChatResponse {
+  content: string;
+  model: string;
+  provider: 'ollama' | 'openai';
+  latency_ms: number;
+  requestType: 'chat' | 'intel';
+}
 
-  const userMessage = typeof body?.message === "string" ? body.message.trim() : "";
-  if (!userMessage) {
-    return NextResponse.json(
-      { ok: false, error: "Empty message." },
-      { status: 400 }
-    );
+/**
+ * Detect if a message is asking for intelligence/analysis
+ */
+function detectRequestType(message: string): 'chat' | 'intel' {
+  // Check if any intel pattern matches
+  for (const pattern of INTEL_PATTERNS) {
+    if (pattern.test(message)) {
+      return 'intel';
+    }
+  }
+  return 'chat';
+}
+
+/**
+ * Build context-aware system prompt for AXE
+ */
+function buildSystemPrompt(traderId: string, context?: Record<string, unknown>): string {
+  let prompt = `You are AXE Companion, a friendly AI trading second brain with a Bobby Axelrod-style edge.
+You are speaking to trader ${traderId}.
+
+Personality:
+- Warm, intelligent, and respectful of the trader's autonomy
+- Occasionally use trading references or light humor
+- Cut straight to insights without unnecessary preamble
+- Always prioritize the trader's edge and risk management`;
+
+  if (context?.pairs) {
+    const pairs = Array.isArray(context.pairs) ? context.pairs.join(', ') : String(context.pairs);
+    prompt += `\n\nThis trader focuses on: ${pairs}`;
   }
 
-  const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
-  const history = Array.isArray(body?.history) ? body.history : [];
+  if (context?.recentWins) {
+    prompt += `\n\nRecent wins: ${context.recentWins}`;
+  }
 
-  // Load intel snapshot
-  const intel = await loadIntelSnapshot({ symbol });
-  const intelContext = buildIntelContext(intel);
+  if (context?.style) {
+    prompt += `\n\nTrading style: ${context.style}`;
+  }
 
-  // Build messages
-  const messages: LLMChatMessage[] = [
-    {
-      role: "system",
-      content: `${INTEL_SYSTEM_PROMPT}\n\n--- LIVE INTEL SNAPSHOT ---\n\n${intelContext}`,
+  return prompt;
+}
+
+/**
+ * Handle POST /api/intel-chat
+ */
+export async function POST(request: NextRequest): Promise<NextResponse<ChatResponse | { error: string }>> {
+  const startTime = Date.now();
+
+  try {
+    // Validate request
+    if (request.headers.get('content-type') !== 'application/json') {
+      return NextResponse.json(
+        { error: 'Content-Type must be application/json' },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json() as ChatRequest;
+    const { traderId, message, context, history } = body;
+
+    if (!traderId || !message) {
+      return NextResponse.json(
+        { error: 'traderId and message are required' },
+        { status: 400 }
+      );
+    }
+
+    // Determine request type
+    const requestType = detectRequestType(message);
+    console.log(`[Chat] Request type: ${requestType}, message: ${message.slice(0, 50)}...`);
+
+    // Build messages for LLM
+    const systemPrompt = buildSystemPrompt(traderId, context);
+    const messages: Array<{ role: string; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      ...(history || []),
+      { role: 'user', content: message },
+    ];
+
+    // Call LLM
+    const llmRequest: LLMRequest = {
+      messages,
+      temperature: requestType === 'intel' ? 0.5 : 0.7, // Lower temp for analysis
+      max_tokens: requestType === 'intel' ? 1024 : 512,
+    };
+
+    const response = await callLLM(llmRequest, requestType);
+    const latency_ms = Date.now() - startTime;
+
+    // Log success
+    console.log(`[Chat] ${requestType} completed in ${latency_ms}ms via ${response.provider}`);
+
+    // Return response
+    return NextResponse.json<ChatResponse>(
+      {
+        content: response.content,
+        model: response.model,
+        provider: response.provider,
+        latency_ms,
+        requestType,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    const latency_ms = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    console.error(`[Chat] Error after ${latency_ms}ms: ${errorMessage}`);
+
+    return NextResponse.json(
+      {
+        error: errorMessage,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Handle GET /api/intel-chat (health check / info)
+ */
+export async function GET(): Promise<NextResponse> {
+  return NextResponse.json({
+    service: 'intel-chat',
+    status: 'operational',
+    models: {
+      chat: 'qwen3:4b',
+      intel: 'deepseek-r1:8b',
     },
-    // Include recent history for continuity (last 10 exchanges max)
-    ...history.slice(-20).map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
-    { role: "user", content: userMessage },
-  ];
-
-  // Stream the response via llmClient
-  const encoder = new TextEncoder();
-  const readable = new ReadableStream({
-    async start(controller) {
-      try {
-        await chatCompletionStream(
-          { messages, maxTokens: 1200, temperature: 0.4 },
-          (token) => {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ text: token })}\n\n`)
-            );
-          }
-        );
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      } catch (err) {
-        console.error("[intel-chat] Stream failed:", err);
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ error: "AXE couldn't generate a reply right now — please try again." })}\n\n`
-          )
-        );
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+    providers: ['ollama', 'openai'],
+    target: process.env.LLM_TARGET || 'auto',
   });
 }
