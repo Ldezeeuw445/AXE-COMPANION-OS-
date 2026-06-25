@@ -488,28 +488,25 @@ export async function upsertCockpitLearningMetrics(
     },
   ];
 
-  for (const row of rows) {
-    const { data: existing } = await supabase
-      .from("assistant_learning_metrics")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("metric_key", row.metric_key)
-      .maybeSingle();
+  // FIXED: Use a single batch upsert instead of SELECT→INSERT/UPDATE per row.
+  // The old pattern caused deadlocks when multiple users hit cockpit simultaneously:
+  // each query would race through the SELECT gap and try to INSERT the same row.
+  // ON CONFLICT DO UPDATE is atomic and deadlock-safe.
+  const payloads = rows.map((row) => ({
+    user_id: userId,
+    metric_key: row.metric_key,
+    metric_value: row.metric_value,
+    dimensions: row.dimensions,
+    period_start: periodStart.toISOString(),
+    updated_at: now,
+  }));
 
-    const payload = {
-      user_id: userId,
-      metric_key: row.metric_key,
-      metric_value: row.metric_value,
-      dimensions: row.dimensions,
-      period_start: periodStart.toISOString(),
-      updated_at: now,
-    };
+  const { error } = await supabase
+    .from("assistant_learning_metrics")
+    .upsert(payloads, { onConflict: "user_id,metric_key" });
 
-    if (existing?.id) {
-      await supabase.from("assistant_learning_metrics").update(payload).eq("id", existing.id);
-    } else {
-      await supabase.from("assistant_learning_metrics").insert(payload);
-    }
+  if (error) {
+    console.error("[cockpitSnapshot] upsertCockpitLearningMetrics error:", error.message);
   }
 }
 
