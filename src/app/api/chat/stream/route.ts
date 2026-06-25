@@ -1,8 +1,7 @@
 import { streamChatMessage, type StreamEvent } from "@/services/chatService";
 import { getEdgeAuthedServiceSupabase } from "@/services/serviceSupabase";
 
-// Removed: export const runtime = "edge";
-// This route needs Node.js runtime to support metaApiClient (uses node:crypto)
+// Node.js runtime — metaApiClient uses node:crypto
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
@@ -16,7 +15,7 @@ export async function POST(request: Request) {
   const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
   const tf = typeof body?.tf === "string" ? body.tf : undefined;
 
-  // Edge auth
+  // Edge auth — returns { supabase, user } or null
   const edgeAuth = await getEdgeAuthedServiceSupabase(request);
   if (!edgeAuth) {
     return new Response(
@@ -26,42 +25,36 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const events = await streamChatMessage({
-          userId: edgeAuth.userId,
-          text,
-          imageBase64,
-          imageType,
-          symbol,
-          tf,
-        });
-
-        for await (const event of events) {
+  // Fire-and-forget — the stream is already attached to the response
+  (async () => {
+    try {
+      await streamChatMessage(
+        text,
+        (event: StreamEvent) => {
           const line = JSON.stringify(event);
-          controller.enqueue(
-            encoder.encode(`data: ${line}\n`)
-          );
-        }
-        controller.enqueue(encoder.encode("data: [DONE]\n"));
-        controller.close();
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        const errorEvent: StreamEvent = {
-          type: "error",
-          message: errorMessage,
-        };
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(errorEvent)}\n`)
-        );
-        controller.close();
-      }
-    },
-  });
+          // intentionally fire without await — writer.write is ordered/buffered
+          writer.write(encoder.encode(`data: ${line}\n`)).catch(() => {});
+        },
+        imageBase64,
+        imageType,
+        symbol,
+        tf,
+        edgeAuth,           // { supabase, user } matches the expected shape
+      );
+      await writer.write(encoder.encode("data: [DONE]\n"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const errorEvent: StreamEvent = { type: "error", message: msg };
+      await writer.write(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n`)).catch(() => {});
+    } finally {
+      writer.close().catch(() => {});
+    }
+  })();
 
-  return new Response(stream, {
+  return new Response(readable, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
