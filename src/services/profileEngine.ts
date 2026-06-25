@@ -135,7 +135,7 @@ export async function buildDecisionSet(traderId: string): Promise<AdaptiveUiDeci
         includeWeather: profile.preferences.weatherOptIn,
         sessionFocus: null,
         preferredPairs: [],
-        tacticalPromptStyle: profile.preferences.briefingTone,
+        tacticalPromptStyle: (profile.preferences.briefingTone === "casual" || profile.preferences.briefingTone === "strategic" ? "focused" : profile.preferences.briefingTone) as "direct" | "calm" | "focused",
       },
       suggestions: [],
     };
@@ -167,5 +167,4 @@ export async function buildDecisionSet(traderId: string): Promise<AdaptiveUiDeci
   }
 }
 
-// Export types
-export type { TraderProfile };
+// TraderProfile is exported inline above

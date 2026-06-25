@@ -51,7 +51,7 @@ async function isOllamaReachable(): Promise<boolean> {
   if (!process.env.OLLAMA_URL && !process.env.OLLAMA_HOST) return false;
   const now = Date.now();
   if (_ollamaHealthy !== null && now - _ollamaLastCheck < OLLAMA_HEALTH_TTL) {
-    return _ollamaHealthy;
+    return _ollamaHealthy === true;
   }
   _ollamaHealthy = await ollamaHealth();
   _ollamaLastCheck = now;

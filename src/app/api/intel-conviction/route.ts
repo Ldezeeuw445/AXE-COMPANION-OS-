@@ -1,6 +1,6 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
-import { callLLM, type LLMRequest } from "@/services/llmClient";
+import { callLLM, type LLMMessage, type LLMRequest } from "@/services/llmClient";
 
 export const dynamic = "force-dynamic";
 
@@ -322,7 +322,7 @@ async function generateConvictions(
 ): Promise<ConvictionSnapshot> {
   const context = buildIntelContext(intel);
 
-  const messages: LLMRequest[] = [
+  const messages: LLMMessage[] = [
     { role: "system", content: CONVICTION_SYSTEM },
     {
       role: "user",

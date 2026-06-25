@@ -1,6 +1,6 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
-import { callLLM, type LLMRequest } from "@/services/llmClient";
+import { callLLM, type LLMMessage, type LLMRequest } from "@/services/llmClient";
 
 export const dynamic = "force-dynamic";
 
@@ -241,7 +241,7 @@ If there isn't enough data for a meaningful correlation, still find the best one
 
 ${context}`;
 
-  const messages: LLMRequest[] = [
+  const messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
   ];

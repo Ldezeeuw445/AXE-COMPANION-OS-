@@ -165,7 +165,7 @@ export function deriveAdaptiveTradingProfile(input: {
     .filter(([accountId]) => accountId !== "__global__")
     .map(([accountId, state]) => ({
       accountId,
-      broker: "unknown",
+      broker: "unknown" as const,
       preferredSymbol: topKeys(state.symbols, 1)[0] ?? null,
       preferredTimeframes: topKeys(state.timeframes, 3),
       enabledIndicators: topKeys(state.indicators, 5),

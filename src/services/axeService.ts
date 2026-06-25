@@ -1,4 +1,4 @@
-import { callLLM, streamLLM, type LLMRequest } from "./llmClient";
+import { callLLM, streamLLM, type LLMMessage, type LLMRequest } from "./llmClient";
 import type { TradingOSContext } from "@/types/context";
 import { formatTradingSpaceForPrompt } from "@/lib/axe/tradingSpaceContext";
 
@@ -932,7 +932,7 @@ export function buildAxeMessages(
   newUserMessage: string,
   imageBase64?: string,
   imageType?: string
-): LLMRequest[] {
+): LLMMessage[] {
   const parts: string[] = [AXE_SYSTEM_PROMPT];
 
   if (pinnedContext.trim()) {
@@ -997,7 +997,7 @@ export function buildAxeMessages(
   const systemContent = parts.join("\n");
 
   // Build the user message — multimodal if an image is attached
-  let userMessage: LLMRequest;
+  let userMessage: LLMMessage;
   if (imageBase64 && imageType) {
     const mimeType = imageType.startsWith("image/") ? imageType : `image/${imageType}`;
     userMessage = {
@@ -1014,7 +1014,7 @@ export function buildAxeMessages(
     userMessage = { role: "user", content: newUserMessage };
   }
 
-  const messages: LLMRequest[] = [
+  const messages: LLMMessage[] = [
     { role: "system", content: systemContent },
     ...history,
     userMessage,
@@ -1037,7 +1037,7 @@ export function buildAxeMessagesFromContext(
   newUserMessage: string,
   imageBase64?: string,
   imageType?: string
-): LLMRequest[] {
+): LLMMessage[] {
   const pinnedContext = context.candles_summary ?? "";
 
   // 1. Base system prompt
@@ -1340,7 +1340,7 @@ export function buildAxeMessagesFromContext(
   const systemContent = parts.join("\n");
 
   // Build user message (multimodal if chart image attached)
-  let userMessage: LLMRequest;
+  let userMessage: LLMMessage;
   if (imageBase64 && imageType) {
     const mimeType = imageType.startsWith("image/") ? imageType : `image/${imageType}`;
     userMessage = {
@@ -1386,7 +1386,7 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
 ]);
 
 export async function callAxe(
-  messages: LLMRequest[]
+  messages: LLMMessage[]
 ): Promise<AxeResponse> {
   try {
     const result = await callLLM({
@@ -1398,7 +1398,7 @@ export async function callAxe(
     });
 
     if (result.toolCalls.length > 0) {
-      return { content: null, toolCalls: result.toolCalls };
+      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
     }
 
     return { content: result.content, toolCalls: [] };
@@ -1410,7 +1410,7 @@ export async function callAxe(
 
 // Intermediate call after tool results — can still trigger a second tool round (e.g. create_alert after fib)
 export async function callAxeAfterTool(
-  messages: LLMRequest[]
+  messages: LLMMessage[]
 ): Promise<AxeResponse> {
   try {
     const result = await callLLM({
@@ -1422,7 +1422,7 @@ export async function callAxeAfterTool(
     });
 
     if (result.toolCalls.length > 0) {
-      return { content: null, toolCalls: result.toolCalls };
+      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
     }
 
     return { content: result.content, toolCalls: [] };
@@ -1434,7 +1434,7 @@ export async function callAxeAfterTool(
 
 // Final natural-language reply after all tools are done — no more tool calls
 export async function callAxeFinal(
-  messages: LLMRequest[]
+  messages: LLMMessage[]
 ): Promise<string | null> {
   try {
     const result = await callLLM({
@@ -1459,7 +1459,7 @@ export async function callAxeFinal(
    ────────────────────────────────────────────────────────────── */
 
 export async function callAxeStreaming(
-  messages: LLMRequest[],
+  messages: LLMMessage[],
   onToken: (text: string) => void,
 ): Promise<AxeResponse> {
   try {
@@ -1475,7 +1475,7 @@ export async function callAxeStreaming(
     );
 
     if (result.toolCalls.length > 0) {
-      return { content: null, toolCalls: result.toolCalls };
+      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
     }
 
     return { content: result.content, toolCalls: [] };
@@ -1486,7 +1486,7 @@ export async function callAxeStreaming(
 }
 
 export async function callAxeFinalStreaming(
-  messages: LLMRequest[],
+  messages: LLMMessage[],
   onToken: (text: string) => void,
 ): Promise<string | null> {
   try {

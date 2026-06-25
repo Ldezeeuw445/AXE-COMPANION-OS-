@@ -139,5 +139,4 @@ export async function getTraderSessionPreference(traderId: string): Promise<'lon
   }
 }
 
-// Export types
-export type { TraderLearningArc };
+// TraderLearningArc is exported inline above

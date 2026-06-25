@@ -211,7 +211,7 @@ export async function generateMorningBrief(traderId: string): Promise<{
     }
 
     return {
-      brief: response.content,
+      brief: response.content ?? "",
       context,
       model: response.model,
       provider: response.provider,

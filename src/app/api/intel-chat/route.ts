@@ -157,7 +157,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ChatRespo
     // Return response
     return NextResponse.json<ChatResponse>(
       {
-        content: response.content,
+        content: response.content ?? "",
         model: response.model,
         provider: response.provider,
         latency_ms,

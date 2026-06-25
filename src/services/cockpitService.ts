@@ -10,7 +10,22 @@ import type {
   CockpitTodaySummary,
   CockpitLearningArc,
 } from "@/types/cockpit";
-import { getTraderLearningArc } from "@/services/learningArcService";
+import { getTraderLearningArc, type TraderLearningArc } from "@/services/learningArcService";
+
+function toCockpitLearningArc(arc: TraderLearningArc): CockpitLearningArc {
+  const focus = arc.topPairs.slice(0, 5).map((label, i) => ({
+    label,
+    count: Math.max(1, 5 - i),
+  }));
+  return {
+    headline: arc.topPairs[0]
+      ? `Top pair: ${arc.topPairs[0]} · ${arc.topTimeframes[0] ?? ""}`
+      : "Keep trading to build your arc",
+    weeklyFocus: focus,
+    messageFeedback: { up: 0, down: 0 },
+    weeklyFeedbackTrend: [],
+  };
+}
 import { computeTraderScores } from "@/services/traderScoresService";
 
 const EMPTY_TRADER_SCORES = {
@@ -274,12 +289,13 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   }
 
   const { supabase, user } = authed;
-  const [todayBase, learningArc, traderScores] = await Promise.all([
+  const [todayBase, rawLearningArc, traderScores] = await Promise.all([
     fetchCockpitTodaySummary(supabase, user.id),
     getTraderLearningArc(user.id),
     computeTraderScores(supabase, user.id),
   ]);
   const today: CockpitTodaySummary = todayBase;
+  const learningArc: CockpitLearningArc = toCockpitLearningArc(rawLearningArc);
 
   const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),

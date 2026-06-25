@@ -12,19 +12,37 @@
  * - 'openai': OpenAI only
  */
 
-interface LLMRequest {
-  messages: Array<{ role: string; content: string }>;
+/** A single chat message — mirrors OpenAI's ChatCompletionMessageParam shape */
+export interface LLMMessage {
+  role: string;
+  content: string | null | Array<{ type: string; [key: string]: unknown }>;
+  tool_calls?: Array<{
+    id: string;
+    type: string;
+    function: { name: string; arguments: string };
+  }>;
+  tool_call_id?: string;
+  name?: string;
+}
+
+export interface LLMRequest {
+  messages: LLMMessage[];
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  /** Passed through to OpenAI tool-calling; ignored by the Ollama path for now */
+  tools?: unknown[];
+  toolChoice?: string;
 }
 
-interface LLMResponse {
-  content: string;
+export interface LLMResponse {
+  content: string | null;
   model: string;
   provider: 'ollama' | 'openai';
   latency_ms: number;
   error?: string;
+  /** Always empty — upgrade to llmRouter for full tool-call support */
+  toolCalls: Array<{ id: string; tool: string; args: Record<string, unknown> }>;
 }
 
 type LLMTarget = 'ollama' | 'openai' | 'auto';
@@ -89,6 +107,7 @@ async function callOllama(
       model,
       provider: 'ollama',
       latency_ms,
+      toolCalls: [],
     };
   } catch (error) {
     const latency_ms = Date.now() - startTime;
@@ -148,6 +167,7 @@ async function callOpenAI(
       model: OPENAI_MODEL,
       provider: 'openai',
       latency_ms,
+      toolCalls: [],
     };
   } catch (error) {
     const latency_ms = Date.now() - startTime;
@@ -169,12 +189,19 @@ function selectModel(requestType: 'chat' | 'intel'): string {
 /**
  * Format chat messages for Ollama (which expects a prompt string)
  */
-function formatMessagesForOllama(messages: Array<{ role: string; content: string }>): string {
+function formatMessagesForOllama(messages: LLMMessage[]): string {
   return messages
+    .filter(msg => msg.role !== 'tool' && msg.content != null)
     .map(msg => {
-      const prefix = msg.role === 'user' ? 'User: ' : 'Assistant: ';
-      return prefix + msg.content;
+      const raw = msg.content;
+      const text = typeof raw === 'string' ? raw :
+        Array.isArray(raw)
+          ? raw.map(p => (typeof p === 'object' && p !== null && typeof (p as { text?: unknown }).text === 'string' ? (p as unknown as { text: string }).text : '')).join(' ')
+          : '';
+      const prefix = msg.role === 'user' ? 'User: ' : msg.role === 'system' ? 'System: ' : 'Assistant: ';
+      return prefix + text;
     })
+    .filter(Boolean)
     .join('\n\n') + '\n\nAssistant: ';
 }
 
@@ -215,19 +242,22 @@ export async function callLLM(
 }
 
 /**
- * Stream response from LLM (future enhancement)
+ * Stream response from LLM.
+ * Calls the appropriate backend and invokes onToken for each text chunk.
+ * Returns the full LLMResponse (content + toolCalls) once complete.
  */
-export async function* streamLLM(
+export async function streamLLM(
   request: LLMRequest,
-  requestType: 'chat' | 'intel' = 'chat'
-) {
-  const model = selectModel(requestType);
-  
-  if (LLM_TARGET === 'openai') {
-    yield* streamOpenAI(request);
-  } else {
-    yield* streamOllama(request, { model });
+  onToken: (text: string) => void,
+): Promise<LLMResponse> {
+  // Use callLLM which already handles Ollama/OpenAI routing.
+  // Real token-by-token streaming for the chat UI is handled separately
+  // by streamChatMessage (TransformStream-based) in chatService.ts.
+  const result = await callLLM(request);
+  if (result.content) {
+    onToken(result.content);
   }
+  return result;
 }
 
 async function* streamOllama(
@@ -339,5 +369,5 @@ async function* streamOpenAI(request: LLMRequest) {
   }
 }
 
-// Export types
-export type { LLMRequest, LLMResponse, LLMTarget };
+// Types are already exported inline above; re-export LLMTarget which has no inline export
+export type { LLMTarget };

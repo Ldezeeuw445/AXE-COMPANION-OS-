@@ -7,12 +7,19 @@ export const dynamic = "force-dynamic";
 /**
  * Authenticated audit writer for the chart live stream.
  *
- * Upserts the latest known snapshot for (user, account, displaySymbol, timeframe).
- * Intentionally bounded so one row per stream — the audit table stays cheap.
+ * Routes writes through the deadlock-safe RPC
+ * `upsert_chart_live_snapshots_safe(p_rows jsonb)` instead of directly
+ * hitting the PostgREST table endpoint.  The RPC:
+ *   - acquires deterministic advisory locks per key (sorted → no deadlocks)
+ *   - skips updates where incoming updated_at < existing updated_at (stale guard)
  *
- * The browser calls this opportunistically (every ~30s while the WS is live and
- * the tab is visible). The Node streamer can also call it when configured.
+ * Server-side throttle: one write per (user, account, symbol, timeframe) per
+ * THROTTLE_MS window.  The browser already calls this every ~60 s, so the
+ * throttle only fires if something hammers the endpoint unexpectedly.
  */
+
+const THROTTLE_MS = 15_000; // 15 s server-side guard
+const _lastWrite = new Map<string, number>(); // throttle state (per instance)
 
 type SnapshotBody = {
   accountId: string;
@@ -50,7 +57,17 @@ export async function POST(request: NextRequest) {
     return jsonError(400, "missing_fields");
   }
 
-  // Verify the user actually owns this account row before recording a snapshot.
+  // --- Server-side throttle per unique stream key ---
+  const throttleKey = `${user.id}:${body.accountId}:${body.displaySymbol.toUpperCase()}:${body.timeframe}`;
+  const now = Date.now();
+  const last = _lastWrite.get(throttleKey) ?? 0;
+  if (now - last < THROTTLE_MS) {
+    // Return 200 so the client doesn't retry; just skip the DB write.
+    return Response.json({ ok: true, throttled: true });
+  }
+  _lastWrite.set(throttleKey, now);
+
+  // --- Ownership check ---
   const { data: ownerCheck } = await supabase
     .from("user_broker_accounts")
     .select("id")
@@ -60,6 +77,7 @@ export async function POST(request: NextRequest) {
 
   if (!ownerCheck) return jsonError(404, "account_not_found");
 
+  // --- Build the row for the RPC ---
   const row = {
     user_id: user.id,
     account_id: body.accountId,
@@ -79,16 +97,19 @@ export async function POST(request: NextRequest) {
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase
-    .from("chart_live_snapshots")
-    .upsert(row, { onConflict: "user_id,account_id,display_symbol,timeframe" });
+  // --- Route through the deadlock-safe RPC (p_rows is a JSON array) ---
+  const { error } = await supabase.rpc("upsert_chart_live_snapshots_safe", {
+    p_rows: [row],
+  });
 
   if (error) {
+    console.error("[chart/snapshot] RPC error:", error.message);
     if (error.message.toLowerCase().includes("does not exist")) {
       return jsonError(503, "snapshot_table_missing");
     }
     return jsonError(500, "snapshot_failed");
   }
+
   return Response.json({ ok: true });
 }
 

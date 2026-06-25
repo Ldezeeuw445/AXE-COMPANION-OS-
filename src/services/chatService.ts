@@ -30,7 +30,7 @@ import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
 import { autoJournalTrades } from "@/services/journalingService";
 import { handlePrepareExecutionRequest, handleRouteChartAction } from "@/services/axeToolHandlers";
 import type { ChatMessage as DomainChatMessage, ConversationSummary } from "@/types/domain";
-import type { LLMRequest } from "@/services/llmClient";
+import type { LLMMessage, LLMRequest } from "@/services/llmClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
@@ -594,10 +594,10 @@ export async function sendChatMessage(
   }
 
   function appendToolRound(
-    msgs: LLMRequest[],
+    msgs: LLMMessage[],
     tcs: AxeToolCall[],
     results: { tc: AxeToolCall; result: string }[]
-  ): LLMRequest[] {
+  ): LLMMessage[] {
     return [
       ...msgs,
       {
@@ -930,10 +930,10 @@ export async function streamChatMessage(
   }
 
   function appendToolRound(
-    msgs: LLMRequest[],
+    msgs: LLMMessage[],
     tcs: AxeToolCall[],
     results: { tc: AxeToolCall; result: string }[],
-  ): LLMRequest[] {
+  ): LLMMessage[] {
     return [
       ...msgs,
       { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.tool, arguments: JSON.stringify(tc.args) } })) },
