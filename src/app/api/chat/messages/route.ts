@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { sendChatMessage } from "@/services/chatService";
-import { getEdgeAuthedServiceSupabase } from "@/services/serviceSupabase";
+import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
@@ -15,8 +16,8 @@ export async function POST(request: Request) {
   const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
   const tf = typeof body?.tf === "string" ? body.tf : undefined;
 
-  // Edge auth
-  const edgeAuth = await getEdgeAuthedServiceSupabase(request);
+  // Server auth
+  const edgeAuth = await getAuthedServiceSupabase();
   if (!edgeAuth) {
     return NextResponse.json(
       { ok: false, error: "Unauthorized" },

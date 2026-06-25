@@ -1,7 +1,8 @@
 import { streamChatMessage, type StreamEvent } from "@/services/chatService";
-import { getEdgeAuthedServiceSupabase } from "@/services/serviceSupabase";
+import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 
 // Node.js runtime — metaApiClient uses node:crypto
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
@@ -15,8 +16,8 @@ export async function POST(request: Request) {
   const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
   const tf = typeof body?.tf === "string" ? body.tf : undefined;
 
-  // Edge auth — returns { supabase, user } or null
-  const edgeAuth = await getEdgeAuthedServiceSupabase(request);
+  // Server auth — returns { supabase, user } or null
+  const edgeAuth = await getAuthedServiceSupabase();
   if (!edgeAuth) {
     return new Response(
       JSON.stringify({ ok: false, error: "Unauthorized" }),
