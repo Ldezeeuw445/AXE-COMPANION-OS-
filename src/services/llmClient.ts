@@ -30,7 +30,7 @@ export interface LLMRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
-  /** Passed through to OpenAI tool-calling; ignored by the Ollama path for now */
+  /** Tool definitions forwarded to OpenAI function-calling */
   tools?: unknown[];
   toolChoice?: string;
 }
@@ -41,7 +41,6 @@ export interface LLMResponse {
   provider: 'ollama' | 'openai';
   latency_ms: number;
   error?: string;
-  /** Always empty — upgrade to llmRouter for full tool-call support */
   toolCalls: Array<{ id: string; tool: string; args: Record<string, unknown> }>;
 }
 
@@ -51,7 +50,7 @@ type LLMTarget = 'ollama' | 'openai' | 'auto';
 const LLM_TARGET = (process.env.LLM_TARGET || 'auto') as LLMTarget;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'https://ollama.axecompanion.com/api';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 // Local model selection based on request type
 const MODEL_FOR_CHAT = 'qwen3:4b'; // Fast, good for general chat
@@ -59,7 +58,7 @@ const MODEL_FOR_INTEL = 'deepseek-r1:8b'; // Better reasoning for correlations
 
 // Timeouts
 const OLLAMA_TIMEOUT_MS = 8000;
-const OPENAI_TIMEOUT_MS = 15000;
+const OPENAI_TIMEOUT_MS = 30000;
 
 interface CallOllamaOptions {
   model?: string;
@@ -133,41 +132,78 @@ async function callOpenAI(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+    // Build request body — include tools when present (enables function calling)
+    const bodyPayload: Record<string, unknown> = {
+      model: OPENAI_MODEL,
+      messages: request.messages,
+      temperature: request.temperature ?? 0.7,
+      max_tokens: request.max_tokens ?? 2048,
+    };
+
+    const tools = request.tools as unknown[] | undefined;
+    if (tools && tools.length > 0) {
+      bodyPayload.tools = tools;
+      bodyPayload.tool_choice = request.toolChoice ?? 'auto';
+    }
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages: request.messages,
-        temperature: request.temperature ?? 0.7,
-        max_tokens: request.max_tokens ?? 2048,
-      }),
+      body: JSON.stringify(bodyPayload),
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText} — ${errBody.slice(0, 200)}`);
     }
 
     const data = await response.json() as {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{
+        message?: {
+          content?: string | null;
+          tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>;
     };
     const latency_ms = Date.now() - startTime;
 
-    const content = data.choices?.[0]?.message?.content || '';
-    console.log(`[LLM] OpenAI (${OPENAI_MODEL}) responded in ${latency_ms}ms`);
+    const message = data.choices?.[0]?.message;
+    const content = message?.content ?? null;
+
+    // Parse tool calls from OpenAI response
+    const rawToolCalls = message?.tool_calls ?? [];
+    const toolCalls = rawToolCalls
+      .filter((tc) => tc?.function?.name)
+      .map((tc) => ({
+        id: tc.id || `tc_${Math.random().toString(36).slice(2)}`,
+        tool: tc.function.name,
+        args: (() => {
+          try {
+            return JSON.parse(tc.function.arguments ?? '{}') as Record<string, unknown>;
+          } catch {
+            return {} as Record<string, unknown>;
+          }
+        })(),
+      }));
+
+    console.log(`[LLM] OpenAI (${OPENAI_MODEL}) responded in ${latency_ms}ms — ${toolCalls.length} tool call(s)`);
 
     return {
       content,
       model: OPENAI_MODEL,
       provider: 'openai',
       latency_ms,
-      toolCalls: [],
+      toolCalls,
     };
   } catch (error) {
     const latency_ms = Date.now() - startTime;
@@ -206,7 +242,8 @@ function formatMessagesForOllama(messages: LLMMessage[]): string {
 }
 
 /**
- * Main LLM call with routing and fallback logic
+ * Main LLM call with routing and fallback logic.
+ * Supports tool/function calling when request.tools is provided.
  */
 export async function callLLM(
   request: LLMRequest,
@@ -216,7 +253,14 @@ export async function callLLM(
   
   console.log(`[LLM] Request type: ${requestType}, target: ${LLM_TARGET}, model: ${model}`);
 
-  if (LLM_TARGET === 'openai') {
+  // Tools require OpenAI's function-calling API — bypass Ollama when tools are requested
+  const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
+
+  if (LLM_TARGET === 'openai' || hasTools) {
+    // When tools are present, always go to OpenAI (Ollama doesn't support function-calling yet)
+    if (hasTools && LLM_TARGET === 'ollama') {
+      console.warn('[LLM] Tool calls requested but target=ollama — falling back to OpenAI for this call');
+    }
     return callOpenAI(request);
   }
 
@@ -224,7 +268,7 @@ export async function callLLM(
     return callOllama(request, { model });
   }
 
-  // 'auto' mode: try Ollama first, fallback to OpenAI
+  // 'auto' mode: try Ollama first (no tools), fallback to OpenAI
   try {
     return await callOllama(request, { model });
   } catch (ollamaError) {
@@ -242,22 +286,112 @@ export async function callLLM(
 }
 
 /**
- * Stream response from LLM.
- * Calls the appropriate backend and invokes onToken for each text chunk.
+ * Stream response from LLM via OpenAI streaming API (preferred) or Ollama.
+ * Calls onToken for each text chunk as it arrives.
  * Returns the full LLMResponse (content + toolCalls) once complete.
  */
 export async function streamLLM(
   request: LLMRequest,
   onToken: (text: string) => void,
 ): Promise<LLMResponse> {
-  // Use callLLM which already handles Ollama/OpenAI routing.
-  // Real token-by-token streaming for the chat UI is handled separately
-  // by streamChatMessage (TransformStream-based) in chatService.ts.
-  const result = await callLLM(request);
-  if (result.content) {
-    onToken(result.content);
+  const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
+
+  // If tools are present, use non-streaming callLLM (OpenAI doesn't stream tool calls reliably)
+  if (hasTools) {
+    const result = await callLLM(request);
+    if (result.content) onToken(result.content);
+    return result;
   }
+
+  // Use OpenAI streaming if available
+  if ((LLM_TARGET === 'openai' || LLM_TARGET === 'auto') && OPENAI_API_KEY) {
+    try {
+      return await streamOpenAITokens(request, onToken);
+    } catch (e) {
+      console.warn('[LLM] OpenAI streaming failed, falling back to non-streaming:', e);
+    }
+  }
+
+  // Ollama path or fallback: non-streaming, emit content as single token
+  const result = await callLLM(request);
+  if (result.content) onToken(result.content);
   return result;
+}
+
+/**
+ * True token-by-token streaming via OpenAI's streaming completions API.
+ */
+async function streamOpenAITokens(
+  request: LLMRequest,
+  onToken: (text: string) => void,
+): Promise<LLMResponse> {
+  const startTime = Date.now();
+
+  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+
+  const bodyPayload: Record<string, unknown> = {
+    model: OPENAI_MODEL,
+    messages: request.messages,
+    temperature: request.temperature ?? 0.7,
+    max_tokens: request.max_tokens ?? 2048,
+    stream: true,
+  };
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify(bodyPayload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI streaming error: ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullContent = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') break;
+
+      try {
+        const parsed = JSON.parse(data) as {
+          choices?: Array<{ delta?: { content?: string } }>;
+        };
+        const token = parsed.choices?.[0]?.delta?.content;
+        if (token) {
+          fullContent += token;
+          onToken(token);
+        }
+      } catch {
+        // malformed chunk — skip
+      }
+    }
+  }
+
+  return {
+    content: fullContent || null,
+    model: OPENAI_MODEL,
+    provider: 'openai',
+    latency_ms: Date.now() - startTime,
+    toolCalls: [],
+  };
 }
 
 async function* streamOllama(
@@ -307,67 +441,8 @@ async function* streamOllama(
   }
 }
 
-async function* streamOpenAI(request: LLMRequest) {
-  if (!OPENAI_API_KEY) {
-    throw new Error('OpenAI API key not configured');
-  }
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages: request.messages,
-        temperature: request.temperature ?? 0.7,
-        max_tokens: request.max_tokens ?? 2048,
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value);
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        if (line === 'data: [DONE]') break;
-
-        try {
-          const data = JSON.parse(line.slice(6)) as {
-            choices?: Array<{ delta?: { content?: string } }>;
-          };
-          const content = data.choices?.[0]?.delta?.content;
-          if (content) {
-            yield content;
-          }
-        } catch {
-          // Parse error, skip
-        }
-      }
-    }
-  } catch (error) {
-    console.error('[LLM] OpenAI streaming failed:', error);
-    throw error;
-  }
-}
+// Suppress unused-variable warning — generator kept for future Ollama streaming
+void streamOllama;
 
 // Types are already exported inline above; re-export LLMTarget which has no inline export
 export type { LLMTarget };

@@ -291,7 +291,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   const { supabase, user } = authed;
   const [todayBase, rawLearningArc, traderScores] = await Promise.all([
     fetchCockpitTodaySummary(supabase, user.id),
-    getTraderLearningArc(user.id),
+    getTraderLearningArc(user.id, supabase),
     computeTraderScores(supabase, user.id),
   ]);
   const today: CockpitTodaySummary = todayBase;
