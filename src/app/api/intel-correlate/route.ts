@@ -249,7 +249,7 @@ ${context}`;
   const result = await callLLM({
     messages,
     temperature: 0.7,
-    maxTokens: 800,
+    max_tokens: 800,
   });
 
   if (!result.content) throw new Error("Empty LLM response");

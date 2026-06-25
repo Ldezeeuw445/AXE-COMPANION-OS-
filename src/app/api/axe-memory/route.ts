@@ -208,7 +208,7 @@ async function extractMemories(
   const result = await callLLM({
     messages: llmMessages,
     temperature: 0.3,
-    maxTokens: 1500,
+    max_tokens: 1500,
   });
 
   if (!result.content) return [];

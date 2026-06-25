@@ -333,7 +333,7 @@ async function generateConvictions(
   const result = await callLLM({
     messages,
     temperature: 0.4,
-    maxTokens: 3000,
+    max_tokens: 3000,
   });
 
   if (!result.content) throw new Error("Empty LLM response");

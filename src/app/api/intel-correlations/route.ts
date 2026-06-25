@@ -262,7 +262,7 @@ async function generateCorrelationSnapshot(
   const result = await callLLM({
     messages,
     temperature: 0.6,
-    maxTokens: 4000,
+    max_tokens: 4000,
   });
 
   if (!result.content) throw new Error("Empty LLM response");

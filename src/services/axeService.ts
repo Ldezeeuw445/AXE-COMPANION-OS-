@@ -1393,7 +1393,7 @@ export async function callAxe(
       messages,
       tools: AXE_TOOLS,
       toolChoice: "auto",
-      maxTokens: 800,
+      max_tokens: 800,
       temperature: 0.55,
     });
 
@@ -1417,7 +1417,7 @@ export async function callAxeAfterTool(
       messages,
       tools: AXE_TOOLS,
       toolChoice: "auto",
-      maxTokens: 600,
+      max_tokens: 600,
       temperature: 0.4,
     });
 
@@ -1439,7 +1439,7 @@ export async function callAxeFinal(
   try {
     const result = await callLLM({
       messages,
-      maxTokens: 500,
+      max_tokens: 500,
       temperature: 0.4,
     });
     return result.content;
@@ -1468,7 +1468,7 @@ export async function callAxeStreaming(
         messages,
         tools: AXE_TOOLS,
         toolChoice: "auto",
-        maxTokens: 800,
+        max_tokens: 800,
         temperature: 0.55,
       },
       onToken,
@@ -1493,7 +1493,7 @@ export async function callAxeFinalStreaming(
     const result = await streamLLM(
       {
         messages,
-        maxTokens: 500,
+        max_tokens: 500,
         temperature: 0.4,
       },
       onToken,
