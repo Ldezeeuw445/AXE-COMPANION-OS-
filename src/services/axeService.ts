@@ -1389,7 +1389,7 @@ export async function callAxe(
   messages: LLMRequest[]
 ): Promise<AxeResponse> {
   try {
-    const result = await chatCompletion({
+    const result = await callLLM({
       messages,
       tools: AXE_TOOLS,
       toolChoice: "auto",
@@ -1413,7 +1413,7 @@ export async function callAxeAfterTool(
   messages: LLMRequest[]
 ): Promise<AxeResponse> {
   try {
-    const result = await chatCompletion({
+    const result = await callLLM({
       messages,
       tools: AXE_TOOLS,
       toolChoice: "auto",
@@ -1437,7 +1437,7 @@ export async function callAxeFinal(
   messages: LLMRequest[]
 ): Promise<string | null> {
   try {
-    const result = await chatCompletion({
+    const result = await callLLM({
       messages,
       maxTokens: 500,
       temperature: 0.4,
