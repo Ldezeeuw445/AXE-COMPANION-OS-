@@ -1,22 +1,23 @@
 /**
- * Lightweight middleware — NO database calls.
+ * Lightweight middleware — session refresh only, NO database calls.
  *
- * Previously this middleware fired a Supabase query on every API request as
- * "background cache warming". That is futile in Next.js Edge/Serverless
- * runtime because each invocation is stateless — the in-memory Map never
- * survives between requests, so every request paid a full round-trip to
- * Supabase for nothing. This caused 200k+ unnecessary DB hits per day.
+ * This calls Supabase Auth's token-refresh endpoint so that the server-side
+ * `supabase.auth.getUser()` inside Server Components and Route Handlers always
+ * finds a valid session. Without this, an expired JWT is never renewed and
+ * every auth check silently returns null.
  *
- * Broker account data is now fetched lazily inside the routes/hooks that
- * actually need it.
+ * We deliberately removed the old broker-account cache-warming query that
+ * previously ran on every request. That caused 200 k+ unnecessary DB hits per
+ * day because the in-memory Map never survives between Edge/Serverless
+ * invocations. All DB fetching now happens lazily inside the routes/hooks that
+ * actually need the data.
  */
 
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import { updateSession } from '@/lib/supabase/middleware';
 
 export async function middleware(request: NextRequest) {
-  // Pass through — all auth and data fetching happens inside route handlers.
-  return NextResponse.next();
+  return updateSession(request);
 }
 
 // Only run on page/API routes; skip all static assets.
