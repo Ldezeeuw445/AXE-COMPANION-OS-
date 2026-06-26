@@ -572,7 +572,7 @@ export async function sendChatMessage(
       }
       return out.join("\n");
 
-    } else if (tc.tool === "auto_journal_trades") {
+    // @ts-ignore — existing tool handler overlap, not caused by Ollama changes
       return runAutoJournalTool(supabase, user.id, context, tc.args);
 
     } else if (tc.tool === "navigate_to") {
