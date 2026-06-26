@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { text?: unknown; imageBase64?: unknown; imageType?: unknown; symbol?: unknown; tf?: unknown }
+    | { text?: unknown; imageBase64?: unknown; imageType?: unknown; symbol?: unknown; tf?: unknown; type?: unknown }
     | null;
 
   const text = typeof body?.text === "string" ? body.text : "";
@@ -15,6 +15,7 @@ export async function POST(request: Request) {
   const imageType = typeof body?.imageType === "string" ? body.imageType : undefined;
   const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
   const tf = typeof body?.tf === "string" ? body.tf : undefined;
+  const chatType = body?.type === "intel" ? "intel" : "axe";
 
   // Server auth
   const edgeAuth = await getAuthedServiceSupabase();
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await sendChatMessage(text, imageBase64, imageType, symbol, tf, edgeAuth);
+  const result = await sendChatMessage(text, imageBase64, imageType, symbol, tf, edgeAuth, chatType);
 
   if (!result.ok) {
     if (result.quotaExceeded) {

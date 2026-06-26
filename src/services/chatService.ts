@@ -156,6 +156,7 @@ async function runAutoJournalTool(
 export async function ensurePrimaryConversation(
   userId: string,
   existingAuth?: { supabase: SupabaseClient; user: User } | null,
+  type: "axe" | "intel" = "axe",
 ): Promise<ConversationSummary | null> {
   const authed = existingAuth ?? await getAuthedServiceSupabase();
   if (!authed || authed.user.id !== userId) return null;
@@ -165,6 +166,7 @@ export async function ensurePrimaryConversation(
     .from("conversations")
     .select("id,title,pinned_context,last_message_at,messages(count)")
     .eq("user_id", userId)
+    .eq("conversation_type", type)
     .order("last_message_at", { ascending: false });
 
   if (convErr) {
@@ -185,7 +187,8 @@ export async function ensurePrimaryConversation(
     .from("conversations")
     .insert({
       user_id: userId,
-      title: "AXE",
+      title: type === "intel" ? "AXE Intelligence" : "AXE",
+      conversation_type: type,
       pinned_context: null,
       last_message_at: new Date().toISOString(),
     })
@@ -200,13 +203,15 @@ export async function ensurePrimaryConversation(
   return mapConversation(created as ConversationRow);
 }
 
-export async function getChatThread(): Promise<{
+export async function getChatThread(
+  type: "axe" | "intel" = "axe",
+): Promise<{
   conversation: ConversationSummary;
   messages: DomainChatMessage[];
 }> {
   const authed = await getAuthedServiceSupabase();
   if (authed) {
-    const conversation = await ensurePrimaryConversation(authed.user.id, authed);
+    const conversation = await ensurePrimaryConversation(authed.user.id, authed, type);
     if (conversation) {
       const { data, error } = await authed.supabase
         .from("messages")
@@ -229,7 +234,7 @@ export async function getChatThread(): Promise<{
   return {
     conversation: {
       id: "demo",
-      title: "AXE",
+      title: type === "intel" ? "AXE Intelligence" : "AXE",
       pinnedContext: "",
       lastMessageAt: new Date().toISOString(),
     },
@@ -248,6 +253,7 @@ export async function sendChatMessage(
   symbol?: string,
   tf?: string,
   edgeAuth?: { supabase: SupabaseClient; user: User } | null,
+  type: "axe" | "intel" = "axe",
 ): Promise<SendChatMessageResult> {
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
@@ -255,7 +261,7 @@ export async function sendChatMessage(
   const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
-  const conversation = await ensurePrimaryConversation(authed.user.id, authed);
+  const conversation = await ensurePrimaryConversation(authed.user.id, authed, type);
   if (!conversation) return { ok: false };
 
   const { supabase, user } = authed;
@@ -695,6 +701,7 @@ export async function streamChatMessage(
   symbol?: string,
   tf?: string,
   edgeAuth?: { supabase: SupabaseClient; user: User } | null,
+  type: "axe" | "intel" = "axe",
 ): Promise<{ ok: boolean; quotaExceeded?: boolean; aiFailed?: boolean; errorDetail?: string }> {
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
@@ -702,7 +709,7 @@ export async function streamChatMessage(
   const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
-  const conversation = await ensurePrimaryConversation(authed.user.id, authed);
+  const conversation = await ensurePrimaryConversation(authed.user.id, authed, type);
   if (!conversation) return { ok: false };
 
   const { supabase, user } = authed;

@@ -263,11 +263,19 @@ const PROXY_ACTION_MAP: Partial<Record<IntelAction, string>> = {};
 function mapProxyVesselRow(row: Record<string, unknown>): VesselTrack {
   const ownerType = String(row.ownerType ?? "unknown");
   const alertLevel = String(row.alertLevel ?? "normal");
+  const mmsi = String(row.mmsi ?? "");
+  let owner = String(row.owner ?? "");
+  // Fallback to fleet meta if owner missing
+  if (!owner && mmsi && VESSEL_FLEET_META[mmsi]) {
+    owner = VESSEL_FLEET_META[mmsi].owner;
+  }
+  if (!owner) owner = "—";
+
   return {
-    mmsi: String(row.mmsi ?? ""),
+    mmsi: mmsi,
     vesselName: String(row.vesselName ?? row.name ?? "Unknown"),
     vesselType: String(row.vesselType ?? row.type ?? "Vessel"),
-    owner: String(row.owner ?? "—"),
+    owner,
     ownerType:
       ownerType === "corporate" || ownerType === "state" || ownerType === "oligarch"
         ? ownerType
@@ -419,10 +427,31 @@ function nearestChokepointForVessel(lat: number, lon: number): string | null {
 }
 
 function mapProxyJetRow(row: Record<string, unknown>): CorporateJet {
+  // Prefer several possible source fields for human-friendly company/operator name
+  const callsign = String(row.callsign ?? row.aircraft ?? "UNKNOWN");
+  const rawCompany = (row.company ?? row.operator ?? row.owner ?? row.owner_name ?? "") as unknown;
+  let company = rawCompany ? String(rawCompany) : "";
+  // Fallback: if company missing, try to infer from callsign (common prefixes) or registration
+  if (!company) {
+    const cs = callsign.toUpperCase();
+    // common operator prefixes mapping (small heuristic)
+    const prefixMap: Record<string, string> = {
+      DAL: "Delta Airlines",
+      AAL: "American Airlines",
+      UAL: "United Airlines",
+      RYR: "Ryanair",
+      TLS: "Tesla",
+      GFA: "Gulfstream",
+    };
+    const prefix = cs.slice(0, 3);
+    if (prefix in prefixMap) company = prefixMap[prefix];
+  }
+  if (!company) company = String(row.company ?? "Unknown");
+
   return {
     icao24: String(row.icao24 ?? ""),
-    callsign: String(row.callsign ?? row.aircraft ?? "UNKNOWN"),
-    company: String(row.company ?? "Unknown"),
+    callsign,
+    company,
     ticker: String(row.ticker ?? "—"),
     tailNumber: String(row.tailNumber ?? row.tail ?? "—").trim() || "—",
     originCountry: String(row.originCountry ?? row.origin_country ?? row.country ?? "Unknown"),

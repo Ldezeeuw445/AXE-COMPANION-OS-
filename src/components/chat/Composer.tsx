@@ -19,18 +19,7 @@ import {
   clearStagedChatPrefill,
   readStagedChatPrefill,
 } from "@/lib/chat/chatPrefill";
-import {
-  Mic,
-  MicOff,
-  Paperclip,
-  Send,
-  X,
-  ImageIcon,
-  Newspaper,
-  AlertTriangle,
-  MessageCircleQuestion,
-  Sparkles,
-} from "lucide-react";
+import { Send, X, ImageIcon } from "lucide-react";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
@@ -258,7 +247,10 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       );
     }
 
-    const body: Record<string, unknown> = { text: text || "(chart attached)" };
+    const body: Record<string, unknown> = {
+      text: text || "(chart attached)",
+      type: intelMode ? "intel" : "axe",
+    };
     if (image) {
       body.imageBase64 = image.base64;
       body.imageType = image.type;
@@ -428,40 +420,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
   const intelMode = useChatIntelMode();
 
-  const QUICK_ACTIONS = [
-    {
-      key: "brief",
-      label: intelMode ? "Brief All" : "Brief All",
-      icon: Newspaper,
-      draft: "Give me a full market brief for today.",
-    },
-    {
-      key: "risks",
-      label: intelMode ? "Top Risks" : "Top Risks",
-      icon: AlertTriangle,
-      draft: "What are the top risks to watch today?",
-    },
-    {
-      key: "ask",
-      label: intelMode ? "Ask anything…" : "Ask anything…",
-      icon: MessageCircleQuestion,
-      draft: "",
-    },
-    {
-      key: "intel",
-      label: intelMode ? "Live Correlation" : "Live Intel",
-      icon: Sparkles,
-      draft: intelMode
-        ? "Build a live cross-feed correlation for XAUUSD."
-        : "Show me live intel across smart money and alt-data.",
-    },
-  ];
-
-  async function runQuickAction(draft: string, focus?: boolean) {
-    if (focus) {
-      textareaRef.current?.focus();
-      return;
-    }
+  async function runQuickAction(draft: string) {
     setValue(draft);
     await new Promise((r) => requestAnimationFrame(() => r(undefined)));
     void submit();
@@ -485,25 +444,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         </div>
       ) : null}
 
-      {/* ── Quick action chips ───────────────────────────────────────── */}
-      <div className="mb-2 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-        {QUICK_ACTIONS.map((action) => {
-          const Icon = action.icon;
-          return (
-            <button
-              key={action.key}
-              type="button"
-              onClick={() => void runQuickAction(action.draft, action.key === "ask")}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
-            >
-              <Icon className="h-3 w-3" />
-              {action.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Composer row — opaque bar masks lower half of orb ───────── */}
+      {/* ── Unified composer bar: quick actions + typing in one row ─── */}
       <div className="relative overflow-visible">
         <div
           className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
@@ -512,97 +453,76 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           <AxeAuraWave variant="composer" />
         </div>
         <div
-          className="relative z-10 flex items-end gap-2 overflow-hidden rounded-[1.15rem] border border-white/[0.08] p-2 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+          className="relative z-10 flex items-center gap-1 overflow-hidden rounded-full border border-white/[0.08] px-1.5 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
           style={{
             background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
           }}
         >
-        {/* Attach button */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/25 transition-colors hover:text-white/45"
-          style={{
-            boxShadow:
-              "inset 2px 2px 4px rgba(0,0,0,0.4), inset -1px -1px 3px rgba(255,255,255,0.03)",
-            background: "rgba(255,255,255,0.015)",
-          }}
-          aria-label="Attach chart"
-          title="Attach chart image"
-        >
-          <Paperclip className="h-[18px] w-[18px]" />
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
+          {/* Brief All */}
+          <button
+            type="button"
+            onClick={() => void runQuickAction("Give me a full market brief for today.")}
+            className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            Brief All
+          </button>
 
-        {/* Mic button — skeu inset */}
-        <button
-          type="button"
-          onClick={toggleMic}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
-            listening ? "text-[#00d4f5]" : "text-white/25 hover:text-white/45"
-          }`}
-          style={{
-            boxShadow:
-              "inset 2px 2px 4px rgba(0,0,0,0.4), inset -1px -1px 3px rgba(255,255,255,0.03)",
-            background: listening ? "rgba(0,212,245,0.06)" : "rgba(255,255,255,0.015)",
-          }}
-          aria-label={listening ? "Stop recording" : "Voice input"}
-          title={listening ? "Tap to stop" : "Voice input"}
-        >
-          {listening ? (
-            <MicOff className="h-[18px] w-[18px]" />
-          ) : (
-            <Mic className="h-[18px] w-[18px]" />
-          )}
-        </button>
+          {/* Divider */}
+          <span className="h-4 w-px bg-white/10" />
 
-        {/* Text input */}
-        <label className="sr-only" htmlFor="composer-input">
-          Message
-        </label>
-        <textarea
-          ref={textareaRef}
-          id="composer-input"
-          rows={1}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onFocus={() => {
-            window.dispatchEvent(new CustomEvent("axe:chat-pin"));
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
+          {/* Top Risks */}
+          <button
+            type="button"
+            onClick={() => void runQuickAction("What are the top risks to watch today?")}
+            className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            Top Risks
+          </button>
+
+          {/* Divider */}
+          <span className="h-4 w-px bg-white/10" />
+
+          {/* Ask anything input */}
+          <label className="sr-only" htmlFor="composer-input">
+            Message
+          </label>
+          <textarea
+            ref={textareaRef}
+            id="composer-input"
+            rows={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onFocus={() => {
+              window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submit();
+              }
+            }}
+            placeholder="Ask anything..."
+            className="max-h-20 min-h-9 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm text-white/90 shadow-none placeholder:text-white/25 focus:outline-none focus:ring-0"
+          />
+
+          {/* Send button */}
+          <button
+            type="button"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-30"
+            style={{
+              background: "#00d4f5",
+              boxShadow: "0 0 10px rgba(0,212,245,0.3), 0 2px 8px rgba(0,0,0,0.3)",
+            }}
+            disabled={(!value.trim() && !image) || sending}
+            aria-label="Send"
+            onClick={() => {
+              vibrate("medium");
               void submit();
-            }
-          }}
-          placeholder={placeholder}
-          className="max-h-28 min-h-10 flex-1 resize-none border-0 bg-transparent py-2.5 text-sm text-white/90 shadow-none placeholder:text-white/20 focus:outline-none focus:ring-0"
-        />
-
-        {/* Send button — cyan */}
-        <button
-          type="button"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-30"
-          style={{
-            background: "#00d4f5",
-            boxShadow: "0 0 10px rgba(0,212,245,0.3), 0 2px 8px rgba(0,0,0,0.3)",
-          }}
-          disabled={(!value.trim() && !image) || sending}
-          aria-label="Send"
-          onClick={() => {
-            vibrate("medium");
-            void submit();
-          }}
-        >
-          <Send className="h-4 w-4 text-black" />
-        </button>
-      </div>
+            }}
+          >
+            <Send className="h-4 w-4 text-black" />
+          </button>
+        </div>
       </div>
 
       {error ? (

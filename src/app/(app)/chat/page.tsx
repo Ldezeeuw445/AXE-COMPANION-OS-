@@ -10,8 +10,14 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 
-export default async function ChatPage() {
-  const { conversation, messages } = await getChatThread();
+export default async function ChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
+}) {
+  const params = await searchParams;
+  const chatType = params?.intel === "1" ? "intel" : "axe";
+  const { conversation, messages } = await getChatThread(chatType);
   const supabase = await createServerSupabaseClient();
   let operatorName: string | null = null;
   let initialQuota: ChatQuotaPayload | null = null;

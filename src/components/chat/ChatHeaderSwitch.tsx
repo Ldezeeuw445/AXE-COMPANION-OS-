@@ -1,7 +1,9 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useCallback, useMemo } from "react";
+import { ChevronDown } from "lucide-react";
 import { AxeWordmark } from "@/components/brand/AxeWordmark";
 import { AxeTriangle } from "@/components/brand/AxeTriangle";
 import {
@@ -73,40 +75,32 @@ export function ChatHeaderSwitch() {
 
   const toggle = useCallback(() => {
     if (!isChat) return;
-    const params = new URLSearchParams(searchParams.toString());
+    // Minimal behavior: navigate to /intel when switching to Intel, back to /chat when switching off
     if (intelMode) {
-      params.delete(INTEL_PARAM);
+      router.replace("/chat", { scroll: false });
     } else {
-      params.set(INTEL_PARAM, "1");
+      router.replace("/intel", { scroll: false });
     }
-    const newUrl = `${pathname}${params.toString() ? `?${params.toString()}` : ""}`;
-    router.replace(newUrl, { scroll: false });
   }, [isChat, intelMode, pathname, router, searchParams]);
 
-  if (!isChat) return <AxeWordmark size="xs" />;
+  if (!isChat)
+    return (
+      <Link href="/chat" className="inline-flex items-center" aria-label="Open AXE chat">
+        <AxeWordmark size="xs" />
+      </Link>
+    );
 
   return (
     <button
       type="button"
       onClick={toggle}
-      className="inline-flex items-center gap-1.5 select-none rounded-lg px-2 py-1 transition-colors hover:bg-white/[0.05]"
+      className="group inline-flex items-center gap-1 select-none rounded px-1 py-0.5 transition-colors hover:bg-white/[0.03]"
       title={title}
       aria-label={title}
     >
       <StatusDot tone={tone} />
-      {intelMode ? (
-        <span className="inline-flex items-center gap-1.5">
-          <AxeTriangle size={18} />
-          <span
-            className="font-extrabold uppercase tracking-[0.18em] text-[11px]"
-            style={{ color: "#00d4f5" }}
-          >
-            AXE Intelligence
-          </span>
-        </span>
-      ) : (
-        <AxeWordmark size="xs" />
-      )}
+      <AxeWordmark size="xs" />
+      <ChevronDown className="h-3 w-3 text-white/30" />
     </button>
   );
 }
