@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
 import { ChatHeaderSwitch } from "@/components/chat/ChatHeaderSwitch";
+import { AxeWordmark } from "@/components/brand/AxeWordmark";
 import { AxeTriangle } from "@/components/brand/AxeTriangle";
 import Image from "next/image";
 import { QuickActionMenu } from "@/components/shell/QuickActionMenu";
@@ -154,7 +155,9 @@ export function AppNavigation() {
             </div>
           ) : (
             <div className="pointer-events-auto">
-              <ChatHeaderSwitch />
+              <Suspense fallback={<AxeWordmark size="xs" />}>
+                <ChatHeaderSwitch />
+              </Suspense>
             </div>
           )}
         </div>
