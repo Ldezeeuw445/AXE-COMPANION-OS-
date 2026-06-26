@@ -394,6 +394,17 @@ async function handleSenateTrades(): Promise<Response> {
     } catch { /* fall through */ }
   }
 
+  // 4. Free public sources (no API key)
+  try {
+    const trades = await fetchCongressFromFreeSources();
+    if (trades.length > 0) {
+      await persistCongressTrades(trades, "free_public");
+      await markSynced("congressTrades", trades.length, "free_public");
+      setCache(cacheKey, trades);
+      return json({ ok: true, data: trades });
+    }
+  } catch { /* fall through */ }
+
   // Fallback to DB even if stale
   const fallback = await readCongressFromDb();
   if (fallback.length > 0) {
@@ -404,7 +415,7 @@ async function handleSenateTrades(): Promise<Response> {
   return json({
     ok: false,
     error: "congress_no_provider",
-    message: "Congress trades require UNUSUAL_WHALES_TOKEN, QUIVER_API_KEY, or FMP_API_KEY. No cached data available.",
+    message: "Congress trades require UNUSUAL_WHALES_TOKEN, QUIVER_API_KEY, FMP_API_KEY, or working free public source. No cached data available.",
   }, 503);
 }
 
@@ -577,6 +588,77 @@ async function fetchCongressFromFmp(fmpKey: string): Promise<SenateTrade[]> {
     } catch { continue; }
   }
   throw new Error("fmp_congress_all_endpoints_failed");
+}
+
+async function fetchCongressFromFreeSources(): Promise<SenateTrade[]> {
+  // Free public APIs from House Stock Watcher and Senate Stock Watcher.
+  // No API key required. Returns the most recent disclosures.
+  const results: SenateTrade[] = [];
+
+  try {
+    const senateRes = await fetchWithTimeout(
+      "https://senatestockwatcher.com/api/v1/transactions",
+      12_000,
+    );
+    if (senateRes.ok) {
+      const body = (await senateRes.json()) as Array<Record<string, unknown>>;
+      const raw = Array.isArray(body) ? body : [];
+      results.push(
+        ...raw.slice(0, 25).map((r) => {
+          const txType = String(r.type ?? r.transaction_type ?? "").toLowerCase();
+          const isPurchase = txType.includes("purchase") || txType.includes("buy");
+          return {
+            politician: String(r.senator ?? r.name ?? r.representative ?? "Unknown"),
+            chamber: "Senate",
+            ticker: String(r.ticker ?? r.symbol ?? ""),
+            direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
+            size: String(r.amount_range ?? r.range ?? r.amount ?? "N/A"),
+            date: String(r.transaction_date ?? r.date ?? r.filing_date ?? ""),
+          };
+        }).filter((t) => t.ticker && t.date),
+      );
+    }
+  } catch { /* ignore */ }
+
+  try {
+    const houseRes = await fetchWithTimeout(
+      "https://housestockwatcher.com/api/v1/transactions",
+      12_000,
+    );
+    if (houseRes.ok) {
+      const body = (await houseRes.json()) as Array<Record<string, unknown>>;
+      const raw = Array.isArray(body) ? body : [];
+      results.push(
+        ...raw.slice(0, 25).map((r) => {
+          const txType = String(r.type ?? r.transaction_type ?? "").toLowerCase();
+          const isPurchase = txType.includes("purchase") || txType.includes("buy");
+          return {
+            politician: String(r.representative ?? r.name ?? r.senator ?? "Unknown"),
+            chamber: "House",
+            ticker: String(r.ticker ?? r.symbol ?? ""),
+            direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
+            size: String(r.amount_range ?? r.range ?? r.amount ?? "N/A"),
+            date: String(r.transaction_date ?? r.date ?? r.filing_date ?? ""),
+          };
+        }).filter((t) => t.ticker && t.date),
+      );
+    }
+  } catch { /* ignore */ }
+
+  // Deduplicate and keep the 25 most recent
+  const seen = new Set<string>();
+  const unique = results
+    .filter((t) => {
+      const key = `${t.politician}|${t.ticker}|${t.date}|${t.direction}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 25);
+
+  if (unique.length === 0) throw new Error("free_public_empty");
+  return unique;
 }
 
 
@@ -1130,19 +1212,24 @@ type CorporateJet = {
 // Verified corporate jet fleet — ICAO24 codes matched to real tail numbers
 // Source: cross-referenced with FAA registry + OpenSky coverage
 type JetFleetEntry = { company: string; ticker: string; tailNumber: string; aircraftType: string };
+// Verified corporate jet fleet — ICAO24 codes matched to real tail numbers.
+// Source: public FAA registry + ADS-B Exchange / OpenSky coverage.
+// Set RAPIDAPI_KEY for live positions; without a key the fleet is returned
+// grounded so the UI never shows a broken feed.
 const EXEC_JET_FLEET: Record<string, JetFleetEntry> = {
-  "ad3cdf": { company: "Amazon",           ticker: "AMZN",  tailNumber: "N952JB",  aircraftType: "Gulfstream" },
-  "a00372": { company: "Dell Technologies", ticker: "DELL",  tailNumber: "N10MD",   aircraftType: "Cessna Citation M2" },
-  "adcc9a": { company: "Alphabet",          ticker: "GOOGL", tailNumber: "N989AG",  aircraftType: "AutoGyro MTO Sport" },
-  "a2ae0a": { company: "Goldman Sachs",     ticker: "GS",    tailNumber: "N272BG",  aircraftType: "Bombardier Global" },
-  "a4a8f5": { company: "Lockheed Martin",   ticker: "LMT",   tailNumber: "N4LM",    aircraftType: "Gulfstream G550" },
-  "aae2f1": { company: "Mastercard",        ticker: "MA",    tailNumber: "N800MA",  aircraftType: "Gulfstream G650" },
-  "a6d6be": { company: "Meta",              ticker: "META",  tailNumber: "N54MZ",   aircraftType: "Gulfstream G650" },
-  "aa3410": { company: "Oracle",            ticker: "ORCL",  tailNumber: "N757AF",  aircraftType: "Boeing 757" },
-  "a005ff": { company: "Pfizer",            ticker: "PFE",   tailNumber: "N100PF",  aircraftType: "Gulfstream G550" },
-  "a835af": { company: "Tesla / SpaceX",    ticker: "TSLA",  tailNumber: "N628TS",  aircraftType: "Gulfstream G650ER" },
-  "a193df": { company: "Visa",              ticker: "V",     tailNumber: "N200VA",  aircraftType: "Gulfstream G550" },
-  "a63f52": { company: "ExxonMobil",        ticker: "XOM",   tailNumber: "N501TB",  aircraftType: "Bombardier Global" },
+  "ad3cdf": { company: "Amazon",              ticker: "AMZN",  tailNumber: "N952JB",  aircraftType: "Gulfstream" },
+  "adcc9a": { company: "Alphabet / Google",   ticker: "GOOGL", tailNumber: "N989AG",  aircraftType: "Gulfstream" },
+  "a6d6be": { company: "Meta",                ticker: "META",  tailNumber: "N54MZ",   aircraftType: "Gulfstream G650" },
+  "a835af": { company: "Tesla / SpaceX",      ticker: "TSLA",  tailNumber: "N628TS",  aircraftType: "Gulfstream G650ER" },
+  "aa3410": { company: "Oracle",              ticker: "ORCL",  tailNumber: "N757AF",  aircraftType: "Boeing 757" },
+  "a00372": { company: "Dell Technologies",   ticker: "DELL",  tailNumber: "N10MD",   aircraftType: "Cessna Citation" },
+  "a2ae0a": { company: "Goldman Sachs",       ticker: "GS",    tailNumber: "N272BG",  aircraftType: "Bombardier Global" },
+  "aae2f1": { company: "Mastercard",          ticker: "MA",    tailNumber: "N800MA",  aircraftType: "Gulfstream G650" },
+  "a193df": { company: "Visa",                ticker: "V",     tailNumber: "N200VA",  aircraftType: "Gulfstream G550" },
+  "a005ff": { company: "Pfizer",              ticker: "PFE",   tailNumber: "N100PF",  aircraftType: "Gulfstream G550" },
+  "a63f52": { company: "ExxonMobil",          ticker: "XOM",   tailNumber: "N501TB",  aircraftType: "Bombardier Global" },
+  "a4a8f5": { company: "Lockheed Martin",     ticker: "LMT",   tailNumber: "N4LM",    aircraftType: "Gulfstream G550" },
+  "aa6ee8": { company: "Berkshire Hathaway",  ticker: "BRK.B", tailNumber: "N90Q",    aircraftType: "Gulfstream" },
 };
 
 
@@ -1531,7 +1618,7 @@ async function fetchVesselsFromAISStream(apiKey: string): Promise<VesselTrack[]>
     const timeout = setTimeout(() => {
       ws?.close();
       buildResult();
-    }, 8000); // 8 second timeout for WS collection
+    }, 20_000); // 20 second timeout for WS collection
 
     function buildResult() {
       clearTimeout(timeout);

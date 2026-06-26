@@ -19,7 +19,19 @@ import {
   clearStagedChatPrefill,
   readStagedChatPrefill,
 } from "@/lib/chat/chatPrefill";
-import { Mic, MicOff, Paperclip, Send, X, ImageIcon } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Paperclip,
+  Send,
+  X,
+  ImageIcon,
+  Newspaper,
+  AlertTriangle,
+  MessageCircleQuestion,
+  Sparkles,
+} from "lucide-react";
+import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
@@ -414,6 +426,47 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     e.target.value = "";
   }
 
+  const intelMode = useChatIntelMode();
+
+  const QUICK_ACTIONS = [
+    {
+      key: "brief",
+      label: intelMode ? "Brief All" : "Brief All",
+      icon: Newspaper,
+      draft: "Give me a full market brief for today.",
+    },
+    {
+      key: "risks",
+      label: intelMode ? "Top Risks" : "Top Risks",
+      icon: AlertTriangle,
+      draft: "What are the top risks to watch today?",
+    },
+    {
+      key: "ask",
+      label: intelMode ? "Ask anything…" : "Ask anything…",
+      icon: MessageCircleQuestion,
+      draft: "",
+    },
+    {
+      key: "intel",
+      label: intelMode ? "Live Correlation" : "Live Intel",
+      icon: Sparkles,
+      draft: intelMode
+        ? "Build a live cross-feed correlation for XAUUSD."
+        : "Show me live intel across smart money and alt-data.",
+    },
+  ];
+
+  async function runQuickAction(draft: string, focus?: boolean) {
+    if (focus) {
+      textareaRef.current?.focus();
+      return;
+    }
+    setValue(draft);
+    await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    void submit();
+  }
+
   return (
     <div className="mt-auto shrink-0 overflow-visible px-1 pb-1 pt-0">
       {/* ── Image preview ────────────────────────────────────────────── */}
@@ -431,6 +484,24 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           </button>
         </div>
       ) : null}
+
+      {/* ── Quick action chips ───────────────────────────────────────── */}
+      <div className="mb-2 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {QUICK_ACTIONS.map((action) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={action.key}
+              type="button"
+              onClick={() => void runQuickAction(action.draft, action.key === "ask")}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white"
+            >
+              <Icon className="h-3 w-3" />
+              {action.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* ── Composer row — opaque bar masks lower half of orb ───────── */}
       <div className="relative overflow-visible">

@@ -2102,3 +2102,12 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-desktop-rail {
 body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
   display: block !important;
 }
+
+/* Utility to hide scrollbars while keeping scroll behaviour */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

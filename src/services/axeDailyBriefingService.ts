@@ -16,6 +16,7 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { callLLM, type LLMRequest } from "@/services/llmClient";
 import { getTraderLearningArc } from "@/services/learningArcService";
 import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
+import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,26 +30,52 @@ export interface TraderBriefingContext {
   recentWins: Array<{ pair: string; timeframe: string; gain: number }>;
   topIndicators: string[];
   preferredSession: "london" | "newyork" | "asia";
+  tier: "free" | "pro" | "founder" | "elite";
+  weather: WeatherSnapshot | null;
+  preferences: Record<string, unknown>;
 }
 
 // ─── Profile fetch (service-role, no relative URLs) ───────────────────────────
 
-async function fetchProfileDirect(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<{ displayName: string; timezone: string }> {
+type ProfileBrief = {
+  displayName: string;
+  timezone: string;
+  preferences: Record<string, unknown>;
+  tier: "free" | "pro" | "founder" | "elite";
+};
+
+async function fetchProfileDirect(supabase: SupabaseClient, userId: string): Promise<ProfileBrief> {
   try {
     const { data } = await supabase
       .from("profiles")
-      .select("display_name, timezone")
+      .select("display_name, timezone, preferences")
       .eq("id", userId)
       .maybeSingle();
+
+    const entitlements = await supabase
+      .from("axe_user_entitlements")
+      .select("plan")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const prefs =
+      data?.preferences && typeof data.preferences === "object"
+        ? (data.preferences as Record<string, unknown>)
+        : {};
+
     return {
       displayName: data?.display_name ?? "Trader",
       timezone: data?.timezone ?? "Europe/Amsterdam",
+      preferences: prefs,
+      tier: (entitlements.data?.plan as ProfileBrief["tier"]) ?? "free",
     };
   } catch {
-    return { displayName: "Trader", timezone: "Europe/Amsterdam" };
+    return {
+      displayName: "Trader",
+      timezone: "Europe/Amsterdam",
+      preferences: {},
+      tier: "free",
+    };
   }
 }
 
@@ -73,6 +100,15 @@ export async function buildBriefingContext(
     if (hour >= 7 && hour < 16) session = "london";
     if (hour >= 14 && hour < 23) session = "newyork";
 
+    // Fetch weather only when user opted in
+    let weather: WeatherSnapshot | null = null;
+    if (profile.preferences.weatherOptIn === true && profile.preferences.locationOptIn === true) {
+      const loc = profile.preferences.location as
+        | { lat?: number; lon?: number; name?: string }
+        | undefined;
+      weather = await fetchWeatherForBrief(loc, profile.timezone);
+    }
+
     return {
       traderId,
       name: profile.displayName,
@@ -82,6 +118,9 @@ export async function buildBriefingContext(
       recentWins: arc.recentWins.slice(0, 3),
       topIndicators: arc.topIndicators.slice(0, 3),
       preferredSession: session,
+      tier: profile.tier,
+      weather,
+      preferences: profile.preferences,
     };
   } catch (error) {
     console.error("[Briefing] Failed to build context:", error);
@@ -94,13 +133,16 @@ export async function buildBriefingContext(
       recentWins: [],
       topIndicators: [],
       preferredSession: "london",
+      tier: "free",
+      weather: null,
+      preferences: {},
     };
   }
 }
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 
-function buildBriefingPrompt(context: TraderBriefingContext): string {
+function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?: boolean }): string {
   const timeStr = new Date().toLocaleString("en-US", {
     timeZone: context.timezone,
     hour: "numeric",
@@ -111,15 +153,21 @@ function buildBriefingPrompt(context: TraderBriefingContext): string {
 
   const hasPairs = context.preferredPairs.length > 0;
   const hasWins = context.recentWins.length > 0;
+  const isWeekly = options?.weekly ?? false;
 
-  let prompt = `You are AXE — a warm, sharp trading companion. Generate a personalized morning brief for ${context.name}.
+  let prompt = `You are AXE — a warm, sharp trading companion. Generate a ${isWeekly ? "personalized weekly outlook" : "personalized morning brief"} for ${context.name}.
 
 Key facts:
 - Their local time: ${timeStr} (${context.timezone})
+- Tier: ${context.tier}
 - Top pairs: ${hasPairs ? context.preferredPairs.join(", ") : "not yet identified — be encouraging"}
 - AXE alignment score: ${context.alignment}% (how well AXE has learned this trader's style)
 - Session focus: ${context.preferredSession}
 - Key indicators they use: ${context.topIndicators.length > 0 ? context.topIndicators.join(", ") : "standard set"}`;
+
+  if (context.weather) {
+    prompt += `\n- Weather in ${context.weather.location}: ${context.weather.summary}, ${context.weather.tempC}°C, wind ${context.weather.windKmh} km/h`;
+  }
 
   if (hasWins) {
     prompt += `\n\nRecent profitable trades:`;
@@ -128,7 +176,20 @@ Key facts:
     }
   }
 
-  prompt += `
+  if (isWeekly) {
+    prompt += `
+
+Write a weekly outlook that:
+1. Opens with a greeting that uses ${context.name}'s name and frames the week ahead
+2. Calls out 2-3 high-probability setups or macro themes for the week
+3. References their tier (${context.tier}) and alignment score in a motivating way
+4. Includes one tactical insight tied to their preferred session or recent winners
+5. Ends with the single most important thing to watch this week
+
+Tone: warm, direct, confident. Like a senior trader who actually knows them. No generic textbook talk.
+Length: 200-280 words maximum.`;
+  } else {
+    prompt += `
 
 Write a morning brief that:
 1. Opens with a greeting that uses ${context.name}'s name and the local time/day
@@ -139,6 +200,7 @@ Write a morning brief that:
 
 Tone: warm, direct, confident. Like a senior trader who actually knows them. No generic textbook talk.
 Length: 150-200 words maximum.`;
+  }
 
   return prompt;
 }
@@ -147,7 +209,8 @@ Length: 150-200 words maximum.`;
 
 export async function generateMorningBrief(
   traderId: string,
-  supabase?: SupabaseClient
+  supabase?: SupabaseClient,
+  options?: { weekly?: boolean; save?: boolean }
 ): Promise<{
   brief: string;
   context: TraderBriefingContext;
@@ -156,6 +219,8 @@ export async function generateMorningBrief(
   latency_ms: number;
 }> {
   const startTime = Date.now();
+  const isWeekly = options?.weekly ?? false;
+  const shouldSave = options?.save ?? true;
 
   // Use provided supabase or create service role client
   const sb = supabase ?? createServiceRoleSupabaseClient();
@@ -165,7 +230,7 @@ export async function generateMorningBrief(
   const context = await buildBriefingContext(sb, traderId);
 
   // Build prompt
-  const userPrompt = buildBriefingPrompt(context);
+  const userPrompt = buildBriefingPrompt(context, { weekly: isWeekly });
 
   // Call LLM
   const llmRequest: LLMRequest = {
@@ -191,31 +256,46 @@ export async function generateMorningBrief(
   const briefText = response.content ?? "";
   const today = new Date().toISOString().slice(0, 10);
 
-  // Save to axe_daily_briefings (upsert by user_id + date)
-  try {
-    await sb.from("axe_daily_briefings").upsert(
-      {
-        user_id: traderId,
-        briefing_date: today,
-        title: `Morning Brief — ${new Date().toLocaleDateString("en-GB", {
-          weekday: "long",
-          day: "numeric",
-          month: "short",
-          timeZone: context.timezone,
-        })}`,
-        body: briefText,
-        highlights: context.preferredPairs.length
-          ? context.preferredPairs.map((p) => ({ pair: p }))
-          : [],
-        chat_prefill: `AXE, tell me more about today's setup for ${
-          context.preferredPairs[0] ?? "the market"
-        }`,
-      },
-      { onConflict: "user_id,briefing_date" }
-    );
-    console.log(`[Briefing] Saved to axe_daily_briefings for ${traderId}`);
-  } catch (err) {
-    console.warn("[Briefing] Failed to save to DB:", err);
+  // Save to axe_daily_briefings (upsert by user_id + date + type)
+  if (shouldSave) {
+    try {
+      await sb.from("axe_daily_briefings").upsert(
+        {
+          user_id: traderId,
+          briefing_date: today,
+          briefing_type: isWeekly ? "weekly" : "daily",
+          title: isWeekly
+            ? `Weekly Outlook — ${new Date().toLocaleDateString("en-GB", {
+                weekday: "long",
+                day: "numeric",
+                month: "short",
+                timeZone: context.timezone,
+              })}`
+            : `Morning Brief — ${new Date().toLocaleDateString("en-GB", {
+                weekday: "long",
+                day: "numeric",
+                month: "short",
+                timeZone: context.timezone,
+              })}`,
+          body: briefText,
+          highlights: context.preferredPairs.length
+            ? context.preferredPairs.map((p) => ({ pair: p }))
+            : [],
+          chat_prefill: isWeekly
+            ? `AXE, walk me through this week's outlook for ${
+                context.preferredPairs[0] ?? "the market"
+              }`
+            : `AXE, tell me more about today's setup for ${
+                context.preferredPairs[0] ?? "the market"
+              }`,
+          feed_url: "/feed",
+        },
+        { onConflict: "user_id,briefing_date,briefing_type" }
+      );
+      console.log(`[Briefing] Saved ${isWeekly ? "weekly" : "daily"} brief to axe_daily_briefings for ${traderId}`);
+    } catch (err) {
+      console.warn("[Briefing] Failed to save to DB:", err);
+    }
   }
 
   // Track event (best-effort)
@@ -248,21 +328,25 @@ export async function generateMorningBrief(
 
 export async function getTodaysBrief(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  type: "daily" | "weekly" = "daily"
 ): Promise<{
   title: string;
   body: string;
   highlights: Array<{ pair?: string; [k: string]: unknown }>;
   chat_prefill: string;
   briefing_date: string;
+  feed_url: string;
+  briefing_type: string;
 } | null> {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const { data } = await supabase
       .from("axe_daily_briefings")
-      .select("title, body, highlights, chat_prefill, briefing_date")
+      .select("title, body, highlights, chat_prefill, briefing_date, feed_url, briefing_type")
       .eq("user_id", userId)
       .eq("briefing_date", today)
+      .eq("briefing_type", type)
       .maybeSingle();
     return data ?? null;
   } catch {
@@ -273,14 +357,16 @@ export async function getTodaysBrief(
 // ─── Fetch all users opted into daily briefing ───────────────────────────────
 
 async function getTraderIdsForBriefing(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  opts?: { targetHour?: number; weekly?: boolean }
 ): Promise<string[]> {
   try {
-    // All users who have a profile — everyone gets a brief by default.
-    // Respect opt-out: preferences->>'morningBriefingOptIn' = 'false' skips.
+    const targetHour = opts?.targetHour ?? 7;
+    const isWeekly = opts?.weekly ?? false;
+
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, preferences")
+      .select("id, preferences, timezone")
       .limit(500);
 
     if (error || !data) {
@@ -294,8 +380,27 @@ async function getTraderIdsForBriefing(
           typeof row.preferences === "object" && row.preferences !== null
             ? (row.preferences as Record<string, unknown>)
             : {};
-        // Only skip if explicitly opted out
-        return prefs.morningBriefingOptIn !== false;
+        // Skip if explicitly opted out
+        if (prefs.morningBriefingOptIn === false) return false;
+
+        // Timezone-aware hour check: only process users whose local time is the target hour
+        const tz = (row.timezone as string) || "Europe/Amsterdam";
+        try {
+          const localHour = parseInt(
+            new Date().toLocaleString("en-US", {
+              timeZone: tz,
+              hour: "numeric",
+              hour12: false,
+            }),
+            10
+          );
+          if (localHour !== targetHour) return false;
+        } catch {
+          // Unknown timezone — fall through to UTC hour match
+          if (new Date().getUTCHours() !== targetHour) return false;
+        }
+
+        return true;
       })
       .map((row) => row.id as string);
   } catch (err) {
@@ -321,12 +426,13 @@ export async function runDailyBriefingCron(): Promise<{
     return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
   }
 
-  const traders = await getTraderIdsForBriefing(supabase);
-  console.log(`[Briefing] Cron starting for ${traders.length} traders`);
+  // Run every hour but only process users whose local time is 07:00
+  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7 });
+  console.log(`[Briefing] Daily cron starting for ${traders.length} traders`);
 
   for (const traderId of traders) {
     try {
-      await generateMorningBrief(traderId, supabase);
+      await generateMorningBrief(traderId, supabase, { weekly: false });
       processed++;
     } catch (error) {
       console.error(`[Briefing] Failed for trader ${traderId}:`, error);
@@ -336,7 +442,48 @@ export async function runDailyBriefingCron(): Promise<{
 
   const latency_ms = Date.now() - startTime;
   console.log(
-    `[Briefing] Cron complete: ${processed} processed, ${failed} failed in ${latency_ms}ms`
+    `[Briefing] Daily cron complete: ${processed} processed, ${failed} failed in ${latency_ms}ms`
+  );
+
+  return { processed, failed, latency_ms };
+}
+
+// ─── Weekly cron entry point ──────────────────────────────────────────────────
+
+export async function runWeeklyBriefingCron(): Promise<{
+  processed: number;
+  failed: number;
+  latency_ms: number;
+}> {
+  const startTime = Date.now();
+  let processed = 0;
+  let failed = 0;
+
+  const supabase = createServiceRoleSupabaseClient();
+  if (!supabase) {
+    console.error("[Briefing] Service role client unavailable — aborting cron");
+    return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
+  }
+
+  // Monday 07:00 local time. Only paid tiers get the weekly outlook.
+  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7, weekly: true });
+  console.log(`[Briefing] Weekly cron starting for ${traders.length} traders`);
+
+  for (const traderId of traders) {
+    try {
+      const brief = await generateMorningBrief(traderId, supabase, { weekly: true });
+      if (["pro", "founder", "elite"].includes(brief.context.tier)) {
+        processed++;
+      }
+    } catch (error) {
+      console.error(`[Briefing] Failed for trader ${traderId}:`, error);
+      failed++;
+    }
+  }
+
+  const latency_ms = Date.now() - startTime;
+  console.log(
+    `[Briefing] Weekly cron complete: ${processed} processed, ${failed} failed in ${latency_ms}ms`
   );
 
   return { processed, failed, latency_ms };

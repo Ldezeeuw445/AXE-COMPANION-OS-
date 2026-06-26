@@ -421,16 +421,16 @@ function nearestChokepointForVessel(lat: number, lon: number): string | null {
 function mapProxyJetRow(row: Record<string, unknown>): CorporateJet {
   return {
     icao24: String(row.icao24 ?? ""),
-    callsign: String(row.aircraft ?? row.callsign ?? "UNKNOWN"),
+    callsign: String(row.callsign ?? row.aircraft ?? "UNKNOWN"),
     company: String(row.company ?? "Unknown"),
     ticker: String(row.ticker ?? "—"),
-    tailNumber: String(row.origin ?? "—").trim() || "—",
-    originCountry: String(row.company ?? "Unknown"),
-    latitude: typeof row.lat === "number" ? row.lat : Number(row.latitude) || null,
-    longitude: typeof row.lon === "number" ? row.lon : Number(row.longitude) || null,
+    tailNumber: String(row.tailNumber ?? row.tail ?? "—").trim() || "—",
+    originCountry: String(row.originCountry ?? row.origin_country ?? row.country ?? "Unknown"),
+    latitude: typeof row.latitude === "number" ? row.latitude : typeof row.lat === "number" ? row.lat : Number(row.lat) || null,
+    longitude: typeof row.longitude === "number" ? row.longitude : typeof row.lon === "number" ? row.lon : Number(row.lon) || null,
     altitude: typeof row.altitude === "number" ? row.altitude : null,
-    velocity: typeof row.speed === "number" ? row.speed : null,
-    onGround: false,
+    velocity: typeof row.velocity === "number" ? row.velocity : typeof row.speed === "number" ? row.speed : null,
+    onGround: row.onGround === true || row.on_ground === true || row.grounded === true,
   };
 }
 

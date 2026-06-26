@@ -19,7 +19,15 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { X, Send, Save } from "lucide-react";
+import {
+  X,
+  Send,
+  Save,
+  BrainCircuit,
+  Radar,
+  BellPlus,
+  Sparkles,
+} from "lucide-react";
 import { AxeTriangle } from "@/components/brand/AxeTriangle";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
@@ -216,6 +224,40 @@ export function IntelAiChat({ symbol }: { symbol?: string }) {
     [messages, streaming, symbol]
   );
 
+  const QUICK_ACTIONS = [
+    {
+      key: "smart-money",
+      label: "Ask AXE about smart money",
+      icon: BrainCircuit,
+      draft: "Summarize the latest smart money signals: insider trades, congress/policy flow, dark pool prints, and unusual options.",
+    },
+    {
+      key: "alt-data",
+      label: "Ask AXE about alt-data",
+      icon: Radar,
+      draft: "Summarize the latest alt-data: corporate jets, vessel tracking, military radar, emergency squawks, chokepoints, conflicts, energy, and cyber threats.",
+    },
+    {
+      key: "alert",
+      label: "Create intel alert",
+      icon: BellPlus,
+      draft: "Set up a live intel alert for XAUUSD that fires when insider, options, dark pool, or conflict feeds show unusual activity.",
+    },
+    {
+      key: "correlate",
+      label: "Live correlation",
+      icon: Sparkles,
+      draft: "Build a live cross-feed correlation for XAUUSD using smart money and alt-data.",
+    },
+  ];
+
+  const runQuickAction = useCallback(
+    (draft: string) => {
+      sendMessage(draft);
+    },
+    [sendMessage]
+  );
+
   const handleSubmit = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
@@ -313,10 +355,29 @@ export function IntelAiChat({ symbol }: { symbol?: string }) {
               </div>
             </div>
 
+            {/* Quick action chips */}
+            <div className="flex shrink-0 gap-2 overflow-x-auto border-t border-white/[0.06] px-4 pt-3 pb-0 scrollbar-hide">
+              {QUICK_ACTIONS.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <button
+                    key={action.key}
+                    type="button"
+                    onClick={() => runQuickAction(action.draft)}
+                    disabled={streaming}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-40"
+                  >
+                    <Icon className="h-3 w-3" />
+                    {action.label}
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Input */}
             <form
               onSubmit={handleSubmit}
-              className="flex shrink-0 items-end gap-3 border-t border-white/[0.06] px-4 py-3"
+              className="flex shrink-0 items-end gap-3 border-white/[0.06] px-4 py-3"
             >
               <textarea
                 ref={inputRef}

@@ -23,7 +23,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
-import { AxeWordmarkLive } from "@/components/brand/AxeWordmarkLive";
+import { ChatHeaderSwitch } from "@/components/chat/ChatHeaderSwitch";
 import { AxeTriangle } from "@/components/brand/AxeTriangle";
 import Image from "next/image";
 import { QuickActionMenu } from "@/components/shell/QuickActionMenu";
@@ -146,14 +146,16 @@ export function AppNavigation() {
           <Menu className="h-[16px] w-[16px]" />
         </button>
 
-        {/* Center — chart controls OR wordmark */}
+        {/* Center — chart controls OR chat header switcher / wordmark */}
         <div className="pointer-events-none relative flex min-w-0 flex-1 items-center justify-center px-2">
           {slots.center ? (
             <div className="pointer-events-auto flex items-center justify-center">
               <div className="max-w-[min(20rem,calc(100vw-8rem))]">{slots.center}</div>
             </div>
           ) : (
-            <AxeWordmarkLive />
+            <div className="pointer-events-auto">
+              <ChatHeaderSwitch />
+            </div>
           )}
         </div>
 
@@ -175,9 +177,9 @@ export function AppNavigation() {
         </div>
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — must sit above composer dock (z-85) and particles */}
       <div
-        className={`fixed inset-0 z-[60] tos-shell-mobile-chrome ${open ? "pointer-events-auto" : "pointer-events-none"}`}
+        className={`fixed inset-0 z-[100] tos-shell-mobile-chrome ${open ? "pointer-events-auto" : "pointer-events-none"}`}
         aria-hidden={!open}
       >
         <button
