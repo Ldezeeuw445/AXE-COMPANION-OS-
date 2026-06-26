@@ -48,13 +48,15 @@ type LLMTarget = 'ollama' | 'openai' | 'auto';
 
 // Configuration
 const LLM_TARGET = (process.env.LLM_TARGET || 'auto') as LLMTarget;
-const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'https://ollama.axecompanion.com/api';
+// Support both OLLAMA_BASE_URL (new) and OLLAMA_API_URL (legacy)
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_API_URL || 'https://ollama.axecompanion.com/api';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 // Local model selection based on request type
-const MODEL_FOR_CHAT = 'qwen3:4b'; // Fast, good for general chat
-const MODEL_FOR_INTEL = 'deepseek-r1:8b'; // Better reasoning for correlations
+const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
+const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel too
 
 // Timeouts
 const OLLAMA_TIMEOUT_MS = 8000;
@@ -73,11 +75,17 @@ async function callOllama(
   const model = options.model || MODEL_FOR_CHAT;
   const timeout = options.timeout || OLLAMA_TIMEOUT_MS;
 
+  // If tools are present, use Ollama's OpenAI-compatible chat endpoint
+  const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
+  if (hasTools) {
+    return callOllamaChat(request, { model, timeout });
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -216,6 +224,103 @@ async function callOpenAI(
 }
 
 /**
+ * Call Ollama's OpenAI-compatible chat completions endpoint.
+ * Supports tool/function calling.
+ */
+async function callOllamaChat(
+  request: LLMRequest,
+  options: CallOllamaOptions = {}
+): Promise<LLMResponse> {
+  const startTime = Date.now();
+  const model = options.model || MODEL_FOR_CHAT;
+  const timeout = options.timeout || OLLAMA_TIMEOUT_MS;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    const bodyPayload: Record<string, unknown> = {
+      model,
+      messages: request.messages,
+      temperature: request.temperature ?? 0.7,
+      max_tokens: request.max_tokens ?? 2048,
+    };
+
+    const tools = request.tools as unknown[] | undefined;
+    if (tools && tools.length > 0) {
+      bodyPayload.tools = tools;
+      bodyPayload.tool_choice = request.toolChoice ?? 'auto';
+    }
+
+    const response = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ollama', // Ollama accepts any key for the compatible endpoint
+      },
+      body: JSON.stringify(bodyPayload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`Ollama chat API error: ${response.status} ${response.statusText} — ${errBody.slice(0, 200)}`);
+    }
+
+    const data = await response.json() as {
+      choices?: Array<{
+        message?: {
+          content?: string | null;
+          tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+      }>;
+    };
+    const latency_ms = Date.now() - startTime;
+
+    const message = data.choices?.[0]?.message;
+    const content = message?.content ?? null;
+
+    const rawToolCalls = message?.tool_calls ?? [];
+    const toolCalls = rawToolCalls
+      .filter((tc) => tc?.function?.name)
+      .map((tc) => ({
+        id: tc.id || `tc_${Math.random().toString(36).slice(2)}`,
+        tool: tc.function.name,
+        args: (() => {
+          try {
+            return JSON.parse(tc.function.arguments ?? '{}') as Record<string, unknown>;
+          } catch {
+            return {} as Record<string, unknown>;
+          }
+        })(),
+      }));
+
+    console.log(`[LLM] Ollama chat (${model}) responded in ${latency_ms}ms — ${toolCalls.length} tool call(s)`);
+
+    return {
+      content,
+      model,
+      provider: 'ollama',
+      latency_ms,
+      toolCalls,
+    };
+  } catch (error) {
+    const latency_ms = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    console.warn(`[LLM] Ollama chat failed after ${latency_ms}ms: ${errorMessage}`);
+
+    throw new Error(`Ollama chat error: ${errorMessage}`);
+  }
+}
+
+/**
  * Select the appropriate model based on request context
  */
 function selectModel(requestType: 'chat' | 'intel'): string {
@@ -253,14 +358,9 @@ export async function callLLM(
   
   console.log(`[LLM] Request type: ${requestType}, target: ${LLM_TARGET}, model: ${model}`);
 
-  // Tools require OpenAI's function-calling API — bypass Ollama when tools are requested
   const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
 
-  if (LLM_TARGET === 'openai' || hasTools) {
-    // When tools are present, always go to OpenAI (Ollama doesn't support function-calling yet)
-    if (hasTools && LLM_TARGET === 'ollama') {
-      console.warn('[LLM] Tool calls requested but target=ollama — falling back to OpenAI for this call');
-    }
+  if (LLM_TARGET === 'openai') {
     return callOpenAI(request);
   }
 
@@ -268,7 +368,7 @@ export async function callLLM(
     return callOllama(request, { model });
   }
 
-  // 'auto' mode: try Ollama first (no tools), fallback to OpenAI
+  // 'auto' mode: try Ollama first, fallback to OpenAI on error
   try {
     return await callOllama(request, { model });
   } catch (ollamaError) {
