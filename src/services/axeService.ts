@@ -1333,3 +1333,61 @@ export async function callAxeFinal(
     return null;
   }
 }
+
+/* ── Streaming variants ─────────────────────────────────────────
+   callAxeStreaming  — streaming version of callAxe. Emits text
+   tokens via onToken callback. Returns AxeResponse with full text
+   + any tool calls (model may return tool calls instead of text).
+
+   callAxeFinalStreaming — streaming version of callAxeFinal.
+   No tools, just pure text streaming.
+   ────────────────────────────────────────────────────────────── */
+
+export async function callAxeStreaming(
+  messages: LLMMessage[],
+  onToken: (text: string) => void,
+): Promise<AxeResponse> {
+  try {
+    const result = await streamLLM(
+      {
+        messages,
+        tools: AXE_TOOLS,
+        toolChoice: "auto",
+        max_tokens: 800,
+        temperature: 0.55,
+      },
+      onToken,
+    );
+
+    if (result.toolCalls.length > 0) {
+      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
+    }
+
+    return { content: result.content, toolCalls: [] };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[axeService] callAxeStreaming error:", msg);
+    // Re-throw so chatService can surface the real error
+    throw err;
+  }
+}
+
+export async function callAxeFinalStreaming(
+  messages: LLMMessage[],
+  onToken: (text: string) => void,
+): Promise<string | null> {
+  try {
+    const result = await streamLLM(
+      {
+        messages,
+        max_tokens: 500,
+        temperature: 0.4,
+      },
+      onToken,
+    );
+    return result.content;
+  } catch (err) {
+    console.error("[axeService] callAxeFinalStreaming error:", err);
+    throw err;
+  }
+}
