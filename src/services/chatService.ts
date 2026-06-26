@@ -166,7 +166,15 @@ export async function ensurePrimaryConversation(
     .from("conversations")
     .select("id,title,pinned_context,last_message_at,messages(count)")
     .eq("user_id", userId)
-    .eq("conversation_type", type)
+    // Include legacy conversations with null conversation_type as AXE
+    .modify((q) => {
+      if (type === "axe") {
+        // conversation_type = 'axe' OR conversation_type IS NULL
+        q.or(`conversation_type.eq.axe,conversation_type.is.null`);
+      } else {
+        q.eq("conversation_type", type);
+      }
+    })
     .order("last_message_at", { ascending: false });
 
   if (convErr) {

@@ -298,6 +298,38 @@ export async function generateMorningBrief(
     }
   }
 
+  // Also insert the brief into the user's AXE conversation as an assistant message
+  try {
+    // Ensure the user's primary AXE conversation exists
+    const { data: convs } = await sb
+      .from("conversations")
+      .select("id")
+      .eq("user_id", traderId)
+      .or("conversation_type.eq.axe,conversation_type.is.null")
+      .order("last_message_at", { ascending: false })
+      .limit(1);
+
+    const convId = Array.isArray(convs) && convs.length > 0 ? (convs[0] as any).id : null;
+    if (convId) {
+      const { error: msgErr } = await sb.from("messages").insert({
+        conversation_id: convId,
+        user_id: traderId,
+        role: "assistant",
+        content: briefText,
+        metadata: { automated_brief: true },
+      });
+      if (msgErr) console.warn("[Briefing] failed to insert message into conversation:", msgErr.message);
+
+      await sb
+        .from("conversations")
+        .update({ last_message_at: new Date().toISOString() })
+        .eq("id", convId)
+        .eq("user_id", traderId);
+    }
+  } catch (err) {
+    console.warn("[Briefing] failed to append brief to chat:", err);
+  }
+
   // Track event (best-effort)
   try {
     await trackAdaptiveEvent({
