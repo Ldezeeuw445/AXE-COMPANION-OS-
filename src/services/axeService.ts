@@ -1,9 +1,6 @@
-import { callLLM, streamLLM, type LLMMessage, type LLMRequest } from "./llmClient";
+import OpenAI from "openai";
+import { createChatCompletion, getAIConfig, getModelForProvider } from "@/services/aiProvider";
 import type { TradingOSContext } from "@/types/context";
-import { formatTradingSpaceForPrompt } from "@/lib/axe/tradingSpaceContext";
-
-// Re-export ChatMessage for compatibility with existing code
-export type { LLMRequest as ChatMessage };
 
 const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
 
@@ -26,7 +23,7 @@ HOW YOU TALK
 - Direct. One thought per sentence. No filler words.
 - Speak like you've been watching the market all session. Use "we," "the setup," "the level" — you're in it together.
 - Strong opinions stated as facts. Caveats only when genuinely material.
-- If you don't have active broker-resolved price data, say "live broker pricing unavailable." Do not use generic web prices as a substitute for broker/MT5 prices.
+- If you don't have real-time price data, say so once and move on — don't dwell on it. Reference the last known context or ask the trader to drop the current price.
 
 WHAT YOU NEVER DO
 - Never say "consult a financial advisor." Never.
@@ -49,7 +46,7 @@ The trader is using AXE Companion. These are the pages they can open and what ea
 - /alerts — standalone in-app alert manager. Price alerts (above/below threshold) work even without push notifications; if VAPID is configured the alert also pushes. Alerts evaluate on every live tick.
 - /positions — open MT5 positions with distance to SL/TP, R:R, floating P/L.
 - /history — closed trades (broker truth).
-- /journal — AXE auto-journals every closed trade (alignment score 0–100, axe_label, breakdown). Trader can add manual tags too.
+- /journal — trader-written entries + label tags per trade.
 - /intel — Unusual Whales smart money: insiders, congress, dark pool, options flow, market tide.
 - /watchlist — symbols the trader actively tracks.
 - /market — wider macro & news feed (Perigon, Finnhub, EODHD, FRED).
@@ -57,7 +54,6 @@ The trader is using AXE Companion. These are the pages they can open and what ea
 - /accounts — connect/select MT5 cloud account (live + demo).
 - /vault — saved AXE replies + chart snapshots.
 - /cockpit — daily prep brief (rules, plan, focus).
-- /feed — AXE Feed timeline: proactive alerts, trade drafts ready for approval, queued chart actions.
 - /settings — preferences, push subscriptions, account.
 - /chat — you, this conversation.
 
@@ -65,7 +61,7 @@ YOUR CAPABILITIES — EVERYTHING THE TRADER CAN DO, YOU CAN HELP WITH
 You have these tools. Call them aggressively, in parallel, and chain them. If a tool gives you the answer, say so — do not pretend you "can't" do something the tools clearly cover.
 
 DATA FETCH (call automatically when relevant — do not wait to be asked):
-- get_live_price — active broker/MT5 chart price only. Use before any setup or level discussion. If unavailable or stale, refuse price-based analysis.
+- get_live_price — current price + day high/low/close. Use before any setup or level discussion.
 - get_economic_calendar — scheduled prints (NFP/CPI/FOMC). Filter by currency. Flag Big 3.
 - get_news_headlines — actual headlines for a symbol/pair from Perigon → Finnhub → EODHD. Use for "what's the news on X", "why is it moving", risk-on/off questions.
 - get_smart_money_intel — Unusual Whales tide, insiders, congress, dark pool, options flow.
@@ -83,29 +79,10 @@ ALERTS / MEMORY / NAV (act, don't suggest):
 - save_note — store an observation/rule/level. Persists across sessions.
 - track_commitment — non-negotiable when you promise to monitor, follow up, or come back to a topic.
 - read_journal — pull recent journal entries + closed trades for review/coaching.
-- auto_journal_trades — score and journal closed broker trades (alignment 0–100, axe_label, axe_note, breakdown). Runs automatically after MT5 sync; call when the trader asks to journal, score, or auto-label recent closes.
-- navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /feed, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1" / "check your AXE feed"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
-- route_chart_action — queue a chart drawing (fibonacci, trendline, indicators/SMC layers, key level, clear drawings) on any pair/timeframe. Works even when the trader is in chat — the chart applies it when they open /chart. Chain this after calculate_fibonacci / calculate_trendline / analyze_pdh_pdl when they ask you to draw.
-- prepare_execution_request — draft a trade ticket (entry, SL, TP, lot size, risk %) to /actions for the trader to approve. On approve, AXE sends a pending/market order to their connected MT5 account (uses their saved default lots unless you pass volume). You never auto-execute without their tap on Place on MT5.
-
-AXE MEMORY — YOUR LONG-TERM BRAIN
-Your memory persists across sessions. You accumulate observations about the trader over time:
-- PATTERNS: "Closes winners too early", "Overtrades on Fridays", "Best entries during London"
-- WEAKNESSES: "Revenge trades after SL hit", "Adds to losers under pressure"
-- STRENGTHS: "Great order block identification", "Disciplined risk management in ranges"
-- PREFERENCES: "Prefers M15 ICT setups on XAUUSD", "Likes clean breaks of structure"
-- RULES: Trading rules they've told you or you've inferred
-Memory is extracted automatically from conversations. When you see memories in your context:
-- Reference them naturally: "You mentioned you tend to close early — let's set a runner target this time"
-- Challenge patterns: if they're about to repeat a known weakness, call it out
-- Build on strengths: reinforce what they do well
-- Never list memories mechanically. Weave them into your analysis like a coach who knows their trader.
+- navigate_to — surface a deep-link button so the trader hops to /chart, /alerts, /positions, /intel, etc. with one tap. Use whenever you want to send them somewhere ("here's your alerts" / "open the chart on XAUUSD H1"). The UI renders [[link:/path|Label]] markers as buttons; emit them inline in your reply.
 
 CHART DRAWING — YOU SEND IT, THE CHART DRAWS IT
-The /chart page listens for AXE actions via route_chart_action (queued server-side) and applies them when opened — fibonacci, trendline, indicators (FVG, structure, OB, RSI, MA, etc.), PDH/PDL lines, clear drawings. If the trader asks you to put analysis on the chart, run the matching analysis tool then route_chart_action. Answer briefly that the drawing is queued and stays adjustable. Do not pretend an order was placed.
-
-TRADE DRAFTS — YOU PREPARE, THEY APPROVE
-When a setup is clear and the trader wants a trade ready, call prepare_execution_request with entry/SL/TP/risk and a short rationale. They review on /actions and tap Place on MT5 — that sends the order to their broker. Never auto-execute without their confirm.
+The /chart page listens for AXE actions. If the trader asks you to put a Fibonacci, trendline, or PDH/PDL line on the chart, run the matching analysis tool and answer briefly that the drawing has been routed to the chart layer and stays adjustable. Do not pretend an order was placed.
 
 COMMITMENTS — NON-NEGOTIABLE
 - Promise to monitor / follow up / come back? → call track_commitment immediately. No exceptions.
@@ -116,19 +93,17 @@ HONESTY MANDATE — READ THIS TWICE
 1. Never claim you "can't" do something covered by your tools or the app pages above. If a tool exists, use it. If a page exists, link to it with navigate_to.
 2. Never claim you did something you didn't actually do. If a tool failed, say it failed and what the error was. If a value is missing, say it's missing.
 3. Never invent data — prices, alerts, positions, P&L, headlines. If you didn't fetch it or it's not in context, say "I don't have that yet, fetching" and call the tool, or ask once.
-7. Price truth is binary. Analysis, levels, support/resistance, market structure, and entries must use the active chart's broker-resolved symbol and canonical broker candle/price. If symbol, broker symbol, price timestamp, or market session truth is missing/stale, say "live broker pricing unavailable" and do not invent a current price.
 4. Never say "consult a financial advisor" or hedge with disclaimer language. Speak with conviction.
 5. If something in the trader's setup, plan, or execution can be improved, say so plainly. If it's already good, say "it's good" and move on. You are not a yes-man, but you are also not a critic for the sake of it.
 6. The trader prefers honest "yes I just did it" / "no it didn't work, here's why" over polished excuses. Match that.
 
 CHAINED TOOL WORKFLOWS — DO THESE AUTOMATICALLY
-- Alert at a Fib level: get_live_price first. Only calculate levels if broker price/context is fresh enough; otherwise say live broker pricing unavailable.
+- Alert at a Fib level: get_live_price + calculate_fibonacci in parallel, then create_alert with the exact level. Confirm with the trader if you guessed the range.
 - Alert at PDH/PDL: analyze_pdh_pdl, then create_alert.
-- Full setup brief: get_live_price + get_economic_calendar + get_news_headlines in parallel. Only give directional price/level analysis when broker price/context is fresh enough.
+- Full setup brief: get_live_price + get_economic_calendar + get_news_headlines in parallel, then calculate_fibonacci / analyze_orderblock as needed, then a tight verdict.
 - "Show me / open / take me to X": run the data tool if useful, then navigate_to with a button.
 - "What alerts do I have on X / pause my X alert": list_alerts → update_alert.
 - "Review my week / find my mistake": read_journal → coaching response, suggest one specific rule, optionally save_note + track_commitment.
-- "Journal my trades / score my closes / auto-journal": auto_journal_trades → summarize axe_label + alignment scores → navigate_to journal if useful.
 
 FORMAT
 - Plain text. No markdown headers or bullet walls unless the trader asks for a structured breakdown.
@@ -144,14 +119,7 @@ export const AXE_KNOWLEDGE_GUARDRAILS = `AXE KNOWLEDGE LAYER — RESPONSE RULES
 - Use the trader’s playbook, journal, and broker history when present; do not invent trades or labels.
 - If live prices or engine context are missing from this message, say so briefly and continue from structure and rules only.`;
 
-export const AXE_TOOLS: Array<{
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-}> = [
+export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
@@ -189,7 +157,7 @@ export const AXE_TOOLS: Array<{
     function: {
       name: "get_live_price",
       description:
-        "Return the active AXE Companion broker/MT5 chart price only. Call this whenever the trader asks about current price, what the market is doing, or before any setup analysis. If broker/live chart pricing is unavailable or stale, the tool returns a refusal string instead of generic provider prices.",
+        "Fetch the live price, daily high, daily low, and previous close for any trading instrument. Call this whenever the trader asks about current price, what the market is doing, or before any setup analysis where live data would help. Supports forex pairs (XAUUSD, EURUSD, etc.), futures (ES, NQ, CL, GC), and crypto (BTC, ETH).",
       parameters: {
         type: "object",
         properties: {
@@ -462,29 +430,6 @@ export const AXE_TOOLS: Array<{
   {
     type: "function",
     function: {
-      name: "auto_journal_trades",
-      description:
-        "Run AXE auto-journal on closed broker trades — produces alignment_score (0-100), axe_label (Perfect/Good/OK/Impatient/Poor/Emotional), axe_note, and a breakdown vs playbooks/rules/memories. Use when the trader asks to journal trades, score recent closes, auto-label history, or 'journal my last trades'. Defaults to un-journaled trades on the active account; pass trade_ids to target specific closes.",
-      parameters: {
-        type: "object",
-        properties: {
-          account_id: {
-            type: "string",
-            description: "Broker account id. Defaults to the trader's active linked account.",
-          },
-          trade_ids: {
-            type: "array",
-            items: { type: "string" },
-            description: "Optional specific broker_trades ids to journal.",
-          },
-        },
-        required: [],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "navigate_to",
       description:
         "Surface a deep-link button to a specific app page so the trader can jump there with one tap. Use when you want to send them somewhere (e.g. 'open the chart on XAUUSD H1', 'go to your alerts', 'pull up the intel page'). Don't pretend to navigate yourself — call this and the UI will render a button.",
@@ -508,7 +453,6 @@ export const AXE_TOOLS: Array<{
               "vault",
               "cockpit",
               "chat",
-              "feed",
             ],
             description: "Which app page to link to.",
           },
@@ -526,81 +470,6 @@ export const AXE_TOOLS: Array<{
           },
         },
         required: ["page"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "route_chart_action",
-      description:
-        "Queue a chart action on a symbol/timeframe — fibonacci, trendline, indicators/SMC layers, key level, or clear drawings. Works from chat; the chart applies it when the trader opens /chart. Use when they ask you to draw, place indicators, or mark levels.",
-      parameters: {
-        type: "object",
-        properties: {
-          action_type: {
-            type: "string",
-            enum: [
-              "draw_fibonacci",
-              "draw_trendline",
-              "add_indicator",
-              "mark_key_level",
-              "clear_ai_drawings",
-            ],
-          },
-          symbol: { type: "string", description: "Instrument symbol, e.g. EURUSD, XAUUSD" },
-          timeframe: {
-            type: "string",
-            description: "Chart timeframe: m1, m5, m15, m30, h1, h4, d1. Default h1.",
-          },
-          indicators: {
-            type: "array",
-            items: { type: "string" },
-            description:
-              "For add_indicator: layer names like fvg, ifvg, structure, orderBlocks, pdh, pdl, rsi, ma, volume.",
-          },
-          enable: {
-            type: "boolean",
-            description: "For add_indicator — true to turn on (default), false to turn off.",
-          },
-          label: { type: "string", description: "Optional button label for the chart deep-link." },
-          payload: {
-            type: "object",
-            description: "Optional extra payload (e.g. price/label for mark_key_level).",
-          },
-        },
-        required: ["action_type", "symbol"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "prepare_execution_request",
-      description:
-        "Draft a trade ticket for the trader to review and approve on /actions. Use when a setup is ready and they want entry/SL/TP prepared — you never place live orders.",
-      parameters: {
-        type: "object",
-        properties: {
-          instrument: { type: "string", description: "Instrument symbol, e.g. EURUSD" },
-          symbol: { type: "string", description: "Optional alias for instrument" },
-          direction: { type: "string", enum: ["long", "short"] },
-          entry_price: { type: "number" },
-          stop_loss: { type: "number" },
-          take_profit: { type: "number" },
-          risk_percent: { type: "number", description: "Risk as % of account (optional)" },
-          risk_amount: { type: "number", description: "Risk in account currency (optional)" },
-          volume: {
-            type: "number",
-            description: "Lot size for the draft (optional — defaults to trader's saved default lots).",
-          },
-          rationale: {
-            type: "string",
-            description: "Short setup rationale — structure, confluence, session context.",
-          },
-          notes: { type: "string", description: "Optional extra notes for the trader." },
-        },
-        required: ["instrument", "direction", "rationale"],
       },
     },
   },
@@ -679,7 +548,6 @@ export type GetSmartMoneyIntelArgs = { symbol?: string };
 export type ListAlertsArgs = { symbol?: string; include_paused?: boolean };
 export type UpdateAlertArgs = { alert_id: string; action: "pause" | "resume" | "delete" };
 export type ReadJournalArgs = { symbol?: string; days?: number };
-export type AutoJournalTradesArgs = { account_id?: string; trade_ids?: string[] };
 export type NavigateToArgs = {
   page:
     | "chart"
@@ -695,35 +563,10 @@ export type NavigateToArgs = {
     | "accounts"
     | "vault"
     | "cockpit"
-    | "chat"
-    | "feed";
+    | "chat";
   symbol?: string;
   timeframe?: string;
   label?: string;
-};
-
-export type RouteChartActionArgs = {
-  action_type: "draw_fibonacci" | "draw_trendline" | "add_indicator" | "mark_key_level" | "clear_ai_drawings";
-  symbol: string;
-  timeframe?: string;
-  indicators?: string[];
-  enable?: boolean;
-  label?: string;
-  payload?: Record<string, unknown>;
-};
-
-export type PrepareExecutionRequestArgs = {
-  instrument: string;
-  symbol?: string;
-  direction: "long" | "short";
-  entry_price?: number;
-  stop_loss?: number;
-  take_profit?: number;
-  risk_percent?: number;
-  risk_amount?: number;
-  volume?: number;
-  rationale: string;
-  notes?: string;
 };
 
 export type AxeToolCall =
@@ -741,10 +584,7 @@ export type AxeToolCall =
   | { id: string; tool: "list_alerts"; args: ListAlertsArgs }
   | { id: string; tool: "update_alert"; args: UpdateAlertArgs }
   | { id: string; tool: "read_journal"; args: ReadJournalArgs }
-  | { id: string; tool: "auto_journal_trades"; args: AutoJournalTradesArgs }
-  | { id: string; tool: "navigate_to"; args: NavigateToArgs }
-  | { id: string; tool: "route_chart_action"; args: RouteChartActionArgs }
-  | { id: string; tool: "prepare_execution_request"; args: PrepareExecutionRequestArgs };
+  | { id: string; tool: "navigate_to"; args: NavigateToArgs };
 
 export function computeFibonacci(args: FibonacciArgs): string {
   const { swing_high, swing_low, symbol, direction } = args;
@@ -932,7 +772,7 @@ export function buildAxeMessages(
   newUserMessage: string,
   imageBase64?: string,
   imageType?: string
-): LLMMessage[] {
+): OpenAI.Chat.ChatCompletionMessageParam[] {
   const parts: string[] = [AXE_SYSTEM_PROMPT];
 
   if (pinnedContext.trim()) {
@@ -997,7 +837,7 @@ export function buildAxeMessages(
   const systemContent = parts.join("\n");
 
   // Build the user message — multimodal if an image is attached
-  let userMessage: LLMMessage;
+  let userMessage: OpenAI.Chat.ChatCompletionMessageParam;
   if (imageBase64 && imageType) {
     const mimeType = imageType.startsWith("image/") ? imageType : `image/${imageType}`;
     userMessage = {
@@ -1014,7 +854,7 @@ export function buildAxeMessages(
     userMessage = { role: "user", content: newUserMessage };
   }
 
-  const messages: LLMMessage[] = [
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemContent },
     ...history,
     userMessage,
@@ -1037,7 +877,7 @@ export function buildAxeMessagesFromContext(
   newUserMessage: string,
   imageBase64?: string,
   imageType?: string
-): LLMMessage[] {
+): OpenAI.Chat.ChatCompletionMessageParam[] {
   const pinnedContext = context.candles_summary ?? "";
 
   // 1. Base system prompt
@@ -1055,23 +895,6 @@ export function buildAxeMessagesFromContext(
   // gives AXE the cross-tab read without bloating the prompt.
   if (context.axe_context?.summary) {
     parts.push(`\nAXE COMPANION OPERATING CONTEXT\n${context.axe_context.summary}`);
-  }
-
-  if (context.axe_context?.tradingSpace?.compactBrief) {
-    parts.push(`\n${formatTradingSpaceForPrompt(context.axe_context.tradingSpace)}`);
-  }
-
-  const capabilityRoadmap = context.user_memory.find(
-    (m) => m.scope === "axe" && m.entry_key === "capability_roadmap",
-  );
-  if (capabilityRoadmap?.content) {
-    parts.push(`\nAXE CAPABILITY ROADMAP (self-assessed focus — prioritize these when advising)\n${capabilityRoadmap.content}`);
-  }
-
-  if (context.axe_context?.accounts.activeAccountPersona) {
-    parts.push(
-      `\nACTIVE BROKER ACCOUNT PERSONA (adapt tone and focus to this account)\n${context.axe_context.accounts.activeAccountPersona}`,
-    );
   }
 
   // 3. Session brief (candles_summary / pinned_context)
@@ -1340,7 +1163,7 @@ export function buildAxeMessagesFromContext(
   const systemContent = parts.join("\n");
 
   // Build user message (multimodal if chart image attached)
-  let userMessage: LLMMessage;
+  let userMessage: OpenAI.Chat.ChatCompletionMessageParam;
   if (imageBase64 && imageType) {
     const mimeType = imageType.startsWith("image/") ? imageType : `image/${imageType}`;
     userMessage = {
@@ -1379,53 +1202,106 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
   "list_alerts",
   "update_alert",
   "read_journal",
-  "auto_journal_trades",
   "navigate_to",
-  "route_chart_action",
-  "prepare_execution_request",
 ]);
 
 export async function callAxe(
-  messages: LLMMessage[]
+  messages: OpenAI.Chat.ChatCompletionMessageParam[]
 ): Promise<AxeResponse> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error("[axeService] OPENAI_API_KEY not set");
+    return { content: null, toolCalls: [] };
+  }
+
+  const config = getAIConfig();
+  if (!config) {
+    console.error("[axeService] No AI provider configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY.");
+    return { content: null, toolCalls: [] };
+  }
+
+  const model = getModelForProvider(config);
+
   try {
-    const result = await callLLM({
+    const response = await createChatCompletion({
+      model,
       messages,
       tools: AXE_TOOLS,
-      toolChoice: "auto",
+      tool_choice: "auto",
+      parallel_tool_calls: true,
       max_tokens: 800,
       temperature: 0.55,
     });
 
-    if (result.toolCalls.length > 0) {
-      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
+    const choice = response.choices[0];
+    const rawToolCalls = choice.message.tool_calls ?? [];
+
+    if (rawToolCalls.length > 0) {
+      const toolCalls: AxeToolCall[] = [];
+      for (const raw of rawToolCalls) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fn = (raw as any).function as { name: string; arguments: string };
+        const name = fn.name as AxeToolCall["tool"];
+        if (VALID_TOOL_NAMES.has(name)) {
+          const parsed = JSON.parse(fn.arguments);
+          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+        }
+      }
+      if (toolCalls.length > 0) {
+        return { content: null, toolCalls };
+      }
     }
 
-    return { content: result.content, toolCalls: [] };
+    return { content: choice.message.content ?? null, toolCalls: [] };
   } catch (err) {
-    console.error("[axeService] LLM error:", err);
+    console.error("[axeService] OpenAI error:", err);
     return { content: null, toolCalls: [] };
   }
 }
 
 // Intermediate call after tool results — can still trigger a second tool round (e.g. create_alert after fib)
 export async function callAxeAfterTool(
-  messages: LLMMessage[]
+  messages: OpenAI.Chat.ChatCompletionMessageParam[]
 ): Promise<AxeResponse> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { content: null, toolCalls: [] };
+
+  const config = getAIConfig();
+  if (!config) return { content: null, toolCalls: [] };
+
+  const model = getModelForProvider(config);
+
   try {
-    const result = await callLLM({
+    const response = await createChatCompletion({
+      model,
       messages,
       tools: AXE_TOOLS,
-      toolChoice: "auto",
+      tool_choice: "auto",
+      parallel_tool_calls: true,
       max_tokens: 600,
       temperature: 0.4,
     });
 
-    if (result.toolCalls.length > 0) {
-      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
+    const choice = response.choices[0];
+    const rawToolCalls = choice.message.tool_calls ?? [];
+
+    if (rawToolCalls.length > 0) {
+      const toolCalls: AxeToolCall[] = [];
+      for (const raw of rawToolCalls) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fn = (raw as any).function as { name: string; arguments: string };
+        const name = fn.name as AxeToolCall["tool"];
+        if (VALID_TOOL_NAMES.has(name)) {
+          const parsed = JSON.parse(fn.arguments);
+          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+        }
+      }
+      if (toolCalls.length > 0) {
+        return { content: null, toolCalls };
+      }
     }
 
-    return { content: result.content, toolCalls: [] };
+    return { content: choice.message.content ?? null, toolCalls: [] };
   } catch (err) {
     console.error("[axeService] callAxeAfterTool error:", err);
     return { content: null, toolCalls: [] };
@@ -1434,73 +1310,26 @@ export async function callAxeAfterTool(
 
 // Final natural-language reply after all tools are done — no more tool calls
 export async function callAxeFinal(
-  messages: LLMMessage[]
+  messages: OpenAI.Chat.ChatCompletionMessageParam[]
 ): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const config = getAIConfig();
+  if (!config) return null;
+
+  const model = getModelForProvider(config);
+
   try {
-    const result = await callLLM({
+    const response = await createChatCompletion({
+      model,
       messages,
       max_tokens: 500,
       temperature: 0.4,
     });
-    return result.content;
+    return response.choices[0]?.message?.content ?? null;
   } catch (err) {
     console.error("[axeService] callAxeFinal error:", err);
-    return null;
-  }
-}
-
-/* ── Streaming variants ─────────────────────────────────────────
-   callAxeStreaming  — streaming version of callAxe. Emits text
-   tokens via onToken callback. Returns AxeResponse with full text
-   + any tool calls (model may return tool calls instead of text).
-
-   callAxeFinalStreaming — streaming version of callAxeFinal.
-   No tools, just pure text streaming.
-   ────────────────────────────────────────────────────────────── */
-
-export async function callAxeStreaming(
-  messages: LLMMessage[],
-  onToken: (text: string) => void,
-): Promise<AxeResponse> {
-  try {
-    const result = await streamLLM(
-      {
-        messages,
-        tools: AXE_TOOLS,
-        toolChoice: "auto",
-        max_tokens: 800,
-        temperature: 0.55,
-      },
-      onToken,
-    );
-
-    if (result.toolCalls.length > 0) {
-      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
-    }
-
-    return { content: result.content, toolCalls: [] };
-  } catch (err) {
-    console.error("[axeService] callAxeStreaming error:", err);
-    return { content: null, toolCalls: [] };
-  }
-}
-
-export async function callAxeFinalStreaming(
-  messages: LLMMessage[],
-  onToken: (text: string) => void,
-): Promise<string | null> {
-  try {
-    const result = await streamLLM(
-      {
-        messages,
-        max_tokens: 500,
-        temperature: 0.4,
-      },
-      onToken,
-    );
-    return result.content;
-  } catch (err) {
-    console.error("[axeService] callAxeFinalStreaming error:", err);
     return null;
   }
 }

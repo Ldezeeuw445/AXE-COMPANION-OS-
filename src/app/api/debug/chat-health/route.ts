@@ -1,87 +1,96 @@
-/**
- * GET /api/debug/chat-health
- *
- * Shows exactly which dependencies are missing so you know why chat fails.
- * Safe to call while logged in — returns 401 if no session.
- */
-import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
-import { isMockDataSource } from "@/lib/env";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+type ProviderCheck = {
+  configured: boolean;
+  reachable: boolean;
+  error: string | null;
+  responseTimeMs?: number;
+};
 
-export async function GET(request: Request) {
-  const checks: Record<string, string | boolean> = {};
+type HealthResults = {
+  status: string;
+  env: {
+    ollama_base_url: string | null;
+    ollama_model: string;
+    openai_key_set: boolean;
+    openai_model: string;
+  };
+  ollama: ProviderCheck;
+  openai: ProviderCheck;
+};
 
-  // 1. Mock mode?
-  checks.mock_mode = isMockDataSource();
-  checks.supabase_url = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  checks.supabase_anon_key = Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  checks.openai_api_key = Boolean(process.env.OPENAI_API_KEY);
-  checks.ollama_url = process.env.OLLAMA_API_URL ?? "(default: https://ollama.axecompanion.com/api)";
-  checks.llm_target = process.env.LLM_TARGET ?? "auto";
-  checks.skip_chat_quota = process.env.AXE_SKIP_CHAT_QUOTA ?? "false";
+export async function GET() {
+  const ollamaUrl = process.env.OLLAMA_BASE_URL;
+  const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
 
-  // 2. Auth — try cookie-based first, then Bearer token from Authorization header
-  let authed = await getAuthedServiceSupabase();
-  if (!authed) {
-    const authHeader = request.headers.get("Authorization") ?? "";
-    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
-    if (bearerToken) {
-      try {
-        const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-        const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "";
-        const sb = createClient(sbUrl, sbKey, { global: { headers: { Authorization: `Bearer ${bearerToken}` } } });
-        const { data: { user }, error } = await sb.auth.getUser(bearerToken);
-        if (!error && user) authed = { supabase: sb as ReturnType<typeof createClient>, user };
-      } catch { /* ignore */ }
-    }
-  }
-  checks.auth_ok = Boolean(authed);
-  if (authed) {
-    checks.user_id = authed.user.id.slice(0, 8) + "...";
+  const results: HealthResults = {
+    status: "checking",
+    env: {
+      ollama_base_url: ollamaUrl || null,
+      ollama_model: ollamaModel,
+      openai_key_set: !!openaiKey,
+      openai_model: openaiModel,
+    },
+    ollama: { configured: false, reachable: false, error: null },
+    openai: { configured: false, reachable: false, error: null },
+  };
 
-    // 3. Chat quota RPC
+  // Check Ollama with a simple fetch
+  if (ollamaUrl) {
+    results.ollama.configured = true;
     try {
-      const { error } = await authed.supabase.rpc("axe_chat_try_consume");
-      checks.quota_rpc = error ? `ERROR: ${error.message}` : "ok";
-    } catch (e) {
-      checks.quota_rpc = `THREW: ${e instanceof Error ? e.message : String(e)}`;
-    }
-
-    // 4. Conversations table
-    try {
-      const { error } = await authed.supabase
-        .from("conversations")
-        .select("id")
-        .limit(1);
-      checks.conversations_table = error ? `ERROR: ${error.message}` : "ok";
-    } catch (e) {
-      checks.conversations_table = `THREW: ${e instanceof Error ? e.message : String(e)}`;
+      const start = Date.now();
+      const res = await fetch(`${ollamaUrl}/api/tags`, { method: "GET" });
+      if (res.ok) {
+        results.ollama.reachable = true;
+        results.ollama.error = null;
+        results.ollama.responseTimeMs = Date.now() - start;
+      } else {
+        results.ollama.reachable = false;
+        results.ollama.error = `HTTP ${res.status}: ${await res.text()}`;
+      }
+    } catch (err) {
+      results.ollama.reachable = false;
+      results.ollama.error = err instanceof Error ? err.message : String(err);
     }
   }
 
-  // 5. LLM reachability (non-destructive ping)
-  if (process.env.OPENAI_API_KEY) {
+  // Check OpenAI with a simple fetch
+  if (openaiKey) {
+    results.openai.configured = true;
     try {
-      const r = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-        signal: AbortSignal.timeout(5000),
+      const start = Date.now();
+      const res = await fetch("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${openaiKey}` },
       });
-      checks.openai_reachable = r.ok ? "ok" : `HTTP ${r.status}`;
-    } catch (e) {
-      checks.openai_reachable = `FAILED: ${e instanceof Error ? e.message : String(e)}`;
+      if (res.ok) {
+        results.openai.reachable = true;
+        results.openai.error = null;
+        results.openai.responseTimeMs = Date.now() - start;
+      } else {
+        results.openai.reachable = false;
+        results.openai.error = `HTTP ${res.status}: ${await res.text()}`;
+      }
+    } catch (err) {
+      results.openai.reachable = false;
+      results.openai.error = err instanceof Error ? err.message : String(err);
     }
-  } else {
-    checks.openai_reachable = "skipped (no key)";
   }
 
-  const allOk =
-    !checks.mock_mode &&
-    checks.auth_ok &&
-    (checks.openai_api_key || checks.llm_target === "ollama") &&
-    checks.quota_rpc === "ok";
+  // Determine overall status
+  if (results.ollama.reachable) {
+    results.status = "ok_ollama";
+  } else if (results.openai.reachable) {
+    results.status = "ok_openai";
+  } else if (ollamaUrl || openaiKey) {
+    results.status = "partial";
+  } else {
+    results.status = "no_provider";
+    return NextResponse.json(results, { status: 503 });
+  }
 
-  return Response.json({ ok: allOk, checks }, { status: allOk ? 200 : 500 });
+  return NextResponse.json(results);
 }
