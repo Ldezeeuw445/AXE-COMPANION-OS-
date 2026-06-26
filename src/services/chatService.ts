@@ -153,8 +153,11 @@ async function runAutoJournalTool(
   return `Journaled ${result.journaled} trade(s):\n${lines.join("\n")}\nOpen [[link:/journal|Journal]] to review.`;
 }
 
-export async function ensurePrimaryConversation(userId: string): Promise<ConversationSummary | null> {
-  const authed = await getAuthedServiceSupabase();
+export async function ensurePrimaryConversation(
+  userId: string,
+  existingAuth?: { supabase: SupabaseClient; user: User } | null,
+): Promise<ConversationSummary | null> {
+  const authed = existingAuth ?? await getAuthedServiceSupabase();
   if (!authed || authed.user.id !== userId) return null;
   const { supabase } = authed;
 
@@ -203,7 +206,7 @@ export async function getChatThread(): Promise<{
 }> {
   const authed = await getAuthedServiceSupabase();
   if (authed) {
-    const conversation = await ensurePrimaryConversation(authed.user.id);
+    const conversation = await ensurePrimaryConversation(authed.user.id, authed);
     if (conversation) {
       const { data, error } = await authed.supabase
         .from("messages")
@@ -252,7 +255,7 @@ export async function sendChatMessage(
   const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
-  const conversation = await ensurePrimaryConversation(authed.user.id);
+  const conversation = await ensurePrimaryConversation(authed.user.id, authed);
   if (!conversation) return { ok: false };
 
   const { supabase, user } = authed;
@@ -695,7 +698,7 @@ export async function streamChatMessage(
   const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
-  const conversation = await ensurePrimaryConversation(authed.user.id);
+  const conversation = await ensurePrimaryConversation(authed.user.id, authed);
   if (!conversation) return { ok: false };
 
   const { supabase, user } = authed;
