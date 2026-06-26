@@ -633,7 +633,7 @@ export async function sendChatMessage(
     const round1Results = await Promise.all(
       axeResponse.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) }))
     );
-    const afterRound1 = appendToolRound(aiMessages, axeResponse.toolCalls, round1Results);
+    const afterRound1 = appendToolRound(aiMessages, axeResponse.toolCalls, round1Results) as LLMMessage[];
 
     const round2Response = await callAxeAfterTool(afterRound1 as LLMMessage[]);
 
