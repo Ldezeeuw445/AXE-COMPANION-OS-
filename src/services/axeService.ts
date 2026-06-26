@@ -1,6 +1,6 @@
-import OpenAI from "openai";
-import { createChatCompletion, getAIConfig, getModelForProvider } from "@/services/aiProvider";
+import { callLLM, streamLLM, type LLMMessage } from "@/services/llmClient";
 import type { TradingOSContext } from "@/types/context";
+import type OpenAI from "openai";
 
 const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
 
@@ -1206,45 +1206,23 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
 ]);
 
 export async function callAxe(
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+  messages: LLMMessage[]
 ): Promise<AxeResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error("[axeService] OPENAI_API_KEY not set");
-    return { content: null, toolCalls: [] };
-  }
-
-  const config = getAIConfig();
-  if (!config) {
-    console.error("[axeService] No AI provider configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY.");
-    return { content: null, toolCalls: [] };
-  }
-
-  const model = getModelForProvider(config);
-
   try {
-    const response = await createChatCompletion({
-      model,
+    const result = await callLLM({
       messages,
       tools: AXE_TOOLS,
-      tool_choice: "auto",
-      parallel_tool_calls: true,
+      toolChoice: "auto",
       max_tokens: 800,
       temperature: 0.55,
     });
 
-    const choice = response.choices[0];
-    const rawToolCalls = choice.message.tool_calls ?? [];
-
-    if (rawToolCalls.length > 0) {
+    if (result.toolCalls.length > 0) {
       const toolCalls: AxeToolCall[] = [];
-      for (const raw of rawToolCalls) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fn = (raw as any).function as { name: string; arguments: string };
-        const name = fn.name as AxeToolCall["tool"];
+      for (const tc of result.toolCalls) {
+        const name = tc.tool as AxeToolCall["tool"];
         if (VALID_TOOL_NAMES.has(name)) {
-          const parsed = JSON.parse(fn.arguments);
-          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+          toolCalls.push({ id: tc.id, tool: name, args: tc.args } as AxeToolCall);
         }
       }
       if (toolCalls.length > 0) {
@@ -1252,48 +1230,32 @@ export async function callAxe(
       }
     }
 
-    return { content: choice.message.content ?? null, toolCalls: [] };
+    return { content: result.content, toolCalls: [] };
   } catch (err) {
-    console.error("[axeService] OpenAI error:", err);
+    console.error("[axeService] callAxe error:", err);
     return { content: null, toolCalls: [] };
   }
 }
 
 // Intermediate call after tool results — can still trigger a second tool round (e.g. create_alert after fib)
 export async function callAxeAfterTool(
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+  messages: LLMMessage[]
 ): Promise<AxeResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return { content: null, toolCalls: [] };
-
-  const config = getAIConfig();
-  if (!config) return { content: null, toolCalls: [] };
-
-  const model = getModelForProvider(config);
-
   try {
-    const response = await createChatCompletion({
-      model,
+    const result = await callLLM({
       messages,
       tools: AXE_TOOLS,
-      tool_choice: "auto",
-      parallel_tool_calls: true,
+      toolChoice: "auto",
       max_tokens: 600,
       temperature: 0.4,
     });
 
-    const choice = response.choices[0];
-    const rawToolCalls = choice.message.tool_calls ?? [];
-
-    if (rawToolCalls.length > 0) {
+    if (result.toolCalls.length > 0) {
       const toolCalls: AxeToolCall[] = [];
-      for (const raw of rawToolCalls) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fn = (raw as any).function as { name: string; arguments: string };
-        const name = fn.name as AxeToolCall["tool"];
+      for (const tc of result.toolCalls) {
+        const name = tc.tool as AxeToolCall["tool"];
         if (VALID_TOOL_NAMES.has(name)) {
-          const parsed = JSON.parse(fn.arguments);
-          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+          toolCalls.push({ id: tc.id, tool: name, args: tc.args } as AxeToolCall);
         }
       }
       if (toolCalls.length > 0) {
@@ -1301,7 +1263,7 @@ export async function callAxeAfterTool(
       }
     }
 
-    return { content: choice.message.content ?? null, toolCalls: [] };
+    return { content: result.content, toolCalls: [] };
   } catch (err) {
     console.error("[axeService] callAxeAfterTool error:", err);
     return { content: null, toolCalls: [] };
@@ -1310,24 +1272,15 @@ export async function callAxeAfterTool(
 
 // Final natural-language reply after all tools are done — no more tool calls
 export async function callAxeFinal(
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+  messages: LLMMessage[]
 ): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  const config = getAIConfig();
-  if (!config) return null;
-
-  const model = getModelForProvider(config);
-
   try {
-    const response = await createChatCompletion({
-      model,
+    const result = await callLLM({
       messages,
       max_tokens: 500,
       temperature: 0.4,
     });
-    return response.choices[0]?.message?.content ?? null;
+    return result.content;
   } catch (err) {
     console.error("[axeService] callAxeFinal error:", err);
     return null;
