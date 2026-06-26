@@ -56,8 +56,11 @@ export async function POST(request: Request) {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
 
+  // SSE format: event name on its own line, then data, then blank line.
+  // The Composer listens for `event: <type>` to route tokens/errors/done.
   const send = (event: StreamEvent) => {
-    writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n`)).catch(() => {});
+    const frame = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+    writer.write(encoder.encode(frame)).catch(() => {});
   };
 
   // Fire-and-forget — the stream is already attached to the response
@@ -87,7 +90,8 @@ export async function POST(request: Request) {
         }
       }
 
-      await writer.write(encoder.encode("data: [DONE]\n"));
+      // [DONE] sentinel — Composer uses the `done` event from chatService; this is a safety net.
+      await writer.write(encoder.encode("data: [DONE]\n\n"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       send({ type: "error", message: msg });
