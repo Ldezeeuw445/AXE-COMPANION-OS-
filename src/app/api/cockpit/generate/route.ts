@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import OpenAI from "openai";
+import { createChatCompletion, getAIConfig, getModelForProvider } from "@/services/aiProvider";
 
 const COCKPIT_PROMPT = `You are analyzing a trader's private session history with their AI trading companion (AXE).
 Your job is to generate a structured cockpit snapshot that reflects the trader's actual behavior, patterns, and how well the AI has learned their style.
@@ -67,10 +67,7 @@ export async function POST() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "OpenAI not configured" }, { status: 500 });
-  }
+  // AI provider check is handled by aiProvider service
 
   // Fetch data in parallel
   const [messagesResult, memoryResult, alertsResult, execResult] = await Promise.all([
@@ -132,12 +129,16 @@ export async function POST() {
     executions: execs.map((e) => ({ symbol: e.symbol, direction: e.direction, status: e.status, at: e.created_at })),
   };
 
-  const client = new OpenAI({ apiKey });
+  const config = getAIConfig();
+  if (!config) {
+    return NextResponse.json({ error: "No AI provider configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY." }, { status: 500 });
+  }
 
-  let snapshot: Record<string, unknown>;
+  const model = getModelForProvider(config);
+
   try {
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o",
+    const completion = await createChatCompletion({
+      model,
       temperature: 0.3,
       max_tokens: 2000,
       messages: [
@@ -152,9 +153,9 @@ export async function POST() {
     const raw = completion.choices[0]?.message?.content ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
-    snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    var snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
   } catch (err) {
-    console.error("[cockpit/generate] GPT error:", err);
+    console.error("[cockpit/generate] AI error:", err);
     return NextResponse.json({ error: "Failed to generate snapshot" }, { status: 500 });
   }
 

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { createChatCompletion, getAIConfig, getModelForProvider } from "@/services/aiProvider";
 import type { TradingOSContext } from "@/types/context";
 
 const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
@@ -1213,11 +1214,17 @@ export async function callAxe(
     return { content: null, toolCalls: [] };
   }
 
-  const client = new OpenAI({ apiKey });
+  const config = getAIConfig();
+  if (!config) {
+    console.error("[axeService] No AI provider configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY.");
+    return { content: null, toolCalls: [] };
+  }
+
+  const model = getModelForProvider(config);
 
   try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
+    const response = await createChatCompletion({
+      model,
       messages,
       tools: AXE_TOOLS,
       tool_choice: "auto",
@@ -1259,11 +1266,14 @@ export async function callAxeAfterTool(
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { content: null, toolCalls: [] };
 
-  const client = new OpenAI({ apiKey });
+  const config = getAIConfig();
+  if (!config) return { content: null, toolCalls: [] };
+
+  const model = getModelForProvider(config);
 
   try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
+    const response = await createChatCompletion({
+      model,
       messages,
       tools: AXE_TOOLS,
       tool_choice: "auto",
@@ -1305,11 +1315,14 @@ export async function callAxeFinal(
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
-  const client = new OpenAI({ apiKey });
+  const config = getAIConfig();
+  if (!config) return null;
+
+  const model = getModelForProvider(config);
 
   try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
+    const response = await createChatCompletion({
+      model,
       messages,
       max_tokens: 500,
       temperature: 0.4,
