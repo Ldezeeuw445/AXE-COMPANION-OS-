@@ -1,12 +1,31 @@
 import { NextResponse } from "next/server";
 
+type ProviderCheck = {
+  configured: boolean;
+  reachable: boolean;
+  error: string | null;
+  responseTimeMs?: number;
+};
+
+type HealthResults = {
+  status: string;
+  env: {
+    ollama_base_url: string | null;
+    ollama_model: string;
+    openai_key_set: boolean;
+    openai_model: string;
+  };
+  ollama: ProviderCheck;
+  openai: ProviderCheck;
+};
+
 export async function GET() {
   const ollamaUrl = process.env.OLLAMA_BASE_URL;
   const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
   const openaiKey = process.env.OPENAI_API_KEY;
   const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
 
-  const results = {
+  const results: HealthResults = {
     status: "checking",
     env: {
       ollama_base_url: ollamaUrl || null,
@@ -14,8 +33,8 @@ export async function GET() {
       openai_key_set: !!openaiKey,
       openai_model: openaiModel,
     },
-    ollama: { configured: false, reachable: false, error: null as string | null },
-    openai: { configured: false, reachable: false, error: null as string | null },
+    ollama: { configured: false, reachable: false, error: null },
+    openai: { configured: false, reachable: false, error: null },
   };
 
   // Check Ollama with a simple fetch
