@@ -76,7 +76,7 @@ export function createAIClient(config: AIClientConfig): OpenAI {
  * Returns the completion response or throws if both fail.
  */
 export async function createChatCompletion(
-  params: OpenAI.Chat.ChatCompletionCreateParams
+  params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const config = getAIConfig();
 
