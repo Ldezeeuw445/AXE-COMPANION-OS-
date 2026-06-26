@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
 import { getAIConfig, createAIClient, getModelForProvider } from "@/services/aiProvider";
 
+type ProviderResult = {
+  configured: boolean;
+  reachable: boolean;
+  error: string | null;
+  responseTimeMs?: number;
+};
+
+type HealthResults = {
+  status: string;
+  primary: string;
+  model: string;
+  ollama: ProviderResult;
+  openai: ProviderResult;
+};
+
 export async function GET() {
   const config = getAIConfig();
 
@@ -9,19 +24,19 @@ export async function GET() {
       {
         status: "no_provider_configured",
         message: "Set OLLAMA_BASE_URL or OPENAI_API_KEY in environment variables",
-        ollama: { configured: false },
-        openai: { configured: false },
+        ollama: { configured: false, reachable: false, error: null },
+        openai: { configured: false, reachable: false, error: null },
       },
       { status: 503 }
     );
   }
 
-  const results = {
+  const results: HealthResults = {
     status: "checking",
     primary: config.provider,
     model: config.model,
-    ollama: { configured: false, reachable: false, error: null as string | null },
-    openai: { configured: false, reachable: false, error: null as string | null },
+    ollama: { configured: false, reachable: false, error: null },
+    openai: { configured: false, reachable: false, error: null },
   };
 
   // Check Ollama if configured
