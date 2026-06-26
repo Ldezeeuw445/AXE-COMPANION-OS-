@@ -1,4 +1,5 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
+import { createClient } from "@supabase/supabase-js";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { callLLM, type LLMMessage, type LLMRequest } from "@/services/llmClient";
 
@@ -71,16 +72,34 @@ async function getCachedConviction(
 
 /* ── POST handler ─────────────────────────────────────────────────── */
 
+async function resolveSupabaseAuth(request: Request) {
+  // 1. Try cookie-based auth
+  const cookieClient = createEdgeSupabaseClient(request);
+  if (cookieClient) {
+    const { data: { user } } = await cookieClient.auth.getUser();
+    if (user) return { supabase: cookieClient, user };
+  }
+  // 2. Fallback: Bearer token from Authorization header
+  const authHeader = request.headers.get("Authorization") ?? "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  if (bearerToken) {
+    const sbClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${bearerToken}` } } },
+    );
+    const { data: { user }, error } = await sbClient.auth.getUser(bearerToken);
+    if (!error && user) return { supabase: sbClient, user };
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
-  const supabase = createEdgeSupabaseClient(request);
-  if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
+  const auth = await resolveSupabaseAuth(request);
+  if (!auth) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const { supabase, user } = auth;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
-
-  // Return cached if fresh
+  // Return cached if fresh (supabase + user from resolveSupabaseAuth above)
   const cached = await getCachedConviction(supabase, user.id);
   if (cached) return jsonResponse({ ok: true, cached: true, conviction: cached });
 
@@ -115,13 +134,9 @@ export async function POST(request: Request) {
 /* ── GET handler — returns cached only ────────────────────────────── */
 
 export async function GET(request: Request) {
-  const supabase = createEdgeSupabaseClient(request);
-  if (!supabase) return jsonResponse({ ok: false, error: "supabase_not_configured" }, 503);
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const auth = await resolveSupabaseAuth(request);
+  if (!auth) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const { supabase, user } = auth;
 
   const { data } = await supabase
     .from("axe_convictions")

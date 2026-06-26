@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, RefreshCw, Zap } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 type SupportingSignal = { feed: string; signal: string };
 
@@ -40,7 +41,20 @@ export function ConvictionEngine() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/intel-conviction", { method: "POST" });
+      // Send Bearer token so server auth works regardless of cookie state
+      let authHeader: Record<string, string> = {};
+      try {
+        const sb = createClient();
+        const { data: { session } } = await sb.auth.getSession();
+        if (session?.access_token) {
+          authHeader = { Authorization: `Bearer ${session.access_token}` };
+        }
+      } catch { /* ignore — server will try cookie fallback */ }
+
+      const res = await fetch("/api/intel-conviction", {
+        method: "POST",
+        headers: authHeader,
+      });
       const json = (await res.json()) as {
         ok: boolean;
         conviction?: ConvictionSnapshot;
