@@ -323,7 +323,7 @@ export async function sendChatMessage(
     imageType
   );
 
-  const axeResponse = await callAxe(aiMessages);
+  const axeResponse = await callAxe(aiMessages as LLMMessage[]);
 
   // Fire-and-forget push notification to user's subscribed devices
   async function firePush(title: string, body: string, url = "/chat") {
@@ -631,14 +631,14 @@ export async function sendChatMessage(
     );
     const afterRound1 = appendToolRound(aiMessages, axeResponse.toolCalls, round1Results);
 
-    const round2Response = await callAxeAfterTool(afterRound1);
+    const round2Response = await callAxeAfterTool(afterRound1 as LLMMessage[]);
 
     if (round2Response.toolCalls.length > 0) {
       const round2Results = await Promise.all(
         round2Response.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) }))
       );
       const afterRound2 = appendToolRound(afterRound1, round2Response.toolCalls, round2Results);
-      finalReply = await callAxeFinal(afterRound2);
+      finalReply = await callAxeFinal(afterRound2 as LLMMessage[]);
     } else {
       finalReply = round2Response.content;
     }
