@@ -239,7 +239,7 @@ export async function getChatThread(): Promise<{
 
 export type SendChatMessageResult =
   | { ok: true }
-  | { ok: false; quotaExceeded?: boolean; aiFailed?: boolean };
+  | { ok: false; quotaExceeded?: boolean; aiFailed?: boolean; errorDetail?: string };
 
 export async function sendChatMessage(
   text: string,
@@ -691,7 +691,7 @@ export async function streamChatMessage(
   symbol?: string,
   tf?: string,
   edgeAuth?: { supabase: SupabaseClient; user: User } | null,
-): Promise<{ ok: boolean; quotaExceeded?: boolean; aiFailed?: boolean }> {
+): Promise<{ ok: boolean; quotaExceeded?: boolean; aiFailed?: boolean; errorDetail?: string }> {
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
 
@@ -995,10 +995,11 @@ export async function streamChatMessage(
       finalReply = firstContent || null;
     }
   } catch (err) {
-    console.error("[chatService] streaming error:", err);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[chatService] streaming error:", detail);
     // The reserved free-tier slot produced no reply — give it back.
     if (consumed) await refundChatQuota(supabase, user.id);
-    return { ok: false, aiFailed: true };
+    return { ok: false, aiFailed: true, errorDetail: detail };
   }
 
   // AXE produced no reply at all (e.g. OpenAI not configured or errored).

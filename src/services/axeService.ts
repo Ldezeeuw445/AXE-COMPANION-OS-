@@ -1480,8 +1480,10 @@ export async function callAxeStreaming(
 
     return { content: result.content, toolCalls: [] };
   } catch (err) {
-    console.error("[axeService] callAxeStreaming error:", err);
-    return { content: null, toolCalls: [] };
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[axeService] callAxeStreaming error:", msg);
+    // Re-throw so chatService can surface the real error
+    throw err;
   }
 }
 
@@ -1501,6 +1503,6 @@ export async function callAxeFinalStreaming(
     return result.content;
   } catch (err) {
     console.error("[axeService] callAxeFinalStreaming error:", err);
-    return null;
+    throw err;
   }
 }

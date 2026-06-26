@@ -6,6 +6,8 @@ import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 // Node.js runtime — metaApiClient uses node:crypto
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Allow up to 60 s — OpenAI with large tool context can take 15-30 s
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -80,10 +82,10 @@ export async function POST(request: Request) {
         if (result.quotaExceeded) {
           send({ type: "error", message: "Daily message limit reached. Upgrade for unlimited access." });
         } else if (result.aiFailed) {
+          const detail = result.errorDetail ? ` — ${result.errorDetail}` : "";
           send({
             type: "error",
-            message:
-              "AXE couldn't reach the AI model. Check that OPENAI_API_KEY is set in Vercel env vars, or that Ollama is reachable.",
+            message: `AXE couldn't reach the AI model${detail}. Check OPENAI_API_KEY in Vercel env vars or Ollama connectivity.`,
           });
         } else {
           send({ type: "error", message: "Chat failed. Please try again." });
