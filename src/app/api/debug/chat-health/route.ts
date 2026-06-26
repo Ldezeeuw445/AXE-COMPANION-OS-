@@ -1,102 +1,60 @@
 import { NextResponse } from "next/server";
-import { getAIConfig, createAIClient, getModelForProvider } from "@/services/aiProvider";
-
-type ProviderResult = {
-  configured: boolean;
-  reachable: boolean;
-  error: string | null;
-  responseTimeMs?: number;
-};
-
-type HealthResults = {
-  status: string;
-  primary: string;
-  model: string;
-  ollama: ProviderResult;
-  openai: ProviderResult;
-};
 
 export async function GET() {
-  const config = getAIConfig();
+  const ollamaUrl = process.env.OLLAMA_BASE_URL;
+  const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
 
-  if (!config) {
-    return NextResponse.json(
-      {
-        status: "no_provider_configured",
-        message: "Set OLLAMA_BASE_URL or OPENAI_API_KEY in environment variables",
-        ollama: { configured: false, reachable: false, error: null },
-        openai: { configured: false, reachable: false, error: null },
-      },
-      { status: 503 }
-    );
-  }
-
-  const results: HealthResults = {
+  const results = {
     status: "checking",
-    primary: config.provider,
-    model: config.model,
-    ollama: { configured: false, reachable: false, error: null },
-    openai: { configured: false, reachable: false, error: null },
+    env: {
+      ollama_base_url: ollamaUrl || null,
+      ollama_model: ollamaModel,
+      openai_key_set: !!openaiKey,
+      openai_model: openaiModel,
+    },
+    ollama: { configured: false, reachable: false, error: null as string | null },
+    openai: { configured: false, reachable: false, error: null as string | null },
   };
 
-  // Check Ollama if configured
-  if (process.env.OLLAMA_BASE_URL) {
+  // Check Ollama with a simple fetch
+  if (ollamaUrl) {
     results.ollama.configured = true;
     try {
-      const ollamaClient = createAIClient({
-        provider: "ollama",
-        baseURL: process.env.OLLAMA_BASE_URL,
-        model: process.env.OLLAMA_MODEL || "llama3.2",
-      });
-
-      const model = getModelForProvider({
-        provider: "ollama",
-        baseURL: process.env.OLLAMA_BASE_URL,
-        model: process.env.OLLAMA_MODEL || "llama3.2",
-      });
-
       const start = Date.now();
-      await ollamaClient.chat.completions.create({
-        model,
-        messages: [{ role: "user", content: "Hi" }],
-        max_tokens: 5,
-      });
-
-      results.ollama.reachable = true;
-      results.ollama.error = null;
-      results.ollama.responseTimeMs = Date.now() - start;
+      const res = await fetch(`${ollamaUrl}/api/tags`, { method: "GET" });
+      if (res.ok) {
+        results.ollama.reachable = true;
+        results.ollama.error = null;
+        results.ollama.responseTimeMs = Date.now() - start;
+      } else {
+        results.ollama.reachable = false;
+        results.ollama.error = `HTTP ${res.status}: ${await res.text()}`;
+      }
     } catch (err) {
       results.ollama.reachable = false;
       results.ollama.error = err instanceof Error ? err.message : String(err);
     }
   }
 
-  // Check OpenAI if configured
-  if (process.env.OPENAI_API_KEY) {
+  // Check OpenAI with a simple fetch
+  if (openaiKey) {
     results.openai.configured = true;
     try {
-      const openaiClient = createAIClient({
-        provider: "openai",
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      });
-
-      const model = getModelForProvider({
-        provider: "openai",
-        apiKey: process.env.OPENAI_API_KEY,
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      });
-
       const start = Date.now();
-      await openaiClient.chat.completions.create({
-        model,
-        messages: [{ role: "user", content: "Hi" }],
-        max_tokens: 5,
+      const res = await fetch("https://api.openai.com/v1/models", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${openaiKey}` },
       });
-
-      results.openai.reachable = true;
-      results.openai.error = null;
-      results.openai.responseTimeMs = Date.now() - start;
+      if (res.ok) {
+        results.openai.reachable = true;
+        results.openai.error = null;
+        results.openai.responseTimeMs = Date.now() - start;
+      } else {
+        results.openai.reachable = false;
+        results.openai.error = `HTTP ${res.status}: ${await res.text()}`;
+      }
     } catch (err) {
       results.openai.reachable = false;
       results.openai.error = err instanceof Error ? err.message : String(err);
@@ -104,16 +62,14 @@ export async function GET() {
   }
 
   // Determine overall status
-  if (config.provider === "ollama" && results.ollama.reachable) {
+  if (results.ollama.reachable) {
     results.status = "ok_ollama";
-  } else if (config.provider === "openai" && results.openai.reachable) {
-    results.status = "ok_openai";
   } else if (results.openai.reachable) {
-    results.status = "fallback_openai";
-  } else if (results.ollama.reachable) {
-    results.status = "fallback_ollama";
+    results.status = "ok_openai";
+  } else if (ollamaUrl || openaiKey) {
+    results.status = "partial";
   } else {
-    results.status = "all_failed";
+    results.status = "no_provider";
     return NextResponse.json(results, { status: 503 });
   }
 
