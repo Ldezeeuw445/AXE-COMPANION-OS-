@@ -13,6 +13,7 @@
 
 import { Suspense, useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import {
   CHAT_PREFILL_EVENT,
   clearStagedChatPrefill,
@@ -259,9 +260,22 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     setImage(null);
 
     try {
+      // Get Supabase session token so server-side auth works even if cookies
+      // aren't forwarded (common on Vercel deployments).
+      let authHeader: Record<string, string> = {};
+      try {
+        const sb = createClient();
+        const { data: { session } } = await sb.auth.getSession();
+        if (session?.access_token) {
+          authHeader = { Authorization: `Bearer ${session.access_token}` };
+        }
+      } catch {
+        // Silently ignore — server will try cookie auth as fallback
+      }
+
       const res = await fetch("/api/chat/stream", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify(body),
       });
 

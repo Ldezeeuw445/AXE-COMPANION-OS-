@@ -6,11 +6,12 @@
  */
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { isMockDataSource } from "@/lib/env";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const checks: Record<string, string | boolean> = {};
 
   // 1. Mock mode?
@@ -22,8 +23,21 @@ export async function GET() {
   checks.llm_target = process.env.LLM_TARGET ?? "auto";
   checks.skip_chat_quota = process.env.AXE_SKIP_CHAT_QUOTA ?? "false";
 
-  // 2. Auth
-  const authed = await getAuthedServiceSupabase();
+  // 2. Auth — try cookie-based first, then Bearer token from Authorization header
+  let authed = await getAuthedServiceSupabase();
+  if (!authed) {
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    if (bearerToken) {
+      try {
+        const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const sbKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "";
+        const sb = createClient(sbUrl, sbKey, { global: { headers: { Authorization: `Bearer ${bearerToken}` } } });
+        const { data: { user }, error } = await sb.auth.getUser(bearerToken);
+        if (!error && user) authed = { supabase: sb as ReturnType<typeof createClient>, user };
+      } catch { /* ignore */ }
+    }
+  }
   checks.auth_ok = Boolean(authed);
   if (authed) {
     checks.user_id = authed.user.id.slice(0, 8) + "...";

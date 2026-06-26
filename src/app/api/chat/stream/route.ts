@@ -1,5 +1,7 @@
 import { streamChatMessage, type StreamEvent } from "@/services/chatService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 
 // Node.js runtime — metaApiClient uses node:crypto
 export const runtime = "nodejs";
@@ -16,11 +18,36 @@ export async function POST(request: Request) {
   const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
   const tf = typeof body?.tf === "string" ? body.tf : undefined;
 
-  // Server auth — returns { supabase, user } or null
-  const edgeAuth = await getAuthedServiceSupabase();
+  // Server auth: try Bearer token first, then fall back to cookie session.
+  let edgeAuth = await getAuthedServiceSupabase();
+
+  if (!edgeAuth) {
+    // Fallback: extract JWT from Authorization header (sent by Composer)
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    if (bearerToken) {
+      try {
+        const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const serviceKey =
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+          process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ||
+          "";
+        const sbClient = createServiceRoleClient(serviceUrl, serviceKey, {
+          global: { headers: { Authorization: `Bearer ${bearerToken}` } },
+        });
+        const { data: { user }, error } = await sbClient.auth.getUser(bearerToken);
+        if (!error && user) {
+          edgeAuth = { supabase: sbClient as ReturnType<typeof createServiceRoleClient>, user };
+        }
+      } catch {
+        // Bearer auth also failed — fall through to 401
+      }
+    }
+  }
+
   if (!edgeAuth) {
     return new Response(
-      JSON.stringify({ ok: false, error: "Unauthorized" }),
+      JSON.stringify({ ok: false, error: "Unauthorized — please log in and try again." }),
       { status: 401, headers: { "Content-Type": "application/json" } }
     );
   }
