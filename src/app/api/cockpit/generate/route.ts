@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createChatCompletion, getAIConfig, getModelForProvider } from "@/services/aiProvider";
+import { callLLM } from "@/services/llmClient";
 
 const COCKPIT_PROMPT = `You are analyzing a trader's private session history with their AI trading companion (AXE).
 Your job is to generate a structured cockpit snapshot that reflects the trader's actual behavior, patterns, and how well the AI has learned their style.
@@ -129,16 +129,8 @@ export async function POST() {
     executions: execs.map((e) => ({ symbol: e.symbol, direction: e.direction, status: e.status, at: e.created_at })),
   };
 
-  const config = getAIConfig();
-  if (!config) {
-    return NextResponse.json({ error: "No AI provider configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY." }, { status: 500 });
-  }
-
-  const model = getModelForProvider(config);
-
   try {
-    const completion = await createChatCompletion({
-      model,
+    const result = await callLLM({
       temperature: 0.3,
       max_tokens: 2000,
       messages: [
@@ -150,7 +142,7 @@ export async function POST() {
       ],
     });
 
-    const raw = completion.choices[0]?.message?.content ?? "";
+    const raw = result.content ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
     var snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
