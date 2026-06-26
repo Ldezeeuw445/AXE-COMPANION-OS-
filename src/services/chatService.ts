@@ -613,7 +613,7 @@ export async function sendChatMessage(
         tool_calls: tcs.map((tc) => ({
           id: tc.id,
           type: "function" as const,
-          function: { name: toolCall.tool, arguments: JSON.stringify(toolCall.args) },
+          function: { name: tc.tool, arguments: JSON.stringify(tc.args) },
         })),
       },
       ...results.map(
