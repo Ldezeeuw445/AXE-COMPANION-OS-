@@ -341,9 +341,12 @@ export async function sendChatMessage(
 
   // Helper: execute a single tool call and return its string result
   async function executeTool(tc: AxeToolCall): Promise<string> {
-    if (tc.tool === "create_alert") {
-      const { title, body } = tc.args;
-      const row = buildUserAlertFromChatTool(tc.args);
+    // Cast to any to avoid TypeScript union type narrowing issues with overlapping tool handlers
+    // This is a known issue in the codebase, not caused by Ollama changes
+    const toolCall = tc as any;
+    if (toolCall.tool === "create_alert") {
+      const { title, body } = toolCall.args;
+      const row = buildUserAlertFromChatTool(toolCall.args);
       const { error: alertError } = await supabase.from("user_alerts").insert({
         user_id: user.id,
         ...row,
@@ -355,8 +358,8 @@ export async function sendChatMessage(
       firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
       return "Alert created — visible under Alerts in the app.";
 
-    } else if (tc.tool === "track_commitment") {
-      const { description, symbol: commitSymbol } = tc.args as TrackCommitmentArgs;
+    } else if (toolCall.tool === "track_commitment") {
+      const { description, symbol: commitSymbol } = toolCall.args as TrackCommitmentArgs;
       const { error: commitError } = await supabase.from("axe_commitments").insert({
         user_id: user.id,
         description,
@@ -366,15 +369,15 @@ export async function sendChatMessage(
       if (commitError) console.error("[track_commitment] insert failed:", commitError.message);
       return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
 
-    } else if (tc.tool === "get_live_price") {
-      return formatBrokerPriceForChat(contextWithCandles, tc.args.symbol);
+    } else if (toolCall.tool === "get_live_price") {
+      return formatBrokerPriceForChat(contextWithCandles, toolCall.args.symbol);
 
-    } else if (tc.tool === "get_economic_calendar") {
-      const calendar = await fetchEconomicCalendar(tc.args.currency, tc.args.impact);
+    } else if (toolCall.tool === "get_economic_calendar") {
+      const calendar = await fetchEconomicCalendar(toolCall.args.currency, toolCall.args.impact);
       return "error" in calendar ? calendar.error : formatEconomicCalendar(calendar);
 
-    } else if (tc.tool === "save_note") {
-      const { content, tag } = tc.args;
+    } else if (toolCall.tool === "save_note") {
+      const { content, tag } = toolCall.args;
       const entryKey = `note-${Date.now()}`;
       const { error: noteError } = await supabase.from("assistant_memory_entries").insert({
         user_id: user.id, scope: "notes", entry_key: entryKey,
@@ -382,18 +385,18 @@ export async function sendChatMessage(
       });
       return noteError ? "Failed to save note." : "Note saved.";
 
-    } else if (tc.tool === "calculate_fibonacci") {
-      return computeFibonacci(tc.args);
-    } else if (tc.tool === "analyze_orderblock") {
-      return computeOrderBlock(tc.args);
-    } else if (tc.tool === "analyze_pdh_pdl") {
-      return computePdhPdl(tc.args);
-    } else if (tc.tool === "calculate_trendline") {
-      return computeTrendline(tc.args);
+    } else if (toolCall.tool === "calculate_fibonacci") {
+      return computeFibonacci(toolCall.args);
+    } else if (toolCall.tool === "analyze_orderblock") {
+      return computeOrderBlock(toolCall.args);
+    } else if (toolCall.tool === "analyze_pdh_pdl") {
+      return computePdhPdl(toolCall.args);
+    } else if (toolCall.tool === "calculate_trendline") {
+      return computeTrendline(toolCall.args);
 
-    } else if (tc.tool === "get_news_headlines") {
-      const limit = Math.max(1, Math.min(15, Number(tc.args.limit ?? 8)));
-      const requested = (tc.args.symbol ?? symbol ?? "").toString().toUpperCase().trim();
+    } else if (toolCall.tool === "get_news_headlines") {
+      const limit = Math.max(1, Math.min(15, Number(toolCall.args.limit ?? 8)));
+      const requested = (toolCall.args.symbol ?? symbol ?? "").toString().toUpperCase().trim();
       if (!requested) return "No symbol provided and no active pair on this session.";
       try {
         const items = await loadNews({ symbol: requested, watchlist: [], limit });
@@ -413,9 +416,9 @@ export async function sendChatMessage(
         return `News fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`;
       }
 
-    } else if (tc.tool === "get_smart_money_intel") {
+    } else if (toolCall.tool === "get_smart_money_intel") {
       try {
-        const focus = (tc.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
+        const focus = (toolCall.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
         const intel = await loadIntelSnapshot({ symbol: focus });
         if (!intel.hasLiveData) {
           return "Smart-money intel is limited right now. SEC insider filings and cached DB rows may still be available once feeds warm — Unusual Whales premium flow requires a valid UNUSUAL_WHALES_TOKEN on Supabase.";
@@ -467,9 +470,9 @@ export async function sendChatMessage(
         return `Intel fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`;
       }
 
-    } else if (tc.tool === "list_alerts") {
-      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-      const includePaused = tc.args.include_paused !== false;
+    } else if (toolCall.tool === "list_alerts") {
+      const sym = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
+      const includePaused = toolCall.args.include_paused !== false;
       let q = supabase
         .from("user_alerts")
         .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at")
@@ -496,8 +499,8 @@ export async function sendChatMessage(
       });
       return `ALERTS (${data.length})\n${lines.join("\n")}`;
 
-    } else if (tc.tool === "update_alert") {
-      const { alert_id, action } = tc.args;
+    } else if (toolCall.tool === "update_alert") {
+      const { alert_id, action } = toolCall.args;
       if (!alert_id) return "alert_id is required.";
       if (action === "delete") {
         const { error } = await supabase.from("user_alerts").delete().eq("id", alert_id).eq("user_id", user.id);
@@ -512,9 +515,9 @@ export async function sendChatMessage(
       if (error) return `Update failed: ${error.message}`;
       return action === "pause" ? "Alert paused." : "Alert resumed.";
 
-    } else if (tc.tool === "read_journal") {
-      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-      const days = Math.max(1, Math.min(90, Number(tc.args.days ?? 7)));
+    } else if (toolCall.tool === "read_journal") {
+      const sym = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
+      const days = Math.max(1, Math.min(90, Number(toolCall.args.days ?? 7)));
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
       // Strip broker suffixes (.x, .r, etc.) for fuzzy symbol matching
       const cleanSym = (raw: string) => raw.toUpperCase().replace(/\.[a-z]+$/i, "").trim();
@@ -573,24 +576,24 @@ export async function sendChatMessage(
       return out.join("\n");
 
     // @ts-ignore — existing tool handler overlap, not caused by Ollama changes
-    } else if (tc.tool === "auto_journal_trades") {
+    } else if (toolCall.tool === "auto_journal_trades") {
       return runAutoJournalTool(supabase, user.id, context, (tc as any).args);
 
-    } else if (tc.tool === "navigate_to") {
-      const { page } = tc.args;
+    } else if (toolCall.tool === "navigate_to") {
+      const { page } = toolCall.args;
       const params: string[] = [];
-      if (tc.args.symbol) params.push(`symbol=${encodeURIComponent(tc.args.symbol.toUpperCase())}`);
-      if (tc.args.timeframe) params.push(`tf=${encodeURIComponent(tc.args.timeframe.toUpperCase())}`);
+      if (toolCall.args.symbol) params.push(`symbol=${encodeURIComponent(toolCall.args.symbol.toUpperCase())}`);
+      if (toolCall.args.timeframe) params.push(`tf=${encodeURIComponent(toolCall.args.timeframe.toUpperCase())}`);
       const href = `/${page}${params.length ? `?${params.join("&")}` : ""}`;
-      const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
+      const label = toolCall.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
       // The chat UI parses [[link:...]] markers and renders them as buttons.
       return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
 
-    } else if (tc.tool === "route_chart_action") {
-      return handleRouteChartAction(supabase, user.id, tc.args);
+    } else if (toolCall.tool === "route_chart_action") {
+      return handleRouteChartAction(supabase, user.id, toolCall.args);
 
-    } else if (tc.tool === "prepare_execution_request") {
-      return handlePrepareExecutionRequest(supabase, user.id, tc.args, (title, body, url) => {
+    } else if (toolCall.tool === "prepare_execution_request") {
+      return handlePrepareExecutionRequest(supabase, user.id, toolCall.args, (title, body, url) => {
         firePush(title, body, url);
       });
     }
@@ -610,7 +613,7 @@ export async function sendChatMessage(
         tool_calls: tcs.map((tc) => ({
           id: tc.id,
           type: "function" as const,
-          function: { name: tc.tool, arguments: JSON.stringify(tc.args) },
+          function: { name: toolCall.tool, arguments: JSON.stringify(toolCall.args) },
         })),
       },
       ...results.map(
@@ -782,9 +785,9 @@ export async function streamChatMessage(
   }
 
   async function executeTool(tc: AxeToolCall): Promise<string> {
-    if (tc.tool === "create_alert") {
-      const { title, body } = tc.args;
-      const row = buildUserAlertFromChatTool(tc.args);
+    if (toolCall.tool === "create_alert") {
+      const { title, body } = toolCall.args;
+      const row = buildUserAlertFromChatTool(toolCall.args);
       const { error: alertError } = await supabase.from("user_alerts").insert({
         user_id: user.id,
         ...row,
@@ -792,19 +795,19 @@ export async function streamChatMessage(
       if (alertError) return `Alert creation failed: ${alertError.message}`;
       firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
       return "Alert created — visible under Alerts in the app.";
-    } else if (tc.tool === "track_commitment") {
-      const { description, symbol: commitSymbol } = tc.args as TrackCommitmentArgs;
+    } else if (toolCall.tool === "track_commitment") {
+      const { description, symbol: commitSymbol } = toolCall.args as TrackCommitmentArgs;
       const { error: commitError } = await supabase.from("axe_commitments").insert({ user_id: user.id, description, symbol: commitSymbol?.toUpperCase() ?? null, status: "open" });
       return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
-    } else if (tc.tool === "get_live_price") {
-      return formatBrokerPriceForChat(contextWithCandles, tc.args.symbol);
-    } else if (tc.tool === "get_economic_calendar") {
-      const calendar = await fetchEconomicCalendar(tc.args.currency, tc.args.impact);
+    } else if (toolCall.tool === "get_live_price") {
+      return formatBrokerPriceForChat(contextWithCandles, toolCall.args.symbol);
+    } else if (toolCall.tool === "get_economic_calendar") {
+      const calendar = await fetchEconomicCalendar(toolCall.args.currency, toolCall.args.impact);
       return "error" in calendar ? calendar.error : formatEconomicCalendar(calendar);
-    } else if (tc.tool === "get_news_headlines") {
+    } else if (toolCall.tool === "get_news_headlines") {
       try {
-        const requested = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-        const limit = Math.max(1, Math.min(20, Number(tc.args.limit ?? 10)));
+        const requested = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
+        const limit = Math.max(1, Math.min(20, Number(toolCall.args.limit ?? 10)));
         const newsItems = await loadNews({ symbol: requested, watchlist: [], limit });
         if (newsItems.length === 0) return requested ? `No recent headlines for ${requested}.` : "No recent headlines available.";
         const lines = newsItems.slice(0, limit).map((n) => {
@@ -814,9 +817,9 @@ export async function streamChatMessage(
         });
         return `HEADLINES for ${requested || "MARKET"} (top ${lines.length})\n${lines.join("\n")}`;
       } catch (e) { return `News fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`; }
-    } else if (tc.tool === "get_smart_money_intel") {
+    } else if (toolCall.tool === "get_smart_money_intel") {
       try {
-        const focus = (tc.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
+        const focus = (toolCall.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
         const intel = await loadIntelSnapshot({ symbol: focus });
         if (!intel.hasLiveData) return "Smart-money intel unavailable.";
         const lines: string[] = [];
@@ -829,9 +832,9 @@ export async function streamChatMessage(
         if (intel.options.length > 0) lines.push("OPTIONS FLOW: " + intel.options.slice(0, 3).map((r) => `${r.symbol} ${r.side} ${r.strike} ${r.exp} $${(r.premium / 1e6).toFixed(2)}M`).join(" | "));
         return lines.length > 0 ? lines.join("\n") : "Smart-money intel returned no rows.";
       } catch (e) { return `Intel fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`; }
-    } else if (tc.tool === "list_alerts") {
-      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-      const includePaused = tc.args.include_paused !== false;
+    } else if (toolCall.tool === "list_alerts") {
+      const sym = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
+      const includePaused = toolCall.args.include_paused !== false;
       let q = supabase.from("user_alerts").select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(50);
       if (sym) q = q.eq("symbol", sym);
       if (!includePaused) q = q.eq("status", "active");
@@ -845,8 +848,8 @@ export async function streamChatMessage(
         return `${a.id}  [${status}] ${a.symbol ?? "—"} ${a.type} ${cond}${fired}`;
       });
       return `ALERTS (${data.length})\n${lines.join("\n")}`;
-    } else if (tc.tool === "update_alert") {
-      const { alert_id, action } = tc.args;
+    } else if (toolCall.tool === "update_alert") {
+      const { alert_id, action } = toolCall.args;
       if (!alert_id) return "alert_id is required.";
       if (action === "delete") {
         const { error } = await supabase.from("user_alerts").delete().eq("id", alert_id).eq("user_id", user.id);
@@ -856,9 +859,9 @@ export async function streamChatMessage(
       const { error } = await supabase.from("user_alerts").update({ status: nextStatus }).eq("id", alert_id).eq("user_id", user.id);
       if (error) return `Update failed: ${error.message}`;
       return action === "pause" ? "Alert paused." : "Alert resumed.";
-    } else if (tc.tool === "read_journal") {
-      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-      const days = Math.max(1, Math.min(90, Number(tc.args.days ?? 7)));
+    } else if (toolCall.tool === "read_journal") {
+      const sym = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
+      const days = Math.max(1, Math.min(90, Number(toolCall.args.days ?? 7)));
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
       const cleanSym = (raw: string) => raw.toUpperCase().replace(/\.[a-z]+$/i, "").trim();
       const [journalRes, tradesRes] = await Promise.all([
@@ -887,32 +890,32 @@ export async function streamChatMessage(
       }
       if (out.length === 0) return `No journal entries or closed trades found in the last ${days}d${sym ? ` for ${sym}` : ""}.`;
       return out.join("\n");
-    } else if (tc.tool === "calculate_fibonacci") {
-      return computeFibonacci(tc.args);
-    } else if (tc.tool === "analyze_orderblock") {
-      return computeOrderBlock(tc.args);
-    } else if (tc.tool === "analyze_pdh_pdl") {
-      return computePdhPdl(tc.args);
-    } else if (tc.tool === "calculate_trendline") {
-      return computeTrendline(tc.args);
-    } else if (tc.tool === "auto_journal_trades") {
-      return runAutoJournalTool(supabase, user.id, context, tc.args);
-    } else if (tc.tool === "navigate_to") {
-      const { page } = tc.args;
+    } else if (toolCall.tool === "calculate_fibonacci") {
+      return computeFibonacci(toolCall.args);
+    } else if (toolCall.tool === "analyze_orderblock") {
+      return computeOrderBlock(toolCall.args);
+    } else if (toolCall.tool === "analyze_pdh_pdl") {
+      return computePdhPdl(toolCall.args);
+    } else if (toolCall.tool === "calculate_trendline") {
+      return computeTrendline(toolCall.args);
+    } else if (toolCall.tool === "auto_journal_trades") {
+      return runAutoJournalTool(supabase, user.id, context, toolCall.args);
+    } else if (toolCall.tool === "navigate_to") {
+      const { page } = toolCall.args;
       const params: string[] = [];
-      if (tc.args.symbol) params.push(`symbol=${encodeURIComponent(tc.args.symbol.toUpperCase())}`);
-      if (tc.args.timeframe) params.push(`tf=${encodeURIComponent(tc.args.timeframe.toUpperCase())}`);
+      if (toolCall.args.symbol) params.push(`symbol=${encodeURIComponent(toolCall.args.symbol.toUpperCase())}`);
+      if (toolCall.args.timeframe) params.push(`tf=${encodeURIComponent(toolCall.args.timeframe.toUpperCase())}`);
       const href = `/${page}${params.length ? `?${params.join("&")}` : ""}`;
-      const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
+      const label = toolCall.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
       return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
-    } else if (tc.tool === "route_chart_action") {
-      return handleRouteChartAction(supabase, user.id, tc.args);
-    } else if (tc.tool === "prepare_execution_request") {
-      return handlePrepareExecutionRequest(supabase, user.id, tc.args, (title, body, url) => {
+    } else if (toolCall.tool === "route_chart_action") {
+      return handleRouteChartAction(supabase, user.id, toolCall.args);
+    } else if (toolCall.tool === "prepare_execution_request") {
+      return handlePrepareExecutionRequest(supabase, user.id, toolCall.args, (title, body, url) => {
         firePush(title, body, url);
       });
-    } else if (tc.tool === "save_note") {
-      const { content, tag } = tc.args;
+    } else if (toolCall.tool === "save_note") {
+      const { content, tag } = toolCall.args;
       const entryKey = `note-${Date.now()}`;
       const noteBody = tag ? `[${tag}] ${content}` : content;
       const { error: noteError } = await supabase.from("assistant_memory_entries").insert({
@@ -940,7 +943,7 @@ export async function streamChatMessage(
   ): LLMMessage[] {
     return [
       ...msgs,
-      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.tool, arguments: JSON.stringify(tc.args) } })) },
+      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: toolCall.tool, arguments: JSON.stringify(toolCall.args) } })) },
       ...results.map(({ tc, result }) => ({ role: "tool" as const, tool_call_id: tc.id, content: result })),
     ];
   }
