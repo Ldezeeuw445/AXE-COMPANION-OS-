@@ -69,14 +69,30 @@ export async function POST() {
 
   // AI provider check is handled by aiProvider service
 
-  // Fetch data in parallel
+  // Allow generating cockpit for a specific assistant type (axe|intel)
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type") === "intel" ? "intel" : "axe";
+
+  // Find conversations for this user and type
+  const { data: convs } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("conversation_type", type)
+    .order("last_message_at", { ascending: false })
+    .limit(5);
+
+  const convIds: string[] = Array.isArray(convs) ? convs.map((c: any) => c.id) : [];
+
+  // Fetch data in parallel, scoped to the selected conversation type
   const [messagesResult, memoryResult, alertsResult, execResult] = await Promise.all([
     supabase
       .from("messages")
-      .select("role,content,created_at")
+      .select("role,content,created_at,conversation_id")
+      .in("conversation_id", convIds.length ? convIds : ["dummy-no-conv"])
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(200),
 
     supabase
       .from("assistant_memory_entries")
@@ -107,7 +123,7 @@ export async function POST() {
 
   if (messages.length < 2) {
     return NextResponse.json(
-      { error: "Not enough conversation history to generate a snapshot. Have a few sessions with AXE first." },
+      { error: `Not enough conversation history to generate a snapshot for ${type}. Have a few sessions with the ${type.toUpperCase()} agent first.` },
       { status: 422 }
     );
   }
@@ -119,7 +135,7 @@ export async function POST() {
       from: messages[0]?.created_at,
       to: messages[messages.length - 1]?.created_at,
     },
-    recentMessages: messages.slice(-60).map((m) => ({
+    recentMessages: messages.slice(-200).map((m) => ({
       role: m.role,
       at: m.created_at,
       content: (m.content as string).slice(0, 300),
