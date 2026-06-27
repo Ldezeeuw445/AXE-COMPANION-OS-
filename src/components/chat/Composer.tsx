@@ -447,6 +447,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       {/* ── Unified composer bar: quick actions + typing in one row (intel only) ─── */}
       <div className="relative overflow-visible">
         {intelMode ? (
+        <>
         <div
           className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
           aria-hidden
@@ -524,6 +525,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
               <Send className="h-4 w-4 text-black" />
             </button>
           </div>
+        </>
         ) : (
           // AXE default composer — unchanged simple bar
           <div
