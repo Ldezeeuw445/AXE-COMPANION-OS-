@@ -90,7 +90,8 @@ async function callOllama(
         prompt: formatMessagesForOllama(request.messages),
         stream: false,
         temperature: request.temperature ?? 0.7,
-        num_predict: request.max_tokens ?? 2048,
+        num_predict: Math.min(request.max_tokens ?? 512, 512),
+        keep_alive: '15m',
       }),
       signal: controller.signal,
     });
@@ -324,23 +325,46 @@ function selectModel(requestType: 'chat' | 'intel'): string {
   return requestType === 'intel' ? MODEL_FOR_INTEL : MODEL_FOR_CHAT;
 }
 
+function truncateForOllama(text: string, max = 2800): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\n[context truncated for local model]`;
+}
+
 /**
- * Format chat messages for Ollama (which expects a prompt string)
+ * Format chat messages for Ollama (which expects a prompt string).
+ * Truncates large AXE system blocks so VPS inference stays within Vercel limits.
  */
 function formatMessagesForOllama(messages: LLMMessage[]): string {
-  return messages
-    .filter(msg => msg.role !== 'tool' && msg.content != null)
-    .map(msg => {
-      const raw = msg.content;
-      const text = typeof raw === 'string' ? raw :
-        Array.isArray(raw)
-          ? raw.map(p => (typeof p === 'object' && p !== null && typeof (p as { text?: unknown }).text === 'string' ? (p as unknown as { text: string }).text : '')).join(' ')
+  const usable = messages.filter((msg) => msg.role !== 'tool' && msg.content != null);
+  const system = usable.find((msg) => msg.role === 'system');
+  const turns = usable.filter((msg) => msg.role !== 'system').slice(-10);
+
+  const toText = (msg: LLMMessage, maxLen: number) => {
+    const raw = msg.content;
+    const text =
+      typeof raw === 'string'
+        ? raw
+        : Array.isArray(raw)
+          ? raw
+              .map((p) =>
+                typeof p === 'object' && p !== null && typeof (p as { text?: unknown }).text === 'string'
+                  ? (p as { text: string }).text
+                  : '',
+              )
+              .join(' ')
           : '';
-      const prefix = msg.role === 'user' ? 'User: ' : msg.role === 'system' ? 'System: ' : 'Assistant: ';
-      return prefix + text;
-    })
-    .filter(Boolean)
-    .join('\n\n') + '\n\nAssistant: ';
+    return truncateForOllama(text, maxLen);
+  };
+
+  const parts: string[] = [];
+  if (system) {
+    parts.push(`System: ${toText(system, 3200)}`);
+  }
+  for (const msg of turns) {
+    const prefix = msg.role === 'user' ? 'User: ' : msg.role === 'assistant' ? 'Assistant: ' : `${msg.role}: `;
+    parts.push(prefix + toText(msg, msg.role === 'user' ? 1200 : 900));
+  }
+  return `${parts.join('\n\n')}\n\nAssistant: `;
 }
 
 /**
@@ -372,13 +396,18 @@ export async function callLLM(
     console.warn('[LLM] Ollama failed, falling back to OpenAI...');
     
     if (!OPENAI_API_KEY) {
-      throw new Error(
-        'Ollama failed and OpenAI fallback not configured. ' +
-        'Set OPENAI_API_KEY or fix Ollama connectivity.'
-      );
+      throw ollamaError instanceof Error ? ollamaError : new Error(String(ollamaError));
     }
     
-    return callOpenAI(request);
+    try {
+      return await callOpenAI(request);
+    } catch (openaiError) {
+      const openaiMsg = openaiError instanceof Error ? openaiError.message : String(openaiError);
+      if (openaiMsg.includes('429') || openaiMsg.includes('quota')) {
+        throw ollamaError instanceof Error ? ollamaError : new Error(String(ollamaError));
+      }
+      throw openaiError;
+    }
   }
 }
 
