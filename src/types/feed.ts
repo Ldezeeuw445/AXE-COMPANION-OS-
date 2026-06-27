@@ -1,4 +1,9 @@
-export type AxeFeedItemKind = "proactive" | "trade_draft" | "chart_action" | "system";
+export type AxeFeedItemKind =
+  | "proactive"
+  | "trade_draft"
+  | "chart_action"
+  | "briefing"
+  | "system";
 
 export type AxeFeedItem = {
   id: string;

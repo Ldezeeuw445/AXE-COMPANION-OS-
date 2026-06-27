@@ -2,7 +2,6 @@ import { ChatThread } from "@/components/chat/ChatThread";
 import { Composer } from "@/components/chat/Composer";
 import { ChatComposerDock } from "@/components/chat/ChatComposerDock";
 import { PinnedContext } from "@/components/chat/PinnedContext";
-import { ChatMorningBrief } from "@/components/chat/ChatMorningBrief";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
 import { ChatFeedStrip } from "@/components/feed/ChatFeedStrip";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -75,7 +74,6 @@ export default async function ChatPage({
           </p>
         ) : null}
         <PinnedContext text={conversation.pinnedContext} />
-        <ChatMorningBrief />
         <ChatFeedStrip />
         <ChatThread
           conversationId={conversation.id}

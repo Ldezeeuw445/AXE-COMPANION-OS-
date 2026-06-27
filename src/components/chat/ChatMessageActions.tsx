@@ -9,11 +9,13 @@ export function ChatMessageActions({
   content,
   initialFeedback,
   vaultTitle = "AXE reply",
+  vaultSource = "axe",
 }: {
   messageId: string;
   content: string;
   initialFeedback?: "up" | "down" | null;
   vaultTitle?: string;
+  vaultSource?: "axe" | "intel";
 }) {
   const [rating, setRating] = useState<"up" | "down" | null>(initialFeedback ?? null);
   const [pending, setPending] = useState(false);
@@ -48,14 +50,14 @@ export function ChatMessageActions({
       const res = await fetch("/api/vault/save-axe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, title: vaultTitle }),
+        body: JSON.stringify({ content, title: vaultTitle, source: vaultSource }),
       });
       if (res.ok) setVaultState("saved");
       else setVaultState("idle");
     } catch {
       setVaultState("idle");
     }
-  }, [content, vaultState, vaultTitle]);
+  }, [content, vaultState, vaultTitle, vaultSource]);
 
   if (!content.trim()) return null;
 

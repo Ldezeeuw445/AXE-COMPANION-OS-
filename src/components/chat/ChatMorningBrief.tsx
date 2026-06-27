@@ -3,13 +3,14 @@
 /**
  * ChatMorningBrief — surfaces today's AXE morning brief inside the chat thread.
  *
- * If a brief exists for today it is shown as a collapsible card with a
- * one-tap prefill to ask AXE about it. If none exists, it auto-generates.
+ * Briefs are delivered by cron (7am local daily, Sunday evening weekly).
+ * This card only displays an existing brief — it never triggers generation.
  */
 
 import { useEffect, useState, useCallback } from "react";
 import { Sunrise, X, RefreshCw, Newspaper, ArrowRight } from "lucide-react";
 import { applyChatPrefill } from "@/lib/chat/chatPrefill";
+import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 
 type Brief = {
   title: string;
@@ -22,9 +23,10 @@ type Brief = {
 };
 
 export function ChatMorningBrief() {
+  const intelMode = useChatIntelMode();
   const [brief, setBrief] = useState<Brief | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   const fetchBrief = useCallback(async () => {
@@ -41,18 +43,18 @@ export function ChatMorningBrief() {
     }
   }, []);
 
-  const generateBrief = useCallback(async () => {
-    setGenerating(true);
+  const refreshBrief = useCallback(async () => {
+    setRefreshing(true);
     try {
-      const res = await fetch("/api/cockpit/briefing", { method: "POST" });
-      if (!res.ok) throw new Error("Generation failed");
+      const res = await fetch("/api/cockpit/briefing?force=true", { method: "POST" });
+      if (!res.ok) throw new Error("Refresh failed");
       const data = await res.json();
       if (data.upgradeRequired) return;
       setBrief(data.brief ?? null);
     } catch (e) {
-      console.warn("[ChatMorningBrief] Generation failed:", e);
+      console.warn("[ChatMorningBrief] Refresh failed:", e);
     } finally {
-      setGenerating(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -60,37 +62,12 @@ export function ChatMorningBrief() {
     fetchBrief();
   }, [fetchBrief]);
 
-  useEffect(() => {
-    if (!loading && brief === null && !generating) {
-      generateBrief();
-    }
-  }, [loading, brief, generating, generateBrief]);
-
   const askAXE = useCallback((text: string) => {
     applyChatPrefill(text);
   }, []);
 
-  if (dismissed) return null;
-  if (loading) {
-    return (
-      <div className="mx-4 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-        <div className="flex items-center gap-2 text-tos-dim">
-          <Sunrise className="h-4 w-4 shrink-0 animate-pulse" />
-          <span className="text-[11px] uppercase tracking-[0.18em]">Loading morning brief…</span>
-        </div>
-      </div>
-    );
-  }
-  if (generating || !brief) {
-    return (
-      <div className="mx-4 mb-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-        <div className="flex items-center gap-2 text-[#00d4f5]">
-          <Sunrise className="h-4 w-4 shrink-0 animate-pulse" />
-          <span className="text-[11px] uppercase tracking-[0.18em]">AXE is writing your brief…</span>
-        </div>
-      </div>
-    );
-  }
+  if (intelMode) return null;
+  if (dismissed || loading || !brief) return null;
 
   const paragraphs = brief.body
     .split(/\n\n+/)
@@ -101,18 +78,19 @@ export function ChatMorningBrief() {
     <div className="mx-4 mb-3 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Sunrise className="h-4 w-4 shrink-0 text-tos-warm" />
+          <Sunrise className="h-4 w-4 shrink-0 text-tos-gold" />
           <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-tos-dim">
             {brief.briefing_type === "weekly" ? "Weekly Outlook" : "Morning Brief"}
           </span>
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={generateBrief}
-            className="rounded p-1.5 text-tos-dim hover:bg-white/[0.06] hover:text-tos-warm"
+            onClick={() => void refreshBrief()}
+            disabled={refreshing}
+            className="rounded p-1.5 text-tos-dim hover:bg-white/[0.06] hover:text-tos-gold disabled:opacity-40"
             title="Regenerate brief"
           >
-            <RefreshCw className="h-3 w-3" />
+            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
           </button>
           <button
             onClick={() => {
@@ -132,7 +110,7 @@ export function ChatMorningBrief() {
         </div>
       </div>
 
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-tos-warm/80">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-tos-gold/90">
         {brief.title}
       </p>
 
@@ -151,7 +129,7 @@ export function ChatMorningBrief() {
             .map((h, i) => (
               <span
                 key={i}
-                className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-tos-warm/10 text-tos-warm"
+                className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-tos-gold/10 text-tos-gold"
               >
                 {h.pair}
               </span>
@@ -162,7 +140,7 @@ export function ChatMorningBrief() {
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => askAXE(brief.chat_prefill || "Tell me more about today's setup")}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[#00d4f5]/10 px-3 py-1.5 text-[11px] font-medium text-[#00d4f5] transition-colors hover:bg-[#00d4f5]/20"
+          className="inline-flex items-center gap-1.5 rounded-full bg-tos-gold/10 px-3 py-1.5 text-[11px] font-medium text-tos-gold transition-colors hover:bg-tos-gold/20"
         >
           <ArrowRight className="h-3 w-3" />
           Ask AXE about this

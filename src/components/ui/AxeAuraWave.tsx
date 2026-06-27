@@ -160,7 +160,33 @@ function referenceDomeColor(yNorm: number, sparkle: boolean): [number, number, n
   ];
 }
 
-function domeColor(yNorm: number, sparkle: boolean): [number, number, number] {
+function axeDomeColor(yNorm: number, sparkle: boolean, hueSeed: number): [number, number, number] {
+  if (sparkle) return [255, 252, 220];
+  const t = Math.max(0, Math.min(1, (yNorm + 1) * 0.5 + hueSeed * 0.13));
+  // AXE brand gradient: lime → cyan → purple
+  if (t < 0.5) {
+    const mix = t / 0.5;
+    return [
+      Math.round(201 + (63 - 201) * mix),
+      Math.round(242 + (230 - 242) * mix),
+      Math.round(75 + (207 - 75) * mix),
+    ];
+  }
+  const mix = (t - 0.5) / 0.5;
+  return [
+    Math.round(63 + (122 - 63) * mix),
+    Math.round(230 + (87 - 230) * mix),
+    Math.round(207 + (255 - 207) * mix),
+  ];
+}
+
+function domeColor(
+  yNorm: number,
+  sparkle: boolean,
+  palette: "intel" | "axe",
+  hueSeed = 0,
+): [number, number, number] {
+  if (palette === "axe") return axeDomeColor(yNorm, sparkle, hueSeed);
   return referenceDomeColor(yNorm, sparkle);
 }
 
@@ -205,7 +231,13 @@ export function isPhoneLandscapeViewport(): boolean {
   return detectPhoneLandscape();
 }
 
-export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer" }) {
+export function AxeAuraWave({
+  variant = "full",
+  palette = "intel",
+}: {
+  variant?: "full" | "composer";
+  palette?: "intel" | "axe";
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const stateRef = useRef<AuraState>("idle");
@@ -336,9 +368,13 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
           if (py > cy + 1) continue;
           const tw = 0.4 + 0.6 * Math.sin(t * 2.6 + p.drift);
           const alpha = p.brightness * tw * 0.72;
+          const [sr, sg, sb] =
+            palette === "axe"
+              ? axeDomeColor(p.y + 0.2, false, p.drift)
+              : ([0, 228, 255] as [number, number, number]);
           ctx.beginPath();
           ctx.arc(px, py, p.size * 0.85, 0, TAU);
-          ctx.fillStyle = `rgba(0, 228, 255, ${alpha})`;
+          ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, ${alpha})`;
           ctx.fill();
         }
       } else {
@@ -409,7 +445,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
               depthFactor * p.brightness * (isComposer ? 0.38 : 0.95) * twinkle,
           );
         const [cr, cg, cb] = isComposer
-          ? domeColor(item.y3d, p.sparkle)
+          ? domeColor(item.y3d, p.sparkle, palette, p.noiseSeed)
           : cyanForElevation(item.y3d);
         const dotR = isComposer
           ? Math.max(1.05, p.sizeBase * (0.42 + depthFactor * 0.58) * 0.62)
@@ -461,7 +497,7 @@ export function AxeAuraWave({ variant = "full" }: { variant?: "full" | "composer
 
     frameRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frameRef.current);
-  }, [variant]);
+  }, [variant, palette]);
 
   const breatheSec = STATE_BREATHE_SEC[state];
   const displaySize = variant === "composer" ? { w: 340, h: 158 } : { w: 104, h: 104 };

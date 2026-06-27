@@ -93,16 +93,25 @@ async function getKeywordKnowledge(
   userId: string,
   symbol: string | null | undefined,
   limit: number,
+  categories?: string[],
 ): Promise<KnowledgeHit[]> {
   const terms = extractTerms(query);
-  const effectiveTerms =
-    terms.length > 0 ? terms : ["setup", "risk", "structure", "liquidity", "session", "trade"];
+  const defaultTerms = categories?.includes("intel")
+    ? ["correlation", "tide", "energy", "geopolitical", "dark", "pool", "insider", "vessel", "signal"]
+    : ["setup", "risk", "structure", "liquidity", "session", "trade"];
+  const effectiveTerms = terms.length > 0 ? terms : defaultTerms;
 
-  const { data: docs, error: dErr } = await supabase
+  let docQuery = supabase
     .from("axe_knowledge_documents")
     .select("id,slug,title,category")
     .eq("active", true)
     .or(`user_id.is.null,user_id.eq.${userId}`);
+
+  if (categories?.length) {
+    docQuery = docQuery.in("category", categories);
+  }
+
+  const { data: docs, error: dErr } = await docQuery;
 
   if (dErr || !docs?.length) return [];
 
@@ -156,9 +165,27 @@ export async function getRelevantKnowledge(
   userId: string,
   symbol?: string | null,
   limit = 12,
+  categories?: string[],
 ): Promise<KnowledgeHit[]> {
-  const semantic = await getSemanticKnowledge(supabase, query, userId, limit);
-  if (semantic?.length) return semantic;
+  const fetchLimit = categories?.length ? Math.max(limit * 3, 24) : limit;
+  const semantic = await getSemanticKnowledge(supabase, query, userId, fetchLimit);
+  if (semantic?.length) {
+    const filtered = categories?.length
+      ? semantic.filter((h) => categories.includes(h.category))
+      : semantic;
+    if (filtered.length) return filtered.slice(0, limit);
+  }
 
-  return getKeywordKnowledge(supabase, query, userId, symbol, limit);
+  return getKeywordKnowledge(supabase, query, userId, symbol, limit, categories);
+}
+
+/** Intel RAG — searches `knowledge/intel/*` docs (category: intel). */
+export async function getRelevantIntelKnowledge(
+  supabase: SupabaseClient,
+  query: string,
+  userId: string,
+  symbol?: string | null,
+  limit = 10,
+): Promise<KnowledgeHit[]> {
+  return getRelevantKnowledge(supabase, query, userId, symbol, limit, ["intel"]);
 }

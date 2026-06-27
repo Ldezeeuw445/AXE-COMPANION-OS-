@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
+import { CockpitIntelVaultSave } from "@/components/cockpit/CockpitIntelVaultSave";
 import { getIntelThreadSummary } from "@/services/chatService";
 
 export async function CockpitIntelSection({ userId }: { userId: string }) {
@@ -46,9 +47,12 @@ export async function CockpitIntelSection({ userId }: { userId: string }) {
       </div>
 
       {intel.lastPreview ? (
-        <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-tos-muted">
-          {intel.lastPreview}
-        </p>
+        <>
+          <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-tos-muted">
+            {intel.lastPreview}
+          </p>
+          <CockpitIntelVaultSave content={intel.lastPreview} title="Latest AXE Intel reply" />
+        </>
       ) : null}
 
       <div className="mt-4 border-t border-white/[0.06] pt-3">

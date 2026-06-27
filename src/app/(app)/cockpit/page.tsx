@@ -8,7 +8,6 @@ import { CockpitLearningArc } from "@/components/cockpit/CockpitLearningArc";
 import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
 import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
 import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
-import { CockpitMorningBrief } from "@/components/cockpit/CockpitMorningBrief";
 import { CockpitIntelSection } from "@/components/cockpit/CockpitIntelSection";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -82,8 +81,6 @@ export default async function CockpitPage() {
       </div>
 
       <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
-
-      <CockpitMorningBrief />
 
       {userId ? <CockpitIntelSection userId={userId} /> : null}
 

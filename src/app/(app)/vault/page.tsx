@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { VaultClient } from "@/components/vault/VaultClient";
 import { listVaultMedia, listVaultNotes } from "@/services/vaultService";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
@@ -24,11 +25,19 @@ export default async function VaultPage() {
           )}`,
         },
         {
+          id: "intel-tab",
+          label: "What did I save from Intel?",
+          description: "Correlations and intel signals",
+          href: `/chat?intel=1&q=${encodeURIComponent(
+            "[AXE Intel · vault]\nSummarize my saved intel notes and highlight the strongest signals.",
+          )}`,
+        },
+        {
           id: "axe-tab",
           label: "What did I save from AXE?",
           description: "Find insights worth reusing",
           href: `/chat?q=${encodeURIComponent(
-            "[AXE · vault]\nHelp me review what I’ve saved from AXE and extract 5 reusable rules/checklists.",
+            "[AXE · vault]\nHelp me review what I've saved from AXE and extract 5 reusable rules/checklists.",
           )}`,
         },
       ],
@@ -52,7 +61,9 @@ export default async function VaultPage() {
         allLiveOverride={null}
       />
       <AxeTopBarInjector title="Vault" subtitle="Notes & media" sections={toolbarSections} center={<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Vault</span>} />
-      <VaultClient notes={notes} media={media} />
+      <Suspense fallback={null}>
+        <VaultClient notes={notes} media={media} />
+      </Suspense>
     </div>
   );
 }

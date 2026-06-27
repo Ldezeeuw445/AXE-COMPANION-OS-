@@ -12,7 +12,9 @@
 
 import { NextRequest } from "next/server";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
-import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
+import { buildIntelKnowledgeLayerBlock } from "@/lib/intel/intelKnowledgeLayer";
+import { loadIntelSnapshot } from "@/lib/intel/intelClient";
+import { buildIntelContext } from "@/lib/intel/buildIntelContext";
 import { streamLLM } from "@/services/llmClient";
 import type { LLMRequest } from "@/services/llmClient";
 
@@ -78,12 +80,10 @@ export async function POST(request: NextRequest) {
     .slice(-12); // last 12 turns
 
   // ── Load user knowledge layer (playbooks, rules, memory, trades) ──
-  const knowledgeLayer = await buildAxeKnowledgeLayerBlock(
-    supabase,
-    user.id,
-    message,
-    symbol ?? null,
-  ).catch(() => null);
+  const [knowledgeLayer, intelSnapshot] = await Promise.all([
+    buildIntelKnowledgeLayerBlock(supabase, user.id, message, symbol ?? null).catch(() => null),
+    loadIntelSnapshot({ symbol: symbol ?? undefined }).catch(() => null),
+  ]);
 
   // ── Build system prompt ───────────────────────────────────────────
   const requestType = detectRequestType(message);
@@ -99,7 +99,13 @@ Your role here is INTEL ANALYSIS — correlations, smart money flow, macro conne
 Be concrete. Use numbers. Connect the dots others miss.`;
 
   if (knowledgeLayer) {
-    systemPrompt += `\n\n--- USER CONTEXT (playbooks, rules, memory, recent trades) ---\n${knowledgeLayer}`;
+    systemPrompt += `\n\n--- INTEL CONTEXT (RAG + memory + saved correlations) ---\n${knowledgeLayer}`;
+  }
+  if (intelSnapshot) {
+    const live = buildIntelContext(intelSnapshot, symbol);
+    if (live.trim()) {
+      systemPrompt += `\n\n--- LIVE INTEL SNAPSHOT ---\n${live}`;
+    }
   }
 
   // ── Build messages ────────────────────────────────────────────────

@@ -22,6 +22,8 @@ export const dynamic = "force-dynamic";
  *   }
  */
 
+type VaultSource = "axe" | "intel";
+
 type Body = {
   content?: string;
   title?: string;
@@ -29,6 +31,8 @@ type Body = {
   conversationId?: string | null;
   messageId?: string | null;
   accountId?: string | null;
+  /** `intel` saves under the AXE Intelligence vault tab */
+  source?: VaultSource;
 };
 
 function deriveTitle(content: string, fallback?: string): string {
@@ -67,11 +71,12 @@ export async function POST(request: NextRequest) {
   const content = (body.content ?? "").trim();
   if (!content) return jsonError(400, "empty_content");
 
+  const source: VaultSource = body.source === "intel" ? "intel" : "axe";
   const title = deriveTitle(content, body.title);
   const tags = Array.from(
     new Set(
       [
-        "axe",
+        source === "intel" ? "axe-intel" : "axe",
         body.symbol ? body.symbol.toUpperCase() : null,
       ].filter((v): v is string => Boolean(v)),
     ),
@@ -95,5 +100,9 @@ export async function POST(request: NextRequest) {
     return jsonError(500, "save_failed");
   }
 
-  return Response.json({ ok: true, id: data?.id ?? null, category: "axe" });
+  return Response.json({
+    ok: true,
+    id: data?.id ?? null,
+    category: source === "intel" ? "axe-intel" : "axe",
+  });
 }

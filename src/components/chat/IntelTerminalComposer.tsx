@@ -35,7 +35,7 @@ export function IntelTerminalComposer({
           className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
           aria-hidden
         >
-          <AxeAuraWave variant="composer" />
+          <AxeAuraWave variant="composer" palette="intel" />
         </div>
       ) : null}
       <div
@@ -49,20 +49,20 @@ export function IntelTerminalComposer({
       >
         <button
           type="button"
-          onClick={() => onQuickAction("Give me a full market brief for today.")}
+          onClick={() => onQuickAction("How do energy flows correlate with XAUUSD right now? Signal, confidence and feeds.")}
           disabled={disabled || sending}
-          className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+          className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[#00d4f5]/90 transition-colors hover:bg-[#00d4f5]/10 hover:text-[#00d4f5] disabled:opacity-40"
         >
-          Brief All
+          Energy vs Gold
         </button>
         <span className="h-4 w-px bg-white/10" />
         <button
           type="button"
-          onClick={() => onQuickAction("What are the top risks to watch today?")}
+          onClick={() => onQuickAction("What's the market tide signal across my watchlist? Net premium and bias.")}
           disabled={disabled || sending}
-          className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+          className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[#00d4f5]/90 transition-colors hover:bg-[#00d4f5]/10 hover:text-[#00d4f5] disabled:opacity-40"
         >
-          Top Risks
+          Market Tide
         </button>
         <span className="h-4 w-px bg-white/10" />
         <label className="sr-only" htmlFor={inputId}>
@@ -81,7 +81,7 @@ export function IntelTerminalComposer({
               onSubmit();
             }
           }}
-          placeholder="Ask anything..."
+          placeholder="Ask intel…"
           disabled={disabled || sending}
           className="max-h-20 min-h-9 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm text-white/90 shadow-none placeholder:text-white/25 focus:outline-none focus:ring-0 disabled:opacity-50"
         />

@@ -72,6 +72,7 @@ export function CorrelateButton({ symbol }: { symbol?: string }) {
           title: `Intel Correlation: ${result.title}`,
           content: `## ${result.title}\n\n**Confidence:** ${result.confidence}\n**Signal:** ${result.signal ?? "none"}\n**Feeds:** ${result.feedsUsed.join(", ")}\n**Symbols:** ${result.symbols.join(", ")}\n\n${result.summary}`,
           symbol: result.symbols[0] ?? symbol ?? null,
+          source: "intel",
         }),
       });
 

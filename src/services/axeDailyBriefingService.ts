@@ -7,7 +7,7 @@
  * - Alignment score (learning arc)
  * - Market context (session time, personalized pair focus)
  *
- * Saves results to axe_daily_briefings so the cockpit can surface them.
+ * Saves results to axe_daily_briefings and surfaces them in the AXE Feed.
  */
 
 import "server-only";
@@ -100,12 +100,15 @@ export async function buildBriefingContext(
     if (hour >= 7 && hour < 16) session = "london";
     if (hour >= 14 && hour < 23) session = "newyork";
 
-    // Fetch weather only when user opted in
+    // Weather: on by default — use explicit location when set, else timezone city
     let weather: WeatherSnapshot | null = null;
-    if (profile.preferences.weatherOptIn === true && profile.preferences.locationOptIn === true) {
-      const loc = profile.preferences.location as
-        | { lat?: number; lon?: number; name?: string }
-        | undefined;
+    if (profile.preferences.weatherOptIn !== false) {
+      const loc =
+        profile.preferences.locationOptIn !== false
+          ? (profile.preferences.location as
+              | { lat?: number; lon?: number; name?: string }
+              | undefined)
+          : undefined;
       weather = await fetchWeatherForBrief(loc, profile.timezone);
     }
 
@@ -217,7 +220,7 @@ Length: 150-220 words maximum.`;
 export async function generateMorningBrief(
   traderId: string,
   supabase?: SupabaseClient,
-  options?: { weekly?: boolean; save?: boolean }
+  options?: { weekly?: boolean; save?: boolean; force?: boolean }
 ): Promise<{
   brief: string;
   context: TraderBriefingContext;
@@ -228,10 +231,36 @@ export async function generateMorningBrief(
   const startTime = Date.now();
   const isWeekly = options?.weekly ?? false;
   const shouldSave = options?.save ?? true;
+  const force = options?.force ?? false;
 
   // Use provided supabase or create service role client
   const sb = supabase ?? createServiceRoleSupabaseClient();
   if (!sb) throw new Error("Supabase service role client unavailable");
+
+  const today = new Date().toISOString().slice(0, 10);
+  const briefingType = isWeekly ? "weekly" : "daily";
+
+  // Skip LLM when today's brief already exists (cron / prior run)
+  if (shouldSave && !force) {
+    const { data: existingRow } = await sb
+      .from("axe_daily_briefings")
+      .select("body")
+      .eq("user_id", traderId)
+      .eq("briefing_date", today)
+      .eq("briefing_type", briefingType)
+      .maybeSingle();
+
+    if (existingRow?.body) {
+      const context = await buildBriefingContext(sb, traderId);
+      return {
+        brief: existingRow.body as string,
+        context,
+        model: "cached",
+        provider: "ollama",
+        latency_ms: Date.now() - startTime,
+      };
+    }
+  }
 
   // Build context
   const context = await buildBriefingContext(sb, traderId);
@@ -261,7 +290,6 @@ export async function generateMorningBrief(
   );
 
   const briefText = response.content ?? "";
-  const today = new Date().toISOString().slice(0, 10);
 
   // Save to axe_daily_briefings (upsert by user_id + date + type)
   if (shouldSave) {
@@ -303,38 +331,6 @@ export async function generateMorningBrief(
     } catch (err) {
       console.warn("[Briefing] Failed to save to DB:", err);
     }
-  }
-
-  // Also insert the brief into the user's AXE conversation as an assistant message
-  try {
-    // Ensure the user's primary AXE conversation exists
-    const { data: convs } = await sb
-      .from("conversations")
-      .select("id")
-      .eq("user_id", traderId)
-      .or("conversation_type.eq.axe,conversation_type.is.null")
-      .order("last_message_at", { ascending: false })
-      .limit(1);
-
-    const convId = Array.isArray(convs) && convs.length > 0 ? (convs[0] as any).id : null;
-    if (convId) {
-      const { error: msgErr } = await sb.from("messages").insert({
-        conversation_id: convId,
-        user_id: traderId,
-        role: "assistant",
-        content: briefText,
-        metadata: { automated_brief: true },
-      });
-      if (msgErr) console.warn("[Briefing] failed to insert message into conversation:", msgErr.message);
-
-      await sb
-        .from("conversations")
-        .update({ last_message_at: new Date().toISOString() })
-        .eq("id", convId)
-        .eq("user_id", traderId);
-    }
-  } catch (err) {
-    console.warn("[Briefing] failed to append brief to chat:", err);
   }
 
   // Track event (best-effort)

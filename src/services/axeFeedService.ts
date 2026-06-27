@@ -18,7 +18,7 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
 
   const since = feedSinceIso();
 
-  const [eventsRes, execRes, chartRes] = await Promise.all([
+  const [eventsRes, execRes, chartRes, briefingsRes] = await Promise.all([
     authed.supabase
       .from("axe_proactive_events")
       .select("id,title,body,url,created_at")
@@ -42,6 +42,13 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(15),
+    authed.supabase
+      .from("axe_daily_briefings")
+      .select("id,title,body,briefing_type,briefing_date,chat_prefill,created_at")
+      .eq("user_id", authed.user.id)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(14),
   ]);
 
   const proactive: AxeFeedItem[] = (eventsRes.data ?? []).map((row) => ({
@@ -84,7 +91,20 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
     };
   });
 
-  return [...proactive, ...drafts, ...chartActions]
+  const briefings: AxeFeedItem[] = (briefingsRes.data ?? []).map((row) => {
+    const type = String(row.briefing_type ?? "daily");
+    const prefill = String(row.chat_prefill ?? "").trim();
+    return {
+      id: `briefing:${row.id}`,
+      kind: "briefing" as const,
+      title: String(row.title ?? (type === "weekly" ? "Weekly Outlook" : "Morning Brief")),
+      body: String(row.body ?? "").slice(0, 480),
+      url: prefill ? `/chat?q=${encodeURIComponent(prefill)}` : "/chat",
+      createdAt: String(row.created_at ?? row.briefing_date),
+    };
+  });
+
+  return [...briefings, ...proactive, ...drafts, ...chartActions]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, limit);
 }

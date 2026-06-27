@@ -25,6 +25,8 @@ import { fetchTradingOSContext } from "@/services/contextService";
 import { loadNews } from "@/lib/market/newsProvider";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
+import { buildIntelKnowledgeLayerBlock } from "@/lib/intel/intelKnowledgeLayer";
+import { buildIntelContext } from "@/lib/intel/buildIntelContext";
 import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
 import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
 import { autoJournalTrades } from "@/services/journalingService";
@@ -302,55 +304,8 @@ export type StreamEvent =
 const INTEL_CHAT_PREFIX = `You are AXE Intelligence — the intel analysis mode of AXE Companion.
 Focus on correlations, smart money flow, macro connections, cross-market reads, jets, vessels, chokepoints, and geopolitical context.
 Be concrete. Use numbers. Connect dots others miss. Same voice as AXE — direct, no filler.
-Intel chat feeds the trader's learning arc; reference their memory and playbook when relevant.`;
-
-function formatIntelSnapshotForChat(
-  intel: Awaited<ReturnType<typeof loadIntelSnapshot>>,
-): string {
-  const lines: string[] = [];
-  if (intel.tide) {
-    lines.push(
-      `Market tide: ${intel.tide.bias} (calls $${(intel.tide.netCallPremium / 1e6).toFixed(1)}M / puts $${(intel.tide.netPutPremium / 1e6).toFixed(1)}M)`,
-    );
-  }
-  if (intel.insiders.length > 0) {
-    lines.push(
-      "Insiders: " +
-        intel.insiders
-          .slice(0, 5)
-          .map((r) => `${r.ticker} ${r.type} ${r.insider}`)
-          .join(" | "),
-    );
-  }
-  if (intel.jets.length > 0) {
-    lines.push(
-      "Corporate jets: " +
-        intel.jets
-          .slice(0, 8)
-          .map((j) => `${j.company} (${j.onGround ? "ground" : "air"})`)
-          .join(" | "),
-    );
-  }
-  if (intel.vessels.length > 0) {
-    lines.push(
-      "Vessels: " +
-        intel.vessels
-          .slice(0, 6)
-          .map((v) => v.vesselName || v.mmsi)
-          .join(" | "),
-    );
-  }
-  if (intel.chokepoints.length > 0) {
-    lines.push(
-      "Chokepoints: " +
-        intel.chokepoints
-          .slice(0, 4)
-          .map((c) => `${c.name} (${c.riskLevel})`)
-          .join(" | "),
-    );
-  }
-  return lines.length > 0 ? lines.join("\n") : "Intel feeds warming — use get_smart_money_intel for live pull.";
-}
+Use INTEL KNOWLEDGE (RAG) and LIVE INTEL SNAPSHOT together — cite feeds used, confidence, and signal.
+Intel chat feeds the trader's learning arc; reference their memory and saved correlations when relevant.`;
 
 export async function streamChatMessage(
   text: string,
@@ -418,7 +373,9 @@ export async function streamChatMessage(
       .limit(40),
 
     fetchTradingOSContext(user.id, supabase, symbol, tf),
-    buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
+    type === "intel"
+      ? buildIntelKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null)
+      : buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
     intelSnapshotPromise,
   ]);
 
@@ -429,9 +386,10 @@ export async function streamChatMessage(
   // 4. Inject candles_summary from pinned_context (+ intel snapshot when in intel mode)
   let knowledgeBlock = knowledgeLayer;
   if (type === "intel" && intelSnapshot) {
-    knowledgeBlock = [knowledgeLayer, formatIntelSnapshotForChat(intelSnapshot)]
+    const liveContext = buildIntelContext(intelSnapshot, symbol ?? undefined);
+    knowledgeBlock = [knowledgeLayer, liveContext ? `LIVE INTEL SNAPSHOT\n${liveContext}` : null]
       .filter(Boolean)
-      .join("\n\n--- LIVE INTEL SNAPSHOT ---\n");
+      .join("\n\n---\n");
   }
 
   const contextWithCandles = {

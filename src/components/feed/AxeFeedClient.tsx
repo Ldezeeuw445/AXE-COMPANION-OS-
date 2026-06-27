@@ -34,6 +34,7 @@ function dayKey(iso: string): string {
 }
 
 function kindLabel(kind: AxeFeedItem["kind"]): string {
+  if (kind === "briefing") return "Morning brief";
   if (kind === "trade_draft") return "Trade draft";
   if (kind === "chart_action") return "Chart action";
   if (kind === "proactive") return "AXE noticed";

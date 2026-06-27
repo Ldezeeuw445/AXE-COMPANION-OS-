@@ -358,6 +358,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
               content={message.content}
               initialFeedback={message.feedback ?? null}
               vaultTitle="AXE Intel Analysis"
+              vaultSource="intel"
             />
           ) : null}
         </div>

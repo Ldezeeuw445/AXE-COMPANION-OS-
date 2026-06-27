@@ -17,8 +17,11 @@ function formatWhen(iso: string): string {
   return `${Math.floor(delta / 3600_000)}h ago`;
 }
 
+import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
+
 /** Compact AXE feed strip above chat — latest notices with link to full feed. */
 export function ChatFeedStrip() {
+  const intelMode = useChatIntelMode();
   const [items, setItems] = useState<AxeFeedItem[]>([]);
   const [allItems, setAllItems] = useState<AxeFeedItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -71,6 +74,7 @@ export function ChatFeedStrip() {
     setUnread(0);
   };
 
+  if (intelMode) return null;
   if (items.length === 0) return null;
 
   const bodyLimit = isTablet ? 48 : 72;
@@ -132,7 +136,13 @@ export function ChatFeedStrip() {
                   isTablet ? "truncate text-[10px] leading-tight" : "text-[11px] leading-snug"
                 }`}
               >
-                <span className="font-medium text-cyan-100/90">{item.title}</span>
+                <span
+                  className={`font-medium ${
+                    item.kind === "briefing" ? "text-tos-gold/95" : "text-cyan-100/90"
+                  }`}
+                >
+                  {item.title}
+                </span>
                 {!isTablet && item.body ? (
                   <span className="text-white/55">
                     {" "}

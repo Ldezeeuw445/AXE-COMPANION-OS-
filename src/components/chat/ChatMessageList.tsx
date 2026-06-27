@@ -9,13 +9,10 @@ import { ActionCard } from "@/components/chat/ActionCard";
 import { TtsButton } from "@/components/chat/TtsButton";
 import { formatTimeHm } from "@/lib/formatDate";
 import { MarkdownLite, renderMarkdownInline } from "@/components/ui/MarkdownLite";
+import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 
 /**
- * Suggested first prompts shown when the thread is empty. Each runs through
- * the same /chat?q=… route the workflows hub uses, so they reach the
- * composer pre-filled and trigger AXE's full tool stack on submit. Picked
- * to showcase three different muscles: live price, journal review,
- * macro-aware setup brief.
+ * Suggested first prompts shown when the AXE thread is empty.
  */
 const STARTER_PROMPTS: Array<{ q: string; label: string; hint: string }> = [
   {
@@ -32,6 +29,25 @@ const STARTER_PROMPTS: Array<{ q: string; label: string; hint: string }> = [
     q: "Review my last 5 trades and tell me the one mistake I keep making.",
     label: "Coach my last week",
     hint: "journal + pattern",
+  },
+];
+
+/** Intel-only starters — correlation, feeds, geopolitical signals. */
+const INTEL_STARTER_PROMPTS: Array<{ q: string; label: string; hint: string }> = [
+  {
+    q: "How do energy flows correlate with XAUUSD right now? Give me signal, confidence and feeds used.",
+    label: "Energy vs Gold",
+    hint: "energyFlows · market correlation",
+  },
+  {
+    q: "What's the market tide signal across my watchlist? Net call/put premium and directional bias.",
+    label: "Market tide scan",
+    hint: "marketTide · sentiment",
+  },
+  {
+    q: "Scan geopolitical, seismic and fleet signals for the top risks I should watch this session.",
+    label: "Geopolitical risk scan",
+    hint: "GDELT · seismic · AIS",
   },
 ];
 
@@ -136,7 +152,44 @@ function StreamingBubble({ text, phase }: { text: string; phase: string | null }
   );
 }
 
-function EmptyState() {
+function EmptyState({ intelMode }: { intelMode: boolean }) {
+  const prompts = intelMode ? INTEL_STARTER_PROMPTS : STARTER_PROMPTS;
+  const chatHref = (q: string) =>
+    intelMode ? `/chat?intel=1&q=${encodeURIComponent(q)}` : `/chat?q=${encodeURIComponent(q)}`;
+
+  if (intelMode) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-start gap-4 px-1 py-6">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#00d4f5]">
+            AXE Intelligence
+          </p>
+          <p className="mt-2 text-base font-semibold text-tos-text">Intel terminal.</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">
+            Correlation engine across market tide, energy flows, geopolitical events, seismic activity
+            and fleet tracking. Ask about signals — not trade coaching.
+          </p>
+        </div>
+        <ul className="w-full space-y-2">
+          {prompts.map((p) => (
+            <li key={p.label}>
+              <Link
+                href={chatHref(p.q)}
+                className="group flex w-full items-center justify-between gap-2 rounded-xl border border-[#00d4f5]/15 bg-[#00d4f5]/[0.04] px-3 py-2.5 text-left text-[12.5px] text-tos-text hover:border-[#00d4f5]/30 hover:bg-[#00d4f5]/[0.08]"
+              >
+                <span className="flex flex-col">
+                  <span className="font-medium">{p.label}</span>
+                  <span className="text-[10.5px] text-[#00d4f5]/70">{p.hint}</span>
+                </span>
+                <ArrowUpRight className="h-3.5 w-3.5 text-[#00d4f5]/50 transition-transform group-hover:translate-x-0.5" aria-hidden />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex max-w-md flex-col items-start gap-4 px-1 py-6 text-tos-muted">
       <div>
@@ -147,10 +200,10 @@ function EmptyState() {
         </p>
       </div>
       <ul className="w-full space-y-2">
-        {STARTER_PROMPTS.map((p) => (
+        {prompts.map((p) => (
           <li key={p.label}>
             <Link
-              href={`/chat?q=${encodeURIComponent(p.q)}`}
+              href={chatHref(p.q)}
               className="group flex w-full items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 text-left text-[12.5px] text-tos-text hover:border-white/[0.12] hover:bg-white/[0.05]"
             >
               <span className="flex flex-col">
@@ -213,6 +266,7 @@ const PIN_DELAYS_MS = [0, 50, 120, 250, 500, 900, 1500, 2500];
 
 export function ChatMessageList({ messages }: ChatMessageListProps) {
   const pathname = usePathname();
+  const intelMode = useChatIntelMode();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -421,7 +475,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         onScroll={onScroll}
         className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[10rem] pr-1 md:pb-2"
       >
-        {messages.length === 0 && pending.length === 0 ? <EmptyState /> : null}
+        {messages.length === 0 && pending.length === 0 ? <EmptyState intelMode={intelMode} /> : null}
         {messages.map((m) => (
           <article
             key={m.id}
@@ -435,15 +489,23 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
             >
               <span
                 className={`h-1 w-1 rounded-full ${
-                  m.role === "user" ? "bg-tos-gold/70" : "bg-tos-warm/70"
+                  m.role === "user"
+                    ? "bg-tos-gold/70"
+                    : intelMode
+                      ? "bg-[#00d4f5]/70"
+                      : "bg-tos-warm/70"
                 }`}
               />
               <p
                 className={`text-[10px] font-semibold uppercase tracking-widest ${
-                  m.role === "user" ? "text-tos-gold/80" : "text-tos-warm/80"
+                  m.role === "user"
+                    ? "text-tos-gold/80"
+                    : intelMode
+                      ? "text-[#00d4f5]/90"
+                      : "text-tos-warm/80"
                 }`}
               >
-                {m.role === "user" ? "You said" : "AXE"}
+                {m.role === "user" ? "You said" : intelMode ? "AXE Intel" : "AXE"}
               </p>
             </div>
 
@@ -472,7 +534,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
                 <>
                   <MessageFeedbackButtons messageId={m.id} initialRating={m.feedback ?? null} />
                   <TtsButton text={m.content} />
-                  <SaveToVaultButton message={m} />
+                  <SaveToVaultButton message={m} source={intelMode ? "intel" : "axe"} />
                 </>
               ) : null}
             </div>
@@ -594,7 +656,13 @@ function MessageFeedbackButtons({
   );
 }
 
-function SaveToVaultButton({ message }: { message: ChatMessage }) {
+function SaveToVaultButton({
+  message,
+  source = "axe",
+}: {
+  message: ChatMessage;
+  source?: "axe" | "intel";
+}) {
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   async function save() {
@@ -609,6 +677,7 @@ function SaveToVaultButton({ message }: { message: ChatMessage }) {
           content: message.content,
           messageId: message.id,
           symbol: null,
+          source,
         }),
       });
       if (res.ok) {
@@ -631,14 +700,16 @@ function SaveToVaultButton({ message }: { message: ChatMessage }) {
     <button
       type="button"
       onClick={() => void save()}
-      aria-label={`${label} this AXE reply to Vault`}
+      aria-label={`${label} this ${source === "intel" ? "intel" : "AXE"} reply to Vault`}
       title={`${label} to Vault`}
       className={`inline-flex h-6 w-6 items-center justify-center rounded-md border text-tos-dim transition-colors ${
         state === "saved"
           ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-200/95"
           : state === "error"
             ? "border-rose-400/35 bg-rose-400/10 text-rose-200/95"
-            : "border-white/[0.06] hover:border-white/[0.15] hover:text-white/80"
+            : source === "intel"
+              ? "border-[#00d4f5]/20 hover:border-[#00d4f5]/40 hover:text-[#00d4f5]"
+              : "border-white/[0.06] hover:border-white/[0.15] hover:text-white/80"
       }`}
     >
       {state === "saved" ? <Check className="h-3 w-3" /> : <Bookmark className="h-3 w-3" />}

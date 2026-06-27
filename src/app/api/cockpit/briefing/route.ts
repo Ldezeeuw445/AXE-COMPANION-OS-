@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await generateMorningBrief(auth.user.id, auth.supabase);
+    const result = await generateMorningBrief(auth.user.id, auth.supabase, { force });
     const brief = await getActiveBrief(auth.supabase, auth.user.id);
 
     return Response.json({
