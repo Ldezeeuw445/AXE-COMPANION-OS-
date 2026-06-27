@@ -58,8 +58,8 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
 const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel too
 
-// Timeouts — VPS Ollama; keep under Vercel maxDuration (60s)
-const OLLAMA_TIMEOUT_MS = 50000;
+// Timeouts — VPS Ollama with compact prompts; extended when maxDuration=300
+const OLLAMA_TIMEOUT_MS = 120000;
 const OPENAI_TIMEOUT_MS = 30000;
 
 interface CallOllamaOptions {

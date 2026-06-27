@@ -6,8 +6,8 @@ import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 // Node.js runtime — metaApiClient uses node:crypto
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Allow up to 60 s — OpenAI with large tool context can take 15-30 s
-export const maxDuration = 60;
+// Allow up to 300 s on Pro — Ollama VPS + context assembly can exceed 60 s
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
