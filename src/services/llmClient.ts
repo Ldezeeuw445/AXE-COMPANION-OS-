@@ -58,8 +58,8 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
 const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel too
 
-// Timeouts — VPS Ollama can take 10–15s on cold model load
-const OLLAMA_TIMEOUT_MS = 45000;
+// Timeouts — VPS Ollama can take 30–55s with tools + large system prompt
+const OLLAMA_TIMEOUT_MS = 58000;
 const OPENAI_TIMEOUT_MS = 30000;
 
 interface CallOllamaOptions {
@@ -78,7 +78,13 @@ async function callOllama(
   // If tools are present, use Ollama's OpenAI-compatible chat endpoint
   const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
   if (hasTools) {
-    return callOllamaChat(request, { model, timeout });
+    try {
+      return await callOllamaChat(request, { model, timeout });
+    } catch (toolErr) {
+      console.warn('[LLM] Ollama tool call failed, retrying without tools:', toolErr);
+      const { tools: _tools, toolChoice: _toolChoice, ...rest } = request;
+      return callOllamaChat({ ...rest, messages: request.messages }, { model, timeout });
+    }
   }
 
   try {
