@@ -94,3 +94,5 @@ Core tables (all with **RLS** on `user_id` / ownership):
 ---
 
 Display name: **TradingOS Companion**. Package folder: `tradingos-companion` (npm naming).
+
+<!-- ci-trigger: redeploy -->
