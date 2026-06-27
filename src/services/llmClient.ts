@@ -58,8 +58,8 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
 const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel too
 
-// Timeouts — VPS Ollama can take 30–55s with tools + large system prompt
-const OLLAMA_TIMEOUT_MS = 58000;
+// Timeouts — VPS Ollama; keep under Vercel maxDuration (60s) with headroom
+const OLLAMA_TIMEOUT_MS = 30000;
 const OPENAI_TIMEOUT_MS = 30000;
 
 interface CallOllamaOptions {
@@ -75,16 +75,12 @@ async function callOllama(
   const model = options.model || MODEL_FOR_CHAT;
   const timeout = options.timeout || OLLAMA_TIMEOUT_MS;
 
-  // If tools are present, use Ollama's OpenAI-compatible chat endpoint
+  // If tools are present, use Ollama chat without tools — llama3.1 tool routing
+  // is slow on the VPS and exceeds Vercel's 60s function budget when retried.
   const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
   if (hasTools) {
-    try {
-      return await callOllamaChat(request, { model, timeout });
-    } catch (toolErr) {
-      console.warn('[LLM] Ollama tool call failed, retrying without tools:', toolErr);
-      const { tools: _tools, toolChoice: _toolChoice, ...rest } = request;
-      return callOllamaChat({ ...rest, messages: request.messages }, { model, timeout });
-    }
+    const { tools: _tools, toolChoice: _toolChoice, ...rest } = request;
+    return callOllamaChat({ ...rest, messages: request.messages }, { model, timeout: Math.min(timeout, 30000) });
   }
 
   try {
