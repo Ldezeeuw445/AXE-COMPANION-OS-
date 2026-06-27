@@ -14,6 +14,16 @@ export default function AppError({
     // Optionally log to an error reporting service
     if (process.env.NODE_ENV !== "production") {
       console.error("[AXE Error]", error);
+      try {
+        // Send client-side error details to local diagnostics endpoint (dev only)
+        void fetch("/api/diagnostics/client-error", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: error.message, stack: (error as any).stack ?? null, url: typeof window !== 'undefined' ? window.location.href : null, userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null }),
+        });
+      } catch (e) {
+        // swallow
+      }
     }
   }, [error]);
 
