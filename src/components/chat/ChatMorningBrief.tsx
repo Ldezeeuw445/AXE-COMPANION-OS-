@@ -32,6 +32,7 @@ export function ChatMorningBrief() {
       const res = await fetch("/api/cockpit/briefing");
       if (!res.ok) throw new Error("Failed to load brief");
       const data = await res.json();
+      if (data.upgradeRequired) return;
       setBrief(data.brief ?? null);
     } catch (e) {
       console.warn("[ChatMorningBrief] Could not load brief:", e);
@@ -46,6 +47,7 @@ export function ChatMorningBrief() {
       const res = await fetch("/api/cockpit/briefing", { method: "POST" });
       if (!res.ok) throw new Error("Generation failed");
       const data = await res.json();
+      if (data.upgradeRequired) return;
       setBrief(data.brief ?? null);
     } catch (e) {
       console.warn("[ChatMorningBrief] Generation failed:", e);
@@ -113,7 +115,15 @@ export function ChatMorningBrief() {
             <RefreshCw className="h-3 w-3" />
           </button>
           <button
-            onClick={() => setDismissed(true)}
+            onClick={() => {
+              if (brief.briefing_type === "weekly") {
+                void fetch(
+                  `/api/cockpit/briefing?read=true&date=${encodeURIComponent(brief.briefing_date)}&type=weekly`,
+                  { method: "POST" },
+                );
+              }
+              setDismissed(true);
+            }}
             className="rounded p-1.5 text-tos-dim hover:bg-white/[0.06] hover:text-white"
             title="Dismiss"
           >

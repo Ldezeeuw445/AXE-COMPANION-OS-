@@ -162,20 +162,21 @@ export async function ensurePrimaryConversation(
   if (!authed || authed.user.id !== userId) return null;
   const { supabase } = authed;
 
-  const { data: conversations, error: convErr } = await supabase
+  let convQuery = supabase
     .from("conversations")
     .select("id,title,pinned_context,last_message_at,messages(count)")
-    .eq("user_id", userId)
-    // Include legacy conversations with null conversation_type as AXE
-    .modify((q) => {
-      if (type === "axe") {
-        // conversation_type = 'axe' OR conversation_type IS NULL
-        q.or(`conversation_type.eq.axe,conversation_type.is.null`);
-      } else {
-        q.eq("conversation_type", type);
-      }
-    })
-    .order("last_message_at", { ascending: false });
+    .eq("user_id", userId);
+
+  if (type === "axe") {
+    convQuery = convQuery.or("conversation_type.eq.axe,conversation_type.is.null");
+  } else {
+    convQuery = convQuery.eq("conversation_type", type);
+  }
+
+  const { data: conversations, error: convErr } = await convQuery.order(
+    "last_message_at",
+    { ascending: false },
+  );
 
   if (convErr) {
     console.error("Failed to load conversations", convErr);
@@ -250,12 +251,110 @@ export async function getChatThread(
   };
 }
 
+export async function getIntelThreadSummary(userId: string): Promise<{
+  messageCount: number;
+  lastMessageAt: string | null;
+  lastPreview: string | null;
+}> {
+  const authed = await getAuthedServiceSupabase();
+  if (!authed || authed.user.id !== userId) {
+    return { messageCount: 0, lastMessageAt: null, lastPreview: null };
+  }
+
+  const conversation = await ensurePrimaryConversation(userId, authed, "intel");
+  if (!conversation) {
+    return { messageCount: 0, lastMessageAt: null, lastPreview: null };
+  }
+
+  const { count } = await authed.supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversation.id)
+    .eq("user_id", userId);
+
+  const { data: lastMsg } = await authed.supabase
+    .from("messages")
+    .select("content,created_at")
+    .eq("conversation_id", conversation.id)
+    .eq("user_id", userId)
+    .eq("role", "assistant")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    messageCount: count ?? 0,
+    lastMessageAt: lastMsg?.created_at ?? conversation.lastMessageAt ?? null,
+    lastPreview: lastMsg?.content?.slice(0, 180) ?? null,
+  };
+}
+
 export type SendChatMessageResult =
   | { ok: true }
   | { ok: false; quotaExceeded?: boolean; aiFailed?: boolean; errorDetail?: string };
 
-export async function sendChatMessage(
+export type StreamEvent =
+  | { type: "token"; text: string }
+  | { type: "status"; phase: "tools" | "responding"; tools?: string[] }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
+const INTEL_CHAT_PREFIX = `You are AXE Intelligence — the intel analysis mode of AXE Companion.
+Focus on correlations, smart money flow, macro connections, cross-market reads, jets, vessels, chokepoints, and geopolitical context.
+Be concrete. Use numbers. Connect dots others miss. Same voice as AXE — direct, no filler.
+Intel chat feeds the trader's learning arc; reference their memory and playbook when relevant.`;
+
+function formatIntelSnapshotForChat(
+  intel: Awaited<ReturnType<typeof loadIntelSnapshot>>,
+): string {
+  const lines: string[] = [];
+  if (intel.tide) {
+    lines.push(
+      `Market tide: ${intel.tide.bias} (calls $${(intel.tide.netCallPremium / 1e6).toFixed(1)}M / puts $${(intel.tide.netPutPremium / 1e6).toFixed(1)}M)`,
+    );
+  }
+  if (intel.insiders.length > 0) {
+    lines.push(
+      "Insiders: " +
+        intel.insiders
+          .slice(0, 5)
+          .map((r) => `${r.ticker} ${r.type} ${r.insider}`)
+          .join(" | "),
+    );
+  }
+  if (intel.jets.length > 0) {
+    lines.push(
+      "Corporate jets: " +
+        intel.jets
+          .slice(0, 8)
+          .map((j) => `${j.company} (${j.onGround ? "ground" : "air"})`)
+          .join(" | "),
+    );
+  }
+  if (intel.vessels.length > 0) {
+    lines.push(
+      "Vessels: " +
+        intel.vessels
+          .slice(0, 6)
+          .map((v) => v.vesselName || v.mmsi)
+          .join(" | "),
+    );
+  }
+  if (intel.chokepoints.length > 0) {
+    lines.push(
+      "Chokepoints: " +
+        intel.chokepoints
+          .slice(0, 4)
+          .map((c) => `${c.name} (${c.riskLevel})`)
+          .join(" | "),
+    );
+  }
+  return lines.length > 0 ? lines.join("\n") : "Intel feeds warming — use get_smart_money_intel for live pull.";
+}
+
+export async function streamChatMessage(
   text: string,
+  onEvent: (event: StreamEvent) => void,
   imageBase64?: string,
   imageType?: string,
   symbol?: string,
@@ -304,7 +403,12 @@ export async function sendChatMessage(
     .eq("user_id", user.id);
 
   // 3. Fetch message history + central TradingOS context in parallel
-  const [historyResult, context, knowledgeLayer] = await Promise.all([
+  const intelSnapshotPromise =
+    type === "intel"
+      ? loadIntelSnapshot({ symbol: symbol ?? undefined }).catch(() => null)
+      : Promise.resolve(null);
+
+  const [historyResult, context, knowledgeLayer, intelSnapshot] = await Promise.all([
     supabase
       .from("messages")
       .select("role,content")
@@ -315,17 +419,25 @@ export async function sendChatMessage(
 
     fetchTradingOSContext(user.id, supabase, symbol, tf),
     buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
+    intelSnapshotPromise,
   ]);
 
   const history = ((historyResult.data ?? []) as { role: "user" | "assistant"; content: string }[])
     .reverse()
     .slice(0, -1);
 
-  // 4. Inject candles_summary from pinned_context
+  // 4. Inject candles_summary from pinned_context (+ intel snapshot when in intel mode)
+  let knowledgeBlock = knowledgeLayer;
+  if (type === "intel" && intelSnapshot) {
+    knowledgeBlock = [knowledgeLayer, formatIntelSnapshotForChat(intelSnapshot)]
+      .filter(Boolean)
+      .join("\n\n--- LIVE INTEL SNAPSHOT ---\n");
+  }
+
   const contextWithCandles = {
     ...context,
     candles_summary: conversation.pinnedContext || null,
-    knowledge_layer: knowledgeLayer,
+    knowledge_layer: knowledgeBlock,
   };
 
   // 5. Build OpenAI messages using the unified context
@@ -335,9 +447,14 @@ export async function sendChatMessage(
     trimmed || "(the trader attached a chart image — analyse it)",
     imageBase64,
     imageType
-  );
+  ) as LLMMessage[];
 
-  const axeResponse = await callAxe(aiMessages as LLMMessage[]);
+  if (type === "intel" && aiMessages[0]?.role === "system") {
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${INTEL_CHAT_PREFIX}\n\n${String(aiMessages[0].content ?? "")}`,
+    };
+  }
 
   // Fire-and-forget push notification to user's subscribed devices
   async function firePush(title: string, body: string, url = "/chat") {
@@ -607,7 +724,7 @@ export async function sendChatMessage(
   ): LLMMessage[] {
     return [
       ...msgs,
-      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: toolCall.tool, arguments: JSON.stringify(toolCall.args) } })) },
+      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.tool, arguments: JSON.stringify(tc.args) } })) },
       ...results.map(({ tc, result }) => ({ role: "tool" as const, tool_call_id: tc.id, content: result })),
     ];
   }
@@ -694,6 +811,18 @@ export async function sendChatMessage(
 
   onEvent({ type: "done" });
   return { ok: true };
+}
+
+export async function sendChatMessage(
+  text: string,
+  imageBase64?: string,
+  imageType?: string,
+  symbol?: string,
+  tf?: string,
+  edgeAuth?: { supabase: SupabaseClient; user: User } | null,
+  type: "axe" | "intel" = "axe",
+): Promise<SendChatMessageResult> {
+  return streamChatMessage(text, () => {}, imageBase64, imageType, symbol, tf, edgeAuth, type);
 }
 
 /**

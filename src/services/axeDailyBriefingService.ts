@@ -150,6 +150,13 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
     hour12: true,
     weekday: "long",
   });
+  const dateStr = new Date().toLocaleDateString("en-US", {
+    timeZone: context.timezone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
   const hasPairs = context.preferredPairs.length > 0;
   const hasWins = context.recentWins.length > 0;
@@ -191,15 +198,15 @@ Length: 200-280 words maximum.`;
   } else {
     prompt += `
 
-Write a morning brief that:
-1. Opens with a greeting that uses ${context.name}'s name and the local time/day
-2. Calls out 1-2 specific pairs or session setups worth watching today
-3. References their alignment score in a motivating way (e.g. "${context.alignment}% aligned — AXE is starting to read your edge")
-4. Includes one tactical insight tied to their style or recent history
-5. Ends with one clear, actionable thing to watch for this session
+Write a morning brief that MUST open exactly in this style:
+"Good morning ${context.name}, today is ${dateStr}, the weather at ${context.weather?.location ?? "your location"} is ${context.weather ? `${context.weather.summary}, ${context.weather.tempC}°C` : "unavailable — skip weather if not configured"}."
+Then continue with:
+1. The most important or upcoming news/events for their top pairs (${hasPairs ? context.preferredPairs.join(", ") : "EURUSD, XAUUSD"})
+2. One tactical insight from AXE memory / alignment (${context.alignment}% aligned)
+3. One clear thing to watch this session
 
-Tone: warm, direct, confident. Like a senior trader who actually knows them. No generic textbook talk.
-Length: 150-200 words maximum.`;
+Tone: warm, direct, confident. Like a senior trader who actually knows them.
+Length: 150-220 words maximum.`;
   }
 
   return prompt;
@@ -370,12 +377,27 @@ export async function getTodaysBrief(
   briefing_date: string;
   feed_url: string;
   briefing_type: string;
+  read_at?: string | null;
 } | null> {
   try {
     const today = new Date().toISOString().slice(0, 10);
+
+    if (type === "weekly") {
+      const { data } = await supabase
+        .from("axe_daily_briefings")
+        .select("title, body, highlights, chat_prefill, briefing_date, feed_url, briefing_type, read_at")
+        .eq("user_id", userId)
+        .eq("briefing_type", "weekly")
+        .is("read_at", null)
+        .order("briefing_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data ?? null;
+    }
+
     const { data } = await supabase
       .from("axe_daily_briefings")
-      .select("title, body, highlights, chat_prefill, briefing_date, feed_url, briefing_type")
+      .select("title, body, highlights, chat_prefill, briefing_date, feed_url, briefing_type, read_at")
       .eq("user_id", userId)
       .eq("briefing_date", today)
       .eq("briefing_type", type)
@@ -386,15 +408,39 @@ export async function getTodaysBrief(
   }
 }
 
+export async function getActiveBrief(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Awaited<ReturnType<typeof getTodaysBrief>>> {
+  const daily = await getTodaysBrief(supabase, userId, "daily");
+  if (daily) return daily;
+  return getTodaysBrief(supabase, userId, "weekly");
+}
+
+export async function markBriefRead(
+  supabase: SupabaseClient,
+  userId: string,
+  briefingDate: string,
+  briefingType: "daily" | "weekly",
+): Promise<void> {
+  await supabase
+    .from("axe_daily_briefings")
+    .update({ read_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("briefing_date", briefingDate)
+    .eq("briefing_type", briefingType);
+}
+
 // ─── Fetch all users opted into daily briefing ───────────────────────────────
 
 async function getTraderIdsForBriefing(
   supabase: SupabaseClient,
-  opts?: { targetHour?: number; weekly?: boolean }
+  opts?: { targetHour?: number; weekly?: boolean; paidOnly?: boolean }
 ): Promise<string[]> {
   try {
     const targetHour = opts?.targetHour ?? 7;
     const isWeekly = opts?.weekly ?? false;
+    const paidOnly = opts?.paidOnly ?? isWeekly;
 
     const { data, error } = await supabase
       .from("profiles")
@@ -406,35 +452,53 @@ async function getTraderIdsForBriefing(
       return [];
     }
 
-    return data
+    const ids = data
       .filter((row) => {
         const prefs =
           typeof row.preferences === "object" && row.preferences !== null
             ? (row.preferences as Record<string, unknown>)
             : {};
-        // Skip if explicitly opted out
         if (prefs.morningBriefingOptIn === false) return false;
 
-        // Timezone-aware hour check: only process users whose local time is the target hour
         const tz = (row.timezone as string) || "Europe/Amsterdam";
         try {
+          const localParts = new Intl.DateTimeFormat("en-US", {
+            timeZone: tz,
+            hour: "numeric",
+            weekday: "short",
+            hour12: false,
+          }).formatToParts(new Date());
           const localHour = parseInt(
-            new Date().toLocaleString("en-US", {
-              timeZone: tz,
-              hour: "numeric",
-              hour12: false,
-            }),
-            10
+            localParts.find((p) => p.type === "hour")?.value ?? "0",
+            10,
           );
+          const weekday = localParts.find((p) => p.type === "weekday")?.value ?? "";
           if (localHour !== targetHour) return false;
+          if (isWeekly && weekday !== "Sun") return false;
         } catch {
-          // Unknown timezone — fall through to UTC hour match
           if (new Date().getUTCHours() !== targetHour) return false;
+          if (isWeekly && new Date().getUTCDay() !== 0) return false;
         }
 
         return true;
       })
       .map((row) => row.id as string);
+
+    if (!paidOnly) return ids;
+
+    const paid: string[] = [];
+    for (const id of ids) {
+      const { data: ent } = await supabase
+        .from("axe_user_entitlements")
+        .select("plan")
+        .eq("user_id", id)
+        .maybeSingle();
+      const plan = ent?.plan ?? "free";
+      if (plan === "pro" || plan === "founder" || plan === "elite") {
+        paid.push(id);
+      }
+    }
+    return paid;
   } catch (err) {
     console.error("[Briefing] getTraderIdsForBriefing error:", err);
     return [];
@@ -459,7 +523,7 @@ export async function runDailyBriefingCron(): Promise<{
   }
 
   // Run every hour but only process users whose local time is 07:00
-  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7 });
+  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7, paidOnly: true });
   console.log(`[Briefing] Daily cron starting for ${traders.length} traders`);
 
   for (const traderId of traders) {
@@ -497,16 +561,18 @@ export async function runWeeklyBriefingCron(): Promise<{
     return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
   }
 
-  // Monday 07:00 local time. Only paid tiers get the weekly outlook.
-  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7, weekly: true });
+  // Sunday 21:00 local — FX weekend close + crypto week framing. Paid tiers only.
+  const traders = await getTraderIdsForBriefing(supabase, {
+    targetHour: 21,
+    weekly: true,
+    paidOnly: true,
+  });
   console.log(`[Briefing] Weekly cron starting for ${traders.length} traders`);
 
   for (const traderId of traders) {
     try {
-      const brief = await generateMorningBrief(traderId, supabase, { weekly: true });
-      if (["pro", "founder", "elite"].includes(brief.context.tier)) {
-        processed++;
-      }
+      await generateMorningBrief(traderId, supabase, { weekly: true });
+      processed++;
     } catch (error) {
       console.error(`[Briefing] Failed for trader ${traderId}:`, error);
       failed++;

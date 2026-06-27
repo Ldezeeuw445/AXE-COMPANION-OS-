@@ -56,7 +56,7 @@ Rules:
 - confidence_trend: generate realistic daily points spanning the message history period
 - Return ONLY the JSON object, no other text.`;
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

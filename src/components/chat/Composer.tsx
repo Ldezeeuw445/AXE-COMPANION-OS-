@@ -21,10 +21,10 @@ import {
 } from "@/lib/chat/chatPrefill";
 import { Send, X, ImageIcon } from "lucide-react";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
+import { IntelTerminalComposer } from "@/components/chat/IntelTerminalComposer";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
-import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
 
 declare global {
   interface Window {
@@ -447,90 +447,21 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       {/* ── Unified composer bar: quick actions + typing in one row (intel only) ─── */}
       <div className="relative overflow-visible">
         {intelMode ? (
-        <>
-        <div
-          className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
-          aria-hidden
-        >
-          <AxeAuraWave variant="composer" />
-        </div>
-          <div
-            className="relative z-10 flex items-center gap-1 overflow-hidden rounded-full border border-white/[0.08] px-1.5 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
-            style={{
-              background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
-              touchAction: "pan-y",
+          <IntelTerminalComposer
+            value={value}
+            onChange={setValue}
+            onSubmit={() => {
+              vibrate("medium");
+              void submit();
             }}
-            onTouchStart={(e) => e.stopPropagation()}
-            onTouchMove={(e) => e.stopPropagation()}
-          >
-            {/* Brief All */}
-            <button
-              type="button"
-              onClick={() => void runQuickAction("Give me a full market brief for today.")}
-              className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white"
-              onTouchMove={(e) => e.stopPropagation()}
-            >
-              Brief All
-            </button>
-
-            {/* Divider */}
-            <span className="h-4 w-px bg-white/10" />
-
-            {/* Top Risks */}
-            <button
-              type="button"
-              onClick={() => void runQuickAction("What are the top risks to watch today?")}
-              className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white"
-              onTouchMove={(e) => e.stopPropagation()}
-            >
-              Top Risks
-            </button>
-
-            {/* Divider */}
-            <span className="h-4 w-px bg-white/10" />
-
-            {/* Ask anything input */}
-            <label className="sr-only" htmlFor="composer-input">
-              Message
-            </label>
-            <textarea
-              ref={textareaRef}
-              id="composer-input"
-              rows={1}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onFocus={() => {
-                window.dispatchEvent(new CustomEvent("axe:chat-pin"));
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void submit();
-                }
-              }}
-              placeholder="Ask anything..."
-              className="max-h-20 min-h-9 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm text-white/90 shadow-none placeholder:text-white/25 focus:outline-none focus:ring-0"
-            />
-
-            {/* Send button */}
-            <button
-              type="button"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-30"
-              style={{
-                background: "#00d4f5",
-                boxShadow: "0 0 10px rgba(0,212,245,0.3), 0 2px 8px rgba(0,0,0,0.3)",
-              }}
-              disabled={(!value.trim() && !image) || sending}
-              aria-label="Send"
-              onClick={() => {
-                vibrate("medium");
-                void submit();
-              }}
-            >
-              <Send className="h-4 w-4 text-black" />
-            </button>
-          </div>
-        </>
+            onQuickAction={(draft) => void runQuickAction(draft)}
+            sending={sending}
+            inputId="composer-input"
+            textareaRef={textareaRef}
+            onFocus={() => {
+              window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+            }}
+          />
         ) : (
           // AXE default composer — unchanged simple bar
           <div

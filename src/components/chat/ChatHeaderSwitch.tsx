@@ -75,13 +75,15 @@ export function ChatHeaderSwitch() {
 
   const toggle = useCallback(() => {
     if (!isChat) return;
-    // Minimal behavior: navigate to /intel when switching to Intel, back to /chat when switching off
+    const params = new URLSearchParams(searchParams.toString());
     if (intelMode) {
-      router.replace("/chat", { scroll: false });
+      params.delete(INTEL_PARAM);
     } else {
-      router.replace("/intel", { scroll: false });
+      params.set(INTEL_PARAM, "1");
     }
-  }, [isChat, intelMode, pathname, router, searchParams]);
+    const qs = params.toString();
+    router.replace(qs ? `/chat?${qs}` : "/chat", { scroll: false });
+  }, [isChat, intelMode, router, searchParams]);
 
   if (!isChat)
     return (
@@ -99,7 +101,13 @@ export function ChatHeaderSwitch() {
       aria-label={title}
     >
       <StatusDot tone={tone} />
-      <AxeWordmark size="xs" />
+      {intelMode ? (
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-[4px] bg-black/90 ring-1 ring-white/10">
+          <AxeTriangle size={12} />
+        </span>
+      ) : (
+        <AxeWordmark size="xs" />
+      )}
       <ChevronDown className="h-3 w-3 text-white/30" />
     </button>
   );

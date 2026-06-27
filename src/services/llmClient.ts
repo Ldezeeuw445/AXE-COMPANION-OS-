@@ -501,7 +501,7 @@ async function* streamOllama(
   const model = options.model || MODEL_FOR_CHAT;
 
   try {
-    const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+    const response = await fetch(`${OLLAMA_BASE_URL}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

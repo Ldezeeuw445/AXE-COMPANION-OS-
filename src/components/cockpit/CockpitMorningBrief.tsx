@@ -28,6 +28,10 @@ export function CockpitMorningBrief() {
       const res = await fetch("/api/cockpit/briefing");
       if (!res.ok) throw new Error("Failed to load brief");
       const data = await res.json();
+      if (data.upgradeRequired) {
+        setError("Morning brief is a Pro feature — upgrade at /upgrade");
+        return;
+      }
       setBrief(data.brief ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load brief");
@@ -43,6 +47,10 @@ export function CockpitMorningBrief() {
       const res = await fetch("/api/cockpit/briefing", { method: "POST" });
       if (!res.ok) throw new Error("Generation failed");
       const data = await res.json();
+      if (data.upgradeRequired) {
+        setError("Morning brief is a Pro feature — upgrade at /upgrade");
+        return;
+      }
       setBrief(data.brief ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
