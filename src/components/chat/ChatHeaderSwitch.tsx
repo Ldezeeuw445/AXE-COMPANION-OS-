@@ -58,6 +58,20 @@ export function useChatIntelMode() {
   return searchParams.get(INTEL_PARAM) === "1";
 }
 
+function IntelStatusMark({ intelMode }: { intelMode: boolean }) {
+  if (intelMode) {
+    return (
+      <span className="relative inline-flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden>
+        <span className="absolute inset-0 flex items-center justify-center animate-ping opacity-50">
+          <AxeTriangle size={10} />
+        </span>
+        <AxeTriangle size={10} />
+      </span>
+    );
+  }
+  return null;
+}
+
 export function ChatHeaderSwitch() {
   const pathname = usePathname();
   const router = useRouter();
@@ -100,10 +114,13 @@ export function ChatHeaderSwitch() {
       title={title}
       aria-label={title}
     >
-      <StatusDot tone={tone} />
+      {intelMode ? <IntelStatusMark intelMode /> : <StatusDot tone={tone} />}
       {intelMode ? (
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-[4px] bg-black/90 ring-1 ring-white/10">
-          <AxeTriangle size={12} />
+        <span
+          className="select-none text-[11px] font-extrabold uppercase tracking-[0.22em] text-[#00d4f5]"
+          style={{ textShadow: "0 0 10px rgba(0,212,245,0.35)" }}
+        >
+          AXE
         </span>
       ) : (
         <AxeWordmark size="xs" />

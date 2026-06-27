@@ -211,14 +211,16 @@ export function IntelAiChat({ symbol }: { symbol?: string }) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen((p) => !p)}
-        className="fixed right-4 z-[60] flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-white/[0.12] bg-[#0a0a0d]/95 shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md active:scale-95"
-        style={{ transition: "transform 0.12s ease", bottom: "calc(var(--tos-nav-offset) + 0.6rem)" }}
-        aria-label={open ? "Close AXE Agent" : "Open AXE Agent"}
-      >
-        {open ? <X className="h-5 w-5 text-white/70" /> : <AxeTriangle size={28} />}
-      </button>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed right-4 z-[60] flex h-[52px] w-[52px] items-center justify-center rounded-xl border border-white/[0.12] bg-[#0a0a0d]/95 shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-md active:scale-95"
+          style={{ transition: "transform 0.12s ease", bottom: "calc(var(--tos-nav-offset) + 0.6rem)" }}
+          aria-label="Open AXE Agent"
+        >
+          <AxeTriangle size={28} />
+        </button>
+      ) : null}
 
       {open && (
         <div

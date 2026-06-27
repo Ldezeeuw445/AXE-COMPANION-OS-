@@ -479,6 +479,33 @@ function mapGdeltToConflict(row: Record<string, unknown>, i: number): ConflictEv
   };
 }
 
+/** Pass through intel-proxy conflict rows; only legacy GDELT-shaped payloads get remapped. */
+function mapProxyConflictRow(row: Record<string, unknown>, i: number): ConflictEvent {
+  const hasProxyShape =
+    row.eventId != null ||
+    row.event_id != null ||
+    row.eventType != null ||
+    row.event_type != null;
+
+  if (hasProxyShape) {
+    return {
+      eventId: String(row.eventId ?? row.event_id ?? i),
+      eventDate: String(row.eventDate ?? row.event_date ?? "").slice(0, 10),
+      country: String(row.country ?? "—"),
+      region: String(row.region ?? row.country ?? "—"),
+      eventType: String(row.eventType ?? row.event_type ?? "Event"),
+      subEventType: String(row.subEventType ?? row.sub_event_type ?? ""),
+      actor1: String(row.actor1 ?? ""),
+      fatalities: Number(row.fatalities ?? 0),
+      notes: String(row.notes ?? "").slice(0, 300),
+      latitude: row.latitude != null ? Number(row.latitude) : null,
+      longitude: row.longitude != null ? Number(row.longitude) : null,
+    };
+  }
+
+  return mapGdeltToConflict(row, i);
+}
+
 function normalizeProxyPayload<T>(action: IntelAction, raw: unknown): T {
   if (action === "corporateJets" && Array.isArray(raw)) {
     return raw.map((row) => mapProxyJetRow(row as Record<string, unknown>)) as T;
@@ -493,7 +520,7 @@ function normalizeProxyPayload<T>(action: IntelAction, raw: unknown): T {
     }
   }
   if (action === "conflictEvents" && Array.isArray(raw)) {
-    return raw.map((row, i) => mapGdeltToConflict(row as Record<string, unknown>, i)) as T;
+    return raw.map((row, i) => mapProxyConflictRow(row as Record<string, unknown>, i)) as T;
   }
   return raw as T;
 }
