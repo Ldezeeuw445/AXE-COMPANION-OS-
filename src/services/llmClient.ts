@@ -58,8 +58,8 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
 const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel too
 
-// Timeouts
-const OLLAMA_TIMEOUT_MS = 8000;
+// Timeouts — VPS Ollama can take 10–15s on cold model load
+const OLLAMA_TIMEOUT_MS = 45000;
 const OPENAI_TIMEOUT_MS = 30000;
 
 interface CallOllamaOptions {
@@ -396,26 +396,33 @@ export async function streamLLM(
 ): Promise<LLMResponse> {
   const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
 
-  // If tools are present, use non-streaming callLLM (OpenAI doesn't stream tool calls reliably)
+  // If tools are present, use non-streaming callLLM (tool rounds are not streamed)
   if (hasTools) {
     const result = await callLLM(request);
     if (result.content) onToken(result.content);
     return result;
   }
 
-  // Use OpenAI streaming if available
-  if ((LLM_TARGET === 'openai' || LLM_TARGET === 'auto') && OPENAI_API_KEY) {
-    try {
-      return await streamOpenAITokens(request, onToken);
-    } catch (e) {
-      console.warn('[LLM] OpenAI streaming failed, falling back to non-streaming:', e);
-    }
+  if (LLM_TARGET === 'openai') {
+    return streamOpenAITokens(request, onToken);
   }
 
-  // Ollama path or fallback: non-streaming, emit content as single token
-  const result = await callLLM(request);
-  if (result.content) onToken(result.content);
-  return result;
+  if (LLM_TARGET === 'ollama') {
+    const result = await callLLM(request);
+    if (result.content) onToken(result.content);
+    return result;
+  }
+
+  // auto: Ollama first (via callLLM), then OpenAI streaming as fallback
+  try {
+    const result = await callLLM(request);
+    if (result.content) onToken(result.content);
+    return result;
+  } catch (ollamaError) {
+    console.warn('[LLM] Ollama failed in streamLLM, falling back to OpenAI streaming:', ollamaError);
+    if (!OPENAI_API_KEY) throw ollamaError;
+    return streamOpenAITokens(request, onToken);
+  }
 }
 
 /**

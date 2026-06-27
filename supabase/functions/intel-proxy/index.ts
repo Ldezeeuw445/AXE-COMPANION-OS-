@@ -1452,7 +1452,7 @@ async function readJetsFromDb(): Promise<CorporateJet[]> {
         callsign: String(r.callsign ?? ""),
         company: String(r.company ?? fleet?.company ?? ""),
         ticker: fleet?.ticker ?? "—",
-        tailNumber: fleet?.tailNumber ?? String(r.callsign ?? "").trim() || "—",
+        tailNumber: (fleet?.tailNumber ?? String(r.callsign ?? "").trim()) || "—",
         originCountry: String(r.origin_country ?? ""),
         latitude: r.latitude != null ? Number(r.latitude) : null,
         longitude: r.longitude != null ? Number(r.longitude) : null,
