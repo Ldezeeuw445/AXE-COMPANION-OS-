@@ -458,13 +458,17 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
             className="relative z-10 flex items-center gap-1 overflow-hidden rounded-full border border-white/[0.08] px-1.5 py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
             style={{
               background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
+              touchAction: "pan-y",
             }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
           >
             {/* Brief All */}
             <button
               type="button"
               onClick={() => void runQuickAction("Give me a full market brief for today.")}
               className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white"
+              onTouchMove={(e) => e.stopPropagation()}
             >
               Brief All
             </button>
@@ -477,6 +481,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
               type="button"
               onClick={() => void runQuickAction("What are the top risks to watch today?")}
               className="shrink-0 rounded-full px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white/80 transition-colors hover:bg-white/[0.06] hover:text-white"
+              onTouchMove={(e) => e.stopPropagation()}
             >
               Top Risks
             </button>
