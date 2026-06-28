@@ -49,7 +49,9 @@ type LLMTarget = 'ollama' | 'openai' | 'auto';
 // Configuration
 const LLM_TARGET = (process.env.LLM_TARGET || 'auto') as LLMTarget;
 // Support both OLLAMA_BASE_URL (new) and OLLAMA_API_URL (legacy)
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_API_URL || 'https://ollama.axecompanion.com/api';
+const OLLAMA_BASE_URL_RAW = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_API_URL || 'https://ollama.axecompanion.com';
+/** Strip trailing /api so paths are consistent (/api/generate, /v1/chat/completions). */
+const OLLAMA_BASE_URL = OLLAMA_BASE_URL_RAW.replace(/\/api\/?$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
@@ -59,8 +61,73 @@ const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
 const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel too
 
 // Timeouts — VPS Ollama with compact prompts; extended when maxDuration=300
-const OLLAMA_TIMEOUT_MS = 120000;
-const OPENAI_TIMEOUT_MS = 30000;
+const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 240_000;
+const OPENAI_TIMEOUT_MS = 30_000;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isOpenAIQuotaError(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return msg.includes('429') || msg.includes('quota') || msg.includes('billing');
+}
+
+function isOpenAIUnavailable(err: unknown): boolean {
+  const msg = errorMessage(err).toLowerCase();
+  return isOpenAIQuotaError(err) || msg.includes('401') || msg.includes('invalid api key');
+}
+
+function messageText(content: LLMMessage['content']): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((p) =>
+        typeof p === 'object' && p !== null && typeof (p as { text?: unknown }).text === 'string'
+          ? String((p as { text?: unknown }).text)
+          : '',
+      )
+      .join(' ');
+  }
+  return '';
+}
+
+/** Compact messages for Ollama chat — keeps tool rounds but trims huge system blocks. */
+function compactMessagesForOllamaChat(messages: LLMMessage[]): LLMMessage[] {
+  return messages.map((msg) => {
+    if (msg.role === 'system') {
+      const text = truncateForOllama(messageText(msg.content), 3600);
+      return { ...msg, content: text };
+    }
+    if (msg.role === 'user' || msg.role === 'assistant') {
+      const max = msg.role === 'user' ? 1400 : 1000;
+      const text = truncateForOllama(messageText(msg.content), max);
+      return { ...msg, content: text || msg.content };
+    }
+    return msg;
+  });
+}
+
+/** User-facing message when auto mode exhausts both providers. */
+function buildAutoModeFailure(ollamaError: unknown, openaiError: unknown): Error {
+  const ollamaMsg = errorMessage(ollamaError);
+  const openaiMsg = errorMessage(openaiError);
+  const openaiQuota = openaiMsg.includes('429') || openaiMsg.toLowerCase().includes('quota');
+  const ollamaTimeout = ollamaMsg.toLowerCase().includes('aborted') || ollamaMsg.toLowerCase().includes('timeout');
+
+  if (openaiQuota && ollamaTimeout) {
+    return new Error(
+      'AI unavailable: Ollama timed out and OpenAI quota is exhausted. Refill OpenAI billing or fix the Ollama VPS.',
+    );
+  }
+  if (openaiQuota) {
+    return new Error('OpenAI quota exceeded — refill billing or rely on Ollama (check VPS connectivity).');
+  }
+  if (ollamaTimeout) {
+    return new Error(`Ollama timed out after ${Math.round(OLLAMA_TIMEOUT_MS / 1000)}s and OpenAI fallback failed: ${openaiMsg}`);
+  }
+  return new Error(`Ollama: ${ollamaMsg}. OpenAI fallback: ${openaiMsg}`);
+}
 
 interface CallOllamaOptions {
   model?: string;
@@ -239,9 +306,9 @@ async function callOllamaChat(
 
     const bodyPayload: Record<string, unknown> = {
       model,
-      messages: request.messages,
+      messages: compactMessagesForOllamaChat(request.messages),
       temperature: request.temperature ?? 0.7,
-      max_tokens: request.max_tokens ?? 2048,
+      max_tokens: Math.min(request.max_tokens ?? 800, 800),
     };
 
     const tools = request.tools as unknown[] | undefined;
@@ -348,7 +415,7 @@ function formatMessagesForOllama(messages: LLMMessage[]): string {
           ? raw
               .map((p) =>
                 typeof p === 'object' && p !== null && typeof (p as { text?: unknown }).text === 'string'
-                  ? (p as { text: string }).text
+                  ? String((p as { text?: unknown }).text)
                   : '',
               )
               .join(' ')
@@ -370,13 +437,17 @@ function formatMessagesForOllama(messages: LLMMessage[]): string {
 /**
  * Main LLM call with routing and fallback logic.
  * Supports tool/function calling when request.tools is provided.
+ *
+ * auto + tools: OpenAI first → Ollama chat (tools) on failure
+ * auto + text:  Ollama generate → OpenAI on failure
+ * ollama:        chat API when tools, generate otherwise
  */
 export async function callLLM(
   request: LLMRequest,
   requestType: 'chat' | 'intel' = 'chat'
 ): Promise<LLMResponse> {
   const model = selectModel(requestType);
-  
+
   console.log(`[LLM] Request type: ${requestType}, target: ${LLM_TARGET}, model: ${model}`);
 
   const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
@@ -386,27 +457,40 @@ export async function callLLM(
   }
 
   if (LLM_TARGET === 'ollama') {
-    return callOllama(request, { model });
+    return hasTools ? callOllamaChat(request, { model }) : callOllama(request, { model });
   }
 
-  // 'auto' mode: try Ollama first, fallback to OpenAI on error
+  // auto mode
+  if (hasTools) {
+    if (OPENAI_API_KEY) {
+      try {
+        return await callOpenAI(request);
+      } catch (openaiError) {
+        console.warn('[LLM] OpenAI tools failed, falling back to Ollama chat:', errorMessage(openaiError));
+        try {
+          return await callOllamaChat(request, { model });
+        } catch (ollamaError) {
+          throw buildAutoModeFailure(ollamaError, openaiError);
+        }
+      }
+    }
+    console.log('[LLM] No OpenAI key — Ollama chat with tools');
+    return callOllamaChat(request, { model });
+  }
+
   try {
     return await callOllama(request, { model });
   } catch (ollamaError) {
     console.warn('[LLM] Ollama failed, falling back to OpenAI...');
-    
+
     if (!OPENAI_API_KEY) {
       throw ollamaError instanceof Error ? ollamaError : new Error(String(ollamaError));
     }
-    
+
     try {
       return await callOpenAI(request);
     } catch (openaiError) {
-      const openaiMsg = openaiError instanceof Error ? openaiError.message : String(openaiError);
-      if (openaiMsg.includes('429') || openaiMsg.includes('quota')) {
-        throw ollamaError instanceof Error ? ollamaError : new Error(String(ollamaError));
-      }
-      throw openaiError;
+      throw buildAutoModeFailure(ollamaError, openaiError);
     }
   }
 }
@@ -419,12 +503,13 @@ export async function callLLM(
 export async function streamLLM(
   request: LLMRequest,
   onToken: (text: string) => void,
+  requestType: 'chat' | 'intel' = 'chat',
 ): Promise<LLMResponse> {
   const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
 
-  // If tools are present, use non-streaming callLLM (tool rounds are not streamed)
+  // Tool rounds use callLLM (non-streaming provider call)
   if (hasTools) {
-    const result = await callLLM(request);
+    const result = await callLLM(request, requestType);
     if (result.content) onToken(result.content);
     return result;
   }
@@ -434,20 +519,24 @@ export async function streamLLM(
   }
 
   if (LLM_TARGET === 'ollama') {
-    const result = await callLLM(request);
+    const result = await callLLM(request, requestType);
     if (result.content) onToken(result.content);
     return result;
   }
 
-  // auto: Ollama first (via callLLM), then OpenAI streaming as fallback
+  // auto: Ollama generate first, OpenAI streaming fallback
   try {
-    const result = await callLLM(request);
+    const result = await callLLM(request, requestType);
     if (result.content) onToken(result.content);
     return result;
   } catch (ollamaError) {
     console.warn('[LLM] Ollama failed in streamLLM, falling back to OpenAI streaming:', ollamaError);
     if (!OPENAI_API_KEY) throw ollamaError;
-    return streamOpenAITokens(request, onToken);
+    try {
+      return await streamOpenAITokens(request, onToken);
+    } catch (openaiError) {
+      throw buildAutoModeFailure(ollamaError, openaiError);
+    }
   }
 }
 

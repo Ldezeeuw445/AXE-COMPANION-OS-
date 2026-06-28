@@ -179,7 +179,7 @@ export async function getRelevantKnowledge(
   return getKeywordKnowledge(supabase, query, userId, symbol, limit, categories);
 }
 
-/** Intel RAG — searches `knowledge/intel/*` docs (category: intel). */
+/** Intel RAG — searches `knowledge/intel/*` docs (category: intel). Always includes core intel docs. */
 export async function getRelevantIntelKnowledge(
   supabase: SupabaseClient,
   query: string,
@@ -187,5 +187,58 @@ export async function getRelevantIntelKnowledge(
   symbol?: string | null,
   limit = 10,
 ): Promise<KnowledgeHit[]> {
-  return getRelevantKnowledge(supabase, query, userId, symbol, limit, ["intel"]);
+  const hits = await getRelevantKnowledge(supabase, query, userId, symbol, limit, ["intel"]);
+  if (hits.length >= 3) return hits;
+
+  const core = await getCoreIntelKnowledge(supabase, userId);
+  return dedupeHits([...hits, ...core], limit);
+}
+
+async function getCoreIntelKnowledge(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<KnowledgeHit[]> {
+  const slugs = ["intel/correlation-framework", "intel/feed-guide", "intel/cross-market-signals"];
+  const { data: docs } = await supabase
+    .from("axe_knowledge_documents")
+    .select("id,slug,title,category")
+    .eq("active", true)
+    .in("slug", slugs)
+    .or(`user_id.is.null,user_id.eq.${userId}`);
+
+  if (!docs?.length) return [];
+
+  const docIds = docs.map((d) => d.id as string);
+  const docMeta = new Map(
+    docs.map((d) => [
+      d.id as string,
+      { slug: d.slug as string, title: d.title as string, category: d.category as string },
+    ]),
+  );
+
+  const { data: chunks } = await supabase
+    .from("axe_knowledge_chunks")
+    .select("document_id,chunk_text,tags,chunk_index")
+    .in("document_id", docIds)
+    .order("chunk_index", { ascending: true });
+
+  if (!chunks?.length) return [];
+
+  const seen = new Set<string>();
+  const out: KnowledgeHit[] = [];
+  for (const row of chunks) {
+    const did = row.document_id as string;
+    const meta = docMeta.get(did);
+    if (!meta || seen.has(meta.slug)) continue;
+    seen.add(meta.slug);
+    out.push({
+      slug: meta.slug,
+      title: meta.title,
+      category: meta.category,
+      chunkText: (row.chunk_text as string) ?? "",
+      tags: (row.tags as string[]) ?? [],
+      score: 50,
+    });
+  }
+  return out;
 }

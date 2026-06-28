@@ -263,7 +263,7 @@ async function generateCorrelationSnapshot(
     messages,
     temperature: 0.6,
     max_tokens: 4000,
-  });
+  }, 'intel');
 
   if (!result.content) throw new Error("Empty LLM response");
 

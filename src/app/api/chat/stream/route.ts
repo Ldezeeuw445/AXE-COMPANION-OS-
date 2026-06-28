@@ -84,10 +84,12 @@ export async function POST(request: Request) {
         if (result.quotaExceeded) {
           send({ type: "error", message: "Daily message limit reached. Upgrade for unlimited access." });
         } else if (result.aiFailed) {
-          const detail = result.errorDetail ? ` — ${result.errorDetail}` : "";
+          const detail = result.errorDetail ?? "Unknown AI error";
           send({
             type: "error",
-            message: `AXE couldn't reach the AI model${detail}. Check OPENAI_API_KEY in Vercel env vars or Ollama connectivity.`,
+            message: detail.includes("quota") || detail.includes("unavailable")
+              ? detail
+              : `AXE couldn't reach the AI model — ${detail}`,
           });
         } else {
           send({ type: "error", message: "Chat failed. Please try again." });

@@ -250,7 +250,7 @@ ${context}`;
     messages,
     temperature: 0.7,
     max_tokens: 800,
-  });
+  }, 'intel');
 
   if (!result.content) throw new Error("Empty LLM response");
 

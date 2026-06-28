@@ -1310,6 +1310,7 @@ export async function callAxeStreaming(
         temperature: 0.55,
       },
       onToken,
+      "chat",
     );
 
     if (result.toolCalls.length > 0) {
@@ -1320,7 +1321,6 @@ export async function callAxeStreaming(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[axeService] callAxeStreaming error:", msg);
-    // Re-throw so chatService can surface the real error
     throw err;
   }
 }

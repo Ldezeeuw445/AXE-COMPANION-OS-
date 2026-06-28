@@ -349,7 +349,7 @@ async function generateConvictions(
     messages,
     temperature: 0.4,
     max_tokens: 3000,
-  });
+  }, 'intel');
 
   if (!result.content) throw new Error("Empty LLM response");
 

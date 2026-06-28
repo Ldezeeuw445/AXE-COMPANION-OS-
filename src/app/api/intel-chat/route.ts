@@ -130,7 +130,7 @@ Be concrete. Use numbers. Connect the dots others miss.`;
         // Each chunk → SSE event that IntelAiChat expects
         const event = JSON.stringify({ text: chunk });
         writer.write(encoder.encode(`data: ${event}\n`)).catch(() => {});
-      });
+      }, "intel");
       await writer.write(encoder.encode("data: [DONE]\n"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
