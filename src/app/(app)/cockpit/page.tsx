@@ -9,6 +9,7 @@ import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButto
 import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
 import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
 import { CockpitIntelSection } from "@/components/cockpit/CockpitIntelSection";
+import { CockpitMorningBrief } from "@/components/cockpit/CockpitMorningBrief";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -45,6 +46,7 @@ export default async function CockpitPage() {
     }
   }
   const canLearn = hasEntitlementFeature(entitlement, "cockpit_learning", userId);
+  const canBriefings = hasEntitlementFeature(entitlement, "briefings", userId);
   const hasSnapshot = Boolean(dash.snapshotId);
   const cockpitCalibrated = hasSnapshot && dash.calibration.state === "active";
   const cockpitPreview = hasSnapshot && dash.calibration.state !== "active";
@@ -83,6 +85,8 @@ export default async function CockpitPage() {
       <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
 
       {userId ? <CockpitIntelSection userId={userId} /> : null}
+
+      {canBriefings ? <CockpitMorningBrief /> : null}
 
       <CockpitTodayStrip
         initial={dash.today}

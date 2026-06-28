@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 import { inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
+import { feedKindStyle } from "@/lib/feed/feedKindStyle";
 import { getFeedLastSeenAt, markAllFeedItemsRead } from "@/lib/feed/feedSeen";
 import { isTabletViewport } from "@/lib/viewport/tablet";
 import type { AxeFeedItem } from "@/types/feed";
@@ -123,7 +124,9 @@ export function ChatFeedStrip() {
         </div>
       </div>
       <ul className={isTablet ? "flex flex-col gap-0.5" : "flex flex-col gap-1"}>
-        {items.map((item) => (
+        {items.map((item) => {
+          const style = feedKindStyle(item.kind);
+          return (
           <li key={item.id}>
             <Link
               href={inferFeedItemUrl(item) ?? "/feed"}
@@ -136,11 +139,7 @@ export function ChatFeedStrip() {
                   isTablet ? "truncate text-[10px] leading-tight" : "text-[11px] leading-snug"
                 }`}
               >
-                <span
-                  className={`font-medium ${
-                    item.kind === "briefing" ? "text-tos-gold/95" : "text-cyan-100/90"
-                  }`}
-                >
+                <span className={`font-medium ${style.text}`}>
                   {item.title}
                 </span>
                 {!isTablet && item.body ? (
@@ -159,7 +158,8 @@ export function ChatFeedStrip() {
               </span>
             </Link>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

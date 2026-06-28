@@ -66,10 +66,15 @@ export async function POST(request: NextRequest) {
     if (existing) {
       return Response.json({ brief: existing, cached: true }, { status: 200 });
     }
+    // Briefs are delivered by cron at 07:00 local — never auto-generate on page load.
+    return Response.json(
+      { brief: null, message: "No brief yet — delivered daily at 07:00 your local time" },
+      { status: 200 },
+    );
   }
 
   try {
-    const result = await generateMorningBrief(auth.user.id, auth.supabase, { force });
+    const result = await generateMorningBrief(auth.user.id, undefined, { force: true });
     const brief = await getActiveBrief(auth.supabase, auth.user.id);
 
     return Response.json({

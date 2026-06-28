@@ -1,23 +1,8 @@
 /**
  * POST /api/cron/daily-briefing
- * 
- * Vercel Cron function that runs daily to generate and deliver briefings.
- * 
- * Configuration:
- * In vercel.json:
- * ```
- * {
- *   "crons": [
- *     {
- *       "path": "/api/cron/daily-briefing",
- *       "schedule": "0 8 * * *"  // 8 AM UTC daily
- *     }
- *   ]
- * }
- * ```
- * 
- * The schedule should be adjusted per timezone group:
- * - 8 AM UTC = 9 AM London, 3 AM New York, 4 PM Tokyo
+ *
+ * Vercel Cron runs hourly; processes users whose local time is 07:00.
+ * Schedule in vercel.json: "0 * * * *"
  */
 
 import { NextRequest, NextResponse } from 'next/server';

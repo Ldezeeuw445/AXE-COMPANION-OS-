@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 import { feedItemLinkLabel, inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
+import { feedKindLabel, feedKindStyle } from "@/lib/feed/feedKindStyle";
 import {
   getFeedLastSeenAt,
   markAllFeedItemsRead,
@@ -33,12 +34,10 @@ function dayKey(iso: string): string {
   return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
 }
 
-function kindLabel(kind: AxeFeedItem["kind"]): string {
-  if (kind === "briefing") return "Morning brief";
-  if (kind === "trade_draft") return "Trade draft";
-  if (kind === "chart_action") return "Chart action";
-  if (kind === "proactive") return "AXE noticed";
-  return "System";
+function kindLabel(item: AxeFeedItem): string {
+  return feedKindLabel(item.kind, {
+    briefingType: item.briefingType,
+  });
 }
 
 export function AxeFeedClient() {
@@ -168,12 +167,13 @@ export function AxeFeedClient() {
             {dayItems.map((item) => {
               const href = inferFeedItemUrl(item);
               const linkLabel = feedItemLinkLabel(item);
+              const style = feedKindStyle(item.kind);
               const panel = (
                 <GlassPanel className="p-4 transition-colors hover:border-white/12">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-cyan-400/80">
-                        {kindLabel(item.kind)}
+                      <p className={`text-[9px] font-semibold uppercase tracking-[0.16em] ${style.text}`}>
+                        {kindLabel(item)}
                       </p>
                       <p className="mt-1 text-sm font-medium text-tos-text">{item.title}</p>
                       {item.body ? (

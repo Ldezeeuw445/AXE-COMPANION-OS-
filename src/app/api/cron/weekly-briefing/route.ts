@@ -1,8 +1,8 @@
 /**
  * POST /api/cron/weekly-briefing
  *
- * Vercel Cron function that runs every Monday at 07:00 local user time
- * to generate and deliver personalized weekly outlooks for paid tiers.
+ * Vercel Cron runs hourly on Sundays; processes users whose local time is 21:00
+ * (Sunday evening — FX weekend close + crypto week framing). Paid tiers only.
  */
 
 import { NextRequest, NextResponse } from "next/server";

@@ -12,4 +12,6 @@ export type AxeFeedItem = {
   body: string;
   url: string | null;
   createdAt: string;
+  /** Present on briefing feed items — daily vs weekly outlook */
+  briefingType?: "daily" | "weekly";
 };

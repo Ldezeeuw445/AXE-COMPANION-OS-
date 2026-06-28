@@ -3,7 +3,7 @@
 /**
  * ChatMorningBrief — surfaces today's AXE morning brief inside the chat thread.
  *
- * Briefs are delivered by cron (7am local daily, Sunday evening weekly).
+ * Briefs are delivered by cron (07:00 local daily, Sunday 21:00 weekly).
  * This card only displays an existing brief — it never triggers generation.
  */
 
@@ -11,6 +11,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Sunrise, X, RefreshCw, Newspaper, ArrowRight } from "lucide-react";
 import { applyChatPrefill } from "@/lib/chat/chatPrefill";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
+import { feedKindLabel, feedKindStyle } from "@/lib/feed/feedKindStyle";
 
 type Brief = {
   title: string;
@@ -24,6 +25,7 @@ type Brief = {
 
 export function ChatMorningBrief() {
   const intelMode = useChatIntelMode();
+  const briefStyle = feedKindStyle("briefing");
   const [brief, setBrief] = useState<Brief | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,7 +61,7 @@ export function ChatMorningBrief() {
   }, []);
 
   useEffect(() => {
-    fetchBrief();
+    void fetchBrief();
   }, [fetchBrief]);
 
   const askAXE = useCallback((text: string) => {
@@ -69,30 +71,41 @@ export function ChatMorningBrief() {
   if (intelMode) return null;
   if (dismissed || loading || !brief) return null;
 
+  const isWeekly = brief.briefing_type === "weekly";
+  const kindLabel = feedKindLabel("briefing", {
+    briefingType: isWeekly ? "weekly" : "daily",
+  });
+
   const paragraphs = brief.body
     .split(/\n\n+/)
     .map((p) => p.trim())
     .filter(Boolean);
 
   return (
-    <div className="mx-4 mb-3 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4">
+    <div
+      className="mx-4 mb-3 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4"
+      style={{ borderLeftColor: "var(--tos-accent-gold)", borderLeftWidth: 2 }}
+    >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Sunrise className="h-4 w-4 shrink-0 text-tos-gold" />
+          <span className={`tos-accent-dot shrink-0 ${briefStyle.dot}`} aria-hidden />
+          <Sunrise className={`h-4 w-4 shrink-0 ${briefStyle.text}`} />
           <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-tos-dim">
-            {brief.briefing_type === "weekly" ? "Weekly Outlook" : "Morning Brief"}
+            {kindLabel}
           </span>
         </div>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => void refreshBrief()}
             disabled={refreshing}
-            className="rounded p-1.5 text-tos-dim hover:bg-white/[0.06] hover:text-tos-gold disabled:opacity-40"
+            className={`rounded p-1.5 text-tos-dim hover:bg-white/[0.06] disabled:opacity-40 ${briefStyle.text}`}
             title="Regenerate brief"
           >
             <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
           </button>
           <button
+            type="button"
             onClick={() => {
               if (brief.briefing_type === "weekly") {
                 void fetch(
@@ -110,37 +123,38 @@ export function ChatMorningBrief() {
         </div>
       </div>
 
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-tos-gold/90">
+      <p className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] ${briefStyle.text}`}>
         {brief.title}
       </p>
 
       <div className="mb-3 space-y-1.5">
-        {paragraphs.slice(0, 2).map((para, i) => (
+        {paragraphs.slice(0, 3).map((para, i) => (
           <p key={i} className="text-[12px] leading-relaxed text-tos-text/85">
             {para}
           </p>
         ))}
       </div>
 
-      {brief.highlights?.length > 0 && (
+      {brief.highlights?.length > 0 ? (
         <div className="mb-3 flex flex-wrap gap-1.5">
           {brief.highlights
             .filter((h) => h.pair)
             .map((h, i) => (
               <span
                 key={i}
-                className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-tos-gold/10 text-tos-gold"
+                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${briefStyle.badge}`}
               >
                 {h.pair}
               </span>
             ))}
         </div>
-      )}
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
+          type="button"
           onClick={() => askAXE(brief.chat_prefill || "Tell me more about today's setup")}
-          className="inline-flex items-center gap-1.5 rounded-full bg-tos-gold/10 px-3 py-1.5 text-[11px] font-medium text-tos-gold transition-colors hover:bg-tos-gold/20"
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${briefStyle.badge} hover:opacity-90`}
         >
           <ArrowRight className="h-3 w-3" />
           Ask AXE about this

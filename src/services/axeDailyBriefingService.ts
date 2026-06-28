@@ -17,7 +17,20 @@ import { callLLM, type LLMRequest } from "@/services/llmClient";
 import { getTraderLearningArc } from "@/services/learningArcService";
 import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
 import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
+import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+// ─── Timezone helpers ─────────────────────────────────────────────────────────
+
+/** YYYY-MM-DD in the trader's local timezone (not UTC). */
+export function getLocalDateString(timezone: string, refDate = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(refDate);
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,13 +166,6 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
     hour12: true,
     weekday: "long",
   });
-  const dateStr = new Date().toLocaleDateString("en-US", {
-    timeZone: context.timezone,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 
   const hasPairs = context.preferredPairs.length > 0;
   const hasWins = context.recentWins.length > 0;
@@ -199,12 +205,16 @@ Write a weekly outlook that:
 Tone: warm, direct, confident. Like a senior trader who actually knows them. No generic textbook talk.
 Length: 200-280 words maximum.`;
   } else {
+    const weatherLine = context.weather
+      ? `the weather at your location is ${context.weather.summary}, ${context.weather.tempC}°C`
+      : "the weather at your location is unavailable";
+
     prompt += `
 
-Write a morning brief that MUST open exactly in this style:
-"Good morning ${context.name}, today is ${dateStr}, the weather at ${context.weather?.location ?? "your location"} is ${context.weather ? `${context.weather.summary}, ${context.weather.tempC}°C` : "unavailable — skip weather if not configured"}."
-Then continue with:
-1. The most important or upcoming news/events for their top pairs (${hasPairs ? context.preferredPairs.join(", ") : "EURUSD, XAUUSD"})
+Write a morning brief that MUST open with this exact first sentence:
+"Good morning ${context.name}, ${weatherLine}."
+Then continue in order:
+1. The most important or upcoming news/events for their top pairs (${hasPairs ? context.preferredPairs.join(", ") : "EURUSD, XAUUSD"}) — use ONLY the market context headlines/events provided below; do not invent news
 2. One tactical insight from AXE memory / alignment (${context.alignment}% aligned)
 3. One clear thing to watch this session
 
@@ -212,6 +222,28 @@ Tone: warm, direct, confident. Like a senior trader who actually knows them.
 Length: 150-220 words maximum.`;
   }
 
+  return prompt;
+}
+
+async function appendMarketContextToPrompt(
+  context: TraderBriefingContext,
+  prompt: string,
+): Promise<string> {
+  const primaryPair = context.preferredPairs[0] ?? "XAUUSD";
+  try {
+    const marketCtx = await buildMarketContext({
+      symbol: primaryPair,
+      watchlist: context.preferredPairs,
+      newsLimit: 6,
+      calendarLimit: 8,
+    });
+    const summary = summarizeMarketContext(marketCtx);
+    if (summary.trim()) {
+      return `${prompt}\n\nMarket context (use for news/events section — do not fabricate beyond this):\n${summary}`;
+    }
+  } catch (err) {
+    console.warn("[Briefing] Market context unavailable:", err);
+  }
   return prompt;
 }
 
@@ -233,28 +265,29 @@ export async function generateMorningBrief(
   const shouldSave = options?.save ?? true;
   const force = options?.force ?? false;
 
-  // Use provided supabase or create service role client
-  const sb = supabase ?? createServiceRoleSupabaseClient();
-  if (!sb) throw new Error("Supabase service role client unavailable");
+  // Reads may use caller client; writes always use service role (RLS is select-only).
+  const readSb = supabase ?? createServiceRoleSupabaseClient();
+  const writeSb = createServiceRoleSupabaseClient() ?? readSb;
+  if (!readSb) throw new Error("Supabase client unavailable");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const contextForDate = await buildBriefingContext(readSb, traderId);
+  const today = getLocalDateString(contextForDate.timezone);
   const briefingType = isWeekly ? "weekly" : "daily";
 
   // Skip LLM when today's brief already exists (cron / prior run)
   if (shouldSave && !force) {
-    const { data: existingRow } = await sb
+    const { data: existingRow } = await writeSb
       .from("axe_daily_briefings")
-      .select("body")
+      .select("body, created_at")
       .eq("user_id", traderId)
       .eq("briefing_date", today)
       .eq("briefing_type", briefingType)
       .maybeSingle();
 
     if (existingRow?.body) {
-      const context = await buildBriefingContext(sb, traderId);
       return {
         brief: existingRow.body as string,
-        context,
+        context: contextForDate,
         model: "cached",
         provider: "ollama",
         latency_ms: Date.now() - startTime,
@@ -263,10 +296,13 @@ export async function generateMorningBrief(
   }
 
   // Build context
-  const context = await buildBriefingContext(sb, traderId);
+  const context = contextForDate;
 
-  // Build prompt
-  const userPrompt = buildBriefingPrompt(context, { weekly: isWeekly });
+  // Build prompt (+ live market context for news section)
+  let userPrompt = buildBriefingPrompt(context, { weekly: isWeekly });
+  if (!isWeekly) {
+    userPrompt = await appendMarketContextToPrompt(context, userPrompt);
+  }
 
   // Call LLM
   const llmRequest: LLMRequest = {
@@ -293,44 +329,44 @@ export async function generateMorningBrief(
 
   // Save to axe_daily_briefings (upsert by user_id + date + type)
   if (shouldSave) {
-    try {
-      await sb.from("axe_daily_briefings").upsert(
-        {
-          user_id: traderId,
-          briefing_date: today,
-          briefing_type: isWeekly ? "weekly" : "daily",
-          title: isWeekly
-            ? `Weekly Outlook — ${new Date().toLocaleDateString("en-GB", {
-                weekday: "long",
-                day: "numeric",
-                month: "short",
-                timeZone: context.timezone,
-              })}`
-            : `Morning Brief — ${new Date().toLocaleDateString("en-GB", {
-                weekday: "long",
-                day: "numeric",
-                month: "short",
-                timeZone: context.timezone,
-              })}`,
-          body: briefText,
-          highlights: context.preferredPairs.length
-            ? context.preferredPairs.map((p) => ({ pair: p }))
-            : [],
-          chat_prefill: isWeekly
-            ? `AXE, walk me through this week's outlook for ${
-                context.preferredPairs[0] ?? "the market"
-              }`
-            : `AXE, tell me more about today's setup for ${
-                context.preferredPairs[0] ?? "the market"
-              }`,
-          feed_url: "/feed",
-        },
-        { onConflict: "user_id,briefing_date,briefing_type" }
-      );
-      console.log(`[Briefing] Saved ${isWeekly ? "weekly" : "daily"} brief to axe_daily_briefings for ${traderId}`);
-    } catch (err) {
-      console.warn("[Briefing] Failed to save to DB:", err);
+    const { error: saveError } = await writeSb.from("axe_daily_briefings").upsert(
+      {
+        user_id: traderId,
+        briefing_date: today,
+        briefing_type: isWeekly ? "weekly" : "daily",
+        title: isWeekly
+          ? `Weekly Outlook — ${new Date().toLocaleDateString("en-GB", {
+              weekday: "long",
+              day: "numeric",
+              month: "short",
+              timeZone: context.timezone,
+            })}`
+          : `Morning Brief — ${new Date().toLocaleDateString("en-GB", {
+              weekday: "long",
+              day: "numeric",
+              month: "short",
+              timeZone: context.timezone,
+            })}`,
+        body: briefText,
+        highlights: context.preferredPairs.length
+          ? context.preferredPairs.map((p) => ({ pair: p }))
+          : [],
+        chat_prefill: isWeekly
+          ? `AXE, walk me through this week's outlook for ${
+              context.preferredPairs[0] ?? "the market"
+            }`
+          : `AXE, tell me more about today's setup for ${
+              context.preferredPairs[0] ?? "the market"
+            }`,
+        feed_url: "/feed",
+      },
+      { onConflict: "user_id,briefing_date,briefing_type" },
+    );
+    if (saveError) {
+      console.error("[Briefing] Failed to save to DB:", saveError.message);
+      throw new Error(`Failed to save briefing: ${saveError.message}`);
     }
+    console.log(`[Briefing] Saved ${isWeekly ? "weekly" : "daily"} brief to axe_daily_briefings for ${traderId}`);
   }
 
   // Track event (best-effort)
@@ -364,7 +400,8 @@ export async function generateMorningBrief(
 export async function getTodaysBrief(
   supabase: SupabaseClient,
   userId: string,
-  type: "daily" | "weekly" = "daily"
+  type: "daily" | "weekly" = "daily",
+  timezone?: string,
 ): Promise<{
   title: string;
   body: string;
@@ -376,7 +413,16 @@ export async function getTodaysBrief(
   read_at?: string | null;
 } | null> {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    let tz = timezone ?? "Europe/Amsterdam";
+    if (!timezone) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("timezone")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profile?.timezone) tz = String(profile.timezone);
+    }
+    const today = getLocalDateString(tz);
 
     if (type === "weekly") {
       const { data } = await supabase
@@ -414,12 +460,17 @@ export async function getActiveBrief(
 }
 
 export async function markBriefRead(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string,
   briefingDate: string,
   briefingType: "daily" | "weekly",
 ): Promise<void> {
-  await supabase
+  const writeSb = createServiceRoleSupabaseClient();
+  if (!writeSb) {
+    console.warn("[Briefing] Service role unavailable — cannot mark read");
+    return;
+  }
+  await writeSb
     .from("axe_daily_briefings")
     .update({ read_at: new Date().toISOString() })
     .eq("user_id", userId)

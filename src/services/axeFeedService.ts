@@ -92,7 +92,7 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
   });
 
   const briefings: AxeFeedItem[] = (briefingsRes.data ?? []).map((row) => {
-    const type = String(row.briefing_type ?? "daily");
+    const type = String(row.briefing_type ?? "daily") as "daily" | "weekly";
     const prefill = String(row.chat_prefill ?? "").trim();
     return {
       id: `briefing:${row.id}`,
@@ -101,6 +101,7 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
       body: String(row.body ?? "").slice(0, 480),
       url: prefill ? `/chat?q=${encodeURIComponent(prefill)}` : "/chat",
       createdAt: String(row.created_at ?? row.briefing_date),
+      briefingType: type,
     };
   });
 
