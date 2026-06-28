@@ -62,6 +62,8 @@ const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel t
 
 // Timeouts — VPS Ollama with compact prompts; extended when maxDuration=300
 const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 240_000;
+/** Shorter budget for chat/completions — fall back to fast /api/generate path sooner. */
+const OLLAMA_CHAT_TIMEOUT_MS = Number(process.env.OLLAMA_CHAT_TIMEOUT_MS) || 90_000;
 const OPENAI_TIMEOUT_MS = 30_000;
 
 function errorMessage(err: unknown): string {
@@ -96,16 +98,130 @@ function messageText(content: LLMMessage['content']): string {
 function compactMessagesForOllamaChat(messages: LLMMessage[]): LLMMessage[] {
   return messages.map((msg) => {
     if (msg.role === 'system') {
-      const text = truncateForOllama(messageText(msg.content), 3600);
+      const text = truncateForOllama(messageText(msg.content), 2400);
       return { ...msg, content: text };
     }
     if (msg.role === 'user' || msg.role === 'assistant') {
-      const max = msg.role === 'user' ? 1400 : 1000;
+      const max = msg.role === 'user' ? 900 : 700;
       const text = truncateForOllama(messageText(msg.content), max);
       return { ...msg, content: text || msg.content };
     }
+    if (msg.role === 'tool') {
+      const text = truncateForOllama(messageText(msg.content), 600);
+      return { ...msg, content: text };
+    }
     return msg;
   });
+}
+
+function extractToolNames(tools: unknown[]): string[] {
+  return tools
+    .map((t) => {
+      const fn = (t as { function?: { name?: string } })?.function?.name;
+      return fn ?? '';
+    })
+    .filter(Boolean)
+    .slice(0, 28);
+}
+
+function parseOllamaToolFromContent(
+  content: string,
+): { id: string; tool: string; args: Record<string, unknown> } | null {
+  const trimmed = content.trim();
+  const tryParse = (raw: string) => {
+    const obj = JSON.parse(raw) as {
+      tool?: string;
+      name?: string;
+      args?: Record<string, unknown>;
+      arguments?: Record<string, unknown>;
+    };
+    const tool = obj.tool ?? obj.name;
+    if (!tool || typeof tool !== 'string') return null;
+    return {
+      id: `tc_${Math.random().toString(36).slice(2)}`,
+      tool,
+      args: obj.args ?? obj.arguments ?? {},
+    };
+  };
+
+  try {
+    const direct = tryParse(trimmed);
+    if (direct) return direct;
+  } catch {
+    /* continue */
+  }
+
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence?.[1]) {
+    try {
+      const fromFence = tryParse(fence[1].trim());
+      if (fromFence) return fromFence;
+    } catch {
+      /* continue */
+    }
+  }
+
+  const inline = trimmed.match(/\{[\s\S]*?"(?:tool|name)"[\s\S]*?\}/);
+  if (inline?.[0]) {
+    try {
+      return tryParse(inline[0]);
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+/**
+ * Fast Ollama path when OpenAI tools fail — uses /api/generate with JSON tool hints.
+ * Typically 30–90s vs 240s+ for full chat/completions with tool schemas.
+ */
+async function callOllamaGenerateWithTools(
+  request: LLMRequest,
+  options: CallOllamaOptions = {},
+): Promise<LLMResponse> {
+  const tools = request.tools as unknown[] | undefined;
+  const names = tools?.length ? extractToolNames(tools) : [];
+  const toolHint = names.length
+    ? `\n\nAXE TOOLS: ${names.join(', ')}\nTo call a tool, reply with ONLY JSON (no markdown): {"tool":"tool_name","args":{...}}\nFor a normal answer, reply in plain text.`
+    : '';
+
+  const messages = request.messages.map((msg) => ({ ...msg }));
+  const sysIdx = messages.findIndex((m) => m.role === 'system');
+  if (toolHint) {
+    if (sysIdx >= 0) {
+      messages[sysIdx] = {
+        ...messages[sysIdx],
+        content: truncateForOllama(messageText(messages[sysIdx].content) + toolHint, 2800),
+      };
+    } else {
+      messages.unshift({ role: 'system', content: toolHint.trim() });
+    }
+  }
+
+  const result = await callOllama(
+    { ...request, messages, tools: undefined },
+    { ...options, timeout: options.timeout ?? OLLAMA_CHAT_TIMEOUT_MS },
+  );
+
+  const parsed = parseOllamaToolFromContent(result.content ?? '');
+  if (parsed) {
+    console.log(`[LLM] Ollama generate parsed tool: ${parsed.tool}`);
+    return { ...result, content: null, toolCalls: [parsed] };
+  }
+  return result;
+}
+
+async function callOllamaWithToolsFallback(
+  request: LLMRequest,
+  model: string,
+): Promise<LLMResponse> {
+  try {
+    return await callOllamaGenerateWithTools(request, { model });
+  } catch (genError) {
+    console.warn('[LLM] Ollama generate+tools failed, trying chat API:', errorMessage(genError));
+    return callOllamaChat(request, { model, timeout: OLLAMA_CHAT_TIMEOUT_MS });
+  }
 }
 
 /** User-facing message when auto mode exhausts both providers. */
@@ -404,7 +520,7 @@ function truncateForOllama(text: string, max = 2800): string {
 function formatMessagesForOllama(messages: LLMMessage[]): string {
   const usable = messages.filter((msg) => msg.role !== 'tool' && msg.content != null);
   const system = usable.find((msg) => msg.role === 'system');
-  const turns = usable.filter((msg) => msg.role !== 'system').slice(-10);
+  const turns = usable.filter((msg) => msg.role !== 'system').slice(-6);
 
   const toText = (msg: LLMMessage, maxLen: number) => {
     const raw = msg.content;
@@ -425,11 +541,11 @@ function formatMessagesForOllama(messages: LLMMessage[]): string {
 
   const parts: string[] = [];
   if (system) {
-    parts.push(`System: ${toText(system, 3200)}`);
+    parts.push(`System: ${toText(system, 2200)}`);
   }
   for (const msg of turns) {
     const prefix = msg.role === 'user' ? 'User: ' : msg.role === 'assistant' ? 'Assistant: ' : `${msg.role}: `;
-    parts.push(prefix + toText(msg, msg.role === 'user' ? 1200 : 900));
+    parts.push(prefix + toText(msg, msg.role === 'user' ? 800 : 600));
   }
   return `${parts.join('\n\n')}\n\nAssistant: `;
 }
@@ -457,7 +573,7 @@ export async function callLLM(
   }
 
   if (LLM_TARGET === 'ollama') {
-    return hasTools ? callOllamaChat(request, { model }) : callOllama(request, { model });
+    return hasTools ? callOllamaWithToolsFallback(request, model) : callOllama(request, { model });
   }
 
   // auto mode
@@ -466,16 +582,16 @@ export async function callLLM(
       try {
         return await callOpenAI(request);
       } catch (openaiError) {
-        console.warn('[LLM] OpenAI tools failed, falling back to Ollama chat:', errorMessage(openaiError));
+        console.warn('[LLM] OpenAI tools failed, falling back to Ollama generate+tools:', errorMessage(openaiError));
         try {
-          return await callOllamaChat(request, { model });
+          return await callOllamaWithToolsFallback(request, model);
         } catch (ollamaError) {
           throw buildAutoModeFailure(ollamaError, openaiError);
         }
       }
     }
-    console.log('[LLM] No OpenAI key — Ollama chat with tools');
-    return callOllamaChat(request, { model });
+    console.log('[LLM] No OpenAI key — Ollama generate+tools');
+    return callOllamaWithToolsFallback(request, model);
   }
 
   try {

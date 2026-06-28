@@ -26,7 +26,7 @@ import { loadNews } from "@/lib/market/newsProvider";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
 import { buildIntelKnowledgeLayerBlock } from "@/lib/intel/intelKnowledgeLayer";
-import { buildIntelContext } from "@/lib/intel/buildIntelContext";
+import { buildIntelContext, truncateIntelContext } from "@/lib/intel/buildIntelContext";
 import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
 import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
 import { autoJournalTrades } from "@/services/journalingService";
@@ -386,7 +386,7 @@ export async function streamChatMessage(
   // 4. Inject candles_summary from pinned_context (+ intel snapshot when in intel mode)
   let knowledgeBlock = knowledgeLayer;
   if (type === "intel" && intelSnapshot) {
-    const liveContext = buildIntelContext(intelSnapshot, symbol ?? undefined);
+    const liveContext = truncateIntelContext(buildIntelContext(intelSnapshot, symbol ?? undefined));
     knowledgeBlock = [knowledgeLayer, liveContext ? `LIVE INTEL SNAPSHOT\n${liveContext}` : null]
       .filter(Boolean)
       .join("\n\n---\n");

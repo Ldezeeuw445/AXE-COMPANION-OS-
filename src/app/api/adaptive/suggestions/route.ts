@@ -38,6 +38,10 @@ export async function GET(request: Request) {
     .limit(24)) as { data: AdaptiveUiSuggestionRow[] | null; error: { message: string } | null };
 
   if (error) {
+    const code = (error as { code?: string }).code;
+    if (code === '42P01' || error.message.includes('adaptive_ui_suggestions')) {
+      return NextResponse.json({ ok: true, suggestions: [] });
+    }
     return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
   }
 

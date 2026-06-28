@@ -39,9 +39,9 @@ export async function listVaultMedia(): Promise<VaultMediaItem[]> {
 
   const { data, error } = await authed.supabase
     .from("vault_items")
-    .select("id,kind,title,symbol,tags,created_at,storage_path,metadata")
+    .select("id,type,title,symbol,tags,created_at,storage_path,metadata")
     .eq("user_id", authed.user.id)
-    .neq("kind", "note")
+    .neq("type", "note")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -51,7 +51,7 @@ export async function listVaultMedia(): Promise<VaultMediaItem[]> {
 
   return (data ?? []).map((row) => ({
     id: row.id,
-    type: row.kind as VaultMediaItem["type"],
+    type: row.type as VaultMediaItem["type"],
     title: row.title,
     symbol: row.symbol ?? null,
     tags: row.tags ?? [],

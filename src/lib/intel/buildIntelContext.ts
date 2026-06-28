@@ -138,3 +138,9 @@ export function buildIntelContext(intel: IntelSnapshot, symbol?: string): string
 
   return parts.join("\n");
 }
+
+/** Cap intel snapshot size for Ollama chat latency. */
+export function truncateIntelContext(text: string, max = 3200): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}\n[intel snapshot truncated for local model]`;
+}
