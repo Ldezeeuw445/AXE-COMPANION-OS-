@@ -55,14 +55,14 @@ function TypingBubble() {
   return (
     <article className="group flex flex-col items-start">
       <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
-        <span className="h-1 w-1 rounded-full bg-[#00d4f5]/70" />
+        <span className="h-1 w-1 rounded-full bg-[color:var(--icon-intel)]/70" />
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
       <div className="flex items-center gap-[5px] px-3 py-2">
         {[0, 1, 2, 3, 4, 5].map((i) => (
           <span
             key={i}
-            className="inline-block h-[6px] w-[6px] rounded-full bg-[#00d4f5]"
+            className="inline-block h-[6px] w-[6px] rounded-full bg-[color:var(--icon-intel)]"
             style={{
               animation: "axe-dot-breathe 1.6s ease-in-out infinite",
               animationDelay: `${i * 0.15}s`,
@@ -125,7 +125,7 @@ function StreamingBubble({ text, phase }: { text: string; phase: string | null }
   return (
     <article className="group flex flex-col items-start">
       <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
-        <span className="h-1 w-1 rounded-full bg-[#00d4f5]/70" />
+        <span className="h-1 w-1 rounded-full bg-[color:var(--icon-intel)]/70" />
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
       {showToolHint ? (
@@ -133,7 +133,7 @@ function StreamingBubble({ text, phase }: { text: string; phase: string | null }
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <span
               key={i}
-              className="inline-block h-[6px] w-[6px] rounded-full bg-[#00d4f5]"
+              className="inline-block h-[6px] w-[6px] rounded-full bg-[color:var(--icon-intel)]"
               style={{
                 animation: "axe-dot-breathe 1.6s ease-in-out infinite",
                 animationDelay: `${i * 0.15}s`,
@@ -145,7 +145,7 @@ function StreamingBubble({ text, phase }: { text: string; phase: string | null }
       ) : (
         <div className="max-w-[85%] px-1">
           {renderAssistantBody(visibleText)}
-          <span className="inline-block h-4 w-[2px] animate-pulse bg-[#00d4f5]/70 align-text-bottom" />
+          <span className="inline-block h-4 w-[2px] animate-pulse bg-[color:var(--icon-intel)]/70 align-text-bottom" />
         </div>
       )}
     </article>
@@ -161,7 +161,7 @@ function EmptyState({ intelMode }: { intelMode: boolean }) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-start gap-4 px-1 py-6">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#00d4f5]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[color:var(--icon-intel)]">
             AXE Intelligence
           </p>
           <p className="mt-2 text-base font-semibold text-tos-text">Intel terminal.</p>
@@ -175,13 +175,13 @@ function EmptyState({ intelMode }: { intelMode: boolean }) {
             <li key={p.label}>
               <Link
                 href={chatHref(p.q)}
-                className="group flex w-full items-center justify-between gap-2 rounded-xl border border-[#00d4f5]/15 bg-[#00d4f5]/[0.04] px-3 py-2.5 text-left text-[12.5px] text-tos-text hover:border-[#00d4f5]/30 hover:bg-[#00d4f5]/[0.08]"
+                className="group flex w-full items-center justify-between gap-2 rounded-xl border border-[color:var(--icon-intel)]/15 bg-[color:var(--icon-intel)]/[0.04] px-3 py-2.5 text-left text-[12.5px] text-tos-text hover:border-[color:var(--icon-intel)]/30 hover:bg-[color:var(--icon-intel)]/[0.08]"
               >
                 <span className="flex flex-col">
                   <span className="font-medium">{p.label}</span>
-                  <span className="text-[10.5px] text-[#00d4f5]/70">{p.hint}</span>
+                  <span className="text-[10.5px] text-[color:var(--icon-intel)]/70">{p.hint}</span>
                 </span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-[#00d4f5]/50 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                <ArrowUpRight className="h-3.5 w-3.5 text-[color:var(--icon-intel)]/50 transition-transform group-hover:translate-x-0.5" aria-hidden />
               </Link>
             </li>
           ))}
@@ -492,7 +492,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
                   m.role === "user"
                     ? "bg-tos-gold/70"
                     : intelMode
-                      ? "bg-[#00d4f5]/70"
+                      ? "bg-[color:var(--icon-intel)]/70"
                       : "bg-tos-warm/70"
                 }`}
               />
@@ -501,7 +501,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
                   m.role === "user"
                     ? "text-tos-gold/80"
                     : intelMode
-                      ? "text-[#00d4f5]/90"
+                      ? "text-[color:var(--icon-intel)]/90"
                       : "text-tos-warm/80"
                 }`}
               >
@@ -708,7 +708,7 @@ function SaveToVaultButton({
           : state === "error"
             ? "border-rose-400/35 bg-rose-400/10 text-rose-200/95"
             : source === "intel"
-              ? "border-[#00d4f5]/20 hover:border-[#00d4f5]/40 hover:text-[#00d4f5]"
+              ? "border-[color:var(--icon-intel)]/20 hover:border-[color:var(--icon-intel)]/40 hover:text-[color:var(--icon-intel)]"
               : "border-white/[0.06] hover:border-white/[0.15] hover:text-white/80"
       }`}
     >

@@ -2,7 +2,7 @@
 
 /**
  * CockpitMorningBrief — displays today's AXE morning brief in the cockpit.
- * Briefs are delivered by cron (07:00 local daily, Sunday 21:00 weekly).
+ * Briefs are delivered by cron (07:00 local daily, Monday 07:00 weekly).
  * This panel only shows an existing brief — it never triggers generation.
  */
 

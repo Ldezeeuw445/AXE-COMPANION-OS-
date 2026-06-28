@@ -521,10 +521,10 @@ async function getTraderIdsForBriefing(
           );
           const weekday = localParts.find((p) => p.type === "weekday")?.value ?? "";
           if (localHour !== targetHour) return false;
-          if (isWeekly && weekday !== "Sun") return false;
+          if (isWeekly && weekday !== "Mon") return false;
         } catch {
           if (new Date().getUTCHours() !== targetHour) return false;
-          if (isWeekly && new Date().getUTCDay() !== 0) return false;
+          if (isWeekly && new Date().getUTCDay() !== 1) return false;
         }
 
         return true;
@@ -608,9 +608,9 @@ export async function runWeeklyBriefingCron(): Promise<{
     return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
   }
 
-  // Sunday 21:00 local — FX weekend close + crypto week framing. Paid tiers only.
+  // Monday 07:00 local — weekly outlook for paid tiers.
   const traders = await getTraderIdsForBriefing(supabase, {
-    targetHour: 21,
+    targetHour: 7,
     weekly: true,
     paidOnly: true,
   });

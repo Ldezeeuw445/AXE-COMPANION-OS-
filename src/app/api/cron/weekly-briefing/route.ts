@@ -1,8 +1,7 @@
 /**
  * POST /api/cron/weekly-briefing
  *
- * Vercel Cron runs hourly on Sundays; processes users whose local time is 21:00
- * (Sunday evening — FX weekend close + crypto week framing). Paid tiers only.
+ * Vercel Cron runs hourly on Mondays; processes users whose local time is 07:00.
  */
 
 import { NextRequest, NextResponse } from "next/server";

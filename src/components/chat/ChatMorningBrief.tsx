@@ -3,7 +3,7 @@
 /**
  * ChatMorningBrief — surfaces today's AXE morning brief inside the chat thread.
  *
- * Briefs are delivered by cron (07:00 local daily, Sunday 21:00 weekly).
+ * Briefs are delivered by cron (07:00 local daily, Monday 07:00 weekly).
  * This card only displays an existing brief — it never triggers generation.
  */
 
