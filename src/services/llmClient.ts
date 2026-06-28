@@ -62,9 +62,20 @@ const MODEL_FOR_INTEL = OLLAMA_MODEL; // Use configured Ollama model for intel t
 
 // Timeouts — VPS Ollama with compact prompts; extended when maxDuration=300
 const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 240_000;
-/** Shorter budget for chat/completions — fall back to fast /api/generate path sooner. */
-const OLLAMA_CHAT_TIMEOUT_MS = Number(process.env.OLLAMA_CHAT_TIMEOUT_MS) || 90_000;
+/** Shorter budget for first tool attempt — fall back to text-only before client disconnects. */
+const OLLAMA_CHAT_TIMEOUT_MS = Number(process.env.OLLAMA_CHAT_TIMEOUT_MS) || 45_000;
 const OPENAI_TIMEOUT_MS = 30_000;
+
+/** Skip OpenAI calls for 15 min after a quota 429 (saves latency on every chat message). */
+let openaiQuotaBlockedUntil = 0;
+
+function shouldSkipOpenAI(): boolean {
+  return Date.now() < openaiQuotaBlockedUntil;
+}
+
+function markOpenAIQuotaExhausted(): void {
+  openaiQuotaBlockedUntil = Date.now() + 15 * 60 * 1000;
+}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -217,10 +228,16 @@ async function callOllamaWithToolsFallback(
   model: string,
 ): Promise<LLMResponse> {
   try {
-    return await callOllamaGenerateWithTools(request, { model });
+    return await callOllamaGenerateWithTools(request, {
+      model,
+      timeout: OLLAMA_CHAT_TIMEOUT_MS,
+    });
   } catch (genError) {
-    console.warn('[LLM] Ollama generate+tools failed, trying chat API:', errorMessage(genError));
-    return callOllamaChat(request, { model, timeout: OLLAMA_CHAT_TIMEOUT_MS });
+    console.warn('[LLM] Ollama generate+tools failed, text-only fallback:', errorMessage(genError));
+    return callOllama(
+      { ...request, tools: undefined },
+      { model, timeout: OLLAMA_TIMEOUT_MS },
+    );
   }
 }
 
@@ -349,6 +366,9 @@ async function callOpenAI(
 
     if (!response.ok) {
       const errBody = await response.text().catch(() => '');
+      if (response.status === 429 || errBody.includes('quota')) {
+        markOpenAIQuotaExhausted();
+      }
       throw new Error(`OpenAI API error: ${response.status} ${response.statusText} — ${errBody.slice(0, 200)}`);
     }
 
@@ -578,19 +598,23 @@ export async function callLLM(
 
   // auto mode
   if (hasTools) {
-    if (OPENAI_API_KEY) {
+    if (OPENAI_API_KEY && !shouldSkipOpenAI()) {
       try {
         return await callOpenAI(request);
       } catch (openaiError) {
-        console.warn('[LLM] OpenAI tools failed, falling back to Ollama generate+tools:', errorMessage(openaiError));
-        try {
-          return await callOllamaWithToolsFallback(request, model);
-        } catch (ollamaError) {
-          throw buildAutoModeFailure(ollamaError, openaiError);
+        const msg = errorMessage(openaiError);
+        if (msg.includes('429') || msg.toLowerCase().includes('quota')) {
+          markOpenAIQuotaExhausted();
         }
+        console.warn('[LLM] OpenAI tools failed, falling back to Ollama:', msg.slice(0, 120));
+        return callOllamaWithToolsFallback(request, model);
       }
     }
-    console.log('[LLM] No OpenAI key — Ollama generate+tools');
+    if (shouldSkipOpenAI()) {
+      console.log('[LLM] OpenAI quota cached — Ollama generate+tools');
+    } else {
+      console.log('[LLM] No OpenAI key — Ollama generate+tools');
+    }
     return callOllamaWithToolsFallback(request, model);
   }
 

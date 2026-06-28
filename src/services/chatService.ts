@@ -350,6 +350,8 @@ export async function streamChatMessage(
     return { ok: false };
   }
 
+  onEvent({ type: "status", phase: "responding" });
+
   // 2. Update conversation timestamp
   await supabase
     .from("conversations")

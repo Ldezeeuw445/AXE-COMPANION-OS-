@@ -285,10 +285,9 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       });
 
       if (!res.ok || !res.body) {
-        // Fallback: try non-streaming route
         const fallback = await fetch("/api/chat/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeader },
           body: JSON.stringify(body),
         });
         if (!fallback.ok) throw new Error("Message not persisted");
@@ -302,6 +301,8 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       const decoder = new TextDecoder();
       let sseBuffer = "";
       let currentEvent = "";
+      let tokensReceived = false;
+      let sseError: string | null = null;
 
       while (true) {
         const { done, value: chunk } = await reader.read();
@@ -309,7 +310,6 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
         sseBuffer += decoder.decode(chunk, { stream: true });
 
-        // Parse SSE lines
         const lines = sseBuffer.split("\n");
         sseBuffer = lines.pop() ?? "";
 
@@ -317,27 +317,31 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           if (line.startsWith("event: ")) {
             currentEvent = line.slice(7).trim();
           } else if (line.startsWith("data: ")) {
+            const raw = line.slice(6).trim();
+            if (raw === "[DONE]") continue;
             try {
-              const data = JSON.parse(line.slice(6));
-              if (currentEvent === "token" && data.text) {
+              const data = JSON.parse(raw) as {
+                type?: string;
+                text?: string;
+                message?: string;
+              };
+              const eventType = data.type ?? currentEvent;
+              if ((eventType === "token" || currentEvent === "token") && data.text) {
+                tokensReceived = true;
                 window.dispatchEvent(
                   new CustomEvent("axe:stream-token", { detail: { text: data.text } }),
                 );
-              } else if (currentEvent === "status") {
+              } else if (eventType === "status" || currentEvent === "status") {
                 window.dispatchEvent(
                   new CustomEvent("axe:stream-status", { detail: data }),
                 );
-              } else if (currentEvent === "done") {
-                // Stream complete — refresh to load persisted messages from DB
+              } else if (eventType === "done" || currentEvent === "done") {
                 void loadQuota();
                 router.refresh();
-              } else if (currentEvent === "error") {
-                const msg = data.message ?? "AXE encountered an error.";
-                if (msg.includes("limit reached") || msg.includes("Upgrade")) {
-                  setError(msg);
+              } else if (eventType === "error" || currentEvent === "error") {
+                sseError = data.message ?? "AXE encountered an error.";
+                if (sseError.includes("limit reached") || sseError.includes("Upgrade")) {
                   void loadQuota();
-                } else {
-                  setError(msg);
                 }
               }
             } catch {
@@ -346,9 +350,21 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           }
         }
       }
-    } catch {
-      setValue(inputText); // Restore input on failure
-      setError("Could not save message.");
+
+      if (sseError) {
+        setError(sseError);
+      } else if (tokensReceived) {
+        void loadQuota();
+        router.refresh();
+      }
+    } catch (err) {
+      setValue(inputText);
+      const msg = err instanceof Error ? err.message : "";
+      setError(
+        msg && msg !== "Message not persisted"
+          ? msg
+          : "Connection lost — AXE may still be thinking. Refresh in a moment.",
+      );
     } finally {
       setSending(false);
       if (typeof window !== "undefined") {
