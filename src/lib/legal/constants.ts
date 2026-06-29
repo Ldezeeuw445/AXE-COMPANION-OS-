@@ -3,7 +3,7 @@
  * Replace businessAddress with the statutory registered office before public launch.
  */
 export const LEGAL = {
-  companyLegalName: "Trading OS B.V.",
+  companyLegalName: "Trading OS",
   tradeNames: "AXE Companion / Trading OS",
   kvk: "74239422",
   vat: "NL002314900B21",
