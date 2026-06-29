@@ -9,7 +9,7 @@ function DemoEmbedInner() {
   const theme = params.get("theme") === "paper" ? "paper" : "midnight";
   const rawTo = params.get("to") ?? "/chart?symbol=XAUUSD&tf=H1";
   const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   const target = useMemo(() => {
     const path = rawTo.startsWith("/") ? rawTo : "/chart?symbol=XAUUSD&tf=H1";
@@ -30,12 +30,12 @@ function DemoEmbedInner() {
         const body = (await res.json()) as { ok?: boolean; error?: string };
         if (cancelled) return;
         if (!res.ok || !body.ok) {
-          setError(body.error ?? "Demo sign-in failed");
+          setError(true);
           return;
         }
         setReady(true);
       } catch {
-        if (!cancelled) setError("Network error");
+        if (!cancelled) setError(true);
       }
     })();
     return () => {
@@ -49,22 +49,7 @@ function DemoEmbedInner() {
       data-theme={theme}
       className="axe-demo-embed-root h-dvh w-full overflow-hidden bg-[#040508]"
     >
-      {!ready && !error ? (
-        <div className="grid h-full place-items-center px-4 text-center">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">
-              AXE Demo
-            </p>
-            <p className="mt-2 text-sm text-white/70">Loading full app preview…</p>
-          </div>
-        </div>
-      ) : null}
-      {error ? (
-        <div className="grid h-full place-items-center px-4 text-center">
-          <p className="text-sm text-rose-300/90">{error}</p>
-        </div>
-      ) : null}
-      {ready ? (
+      {ready && !error ? (
         <iframe
           title={device === "tablet" ? "AXE iPad demo" : "AXE phone demo"}
           src={target}
