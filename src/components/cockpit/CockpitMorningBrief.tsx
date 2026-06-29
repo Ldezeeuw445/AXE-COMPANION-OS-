@@ -7,14 +7,18 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Sunrise } from "lucide-react";
+import { RefreshCw, Sunrise, Check } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { feedKindLabel, feedKindStyle } from "@/lib/feed/feedKindStyle";
+import { BriefBodyContent } from "@/components/briefing/BriefBodyContent";
+import type { BriefHighlight } from "@/lib/briefing/briefBodyFormat";
+import { pairHighlights } from "@/lib/briefing/briefBodyFormat";
+import { cn } from "@/lib/utils";
 
 type Brief = {
   title: string;
   body: string;
-  highlights: Array<{ pair?: string }>;
+  highlights: BriefHighlight[];
   chat_prefill: string;
   briefing_date: string;
   briefing_type: string;
@@ -25,6 +29,7 @@ export function CockpitMorningBrief() {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshDone, setRefreshDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchBrief = useCallback(async () => {
@@ -47,6 +52,7 @@ export function CockpitMorningBrief() {
 
   const forceRefresh = useCallback(async () => {
     setRefreshing(true);
+    setRefreshDone(false);
     setError(null);
     try {
       const res = await fetch("/api/cockpit/briefing?force=true", { method: "POST" });
@@ -57,6 +63,8 @@ export function CockpitMorningBrief() {
         return;
       }
       setBrief(data.brief ?? null);
+      setRefreshDone(true);
+      window.setTimeout(() => setRefreshDone(false), 1800);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Refresh failed");
     } finally {
@@ -98,10 +106,21 @@ export function CockpitMorningBrief() {
           type="button"
           onClick={() => void forceRefresh()}
           disabled={refreshing}
-          className={`mt-3 inline-flex items-center gap-1.5 text-[11px] ${briefStyle.text} hover:opacity-80 disabled:opacity-40`}
+          className={cn(
+            "mt-3 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] transition-all active:scale-95 disabled:opacity-40",
+            refreshDone
+              ? "bg-emerald-500/15 text-emerald-300"
+              : refreshing
+                ? "bg-white/[0.06] text-tos-text"
+                : `${briefStyle.text} hover:bg-white/[0.04] hover:opacity-90`,
+          )}
         >
-          <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
-          Generate now
+          {refreshDone ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
+          )}
+          {refreshDone ? "Updated" : refreshing ? "Generating…" : "Generate now"}
         </button>
       </GlassPanel>
     );
@@ -112,10 +131,7 @@ export function CockpitMorningBrief() {
     briefingType: isWeekly ? "weekly" : "daily",
   });
 
-  const paragraphs = brief.body
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const pairTags = pairHighlights(brief.highlights);
 
   return (
     <GlassPanel className="p-5">
@@ -131,10 +147,21 @@ export function CockpitMorningBrief() {
           type="button"
           onClick={() => void forceRefresh()}
           disabled={refreshing}
-          className="text-tos-dim transition-colors hover:opacity-80 disabled:opacity-40"
+          className={cn(
+            "rounded-md p-1.5 transition-all active:scale-95 disabled:opacity-40",
+            refreshDone
+              ? "bg-emerald-500/15 text-emerald-300"
+              : refreshing
+                ? "bg-white/[0.06] text-tos-text"
+                : "text-tos-dim hover:bg-white/[0.06] hover:opacity-80",
+          )}
           title="Regenerate brief"
         >
-          <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshDone ? (
+            <Check className="h-3 w-3" />
+          ) : (
+            <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
+          )}
         </button>
       </div>
 
@@ -142,26 +169,18 @@ export function CockpitMorningBrief() {
         {brief.title}
       </p>
 
-      <div className="space-y-2">
-        {paragraphs.map((para, i) => (
-          <p key={i} className="text-[13px] leading-relaxed text-tos-text/90">
-            {para}
-          </p>
-        ))}
-      </div>
+      <BriefBodyContent body={brief.body} highlights={brief.highlights} />
 
-      {brief.highlights?.length > 0 ? (
+      {pairTags.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {brief.highlights
-            .filter((h) => h.pair)
-            .map((h, i) => (
-              <span
-                key={i}
-                className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${briefStyle.badge}`}
-              >
-                {h.pair}
-              </span>
-            ))}
+          {pairTags.map((pair, i) => (
+            <span
+              key={i}
+              className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${briefStyle.badge}`}
+            >
+              {pair}
+            </span>
+          ))}
         </div>
       ) : null}
 
