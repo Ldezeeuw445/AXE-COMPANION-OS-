@@ -5,17 +5,82 @@ export type WalletProviderMeta = {
   name: string;
   subtitle: string;
   accent: string;
+  logoSrc?: string;
+  brandBg: string;
+  brandRing: string;
+  connectable?: boolean;
 };
 
 export const WALLET_PROVIDERS: WalletProviderMeta[] = [
-  { id: "ledger", name: "Ledger", subtitle: "Hardware wallet", accent: "text-white/90" },
-  { id: "tangem", name: "Tangem", subtitle: "Card wallet", accent: "text-sky-300/90" },
-  { id: "trust", name: "Trust Wallet", subtitle: "Mobile wallet", accent: "text-blue-300/90" },
-  { id: "metamask", name: "MetaMask", subtitle: "Browser wallet", accent: "text-orange-300/90" },
-  { id: "coinbase", name: "Coinbase Wallet", subtitle: "Exchange wallet", accent: "text-indigo-300/90" },
-  { id: "rise", name: "Rise", subtitle: "Payouts · read-only", accent: "text-emerald-300/90" },
-  { id: "other", name: "Other", subtitle: "Custom address", accent: "text-white/70" },
+  {
+    id: "ledger",
+    name: "Ledger",
+    subtitle: "Hardware wallet",
+    accent: "text-white/90",
+    logoSrc: "/wallets/ledger.svg",
+    brandBg: "from-white/[0.14] to-white/[0.04]",
+    brandRing: "ring-white/20",
+    connectable: true,
+  },
+  {
+    id: "tangem",
+    name: "Tangem",
+    subtitle: "Card wallet",
+    accent: "text-sky-300/90",
+    logoSrc: "/wallets/tangem.svg",
+    brandBg: "from-sky-500/20 to-blue-600/10",
+    brandRing: "ring-sky-400/25",
+    connectable: true,
+  },
+  {
+    id: "trust",
+    name: "Trust Wallet",
+    subtitle: "Mobile wallet",
+    accent: "text-blue-300/90",
+    logoSrc: "/wallets/trust.svg",
+    brandBg: "from-blue-500/20 to-blue-700/10",
+    brandRing: "ring-blue-400/25",
+    connectable: true,
+  },
+  {
+    id: "metamask",
+    name: "MetaMask",
+    subtitle: "Browser wallet",
+    accent: "text-orange-300/90",
+    logoSrc: "/wallets/metamask.svg",
+    brandBg: "from-orange-500/20 to-amber-600/10",
+    brandRing: "ring-orange-400/25",
+    connectable: true,
+  },
+  {
+    id: "coinbase",
+    name: "Coinbase Wallet",
+    subtitle: "Exchange wallet",
+    accent: "text-indigo-300/90",
+    logoSrc: "/wallets/coinbase.svg",
+    brandBg: "from-indigo-500/20 to-blue-500/10",
+    brandRing: "ring-indigo-400/25",
+    connectable: true,
+  },
+  {
+    id: "rise",
+    name: "Rise",
+    subtitle: "Payouts · read-only",
+    accent: "text-emerald-300/90",
+    brandBg: "from-emerald-500/15 to-emerald-700/10",
+    brandRing: "ring-emerald-400/20",
+  },
+  {
+    id: "other",
+    name: "Other",
+    subtitle: "Custom address",
+    accent: "text-white/70",
+    brandBg: "from-white/[0.08] to-white/[0.03]",
+    brandRing: "ring-white/10",
+  },
 ];
+
+export const CONNECTABLE_WALLET_PROVIDERS = WALLET_PROVIDERS.filter((p) => p.connectable);
 
 export const WALLET_CHAINS: Array<{ id: WalletChain; label: string; symbol: string }> = [
   { id: "ethereum", label: "Ethereum", symbol: "ETH" },
