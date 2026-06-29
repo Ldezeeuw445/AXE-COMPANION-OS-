@@ -124,7 +124,8 @@ export function LoginForm() {
                   <Link href="/privacy" className="text-tos-warm underline-offset-2 hover:underline">
                     Privacy Policy
                   </Link>{" "}
-                  and understand that AXE does not provide financial advice.
+                  and understand that AXE Companion is analytical software only — not a financial
+                  adviser or broker.
                 </span>
               </label>
               {state?.error ? (

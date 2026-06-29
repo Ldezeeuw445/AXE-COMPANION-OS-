@@ -48,7 +48,7 @@ export async function signUpAction(_prevState: unknown, formData: FormData) {
   if (acceptTerms !== "on") {
     return {
       error:
-        "Please confirm you agree to the Terms and Privacy Policy and understand that AXE does not provide financial advice.",
+        "Please confirm you agree to the Terms and Privacy Policy and understand that AXE Companion is analytical software only — not a financial adviser or broker.",
     };
   }
 

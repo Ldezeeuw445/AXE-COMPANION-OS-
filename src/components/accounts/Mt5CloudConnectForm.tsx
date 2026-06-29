@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createCloudMt5ConnectionAction } from "@/app/actions/mt5Cloud";
+import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
 
 const REGION_OPTIONS: Array<{
   value: "london" | "new-york" | "singapore";
@@ -193,13 +194,7 @@ export function Mt5CloudConnectForm({ defaultRegion }: Props) {
         </p>
       </div>
 
-      <label className="flex cursor-pointer items-start gap-2 text-[11px] leading-relaxed text-tos-muted">
-        <input type="checkbox" name="readOnlyConfirm" className="mt-0.5 rounded border-white/20" required />
-        <span>
-          I&apos;m using my <strong className="text-tos-text">read-only investor</strong> password and I
-          understand AXE only places trades when I explicitly enable Live Trading and confirm each order.
-        </span>
-      </label>
+      <MetaApiComplianceCheckboxes />
 
       {err ? (
         <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-3 py-3 text-[11px] text-red-200/95">

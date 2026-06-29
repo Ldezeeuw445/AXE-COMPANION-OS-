@@ -27,7 +27,7 @@ const STARTER_PROMPTS: Array<{ q: string; label: string; hint: string }> = [
   },
   {
     q: "Review my last 5 trades and tell me the one mistake I keep making.",
-    label: "Coach my last week",
+    label: "Review my last week",
     hint: "journal + pattern",
   },
 ];
@@ -167,7 +167,7 @@ function EmptyState({ intelMode }: { intelMode: boolean }) {
           <p className="mt-2 text-base font-semibold text-tos-text">Intel terminal.</p>
           <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">
             Correlation engine across market tide, energy flows, geopolitical events, seismic activity
-            and fleet tracking. Ask about signals — not trade coaching.
+            and fleet tracking. Ask about signals — analytical context only, not trade recommendations.
           </p>
         </div>
         <ul className="w-full space-y-2">
@@ -195,8 +195,8 @@ function EmptyState({ intelMode }: { intelMode: boolean }) {
       <div>
         <p className="text-base font-semibold text-tos-text">Welcome.</p>
         <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">
-          I&apos;m AXE — your trading advisor. I read your chart, positions, journal and the macro calendar
-          to give you sharp setups and honest reviews. Pick a starter or just type below.
+          I&apos;m AXE — your AI-powered market analytics assistant. I read your chart, positions, journal and the macro calendar
+          to surface technical context and honest reviews. Pick a starter or just type below.
         </p>
       </div>
       <ul className="w-full space-y-2">

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronRight, Sparkles, TerminalSquare } from "lucide-react";
-import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
+import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { FinalHeroExperience } from "@/components/marketing/FinalHeroExperience";
 import { FinalTerminalShowcase } from "@/components/marketing/FinalTerminalShowcase";
 
@@ -92,17 +92,10 @@ export default function FinalPage() {
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-white/7 px-5 py-10 text-center text-[11px] text-white/34 sm:px-8">
-        <div className="mx-auto max-w-5xl">
-          <p className="font-medium uppercase tracking-[0.24em] text-white/38">
-            AXE Companion + Trading Terminal
-          </p>
-          <p className="mt-3 text-white/42">
-            One workspace memory. Two surfaces. Same source of truth.
-          </p>
-          <LegalNavLinks className="mt-6" />
-        </div>
-      </footer>
+      <ComplianceSiteFooter
+        className="relative z-10"
+        tagline="AXE Companion + Trading Terminal"
+      />
     </div>
   );
 }

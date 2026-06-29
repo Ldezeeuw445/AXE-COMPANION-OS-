@@ -10,7 +10,7 @@ import {
   Smartphone,
   Target,
 } from "lucide-react";
-import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
+import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { LaunchHeroExperience } from "@/components/marketing/LaunchHeroExperience";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
@@ -38,7 +38,7 @@ const FEATURE_STRIP = [
   "Market depth drawer",
   "News & intel, cached to save credits",
   "One-tap execution dock",
-  "AXE copilot that knows the app",
+  "AXE — AI-powered market analytics",
 ] as const;
 
 const SHOWCASE_SECTIONS = [
@@ -362,17 +362,7 @@ export default function LaunchPage() {
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-white/7 px-5 py-10 text-center text-[11px] text-white/34 sm:px-8">
-        <div className="mx-auto max-w-5xl">
-          <p className="font-medium uppercase tracking-[0.24em] text-white/38">
-            AXE Companion OS
-          </p>
-          <p className="mt-3 text-white/42">
-            Chart, intel and execution in one phone-first workspace.
-          </p>
-          <LegalNavLinks className="mt-6" />
-        </div>
-      </footer>
+      <ComplianceSiteFooter className="relative z-10" tagline="AXE Companion OS" />
     </div>
   );
 }

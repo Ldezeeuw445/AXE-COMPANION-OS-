@@ -1,34 +1,49 @@
 /**
- * Legal entity placeholders — Trading OS is the company; AXE Companion is the product.
- * Draft — needs legal review (see LegalDraftNote in UI).
- * Do not publish a private home address; keep [BUSINESS ADDRESS] until a business address is confirmed.
+ * Legal entity — Trading OS B.V. is the provider; AXE Companion is the product.
+ * Replace businessAddress with the statutory registered office before public launch.
  */
 export const LEGAL = {
-  companyLegalName: "Trading OS",
+  companyLegalName: "Trading OS B.V.",
   tradeNames: "AXE Companion / Trading OS",
   kvk: "74239422",
   vat: "NL002314900B21",
-  /** Intentionally left as placeholder until a statutory business address is chosen. */
+  /** Statutory business address — replace with confirmed registered office. */
   businessAddress: "[BUSINESS ADDRESS]",
   contactEmail: "support@tradingosapp.com",
   supportEmail: "support@tradingosapp.com",
   privacyEmail: "support@tradingosapp.com",
-  /** Replace with confirmed launch date after counsel review. */
-  effectiveDate: "30 April 2026 (confirm at launch)",
+  effectiveDate: "30 April 2026",
   governingLaw: "Netherlands",
   jurisdiction:
     "the competent courts of the Netherlands, unless mandatory consumer protection law provides otherwise",
 } as const;
 
+/** Mandatory risk warning — footer, login, and onboarding surfaces. */
+export const RISK_WARNING =
+  "Trading financial instruments involves high risk. AXE Companion does not guarantee profits. Past performance is no guarantee of future results. Our software is for educational and analytical purposes only. You operate the software at your own financial risk." as const;
+
 export const LEGAL_COPY = {
   signupCheckbox:
-    "I agree to the Terms and Privacy Policy and understand that AXE does not provide financial advice.",
+    "I agree to the Terms and Privacy Policy and understand that AXE Companion is analytical software only — not a financial adviser or broker.",
   chatDisclaimer:
     "AXE provides educational and analytical support only. You remain responsible for your own trading decisions.",
   mt5Connect:
-    "Use read-only/investor access where possible. AXE uses connected account data for analytics, journaling and context. AXE does not place trades by default.",
+    "Use read-only/investor access where possible. AXE uses connected account data for analytics, journaling and context. Order execution requires explicit Live Trading activation and per-order confirmation.",
   pricing:
     "Prices may exclude taxes. Subscriptions renew automatically until cancelled. You can cancel before the next billing period.",
   tradingShort:
     "Trading involves risk. Past performance does not guarantee future results. AXE does not guarantee profits.",
+  metaApiCheckbox1:
+    "I agree to the Algemene Voorwaarden and the Privacy Policy.",
+  metaApiCheckbox2:
+    "I understand that AXE Companion is a software tool and NOT a financial adviser or broker. All trades executed via the MetaAPI connection are entirely my own responsibility.",
+  metaApiCheckbox3:
+    "I confirm that I explicitly authorise AXE Companion to forward orders to my broker using the API credentials I provide.",
+} as const;
+
+/** Form field names for the three MetaAPI compliance checkboxes (server + client). */
+export const META_API_COMPLIANCE_FIELDS = {
+  terms: "metaApiTermsConfirm",
+  softwareTool: "metaApiSoftwareToolConfirm",
+  orderForward: "metaApiOrderForwardConfirm",
 } as const;

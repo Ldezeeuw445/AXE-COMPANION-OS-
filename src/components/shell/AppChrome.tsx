@@ -12,6 +12,7 @@ import { TabletShellEffects } from "@/components/shell/TabletShellEffects";
 import { TabletNavCollapseProvider } from "@/components/shell/TabletNavCollapse";
 import { TabletNavPeekHandle } from "@/components/shell/TabletNavPeekHandle";
 import { Toaster } from "@/components/ui/sonner";
+import { AppComplianceStrip } from "@/components/legal/AppComplianceStrip";
 
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
@@ -40,6 +41,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
               </SwipeContentWrapper>
             </div>
             <ClientBottomNav />
+            <AppComplianceStrip />
             <TabletNavPeekHandle />
           </div>
         </SwipeNavProvider>

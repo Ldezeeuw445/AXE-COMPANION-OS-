@@ -1,5 +1,7 @@
 import Image from "next/image";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { ComplianceRiskNotice } from "@/components/legal/ComplianceRiskNotice";
+import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 
 export default function LoginPage() {
   return (
@@ -66,6 +68,10 @@ export default function LoginPage() {
         {/* Auth form */}
         <LoginForm />
 
+        <div className="mt-6">
+          <ComplianceRiskNotice compact className="text-center" />
+        </div>
+
         {/* Status line */}
         <div className="mt-8 flex items-center justify-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-tos-warm/50" />
@@ -75,6 +81,8 @@ export default function LoginPage() {
           <span className="h-1.5 w-1.5 rounded-full bg-tos-warm/50" />
         </div>
       </div>
+
+      <ComplianceSiteFooter className="relative z-10 mt-auto w-full" tagline="AXE Companion OS" />
     </div>
   );
 }

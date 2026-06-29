@@ -392,7 +392,7 @@ export default async function SettingsPage() {
           Legal &amp; policies
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          Draft documents — replace placeholders and review with counsel before marketing to retail.
+          Terms, privacy, risk and AI disclaimers for AXE Companion.
         </p>
         <LegalNavLinks className="mt-4" />
       </GlassPanel>

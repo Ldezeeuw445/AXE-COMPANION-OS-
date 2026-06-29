@@ -4,38 +4,34 @@
  * Settings · Live trading
  *
  * The single point in the app where a user opts into sending real broker
- * orders. Off by default; turning it on requires a 3-checkbox + typed-phrase
- * disclaimer. Even after this, every BUY/SELL on the chart still asks for a
+ * orders. Off by default; turning it on requires the three MetaAPI compliance
+ * checkboxes. Even after this, every BUY/SELL on the chart still asks for a
  * final confirm before going to MetaApi.
- *
- * The flag is account-wide (server-persisted). Per-order confirm on the chart
- * remains the last gate before any order leaves the app.
  */
 import { useEffect, useState } from "react";
 import { AlertTriangle, ShieldCheck, ShieldOff, X } from "lucide-react";
 import { TosMatteBanner } from "@/components/ui/TosNotice";
-import { REQUIRED_PHRASE, useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
+import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
+import { META_API_COMPLIANCE_FIELDS } from "@/lib/legal/constants";
+import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
+
+function liveTradingCheckboxesOk(): boolean {
+  if (typeof document === "undefined") return false;
+  const { terms, softwareTool, orderForward } = META_API_COMPLIANCE_FIELDS;
+  const el = (name: string) =>
+    document.querySelector<HTMLInputElement>(`input[name="${name}"]`)?.checked ?? false;
+  return el(terms) && el(softwareTool) && el(orderForward);
+}
 
 export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }) {
   const live = useLiveTradingFlag(initialEnabled);
   const [open, setOpen] = useState(false);
-  const [riskAck, setRiskAck] = useState(false);
-  const [responsibilityAck, setResponsibilityAck] = useState(false);
-  const [deviceAck, setDeviceAck] = useState(false);
-  const [phrase, setPhrase] = useState("");
+  const [checkboxesOk, setCheckboxesOk] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setRiskAck(false);
-      setResponsibilityAck(false);
-      setDeviceAck(false);
-      setPhrase("");
-    }
+    if (!open) setCheckboxesOk(false);
   }, [open]);
-
-  const phraseMatches = phrase.trim() === REQUIRED_PHRASE;
-  const canEnable = riskAck && responsibilityAck && deviceAck && phraseMatches;
 
   return (
     <section className="rounded-2xl border border-white/[0.07] bg-[#0c0d0e]/90 p-4">
@@ -99,16 +95,8 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
 
       {open ? (
         <ActivateModal
-          riskAck={riskAck}
-          setRiskAck={setRiskAck}
-          responsibilityAck={responsibilityAck}
-          setResponsibilityAck={setResponsibilityAck}
-          deviceAck={deviceAck}
-          setDeviceAck={setDeviceAck}
-          phrase={phrase}
-          setPhrase={setPhrase}
-          phraseMatches={phraseMatches}
-          canEnable={canEnable}
+          onCheckboxChange={() => setCheckboxesOk(liveTradingCheckboxesOk())}
+          canEnable={checkboxesOk}
           pending={live.pending}
           onClose={() => setOpen(false)}
           onEnable={async () => {
@@ -133,29 +121,13 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
 }
 
 function ActivateModal({
-  riskAck,
-  setRiskAck,
-  responsibilityAck,
-  setResponsibilityAck,
-  deviceAck,
-  setDeviceAck,
-  phrase,
-  setPhrase,
-  phraseMatches,
+  onCheckboxChange,
   canEnable,
   pending,
   onClose,
   onEnable,
 }: {
-  riskAck: boolean;
-  setRiskAck: (b: boolean) => void;
-  responsibilityAck: boolean;
-  setResponsibilityAck: (b: boolean) => void;
-  deviceAck: boolean;
-  setDeviceAck: (b: boolean) => void;
-  phrase: string;
-  setPhrase: (s: string) => void;
-  phraseMatches: boolean;
+  onCheckboxChange: () => void;
   canEnable: boolean;
   pending: boolean;
   onClose: () => void;
@@ -179,7 +151,7 @@ function ActivateModal({
                 Activate live trading
               </p>
               <p className="mt-0.5 text-[11px] text-tos-muted">
-                Read carefully — this enables real broker orders.
+                Confirm all three acknowledgements before enabling real broker orders.
               </p>
             </div>
           </div>
@@ -193,46 +165,8 @@ function ActivateModal({
           </button>
         </header>
 
-        <ul className="space-y-2 text-[12px] leading-relaxed">
-          <Check
-            value={riskAck}
-            onChange={setRiskAck}
-            label="I understand trading involves real risk."
-            sub="Past performance, AXE signals, and demo results do not guarantee future profit. I can lose more than I deposited on leveraged accounts."
-          />
-          <Check
-            value={responsibilityAck}
-            onChange={setResponsibilityAck}
-            label="I am solely responsible for every order I send."
-            sub="AXE does not auto-execute. Every BUY / SELL is a deliberate action by me, not by the assistant."
-          />
-          <Check
-            value={deviceAck}
-            onChange={setDeviceAck}
-            label="I will keep this device secure."
-            sub="Anyone with this unlocked device could place orders after I enable live trading. I will lock the screen when I'm done."
-          />
-        </ul>
-
-        <div className="mt-4">
-          <label className="block text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-            Type the phrase to confirm
-          </label>
-          <input
-            type="text"
-            value={phrase}
-            onChange={(e) => setPhrase(e.target.value)}
-            placeholder={`Type: ${REQUIRED_PHRASE}`}
-            autoComplete="off"
-            spellCheck={false}
-            className={`mt-1 w-full rounded-lg border px-2.5 py-2 font-mono text-[12.5px] text-tos-text outline-none transition ${
-              phrase.length === 0
-                ? "border-white/10 bg-[#0c0d0e]"
-                : phraseMatches
-                  ? "border-white/[0.12] bg-white/[0.025]"
-                  : "border-rose-400/30 bg-rose-400/[0.05]"
-            }`}
-          />
+        <div onChange={onCheckboxChange}>
+          <MetaApiComplianceCheckboxes variant="master" />
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -300,34 +234,5 @@ function DisableModal({
         </div>
       </div>
     </div>
-  );
-}
-
-function Check({
-  value,
-  onChange,
-  label,
-  sub,
-}: {
-  value: boolean;
-  onChange: (b: boolean) => void;
-  label: string;
-  sub: string;
-}) {
-  return (
-    <li>
-      <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 hover:bg-white/[0.04]">
-        <input
-          type="checkbox"
-          checked={value}
-          onChange={(e) => onChange(e.target.checked)}
-          className="mt-0.5 rounded border-white/20"
-        />
-        <span>
-          <span className="font-semibold text-tos-text">{label}</span>
-          <span className="mt-0.5 block text-[11px] leading-relaxed text-tos-muted">{sub}</span>
-        </span>
-      </label>
-    </li>
   );
 }

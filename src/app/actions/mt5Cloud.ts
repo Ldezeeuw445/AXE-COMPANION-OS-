@@ -26,6 +26,10 @@ import {
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
 import { metadataHasSymbolMap, refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
 import { syncBrokerHubFromAccountRow } from "@/lib/broker/hub/sync";
+import {
+  metaApiComplianceConfirmed,
+  META_API_COMPLIANCE_ERROR,
+} from "@/lib/legal/metaApiCompliance";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -264,8 +268,9 @@ export async function createCloudMt5ConnectionAction(
   const mt5Password =
     String(formData.get("mt5Password") ?? "").trim() ||
     String(formData.get("investorPassword") ?? "");
-  const readOnlyOk = formData.get("readOnlyConfirm") === "on" || formData.get("readOnlyConfirm") === "true";
-  const masterOk = formData.get("masterConfirm") === "on" || formData.get("masterConfirm") === "true";
+  if (!metaApiComplianceConfirmed(formData)) {
+    return { ok: false, code: "validation", message: META_API_COMPLIANCE_ERROR };
+  }
 
   if (!label) return { ok: false, code: "validation", message: "Label is required." };
   if (!mt5Login) return { ok: false, code: "validation", message: "MT5 login (digits) is required." };
@@ -277,21 +282,6 @@ export async function createCloudMt5ConnectionAction(
       message: passwordType === "master" ? "Master password is required." : "Investor (read-only) password is required.",
     };
   }
-  if (passwordType === "investor" && !readOnlyOk) {
-    return {
-      ok: false,
-      code: "validation",
-      message: "Confirm read-only access: tick the checkbox to use investor password only.",
-    };
-  }
-  if (passwordType === "master" && !masterOk) {
-    return {
-      ok: false,
-      code: "validation",
-      message: "Confirm master password: tick the checkbox to acknowledge full trading access.",
-    };
-  }
-
   const manualTrades = passwordType === "investor";
 
   // Region must be one of the supported MetaApi clouds. The form already
@@ -346,8 +336,8 @@ export async function createCloudMt5ConnectionAction(
         ? existingMetaAccount.region
         : region),
     passwordType,
-    readOnlyConfirmed: passwordType === "investor" && readOnlyOk,
-    masterPasswordConfirmed: passwordType === "master" && masterOk,
+    metaApiComplianceConfirmed: true,
+    passwordType,
     createdVia: "axe_companion_cloud_mt5",
     metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,

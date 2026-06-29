@@ -1,4 +1,4 @@
-import { LEGAL } from "@/lib/legal/constants";
+import { LEGAL, RISK_WARNING } from "@/lib/legal/constants";
 
 export function RiskDisclaimerPageContent() {
   const L = LEGAL;
@@ -8,7 +8,8 @@ export function RiskDisclaimerPageContent() {
       <p>
         <strong>Effective date:</strong> {L.effectiveDate}
       </p>
-      <p>
+      <p className="font-medium text-tos-text">{RISK_WARNING}</p>
+      <p className="mt-4">
         AXE Companion and Trading OS provide educational, analytical and informational tools for traders. They do not
         provide licensed financial advice, investment advice, portfolio management, asset management, tax advice or
         legal advice.
