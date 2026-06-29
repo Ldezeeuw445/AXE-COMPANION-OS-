@@ -1260,6 +1260,314 @@
       box-shadow: 0 0 10px rgba(72,222,246,0.55);
     }
 
+    /* ===== Ecosystem sync strip ===== */
+    .ecosystem-sync {
+      position: relative;
+      padding: 8px 0 48px;
+    }
+
+    .ecosystem-sync::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(620px 180px at 50% 0%, rgba(67,215,255,0.08), transparent 72%),
+        linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+
+    .ecosystem-sync-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .sync-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 20px;
+      padding: 28px 24px;
+      background: rgba(255,255,255,0.022);
+      border: 1px solid rgba(255,255,255,0.06);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+      min-height: 220px;
+    }
+
+    .sync-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      background: radial-gradient(400px circle at var(--mx) var(--my), rgba(72,222,246,0.06), transparent 60%);
+      pointer-events: none;
+    }
+
+    .sync-card:hover {
+      border-color: rgba(72,222,246,0.22);
+      box-shadow: 0 0 32px -8px rgba(72,222,246,0.12);
+      transform: translateY(-3px);
+    }
+
+    .sync-card:hover::after { opacity: 1; }
+
+    .sync-card-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(112,226,255,0.88);
+      margin-bottom: 14px;
+    }
+
+    .sync-card-kicker i {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .sync-card h3 {
+      margin: 0;
+      font-size: clamp(22px, 2.4vw, 28px);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+    }
+
+    .sync-card p {
+      margin: 12px 0 0;
+      color: var(--copy);
+      font-size: 14px;
+      line-height: 1.72;
+      max-width: 36ch;
+    }
+
+    .sync-card-tag {
+      display: inline-flex;
+      margin-top: 18px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.62);
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .sync-bridge {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin: 28px auto 0;
+      max-width: 720px;
+      color: rgba(255,255,255,0.38);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+    }
+
+    .sync-bridge::before,
+    .sync-bridge::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(72,222,246,0.35), transparent);
+    }
+
+    /* ===== Linear-style showcase ===== */
+    .showcase {
+      max-width: min(1280px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 0 0 24px;
+      overflow: hidden;
+    }
+
+    .show-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: center;
+      padding: 72px 0;
+      overflow: hidden;
+    }
+
+    .show-section.flip { direction: rtl; }
+    .show-section.flip > * { direction: ltr; }
+
+    .show-meta .step {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 12px;
+    }
+
+    .show-meta h3 {
+      font-size: clamp(24px, 3vw, 36px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin: 0 0 14px;
+    }
+
+    .show-meta p {
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--copy);
+      margin: 0;
+      max-width: 46ch;
+    }
+
+    .show-meta .arrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 18px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cyan);
+      opacity: 0.78;
+      text-decoration: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .show-meta .arrow:hover { opacity: 1; }
+
+    .show-photo {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .show-photo img {
+      width: 100%;
+      max-width: 560px;
+      height: auto;
+      border-radius: 24px;
+      -webkit-mask-image:
+        linear-gradient(to bottom, black 55%, transparent 100%),
+        linear-gradient(to top, black 90%, transparent 100%),
+        linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+      mask-image:
+        linear-gradient(to bottom, black 55%, transparent 100%),
+        linear-gradient(to top, black 90%, transparent 100%),
+        linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+      -webkit-mask-composite: source-in;
+      mask-composite: intersect;
+    }
+
+    /* ===== Intel bento grid ===== */
+    .intel-bento {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 18px;
+    }
+
+    .itile {
+      position: relative;
+      overflow: hidden;
+      border-radius: 18px;
+      padding: 28px 26px;
+      background: rgba(255,255,255,0.022);
+      border: 1px solid rgba(255,255,255,0.06);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+      min-height: 180px;
+    }
+
+    .itile::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      background: radial-gradient(400px circle at var(--mx) var(--my), rgba(var(--ac), 0.06), transparent 60%);
+      pointer-events: none;
+    }
+
+    .itile:hover {
+      border-color: rgba(var(--ac), 0.22);
+      box-shadow: 0 0 32px -8px rgba(var(--ac), 0.12);
+      transform: translateY(-2px);
+    }
+
+    .itile:hover::after { opacity: 1; }
+
+    .itile.span2 { grid-column: span 2; }
+    .itile.span3 { grid-column: span 3; }
+
+    .badge2 {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: rgba(var(--ac), 1);
+      background: rgba(var(--ac), 0.08);
+      margin-bottom: 14px;
+    }
+
+    .badge2 i {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+      animation: pulseLive 2.8s ease-in-out infinite;
+    }
+
+    .itile .ic {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(var(--ac), 0.08);
+      color: rgba(var(--ac), 1);
+      margin-bottom: 14px;
+    }
+
+    .itile .ic svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .itile h3 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin: 0 0 8px;
+    }
+
+    .itile p {
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: var(--muted);
+      margin: 0;
+    }
+
     .section {
       padding: 60px 0 80px;
       background: transparent;
@@ -3488,6 +3796,11 @@
       .cards-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .card--feature { grid-column: span 3; }
       .feed-card--feature { grid-column: span 3; }
+      .itile.span2,
+      .itile.span3 { grid-column: span 2; }
+      .ecosystem-sync-grid { grid-template-columns: 1fr; }
+      .show-section { grid-template-columns: 1fr; gap: 32px; padding: 56px 0; }
+      .show-section.flip { direction: ltr; }
       .reveal-grid { grid-template-columns: 1fr; }
     }
 
@@ -3545,6 +3858,8 @@
 
     @media (max-width: 720px) {
       .cards-grid { grid-template-columns: 1fr; }
+      .itile.span2,
+      .itile.span3 { grid-column: span 1; }
       .card--feature,
       .card--bar { grid-column: auto; }
       .feed-card--feature,
@@ -3593,6 +3908,7 @@
           <img class="nav-logo" src="../figma-assets/images/nav-logo-axe-full.png" alt="AXE logo" />
         </div>
         <nav class="nav-center" aria-label="Primary">
+          <a class="nav-center-link" href="#ecosystem">Ecosystem</a>
           <a class="nav-center-link" href="#product">Product</a>
           <a class="nav-center-link" href="#pricing">Pricing</a>
           <a class="nav-center-link" href="#launch-access">Docs</a>
@@ -3626,7 +3942,7 @@
                 <div class="device-screen">
                   <iframe
                     title="AXE iPhone 15 Pro demo"
-                    src="/demo/embed?device=phone&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                    src="/demo/embed?device=phone&amp;to=%2Fchat"
                     loading="eager"
                     allow="clipboard-write"
                   ></iframe>
@@ -3664,57 +3980,115 @@
       </div>
     </section>
 
-    <section class="reveal-strip section">
+    <section id="ecosystem" class="ecosystem-sync section">
       <div class="section-inner">
-        <div class="reveal-grid">
-          <article class="reveal-card reveal">
-            <div class="reveal-card-default">
-              <div class="reveal-card-default-inner">
-                <div class="reveal-orb">A</div>
-                <h4>Surface the signal.</h4>
-                <span>Hover to reveal</span>
-              </div>
-            </div>
-            <div class="reveal-card-hover">
-              <div class="reveal-card-inner">
-                <div class="reveal-card-kicker">Canvas reveal</div>
-                <h3>Surface the signal.</h3>
-                <p>One calm card layer that lights up just enough to feel alive, without breaking the dark restraint of the landing page.</p>
-              </div>
-            </div>
+        <div class="eyebrow" style="text-align:center;margin-bottom:18px;">One ecosystem</div>
+        <h2 class="band-title" style="text-align:center;margin:0 auto 12px;">AXE Companion + Trading OS.<br /><span class="hero-gradient">Same brain. Two surfaces.</span></h2>
+        <p class="band-copy" style="text-align:center;margin:0 auto 32px;">Phone-first chat on Companion. Chart-first canvas on iPad and Trading OS. One Supabase memory layer keeps context, intel and behavior aligned across both apps.</p>
+        <div class="ecosystem-sync-grid">
+          <article class="sync-card reveal">
+            <div class="sync-card-kicker"><i></i>AXE Companion</div>
+            <h3>The trader's phone OS.</h3>
+            <p>Chat-first AXE copilot, morning briefs, intel cards and one-tap execution — built for the pocket workflow.</p>
+            <span class="sync-card-tag">Phone · Chat default</span>
           </article>
-          <article class="reveal-card reveal">
-            <div class="reveal-card-default">
-              <div class="reveal-card-default-inner">
-                <div class="reveal-orb">X</div>
-                <h4>Quiet, but not flat.</h4>
-                <span>Hover to reveal</span>
-              </div>
-            </div>
-            <div class="reveal-card-hover">
-              <div class="reveal-card-inner">
-                <div class="reveal-card-kicker">App language</div>
-                <h3>Quiet, but not flat.</h3>
-                <p>Thin Linear-style edges, cyan energy and soft reveal motion keep the whole section feeling like part of AXE itself.</p>
-              </div>
-            </div>
+          <article class="sync-card reveal">
+            <div class="sync-card-kicker"><i></i>Shared spine</div>
+            <h3>One memory layer.</h3>
+            <p>Same Supabase login, workspace, journal, cockpit signals and AXE context — synced the moment either app is live.</p>
+            <span class="sync-card-tag">Supabase · Live sync</span>
           </article>
-          <article class="reveal-card reveal">
-            <div class="reveal-card-default">
-              <div class="reveal-card-default-inner">
-                <div class="reveal-orb">E</div>
-                <h4>Premium motion cues.</h4>
-                <span>Hover to reveal</span>
-              </div>
-            </div>
-            <div class="reveal-card-hover">
-              <div class="reveal-card-inner">
-                <div class="reveal-card-kicker">Depth</div>
-                <h3>Premium motion cues.</h3>
-                <p>Hover brings in a controlled canvas field so the cards feel reactive and expensive, not decorative or noisy.</p>
-              </div>
-            </div>
+          <article class="sync-card reveal">
+            <div class="sync-card-kicker"><i></i>Trading OS</div>
+            <h3>The desktop terminal.</h3>
+            <p>Chart-first execution surface with multi-account workflows, depth and the full intel board — same AXE brain, larger canvas.</p>
+            <span class="sync-card-tag">Desktop · Chart default</span>
           </article>
+        </div>
+        <div class="sync-bridge">Context flows both ways</div>
+      </div>
+    </section>
+
+    <section class="glow-band">
+      <div class="band-inner">
+        <div class="eyebrow">Inside the ecosystem</div>
+        <h2 class="band-title">Scroll the full stack —<br /><span class="hero-gradient">phone to terminal.</span></h2>
+        <p class="band-copy">From AXE Chat on your phone to the chart on iPad and Trading OS — every screen shares the same intelligence layer and execution model.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px;padding-bottom:24px;">
+      <div class="showcase">
+        <div class="show-section reveal">
+          <div class="show-meta">
+            <div class="step">01 · AXE Chat · Companion</div>
+            <h3>Ask on phone. Context follows everywhere.</h3>
+            <p>Start in chat on AXE Companion — chart-aware reasoning, morning briefs and trade plans. The same thread is waiting on iPad and Trading OS when you switch surfaces.</p>
+            <a class="arrow" href="#hero-devices">Try live chat mock →</a>
+          </div>
+          <div class="show-photo">
+            <img src="/landing/photos/595_1x_shots_so.png" alt="AXE Chat — H1 analysis on phone" loading="lazy" />
+          </div>
+        </div>
+
+        <div class="show-section flip reveal">
+          <div class="show-meta">
+            <div class="step">02 · Shared memory</div>
+            <h3>One login. One workspace. Zero re-entry.</h3>
+            <p>Journal entries, cockpit FIT, intel saves and AXE memory sync through Supabase — not duplicated silos. What you teach AXE on mobile shows up on desktop instantly.</p>
+            <a class="arrow" href="#pricing">See pricing →</a>
+          </div>
+          <div class="show-photo">
+            <img src="/marketing/marketing-overview.png" alt="AXE ecosystem overview — shared workspace" loading="lazy" />
+          </div>
+        </div>
+
+        <div class="show-section reveal">
+          <div class="show-meta">
+            <div class="step">03 · Chart · iPad + Trading OS</div>
+            <h3>Read the candle on the big canvas.</h3>
+            <p>MT5 ticks on a calm dark canvas — auto-Fib, BOS/CHoCH, order blocks and FVGs. iPad lands on chart by default; Trading OS extends the same workflow to desktop execution.</p>
+            <a class="arrow" href="#hero-devices">Try live chart mock →</a>
+          </div>
+          <div class="show-photo">
+            <img src="/landing/photos/809_1x_shots_so.png" alt="AXE Chart — structure and execution" loading="lazy" />
+          </div>
+        </div>
+
+        <div class="show-section flip reveal">
+          <div class="show-meta">
+            <div class="step">04 · Intel board</div>
+            <h3>19 live feeds on every surface.</h3>
+            <p>Chokepoints, military radar, smart-money flow and macro — streamed live next to your chart on Companion, iPad and Trading OS. Same feeds, same scoring, same urgency.</p>
+            <a class="arrow" href="#product">Explore the feeds →</a>
+          </div>
+          <div class="show-photo">
+            <img src="/landing/photos/54_1x_shots_so.png" alt="AXE Intel analysis board" loading="lazy" />
+          </div>
+        </div>
+
+        <div class="show-section reveal">
+          <div class="show-meta">
+            <div class="step">05 · Cockpit</div>
+            <h3>Behavior map syncs across apps.</h3>
+            <p>FIT alignment, session rhythm and correction loops built from real MT5 fills — visible in Companion and reflected in Trading OS coaching. One edge profile, not two dashboards.</p>
+            <a class="arrow" href="#product">See behavior map →</a>
+          </div>
+          <div class="show-photo">
+            <img src="/landing/photos/482_1x_shots_so.png" alt="AXE Cockpit — FIT alignment" loading="lazy" />
+          </div>
+        </div>
+
+        <div class="show-section flip reveal">
+          <div class="show-meta">
+            <div class="step">06 · Trading OS terminal</div>
+            <h3>Desktop execution at terminal speed.</h3>
+            <p>Multi-account MT5 connect, market depth, chart tools and scenario workflows — the premium terminal that shares AXE's brain with Companion. Start on phone, finish on desk.</p>
+            <a class="arrow" href="https://tradingosapp.com" target="_blank" rel="noopener noreferrer">Trading OS →</a>
+          </div>
+          <div class="show-photo">
+            <img src="/landing/photos/883_1x_shots_so.png" alt="Trading OS desktop terminal" loading="lazy" />
+          </div>
         </div>
       </div>
     </section>
@@ -3729,30 +4103,28 @@
 
     <section id="product" class="section">
       <div class="section-inner">
-        <div class="cards-grid">
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-5 4 10 2-5h4"/></svg></div><h3>AXE Intel Tide</h3><p>Net call premium $1.71B vs net put premium $2.29B, directional bias per instrument and live smart-money pressure.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/></svg></div><h3>AXE Macro</h3><p>Rates, inflation, growth and central-bank posture distilled into a regime read that frames every trade.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></div><h3>AXE Market Conviction</h3><p>A single conviction score blending breadth, flow and momentum, how hard the tape is leaning.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/></svg></div><h3>AXE Insider Flow</h3><p>Form-4 buys and sells the moment they hit, sized in dollars, ranked by signal.</p></article>
-          <article class="feed-card feed-card--feature reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M6 18V6"/><path d="M18 18H6"/><path d="m8 15 3-4 3 2 4-5"/></svg></div><h3>Cockpit</h3><p>Your full behavior surface in one place — FIT, journals, sessions, instruments and the correction rhythm visible without leaving the chart flow.</p></article>
-          <article class="feed-card feed-card--feature reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/><path d="M7 11h10M7 15h6"/></svg></div><h3>AXE Feed</h3><p>The highest-value stream inside the app — AI summaries, linked signals and live context so the feed reads like one coherent tape, not noise.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M7 4h10v16H7z"/><path d="M4 8h3M4 12h3M4 16h3"/></svg></div><h3>AXE Policy Flow</h3><p>Congressional trades, lobbying and legislative moves — the policy tape that front-runs the price tape.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M10 4h4v16h-4z"/></svg></div><h3>AXE Dark Pool</h3><p>Off-exchange block prints surfaced live so size shows up before it moves the lit book.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg></div><h3>AXE Options Flow</h3><p>Sweeps, blocks and unusual contracts in real time, strike, premium and aggressor side.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M2 13h7l4 4 9-9"/><path d="M14 13h8"/></svg></div><h3>AXE Jet Tracker</h3><p>Corporate jets, Dell, Alphabet, Pfizer, ExxonMobil. Who’s airborne, who’s grounded.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div><h3>AXE Military Radar</h3><p>200 aircraft tracked, bombers, ISR, tankers, flight level and speed. See escalation before headlines.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M12 5 20 19H4L12 5Z"/><path d="M12 10v4M12 17h.01"/></svg></div><h3>AXE Emergency Monitor</h3><p>Distress feed across global airspace. Active alerts surface the moment they happen.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M12 21V8"/><path d="M5 14c4 0 5-3 7-3s3 3 7 3"/><path d="M7 4c2 2 3 3 5 3s3-1 5-3"/></svg></div><h3>AXE Vessel Intel</h3><p>Tracked tankers and container ships positioned against live chokepoint risk.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></div><h3>AXE Energy Flow</h3><p>Crude, gas and power flows — cargoes, storage and pipeline shifts that set the floor under risk assets.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M12 21V8"/><path d="M5 14c4 0 5-3 7-3s3 3 7 3"/><circle cx="12" cy="5" r="2"/></svg></div><h3>AXE Global Chokepoints</h3><p>Hormuz, Malacca, Suez, Panama, Bab-el-Mandeb, Taiwan Strait — live ship counts and critical/high/medium risk scoring as conflict reshapes supply chains.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M8 7h8"/><path d="M7 14 5 21"/><path d="M17 14l2 7"/></svg></div><h3>AXE Seismic Events</h3><p>Earthquakes, volcanoes and wildfires tagged with market impact — supply shocks before the wire catches up.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M12 3 5 7v5c0 5 3.5 8 7 9 3.5-1 7-4 7-9V7l-7-4Z"/></svg></div><h3>AXE Cyber Intel</h3><p>Breaches, ransomware and outages mapped to tickers — the digital risk feed equities now trade on.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M6 18V6"/><path d="M18 18H6"/><path d="m8 15 3-4 3 2 4-5"/></svg></div><h3>AXE Correlation Engine</h3><p>Cross-asset correlations computed live — how gold, yields, crude and crypto are actually moving together right now.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/><path d="M7 11h10M7 15h6"/></svg></div><h3>AXE News</h3><p>Multi-source headlines fused and de-duped — cached smart so a quiet hour never burns your feed.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg></div><h3>AXE Calendar</h3><p>Upcoming events, prints and earnings on one timeline — know what hits the tape before it does.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v5h5"/></svg></div><h3>AXE Déjà Vu</h3><p>Similar-patterns engine — finds the historical analogues to today’s setup and what happened next.</p></article>
-          <article class="feed-card reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M4 14c2-4 5-6 8-6 4 0 6 3 8 7"/><path d="M4 10c2 1 4 2 6 2"/></svg></div><h3>AXE Smart Money Flow</h3><p>Institutional pressure mapped into one quiet tape read so intent shows up faster than noise.</p></article>
-          <article class="feed-card feed-card--bar reveal"><div class="pill"></div><div class="card-icon"><svg viewBox="0 0 24 24"><path d="M4 12h3l2-4 3 8 2-4h6"/></svg></div><h3>Squawk Bar</h3><p>A thin live bar for macro bursts, headlines and desk-color one-liners — always on, never taking over the whole feed.</p></article>
+        <div class="intel-bento">
+          <div class="itile span2 reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><h3>AXE Intel Tide</h3><p>Net call premium <b style="color:#5eead4">$1.71B</b> vs net put premium <b style="color:#fda4af">$2.29B</b>, directional bias per instrument and live smart-money pressure.</p></div>
+          <div class="itile reveal" style="--ac:34,211,238"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div><h3>AXE Macro</h3><p>Rates, inflation, growth and central-bank posture distilled into a regime read that frames every trade.</p></div>
+          <div class="itile reveal" style="--ac:34,211,238"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></div><h3>AXE Market Conviction</h3><p>A single conviction score blending breadth, flow and momentum — how hard the tape is leaning.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div><h3>AXE Insider Flow</h3><p>Form-4 buys and sells the moment they hit — sized in dollars, ranked by signal.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></div><h3>AXE Policy Flow</h3><p>Congressional trades, lobbying and legislative moves — the policy tape that front-runs the price tape.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></div><h3>AXE Dark Pool</h3><p>Off-exchange block prints surfaced live — see size before it moves the lit book.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div><h3>AXE Options Flow</h3><p>Sweeps, blocks and unusual contracts in real time — strike, premium and aggressor side.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg></div><h3>AXE Jet Tracker</h3><p>Corporate jets — who's airborne, who's grounded, and what it might mean for the tape.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div><h3>AXE Military Radar</h3><p>200 aircraft tracked — bombers, ISR, tankers. See escalation before headlines.</p></div>
+          <div class="itile reveal" style="--ac:251,113,133"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="m10.29 3.86-8.4 14.55A2 2 0 0 0 3.6 21h16.8a2 2 0 0 0 1.71-2.59l-8.4-14.55a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><h3>AXE Emergency Monitor</h3><p>Squawk 7700 distress feed across global airspace — active alerts surfaced the moment they happen.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M2 20a6 6 0 0 0 12 0 6 6 0 0 0 8 0"/><path d="M4 18 2 9l10 3 10-3-2 9"/><path d="M12 12V3"/></svg></div><h3>AXE Vessel Intel</h3><p>Tracked tankers and container ships positioned against live chokepoint risk.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div><h3>AXE Energy Flow</h3><p>Crude, gas and power flows — cargoes, storage and pipeline shifts that set the floor under risk assets.</p></div>
+          <div class="itile span2 reveal" style="--ac:45,212,191"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 22V8"/><circle cx="12" cy="5" r="3"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg></div><h3>AXE Global Chokepoints</h3><p>Hormuz, Malacca, Suez, Panama, Bab-el-Mandeb, Taiwan Strait — live ship counts, % of world trade and critical / high / medium risk scoring.</p></div>
+          <div class="itile reveal" style="--ac:251,113,133"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" y1="14" x2="9" y2="18"/></svg></div><h3>AXE Seismic Events</h3><p>Earthquakes, volcanoes and wildfires tagged with market impact — supply shocks before the wire catches up.</p></div>
+          <div class="itile reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3>AXE Cyber Intel</h3><p>Breaches, ransomware and outages mapped to tickers — the digital risk feed equities now trade on.</p></div>
+          <div class="itile span2 reveal" style="--ac:34,211,238"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div><h3>AXE Correlation Engine</h3><p>Cross-asset correlations computed live — how gold, yields, crude and crypto are actually moving together right now.</p></div>
+          <div class="itile reveal" style="--ac:96,165,250"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/></svg></div><h3>AXE News</h3><p>Multi-source headlines fused and de-duped — cached smart so a quiet hour never burns your feed.</p></div>
+          <div class="itile reveal" style="--ac:96,165,250"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><h3>AXE Calendar</h3><p>Upcoming events, prints and earnings on one timeline — know what hits the tape before it does.</p></div>
+          <div class="itile reveal" style="--ac:251,191,36"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/><polyline points="12 7 12 12 15 14"/></svg></div><h3>AXE Déjà Vu</h3><p>Similar-patterns engine — finds the historical analogues to today's setup and what happened next.</p></div>
+          <div class="itile reveal" style="--ac:125,211,252"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><h3>AXE Feed</h3><p>The highest-value stream inside the app — AI summaries, linked signals and live context on one coherent tape.</p></div>
+          <div class="itile span3 reveal" style="--ac:52,211,153"><div class="badge2"><i></i>LIVE</div><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12h3l2-4 3 8 2-4h6"/></svg></div><h3>Squawk Bar</h3><p>A thin live bar for macro bursts, headlines and desk-color one-liners — always on across Companion and Trading OS, never taking over the whole feed.</p></div>
         </div>
       </div>
     </section>
@@ -4158,11 +4530,11 @@
       });
     });
 
-    document.querySelectorAll('#product .feed-card').forEach((card) => {
-      card.addEventListener('pointermove', (event) => {
-        const rect = card.getBoundingClientRect();
-        card.style.setProperty('--mx', `${event.clientX - rect.left}px`);
-        card.style.setProperty('--my', `${event.clientY - rect.top}px`);
+    document.querySelectorAll('.itile, .sync-card, .card').forEach((tile) => {
+      tile.addEventListener('pointermove', (event) => {
+        const rect = tile.getBoundingClientRect();
+        tile.style.setProperty('--mx', `${event.clientX - rect.left}px`);
+        tile.style.setProperty('--my', `${event.clientY - rect.top}px`);
       });
     });
 

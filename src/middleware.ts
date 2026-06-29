@@ -110,7 +110,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (isProtectedPath(path) && !user) {
+  const isEmbedDemo =
+    request.nextUrl.searchParams.get("embed") === "1" &&
+    request.nextUrl.searchParams.get("demo") === "1";
+
+  if (isProtectedPath(path) && !user && !isEmbedDemo) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
