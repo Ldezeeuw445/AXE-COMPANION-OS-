@@ -74,7 +74,7 @@ export const WALLET_PROVIDERS: WalletProviderMeta[] = [
     id: "rise",
     name: "Rise",
     subtitle: "Payouts · paste address",
-    logoSrc: "/wallets/rise.png",
+    logoSrc: "/wallets/rise-icon.svg",
     connectable: true,
     ...METAMASK_STYLE,
   },
