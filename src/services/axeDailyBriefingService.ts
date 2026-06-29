@@ -570,7 +570,7 @@ export async function runDailyBriefingCron(): Promise<{
   }
 
   // Run every hour but only process users whose local time is 07:00
-  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7, paidOnly: true });
+  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7, paidOnly: false });
   console.log(`[Briefing] Daily cron starting for ${traders.length} traders`);
 
   for (const traderId of traders) {
