@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { SQUAWK_STATIONS } from "@/lib/squawk/streams";
+import { tierLabel } from "@/lib/squawk/rotation";
 import { normalizeSquawkStationIds, writeSquawkStationIds } from "@/lib/squawk/prefs";
 
 export function SquawkStationPicker({ initialIds }: { initialIds: string[] }) {
@@ -57,7 +58,10 @@ export function SquawkStationPicker({ initialIds }: { initialIds: string[] }) {
               <p className={`text-xs font-semibold ${on ? "text-cyan-100" : "text-white/80"}`}>
                 {station.name}
               </p>
-              <p className="text-[10px] text-white/40">{station.tag}</p>
+              <p className="text-[10px] text-white/40">
+                {station.tag}
+                <span className="text-white/25"> · {tierLabel(station.tier)}</span>
+              </p>
             </div>
             <span
               className={`ml-3 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold ${
@@ -71,7 +75,9 @@ export function SquawkStationPicker({ initialIds }: { initialIds: string[] }) {
         );
       })}
       <p className="text-[10px] text-tos-dim">
-        {saving ? "Saving…" : "Pick which channels rotate on chart squawk. At least one must stay on."}
+        {saving
+          ? "Saving…"
+          : "10 channels · Core (always-on), Session (US/EU hours), Context (macro). Pick which rotate on chart squawk."}
       </p>
     </div>
   );
