@@ -1,22 +1,18 @@
 "use client";
 
-/**
- * ChatMorningBrief — surfaces today's AXE morning brief inside the chat thread.
- *
- * Briefs are delivered by cron (07:00 local daily, Monday 07:00 weekly).
- * This card only displays an existing brief — it never triggers generation.
- */
-
 import { useEffect, useState, useCallback } from "react";
-import { Sunrise, X, RefreshCw, Newspaper, ArrowRight } from "lucide-react";
+import { Sunrise, X, RefreshCw, Newspaper, ArrowRight, Check } from "lucide-react";
 import { applyChatPrefill } from "@/lib/chat/chatPrefill";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import { feedKindLabel, feedKindStyle } from "@/lib/feed/feedKindStyle";
+import { BriefBodyContent } from "@/components/briefing/BriefBodyContent";
+import type { BriefHighlight } from "@/lib/briefing/briefBodyFormat";
+import { pairHighlights } from "@/lib/briefing/briefBodyFormat";
 
 type Brief = {
   title: string;
   body: string;
-  highlights: Array<{ pair?: string }>;
+  highlights: BriefHighlight[];
   chat_prefill: string;
   briefing_date: string;
   feed_url: string;
@@ -29,6 +25,7 @@ export function ChatMorningBrief() {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshDone, setRefreshDone] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   const fetchBrief = useCallback(async () => {
@@ -47,12 +44,15 @@ export function ChatMorningBrief() {
 
   const refreshBrief = useCallback(async () => {
     setRefreshing(true);
+    setRefreshDone(false);
     try {
       const res = await fetch("/api/cockpit/briefing?force=true", { method: "POST" });
       if (!res.ok) throw new Error("Refresh failed");
       const data = await res.json();
       if (data.upgradeRequired) return;
       setBrief(data.brief ?? null);
+      setRefreshDone(true);
+      window.setTimeout(() => setRefreshDone(false), 1800);
     } catch (e) {
       console.warn("[ChatMorningBrief] Refresh failed:", e);
     } finally {
@@ -76,10 +76,7 @@ export function ChatMorningBrief() {
     briefingType: isWeekly ? "weekly" : "daily",
   });
 
-  const paragraphs = brief.body
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const pairTags = pairHighlights(brief.highlights);
 
   return (
     <div
@@ -99,10 +96,20 @@ export function ChatMorningBrief() {
             type="button"
             onClick={() => void refreshBrief()}
             disabled={refreshing}
-            className={`rounded p-1.5 text-tos-dim hover:bg-white/[0.06] disabled:opacity-40 ${briefStyle.text}`}
+            className={`rounded p-1.5 transition-all active:scale-95 disabled:opacity-40 ${
+              refreshDone
+                ? "bg-emerald-500/15 text-emerald-300"
+                : refreshing
+                  ? "bg-white/[0.08] text-tos-text"
+                  : `text-tos-dim hover:bg-white/[0.06] ${briefStyle.text}`
+            }`}
             title="Regenerate brief"
           >
-            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshDone ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+            )}
           </button>
           <button
             type="button"
@@ -127,24 +134,18 @@ export function ChatMorningBrief() {
         {brief.title}
       </p>
 
-      <div className="mb-3 space-y-1.5">
-        {paragraphs.slice(0, 3).map((para, i) => (
-          <p key={i} className="text-[12px] leading-relaxed text-tos-text/85">
-            {para}
-          </p>
-        ))}
+      <div className="mb-3">
+        <BriefBodyContent body={brief.body} highlights={brief.highlights} compact />
       </div>
 
-      {brief.highlights?.length > 0 ? (
+      {pairTags.length > 0 ? (
         <div className="mb-3 flex flex-wrap gap-1.5">
-          {brief.highlights
-            .filter((h) => h.pair)
-            .map((h, i) => (
+          {pairTags.map((pair, i) => (
               <span
                 key={i}
                 className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${briefStyle.badge}`}
               >
-                {h.pair}
+                {pair}
               </span>
             ))}
         </div>

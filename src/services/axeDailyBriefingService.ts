@@ -18,6 +18,9 @@ import { getTraderLearningArc } from "@/services/learningArcService";
 import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
 import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
+import { buildBriefNewsCards } from "@/lib/briefing/briefingNewsCards";
+import type { BriefHighlight } from "@/lib/briefing/briefBodyFormat";
+import type { MarketContext } from "@/lib/market/marketTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ─── Timezone helpers ─────────────────────────────────────────────────────────
@@ -211,12 +214,24 @@ Length: 200-280 words maximum.`;
 
     prompt += `
 
-Write a morning brief that MUST open with this exact first sentence:
-"Good morning ${context.name}, ${weatherLine}."
-Then continue in order:
-1. The most important or upcoming news/events for their top pairs (${hasPairs ? context.preferredPairs.join(", ") : "EURUSD, XAUUSD"}) — use ONLY the market context headlines/events provided below; do not invent news
-2. One tactical insight from AXE memory / alignment (${context.alignment}% aligned)
-3. One clear thing to watch this session
+Write a morning brief using EXACTLY this plain-text structure (no markdown, no ** or # symbols):
+
+Good morning ${context.name}, ${weatherLine}.
+
+MARKET OUTLOOK
+[2-3 sentences on session setup for their top pairs — bold pair symbols as plain text like XAUUSD, not markdown]
+
+NEWS
+[Only include this section if there is meaningful news in the market context below. 1-2 sentences on the most important headline or calendar event for their pairs. Omit the whole NEWS section if nothing notable.]
+
+WATCH THIS SESSION
+[One clear tactical watch item tied to alignment (${context.alignment}% aligned)]
+
+Rules:
+- Do NOT use **, __, #, or bullet lists
+- Section headers must be exactly: MARKET OUTLOOK, NEWS, WATCH THIS SESSION
+- Use ONLY headlines/events from the market context below for NEWS — never invent news
+- Mention trading pairs by ticker (XAUUSD, BTCUSD, etc.)
 
 Tone: warm, direct, confident. Like a senior trader who actually knows them.
 Length: 150-220 words maximum.`;
@@ -228,7 +243,7 @@ Length: 150-220 words maximum.`;
 async function appendMarketContextToPrompt(
   context: TraderBriefingContext,
   prompt: string,
-): Promise<string> {
+): Promise<{ prompt: string; marketCtx: MarketContext | null }> {
   const primaryPair = context.preferredPairs[0] ?? "XAUUSD";
   try {
     const marketCtx = await buildMarketContext({
@@ -239,12 +254,16 @@ async function appendMarketContextToPrompt(
     });
     const summary = summarizeMarketContext(marketCtx);
     if (summary.trim()) {
-      return `${prompt}\n\nMarket context (use for news/events section — do not fabricate beyond this):\n${summary}`;
+      return {
+        prompt: `${prompt}\n\nMarket context (use for NEWS section only — do not fabricate beyond this):\n${summary}`,
+        marketCtx,
+      };
     }
+    return { prompt, marketCtx };
   } catch (err) {
     console.warn("[Briefing] Market context unavailable:", err);
   }
-  return prompt;
+  return { prompt, marketCtx: null };
 }
 
 // ─── Generate brief and save to DB ───────────────────────────────────────────
@@ -300,8 +319,11 @@ export async function generateMorningBrief(
 
   // Build prompt (+ live market context for news section)
   let userPrompt = buildBriefingPrompt(context, { weekly: isWeekly });
+  let marketCtx: MarketContext | null = null;
   if (!isWeekly) {
-    userPrompt = await appendMarketContextToPrompt(context, userPrompt);
+    const enriched = await appendMarketContextToPrompt(context, userPrompt);
+    userPrompt = enriched.prompt;
+    marketCtx = enriched.marketCtx;
   }
 
   // Call LLM
@@ -310,7 +332,7 @@ export async function generateMorningBrief(
       {
         role: "system",
         content:
-          "You are AXE Companion, a warm and intelligent AI trading partner. Write concise, personal, actionable morning briefs.",
+          "You are AXE Companion, a warm and intelligent AI trading partner. Write concise, personal, actionable morning briefs. Never use markdown formatting — no **, no #, no bullet lists. Use plain section headers on their own line.",
       },
       { role: "user", content: userPrompt },
     ],
@@ -325,7 +347,16 @@ export async function generateMorningBrief(
     `[Briefing] Generated for ${traderId} in ${latency_ms}ms via ${response.provider}`
   );
 
-  const briefText = response.content ?? "";
+  const briefText = (response.content ?? "").replace(/\*\*/g, "");
+
+  const highlightRows: BriefHighlight[] = context.preferredPairs.length
+    ? context.preferredPairs.map((p) => ({ pair: p }))
+    : [];
+  if (marketCtx && !isWeekly) {
+    for (const card of buildBriefNewsCards(marketCtx, 2)) {
+      highlightRows.push(card);
+    }
+  }
 
   // Save to axe_daily_briefings (upsert by user_id + date + type)
   if (shouldSave) {
@@ -348,9 +379,7 @@ export async function generateMorningBrief(
               timeZone: context.timezone,
             })}`,
         body: briefText,
-        highlights: context.preferredPairs.length
-          ? context.preferredPairs.map((p) => ({ pair: p }))
-          : [],
+        highlights: highlightRows,
         chat_prefill: isWeekly
           ? `AXE, walk me through this week's outlook for ${
               context.preferredPairs[0] ?? "the market"

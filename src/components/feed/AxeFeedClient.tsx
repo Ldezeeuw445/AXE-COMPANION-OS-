@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, RefreshCw } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 import { feedItemLinkLabel, inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import { feedKindLabel, feedKindStyle } from "@/lib/feed/feedKindStyle";
+import { stripBriefMarkdown } from "@/lib/briefing/briefBodyFormat";
 import {
   getFeedLastSeenAt,
   markAllFeedItemsRead,
   AXE_FEED_LAST_SEEN_KEY,
 } from "@/lib/feed/feedSeen";
+import { cn } from "@/lib/utils";
 import type { AxeFeedItem } from "@/types/feed";
 
 export { getFeedLastSeenAt, AXE_FEED_LAST_SEEN_KEY };
@@ -44,6 +47,9 @@ export function AxeFeedClient() {
   const [items, setItems] = useState<AxeFeedItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshDone, setRefreshDone] = useState(false);
+  const [markReadDone, setMarkReadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const applyItems = useCallback((list: AxeFeedItem[], markSeen: boolean) => {
@@ -96,9 +102,26 @@ export function AxeFeedClient() {
     return [...map.entries()];
   }, [items]);
 
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshDone(false);
+    try {
+      await loadFeed(false);
+      setRefreshDone(true);
+      window.setTimeout(() => setRefreshDone(false), 1600);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to refresh");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const handleMarkAllRead = () => {
     markAllFeedItemsRead(items);
     setUnread(0);
+    setMarkReadDone(true);
+    window.setTimeout(() => setMarkReadDone(false), 1600);
   };
 
   if (loading) {
@@ -134,24 +157,51 @@ export function AxeFeedClient() {
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
           Last {FEED_HISTORY_DAYS} days · {items.length} items
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => void loadFeed(false)}
-            className="text-[10px] font-semibold uppercase tracking-[0.12em] text-tos-dim transition-colors hover:text-tos-muted"
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95 disabled:opacity-50",
+              refreshDone
+                ? "bg-emerald-500/12 text-emerald-300"
+                : refreshing
+                  ? "bg-white/[0.06] text-tos-text"
+                  : "text-tos-dim hover:bg-white/[0.05] hover:text-tos-muted",
+            )}
           >
-            Refresh
+            {refreshDone ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
+            )}
+            {refreshDone ? "Refreshed" : refreshing ? "Refreshing…" : "Refresh"}
           </button>
           {unread > 0 ? (
             <button
               type="button"
               onClick={handleMarkAllRead}
-              className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-400/90 transition-colors hover:text-cyan-300"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95",
+                markReadDone
+                  ? "bg-emerald-500/12 text-emerald-300"
+                  : "text-cyan-400/90 hover:bg-cyan-400/10 hover:text-cyan-300",
+              )}
             >
-              Mark all read ({unread > 9 ? "9+" : unread})
+              {markReadDone ? <Check className="h-3 w-3" /> : null}
+              {markReadDone ? "All read" : `Mark all read (${unread > 9 ? "9+" : unread})`}
             </button>
           ) : (
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-tos-dim">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors",
+                markReadDone || refreshDone
+                  ? "bg-emerald-500/10 text-emerald-300"
+                  : "text-tos-dim",
+              )}
+            >
+              {(markReadDone || refreshDone) && <Check className="h-3 w-3" />}
               All caught up
             </span>
           )}
@@ -177,7 +227,9 @@ export function AxeFeedClient() {
                       </p>
                       <p className="mt-1 text-sm font-medium text-tos-text">{item.title}</p>
                       {item.body ? (
-                        <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">{item.body}</p>
+                        <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">
+                          {stripBriefMarkdown(item.body)}
+                        </p>
                       ) : null}
                     </div>
                     <span className="shrink-0 text-[10px] uppercase tracking-wide text-tos-dim">
