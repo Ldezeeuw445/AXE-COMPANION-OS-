@@ -19,6 +19,11 @@ import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
 import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
 import { buildBriefNewsCards } from "@/lib/briefing/briefingNewsCards";
+import {
+  fetchBriefPeriodTrades,
+  formatPeriodPerformanceForPrompt,
+  type BriefPeriodPerformance,
+} from "@/lib/briefing/briefPeriodTrades";
 import type { BriefHighlight } from "@/lib/briefing/briefBodyFormat";
 import type { MarketContext } from "@/lib/market/marketTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -43,7 +48,7 @@ export interface TraderBriefingContext {
   timezone: string;
   preferredPairs: string[];
   alignment: number; // 0-100
-  recentWins: Array<{ pair: string; timeframe: string; gain: number }>;
+  periodPerformance: BriefPeriodPerformance;
   topIndicators: string[];
   preferredSession: "london" | "newyork" | "asia";
   tier: "free" | "pro" | "founder" | "elite";
@@ -99,13 +104,21 @@ async function fetchProfileDirect(supabase: SupabaseClient, userId: string): Pro
 
 export async function buildBriefingContext(
   supabase: SupabaseClient,
-  traderId: string
+  traderId: string,
+  options?: { weekly?: boolean },
 ): Promise<TraderBriefingContext> {
   try {
     const [profile, arc] = await Promise.all([
       fetchProfileDirect(supabase, traderId),
       getTraderLearningArc(traderId, supabase),
     ]);
+
+    const periodPerformance = await fetchBriefPeriodTrades(
+      supabase,
+      traderId,
+      profile.timezone,
+      { weekly: options?.weekly },
+    );
 
     const tzDate = new Date(
       new Date().toLocaleString("en-US", { timeZone: profile.timezone })
@@ -134,7 +147,7 @@ export async function buildBriefingContext(
       timezone: profile.timezone,
       preferredPairs: arc.topPairs.slice(0, 3),
       alignment: arc.alignmentScore,
-      recentWins: arc.recentWins.slice(0, 3),
+      periodPerformance,
       topIndicators: arc.topIndicators.slice(0, 3),
       preferredSession: session,
       tier: profile.tier,
@@ -149,7 +162,14 @@ export async function buildBriefingContext(
       timezone: "Europe/Amsterdam",
       preferredPairs: [],
       alignment: 0,
-      recentWins: [],
+      periodPerformance: {
+        since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        trades: [],
+        wins: 0,
+        losses: 0,
+        breakeven: 0,
+        netPnl: 0,
+      },
       topIndicators: [],
       preferredSession: "london",
       tier: "free",
@@ -171,7 +191,7 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
   });
 
   const hasPairs = context.preferredPairs.length > 0;
-  const hasWins = context.recentWins.length > 0;
+  const hasPeriodTrades = context.periodPerformance.trades.length > 0;
   const isWeekly = options?.weekly ?? false;
 
   let prompt = `You are AXE — a warm, sharp trading companion. Generate a ${isWeekly ? "personalized weekly outlook" : "personalized morning brief"} for ${context.name}.
@@ -188,11 +208,8 @@ Key facts:
     prompt += `\n- Weather in ${context.weather.location}: ${context.weather.summary}, ${context.weather.tempC}°C, wind ${context.weather.windKmh} km/h`;
   }
 
-  if (hasWins) {
-    prompt += `\n\nRecent profitable trades:`;
-    for (const win of context.recentWins) {
-      prompt += `\n- ${win.pair} on ${win.timeframe}: +${win.gain.toFixed(1)}%`;
-    }
+  if (hasPeriodTrades) {
+    prompt += formatPeriodPerformanceForPrompt(context.periodPerformance);
   }
 
   if (isWeekly) {
@@ -219,22 +236,33 @@ Write a morning brief using EXACTLY this plain-text structure (no markdown, no *
 Good morning ${context.name}, ${weatherLine}.
 
 MARKET OUTLOOK
-[2-3 sentences on session setup for their top pairs — bold pair symbols as plain text like XAUUSD, not markdown]
+[2-3 sentences on session setup for their top pairs — mention pair symbols like XAUUSD as plain text, not markdown]
 
 NEWS
 [Only include this section if there is meaningful news in the market context below. 1-2 sentences on the most important headline or calendar event for their pairs. Omit the whole NEWS section if nothing notable.]
+
+RECENT PERFORMANCE
+[Only include if closed History trades are listed above. Summarize wins AND losses. Use exact P/L currency amounts from the data — never percentages. Never mention Quotes or chart timeframes.]
+
+ALIGNMENT SCORE
+[One sentence on alignment at ${context.alignment}%]
+
+ACTION ITEMS
+[2-4 numbered tactical points for today — plain numbers like 1. 2. 3., no markdown]
 
 WATCH THIS SESSION
 [One clear tactical watch item tied to alignment (${context.alignment}% aligned)]
 
 Rules:
 - Do NOT use **, __, #, or bullet lists
-- Section headers must be exactly: MARKET OUTLOOK, NEWS, WATCH THIS SESSION
+- Section headers must be exactly: MARKET OUTLOOK, NEWS, RECENT PERFORMANCE, ALIGNMENT SCORE, ACTION ITEMS, WATCH THIS SESSION
+- Omit RECENT PERFORMANCE entirely if no closed trades were provided above
 - Use ONLY headlines/events from the market context below for NEWS — never invent news
 - Mention trading pairs by ticker (XAUUSD, BTCUSD, etc.)
+- Closed trades come from History — never call them Quotes; open positions live under Trade
 
 Tone: warm, direct, confident. Like a senior trader who actually knows them.
-Length: 150-220 words maximum.`;
+Length: 180-260 words maximum.`;
   }
 
   return prompt;
@@ -289,7 +317,7 @@ export async function generateMorningBrief(
   const writeSb = createServiceRoleSupabaseClient() ?? readSb;
   if (!readSb) throw new Error("Supabase client unavailable");
 
-  const contextForDate = await buildBriefingContext(readSb, traderId);
+  const contextForDate = await buildBriefingContext(readSb, traderId, { weekly: isWeekly });
   const today = getLocalDateString(contextForDate.timezone);
   const briefingType = isWeekly ? "weekly" : "daily";
 
@@ -347,7 +375,11 @@ export async function generateMorningBrief(
     `[Briefing] Generated for ${traderId} in ${latency_ms}ms via ${response.provider}`
   );
 
-  const briefText = (response.content ?? "").replace(/\*\*/g, "");
+  const briefText = (response.content ?? "")
+    .replace(/\*\*/g, "")
+    .replace(/\bon\s+quote\b/gi, "from History")
+    .replace(/\bquotes?\s+tab\b/gi, "History")
+    .trim();
 
   const highlightRows: BriefHighlight[] = context.preferredPairs.length
     ? context.preferredPairs.map((p) => ({ pair: p }))
