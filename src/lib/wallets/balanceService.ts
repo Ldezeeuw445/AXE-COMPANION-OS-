@@ -3,6 +3,7 @@ import "server-only";
 import type { WalletChain } from "@/types/wallets";
 import type { WalletBalance } from "@/types/wallets";
 import { chainSymbol } from "@/lib/wallets/walletCatalog";
+import { fetchNativeUsdPrices } from "@/lib/wallets/coingeckoClient";
 
 const EVM_RPC: Record<Exclude<WalletChain, "bitcoin">, string> = {
   ethereum: "https://eth.llamarpc.com",
@@ -31,17 +32,7 @@ async function nativeUsdPrices(): Promise<Record<string, number>> {
     return priceCache.prices;
   }
   try {
-    const res = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,matic-network,bitcoin&vs_currencies=usd",
-      { next: { revalidate: 120 } },
-    );
-    if (!res.ok) return priceCache?.prices ?? {};
-    const json = (await res.json()) as Record<string, { usd?: number }>;
-    const prices = {
-      ethereum: json.ethereum?.usd ?? 0,
-      "matic-network": json["matic-network"]?.usd ?? 0,
-      bitcoin: json.bitcoin?.usd ?? 0,
-    };
+    const prices = await fetchNativeUsdPrices();
     priceCache = { at: Date.now(), prices };
     return prices;
   } catch {

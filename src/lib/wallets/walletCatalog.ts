@@ -15,7 +15,7 @@ export const WALLET_PROVIDERS: WalletProviderMeta[] = [
   {
     id: "ledger",
     name: "Ledger",
-    subtitle: "Hardware wallet",
+    subtitle: "Hardware · paste address",
     accent: "text-white/90",
     logoSrc: "/wallets/ledger.svg",
     brandBg: "from-white/[0.14] to-white/[0.04]",
