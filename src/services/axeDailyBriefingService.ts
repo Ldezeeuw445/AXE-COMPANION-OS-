@@ -17,8 +17,9 @@ import { callLLM, type LLMRequest } from "@/services/llmClient";
 import { getTraderLearningArc } from "@/services/learningArcService";
 import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
 import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
-import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
-import { buildBriefNewsCards } from "@/lib/briefing/briefingNewsCards";
+import { buildMarketContext } from "@/lib/market/marketContextService";
+import { buildBriefHighlights } from "@/lib/briefing/briefingNewsCards";
+import { summarizeBriefMarketContext } from "@/lib/briefing/briefMarketDigest";
 import {
   fetchBriefPeriodTrades,
   formatPeriodPerformanceForPrompt,
@@ -239,30 +240,33 @@ MARKET OUTLOOK
 [2-3 sentences on session setup for their top pairs — mention pair symbols like XAUUSD as plain text, not markdown]
 
 NEWS
-[Only include this section if there is meaningful news in the market context below. 1-2 sentences on the most important headline or calendar event for their pairs. Omit the whole NEWS section if nothing notable.]
+[Today's agenda: lead with scheduled economic events from the calendar data below. 1-2 sentences on what matters for their pairs today. If a major headline is provided, summarize it in plain language — never paste URLs or filing titles. Omit this section only if the calendar is quiet AND no relevant headlines exist.]
 
 RECENT PERFORMANCE
 [Only include if closed History trades are listed above. Summarize wins AND losses. Use exact P/L currency amounts from the data — never percentages. Never mention Quotes or chart timeframes.]
 
 ALIGNMENT SCORE
-[One sentence on alignment at ${context.alignment}%]
+[Exactly ONE sentence, e.g. "You're at ${context.alignment}% aligned — AXE knows your style well." Do NOT repeat the words "Alignment score" in this sentence.]
 
 ACTION ITEMS
 [2-4 numbered tactical points for today — plain numbers like 1. 2. 3., no markdown]
 
 WATCH THIS SESSION
-[One clear tactical watch item tied to alignment (${context.alignment}% aligned)]
+[One clear tactical watch item for today's session]
 
 Rules:
-- Do NOT use **, __, #, or bullet lists
-- Section headers must be exactly: MARKET OUTLOOK, NEWS, RECENT PERFORMANCE, ALIGNMENT SCORE, ACTION ITEMS, WATCH THIS SESSION
+- Do NOT use **, __, #, bullet lists, or URLs
+- Section headers on their own line — exactly: MARKET OUTLOOK, NEWS, RECENT PERFORMANCE, ALIGNMENT SCORE, ACTION ITEMS, WATCH THIS SESSION
+- Never repeat a section header inside the body text under that section
 - Omit RECENT PERFORMANCE entirely if no closed trades were provided above
-- Use ONLY headlines/events from the market context below for NEWS — never invent news
+- Use ONLY calendar events and headlines from the market context below — never invent news
+- Ignore SEC filings, Form 8.3, fund disclosure PR — not useful for traders
 - Mention trading pairs by ticker (XAUUSD, BTCUSD, etc.)
 - Closed trades come from History — never call them Quotes; open positions live under Trade
+- Write so the trader knows what to expect today without clicking links
 
 Tone: warm, direct, confident. Like a senior trader who actually knows them.
-Length: 180-260 words maximum.`;
+Length: 160-240 words maximum.`;
   }
 
   return prompt;
@@ -280,10 +284,10 @@ async function appendMarketContextToPrompt(
       newsLimit: 6,
       calendarLimit: 8,
     });
-    const summary = summarizeMarketContext(marketCtx);
+    const summary = summarizeBriefMarketContext(marketCtx, context.timezone);
     if (summary.trim()) {
       return {
-        prompt: `${prompt}\n\nMarket context (use for NEWS section only — do not fabricate beyond this):\n${summary}`,
+        prompt: `${prompt}\n\nMarket context (calendar + filtered headlines — do not fabricate beyond this):\n${summary}`,
         marketCtx,
       };
     }
@@ -379,16 +383,14 @@ export async function generateMorningBrief(
     .replace(/\*\*/g, "")
     .replace(/\bon\s+quote\b/gi, "from History")
     .replace(/\bquotes?\s+tab\b/gi, "History")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  const highlightRows: BriefHighlight[] = context.preferredPairs.length
-    ? context.preferredPairs.map((p) => ({ pair: p }))
-    : [];
-  if (marketCtx && !isWeekly) {
-    for (const card of buildBriefNewsCards(marketCtx, 2)) {
-      highlightRows.push(card);
-    }
-  }
+  const highlightRows: BriefHighlight[] =
+    marketCtx && !isWeekly
+      ? buildBriefHighlights(marketCtx, context.timezone, context.preferredPairs)
+      : context.preferredPairs.map((p) => ({ pair: p }));
 
   // Save to axe_daily_briefings (upsert by user_id + date + type)
   if (shouldSave) {

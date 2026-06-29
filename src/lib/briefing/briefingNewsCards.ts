@@ -1,48 +1,68 @@
 import type { MarketContext } from "@/lib/market/marketTypes";
-import type { BriefNewsCard } from "@/lib/briefing/briefBodyFormat";
-import { isBreakingNewsText } from "@/lib/briefing/briefBodyFormat";
+import type { BriefHighlight, BriefNewsCard } from "@/lib/briefing/briefBodyFormat";
+import {
+  formatEventTime,
+  isEventToday,
+  isTraderRelevantNews,
+  isUsableBriefImage,
+  scoreCalendarEventForBrief,
+  scoreNewsForBrief,
+} from "@/lib/briefing/briefNewsQuality";
 
-const INTEL_PLACEHOLDER =
-  "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=800&q=60";
+export type BriefEventChip = {
+  type: "event";
+  title: string;
+  time: string;
+  impact: string;
+  currency?: string;
+};
 
-/** Pick headline cards with optional images for the morning brief NEWS section. */
-export function buildBriefNewsCards(ctx: MarketContext, limit = 2): BriefNewsCard[] {
-  const cards: BriefNewsCard[] = [];
+/** At most one visual news card (real image only) + today's key calendar events as chips. */
+export function buildBriefHighlights(
+  ctx: MarketContext,
+  timezone: string,
+  pairSymbols: string[],
+): BriefHighlight[] {
+  const highlights: BriefHighlight[] = pairSymbols.map((p) => ({ pair: p }));
 
-  for (const item of ctx.news.slice(0, 8)) {
-    if (!item.title?.trim()) continue;
-    const breaking = isBreakingNewsText(`${item.title} ${item.summary ?? ""}`);
-    cards.push({
-      type: "news",
-      title: item.title.trim(),
-      summary: item.summary?.trim().slice(0, 200) ?? null,
-      imageUrl: item.imageUrl?.trim() || (breaking ? INTEL_PLACEHOLDER : null),
-      source: item.source,
-      url: item.url,
-      breaking,
+  const todayEvents = ctx.events
+    .filter((e) => isEventToday(e.startsAt, timezone))
+    .sort((a, b) => scoreCalendarEventForBrief(b) - scoreCalendarEventForBrief(a))
+    .slice(0, 4);
+
+  for (const ev of todayEvents) {
+    highlights.push({
+      type: "event",
+      title: ev.title.trim(),
+      time: formatEventTime(ev.startsAt, timezone),
+      impact: ev.impact,
+      currency: ev.currency ?? ev.country ?? undefined,
     });
   }
 
-  for (const ev of ctx.events.filter((e) => e.impact === "high").slice(0, 3)) {
-    const title = ev.title?.trim();
-    if (!title) continue;
-    const breaking = isBreakingNewsText(title);
-    cards.push({
+  const bestNews = ctx.news
+    .filter((n) => isTraderRelevantNews(n.title, n.summary))
+    .sort((a, b) => scoreNewsForBrief(b) - scoreNewsForBrief(a))
+    .find((n) => isUsableBriefImage(n.imageUrl) && scoreNewsForBrief(n) >= 30);
+
+  if (bestNews) {
+    const card: BriefNewsCard = {
       type: "news",
-      title,
-      summary: `${ev.currency ?? ev.country ?? "Global"} · ${new Date(ev.startsAt).toLocaleString("en-GB", {
-        weekday: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })}`,
-      imageUrl: INTEL_PLACEHOLDER,
-      source: "AXE Calendar",
-      breaking,
-    });
+      title: bestNews.title.trim(),
+      summary: bestNews.summary?.trim().slice(0, 160) ?? null,
+      imageUrl: bestNews.imageUrl!.trim(),
+      source: bestNews.source,
+      breaking: scoreNewsForBrief(bestNews) >= 50,
+    };
+    highlights.push(card);
   }
 
-  return cards
-    .sort((a, b) => Number(Boolean(b.breaking)) - Number(Boolean(a.breaking)))
-    .filter((card, idx, arr) => arr.findIndex((c) => c.title === card.title) === idx)
-    .slice(0, limit);
+  return highlights;
+}
+
+/** @deprecated use buildBriefHighlights */
+export function buildBriefNewsCards(ctx: MarketContext, _limit = 1): BriefNewsCard[] {
+  return buildBriefHighlights(ctx, "Europe/Amsterdam", [])
+    .filter((h): h is BriefNewsCard => h.type === "news")
+    .slice(0, 1);
 }
