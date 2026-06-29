@@ -8,7 +8,7 @@ import { useSquawkPlayer } from "@/hooks/useSquawkPlayer";
  * Sits above the bottom nav; auto-fails over to the next station on error.
  */
 export function SquawkBar({ className = "" }: { className?: string }) {
-  const { audioRef, station, playing, error, togglePlay, nextStation } = useSquawkPlayer();
+  const { audioRef, station, playing, resolving, error, togglePlay, nextStation } = useSquawkPlayer();
 
   return (
     <div
@@ -23,7 +23,7 @@ export function SquawkBar({ className = "" }: { className?: string }) {
           {station.name}
         </p>
         <p className="truncate text-[9px] text-white/40">
-          {error ?? station.tag}
+          {error ?? (resolving ? "Tuning…" : station.tag)}
           {playing ? " · LIVE" : ""}
         </p>
       </div>
@@ -31,7 +31,8 @@ export function SquawkBar({ className = "" }: { className?: string }) {
       <button
         type="button"
         onClick={togglePlay}
-        className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.05] text-white/80 active:scale-95"
+        disabled={resolving}
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.05] text-white/80 active:scale-95 disabled:opacity-40"
         aria-label={playing ? "Pause squawk" : "Play squawk"}
       >
         {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}

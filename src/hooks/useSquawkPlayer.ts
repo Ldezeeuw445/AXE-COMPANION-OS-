@@ -2,21 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readSquawkStationIds, resolveSquawkStations } from "@/lib/squawk/prefs";
+import { buildSquawkRotation } from "@/lib/squawk/rotation";
 import { SQUAWK_STATIONS, type SquawkStation } from "@/lib/squawk/streams";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 
 export function useSquawkPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [stations, setStations] = useState<SquawkStation[]>(() =>
-    resolveSquawkStations(readSquawkStationIds()),
+    buildSquawkRotation(resolveSquawkStations(readSquawkStationIds())),
   );
   const [stationIdx, setStationIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
   const { vibrate } = useAmbient();
 
   const syncStations = useCallback((ids: string[] | null) => {
-    setStations(resolveSquawkStations(ids));
+    setStations(buildSquawkRotation(resolveSquawkStations(ids)));
     setStationIdx(0);
     setPlaying(false);
     setError(null);
@@ -50,9 +52,43 @@ export function useSquawkPlayer() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    audio.src = station.url;
-    audio.load();
-  }, [station.url]);
+
+    let cancelled = false;
+    setResolving(true);
+    setError(null);
+
+    (async () => {
+      const needsResolve = Boolean(station.feedUrl || station.mount || station.amperwaveUrl);
+      if (needsResolve) {
+        try {
+          const res = await fetch(`/api/squawk/resolve?id=${encodeURIComponent(station.id)}`, {
+            credentials: "include",
+          });
+          if (res.ok) {
+            const json = (await res.json()) as { url?: string };
+            if (!cancelled && json.url) {
+              audio.src = json.url;
+              audio.load();
+              setResolving(false);
+              return;
+            }
+          }
+        } catch {
+          /* fall through to static url */
+        }
+      }
+
+      if (!cancelled) {
+        audio.src = station.url;
+        audio.load();
+        setResolving(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [station]);
 
   const nextStation = useCallback(() => {
     vibrate("light");
@@ -63,7 +99,7 @@ export function useSquawkPlayer() {
   const togglePlay = useCallback(() => {
     vibrate("light");
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || resolving) return;
     if (playing) {
       audio.pause();
       setPlaying(false);
@@ -85,7 +121,7 @@ export function useSquawkPlayer() {
         setError("Stream unavailable");
       }
     });
-  }, [playing, station.fallbackUrl, vibrate]);
+  }, [playing, resolving, station.fallbackUrl, vibrate]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -108,6 +144,7 @@ export function useSquawkPlayer() {
     station,
     stations,
     playing,
+    resolving,
     error,
     togglePlay,
     nextStation,
