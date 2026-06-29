@@ -26,8 +26,9 @@
       color: var(--text);
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(900px circle at 50% -8%, rgba(72, 222, 246, 0.15), transparent 54%),
-        linear-gradient(180deg, #101318 0%, #0d1015 22%, #090b0f 55%, #07080a 100%);
+        radial-gradient(900px circle at 50% -8%, rgba(72, 222, 246, 0.16), transparent 52%),
+        linear-gradient(180deg, #151c27 0%, #111824 16%, #0d131d 34%, #090e15 55%, #060a0f 76%, #040507 100%);
+      background-attachment: fixed;
     }
 
     .page { min-height: 100vh; }
@@ -111,8 +112,17 @@
     }
 
     .hero {
-      padding: 44px 0 30px;
+      position: relative;
+      padding: 44px 0 34px;
       overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(680px circle at 50% 8%, rgba(84, 195, 255, 0.1), transparent 56%);
+      pointer-events: none;
     }
 
     .hero-inner { text-align: center; }
@@ -160,6 +170,19 @@
       gap: 12px;
     }
 
+    .hero-device-shell {
+      margin-top: 26px;
+      border: 1px solid rgba(92, 128, 182, 0.28);
+      border-radius: 30px;
+      padding: 18px;
+      background:
+        radial-gradient(780px circle at 50% -16%, rgba(72, 222, 246, 0.14), transparent 52%),
+        linear-gradient(180deg, rgba(10, 14, 21, 0.96), rgba(6, 8, 12, 0.98));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 24px 48px rgba(0, 0, 0, 0.34);
+    }
+
     .section {
       padding: 70px 0;
       border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -201,11 +224,11 @@
     .feed-card {
       position: relative;
       border-radius: 22px;
-      border: 1px solid rgba(120, 160, 220, 0.16);
+      border: 1px solid rgba(140, 170, 210, 0.2);
       background:
-        radial-gradient(520px circle at 100% -12%, rgba(72, 222, 246, 0.15), transparent 48%),
-        radial-gradient(380px circle at 0% 120%, rgba(17, 42, 88, 0.32), transparent 52%),
-        linear-gradient(180deg, #090c11 0%, #05070b 100%);
+        radial-gradient(520px circle at 100% -12%, rgba(72, 222, 246, 0.18), transparent 48%),
+        radial-gradient(380px circle at 0% 120%, rgba(17, 42, 88, 0.34), transparent 52%),
+        linear-gradient(180deg, #07090d 0%, #040508 100%);
       box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.05),
         inset 0 -1px 0 rgba(0, 0, 0, 0.42),
@@ -471,6 +494,7 @@
 
       .nav-brand img { width: 72px; height: 72px; }
       .hero { padding-top: 26px; }
+      .hero-device-shell { padding: 12px; border-radius: 22px; }
       .section { padding: 56px 0; }
       .final-cta,
       .cockpit-note { padding: 22px; }
@@ -506,30 +530,32 @@
           <a class="btn btn-secondary" href="#product">Explore the Product</a>
         </div>
 
-        <div class="hero-device-stage">
-          <div class="device-3d device-3d--phone">
-            <div class="device-bezel">
-              <div class="device-notch" aria-hidden="true"></div>
-              <div class="device-screen">
-                <iframe
-                  title="AXE iPhone 15 Pro demo"
-                  src="/demo/embed?device=phone&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
-                  loading="eager"
-                  allow="clipboard-write"
-                ></iframe>
-              </div>
-            </div>
-          </div>
-          <div class="hero-ipad-stack-live">
-            <div class="device-3d device-3d--ipad">
+        <div class="hero-device-shell">
+          <div class="hero-device-stage">
+            <div class="device-3d device-3d--phone">
               <div class="device-bezel">
+                <div class="device-notch" aria-hidden="true"></div>
                 <div class="device-screen">
                   <iframe
-                    title="AXE iPad Pro demo"
-                    src="/demo/embed?device=tablet&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
-                    loading="lazy"
+                    title="AXE iPhone 15 Pro demo"
+                    src="/demo/embed?device=phone&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                    loading="eager"
                     allow="clipboard-write"
                   ></iframe>
+                </div>
+              </div>
+            </div>
+            <div class="hero-ipad-stack-live">
+              <div class="device-3d device-3d--ipad">
+                <div class="device-bezel">
+                  <div class="device-screen">
+                    <iframe
+                      title="AXE iPad Pro demo"
+                      src="/demo/embed?device=tablet&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                      loading="lazy"
+                      allow="clipboard-write"
+                    ></iframe>
+                  </div>
                 </div>
               </div>
             </div>
