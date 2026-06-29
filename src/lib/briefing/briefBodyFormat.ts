@@ -92,7 +92,16 @@ export function stripBriefMarkdown(text: string): string {
     .replace(/^\s*[\*#]+\s*$/gm, "")
     // Repair broken bold splits like "**K**\ney indicators" → "Key indicators"
     .replace(/^([A-Za-z])\n(?=[a-z])/gm, "$1")
+    // Drop orphan letter lines before a capitalized word ("K\nThe …" not a real word split)
+    .replace(/^([A-Za-z])\n(?=[A-Z])/gm, "")
     .trim();
+}
+
+/** Fix glued orphan prefixes like "KThe" or "SToday's" left by bad markdown splits. */
+export function repairBriefParagraph(text: string): string {
+  const m = text.match(/^([A-Z])([A-Z][a-z].*)$/);
+  if (m && m[2]) return m[2];
+  return text;
 }
 
 export function isBreakingNewsText(text: string): boolean {
@@ -146,9 +155,12 @@ function mergeOrphanParagraphs(paragraphs: string[]): string[] {
     let p = paragraphs[i]!.trim();
     if (!p) continue;
 
-    // Lone letter from broken markdown — glue to the next line ("K" + "ey indicators…")
+    // Lone letter from broken markdown — only glue when next line continues the same word
     if (/^[A-Za-z]$/.test(p) && i + 1 < paragraphs.length) {
-      paragraphs[i + 1] = `${p}${paragraphs[i + 1]!.trimStart()}`;
+      const next = paragraphs[i + 1]!.trimStart();
+      if (/^[a-z]/.test(next)) {
+        paragraphs[i + 1] = `${p}${next}`;
+      }
       continue;
     }
 
@@ -199,7 +211,7 @@ export function parseBriefSections(body: string): BriefSection[] {
     const cleaned = stripBriefMarkdown(chunk.replace(/^[\s:–-]+/, "").trim());
     let paragraphs = cleaned
       .split(/\n{2,}|\n/)
-      .map((p) => p.trim())
+      .map((p) => repairBriefParagraph(p.trim()))
       .filter(Boolean);
     paragraphs = mergeOrphanParagraphs(paragraphs);
 
