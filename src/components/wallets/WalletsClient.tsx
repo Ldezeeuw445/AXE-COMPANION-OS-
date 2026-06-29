@@ -12,6 +12,7 @@ import {
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { ConnectWalletButton } from "@/components/wallets/ConnectWalletButton";
 import { WalletBrandIcon } from "@/components/wallets/WalletBrandIcon";
 import { WalletProviderCard } from "@/components/wallets/WalletProviderCard";
 import {
@@ -163,8 +164,8 @@ export function WalletsClient() {
         <div>
           <h1 className="text-lg font-semibold text-tos-text">Wallets</h1>
           <p className="mt-1 max-w-md text-[12px] leading-relaxed text-tos-muted">
-            Read-only tracking for Ledger, Tangem, Trust, MetaMask, Coinbase and Rise payout
-            addresses. AXE never stores private keys — only public addresses you add.
+            Read-only tracking for Ledger, Tangem, Trust, MetaMask, Coinbase and Rise.
+            Connect software wallets live or paste a public address — AXE never stores private keys.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -185,7 +186,7 @@ export function WalletsClient() {
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
             Connect a wallet
           </h2>
-          <span className="text-[10px] text-white/30">Read-only · tap to add address</span>
+          <span className="text-[10px] text-white/30">Connect live or add address</span>
         </div>
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
           {CONNECTABLE_WALLET_PROVIDERS.map((meta) => (
@@ -264,8 +265,18 @@ export function WalletsClient() {
               ))}
             </select>
           </label>
+          <ConnectWalletButton
+            provider={provider}
+            chain={chain}
+            onConnected={(addr) => {
+              setAddress(addr);
+              setError(null);
+            }}
+            onError={(msg) => setError(msg || null)}
+          />
+
           <label className="block text-[11px] text-tos-muted">
-            Public address
+            Or paste public address
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
