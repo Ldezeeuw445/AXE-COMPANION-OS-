@@ -19,6 +19,7 @@ import {
   Settings,
   Sparkles,
   Vault,
+  Wallet,
   X,
   Landmark,
 } from "lucide-react";
@@ -51,6 +52,7 @@ const NAV: NavItem[] = [
   { href: "/positions", label: "Positions", Icon: Layers },
   { href: "/chart", label: "Chart", Icon: LineChart },
   { href: "/history", label: "History", Icon: ScrollText },
+  { href: "/wallets", label: "Wallets", Icon: Wallet },
   { href: "/journal", label: "Journal", Icon: BookOpen },
   { href: "/watchlist", label: "Watchlist", Icon: BarChart3 },
   { href: "/intel", label: "Intel", Icon: IntelTriangleIcon as unknown as typeof MessageSquare, premium: true },
