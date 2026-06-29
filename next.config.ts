@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
     // support working. Type errors should be fixed properly later.
     ignoreBuildErrors: true,
   },
+  webpack: (config) => {
+    config.externals.push("pino-pretty", "lokijs", "encoding");
+    return config;
+  },
   turbopack: {
     root: rootDir,
   },

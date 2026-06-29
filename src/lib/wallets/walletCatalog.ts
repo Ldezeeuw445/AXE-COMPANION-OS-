@@ -25,7 +25,7 @@ export const WALLET_PROVIDERS: WalletProviderMeta[] = [
   {
     id: "tangem",
     name: "Tangem",
-    subtitle: "Card wallet",
+    subtitle: "Card · paste address",
     accent: "text-sky-300/90",
     logoSrc: "/wallets/tangem.png",
     brandBg: "from-sky-500/20 to-blue-600/10",
@@ -35,7 +35,7 @@ export const WALLET_PROVIDERS: WalletProviderMeta[] = [
   {
     id: "trust",
     name: "Trust Wallet",
-    subtitle: "Mobile wallet",
+    subtitle: "Connect or paste address",
     accent: "text-blue-300/90",
     logoSrc: "/wallets/trust.png",
     brandBg: "from-blue-500/20 to-blue-700/10",
@@ -45,7 +45,7 @@ export const WALLET_PROVIDERS: WalletProviderMeta[] = [
   {
     id: "metamask",
     name: "MetaMask",
-    subtitle: "Browser wallet",
+    subtitle: "Connect or paste address",
     accent: "text-orange-300/90",
     logoSrc: "/wallets/metamask.svg",
     brandBg: "from-orange-500/20 to-amber-600/10",
@@ -55,7 +55,7 @@ export const WALLET_PROVIDERS: WalletProviderMeta[] = [
   {
     id: "coinbase",
     name: "Coinbase Wallet",
-    subtitle: "Exchange wallet",
+    subtitle: "Connect or paste address",
     accent: "text-indigo-300/90",
     logoSrc: "/wallets/coinbase.svg",
     brandBg: "from-indigo-500/20 to-blue-500/10",
