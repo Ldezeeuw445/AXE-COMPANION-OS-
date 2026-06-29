@@ -90,6 +90,8 @@ export function stripBriefMarkdown(text: string): string {
     .replace(/\*\*/g, "")
     .replace(/__/g, "")
     .replace(/^\s*[\*#]+\s*$/gm, "")
+    // Repair broken bold splits like "**K**\ney indicators" → "Key indicators"
+    .replace(/^([A-Za-z])\n(?=[a-z])/gm, "$1")
     .trim();
 }
 
@@ -139,19 +141,27 @@ function findSectionAtLine(
 }
 
 function mergeOrphanParagraphs(paragraphs: string[]): string[] {
-  const out: string[] = [];
-  for (const raw of paragraphs) {
-    const p = raw.trim();
+  const merged: string[] = [];
+  for (let i = 0; i < paragraphs.length; i++) {
+    let p = paragraphs[i]!.trim();
     if (!p) continue;
+
+    // Lone letter from broken markdown — glue to the next line ("K" + "ey indicators…")
+    if (/^[A-Za-z]$/.test(p) && i + 1 < paragraphs.length) {
+      paragraphs[i + 1] = `${p}${paragraphs[i + 1]!.trimStart()}`;
+      continue;
+    }
+
     const words = p.split(/\s+/);
     const isOrphan = words.length <= 2 && p.length < 24;
-    if (isOrphan && out.length > 0) {
-      out[out.length - 1] = `${out[out.length - 1]} ${p}`;
+    if (isOrphan && merged.length > 0) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${p}`;
     } else {
-      out.push(p);
+      merged.push(p);
     }
   }
-  return out;
+
+  return merged.filter((p) => !/^[A-Za-z]$/.test(p));
 }
 
 export function parseBriefSections(body: string): BriefSection[] {
