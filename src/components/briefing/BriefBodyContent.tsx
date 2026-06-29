@@ -3,6 +3,7 @@
 import { renderMarkdownInline } from "@/components/ui/MarkdownLite";
 import {
   emphasizeTradingPairs,
+  isItalicBriefSection,
   newsCardsFromHighlights,
   pairHighlights,
   parseBriefSections,
@@ -10,6 +11,7 @@ import {
   type BriefHighlight,
   type BriefNewsCard,
 } from "@/lib/briefing/briefBodyFormat";
+import { cn } from "@/lib/utils";
 
 type BriefBodyContentProps = {
   body: string;
@@ -101,12 +103,19 @@ export function BriefBodyContent({ body, highlights, compact }: BriefBodyContent
       {sections.map((section, idx) => {
         const label = section.label ?? sectionDisplayLabel(section.id);
         const showNewsCards = section.id === "news" && newsCards.length > 0;
+        const italicLabel = section.italicLabel ?? isItalicBriefSection(section.id);
 
         return (
           <div key={`${section.id}-${idx}`}>
             {label ? (
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                <h4 className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/88">
+                <h4
+                  className={cn(
+                    italicLabel
+                      ? "text-[12px] font-medium italic tracking-[0.02em] text-white/82"
+                      : "text-[10px] font-bold uppercase tracking-[0.18em] text-white/88",
+                  )}
+                >
                   {label}
                 </h4>
                 {section.id === "news" && (section.breaking || newsCards.some((c) => c.breaking)) ? (

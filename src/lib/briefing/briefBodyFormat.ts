@@ -15,15 +15,32 @@ export type BriefHighlight =
   | BriefNewsCard;
 
 export type BriefSection = {
-  id: "greeting" | "market_outlook" | "news" | "watch";
+  id:
+    | "greeting"
+    | "market_outlook"
+    | "news"
+    | "recent_performance"
+    | "alignment"
+    | "action_items"
+    | "watch";
   label?: string;
   paragraphs: string[];
   breaking?: boolean;
+  italicLabel?: boolean;
 };
 
 const SECTION_MARKERS: Array<{ id: BriefSection["id"]; labels: string[] }> = [
   { id: "market_outlook", labels: ["MARKET OUTLOOK", "MARKET OUTLOOK:", "OUTLOOK"] },
   { id: "news", labels: ["NEWS", "NEWS:", "HEADLINES"] },
+  {
+    id: "recent_performance",
+    labels: ["RECENT PERFORMANCE", "RECENT PERFORMANCE:", "RECENT TRADES"],
+  },
+  {
+    id: "alignment",
+    labels: ["ALIGNMENT SCORE", "ALIGNMENT SCORE:", "ALIGNMENT"],
+  },
+  { id: "action_items", labels: ["ACTION ITEMS", "ACTION ITEMS:", "ACTION ITEM"] },
   { id: "watch", labels: ["WATCH THIS SESSION", "SESSION WATCH", "WATCH", "TODAY'S WATCH"] },
 ];
 
@@ -50,7 +67,10 @@ export function stripBriefMarkdown(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/^\s*[\*#]+\s*$/gm, "")
     .trim();
 }
 
@@ -126,19 +146,13 @@ export function parseBriefSections(body: string): BriefSection[] {
       .filter(Boolean);
 
     if (paragraphs.length) {
-      const label =
-        currentId === "market_outlook"
-          ? "Market outlook"
-          : currentId === "news"
-            ? "News"
-            : currentId === "watch"
-              ? "Watch this session"
-              : undefined;
+      const label = sectionDisplayLabel(currentId);
       sections.push({
         id: currentId,
         label,
         paragraphs,
         breaking: currentId === "news" && paragraphs.some((p) => isBreakingNewsText(p)),
+        italicLabel: isItalicBriefSection(currentId),
       });
     }
 
@@ -153,8 +167,15 @@ export function parseBriefSections(body: string): BriefSection[] {
 export function sectionDisplayLabel(id: BriefSection["id"]): string | undefined {
   if (id === "market_outlook") return "Market outlook";
   if (id === "news") return "News";
+  if (id === "recent_performance") return "Recent performance";
+  if (id === "alignment") return "Alignment score";
+  if (id === "action_items") return "Action items";
   if (id === "watch") return "Watch this session";
   return undefined;
+}
+
+export function isItalicBriefSection(id: BriefSection["id"]): boolean {
+  return id === "recent_performance" || id === "alignment" || id === "action_items";
 }
 
 export function newsCardsFromHighlights(
