@@ -10,6 +10,7 @@ import {
   pairHighlights,
   parseBriefSections,
   sectionDisplayLabel,
+  stripBriefMarkdown,
   type BriefEventChip,
   type BriefHighlight,
   type BriefNewsCard,
@@ -32,7 +33,9 @@ function RichBriefLine({
   className: string;
 }) {
   return (
-    <p className={className}>{renderMarkdownInline(emphasizeTradingPairs(text, pairs))}</p>
+    <p className={className}>
+      {renderMarkdownInline(emphasizeTradingPairs(stripBriefMarkdown(text), pairs))}
+    </p>
   );
 }
 
