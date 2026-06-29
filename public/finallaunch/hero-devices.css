@@ -1,49 +1,35 @@
-/* Interactive 3D device mocks — full-size 1:1 live app embeds (shots.so-style) */
+/* Static interactive device mocks (no tilt, no cursor-follow) */
 
 .hero-device-stage {
   position: relative;
-  width: min(1540px, 100%);
-  height: clamp(780px, 75vw, 1080px);
+  width: min(1480px, 100%);
+  min-height: 780px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: clamp(20px, 2vw, 36px);
-  padding: 52px 54px 40px;
-  box-sizing: border-box;
-  transform: translateX(-68px);
-}
-
-.axe-3d-scene {
-  perspective: 2200px;
-  perspective-origin: 50% 42%;
+  gap: clamp(20px, 2.2vw, 34px);
+  margin: 32px auto 0;
+  padding: 26px 18px 14px;
 }
 
 .device-3d {
-  --rx: 0deg;
-  --ry: 0deg;
-  --tz: 0px;
-  transform: rotateX(var(--rx)) rotateY(var(--ry)) translateZ(var(--tz));
-  transform-style: preserve-3d;
-  transition: transform 180ms ease-out;
-  will-change: transform;
+  transform: none !important;
+  transition: none !important;
+  will-change: auto;
 }
 
-/* Phone — matches original hero-phone-wrap (508px) */
 .device-3d--phone {
-  width: min(508px, 34.5vw);
+  width: min(338px, 26vw);
   flex: 0 0 auto;
-  z-index: 3;
-  filter: drop-shadow(0 28px 42px rgba(0, 0, 0, 0.28));
+  z-index: 2;
+  filter: drop-shadow(0 20px 34px rgba(0, 0, 0, 0.34));
 }
 
-/* iPad — matches original hero-ipad-stack (1210px + 1.1 scale) */
 .device-3d--ipad {
-  width: min(1210px, 86vw);
+  width: min(1060px, 76vw);
   flex: 0 0 auto;
   z-index: 1;
-  transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 4deg)) translateZ(var(--tz)) scale(1.1);
-  transform-origin: left bottom;
-  filter: drop-shadow(0 30px 46px rgba(0, 0, 0, 0.24));
+  filter: drop-shadow(0 22px 40px rgba(0, 0, 0, 0.3));
 }
 
 .device-bezel {
@@ -109,46 +95,52 @@
 
 .hero-ipad-stack-live {
   position: relative;
-  width: min(1210px, 86vw);
+  width: min(1060px, 76vw);
   flex: 0 0 auto;
 }
 
 .device-3d--ipad .device-screen {
   border-radius: 16px;
   aspect-ratio: 4 / 3;
-  min-height: 680px;
+  min-height: 620px;
 }
 
 .device-3d--phone .device-screen {
   aspect-ratio: 9 / 19.5;
-  min-height: 820px;
+  min-height: 730px;
+}
+
+@media (max-width: 1220px) {
+  .device-3d--ipad,
+  .hero-ipad-stack-live {
+    width: min(900px, 72vw);
+  }
+
+  .device-3d--phone {
+    width: min(300px, 24vw);
+  }
 }
 
 @media (max-width: 1100px) {
   .hero-device-stage {
-    transform: none;
-    flex-direction: column;
+    flex-direction: column-reverse;
     align-items: center;
-    height: auto;
-    padding: 28px 18px 32px;
+    min-height: 0;
+    padding: 16px 8px 8px;
+    gap: 22px;
   }
 
   .device-3d--phone,
   .device-3d--ipad,
   .hero-ipad-stack-live {
-    width: min(420px, 92vw);
-  }
-
-  .device-3d--ipad {
-    transform: rotateX(var(--rx)) rotateY(var(--ry)) translateZ(var(--tz));
-    scale: 1;
+    width: min(430px, 92vw);
   }
 
   .device-3d--ipad .device-screen {
-    min-height: 480px;
+    min-height: 470px;
   }
 
   .device-3d--phone .device-screen {
-    min-height: 680px;
+    min-height: 640px;
   }
 }
