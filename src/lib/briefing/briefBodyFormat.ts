@@ -12,7 +12,16 @@ export type BriefNewsCard = {
 
 export type BriefHighlight =
   | { pair?: string; type?: undefined }
-  | BriefNewsCard;
+  | BriefNewsCard
+  | BriefEventChip;
+
+export type BriefEventChip = {
+  type: "event";
+  title: string;
+  time: string;
+  impact: string;
+  currency?: string;
+};
 
 export type BriefSection = {
   id:
@@ -30,7 +39,7 @@ export type BriefSection = {
 };
 
 const SECTION_MARKERS: Array<{ id: BriefSection["id"]; labels: string[] }> = [
-  { id: "market_outlook", labels: ["MARKET OUTLOOK", "MARKET OUTLOOK:", "OUTLOOK"] },
+  { id: "market_outlook", labels: ["MARKET OUTLOOK", "MARKET OUTLOOK:"] },
   { id: "news", labels: ["NEWS", "NEWS:", "HEADLINES"] },
   {
     id: "recent_performance",
@@ -38,10 +47,20 @@ const SECTION_MARKERS: Array<{ id: BriefSection["id"]; labels: string[] }> = [
   },
   {
     id: "alignment",
-    labels: ["ALIGNMENT SCORE", "ALIGNMENT SCORE:", "ALIGNMENT"],
+    labels: ["ALIGNMENT SCORE", "ALIGNMENT SCORE:"],
   },
-  { id: "action_items", labels: ["ACTION ITEMS", "ACTION ITEMS:", "ACTION ITEM"] },
-  { id: "watch", labels: ["WATCH THIS SESSION", "SESSION WATCH", "WATCH", "TODAY'S WATCH"] },
+  { id: "action_items", labels: ["ACTION ITEMS", "ACTION ITEMS:", "TRADE IDEAS", "TRADE IDEAS:"] },
+  {
+    id: "watch",
+    labels: [
+      "WATCH THIS SESSION",
+      "SESSION WATCH",
+      "SESSION FOCUS",
+      "TODAY'S WATCH",
+      "WATCH THIS SESSION:",
+      "SESSION FOCUS:",
+    ],
+  },
 ];
 
 const BREAKING_RE =
@@ -91,26 +110,55 @@ export function emphasizeTradingPairs(text: string, extraPairs: string[] = []): 
   return out;
 }
 
-function findSectionIndex(upper: string): { id: BriefSection["id"]; index: number; len: number } | null {
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Section headers must appear on their own line — avoids splitting on "alignment" mid-sentence. */
+function findSectionAtLine(
+  text: string,
+  fromIndex: number,
+): { id: BriefSection["id"]; index: number; len: number } | null {
   let best: { id: BriefSection["id"]; index: number; len: number } | null = null;
+
   for (const marker of SECTION_MARKERS) {
     for (const label of marker.labels) {
-      const idx = upper.indexOf(label);
-      if (idx === -1) continue;
-      if (!best || idx < best.index) {
-        best = { id: marker.id, index: idx, len: label.length };
+      const re = new RegExp(`(?:^|\\n)\\s*${escapeRegExp(label)}\\s*:?(?=\\s*(?:\\n|$))`, "gi");
+      re.lastIndex = fromIndex;
+      const match = re.exec(text);
+      if (!match) continue;
+      const lineStart = match[0].startsWith("\n") ? match.index + 1 : match.index;
+      if (lineStart < fromIndex) continue;
+      if (!best || lineStart < best.index) {
+        best = { id: marker.id, index: lineStart, len: match[0].trimStart().length };
       }
     }
   }
+
   return best;
+}
+
+function mergeOrphanParagraphs(paragraphs: string[]): string[] {
+  const out: string[] = [];
+  for (const raw of paragraphs) {
+    const p = raw.trim();
+    if (!p) continue;
+    const words = p.split(/\s+/);
+    const isOrphan = words.length <= 2 && p.length < 24;
+    if (isOrphan && out.length > 0) {
+      out[out.length - 1] = `${out[out.length - 1]} ${p}`;
+    } else {
+      out.push(p);
+    }
+  }
+  return out;
 }
 
 export function parseBriefSections(body: string): BriefSection[] {
   const normalized = body.replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
 
-  const upper = normalized.toUpperCase();
-  const first = findSectionIndex(upper);
+  const first = findSectionAtLine(normalized, 0);
 
   if (!first) {
     const paras = normalized
@@ -133,17 +181,24 @@ export function parseBriefSections(body: string): BriefSection[] {
   let currentId = first.id;
 
   while (cursor < normalized.length) {
-    const restUpper = normalized.toUpperCase();
-    const next = findSectionIndex(restUpper.slice(cursor));
-    const nextAbs = next ? cursor + next.index : -1;
+    const next = findSectionAtLine(normalized, cursor + 1);
+    const nextAbs = next?.index ?? -1;
 
-    const sliceEnd = next && next.index > 0 ? nextAbs : normalized.length;
+    const sliceEnd = next && next.index > cursor ? next.index : normalized.length;
     const chunk = normalized.slice(cursor, sliceEnd).trim();
     const cleaned = stripBriefMarkdown(chunk.replace(/^[\s:–-]+/, "").trim());
-    const paragraphs = cleaned
+    let paragraphs = cleaned
       .split(/\n{2,}|\n/)
       .map((p) => p.trim())
       .filter(Boolean);
+    paragraphs = mergeOrphanParagraphs(paragraphs);
+
+    // Drop paragraphs that only repeat the section header label
+    if (currentId === "alignment") {
+      paragraphs = paragraphs.filter(
+        (p) => !/^alignment\s*score\s*$/i.test(p) && !/^our\s*$/i.test(p),
+      );
+    }
 
     if (paragraphs.length) {
       const label = sectionDisplayLabel(currentId);
@@ -156,8 +211,8 @@ export function parseBriefSections(body: string): BriefSection[] {
       });
     }
 
-    if (!next || next.index <= 0) break;
-    cursor = nextAbs + next.len;
+    if (!next || next.index <= cursor) break;
+    cursor = next.index + next.len;
     currentId = next.id;
   }
 
@@ -178,12 +233,28 @@ export function isItalicBriefSection(id: BriefSection["id"]): boolean {
   return id === "recent_performance" || id === "alignment" || id === "action_items";
 }
 
+export function eventsFromHighlights(
+  highlights: Array<{ type?: string; [key: string]: unknown }> | undefined,
+): BriefEventChip[] {
+  if (!highlights?.length) return [];
+  return highlights
+    .filter((h) => h.type === "event" && typeof h.title === "string")
+    .map((h) => ({
+      type: "event" as const,
+      title: String(h.title),
+      time: typeof h.time === "string" ? h.time : "",
+      impact: typeof h.impact === "string" ? h.impact : "unknown",
+      currency: typeof h.currency === "string" ? h.currency : undefined,
+    }));
+}
+
 export function newsCardsFromHighlights(
   highlights: Array<{ pair?: string; type?: string; [key: string]: unknown }> | undefined,
 ): BriefNewsCard[] {
   if (!highlights?.length) return [];
   return highlights
-    .filter((h) => h.type === "news" && typeof h.title === "string")
+    .filter((h) => h.type === "news" && typeof h.title === "string" && h.imageUrl)
+    .slice(0, 1)
     .map((h) => ({
       type: "news" as const,
       title: String(h.title),

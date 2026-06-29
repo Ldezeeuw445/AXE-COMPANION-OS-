@@ -1,13 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { renderMarkdownInline } from "@/components/ui/MarkdownLite";
 import {
   emphasizeTradingPairs,
+  eventsFromHighlights,
   isItalicBriefSection,
   newsCardsFromHighlights,
   pairHighlights,
   parseBriefSections,
   sectionDisplayLabel,
+  type BriefEventChip,
   type BriefHighlight,
   type BriefNewsCard,
 } from "@/lib/briefing/briefBodyFormat";
@@ -33,45 +36,64 @@ function RichBriefLine({
   );
 }
 
+function EventChip({ event, compact }: { event: BriefEventChip; compact?: boolean }) {
+  const impactColor =
+    event.impact === "high"
+      ? "border-amber-400/25 bg-amber-500/10 text-amber-200/90"
+      : "border-white/10 bg-white/[0.04] text-white/75";
+
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-2.5 rounded-lg border px-2.5 py-2",
+        impactColor,
+        compact ? "text-[11px]" : "text-[12px]",
+      )}
+    >
+      <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-white/50">
+        {event.time}
+      </span>
+      <div className="min-w-0">
+        <p className="font-medium leading-snug text-white/90">{event.title}</p>
+        {event.currency ? (
+          <p className="mt-0.5 text-[9px] uppercase tracking-wider text-white/40">{event.currency}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function NewsCardBlock({ card, compact }: { card: BriefNewsCard; compact?: boolean }) {
+  const [imageOk, setImageOk] = useState(true);
+  if (!card.imageUrl || !imageOk) return null;
+
   return (
     <article className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03]">
-      {card.imageUrl ? (
-        <div className={`relative w-full overflow-hidden ${compact ? "h-28" : "h-32"} bg-black/40`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={card.imageUrl}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover opacity-90"
-            loading="lazy"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-          {card.breaking ? (
-            <span className="absolute left-2.5 top-2.5 rounded-full border border-rose-300/25 bg-rose-500/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-rose-200/90">
-              Breaking news
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="p-3">
-        {!card.imageUrl && card.breaking ? (
-          <span className="mb-1.5 inline-flex rounded-full border border-rose-300/25 bg-rose-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-rose-200/85">
-            Breaking news
+      <div className={`relative w-full overflow-hidden ${compact ? "h-32" : "h-36"} bg-black/50`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={card.imageUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setImageOk(false)}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+        {card.breaking ? (
+          <span className="absolute left-2.5 top-2.5 rounded-full border border-rose-300/25 bg-rose-500/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-rose-200/90">
+            Breaking
           </span>
         ) : null}
-        <p className={`font-semibold text-tos-text/95 ${compact ? "text-[12px] leading-snug" : "text-[13px]"}`}>
-          {card.title}
-        </p>
-        {card.summary ? (
-          <p className={`mt-1 text-tos-muted ${compact ? "text-[11px]" : "text-[12px]"} leading-relaxed`}>
-            {card.summary}
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <p className={`font-semibold leading-snug text-white ${compact ? "text-[12px]" : "text-[13px]"}`}>
+            {card.title}
           </p>
-        ) : null}
-        {card.source ? (
-          <p className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.12em] text-tos-dim">
-            {card.source}
-          </p>
-        ) : null}
+          {card.summary ? (
+            <p className={`mt-1 line-clamp-2 text-white/70 ${compact ? "text-[10px]" : "text-[11px]"}`}>
+              {card.summary}
+            </p>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -80,6 +102,7 @@ function NewsCardBlock({ card, compact }: { card: BriefNewsCard; compact?: boole
 export function BriefBodyContent({ body, highlights, compact }: BriefBodyContentProps) {
   const pairs = pairHighlights(highlights);
   const newsCards = newsCardsFromHighlights(highlights);
+  const eventChips = eventsFromHighlights(highlights);
   const sections = parseBriefSections(body);
   const textSize = compact ? "text-[12px]" : "text-[13px]";
 
@@ -101,8 +124,14 @@ export function BriefBodyContent({ body, highlights, compact }: BriefBodyContent
   return (
     <div className="space-y-3">
       {sections.map((section, idx) => {
-        const label = section.label ?? sectionDisplayLabel(section.id);
-        const showNewsCards = section.id === "news" && newsCards.length > 0;
+        const label =
+          section.id === "news" && eventChips.length > 0
+            ? "Today's agenda"
+            : (section.label ?? sectionDisplayLabel(section.id));
+        const showEvents =
+          section.id === "news" && eventChips.length > 0;
+        const showNewsCard =
+          section.id === "news" && newsCards.length > 0;
         const italicLabel = section.italicLabel ?? isItalicBriefSection(section.id);
 
         return (
@@ -120,9 +149,17 @@ export function BriefBodyContent({ body, highlights, compact }: BriefBodyContent
                 </h4>
                 {section.id === "news" && (section.breaking || newsCards.some((c) => c.breaking)) ? (
                   <span className="rounded-full border border-rose-300/20 bg-rose-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-rose-200/80">
-                    Breaking news
+                    Breaking
                   </span>
                 ) : null}
+              </div>
+            ) : null}
+
+            {showEvents ? (
+              <div className={`grid gap-1.5 ${section.paragraphs.length ? "mb-2" : ""}`}>
+                {eventChips.map((ev) => (
+                  <EventChip key={`${ev.time}-${ev.title}`} event={ev} compact={compact} />
+                ))}
               </div>
             ) : null}
 
@@ -137,11 +174,9 @@ export function BriefBodyContent({ body, highlights, compact }: BriefBodyContent
               ))}
             </div>
 
-            {showNewsCards ? (
-              <div className={`grid gap-2 ${compact ? "mt-2" : "mt-2.5"} ${newsCards.length > 1 ? "sm:grid-cols-2" : ""}`}>
-                {newsCards.map((card) => (
-                  <NewsCardBlock key={card.title} card={card} compact={compact} />
-                ))}
+            {showNewsCard ? (
+              <div className={compact ? "mt-2" : "mt-2.5"}>
+                <NewsCardBlock card={newsCards[0]!} compact={compact} />
               </div>
             ) : null}
           </div>
