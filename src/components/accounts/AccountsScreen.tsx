@@ -30,6 +30,7 @@ import {
 } from "@/app/actions/mt5Cloud";
 import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAutoPoll";
 import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
+import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
 import { isAlpacaAccount } from "@/lib/alpaca/provision";
 
@@ -590,23 +591,7 @@ function ConnectWizard({ defaultRegion }: { defaultRegion: string }) {
             </p>
           </div>
 
-          {passwordType === "investor" ? (
-            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-3 text-[11px] text-white/50">
-              <input type="checkbox" name="readOnlyConfirm" required className="mt-0.5 rounded border-white/20" />
-              <span>
-                I confirm this is my <strong className="text-white/70">read-only investor</strong> password.
-                AXE won&apos;t place trades unless I explicitly enable Live Trading in Settings.
-              </span>
-            </label>
-          ) : (
-            <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-amber-400/15 bg-amber-400/[0.04] p-3 text-[11px] text-amber-100/80">
-              <input type="checkbox" name="masterConfirm" required className="mt-0.5 rounded border-white/20" />
-              <span>
-                I confirm this is my <strong className="text-amber-50">master (trading) password</strong> and I
-                understand AXE can send real orders when Live Trading is enabled. I accept full responsibility.
-              </span>
-            </label>
-          )}
+          <MetaApiComplianceCheckboxes variant={passwordType === "master" ? "master" : "default"} />
 
           {err && (
             <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2.5 text-[11px] text-rose-200/90">

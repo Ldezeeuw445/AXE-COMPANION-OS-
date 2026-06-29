@@ -22,7 +22,7 @@ import {
 import { LandingHeroPhone } from "@/components/marketing/LandingHeroPhone";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
-import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
+import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 
 export const metadata: Metadata = {
@@ -81,8 +81,8 @@ const LANDING_FEATURES = [
     color: "text-emerald-300",
   },
   {
-    title: "AXE — copilot that knows the app",
-    desc: "Chat that can read your chart, your accounts, your journal, news and intel. It explains structure, suggests journal labels, and answers honestly when there's nothing to say.",
+    title: "AXE — AI-powered market analytics",
+    desc: "Chat that reads your chart, accounts, journal, news and intel. Technical analysis and educational context — you make every trading decision.",
     Icon: Brain,
     color: "text-cyan-300",
   },
@@ -595,20 +595,10 @@ export default function HomeLandingPage() {
         </div>
       </section>
 
-      {/* ─── footer ─── */}
-      <footer className="relative z-10 border-t border-white/[0.04] px-5 py-8 text-center text-[11px] text-tos-dim">
-        <p>AXE Companion OS · not financial advice · trade responsibly</p>
-        <p className="mt-2 text-tos-muted">
-          Trading OS — desktop terminal in private beta · same Supabase spine ·{" "}
-          <a
-            href="#waitlist"
-            className="text-cyan-300/85 underline-offset-2 transition hover:text-cyan-200 hover:underline"
-          >
-            Join the Trading OS waitlist
-          </a>
-        </p>
-        <LegalNavLinks className="mt-6" />
-      </footer>
+      <ComplianceSiteFooter
+        className="relative z-10"
+        tagline="AXE Companion OS · Algorithmic insights & technical analysis tool"
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ export function LegalCompanyFooter() {
       <p className="font-medium text-tos-muted">{LEGAL.companyLegalName}</p>
       <p className="mt-1 text-tos-muted">Trade names: {LEGAL.tradeNames}</p>
       <p className="mt-2">
-        KvK {LEGAL.kvk} · VAT {LEGAL.vat}
+        KvK {LEGAL.kvk} · BTW {LEGAL.vat}
         <br />
         <a href={`mailto:${LEGAL.supportEmail}`} className="text-tos-warm hover:underline">
           {LEGAL.supportEmail}

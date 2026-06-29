@@ -8,7 +8,23 @@ export function AiDisclaimerPageContent() {
       <p>
         <strong>Effective date:</strong> {L.effectiveDate}
       </p>
-      <p>AXE uses AI to help explain, summarise, organise and analyse trading-related information.</p>
+      <p>
+        AXE uses AI to help explain, summarise, organise and analyse market and trading-related information. AXE
+        Companion is a <strong>technical analysis and educational software tool</strong> — not an investment adviser,
+        financial adviser, broker or portfolio manager.
+      </p>
+
+      <h2>Explicit exclusion of investment advice</h2>
+      <p>
+        Nothing in AXE Companion — including chat responses, briefings, chart annotations, journal insights, alerts or
+        workflow suggestions — constitutes investment advice, personalised financial advice, a recommendation to buy or
+        sell any financial instrument, or a solicitation to enter into any transaction.
+      </p>
+      <p>
+        AI output is generated for educational and analytical purposes only. You must evaluate every response yourself
+        and make your own independent trading decisions. AXE does not tell you what to trade, when to trade, or how
+        much to risk.
+      </p>
 
       <h2>AI can be wrong</h2>
       <p>
@@ -35,8 +51,8 @@ export function AiDisclaimerPageContent() {
       <h2>Not a signal bot</h2>
       <p>AXE is not designed to guarantee entries, exits, signals or profits.</p>
       <p>
-        AXE may help you review your plan, risk, journal, mistakes, trade history and context. You remain responsible for
-        your decisions.
+        AXE may help you review your plan, risk, journal, mistakes, trade history and context. You remain solely
+        responsible for your decisions.
       </p>
 
       <h2>Verify important information</h2>
@@ -46,7 +62,10 @@ export function AiDisclaimerPageContent() {
       </p>
 
       <h2>No professional advice</h2>
-      <p>AXE does not provide regulated financial, investment, legal, tax or accounting advice.</p>
+      <p>
+        AXE does not provide regulated financial, investment, legal, tax or accounting advice. If you need regulated
+        advice, consult a licensed professional in your jurisdiction.
+      </p>
     </>
   );
 }

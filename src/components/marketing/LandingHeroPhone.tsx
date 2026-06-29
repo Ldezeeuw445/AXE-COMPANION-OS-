@@ -831,7 +831,7 @@ function AxeFrame({ seed }: { seed: number }) {
           />
           <div>
             <p className="text-[12px] font-bold tracking-tight text-tos-text">AXE</p>
-            <p className="text-[9px] text-tos-muted">Trading copilot · live</p>
+            <p className="text-[9px] text-tos-muted">Market analytics · live</p>
           </div>
         </div>
         <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-cyan-200/95">

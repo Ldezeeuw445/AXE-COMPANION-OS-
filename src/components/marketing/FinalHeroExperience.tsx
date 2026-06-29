@@ -111,8 +111,8 @@ const HERO_TABS: HeroTab[] = [
         y: "58%",
       },
       {
-        id: "coach",
-        title: "AXE coaching handoff",
+        id: "analytics",
+        title: "AXE analytics handoff",
         body: "Cockpit insights lopen door naar chat prompts en workflows.",
         x: "40%",
         y: "82%",
@@ -158,7 +158,7 @@ const BANNER_ITEMS = [
   "Market depth drawer",
   "News & intel, cached to save credits",
   "One-tap execution dock",
-  "AXE copilot that knows the app",
+  "AXE — AI-powered market analytics",
 ] as const;
 
 export function FinalHeroExperience() {
