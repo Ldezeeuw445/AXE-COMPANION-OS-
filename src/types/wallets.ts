@@ -19,10 +19,19 @@ export type CryptoWalletRow = {
   created_at: string;
 };
 
+export type Erc20TokenBalance = {
+  symbol: string;
+  contractAddress: string;
+  amount: number;
+  usdEstimate: number | null;
+};
+
 export type WalletBalance = {
   nativeAmount: number;
   nativeSymbol: string;
+  /** Native + ERC-20 USD total when pricing is available. */
   usdEstimate: number | null;
+  tokens?: Erc20TokenBalance[];
   error?: string;
 };
 

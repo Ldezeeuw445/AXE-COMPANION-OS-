@@ -24,6 +24,11 @@ import {
 import type { CryptoWalletWithBalance, WalletChain, WalletProvider } from "@/types/wallets";
 import { cn } from "@/lib/utils";
 
+function formatTokenAmount(amount: number, symbol: string): string {
+  const digits = symbol === "USDC" || symbol === "USDT" || symbol === "USDC.e" ? 2 : 4;
+  return `${amount.toFixed(digits)} ${symbol}`;
+}
+
 function formatNative(amount: number, symbol: string): string {
   const digits = symbol === "BTC" ? 6 : 4;
   return `${amount.toFixed(digits)} ${symbol}`;
@@ -166,6 +171,7 @@ export function WalletsClient() {
           <p className="mt-1 max-w-md text-[12px] leading-relaxed text-tos-muted">
             Read-only tracking for Ledger, Tangem, Trust, MetaMask, Coinbase and Rise.
             Connect software wallets live or paste a public address — AXE never stores private keys.
+            ERC-20 stables and WETH are included on Ethereum, Arbitrum and Polygon (CoinGecko pricing).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -361,17 +367,39 @@ export function WalletsClient() {
                               {shortAddress(w.address)}
                             </p>
                             {w.balance ? (
-                              <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                                <span className={`text-sm font-semibold ${meta.accent}`}>
-                                  {formatNative(w.balance.nativeAmount, w.balance.nativeSymbol)}
-                                </span>
-                                <span className="text-[11px] text-tos-dim">
-                                  ≈ {formatUsd(w.balance.usdEstimate)}
-                                </span>
-                                {w.balance.error ? (
-                                  <span className="text-[10px] text-amber-300/80">
-                                    {w.balance.error}
+                              <div className="mt-2 space-y-1.5">
+                                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                  <span className={`text-sm font-semibold ${meta.accent}`}>
+                                    {formatNative(w.balance.nativeAmount, w.balance.nativeSymbol)}
                                   </span>
+                                  {!w.balance.tokens?.length ? (
+                                    <span className="text-[11px] text-tos-dim">
+                                      ≈ {formatUsd(w.balance.usdEstimate)}
+                                    </span>
+                                  ) : null}
+                                  {w.balance.error ? (
+                                    <span className="text-[10px] text-amber-300/80">
+                                      {w.balance.error}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {w.balance.tokens?.map((token) => (
+                                  <div
+                                    key={token.contractAddress}
+                                    className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pl-2 text-[11px] text-tos-muted"
+                                  >
+                                    <span className="font-medium text-white/70">
+                                      {formatTokenAmount(token.amount, token.symbol)}
+                                    </span>
+                                    <span className="text-tos-dim">
+                                      ≈ {formatUsd(token.usdEstimate)}
+                                    </span>
+                                  </div>
+                                ))}
+                                {w.balance.tokens && w.balance.tokens.length > 0 ? (
+                                  <p className="pl-2 text-[11px] font-medium text-tos-dim">
+                                    Total ≈ {formatUsd(w.balance.usdEstimate)}
+                                  </p>
                                 ) : null}
                               </div>
                             ) : (
