@@ -8,7 +8,7 @@ export const LEGAL = {
   kvk: "74239422",
   vat: "NL002314900B21",
   /** Statutory business address — replace with confirmed registered office. */
-  businessAddress: "[BUSINESS ADDRESS]",
+  businessAddress: "Doorzwin 5032, 1788 SC Julianadorp, Netherlands",
   contactEmail: "support@tradingosapp.com",
   supportEmail: "support@tradingosapp.com",
   privacyEmail: "support@tradingosapp.com",
