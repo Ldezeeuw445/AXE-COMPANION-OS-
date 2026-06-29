@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Bitcoin,
   Plus,
   RefreshCw,
   Trash2,
   Wallet,
-  ExternalLink,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
@@ -194,7 +192,7 @@ export function WalletsClient() {
           </h2>
           <span className="text-[10px] text-white/30">Connect live or add address</span>
         </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2.5">
           {CONNECTABLE_WALLET_PROVIDERS.map((meta) => (
             <WalletProviderCard
               key={meta.id}
@@ -230,7 +228,7 @@ export function WalletsClient() {
             Add public address
           </p>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {CONNECTABLE_WALLET_PROVIDERS.map((meta) => {
               const active = provider === meta.id;
               return (
@@ -252,8 +250,8 @@ export function WalletsClient() {
             })}
           </div>
           {provider === "rise" ? (
-            <p className="text-[11px] text-emerald-300/80">
-              Tracking a Rise payout address — read-only, no live API connection yet.
+            <p className="text-[11px] text-orange-300/80">
+              Track your Rise payout wallet read-only — paste a public address on any supported chain.
             </p>
           ) : null}
 
@@ -426,41 +424,6 @@ export function WalletsClient() {
           })}
         </div>
       )}
-
-      <GlassPanel className="p-4">
-        <div className="flex items-start gap-3">
-          <Bitcoin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400/70" />
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300/90">
-              Rise payouts
-            </p>
-            <p className="mt-1 text-[12px] leading-relaxed text-tos-muted">
-              Add your Rise payout wallet address here to track balances read-only — same as your
-              other wallets. Live payouts via Rise API can be added later; this view never moves
-              funds.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => openAddForProvider("rise")}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-200/90 hover:bg-emerald-500/15"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Rise address
-              </button>
-              <a
-                href="https://www.riseworks.io/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-400/90 hover:text-cyan-300"
-              >
-                Rise dashboard
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </GlassPanel>
     </div>
   );
 }

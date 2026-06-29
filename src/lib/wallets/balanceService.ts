@@ -9,12 +9,7 @@ import {
   curatedTokensForChain,
 } from "@/lib/wallets/tokenCatalog";
 import { fetchErc20TokenUsdPrices, fetchNativeUsdPrices } from "@/lib/wallets/coingeckoClient";
-
-const EVM_RPC: Record<Exclude<WalletChain, "bitcoin">, string> = {
-  ethereum: "https://eth.llamarpc.com",
-  arbitrum: "https://arb1.arbitrum.io/rpc",
-  polygon: "https://polygon-rpc.com",
-};
+import { evmJsonRpc } from "@/lib/wallets/evmRpc";
 
 const NATIVE_DECIMALS: Record<WalletChain, number> = {
   ethereum: 18,
@@ -74,21 +69,12 @@ async function erc20UsdPrices(
 }
 
 async function fetchEvmBalance(chain: Exclude<WalletChain, "bitcoin">, address: string): Promise<number> {
-  const rpc = EVM_RPC[chain];
-  const res = await fetch(rpc, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_getBalance",
-      params: [address, "latest"],
-    }),
-    cache: "no-store",
+  const json = await evmJsonRpc(chain, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_getBalance",
+    params: [address, "latest"],
   });
-  if (!res.ok) throw new Error("RPC unavailable");
-  const json = (await res.json()) as { result?: string; error?: { message?: string } };
-  if (json.error?.message) throw new Error(json.error.message);
   if (!json.result) throw new Error("No balance");
   return Number(BigInt(json.result)) / 10 ** NATIVE_DECIMALS[chain];
 }
@@ -144,39 +130,59 @@ export async function fetchWalletBalance(
   address: string,
 ): Promise<WalletBalance> {
   const symbol = chainSymbol(chain);
+  let nativeAmount = 0;
+  let nativeError: string | undefined;
+
   try {
-    const nativeAmount =
+    nativeAmount =
       chain === "bitcoin"
         ? await fetchBtcBalance(address)
         : await fetchEvmBalance(chain, address);
+  } catch (err) {
+    nativeError = err instanceof Error ? err.message : "Balance unavailable";
+  }
 
+  const tokens =
+    chain === "bitcoin"
+      ? []
+      : await fetchErc20Balances(chain, address).catch(() => [] as Erc20TokenBalance[]);
+
+  try {
     const prices = await nativeUsdPrices();
     const cgId = COINGECKO_ID[chain];
     const nativeUsdRate = cgId ? prices[cgId] ?? null : null;
     const nativeUsd = nativeUsdRate != null ? nativeAmount * nativeUsdRate : null;
 
-    const tokens =
-      chain === "bitcoin" ? [] : await fetchErc20Balances(chain, address);
-
     const tokenUsd = tokens.reduce((sum, t) => sum + (t.usdEstimate ?? 0), 0);
     const hasTokenUsd = tokens.some((t) => t.usdEstimate != null);
     const usdEstimate =
-      nativeUsd != null || hasTokenUsd
-        ? (nativeUsd ?? 0) + tokenUsd
-        : null;
+      nativeUsd != null || hasTokenUsd ? (nativeUsd ?? 0) + tokenUsd : null;
+
+    if (nativeError && tokens.length === 0) {
+      return {
+        nativeAmount: 0,
+        nativeSymbol: symbol,
+        usdEstimate: null,
+        error: nativeError,
+      };
+    }
 
     return {
       nativeAmount,
       nativeSymbol: symbol,
       usdEstimate,
       tokens: tokens.length > 0 ? tokens : undefined,
+      error: nativeError,
     };
   } catch (err) {
     return {
-      nativeAmount: 0,
+      nativeAmount,
       nativeSymbol: symbol,
       usdEstimate: null,
-      error: err instanceof Error ? err.message : "Balance unavailable",
+      tokens: tokens.length > 0 ? tokens : undefined,
+      error:
+        nativeError ??
+        (err instanceof Error ? err.message : "Balance unavailable"),
     };
   }
 }

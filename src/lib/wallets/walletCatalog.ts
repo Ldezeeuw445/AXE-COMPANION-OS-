@@ -11,64 +11,72 @@ export type WalletProviderMeta = {
   connectable?: boolean;
 };
 
+const LEDGER_STYLE = {
+  accent: "text-white/90",
+  brandBg: "from-white/[0.14] to-white/[0.04]",
+  brandRing: "ring-white/20",
+} as const;
+
+const BLUE_WALLET_STYLE = {
+  accent: "text-blue-300/90",
+  brandBg: "from-blue-500/20 to-blue-700/10",
+  brandRing: "ring-blue-400/25",
+} as const;
+
+const METAMASK_STYLE = {
+  accent: "text-orange-300/90",
+  brandBg: "from-orange-500/20 to-amber-600/10",
+  brandRing: "ring-orange-400/25",
+} as const;
+
 export const WALLET_PROVIDERS: WalletProviderMeta[] = [
   {
     id: "ledger",
     name: "Ledger",
     subtitle: "Hardware · paste address",
-    accent: "text-white/90",
     logoSrc: "/wallets/ledger.svg",
-    brandBg: "from-white/[0.14] to-white/[0.04]",
-    brandRing: "ring-white/20",
     connectable: true,
+    ...LEDGER_STYLE,
   },
   {
     id: "tangem",
     name: "Tangem",
     subtitle: "Card · paste address",
-    accent: "text-sky-300/90",
     logoSrc: "/wallets/tangem.png",
-    brandBg: "from-sky-500/20 to-blue-600/10",
-    brandRing: "ring-sky-400/25",
     connectable: true,
+    ...LEDGER_STYLE,
   },
   {
     id: "trust",
     name: "Trust Wallet",
     subtitle: "Connect or paste address",
-    accent: "text-blue-300/90",
     logoSrc: "/wallets/trust.png",
-    brandBg: "from-blue-500/20 to-blue-700/10",
-    brandRing: "ring-blue-400/25",
     connectable: true,
-  },
-  {
-    id: "metamask",
-    name: "MetaMask",
-    subtitle: "Connect or paste address",
-    accent: "text-orange-300/90",
-    logoSrc: "/wallets/metamask.svg",
-    brandBg: "from-orange-500/20 to-amber-600/10",
-    brandRing: "ring-orange-400/25",
-    connectable: true,
+    ...BLUE_WALLET_STYLE,
   },
   {
     id: "coinbase",
     name: "Coinbase Wallet",
     subtitle: "Connect or paste address",
-    accent: "text-indigo-300/90",
     logoSrc: "/wallets/coinbase.svg",
-    brandBg: "from-indigo-500/20 to-blue-500/10",
-    brandRing: "ring-indigo-400/25",
     connectable: true,
+    ...BLUE_WALLET_STYLE,
+  },
+  {
+    id: "metamask",
+    name: "MetaMask",
+    subtitle: "Connect or paste address",
+    logoSrc: "/wallets/metamask.svg",
+    connectable: true,
+    ...METAMASK_STYLE,
   },
   {
     id: "rise",
     name: "Rise",
-    subtitle: "Payouts · read-only",
-    accent: "text-emerald-300/90",
-    brandBg: "from-emerald-500/15 to-emerald-700/10",
-    brandRing: "ring-emerald-400/20",
+    subtitle: "Payouts · paste address",
+    logoSrc: "/wallets/rise.png",
+    connectable: true,
+    ...METAMASK_STYLE,
   },
   {
     id: "other",
@@ -80,7 +88,10 @@ export const WALLET_PROVIDERS: WalletProviderMeta[] = [
   },
 ];
 
-export const CONNECTABLE_WALLET_PROVIDERS = WALLET_PROVIDERS.filter((p) => p.connectable);
+/** Connect grid order: Ledger | Tangem · Trust | Coinbase · MetaMask | Rise */
+export const WALLET_GRID_PROVIDERS = WALLET_PROVIDERS.filter((p) => p.connectable);
+
+export const CONNECTABLE_WALLET_PROVIDERS = WALLET_GRID_PROVIDERS;
 
 export const WALLET_CHAINS: Array<{ id: WalletChain; label: string; symbol: string }> = [
   { id: "ethereum", label: "Ethereum", symbol: "ETH" },
