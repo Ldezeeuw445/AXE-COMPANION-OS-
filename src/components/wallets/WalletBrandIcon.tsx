@@ -47,7 +47,10 @@ export function WalletBrandIcon({ meta, size = "md", className }: WalletBrandIco
         alt=""
         width={dim.img}
         height={dim.img}
-        className="h-[72%] w-[72%] object-contain"
+        className={cn(
+          "object-contain",
+          meta.logoSrc.endsWith(".png") ? "h-[88%] w-[88%]" : "h-[72%] w-[72%]",
+        )}
         aria-hidden
       />
     </div>
