@@ -1,5 +1,5 @@
 /**
- * Legal entity — Trading OS B.V. is the provider; AXE Companion is the product.
+ * Legal entity — Trading OS is the provider; AXE Companion is the product.
  * Replace businessAddress with the statutory registered office before public launch.
  */
 export const LEGAL = {
