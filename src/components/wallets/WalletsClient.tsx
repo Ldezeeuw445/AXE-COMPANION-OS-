@@ -326,7 +326,8 @@ export function WalletsClient() {
           <Wallet className="mx-auto mb-3 h-8 w-8 text-white/25" />
           <p className="text-sm text-tos-muted">No wallets tracked yet.</p>
           <p className="mt-2 text-[12px] text-tos-dim">
-            Tap a wallet card above to add your public address.
+            Tap a wallet card above, then use <strong className="font-medium text-white/55">Connect wallet</strong>{" "}
+            for MetaMask, Trust or Coinbase — or paste a public address.
           </p>
         </GlassPanel>
       ) : (
