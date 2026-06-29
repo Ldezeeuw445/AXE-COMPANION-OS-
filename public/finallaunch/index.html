@@ -190,28 +190,46 @@
     }
 
     .bento-grid {
-      margin-top: 28px;
+      margin-top: 32px;
       display: grid;
       grid-template-columns: repeat(12, minmax(0, 1fr));
-      gap: 14px;
+      grid-auto-rows: minmax(74px, auto);
+      grid-auto-flow: dense;
+      gap: 16px;
     }
 
     .feed-card {
       position: relative;
       border-radius: 22px;
-      border: 1px solid var(--line);
+      border: 1px solid rgba(120, 160, 220, 0.16);
       background:
-        radial-gradient(500px circle at 120% -10%, rgba(72, 222, 246, 0.12), transparent 48%),
-        linear-gradient(180deg, #0b0d11 0%, #080a0d 100%);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 30px rgba(0, 0, 0, 0.22);
-      padding: 20px;
+        radial-gradient(520px circle at 100% -12%, rgba(72, 222, 246, 0.15), transparent 48%),
+        radial-gradient(380px circle at 0% 120%, rgba(17, 42, 88, 0.32), transparent 52%),
+        linear-gradient(180deg, #090c11 0%, #05070b 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+        0 18px 34px rgba(0, 0, 0, 0.34);
+      padding: 22px;
       min-height: 180px;
+      overflow: hidden;
+    }
+
+    .feed-card::before {
+      content: "";
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      top: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(72, 222, 246, 0.7), transparent);
+      opacity: 0.9;
     }
 
     .feed-card h3 {
       margin: 0;
-      font-size: 20px;
-      line-height: 1.2;
+      font-size: 21px;
+      line-height: 1.16;
       letter-spacing: -0.01em;
     }
 
@@ -219,21 +237,75 @@
       margin: 10px 0 0;
       color: var(--muted);
       font-size: 14px;
-      line-height: 1.65;
+      line-height: 1.7;
     }
 
     .feed-card .tag {
       margin: 0 0 12px;
       color: var(--cyan-soft);
       font-size: 10px;
-      letter-spacing: 0.16em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       font-weight: 600;
     }
 
+    .feed-card strong {
+      color: #f3f8ff;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .feed-stats {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .feed-stat {
+      border: 1px solid rgba(148, 179, 255, 0.22);
+      border-radius: 12px;
+      background: rgba(9, 13, 20, 0.72);
+      padding: 10px;
+    }
+
+    .feed-stat b {
+      display: block;
+      font-size: 21px;
+      line-height: 1;
+    }
+
+    .feed-stat span {
+      display: block;
+      margin-top: 5px;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .feed-progress {
+      margin-top: 14px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.09);
+      overflow: hidden;
+    }
+
+    .feed-progress i {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #0ea5ff, #48def6);
+    }
+
+    .hero-feed { min-height: 256px; }
     .span-3 { grid-column: span 3; }
     .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
     .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .row-2 { grid-row: span 2; }
 
     .system-grid {
       margin-top: 26px;
@@ -383,7 +455,7 @@
     }
 
     @media (max-width: 1180px) {
-      .span-3, .span-4, .span-6,
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-8,
       .visual-panel,
       .cockpit-note { grid-column: span 12; }
 
@@ -475,35 +547,92 @@
         </p>
 
         <div class="bento-grid">
-          <article class="feed-card span-6"><p class="tag">Feed 01</p><h3>Cockpit</h3><p>Behavior scores, correction rhythm, conviction trends and execution quality in one live surface.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 02</p><h3>AXE Feed</h3><p>High-value stream with context-linked insights and less noise.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 03</p><h3>Intel Chat</h3><p>Shared memory with your actual account and journal behavior.</p></article>
+          <article class="feed-card hero-feed span-8 row-2">
+            <p class="tag">Feed 01 · Core Cockpit</p>
+            <h3>One Dark Control Layer for <strong>Execution + Learning</strong></h3>
+            <p>Live score stack, corrections, edge map and trader behavior all in one cockpit so the whole workflow is visible at once.</p>
+            <div class="feed-stats">
+              <div class="feed-stat"><b>56</b><span>Trader score</span></div>
+              <div class="feed-stat"><b>48/100</b><span>AXE alignment</span></div>
+              <div class="feed-stat"><b>146</b><span>Kept setups</span></div>
+              <div class="feed-stat"><b>299</b><span>Passed setups</span></div>
+            </div>
+          </article>
 
-          <article class="feed-card span-3"><p class="tag">Feed 04</p><h3>Chart Context</h3><p>Structure and session context aligned with your active symbol.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 05</p><h3>Execution Layer</h3><p>One-tap entries with guardrails and clearer risk framing.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 06</p><h3>Risk Monitor</h3><p>Risk exposure tracking that updates with each live decision.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 07</p><h3>Session Bias</h3><p>What your book is actually doing by London, NY, and Asia windows.</p></article>
+          <article class="feed-card span-4">
+            <p class="tag">Feed 02 · AXE Engine</p>
+            <h3>Adaptive Core</h3>
+            <p>Learns from your approvals, rejects and timing behavior continuously.</p>
+            <div class="feed-progress"><i style="width:74%"></i></div>
+          </article>
 
-          <article class="feed-card span-4"><p class="tag">Feed 08</p><h3>News Context</h3><p>Macro and symbol events transformed into tradable context quickly.</p></article>
-          <article class="feed-card span-4"><p class="tag">Feed 09</p><h3>Smart Money</h3><p>Large-flow perspective layered on top of your chart narrative.</p></article>
-          <article class="feed-card span-4"><p class="tag">Feed 10</p><h3>Orderflow Snapshot</h3><p>Live depth behavior and pressure shifts around key levels.</p></article>
+          <article class="feed-card span-4">
+            <p class="tag">Feed 03 · Intel Chat</p>
+            <h3>Memory Chat</h3>
+            <p>Persistent context from chart, journal and decision history.</p>
+          </article>
 
-          <article class="feed-card span-3"><p class="tag">Feed 11</p><h3>Journal Sync</h3><p>Automatic ties between executed ideas and final outcomes.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 12</p><h3>Label Engine</h3><p>Consistent tagging that improves later review quality.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 13</p><h3>Score Delta</h3><p>See which behaviors move your alignment score up or down.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 14</p><h3>AXE Memory</h3><p>Persistent learning loop from chat, corrections, and execution.</p></article>
+          <article class="feed-card span-4">
+            <p class="tag">Feed 04 · News Context</p>
+            <h3>Macro Signal Layer</h3>
+            <p>Market events translated to execution-relevant context in seconds.</p>
+          </article>
 
-          <article class="feed-card span-6"><p class="tag">Feed 15</p><h3>Behavior Map</h3><p>Where your edge actually appears versus where you spend attention.</p></article>
-          <article class="feed-card span-6"><p class="tag">Feed 16</p><h3>Learning Arc</h3><p>Signals, response quality, and improvement rhythm over time.</p></article>
+          <article class="feed-card span-4">
+            <p class="tag">Feed 05 · Chart Edge</p>
+            <h3>Structure + Session</h3>
+            <p>Session-aware view for London, New York, and Asia behavior shifts.</p>
+          </article>
 
-          <article class="feed-card span-4"><p class="tag">Feed 17</p><h3>Patience Meter</h3><p>Tracks timing quality around entries, exits and invalidations.</p></article>
-          <article class="feed-card span-4"><p class="tag">Feed 18</p><h3>Discipline Meter</h3><p>Measures adherence to your own high-quality execution standards.</p></article>
-          <article class="feed-card span-4"><p class="tag">Feed 19</p><h3>Execution Meter</h3><p>Live signal for entry precision and correction responsiveness.</p></article>
+          <article class="feed-card span-4">
+            <p class="tag">Feed 06 · Execution</p>
+            <h3>Order Layer</h3>
+            <p>Fast entries with risk framing and clean post-trade traceability.</p>
+          </article>
 
-          <article class="feed-card span-3"><p class="tag">Feed 20</p><h3>Risk Meter</h3><p>Visibility into sizing and downside discipline consistency.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 21</p><h3>Pattern Library</h3><p>Breakout, liquidity, imbalance and continuation edge stats.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 22</p><h3>Market Intel</h3><p>Multi-source market context fused into one practical summary.</p></article>
-          <article class="feed-card span-3"><p class="tag">Feed 23</p><h3>Trader OS Sync</h3><p>AXE Companion + Trading OS coherence across phone and terminal.</p></article>
+          <article class="feed-card span-4">
+            <p class="tag">Feed 07 · Risk</p>
+            <h3>Exposure Watch</h3>
+            <p>Dynamic risk monitor synced to live account behavior.</p>
+            <div class="feed-progress"><i style="width:61%"></i></div>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 08 · Behavior Map</p>
+            <h3>Where Your Edge Lives</h3>
+            <p>Pinpoints where your best setups actually happen versus where you overtrade.</p>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 09 · Learning Arc</p>
+            <h3>Feedback Rhythm</h3>
+            <p>Tracks your correction loop quality across weeks, not just single trades.</p>
+          </article>
+
+          <article class="feed-card span-5">
+            <p class="tag">Feed 10 · Pattern Library</p>
+            <h3>What Repeats Wins</h3>
+            <p>Breakout, liquidity sweep, imbalance fill and continuation quality stats.</p>
+          </article>
+
+          <article class="feed-card span-7">
+            <p class="tag">Feed 11 · Conviction Over Time</p>
+            <h3>Confidence Curve</h3>
+            <p>Shows whether your conviction is earned by process quality or distorted by random outcome.</p>
+          </article>
+
+          <article class="feed-card span-3"><p class="tag">Feed 12</p><h3>Smart Money</h3><p>Flow context on top of your own narrative.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 13</p><h3>Orderflow</h3><p>Pressure shifts around key levels.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 14</p><h3>Journal Sync</h3><p>Auto-links ideas to outcomes.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 15</p><h3>Label Engine</h3><p>Consistent tags that improve review.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 16</p><h3>Score Delta</h3><p>See what moved your score up or down.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 17</p><h3>AXE Memory</h3><p>Long-term context retention loop.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 18</p><h3>Patience Meter</h3><p>Timing quality around entries and exits.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 19</p><h3>Discipline Meter</h3><p>Rule adherence under pressure.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 20</p><h3>Execution Meter</h3><p>Entry precision and response quality.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 21</p><h3>Risk Meter</h3><p>Sizing and downside consistency.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 22</p><h3>Market Intel</h3><p>Multi-source context in one stream.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 23</p><h3>OS Sync</h3><p>Companion and Trading OS run as one.</p></article>
         </div>
       </div>
     </section>
