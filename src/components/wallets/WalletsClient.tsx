@@ -7,19 +7,21 @@ import {
   RefreshCw,
   Trash2,
   Wallet,
-  Shield,
   ExternalLink,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { WalletBrandIcon } from "@/components/wallets/WalletBrandIcon";
+import { WalletProviderCard } from "@/components/wallets/WalletProviderCard";
 import {
+  CONNECTABLE_WALLET_PROVIDERS,
   WALLET_CHAINS,
   WALLET_PROVIDERS,
   providerMeta,
-  chainSymbol,
 } from "@/lib/wallets/walletCatalog";
 import type { CryptoWalletWithBalance, WalletChain, WalletProvider } from "@/types/wallets";
+import { cn } from "@/lib/utils";
 
 function formatNative(amount: number, symbol: string): string {
   const digits = symbol === "BTC" ? 6 : 4;
@@ -81,6 +83,12 @@ export function WalletsClient() {
     void load(false);
   }, [load]);
 
+  const openAddForProvider = (next: WalletProvider) => {
+    setProvider(next);
+    setShowForm(true);
+    setError(null);
+  };
+
   const handleAdd = async () => {
     if (!address.trim()) return;
     setSaving(true);
@@ -139,6 +147,8 @@ export function WalletsClient() {
     return map;
   }, [wallets]);
 
+  const selectedMeta = providerMeta(provider);
+
   return (
     <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pb-24">
       <PageTitleInjector title="Wallets" />
@@ -167,16 +177,27 @@ export function WalletsClient() {
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={() => setShowForm((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-cyan-200"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add wallet
-          </button>
         </div>
       </div>
+
+      <section>
+        <div className="mb-2.5 flex items-center justify-between gap-2">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+            Connect a wallet
+          </h2>
+          <span className="text-[10px] text-white/30">Read-only · tap to add address</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+          {CONNECTABLE_WALLET_PROVIDERS.map((meta) => (
+            <WalletProviderCard
+              key={meta.id}
+              meta={meta}
+              trackedCount={grouped.get(meta.id)?.length ?? 0}
+              onSelect={() => openAddForProvider(meta.id)}
+            />
+          ))}
+        </div>
+      </section>
 
       {totalUsd != null && wallets.length > 0 ? (
         <GlassPanel className="p-4">
@@ -190,39 +211,59 @@ export function WalletsClient() {
 
       {showForm ? (
         <GlassPanel className="space-y-3 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">
-            Add address
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-[11px] text-tos-muted">
-              Wallet type
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value as WalletProvider)}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
-              >
-                {WALLET_PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-[11px] text-tos-muted">
-              Chain
-              <select
-                value={chain}
-                onChange={(e) => setChain(e.target.value as WalletChain)}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
-              >
-                {WALLET_CHAINS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="flex items-center gap-3">
+            <WalletBrandIcon meta={selectedMeta} size="lg" />
+            <div>
+              <p className="text-sm font-semibold text-white/90">{selectedMeta.name}</p>
+              <p className="text-[11px] text-tos-muted">{selectedMeta.subtitle}</p>
+            </div>
           </div>
+
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">
+            Add public address
+          </p>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {CONNECTABLE_WALLET_PROVIDERS.map((meta) => {
+              const active = provider === meta.id;
+              return (
+                <button
+                  key={meta.id}
+                  type="button"
+                  onClick={() => setProvider(meta.id)}
+                  className={cn(
+                    "flex flex-col items-center gap-2 rounded-xl border px-2 py-2.5 transition-colors",
+                    active
+                      ? "border-cyan-400/35 bg-cyan-400/10"
+                      : "border-white/10 bg-black/20 hover:bg-white/[0.04]",
+                  )}
+                >
+                  <WalletBrandIcon meta={meta} size="sm" />
+                  <span className="text-[10px] font-medium text-white/75">{meta.name}</span>
+                </button>
+              );
+            })}
+          </div>
+          {provider === "rise" ? (
+            <p className="text-[11px] text-emerald-300/80">
+              Tracking a Rise payout address — read-only, no live API connection yet.
+            </p>
+          ) : null}
+
+          <label className="block text-[11px] text-tos-muted">
+            Chain
+            <select
+              value={chain}
+              onChange={(e) => setChain(e.target.value as WalletChain)}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+            >
+              {WALLET_CHAINS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="block text-[11px] text-tos-muted">
             Public address
             <input
@@ -274,8 +315,7 @@ export function WalletsClient() {
           <Wallet className="mx-auto mb-3 h-8 w-8 text-white/25" />
           <p className="text-sm text-tos-muted">No wallets tracked yet.</p>
           <p className="mt-2 text-[12px] text-tos-dim">
-            Add a public address from Ledger, Tangem, Trust, MetaMask, Coinbase or your Rise payout
-            wallet.
+            Tap a wallet card above to add your public address.
           </p>
         </GlassPanel>
       ) : (
@@ -284,10 +324,14 @@ export function WalletsClient() {
             const list = grouped.get(meta.id) ?? [];
             return (
               <section key={meta.id}>
-                <h2 className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
-                  <Shield className="h-3 w-3" />
-                  {meta.name}
-                  <span className="text-white/25">· {meta.subtitle}</span>
+                <h2 className="mb-2 flex items-center gap-2.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+                  <WalletBrandIcon meta={meta} size="sm" className="!h-7 !w-7 rounded-lg" />
+                  <span>
+                    {meta.name}
+                    <span className="ml-2 font-normal normal-case tracking-normal text-white/25">
+                      · {meta.subtitle}
+                    </span>
+                  </span>
                 </h2>
                 <ul className="space-y-2">
                   {list.map((w) => (
@@ -355,15 +399,25 @@ export function WalletsClient() {
               other wallets. Live payouts via Rise API can be added later; this view never moves
               funds.
             </p>
-            <a
-              href="https://www.riseworks.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-400/90 hover:text-cyan-300"
-            >
-              Rise dashboard
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => openAddForProvider("rise")}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-200/90 hover:bg-emerald-500/15"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Rise address
+              </button>
+              <a
+                href="https://www.riseworks.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-400/90 hover:text-cyan-300"
+              >
+                Rise dashboard
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
         </div>
       </GlassPanel>
