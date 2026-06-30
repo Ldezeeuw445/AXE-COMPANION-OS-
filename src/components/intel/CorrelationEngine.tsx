@@ -68,7 +68,9 @@ export function CorrelationEngine() {
       if (json.ok && json.snapshot) {
         setData(json.snapshot);
         try {
-          window.sessionStorage.setItem(CACHE_KEY, JSON.stringify(json.snapshot));
+          const serialized = JSON.stringify(json.snapshot);
+          window.sessionStorage.setItem(CACHE_KEY, serialized);
+          window.localStorage.setItem(CACHE_KEY, serialized);
         } catch {
           /* ignore */
         }
@@ -83,7 +85,7 @@ export function CorrelationEngine() {
 
   useEffect(() => {
     try {
-      const cached = window.sessionStorage.getItem(CACHE_KEY);
+      const cached = window.sessionStorage.getItem(CACHE_KEY) ?? window.localStorage.getItem(CACHE_KEY);
       if (cached) {
         setData(JSON.parse(cached) as CorrelationSnapshot);
       }

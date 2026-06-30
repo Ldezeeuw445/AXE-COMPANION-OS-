@@ -1,11 +1,11 @@
 import Image from "next/image";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { ComplianceRiskNotice } from "@/components/legal/ComplianceRiskNotice";
-import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 
 export default function LoginPage() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-none bg-[#050608] px-6 py-10">
+    <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden overscroll-none bg-[#050608]">
+      <div className="flex h-full w-full items-center justify-center px-6 py-10">
 
       {/* Ambient glow behind wordmark */}
       <div
@@ -81,8 +81,7 @@ export default function LoginPage() {
           <span className="h-1.5 w-1.5 rounded-full bg-tos-warm/50" />
         </div>
       </div>
-
-      <ComplianceSiteFooter className="relative z-10 mt-auto w-full" tagline="AXE Companion OS" />
+      </div>
     </div>
   );
 }

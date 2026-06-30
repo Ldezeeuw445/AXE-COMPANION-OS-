@@ -65,7 +65,9 @@ export function ConvictionEngine() {
       if (json.ok && json.conviction) {
         setData(json.conviction);
         try {
-          window.sessionStorage.setItem(CACHE_KEY, JSON.stringify(json.conviction));
+          const serialized = JSON.stringify(json.conviction);
+          window.sessionStorage.setItem(CACHE_KEY, serialized);
+          window.localStorage.setItem(CACHE_KEY, serialized);
         } catch {
           /* ignore */
         }
@@ -81,7 +83,7 @@ export function ConvictionEngine() {
 
   useEffect(() => {
     try {
-      const cached = window.sessionStorage.getItem(CACHE_KEY);
+      const cached = window.sessionStorage.getItem(CACHE_KEY) ?? window.localStorage.getItem(CACHE_KEY);
       if (cached) {
         setData(JSON.parse(cached) as ConvictionSnapshot);
       }

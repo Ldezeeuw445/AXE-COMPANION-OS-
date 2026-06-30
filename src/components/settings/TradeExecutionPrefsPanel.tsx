@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { Zap } from "lucide-react";
 import { TosMatteBanner } from "@/components/ui/TosNotice";
+import { RiskConfirmationModal } from "@/components/risk/RiskConfirmationModal";
 import {
   DEFAULT_TRADE_VOLUME_LOTS,
   MAX_TRADE_VOLUME_LOTS,
@@ -36,6 +37,7 @@ export function TradeExecutionPrefsPanel({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const persist = useCallback(
     async (next: {
@@ -86,8 +88,7 @@ export function TradeExecutionPrefsPanel({
     void persist({ volume, auto: alertAutoTrade, sl: slOffset, tp: tpOffset });
   };
 
-  const toggleAuto = () => {
-    const next = !alertAutoTrade;
+  const applyAutoToggle = (next: boolean) => {
     if (next) {
       if (!liveTradingEnabled) {
         setError("Enable Live trading first (same 3-step risk confirmation) before auto-trade on alerts.");
@@ -104,8 +105,18 @@ export function TradeExecutionPrefsPanel({
     void persist({ volume, auto: next, sl: slOffset, tp: tpOffset });
   };
 
+  const toggleAuto = () => {
+    const next = !alertAutoTrade;
+    if (next && !alertAutoTrade) {
+      setConfirmOpen(true);
+      return;
+    }
+    applyAutoToggle(next);
+  };
+
   return (
-    <section className="rounded-2xl border border-white/[0.07] bg-[#0c0d0e]/90 p-4">
+    <>
+      <section className="rounded-2xl border border-white/[0.07] bg-[#0c0d0e]/90 p-4">
       <header>
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
           Trade size &amp; alerts
@@ -204,6 +215,19 @@ export function TradeExecutionPrefsPanel({
       <p className="mt-3 text-[10px] text-tos-dim">
         {saving ? "Saving…" : saved ? "Saved to your workspace." : "Syncs across devices."}
       </p>
-    </section>
+      </section>
+      <RiskConfirmationModal
+        open={confirmOpen}
+        pending={saving}
+        title="Enable alert auto-trade"
+        subtitle="Alerts can submit market orders with SL/TP automatically when armed."
+        confirmLabel="Enable auto-trade"
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={async () => {
+          applyAutoToggle(true);
+          setConfirmOpen(false);
+        }}
+      />
+    </>
   );
 }

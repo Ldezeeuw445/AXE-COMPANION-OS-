@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { PushPermission } from "@/components/push/PushPermission";
+import { RiskConfirmationModal } from "@/components/risk/RiskConfirmationModal";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import { applyChatPrefill, chatHrefWithPrefill } from "@/lib/chat/chatPrefill";
 import {
@@ -205,6 +206,8 @@ export function AlertsClient({
   const [armPending, setArmPending] = useState(false);
   const [armTick, setArmTick] = useState(0);
   const [stopsTouched, setStopsTouched] = useState(false);
+  const [confirmAutoAlertId, setConfirmAutoAlertId] = useState<string | null>(null);
+  const [confirmAutoPending, setConfirmAutoPending] = useState(false);
 
   useEffect(() => {
     if (!focusSymbol) return;
@@ -963,7 +966,13 @@ export function AlertsClient({
                     {a.type === "price" && tradePrefs.alertAutoTradeEnabled ? (
                       <button
                         type="button"
-                        onClick={() => void toggleAlertAutoTrade(a, !alertAutoOn)}
+                        onClick={() => {
+                          if (!alertAutoOn) {
+                            setConfirmAutoAlertId(a.id);
+                            return;
+                          }
+                          void toggleAlertAutoTrade(a, false);
+                        }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-semibold text-tos-muted hover:bg-white/[0.06]"
                       >
                         <Zap className="h-3.5 w-3.5" aria-hidden />
@@ -1018,6 +1027,29 @@ export function AlertsClient({
         extra channel. TradingOS can also fire push via{" "}
         <code className="text-tos-muted">POST /api/push/alert</code> when both apps are online.
       </p>
+      <RiskConfirmationModal
+        open={confirmAutoAlertId != null}
+        pending={confirmAutoPending}
+        title="Enable alert auto-trade on this alert"
+        subtitle="This alert may place market orders with SL/TP while armed."
+        confirmLabel="Enable for this alert"
+        onClose={() => setConfirmAutoAlertId(null)}
+        onConfirm={async () => {
+          if (!confirmAutoAlertId) return;
+          const alert = alerts.find((a) => a.id === confirmAutoAlertId);
+          if (!alert) {
+            setConfirmAutoAlertId(null);
+            return;
+          }
+          setConfirmAutoPending(true);
+          try {
+            await toggleAlertAutoTrade(alert, true);
+            setConfirmAutoAlertId(null);
+          } finally {
+            setConfirmAutoPending(false);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -39,6 +39,13 @@ export function ChatThread({
 
   useEffect(() => {
     setMessages(initialMessages);
+    window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+    const t1 = window.setTimeout(() => window.dispatchEvent(new CustomEvent("axe:chat-pin")), 120);
+    const t2 = window.setTimeout(() => window.dispatchEvent(new CustomEvent("axe:chat-pin")), 420);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, [initialMessages]);
 
   useEffect(() => {
