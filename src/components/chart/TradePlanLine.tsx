@@ -310,7 +310,8 @@ export const TradePlanLine = memo(function TradePlanLine({
   const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits, symbol) : null;
   const labelText = info ? `${label.toUpperCase()}, ${info.label}` : label.toUpperCase();
   const priceText = price.toFixed(digits);
-  const labelPixels = Math.max(40, labelText.length * 5.5 + 8);
+  const showVisual = !tapToArm || armed || !dashed;
+  const labelPixels = showVisual ? Math.max(40, labelText.length * 5.5 + 8) : 40;
   const priceWidth = Math.max(58, axisWidth - 4);
   const priceX = size.w - priceWidth - 2;
   const handleCx = (labelPixels + 4 + plotRight) / 2;
@@ -337,27 +338,31 @@ export const TradePlanLine = memo(function TradePlanLine({
         style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
       >
         <g ref={groupRef}>
-          <line
-            x1={labelPixels + 4}
-            x2={plotRight}
-            y1={0}
-            y2={0}
-            stroke={color}
-            strokeWidth={dashed ? 1 : 1.5}
-            strokeDasharray={dashed ? "6 4" : ""}
-          />
+          {showVisual ? (
+            <>
+              <line
+                x1={labelPixels + 4}
+                x2={plotRight}
+                y1={0}
+                y2={0}
+                stroke={color}
+                strokeWidth={dashed ? 1 : 1.5}
+                strokeDasharray={dashed ? "6 4" : ""}
+              />
 
-          <text
-            ref={labelTextRef}
-            x={4}
-            y={3}
-            fontFamily="ui-sans-serif, system-ui, -apple-system"
-            fontSize={10}
-            fontWeight={700}
-            fill={color}
-          >
-            {labelText}
-          </text>
+              <text
+                ref={labelTextRef}
+                x={4}
+                y={3}
+                fontFamily="ui-sans-serif, system-ui, -apple-system"
+                fontSize={10}
+                fontWeight={700}
+                fill={color}
+              >
+                {labelText}
+              </text>
+            </>
+          ) : null}
 
           {showDragHandle ? (
             <circle
@@ -373,21 +378,23 @@ export const TradePlanLine = memo(function TradePlanLine({
             />
           ) : null}
 
-          <g style={{ pointerEvents: "none" }}>
-            <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
-            <text
-              ref={priceTextRef}
-              x={priceX + priceWidth / 2}
-              y={4}
-              textAnchor="middle"
-              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontSize={10}
-              fontWeight={700}
-              fill="#000"
-            >
-              {priceText}
-            </text>
-          </g>
+          {showVisual ? (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
+              <text
+                ref={priceTextRef}
+                x={priceX + priceWidth / 2}
+                y={4}
+                textAnchor="middle"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                fontSize={10}
+                fontWeight={700}
+                fill="#000"
+              >
+                {priceText}
+              </text>
+            </g>
+          ) : null}
         </g>
       </svg>
 

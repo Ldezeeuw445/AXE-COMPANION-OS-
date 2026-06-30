@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, GitBranch, History, RefreshCw } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 type FeedSignal = { feed: string; signal: string };
 
@@ -36,6 +37,8 @@ type CorrelationSnapshot = {
   generatedAt: string;
 };
 
+const CACHE_KEY = "axe.intel.correlation.snapshot.v1";
+
 export function CorrelationEngine() {
   const [data, setData] = useState<CorrelationSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,13 +49,30 @@ export function CorrelationEngine() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/intel-correlations", { method: "POST" });
+      let authHeader: Record<string, string> = {};
+      try {
+        const sb = createClient();
+        const { data: { session } } = await sb.auth.getSession();
+        if (session?.access_token) {
+          authHeader = { Authorization: `Bearer ${session.access_token}` };
+        }
+      } catch {
+        /* ignore */
+      }
+      const res = await fetch("/api/intel-correlations", { method: "POST", headers: authHeader });
       const json = (await res.json()) as {
         ok: boolean;
         snapshot?: CorrelationSnapshot;
         error?: string;
       };
-      if (json.ok && json.snapshot) setData(json.snapshot);
+      if (json.ok && json.snapshot) {
+        setData(json.snapshot);
+        try {
+          window.sessionStorage.setItem(CACHE_KEY, JSON.stringify(json.snapshot));
+        } catch {
+          /* ignore */
+        }
+      }
       else setError(json.error ?? "Failed");
     } catch {
       setError("Network error");
@@ -62,6 +82,14 @@ export function CorrelationEngine() {
   }, []);
 
   useEffect(() => {
+    try {
+      const cached = window.sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        setData(JSON.parse(cached) as CorrelationSnapshot);
+      }
+    } catch {
+      /* ignore */
+    }
     fetch_();
   }, [fetch_]);
 

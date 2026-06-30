@@ -5,7 +5,7 @@ import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 
 export default function LoginPage() {
   return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-6 py-12">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden overscroll-none bg-[#050608] px-6 py-10">
 
       {/* Ambient glow behind wordmark */}
       <div

@@ -405,9 +405,27 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
 
   useLayoutEffect(() => {
     if (pathname !== "/chat" && !pathname.startsWith("/chat/")) return;
+    stickToBottomRef.current = true;
+    setShowJump(false);
     runPinSequence(true);
     return clearPinTimers;
   }, [pathname, messages.length, lastMessageId, runPinSequence, clearPinTimers]);
+
+  // iOS/WebView can restore stale scroll offsets on route revisit.
+  // Keep forcing a bottom pin briefly after opening chat.
+  useEffect(() => {
+    if (pathname !== "/chat" && !pathname.startsWith("/chat/")) return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - startedAt > 2400) {
+        window.clearInterval(timer);
+        return;
+      }
+      stickToBottomRef.current = true;
+      pinToLatest(true);
+    }, 180);
+    return () => window.clearInterval(timer);
+  }, [pathname, pinToLatest, messages.length]);
 
   useEffect(() => {
     function onPinRequest() {

@@ -263,18 +263,6 @@ export function PositionLabelsOverlay({
         return;
       }
 
-      // Pending limit/stop entry: apply on release (MT5-style direct modify).
-      if (input.orderId && input.field === "entry") {
-        await submitModify({
-          targetKey: input.targetKey,
-          orderId: input.orderId,
-          stopLoss: input.currentSl,
-          takeProfit: input.currentTp,
-          openPrice: input.newPrice,
-        });
-        return;
-      }
-
       const newSl = input.field === "sl" ? input.newPrice : input.currentSl;
       const newTp = input.field === "tp" ? input.newPrice : input.currentTp;
       const newOpenPrice = input.field === "entry" ? input.newPrice : input.currentOpenPrice;
@@ -334,7 +322,24 @@ export function PositionLabelsOverlay({
     }
 
     for (const o of pendingOrders) {
-      // Pending broker entry labels are rendered as draggable TradePlanLine overlays.
+      const targetKey = slTpDraftKeyForOrder(o.id);
+      const draft = drafts[targetKey];
+      const hasDraft = Boolean(draft);
+      const entry = draft?.openPrice ?? o.openPrice;
+      if (entry == null || entry <= 0) continue;
+      const y = canvas.priceToCoordinate(entry);
+      if (y == null) continue;
+      const side = (o.side ?? "buy") as "buy" | "sell";
+      const typeLabel = o.type.replace(/_/g, " ").toUpperCase();
+      next.push({
+        key: `entry-ord-${o.id}`,
+        y,
+        text: `${typeLabel} ${o.volume}`,
+        color: entryColor(side),
+        showConfirm: hasDraft && canModify,
+        confirmTargetKey: targetKey,
+        orderId: o.id,
+      });
     }
 
     setEntryLabels(next);

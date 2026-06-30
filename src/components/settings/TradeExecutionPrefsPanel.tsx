@@ -17,11 +17,13 @@ export function TradeExecutionPrefsPanel({
   initialAlertAutoTrade,
   initialAlertSlOffset,
   initialAlertTpOffset,
+  liveTradingEnabled = false,
 }: {
   initialVolume: number;
   initialAlertAutoTrade: boolean;
   initialAlertSlOffset: number | null;
   initialAlertTpOffset: number | null;
+  liveTradingEnabled?: boolean;
 }) {
   const [volume, setVolume] = useState(() => normalizeTradeVolume(initialVolume));
   const [alertAutoTrade, setAlertAutoTrade] = useState(initialAlertAutoTrade);
@@ -87,6 +89,10 @@ export function TradeExecutionPrefsPanel({
   const toggleAuto = () => {
     const next = !alertAutoTrade;
     if (next) {
+      if (!liveTradingEnabled) {
+        setError("Enable Live trading first (same 3-step risk confirmation) before auto-trade on alerts.");
+        return;
+      }
       const slNum = slOffset.trim() === "" ? null : Number(slOffset);
       const tpNum = tpOffset.trim() === "" ? null : Number(tpOffset);
       if (slNum == null || tpNum == null || !Number.isFinite(slNum) || !Number.isFinite(tpNum) || slNum <= 0 || tpNum <= 0) {
@@ -170,7 +176,7 @@ export function TradeExecutionPrefsPanel({
           type="checkbox"
           className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/40 accent-cyan-400"
           checked={alertAutoTrade}
-          disabled={saving}
+          disabled={saving || !liveTradingEnabled}
           onChange={toggleAuto}
         />
         <span className="min-w-0">
@@ -189,6 +195,11 @@ export function TradeExecutionPrefsPanel({
         <TosMatteBanner accent="amber" className="mt-2">
           {error}
         </TosMatteBanner>
+      ) : null}
+      {!liveTradingEnabled ? (
+        <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
+          Auto-trade is locked until Live trading is enabled with the full 3-step risk acknowledgment.
+        </p>
       ) : null}
       <p className="mt-3 text-[10px] text-tos-dim">
         {saving ? "Saving…" : saved ? "Saved to your workspace." : "Syncs across devices."}

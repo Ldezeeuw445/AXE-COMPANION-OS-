@@ -3,8 +3,15 @@
 import { ArrowRight, MoveVertical } from "lucide-react";
 import { useInstantSlTpModify } from "@/lib/chart/instantSlTpModify";
 
-export function SlTpModifyPanel({ initialInstant }: { initialInstant: boolean }) {
+export function SlTpModifyPanel({
+  initialInstant,
+  liveTradingEnabled = false,
+}: {
+  initialInstant: boolean;
+  liveTradingEnabled?: boolean;
+}) {
   const { enabled, pending, setInstant } = useInstantSlTpModify(initialInstant);
+  const blocked = !liveTradingEnabled;
 
   return (
     <section className="rounded-2xl border border-white/[0.07] bg-[#0c0d0e]/90 p-4">
@@ -25,8 +32,11 @@ export function SlTpModifyPanel({ initialInstant }: { initialInstant: boolean })
             type="checkbox"
             className="mt-0.5 h-4 w-4 rounded border-white/20 bg-black/40 accent-cyan-400"
             checked={enabled}
-            disabled={pending}
-            onChange={(e) => void setInstant(e.target.checked)}
+            disabled={pending || blocked}
+            onChange={(e) => {
+              if (blocked && e.target.checked) return;
+              void setInstant(e.target.checked);
+            }}
           />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 text-[13px] font-semibold text-white/90">
@@ -43,7 +53,9 @@ export function SlTpModifyPanel({ initialInstant }: { initialInstant: boolean })
         </label>
 
         <p className="text-[10px] text-tos-dim">
-          Synced to your account · {enabled ? "Instant apply" : "Confirm with arrow (default)"}
+          {blocked
+            ? "Enable Live trading first (3-step risk confirmation) to unlock instant drag release."
+            : `Synced to your account · ${enabled ? "Instant apply" : "Confirm with arrow (default)"}`}
         </p>
       </div>
     </section>

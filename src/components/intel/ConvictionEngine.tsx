@@ -31,6 +31,8 @@ type ConvictionSnapshot = {
   marketSentence: string;
 };
 
+const CACHE_KEY = "axe.intel.conviction.snapshot.v1";
+
 export function ConvictionEngine() {
   const [data, setData] = useState<ConvictionSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -62,6 +64,11 @@ export function ConvictionEngine() {
       };
       if (json.ok && json.conviction) {
         setData(json.conviction);
+        try {
+          window.sessionStorage.setItem(CACHE_KEY, JSON.stringify(json.conviction));
+        } catch {
+          /* ignore */
+        }
       } else {
         setError(json.error ?? "Failed to generate convictions");
       }
@@ -73,6 +80,14 @@ export function ConvictionEngine() {
   }, []);
 
   useEffect(() => {
+    try {
+      const cached = window.sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        setData(JSON.parse(cached) as ConvictionSnapshot);
+      }
+    } catch {
+      /* ignore */
+    }
     fetchConvictions();
   }, [fetchConvictions]);
 

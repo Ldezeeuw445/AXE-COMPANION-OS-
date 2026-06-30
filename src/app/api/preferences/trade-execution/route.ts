@@ -77,6 +77,20 @@ export async function POST(req: Request) {
     );
   }
 
+  if (alertAutoTradeEnabled) {
+    const { data: pref } = await supabase
+      .from("user_workspace_preferences")
+      .select("live_trading_enabled")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!pref?.live_trading_enabled) {
+      return Response.json(
+        { error: "Enable Live trading first (3-step risk confirmation) before auto-trade on alerts." },
+        { status: 403 },
+      );
+    }
+  }
+
   const { error } = await supabase.from("user_workspace_preferences").upsert(
     {
       user_id: user.id,

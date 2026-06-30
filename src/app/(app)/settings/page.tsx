@@ -213,7 +213,10 @@ export default async function SettingsPage() {
       </div>
 
       <div className="mb-4">
-        <SlTpModifyPanel initialInstant={instantSlTpModify} />
+        <SlTpModifyPanel
+          initialInstant={instantSlTpModify}
+          liveTradingEnabled={liveTrading.enabled}
+        />
       </div>
 
       <div className="mb-4">
@@ -222,6 +225,7 @@ export default async function SettingsPage() {
           initialAlertAutoTrade={tradeExecutionPrefs.alertAutoTradeEnabled}
           initialAlertSlOffset={tradeExecutionPrefs.alertSlOffset}
           initialAlertTpOffset={tradeExecutionPrefs.alertTpOffset}
+          liveTradingEnabled={liveTrading.enabled}
         />
       </div>
 
