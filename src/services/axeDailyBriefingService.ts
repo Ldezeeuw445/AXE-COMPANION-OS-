@@ -68,7 +68,7 @@ function getLocalWeekday(timezone: string, refDate = new Date()): string {
   }
 }
 
-/** True when local time is past 07:00 and the daily brief for today is still missing. */
+/** True when local time is past 06:00 and the daily brief for today is still missing. */
 export async function shouldDeliverTodaysDailyBrief(
   supabase: SupabaseClient,
   userId: string,
@@ -79,7 +79,7 @@ export async function shouldDeliverTodaysDailyBrief(
   }
 
   const hour = getLocalHour(profile.timezone);
-  if (hour < 7) return { due: false, timezone: profile.timezone };
+  if (hour < 6) return { due: false, timezone: profile.timezone };
 
   const existing = await getTodaysBrief(supabase, userId, "daily", profile.timezone);
   if (existing?.body) return { due: false, timezone: profile.timezone };
@@ -87,7 +87,7 @@ export async function shouldDeliverTodaysDailyBrief(
   return { due: true, timezone: profile.timezone };
 }
 
-/** Generate today's daily brief if cron missed the 07:00 window. */
+/** Generate today's daily brief if cron missed the 06:00 window. */
 export async function ensureTodaysDailyBrief(userId: string): Promise<boolean> {
   const writeSb = createServiceRoleSupabaseClient();
   if (!writeSb) return false;
@@ -435,7 +435,7 @@ export async function generateMorningBrief(
     max_tokens: 350,
   };
 
-  const response = await callLLM(llmRequest, "intel");
+  const response = await callLLM(llmRequest, "briefing");
   const latency_ms = Date.now() - startTime;
 
   console.log(
@@ -717,10 +717,10 @@ export async function runDailyBriefingCron(): Promise<{
     return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
   }
 
-  // Hourly cron: 07:00 delivery + 08:00–11:00 catch-up if the 07:00 run missed
+  // Pre-generate at 06:00 local; catch-up 07:00–11:00 if that run missed
   const traders = await getTraderIdsForBriefing(supabase, {
-    targetHour: 7,
-    catchUpHours: [8, 11],
+    targetHour: 6,
+    catchUpHours: [7, 11],
     paidOnly: false,
   });
   console.log(`[Briefing] Daily cron starting for ${traders.length} traders`);
@@ -730,8 +730,15 @@ export async function runDailyBriefingCron(): Promise<{
       await generateMorningBrief(traderId, supabase, { weekly: false });
       processed++;
     } catch (error) {
-      console.error(`[Briefing] Failed for trader ${traderId}:`, error);
-      failed++;
+      console.error(`[Briefing] Failed for trader ${traderId}, retrying:`, error);
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+        await generateMorningBrief(traderId, supabase, { weekly: false });
+        processed++;
+      } catch (retryError) {
+        console.error(`[Briefing] Retry failed for trader ${traderId}:`, retryError);
+        failed++;
+      }
     }
   }
 
@@ -760,10 +767,10 @@ export async function runWeeklyBriefingCron(): Promise<{
     return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
   }
 
-  // Monday 07:00 local (+ catch-up through 11:00) — weekly outlook for paid tiers.
+  // Monday 06:00 local (+ catch-up through 11:00) — weekly outlook for paid tiers.
   const traders = await getTraderIdsForBriefing(supabase, {
-    targetHour: 7,
-    catchUpHours: [8, 11],
+    targetHour: 6,
+    catchUpHours: [7, 11],
     weekly: true,
     paidOnly: true,
   });
@@ -774,8 +781,15 @@ export async function runWeeklyBriefingCron(): Promise<{
       await generateMorningBrief(traderId, supabase, { weekly: true });
       processed++;
     } catch (error) {
-      console.error(`[Briefing] Failed for trader ${traderId}:`, error);
-      failed++;
+      console.error(`[Briefing] Weekly failed for trader ${traderId}, retrying:`, error);
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+        await generateMorningBrief(traderId, supabase, { weekly: true });
+        processed++;
+      } catch (retryError) {
+        console.error(`[Briefing] Weekly retry failed for trader ${traderId}:`, retryError);
+        failed++;
+      }
     }
   }
 

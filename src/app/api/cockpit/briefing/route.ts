@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     return Response.json(
       {
         brief: null,
-        message: "No brief yet — delivered daily from 07:00 your local time",
+        message: "No brief yet — delivered daily from 06:00 your local time",
       },
       { status: 200 },
     );

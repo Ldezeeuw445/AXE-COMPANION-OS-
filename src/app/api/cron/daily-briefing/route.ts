@@ -1,8 +1,7 @@
 /**
  * GET/POST /api/cron/daily-briefing
  *
- * Vercel Cron invokes this path with HTTP GET hourly; processes users at 07:00 local.
- * Schedule in vercel.json: "0 * * * *"
+ * Vercel Cron invokes this path every 15 min (04:00–11:00 UTC); pre-generates at 06:00 local.
  */
 
 import { NextRequest, NextResponse } from "next/server";

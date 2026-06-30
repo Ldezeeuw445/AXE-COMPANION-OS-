@@ -55,6 +55,8 @@ const OLLAMA_BASE_URL = OLLAMA_BASE_URL_RAW.replace(/\/api\/?$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
+/** Morning briefs always use OpenAI — fast, reliable, ready before the trader opens the app. */
+const OPENAI_BRIEFING_MODEL = process.env.OPENAI_BRIEFING_MODEL || 'gpt-4o-mini';
 
 // Local model selection based on request type
 const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
@@ -326,8 +328,11 @@ async function callOllama(
 
 async function callOpenAI(
   request: LLMRequest,
-  timeout: number = OPENAI_TIMEOUT_MS
+  options: number | { timeout?: number; model?: string } = OPENAI_TIMEOUT_MS,
 ): Promise<LLMResponse> {
+  const opts = typeof options === 'number' ? { timeout: options } : options;
+  const model = opts.model ?? OPENAI_MODEL;
+  const timeout = opts.timeout ?? OPENAI_TIMEOUT_MS;
   const startTime = Date.now();
 
   if (!OPENAI_API_KEY) {
@@ -340,7 +345,7 @@ async function callOpenAI(
 
     // Build request body — include tools when present (enables function calling)
     const bodyPayload: Record<string, unknown> = {
-      model: OPENAI_MODEL,
+      model,
       messages: request.messages,
       temperature: request.temperature ?? 0.7,
       max_tokens: request.max_tokens ?? 2048,
@@ -405,11 +410,11 @@ async function callOpenAI(
         })(),
       }));
 
-    console.log(`[LLM] OpenAI (${OPENAI_MODEL}) responded in ${latency_ms}ms — ${toolCalls.length} tool call(s)`);
+    console.log(`[LLM] OpenAI (${model}) responded in ${latency_ms}ms — ${toolCalls.length} tool call(s)`);
 
     return {
       content,
-      model: OPENAI_MODEL,
+      model,
       provider: 'openai',
       latency_ms,
       toolCalls,
@@ -524,7 +529,8 @@ async function callOllamaChat(
 /**
  * Select the appropriate model based on request context
  */
-function selectModel(requestType: 'chat' | 'intel'): string {
+function selectModel(requestType: 'chat' | 'intel' | 'briefing'): string {
+  if (requestType === 'briefing') return OPENAI_BRIEFING_MODEL;
   return requestType === 'intel' ? MODEL_FOR_INTEL : MODEL_FOR_CHAT;
 }
 
@@ -580,11 +586,16 @@ function formatMessagesForOllama(messages: LLMMessage[]): string {
  */
 export async function callLLM(
   request: LLMRequest,
-  requestType: 'chat' | 'intel' = 'chat'
+  requestType: 'chat' | 'intel' | 'briefing' = 'chat'
 ): Promise<LLMResponse> {
   const model = selectModel(requestType);
 
   console.log(`[LLM] Request type: ${requestType}, target: ${LLM_TARGET}, model: ${model}`);
+
+  // Morning briefs: GPT-only for reliable pre-dawn delivery (no Ollama cold-start timeouts).
+  if (requestType === 'briefing') {
+    return callOpenAI(request, { model: OPENAI_BRIEFING_MODEL, timeout: OPENAI_TIMEOUT_MS });
+  }
 
   const hasTools = Array.isArray(request.tools) && request.tools.length > 0;
 
