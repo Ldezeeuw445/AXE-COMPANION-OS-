@@ -41,6 +41,69 @@ export function getLocalDateString(timezone: string, refDate = new Date()): stri
   }).format(refDate);
 }
 
+/** Local hour 0–23 in the trader's timezone. */
+export function getLocalHour(timezone: string, refDate = new Date()): number {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hour12: false,
+    }).formatToParts(refDate);
+    const raw = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+    return raw === 24 ? 0 : raw;
+  } catch {
+    return refDate.getUTCHours();
+  }
+}
+
+function getLocalWeekday(timezone: string, refDate = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+    }).formatToParts(refDate);
+    return parts.find((p) => p.type === "weekday")?.value ?? "";
+  } catch {
+    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][refDate.getUTCDay()] ?? "";
+  }
+}
+
+/** True when local time is past 07:00 and the daily brief for today is still missing. */
+export async function shouldDeliverTodaysDailyBrief(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ due: boolean; timezone: string }> {
+  const profile = await fetchProfileDirect(supabase, userId);
+  if (profile.preferences.morningBriefingOptIn === false) {
+    return { due: false, timezone: profile.timezone };
+  }
+
+  const hour = getLocalHour(profile.timezone);
+  if (hour < 7) return { due: false, timezone: profile.timezone };
+
+  const existing = await getTodaysBrief(supabase, userId, "daily", profile.timezone);
+  if (existing?.body) return { due: false, timezone: profile.timezone };
+
+  return { due: true, timezone: profile.timezone };
+}
+
+/** Generate today's daily brief if cron missed the 07:00 window. */
+export async function ensureTodaysDailyBrief(userId: string): Promise<boolean> {
+  const writeSb = createServiceRoleSupabaseClient();
+  if (!writeSb) return false;
+
+  const { due } = await shouldDeliverTodaysDailyBrief(writeSb, userId);
+  if (!due) return false;
+
+  try {
+    await generateMorningBrief(userId, writeSb, { weekly: false });
+    return true;
+  } catch (err) {
+    console.error("[Briefing] ensureTodaysDailyBrief failed:", err);
+    return false;
+  }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface TraderBriefingContext {
@@ -545,24 +608,42 @@ export async function markBriefRead(
 
 async function getTraderIdsForBriefing(
   supabase: SupabaseClient,
-  opts?: { targetHour?: number; weekly?: boolean; paidOnly?: boolean }
+  opts?: {
+    targetHour?: number;
+    catchUpHours?: [number, number];
+    weekly?: boolean;
+    paidOnly?: boolean;
+  },
 ): Promise<string[]> {
   try {
     const targetHour = opts?.targetHour ?? 7;
+    const catchUpRange = opts?.catchUpHours;
     const isWeekly = opts?.weekly ?? false;
     const paidOnly = opts?.paidOnly ?? isWeekly;
+    const now = new Date();
+    const PAGE_SIZE = 500;
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, preferences, timezone")
-      .limit(500);
+    const rows: { id: string; preferences: unknown; timezone: string | null }[] = [];
+    let offset = 0;
 
-    if (error || !data) {
-      console.warn("[Briefing] Could not fetch profiles:", error?.message);
-      return [];
+    while (true) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, preferences, timezone")
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        console.warn("[Briefing] Could not fetch profiles:", error.message);
+        break;
+      }
+      if (!data?.length) break;
+
+      rows.push(...data);
+      if (data.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
     }
 
-    const ids = data
+    const ids = rows
       .filter((row) => {
         const prefs =
           typeof row.preferences === "object" && row.preferences !== null
@@ -571,26 +652,30 @@ async function getTraderIdsForBriefing(
         if (prefs.morningBriefingOptIn === false) return false;
 
         const tz = (row.timezone as string) || "Europe/Amsterdam";
-        try {
-          const localParts = new Intl.DateTimeFormat("en-US", {
-            timeZone: tz,
-            hour: "numeric",
-            weekday: "short",
-            hour12: false,
-          }).formatToParts(new Date());
-          const localHour = parseInt(
-            localParts.find((p) => p.type === "hour")?.value ?? "0",
-            10,
-          );
-          const weekday = localParts.find((p) => p.type === "weekday")?.value ?? "";
-          if (localHour !== targetHour) return false;
-          if (isWeekly && weekday !== "Mon") return false;
-        } catch {
-          if (new Date().getUTCHours() !== targetHour) return false;
-          if (isWeekly && new Date().getUTCDay() !== 1) return false;
+        const localHour = getLocalHour(tz, now);
+
+        if (isWeekly) {
+          if (getLocalWeekday(tz, now) !== "Mon") return false;
+          if (localHour === targetHour) return true;
+          if (
+            catchUpRange &&
+            localHour >= catchUpRange[0] &&
+            localHour <= catchUpRange[1]
+          ) {
+            return true;
+          }
+          return false;
         }
 
-        return true;
+        if (localHour === targetHour) return true;
+        if (
+          catchUpRange &&
+          localHour >= catchUpRange[0] &&
+          localHour <= catchUpRange[1]
+        ) {
+          return true;
+        }
+        return false;
       })
       .map((row) => row.id as string);
 
@@ -632,8 +717,12 @@ export async function runDailyBriefingCron(): Promise<{
     return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
   }
 
-  // Run every hour but only process users whose local time is 07:00
-  const traders = await getTraderIdsForBriefing(supabase, { targetHour: 7, paidOnly: false });
+  // Hourly cron: 07:00 delivery + 08:00–11:00 catch-up if the 07:00 run missed
+  const traders = await getTraderIdsForBriefing(supabase, {
+    targetHour: 7,
+    catchUpHours: [8, 11],
+    paidOnly: false,
+  });
   console.log(`[Briefing] Daily cron starting for ${traders.length} traders`);
 
   for (const traderId of traders) {
@@ -671,9 +760,10 @@ export async function runWeeklyBriefingCron(): Promise<{
     return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
   }
 
-  // Monday 07:00 local — weekly outlook for paid tiers.
+  // Monday 07:00 local (+ catch-up through 11:00) — weekly outlook for paid tiers.
   const traders = await getTraderIdsForBriefing(supabase, {
     targetHour: 7,
+    catchUpHours: [8, 11],
     weekly: true,
     paidOnly: true,
   });

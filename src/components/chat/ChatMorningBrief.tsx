@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Sunrise, X, RefreshCw, Newspaper, ArrowRight, Check } from "lucide-react";
 import { applyChatPrefill } from "@/lib/chat/chatPrefill";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
@@ -26,21 +26,64 @@ export function ChatMorningBrief() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshDone, setRefreshDone] = useState(false);
+  const [delivering, setDelivering] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchBrief = useCallback(async () => {
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const fetchBrief = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/cockpit/briefing");
       if (!res.ok) throw new Error("Failed to load brief");
       const data = await res.json();
-      if (data.upgradeRequired) return;
+      if (data.upgradeRequired) return false;
+      if (data.delivering) {
+        setDelivering(true);
+        setBrief(null);
+        return true;
+      }
+      setDelivering(false);
       setBrief(data.brief ?? null);
+      return Boolean(data.brief);
     } catch (e) {
       console.warn("[ChatMorningBrief] Could not load brief:", e);
+      setDelivering(false);
+      return false;
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void fetchBrief();
+  }, [fetchBrief]);
+
+  useEffect(() => {
+    if (!delivering) {
+      stopPolling();
+      return;
+    }
+
+    const started = Date.now();
+    pollRef.current = setInterval(() => {
+      if (Date.now() - started > 120_000) {
+        stopPolling();
+        setDelivering(false);
+        return;
+      }
+      void fetchBrief().then((ready) => {
+        if (ready) stopPolling();
+      });
+    }, 4000);
+
+    return stopPolling;
+  }, [delivering, fetchBrief, stopPolling]);
 
   const refreshBrief = useCallback(async () => {
     setRefreshing(true);
@@ -60,16 +103,30 @@ export function ChatMorningBrief() {
     }
   }, []);
 
-  useEffect(() => {
-    void fetchBrief();
-  }, [fetchBrief]);
-
   const askAXE = useCallback((text: string) => {
     applyChatPrefill(text);
   }, []);
 
   if (intelMode) return null;
-  if (dismissed || loading || !brief) return null;
+  if (dismissed) return null;
+
+  if (loading || delivering) {
+    if (!delivering) return null;
+    return (
+      <div
+        className="mx-4 mb-3 rounded-2xl border border-white/[0.06] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4"
+        style={{ borderLeftColor: "var(--tos-accent-gold)", borderLeftWidth: 2 }}
+      >
+        <div className="flex items-center gap-2 text-tos-dim">
+          <Sunrise className={`h-4 w-4 shrink-0 ${briefStyle.text}`} />
+          <span className="text-[11px] uppercase tracking-[0.18em]">Generating morning brief…</span>
+          <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-70" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!brief) return null;
 
   const isWeekly = brief.briefing_type === "weekly";
   const kindLabel = feedKindLabel("briefing", {

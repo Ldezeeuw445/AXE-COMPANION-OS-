@@ -4,17 +4,20 @@
  * POST /api/cockpit/briefing?read=true&date=YYYY-MM-DD&type=weekly — mark read
  */
 
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import {
   getActiveBrief,
   generateMorningBrief,
   markBriefRead,
+  ensureTodaysDailyBrief,
+  shouldDeliverTodaysDailyBrief,
 } from "@/services/axeDailyBriefingService";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function GET() {
   const auth = await getAuthedServiceSupabase();
@@ -27,10 +30,27 @@ export async function GET() {
     return Response.json({ error: gate.error, brief: null, upgradeRequired: true }, { status: gate.status });
   }
 
-  const brief = await getActiveBrief(auth.supabase, auth.user.id);
+  let brief = await getActiveBrief(auth.supabase, auth.user.id);
 
   if (!brief) {
-    return Response.json({ brief: null, message: "No brief for today yet" }, { status: 200 });
+    const { due } = await shouldDeliverTodaysDailyBrief(auth.supabase, auth.user.id);
+    if (due) {
+      after(async () => {
+        try {
+          await ensureTodaysDailyBrief(auth.user.id);
+        } catch (err) {
+          console.error("[Briefing API] background delivery failed:", err);
+        }
+      });
+      return Response.json(
+        {
+          brief: null,
+          delivering: true,
+          message: "Generating your morning brief — check back in a moment",
+        },
+        { status: 200 },
+      );
+    }
   }
 
   return Response.json({ brief }, { status: 200 });
@@ -66,9 +86,25 @@ export async function POST(request: NextRequest) {
     if (existing) {
       return Response.json({ brief: existing, cached: true }, { status: 200 });
     }
-    // Briefs are delivered by cron at 07:00 local — never auto-generate on page load.
+
+    const { due } = await shouldDeliverTodaysDailyBrief(auth.supabase, auth.user.id);
+    if (due) {
+      try {
+        await ensureTodaysDailyBrief(auth.user.id);
+        const brief = await getActiveBrief(auth.supabase, auth.user.id);
+        return Response.json({ brief, generated: true }, { status: 200 });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error("[Briefing API] auto-deliver failed:", msg);
+        return Response.json({ error: msg }, { status: 500 });
+      }
+    }
+
     return Response.json(
-      { brief: null, message: "No brief yet — delivered daily at 07:00 your local time" },
+      {
+        brief: null,
+        message: "No brief yet — delivered daily from 07:00 your local time",
+      },
       { status: 200 },
     );
   }

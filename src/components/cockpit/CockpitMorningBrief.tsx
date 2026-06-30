@@ -2,11 +2,11 @@
 
 /**
  * CockpitMorningBrief — displays today's AXE morning brief in the cockpit.
- * Briefs are delivered by cron (07:00 local daily, Monday 07:00 weekly).
- * This panel only shows an existing brief — it never triggers generation.
+ * Briefs are delivered by cron (07:00 local daily, Monday 07:00 weekly) or
+ * auto-generated on first visit after 07:00 if cron missed delivery.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Sunrise, Check } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { feedKindLabel, feedKindStyle } from "@/lib/feed/feedKindStyle";
@@ -30,25 +30,70 @@ export function CockpitMorningBrief() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshDone, setRefreshDone] = useState(false);
+  const [delivering, setDelivering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchBrief = useCallback(async () => {
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const fetchBrief = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/cockpit/briefing");
       if (!res.ok) throw new Error("Failed to load brief");
       const data = await res.json();
       if (data.upgradeRequired) {
         setError("Morning brief is a Pro feature — upgrade at /upgrade");
-        return;
+        return false;
       }
+      if (data.delivering) {
+        setDelivering(true);
+        setBrief(null);
+        setError(null);
+        return true;
+      }
+      setDelivering(false);
       setBrief(data.brief ?? null);
       setError(null);
+      return Boolean(data.brief);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load brief");
+      setDelivering(false);
+      return false;
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void fetchBrief();
+  }, [fetchBrief]);
+
+  useEffect(() => {
+    if (!delivering) {
+      stopPolling();
+      return;
+    }
+
+    const started = Date.now();
+    pollRef.current = setInterval(() => {
+      if (Date.now() - started > 120_000) {
+        stopPolling();
+        setDelivering(false);
+        setError("Brief generation is taking longer than expected — try Generate now");
+        return;
+      }
+      void fetchBrief().then((ready) => {
+        if (ready) stopPolling();
+      });
+    }, 4000);
+
+    return stopPolling;
+  }, [delivering, fetchBrief, stopPolling]);
 
   const forceRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -72,10 +117,6 @@ export function CockpitMorningBrief() {
     }
   }, []);
 
-  useEffect(() => {
-    void fetchBrief();
-  }, [fetchBrief]);
-
   if (loading) {
     return (
       <GlassPanel className="p-5">
@@ -97,10 +138,17 @@ export function CockpitMorningBrief() {
             Morning brief
           </span>
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-tos-muted">
-          Your personalized brief arrives at <span className="text-tos-text">07:00</span> in your
-          local timezone. Check back after that, or refresh manually if you missed a delivery.
-        </p>
+        {delivering ? (
+          <p className="mt-3 text-sm leading-relaxed text-tos-muted">
+            Generating your morning brief…
+            <RefreshCw className="ml-1.5 inline h-3.5 w-3.5 animate-spin align-[-2px] opacity-70" />
+          </p>
+        ) : (
+          <p className="mt-3 text-sm leading-relaxed text-tos-muted">
+            Your personalized brief arrives at <span className="text-tos-text">07:00</span> in your
+            local timezone. If you open the app after that, it generates automatically.
+          </p>
+        )}
         {error ? <p className="mt-2 text-[11px] text-tos-risk">{error}</p> : null}
         <button
           type="button"
