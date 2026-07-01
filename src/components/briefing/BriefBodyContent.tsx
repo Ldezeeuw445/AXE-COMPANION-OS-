@@ -12,6 +12,7 @@ import {
   sectionDisplayLabel,
   repairBriefParagraph,
   stripBriefMarkdown,
+  normalizeBriefText,
   type BriefEventChip,
   type BriefHighlight,
   type BriefNewsCard,
@@ -72,10 +73,16 @@ function EventChip({ event, compact }: { event: BriefEventChip; compact?: boolea
 function NewsCardBlock({ card, compact }: { card: BriefNewsCard; compact?: boolean }) {
   const [imageOk, setImageOk] = useState(true);
   if (!card.imageUrl || !imageOk) return null;
+  const cleanTitle = normalizeBriefText(card.title);
+  const cleanSummary = card.summary ? normalizeBriefText(card.summary) : null;
 
   return (
     <article className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.03]">
-      <div className={`relative w-full overflow-hidden ${compact ? "h-32" : "h-36"} bg-black/50`}>
+      <div
+        className={`relative w-full overflow-hidden bg-black/50 ${
+          compact ? "h-44 sm:h-48" : "h-48 sm:h-56"
+        }`}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={card.imageUrl}
@@ -92,11 +99,11 @@ function NewsCardBlock({ card, compact }: { card: BriefNewsCard; compact?: boole
         ) : null}
         <div className="absolute inset-x-0 bottom-0 p-3">
           <p className={`font-semibold leading-snug text-white ${compact ? "text-[12px]" : "text-[13px]"}`}>
-            {card.title}
+            {cleanTitle}
           </p>
-          {card.summary ? (
+          {cleanSummary ? (
             <p className={`mt-1 line-clamp-2 text-white/70 ${compact ? "text-[10px]" : "text-[11px]"}`}>
-              {card.summary}
+              {cleanSummary}
             </p>
           ) : null}
         </div>

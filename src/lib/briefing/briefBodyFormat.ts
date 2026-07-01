@@ -81,9 +81,30 @@ const DEFAULT_PAIRS = [
   "WTI",
 ];
 
+/** Normalize malformed unicode/mojibake that occasionally leaks from upstream feeds. */
+export function normalizeBriefText(text: string): string {
+  return text
+    // common mojibake punctuation
+    .replace(/â€™/g, "'")
+    .replace(/â€˜/g, "'")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .replace(/â€“/g, "-")
+    .replace(/â€”/g, " - ")
+    .replace(/â€¦/g, "...")
+    .replace(/Â/g, "")
+    // replacement chars / zero-width artifacts
+    .replace(/\uFFFD/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    // normalize spacing
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 /** Strip markdown emphasis markers the model sometimes emits. */
 export function stripBriefMarkdown(text: string): string {
-  return text
+  return normalizeBriefText(
+    text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
     .replace(/\*([^*\n]+)\*/g, "$1")
@@ -94,14 +115,16 @@ export function stripBriefMarkdown(text: string): string {
     .replace(/^([A-Za-z])\n(?=[a-z])/gm, "$1")
     // Drop orphan letter lines before a capitalized word ("K\nThe …" not a real word split)
     .replace(/^([A-Za-z])\n(?=[A-Z])/gm, "")
-    .trim();
+    .trim(),
+  );
 }
 
 /** Fix glued orphan prefixes like "KThe" or "SToday's" left by bad markdown splits. */
 export function repairBriefParagraph(text: string): string {
-  const m = text.match(/^([A-Z])([A-Z][a-z].*)$/);
+  const normalized = normalizeBriefText(text);
+  const m = normalized.match(/^([A-Z])([A-Z][a-z].*)$/);
   if (m && m[2]) return m[2];
-  return text;
+  return normalized;
 }
 
 export function isBreakingNewsText(text: string): boolean {
@@ -152,7 +175,7 @@ function findSectionAtLine(
 function mergeOrphanParagraphs(paragraphs: string[]): string[] {
   const merged: string[] = [];
   for (let i = 0; i < paragraphs.length; i++) {
-    let p = paragraphs[i]!.trim();
+    const p = paragraphs[i]!.trim();
     if (!p) continue;
 
     // Lone letter from broken markdown — only glue when next line continues the same word
@@ -204,7 +227,6 @@ export function parseBriefSections(body: string): BriefSection[] {
 
   while (cursor < normalized.length) {
     const next = findSectionAtLine(normalized, cursor + 1);
-    const nextAbs = next?.index ?? -1;
 
     const sliceEnd = next && next.index > cursor ? next.index : normalized.length;
     const chunk = normalized.slice(cursor, sliceEnd).trim();
