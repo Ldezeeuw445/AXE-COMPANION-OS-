@@ -432,9 +432,7 @@ export async function streamChatMessage(
 
   // Helper: execute a single tool call and return its string result
   async function executeTool(tc: AxeToolCall): Promise<string> {
-    // Cast to any to avoid TypeScript union type narrowing issues with overlapping tool handlers
-    // This is a known issue in the codebase, not caused by Ollama changes
-    const toolCall = tc as any;
+    const toolCall = tc as AxeToolCall & { args: Record<string, unknown> };
     if (toolCall.tool === "create_alert") {
       const { title, body } = toolCall.args;
       const row = buildUserAlertFromChatTool(toolCall.args);
@@ -691,6 +689,7 @@ export async function streamChatMessage(
 
   // 3. Stream the response — tool rounds are non-streaming, final text is streaming
   let finalReply: string | null = null;
+  const executedToolResults: Array<{ tc: AxeToolCall; result: string }> = [];
 
   try {
     // First call: streaming — may return tool calls or text
@@ -707,6 +706,7 @@ export async function streamChatMessage(
       const round1Results = await Promise.all(
         firstResponse.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) })),
       );
+      executedToolResults.push(...round1Results);
       const afterRound1 = appendToolRound(aiMessages, firstResponse.toolCalls, round1Results);
 
       // Second call: streaming for text, but may have more tool calls
@@ -723,6 +723,7 @@ export async function streamChatMessage(
         const round2Results = await Promise.all(
           round2Response.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) })),
         );
+        executedToolResults.push(...round2Results);
         const afterRound2 = appendToolRound(afterRound1, round2Response.toolCalls, round2Results);
 
         // Final streaming call (no tools)
@@ -754,6 +755,20 @@ export async function streamChatMessage(
     console.error("[chatService] AXE returned no reply (stream)");
     if (consumed) await refundChatQuota(supabase, user.id);
     return { ok: false, aiFailed: true };
+  }
+
+  // Hard safety for fib chart actions:
+  // if AXE actually routed a draw_fibonacci action, force a deterministic
+  // confirmation message using the real queued chart link and avoid invented levels.
+  const fibRoute = executedToolResults.find(
+    ({ tc }) => tc.tool === "route_chart_action" && tc.args.action_type === "draw_fibonacci",
+  );
+  const usedCalcFib = executedToolResults.some(({ tc }) => tc.tool === "calculate_fibonacci");
+  if (fibRoute && !usedCalcFib) {
+    const link =
+      fibRoute.result.match(/\[\[link:[^\]]+\]\]/)?.[0] ??
+      "[[link:/chart|Open chart]]";
+    finalReply = `Fibonacci is added on your active ${symbol?.toUpperCase() ?? "chart"} context. ${link} I will keep analysis locked to your active account + pair and current broker price regime.`;
   }
 
   // 4. Save assistant reply
