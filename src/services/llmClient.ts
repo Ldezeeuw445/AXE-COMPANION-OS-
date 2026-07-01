@@ -57,6 +57,8 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 /** Morning briefs always use OpenAI — fast, reliable, ready before the trader opens the app. */
 const OPENAI_BRIEFING_MODEL = process.env.OPENAI_BRIEFING_MODEL || 'gpt-4o-mini';
+/** Prefer OpenAI for tool rounds when available (quality + tool reliability). */
+const PREFER_OPENAI_FOR_TOOLS = (process.env.PREFER_OPENAI_FOR_TOOLS ?? '1') !== '0';
 
 // Local model selection based on request type
 const MODEL_FOR_CHAT = OLLAMA_MODEL; // Use configured Ollama model
@@ -70,13 +72,14 @@ const OPENAI_TIMEOUT_MS = 30_000;
 
 /** Skip OpenAI calls for 15 min after a quota 429 (saves latency on every chat message). */
 let openaiQuotaBlockedUntil = 0;
+const OPENAI_QUOTA_BLOCK_MS = Number(process.env.OPENAI_QUOTA_BLOCK_MS) || 90_000;
 
 function shouldSkipOpenAI(): boolean {
   return Date.now() < openaiQuotaBlockedUntil;
 }
 
 function markOpenAIQuotaExhausted(): void {
-  openaiQuotaBlockedUntil = Date.now() + 15 * 60 * 1000;
+  openaiQuotaBlockedUntil = Date.now() + OPENAI_QUOTA_BLOCK_MS;
 }
 
 function errorMessage(err: unknown): string {
@@ -86,11 +89,6 @@ function errorMessage(err: unknown): string {
 function isOpenAIQuotaError(err: unknown): boolean {
   const msg = errorMessage(err).toLowerCase();
   return msg.includes('429') || msg.includes('quota') || msg.includes('billing');
-}
-
-function isOpenAIUnavailable(err: unknown): boolean {
-  const msg = errorMessage(err).toLowerCase();
-  return isOpenAIQuotaError(err) || msg.includes('401') || msg.includes('invalid api key');
 }
 
 function messageText(content: LLMMessage['content']): string {
@@ -111,7 +109,7 @@ function messageText(content: LLMMessage['content']): string {
 function compactMessagesForOllamaChat(messages: LLMMessage[]): LLMMessage[] {
   return messages.map((msg) => {
     if (msg.role === 'system') {
-      const text = truncateForOllama(messageText(msg.content), 2400);
+      const text = compactSystemForOllama(messageText(msg.content), 2400);
       return { ...msg, content: text };
     }
     if (msg.role === 'user' || msg.role === 'assistant') {
@@ -125,6 +123,54 @@ function compactMessagesForOllamaChat(messages: LLMMessage[]): LLMMessage[] {
     }
     return msg;
   });
+}
+
+function sectionAround(text: string, marker: string, radius = 520): string | null {
+  const idx = text.indexOf(marker);
+  if (idx < 0) return null;
+  const start = Math.max(0, idx - 80);
+  const end = Math.min(text.length, idx + marker.length + radius);
+  return text.slice(start, end).trim();
+}
+
+/**
+ * Preserve critical Companion context when compressing huge system prompts for Ollama.
+ * Plain head-truncation often removes ACTIVE PAIR/account-memory blocks.
+ */
+function compactSystemForOllama(text: string, max = 2400): string {
+  if (text.length <= max) return text;
+  const markers = [
+    'ACTIVE PAIR:',
+    'AXE COMPANION OPERATING CONTEXT',
+    'SESSION BRIEF',
+    'ACTIVE WATCHLIST',
+    'KEY LEVELS',
+    'HIGH-IMPACT EVENTS THIS WEEK',
+    'SMART MONEY (Unusual Whales',
+    'ACTIVE ACCOUNT:',
+    'TRADER MEMORY',
+    'OPEN COMMITMENTS',
+    'LINKED BROKER ACCOUNTS',
+    'RECENT BROKER TRADES',
+    'JOURNAL ENTRIES',
+    'LIVE ACCOUNT',
+    'OPEN POSITIONS',
+    '--- AXE KNOWLEDGE LAYER',
+    'AXE KNOWLEDGE LAYER - RESPONSE RULES',
+  ];
+  const criticalSnippets = markers
+    .map((m) => sectionAround(text, m))
+    .filter((s): s is string => Boolean(s));
+
+  const head = text.slice(0, Math.min(900, Math.max(500, Math.floor(max * 0.38)))).trim();
+  const tail = text.slice(-Math.min(500, Math.max(280, Math.floor(max * 0.22)))).trim();
+
+  const joined = [head, ...criticalSnippets, tail]
+    .filter(Boolean)
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n');
+
+  return truncateForOllama(joined, max);
 }
 
 function extractToolNames(tools: unknown[]): string[] {
@@ -229,6 +275,18 @@ async function callOllamaWithToolsFallback(
   request: LLMRequest,
   model: string,
 ): Promise<LLMResponse> {
+  try {
+    const chatResult = await callOllamaChat(request, {
+      model,
+      timeout: OLLAMA_CHAT_TIMEOUT_MS,
+    });
+    if (chatResult.toolCalls.length > 0 || chatResult.content) {
+      return chatResult;
+    }
+  } catch (chatError) {
+    console.warn('[LLM] Ollama chat+tools failed, trying generate hint path:', errorMessage(chatError));
+  }
+
   try {
     return await callOllamaGenerateWithTools(request, {
       model,
@@ -562,6 +620,7 @@ function formatMessagesForOllama(messages: LLMMessage[]): string {
               )
               .join(' ')
           : '';
+    if (msg.role === 'system') return compactSystemForOllama(text, maxLen);
     return truncateForOllama(text, maxLen);
   };
 
@@ -604,6 +663,17 @@ export async function callLLM(
   }
 
   if (LLM_TARGET === 'ollama') {
+    if (hasTools && PREFER_OPENAI_FOR_TOOLS && OPENAI_API_KEY && !shouldSkipOpenAI()) {
+      try {
+        console.log('[LLM] ollama target + tools: trying OpenAI first for reliability');
+        return await callOpenAI(request);
+      } catch (openaiError) {
+        if (isOpenAIQuotaError(openaiError)) {
+          markOpenAIQuotaExhausted();
+        }
+        console.warn('[LLM] OpenAI tools failed under ollama target, falling back to Ollama:', errorMessage(openaiError));
+      }
+    }
     return hasTools ? callOllamaWithToolsFallback(request, model) : callOllama(request, { model });
   }
 

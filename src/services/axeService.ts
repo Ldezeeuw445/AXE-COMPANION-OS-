@@ -496,6 +496,54 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "route_chart_action",
+      description:
+        "Queue an analytical chart action for AXE Companion (/chart). Use this when the trader asks to draw fib, trendline, key level, clear AI drawings, or toggle indicator layers. This never places orders; it only routes chart overlays.",
+      parameters: {
+        type: "object",
+        properties: {
+          action_type: {
+            type: "string",
+            enum: ["draw_fibonacci", "draw_trendline", "mark_key_level", "add_indicator", "clear_ai_drawings"],
+            description: "Chart action type to queue.",
+          },
+          symbol: {
+            type: "string",
+            description: "Instrument symbol, e.g. XAUUSD, EURUSD, BTCUSD.",
+          },
+          timeframe: {
+            type: "string",
+            description: "Optional timeframe key like m1/m5/m15/m30/h1/h4/d1.",
+          },
+          account_id: {
+            type: "string",
+            description: "Optional broker account id.",
+          },
+          indicators: {
+            type: "array",
+            items: { type: "string" },
+            description: "For add_indicator: layer names to toggle (e.g. fvg, ifvg, structure, orderBlocks, rsi, ma).",
+          },
+          enable: {
+            type: "boolean",
+            description: "For add_indicator: true to enable, false to disable.",
+          },
+          label: {
+            type: "string",
+            description: "Optional link label override (default: Open chart).",
+          },
+          payload: {
+            type: "object",
+            description: "Optional custom payload for advanced chart actions.",
+          },
+        },
+        required: ["action_type", "symbol"],
+      },
+    },
+  },
 ];
 
 export type CreateAlertArgs = {
@@ -568,6 +616,16 @@ export type NavigateToArgs = {
   timeframe?: string;
   label?: string;
 };
+export type RouteChartActionArgs = {
+  action_type: "draw_fibonacci" | "draw_trendline" | "mark_key_level" | "add_indicator" | "clear_ai_drawings";
+  symbol: string;
+  timeframe?: string;
+  account_id?: string;
+  indicators?: string[];
+  enable?: boolean;
+  label?: string;
+  payload?: Record<string, unknown>;
+};
 
 export type AxeToolCall =
   | { id: string; tool: "create_alert"; args: CreateAlertArgs }
@@ -584,7 +642,8 @@ export type AxeToolCall =
   | { id: string; tool: "list_alerts"; args: ListAlertsArgs }
   | { id: string; tool: "update_alert"; args: UpdateAlertArgs }
   | { id: string; tool: "read_journal"; args: ReadJournalArgs }
-  | { id: string; tool: "navigate_to"; args: NavigateToArgs };
+  | { id: string; tool: "navigate_to"; args: NavigateToArgs }
+  | { id: string; tool: "route_chart_action"; args: RouteChartActionArgs };
 
 export function computeFibonacci(args: FibonacciArgs): string {
   const { swing_high, swing_low, symbol, direction } = args;
@@ -1203,6 +1262,7 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
   "update_alert",
   "read_journal",
   "navigate_to",
+  "route_chart_action",
 ]);
 
 export async function callAxe(
