@@ -152,6 +152,51 @@ function extractFirstLink(text: string | null | undefined): string | null {
   return text.match(/\[\[link:[^\]]+\]\]/)?.[0] ?? null;
 }
 
+function inferRequestedSymbols(text: string): string[] {
+  const upper = text.toUpperCase();
+  const out = new Set<string>();
+  // 6-letter FX/metal pairs (XAUUSD, EURUSD, etc.)
+  for (const m of upper.matchAll(/\b[A-Z]{6}\b/g)) out.add(m[0]);
+  // Common alias: GOLD -> XAUUSD
+  if (/\bGOLD\b/.test(upper)) out.add("XAUUSD");
+  return Array.from(out);
+}
+
+function buildAllowedSymbolSet(
+  context: Awaited<ReturnType<typeof fetchTradingOSContext>>,
+): Set<string> {
+  const allowed = new Set<string>();
+  const chartSymbol = (context.axe_context?.chart?.symbol ?? context.symbol ?? "").toUpperCase().trim();
+  const brokerSymbol = (context.axe_context?.chart?.brokerSymbol ?? "").toUpperCase().trim();
+  if (chartSymbol) allowed.add(chartSymbol);
+  if (brokerSymbol) allowed.add(brokerSymbol);
+  for (const w of context.account_state.watchlist ?? []) {
+    const s = (w.symbol ?? "").toUpperCase().trim();
+    if (s) allowed.add(s);
+  }
+  const symbolMap = context.axe_context?.accounts?.activeSymbolMap ?? {};
+  for (const [display, broker] of Object.entries(symbolMap)) {
+    const d = display.toUpperCase().trim();
+    const b = String(broker ?? "").toUpperCase().trim();
+    if (d) allowed.add(d);
+    if (b) allowed.add(b);
+  }
+  return allowed;
+}
+
+function looksLikePriceAnalysisIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    t.includes("price") ||
+    t.includes("thought") ||
+    t.includes("bias") ||
+    t.includes("entry") ||
+    t.includes("setup") ||
+    t.includes("xauusd") ||
+    t.includes("gold")
+  );
+}
+
 function resolveJournalAccountId(
   accountId: string | undefined,
   tradingContext: Awaited<ReturnType<typeof fetchTradingOSContext>>,
@@ -849,6 +894,45 @@ export async function streamChatMessage(
     // Keep user-facing copy stable while still enforcing anti-stale guardrails.
     if (canonical == null || staleRegime || fibRoute) {
       finalReply = `I've added the Fibonacci retracement to your ${activeSymbol} ${activeTf} chart. ${link}`;
+    }
+  }
+
+  // Global broker-symbol and price-regime guard:
+  // AXE must only speak in broker-supported symbols and active price regime.
+  if (type === "axe") {
+    const requestedSymbols = inferRequestedSymbols(trimmed);
+    const allowedSymbols = buildAllowedSymbolSet(contextWithCandles);
+    const blockedSymbol = requestedSymbols.find((s) => !allowedSymbols.has(s));
+    if (blockedSymbol) {
+      const active = (contextWithCandles.axe_context?.chart?.symbol ?? contextWithCandles.symbol ?? "your active pair")
+        .toUpperCase();
+      finalReply =
+        `I can only use symbols available on your active broker account. ${blockedSymbol} is not available in this session. ` +
+        `Active broker chart is ${active}. [[link:/chart|Open chart]]`;
+    } else if (looksLikePriceAnalysisIntent(trimmed)) {
+      const canonical = canonicalBrokerPrice({
+        lastPrice: contextWithCandles.axe_context?.chart?.lastPrice ?? null,
+        lastBid: contextWithCandles.axe_context?.chart?.lastBid ?? null,
+        lastAsk: contextWithCandles.axe_context?.chart?.lastAsk ?? null,
+      });
+      const usedLivePriceTool = executedToolResults.some(({ tc }) => tc.tool === "get_live_price");
+      if (canonical != null && hasOutOfRegimeLevels(finalReply, canonical)) {
+        const active =
+          (contextWithCandles.axe_context?.chart?.symbol ?? contextWithCandles.symbol ?? "ACTIVE").toUpperCase();
+        const tfActive = String(
+          contextWithCandles.axe_context?.chart?.timeframe ?? contextWithCandles.timeframe ?? "H1",
+        ).toUpperCase();
+        finalReply =
+          `I am locked to your broker price regime for ${active} ${tfActive}. Current canonical broker price is ${canonical}. ` +
+          `I filtered out stale levels outside your active market. [[link:/chart|Open chart]]`;
+      } else if (canonical == null && !usedLivePriceTool) {
+        const active =
+          (contextWithCandles.axe_context?.chart?.symbol ?? contextWithCandles.symbol ?? "your active pair")
+            .toUpperCase();
+        finalReply =
+          `I can only analyze with your broker context. Live broker pricing is unavailable right now for ${active}, ` +
+          `so I won't output guessed levels. Sync account/chart and I will continue from live broker data. [[link:/chart|Open chart]]`;
+      }
     }
   }
 
