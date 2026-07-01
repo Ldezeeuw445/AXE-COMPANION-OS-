@@ -835,44 +835,20 @@ export async function streamChatMessage(
     const activeTf = String(
       tf ?? contextWithCandles.timeframe ?? contextWithCandles.axe_context?.chart?.timeframe ?? "h1",
     ).toUpperCase();
-    const activeAccountId =
-      contextWithCandles.companion_active_account_id ??
-      contextWithCandles.axe_context?.accounts?.activeAccountId ??
-      null;
-    const activeAccountLabel =
-      contextWithCandles.companion_accounts?.find((a) => a.id === activeAccountId)?.label ??
-      contextWithCandles.axe_context?.accounts?.activeLabel ??
-      null;
     const canonical = canonicalBrokerPrice({
       lastPrice: contextWithCandles.axe_context?.chart?.lastPrice ?? null,
       lastBid: contextWithCandles.axe_context?.chart?.lastBid ?? null,
       lastAsk: contextWithCandles.axe_context?.chart?.lastAsk ?? null,
     });
     const staleRegime = canonical != null && hasOutOfRegimeLevels(finalReply, canonical);
-    const calcFib = executedToolResults.find(({ tc }) => tc.tool === "calculate_fibonacci");
     const link =
       extractFirstLink(fibRoute?.result) ??
       extractFirstLink(finalReply) ??
       "[[link:/chart|Open chart]]";
 
-    // Absolute guardrail:
-    // - If no canonical broker price is available, do not emit fib levels.
-    // - If canonical exists and output contains out-of-regime levels, replace output.
-    // - If fib route exists, prefer deterministic account/pair-locked confirmation.
-    if (canonical == null) {
-      finalReply =
-        `I queued the Fibonacci drawing on your active ${activeSymbol} ${activeTf} chart${activeAccountLabel ? ` for ${activeAccountLabel}` : ""}. ${link} ` +
-        `I am not emitting numeric levels because live broker pricing is unavailable in this session; once chart sync is live, I will lock levels to your active broker regime.`;
-    } else if (staleRegime || fibRoute) {
-      const calcText = calcFib?.result?.trim();
-      const calcOutOfRegime =
-        calcText && hasOutOfRegimeLevels(calcText, canonical);
-      finalReply =
-        `Fibonacci is queued on your active ${activeSymbol} ${activeTf} chart${activeAccountLabel ? ` for ${activeAccountLabel}` : ""}. ${link} ` +
-        `Active broker price regime is ${canonical}.` +
-        (calcText && !calcOutOfRegime
-          ? ` Validated fib levels from your request:\n${calcText}`
-          : " I filtered out stale/off-regime levels to prevent incorrect 1900-range output.");
+    // Keep user-facing copy stable while still enforcing anti-stale guardrails.
+    if (canonical == null || staleRegime || fibRoute) {
+      finalReply = `I've added the Fibonacci retracement to your ${activeSymbol} ${activeTf} chart. ${link}`;
     }
   }
 
