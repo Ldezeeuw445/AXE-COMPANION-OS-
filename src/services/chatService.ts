@@ -120,6 +120,33 @@ function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradin
   ].join("\n");
 }
 
+function isFibChartIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  const asksFib =
+    t.includes("fib") ||
+    t.includes("fibonacci") ||
+    t.includes("retracement");
+  const asksChart =
+    t.includes("chart") ||
+    t.includes("teken") ||
+    t.includes("draw") ||
+    t.includes("add") ||
+    t.includes("zet");
+  return asksFib && asksChart;
+}
+
+function hasOutOfRegimeLevels(reply: string, canonicalPrice: number): boolean {
+  if (!Number.isFinite(canonicalPrice) || canonicalPrice <= 0) return false;
+  const matches = reply.match(/\b\d{3,5}(?:\.\d+)?\b/g) ?? [];
+  if (matches.length < 3) return false;
+  const numbers = matches
+    .map((m) => Number(m))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (numbers.length < 3) return false;
+  const outliers = numbers.filter((n) => Math.abs(n - canonicalPrice) / canonicalPrice > 0.25);
+  return outliers.length >= 2;
+}
+
 function resolveJournalAccountId(
   accountId: string | undefined,
   tradingContext: Awaited<ReturnType<typeof fetchTradingOSContext>>,
@@ -758,17 +785,61 @@ export async function streamChatMessage(
   }
 
   // Hard safety for fib chart actions:
-  // if AXE actually routed a draw_fibonacci action, force a deterministic
-  // confirmation message using the real queued chart link and avoid invented levels.
-  const fibRoute = executedToolResults.find(
+  // - if user asked for fib-on-chart, ensure we have a routed chart action link
+  // - if model outputs stale level regime (e.g. 1900 while active XAU is ~4000), replace with deterministic confirmation
+  const fibIntent = type === "axe" && isFibChartIntent(trimmed);
+  let fibRoute = executedToolResults.find(
     ({ tc }) => tc.tool === "route_chart_action" && tc.args.action_type === "draw_fibonacci",
   );
-  const usedCalcFib = executedToolResults.some(({ tc }) => tc.tool === "calculate_fibonacci");
-  if (fibRoute && !usedCalcFib) {
-    const link =
-      fibRoute.result.match(/\[\[link:[^\]]+\]\]/)?.[0] ??
-      "[[link:/chart|Open chart]]";
-    finalReply = `Fibonacci is added on your active ${symbol?.toUpperCase() ?? "chart"} context. ${link} I will keep analysis locked to your active account + pair and current broker price regime.`;
+  if (fibIntent && !fibRoute) {
+    const routeSymbol =
+      (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "")
+        .toUpperCase()
+        .trim();
+    const routeTf = String(
+      tf ?? contextWithCandles.timeframe ?? contextWithCandles.axe_context?.chart?.timeframe ?? "h1",
+    )
+      .toLowerCase()
+      .trim();
+    if (routeSymbol) {
+      try {
+        const routeResult = await handleRouteChartAction(supabase, user.id, {
+          action_type: "draw_fibonacci",
+          symbol: routeSymbol,
+          timeframe: routeTf,
+          label: "Open chart",
+        });
+        fibRoute = {
+          tc: {
+            id: `forced_fib_${Date.now()}`,
+            tool: "route_chart_action",
+            args: { action_type: "draw_fibonacci", symbol: routeSymbol, timeframe: routeTf },
+          },
+          result: routeResult,
+        };
+      } catch (e) {
+        console.warn("[chatService] forced fib route failed:", e);
+      }
+    }
+  }
+
+  if (fibIntent) {
+    const activeSymbol =
+      (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "chart")
+        .toUpperCase();
+    const activeTf = String(
+      tf ?? contextWithCandles.timeframe ?? contextWithCandles.axe_context?.chart?.timeframe ?? "h1",
+    ).toUpperCase();
+    const canonical = canonicalBrokerPrice({
+      lastPrice: contextWithCandles.axe_context?.chart?.lastPrice ?? null,
+      lastBid: contextWithCandles.axe_context?.chart?.lastBid ?? null,
+      lastAsk: contextWithCandles.axe_context?.chart?.lastAsk ?? null,
+    });
+    const staleRegime = canonical != null && hasOutOfRegimeLevels(finalReply, canonical);
+    if (fibRoute || staleRegime) {
+      const link = fibRoute?.result.match(/\[\[link:[^\]]+\]\]/)?.[0] ?? "[[link:/chart|Open chart]]";
+      finalReply = `Fibonacci is queued on your active ${activeSymbol} ${activeTf} chart context. ${link} I will keep all levels locked to your active broker price regime${canonical != null ? ` (${canonical})` : ""} and will not reuse stale 1900-range values.`;
+    }
   }
 
   // 4. Save assistant reply
