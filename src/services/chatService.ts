@@ -147,6 +147,11 @@ function hasOutOfRegimeLevels(reply: string, canonicalPrice: number): boolean {
   return outliers.length >= 2;
 }
 
+function extractFirstLink(text: string | null | undefined): string | null {
+  if (!text) return null;
+  return text.match(/\[\[link:[^\]]+\]\]/)?.[0] ?? null;
+}
+
 function resolveJournalAccountId(
   accountId: string | undefined,
   tradingContext: Awaited<ReturnType<typeof fetchTradingOSContext>>,
@@ -830,15 +835,44 @@ export async function streamChatMessage(
     const activeTf = String(
       tf ?? contextWithCandles.timeframe ?? contextWithCandles.axe_context?.chart?.timeframe ?? "h1",
     ).toUpperCase();
+    const activeAccountId =
+      contextWithCandles.companion_active_account_id ??
+      contextWithCandles.axe_context?.accounts?.activeAccountId ??
+      null;
+    const activeAccountLabel =
+      contextWithCandles.companion_accounts?.find((a) => a.id === activeAccountId)?.label ??
+      contextWithCandles.axe_context?.accounts?.activeLabel ??
+      null;
     const canonical = canonicalBrokerPrice({
       lastPrice: contextWithCandles.axe_context?.chart?.lastPrice ?? null,
       lastBid: contextWithCandles.axe_context?.chart?.lastBid ?? null,
       lastAsk: contextWithCandles.axe_context?.chart?.lastAsk ?? null,
     });
     const staleRegime = canonical != null && hasOutOfRegimeLevels(finalReply, canonical);
-    if (fibRoute || staleRegime) {
-      const link = fibRoute?.result.match(/\[\[link:[^\]]+\]\]/)?.[0] ?? "[[link:/chart|Open chart]]";
-      finalReply = `Fibonacci is queued on your active ${activeSymbol} ${activeTf} chart context. ${link} I will keep all levels locked to your active broker price regime${canonical != null ? ` (${canonical})` : ""} and will not reuse stale 1900-range values.`;
+    const calcFib = executedToolResults.find(({ tc }) => tc.tool === "calculate_fibonacci");
+    const link =
+      extractFirstLink(fibRoute?.result) ??
+      extractFirstLink(finalReply) ??
+      "[[link:/chart|Open chart]]";
+
+    // Absolute guardrail:
+    // - If no canonical broker price is available, do not emit fib levels.
+    // - If canonical exists and output contains out-of-regime levels, replace output.
+    // - If fib route exists, prefer deterministic account/pair-locked confirmation.
+    if (canonical == null) {
+      finalReply =
+        `I queued the Fibonacci drawing on your active ${activeSymbol} ${activeTf} chart${activeAccountLabel ? ` for ${activeAccountLabel}` : ""}. ${link} ` +
+        `I am not emitting numeric levels because live broker pricing is unavailable in this session; once chart sync is live, I will lock levels to your active broker regime.`;
+    } else if (staleRegime || fibRoute) {
+      const calcText = calcFib?.result?.trim();
+      const calcOutOfRegime =
+        calcText && hasOutOfRegimeLevels(calcText, canonical);
+      finalReply =
+        `Fibonacci is queued on your active ${activeSymbol} ${activeTf} chart${activeAccountLabel ? ` for ${activeAccountLabel}` : ""}. ${link} ` +
+        `Active broker price regime is ${canonical}.` +
+        (calcText && !calcOutOfRegime
+          ? ` Validated fib levels from your request:\n${calcText}`
+          : " I filtered out stale/off-regime levels to prevent incorrect 1900-range output.");
     }
   }
 
