@@ -174,6 +174,7 @@ function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradin
     lastBid: chart.lastBid,
     lastAsk: chart.lastAsk,
   });
+  const prettyPrice = formatPriceCompact(price);
   if (price == null) {
     return `Live broker pricing unavailable for ${activeSymbol} (${brokerSymbol}). No canonical broker price is available.`;
   }
@@ -189,11 +190,22 @@ function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradin
         : "timestamp unknown";
   return [
     `${activeSymbol} broker price (${brokerSymbol})`,
-    `Canonical price: ${price}`,
+    `Canonical price: ${prettyPrice}`,
     `Runtime state: ${state}`,
     `Freshness: ${freshness}`,
     "Use this broker context only. Do not substitute Yahoo, generic provider, memory, or stale snapshot prices.",
   ].join("\n");
+}
+
+function formatPriceCompact(price: number | null): string {
+  if (price == null || !Number.isFinite(price)) return "n/a";
+  const abs = Math.abs(price);
+  const decimals =
+    abs >= 1000 ? 2 :
+    abs >= 100 ? 3 :
+    abs >= 10 ? 4 :
+    abs >= 1 ? 5 : 6;
+  return Number(price).toFixed(decimals);
 }
 
 function isFibChartIntent(text: string): boolean {
@@ -1090,8 +1102,9 @@ export async function streamChatMessage(
     });
 
     if (canonical != null && (state === "live" || state === "degraded")) {
+      const pretty = formatPriceCompact(canonical);
       finalReply =
-        `Live broker price for ${requestedUpper || activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${canonical}. ` +
+        `Live broker price for ${requestedUpper || activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${pretty}. ` +
         `I’m reading this from your active account context.`;
     } else {
       finalReply =
