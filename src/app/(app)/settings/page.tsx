@@ -31,6 +31,7 @@ import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { PlanStatusLine } from "@/components/billing/FounderBadge";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getUserAxeEntitlement } from "@/services/billingService";
+import { getAxeEngineProfile } from "@/services/axeEngineService";
 
 async function getPrimaryConversation() {
   const authed = await getAuthedServiceSupabase();
@@ -65,7 +66,7 @@ export default async function SettingsPage() {
     }
   }
 
-  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs, favoriteWorkflowIds] = await Promise.all([
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs, favoriteWorkflowIds, engineProfile] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
@@ -76,6 +77,15 @@ export default async function SettingsPage() {
     getSquawkStationIdsServerState(),
     getTradeExecutionPrefsServerState(),
     getFavoriteWorkflowIdsServerState(),
+    supabase
+      ? (async () => {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return null;
+          return getAxeEngineProfile(supabase, user.id, { source: "settings_page" }).catch(() => null);
+        })()
+      : Promise.resolve(null),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -300,6 +310,31 @@ export default async function SettingsPage() {
         >
           Open Assistant cockpit →
         </Link>
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          AXE Engine status
+        </h2>
+        {engineProfile ? (
+          <>
+            <p className="mt-2 text-xs text-tos-muted">
+              {engineProfile.engineName} {engineProfile.engineVersion} · confidence{" "}
+              <span className="font-semibold text-tos-text">{engineProfile.confidenceScore}/100</span> · gate{" "}
+              <span className="font-semibold text-tos-text">{engineProfile.gateMode}</span>
+            </p>
+            <p className="mt-1 text-[11px] text-tos-dim">
+              Signals {engineProfile.signalCount} · Trade labels {engineProfile.tradeLabelCount} · Memory {engineProfile.memoryCount}
+            </p>
+            <p className="mt-1 text-[11px] text-tos-dim">
+              Last refresh: {new Date(engineProfile.updatedAt).toLocaleString()}
+            </p>
+          </>
+        ) : (
+          <p className="mt-2 text-xs text-tos-muted">
+            Engine profile is initializing. Keep chatting, journaling and trading to build confidence depth.
+          </p>
+        )}
       </GlassPanel>
 
       {/* Memory */}

@@ -11,6 +11,7 @@ import type {
   CockpitLearningArc,
 } from "@/types/cockpit";
 import { getTraderLearningArc, type TraderLearningArc } from "@/services/learningArcService";
+import { getAxeEngineProfile } from "@/services/axeEngineService";
 
 function toCockpitLearningArc(arc: TraderLearningArc): CockpitLearningArc {
   const focus = arc.topPairs.slice(0, 5).map((label, i) => ({
@@ -69,6 +70,18 @@ const EMPTY_DASHBOARD: CockpitDashboard = {
     missingSignals: ["chat", "journal", "trade history", "memory"],
     lastCalculatedAt: null,
     message: "AXE needs real chat, journal, memory, or trade signals before it can score alignment.",
+  },
+  engine: {
+    name: "AXE One",
+    version: "v1",
+    confidenceScore: 0,
+    confidenceTier: "low",
+    gateMode: "strict",
+    signalCount: 0,
+    tradeLabelCount: 0,
+    memoryCount: 0,
+    updatedAt: null,
+    rationale: {},
   },
   today: EMPTY_TODAY,
   learningArc: {
@@ -289,13 +302,26 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   }
 
   const { supabase, user } = authed;
-  const [todayBase, rawLearningArc, traderScores] = await Promise.all([
+  const [todayBase, rawLearningArc, traderScores, engineProfile] = await Promise.all([
     fetchCockpitTodaySummary(supabase, user.id),
     getTraderLearningArc(user.id, supabase),
     computeTraderScores(supabase, user.id),
+    getAxeEngineProfile(supabase, user.id, { source: "cockpit_dashboard" }).catch(() => null),
   ]);
   const today: CockpitTodaySummary = todayBase;
   const learningArc: CockpitLearningArc = toCockpitLearningArc(rawLearningArc);
+  const engine = {
+    name: engineProfile?.engineName ?? "AXE One",
+    version: engineProfile?.engineVersion ?? "v1",
+    confidenceScore: engineProfile?.confidenceScore ?? 0,
+    confidenceTier: engineProfile?.confidenceTier ?? "low",
+    gateMode: engineProfile?.gateMode ?? "strict",
+    signalCount: engineProfile?.signalCount ?? 0,
+    tradeLabelCount: engineProfile?.tradeLabelCount ?? 0,
+    memoryCount: engineProfile?.memoryCount ?? 0,
+    updatedAt: engineProfile?.updatedAt ?? null,
+    rationale: engineProfile?.rationale ?? {},
+  } as const;
 
   const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
@@ -336,6 +362,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     return {
       ...EMPTY_DASHBOARD,
       today,
+      engine,
       learningArc,
       traderScores,
       calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
@@ -346,6 +373,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     return {
       ...EMPTY_DASHBOARD,
       today,
+      engine,
       learningArc,
       traderScores,
       calibration: calibrationState({ ...counts, signalCount, hasSnapshot: false, lastCalculatedAt: null }),
@@ -437,6 +465,7 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     behavior: mapBehavior(latest.behavior_map),
     metricKeysSample,
     calibration,
+    engine,
     today: await fetchCockpitTodaySummary(supabase, user.id),
     learningArc,
     traderScores,

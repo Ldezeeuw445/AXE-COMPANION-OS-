@@ -92,6 +92,18 @@ export type CockpitDashboard = {
     lastCalculatedAt: string | null;
     message: string;
   };
+  engine: {
+    name: string;
+    version: string;
+    confidenceScore: number;
+    confidenceTier: "low" | "medium" | "high";
+    gateMode: "strict" | "guided" | "proactive";
+    signalCount: number;
+    tradeLabelCount: number;
+    memoryCount: number;
+    updatedAt: string | null;
+    rationale: Record<string, unknown>;
+  };
   today: CockpitTodaySummary;
   learningArc: CockpitLearningArc;
   traderScores: CockpitTraderScores;

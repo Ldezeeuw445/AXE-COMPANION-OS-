@@ -10,6 +10,7 @@ import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
 import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
 import { CockpitIntelSection } from "@/components/cockpit/CockpitIntelSection";
 import { CockpitMorningBrief } from "@/components/cockpit/CockpitMorningBrief";
+import { CockpitEngineStatus } from "@/components/cockpit/CockpitEngineStatus";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -87,12 +88,29 @@ export default async function CockpitPage() {
       {userId ? <CockpitIntelSection userId={userId} /> : null}
 
       {canBriefings ? <CockpitMorningBrief /> : null}
+      <CockpitEngineStatus engine={dash.engine} />
 
       <CockpitTodayStrip
         initial={dash.today}
         traderScores={dash.traderScores}
         axeAlignment={hasSnapshot && canLearn ? dash.alignment : null}
       />
+
+      {canLearn ? (
+        <GlassPanel className="p-3.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+            How growth happens
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-tos-muted">
+            Cockpit grows from real per-user signals: chat feedback, journal notes, closed trades, and feed/alert actions.
+            You currently have <span className="font-semibold text-tos-text">{dash.calibration.signalCount}</span> signals
+            in this snapshot.
+          </p>
+          <p className="mt-1.5 text-[11px] text-tos-dim">
+            Fastest way to move Learning Arc: rate AXE replies, journal trades, and refresh snapshot after your session.
+          </p>
+        </GlassPanel>
+      ) : null}
 
       {canLearn ? (
         <CockpitLearningArc data={dash.learningArc} />
