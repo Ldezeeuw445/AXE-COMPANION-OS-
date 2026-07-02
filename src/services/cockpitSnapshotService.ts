@@ -65,6 +65,39 @@ function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
+function stabilizeAlignmentScore(input: {
+  rawScore: number;
+  previousScore: number | null;
+  previousSignalCount: number | null;
+  currentSignalCount: number;
+}): number {
+  const raw = clamp01(input.rawScore);
+  const prev = input.previousScore;
+  if (prev == null || !Number.isFinite(prev)) return raw;
+
+  const previousSignals = Math.max(0, Number(input.previousSignalCount ?? 0));
+  const currentSignals = Math.max(0, Number(input.currentSignalCount ?? 0));
+  const newSignals = Math.max(0, currentSignals - previousSignals);
+
+  // Conservative cap when little new evidence exists; relax as real signal depth grows.
+  const maxDelta =
+    newSignals >= 40 ? 0.30 :
+    newSignals >= 20 ? 0.20 :
+    newSignals >= 10 ? 0.14 :
+    newSignals >= 4 ? 0.10 : 0.07;
+
+  const delta = raw - prev;
+  const bounded = prev + Math.max(-maxDelta, Math.min(maxDelta, delta));
+
+  // Blend keeps movement smooth while still converging toward raw score.
+  const alpha =
+    newSignals >= 40 ? 0.75 :
+    newSignals >= 20 ? 0.60 :
+    newSignals >= 10 ? 0.48 :
+    newSignals >= 4 ? 0.36 : 0.24;
+  return clamp01(prev * (1 - alpha) + bounded * alpha);
+}
+
 function sessionLabelForUtcHour(hour: number): (typeof SESSION_BUCKETS)[number]["label"] {
   if (hour >= 2 && hour < 10) return "London";
   if (hour >= 13 && hour < 21) return "New York";
@@ -518,8 +551,29 @@ export async function generateCockpitSnapshot(
   const gate = canGenerateCockpitSnapshot(data);
   if (!gate.ok) return { ok: false, error: gate.reason, status: 422 };
 
-  const signalSummary = await summarizeLearningSignals(supabase, userId);
-  const alignmentScore = computeHonestAlignmentScore(data, signalSummary);
+  const [signalSummary, prevSnapshotRes] = await Promise.all([
+    summarizeLearningSignals(supabase, userId),
+    supabase
+      .from("assistant_cockpit_snapshots")
+      .select("alignment_score,signal_count,captured_at")
+      .eq("user_id", userId)
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const rawAlignmentScore = computeHonestAlignmentScore(data, signalSummary);
+  const alignmentScore = stabilizeAlignmentScore({
+    rawScore: rawAlignmentScore,
+    previousScore:
+      prevSnapshotRes.data?.alignment_score != null
+        ? Number(prevSnapshotRes.data.alignment_score)
+        : null,
+    previousSignalCount:
+      prevSnapshotRes.data?.signal_count != null
+        ? Number(prevSnapshotRes.data.signal_count)
+        : null,
+    currentSignalCount: data.signalCount,
+  });
 
   const snapshot: CockpitSnapshotPayload = {
     alignment_score: alignmentScore,
