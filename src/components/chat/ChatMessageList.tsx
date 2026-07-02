@@ -437,16 +437,23 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     function onPageShow() {
       runPinSequence(true);
     }
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") runPinSequence(true);
+    }
+    function onResize() {
+      if (stickToBottomRef.current) runPinSequence(true);
+    }
     window.addEventListener("axe:chat-pin", onPinRequest);
     window.addEventListener("axe:chat-scroll-top", onScrollFeedTop);
     window.addEventListener("pageshow", onPageShow);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") runPinSequence(true);
-    });
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("axe:chat-pin", onPinRequest);
       window.removeEventListener("axe:chat-scroll-top", onScrollFeedTop);
       window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("resize", onResize);
       clearPinTimers();
     };
   }, [runPinSequence, clearPinTimers, scrollToFeedTop]);
@@ -463,6 +470,18 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     }
     return () => ro.disconnect();
   }, [pinToLatest, messages.length, pending.length, thinking, streamText]);
+
+  // DOM-level safety net: when message nodes are inserted, keep bottom lock
+  // if the user has not scrolled away from the latest message.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const observer = new MutationObserver(() => {
+      if (stickToBottomRef.current) pinToLatest(true);
+    });
+    observer.observe(scroller, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [pinToLatest]);
 
   // Auto-scroll to the typing/streaming bubble when AXE starts thinking,
   // tokens stream in, or an optimistic user bubble is added.
@@ -486,12 +505,29 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     setShowJump(false);
   }
 
+  function clearSelection() {
+    try {
+      const sel = window.getSelection?.();
+      if (sel && sel.rangeCount > 0) sel.removeAllRanges();
+    } catch {
+      // non-blocking
+    }
+  }
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={scrollerRef}
         onScroll={onScroll}
-        className="tos-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-[10rem] pr-1 md:pb-2"
+        onTouchStart={clearSelection}
+        onTouchMove={clearSelection}
+        className="tos-scrollbar flex min-h-0 flex-1 touch-pan-y select-none flex-col gap-5 overflow-y-auto overscroll-y-contain pb-[10rem] pr-1 md:pb-2"
+        style={{
+          WebkitUserSelect: "none",
+          userSelect: "none",
+          WebkitTouchCallout: "none",
+          WebkitOverflowScrolling: "touch",
+        }}
       >
         {messages.length === 0 && pending.length === 0 ? <EmptyState intelMode={intelMode} /> : null}
         {messages.map((m) => (
