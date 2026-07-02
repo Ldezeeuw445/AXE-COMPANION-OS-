@@ -41,6 +41,7 @@ import type { LLMMessage, LLMRequest } from "@/services/llmClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
+import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -89,10 +90,18 @@ async function runToolWithPolicy(
   let lastErr: unknown = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const startedAt = Date.now();
     try {
-      return await withTimeout(() => execute(tc), timeoutMs, tc.tool);
+      const result = await withTimeout(() => execute(tc), timeoutMs, tc.tool);
+      const elapsed = Date.now() - startedAt;
+      recordLatencySample(`chat.tool.${tc.tool}.ms`, elapsed);
+      logLatencyIfDue(`chat.tool.${tc.tool}.ms`, 20);
+      return result;
     } catch (err) {
       lastErr = err;
+      const elapsed = Date.now() - startedAt;
+      recordLatencySample(`chat.tool.${tc.tool}.error_ms`, elapsed);
+      logLatencyIfDue(`chat.tool.${tc.tool}.error_ms`, 20);
       const msg = err instanceof Error ? err.message : String(err);
       const isLast = attempt === maxAttempts;
       console.warn(`[chatService] tool ${tc.tool} attempt ${attempt}/${maxAttempts} failed: ${msg}`);
@@ -486,6 +495,21 @@ export async function streamChatMessage(
   edgeAuth?: { supabase: SupabaseClient; user: User } | null,
   type: "axe" | "intel" = "axe",
 ): Promise<SendChatMessageResult> {
+  const chatStartedAt = Date.now();
+  const markChatLatency = (status: "ok" | "error" | "quota" | "no_reply") => {
+    const elapsed = Date.now() - chatStartedAt;
+    const metric =
+      status === "ok"
+        ? "chat.turn.total_ms"
+        : status === "quota"
+          ? "chat.turn.quota_reject_ms"
+          : status === "no_reply"
+            ? "chat.turn.no_reply_ms"
+            : "chat.turn.error_ms";
+    recordLatencySample(metric, elapsed);
+    logLatencyIfDue(metric, 20);
+  };
+
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
 
@@ -499,7 +523,11 @@ export async function streamChatMessage(
 
   const quota = await tryConsumeChatQuota(supabase, user.id);
   if (!quota.ok) {
-    if (quota.quotaExceeded) return { ok: false, quotaExceeded: true };
+    if (quota.quotaExceeded) {
+      markChatLatency("quota");
+      return { ok: false, quotaExceeded: true };
+    }
+    markChatLatency("error");
     return { ok: false };
   }
   const consumed = quota.consumed;
@@ -516,6 +544,7 @@ export async function streamChatMessage(
   if (insertError) {
     console.error("Failed to insert chat message", insertError);
     if (consumed) await refundChatQuota(supabase, user.id);
+    markChatLatency("error");
     return { ok: false };
   }
 
@@ -901,6 +930,7 @@ export async function streamChatMessage(
     console.error("[chatService] streaming error:", detail);
     // The reserved free-tier slot produced no reply — give it back.
     if (consumed) await refundChatQuota(supabase, user.id);
+    markChatLatency("error");
     return { ok: false, aiFailed: true, errorDetail: detail };
   }
 
@@ -910,6 +940,7 @@ export async function streamChatMessage(
   if (!finalReply) {
     console.error("[chatService] AXE returned no reply (stream)");
     if (consumed) await refundChatQuota(supabase, user.id);
+    markChatLatency("no_reply");
     return { ok: false, aiFailed: true };
   }
 
@@ -1037,6 +1068,7 @@ export async function streamChatMessage(
   }).catch((e) => console.error("[chatService] precompute lane failed:", e));
 
   onEvent({ type: "done" });
+  markChatLatency("ok");
   return { ok: true };
 }
 

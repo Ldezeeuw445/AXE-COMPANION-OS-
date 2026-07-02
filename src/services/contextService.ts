@@ -11,6 +11,7 @@ import {
   buildAxeCompanionContext,
   buildTradingOSCompatibleContext,
 } from "@/services/axeContextBuilder";
+import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
 
 type ContextCacheMode = "default" | "bypass" | "refresh";
 
@@ -118,6 +119,7 @@ export async function fetchTradingOSContext(
   pinnedContext?: string | null,
   options?: FetchTradingOSContextOptions,
 ): Promise<TradingOSContext> {
+  const startedAt = Date.now();
   const mode = options?.cacheMode ?? "default";
   const ttlMs = Math.max(2_000, options?.ttlMs ?? CONTEXT_CACHE_TTL_MS);
   const key = cacheKey(userId, symbol, tf, pinnedContext);
@@ -125,17 +127,24 @@ export async function fetchTradingOSContext(
   if (mode === "default") {
     const cached = tradingContextCache.get(key);
     if (cached && cached.expiresAt > Date.now()) {
+      recordLatencySample("context.fetch.cache_hit_ms", Date.now() - startedAt);
+      logLatencyIfDue("context.fetch.cache_hit_ms", 25);
       return cached.value;
     }
   }
 
+  const buildStartedAt = Date.now();
   const fresh = await buildTradingOSCompatibleContext({ userId, supabase, symbol, tf, pinnedContext });
+  recordLatencySample("context.fetch.build_ms", Date.now() - buildStartedAt);
+  logLatencyIfDue("context.fetch.build_ms", 20);
   tradingContextCache.set(key, {
     value: fresh,
     expiresAt: Date.now() + ttlMs,
     updatedAt: Date.now(),
   });
   trimContextCache();
+  recordLatencySample("context.fetch.total_ms", Date.now() - startedAt);
+  logLatencyIfDue("context.fetch.total_ms", 20);
   return fresh;
 }
 
@@ -151,6 +160,7 @@ export async function precomputeTradingOSContextLane(
   tf?: string | null,
   pinnedContext?: string | null,
 ): Promise<void> {
+  const startedAt = Date.now();
   const base = await fetchTradingOSContext(userId, supabase, symbol, tf, pinnedContext, {
     cacheMode: "refresh",
   });
@@ -164,4 +174,6 @@ export async function precomputeTradingOSContextLane(
   await fetchTradingOSContext(userId, supabase, warmSymbol, tf ?? base.timeframe ?? null, pinnedContext, {
     cacheMode: "refresh",
   });
+  recordLatencySample("context.precompute_lane_ms", Date.now() - startedAt);
+  logLatencyIfDue("context.precompute_lane_ms", 20);
 }
