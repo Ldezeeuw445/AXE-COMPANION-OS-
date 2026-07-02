@@ -239,6 +239,8 @@ function inferRequestedSymbols(text: string): string[] {
   for (const m of upper.matchAll(/\b[A-Z]{6}\b/g)) out.add(m[0]);
   // Common alias: GOLD -> XAUUSD
   if (/\bGOLD\b/.test(upper)) out.add("XAUUSD");
+  // Common typo seen on mobile keyboards.
+  if (/\bXAAUSD\b/.test(upper)) out.add("XAUUSD");
   return Array.from(out);
 }
 
@@ -1039,14 +1041,16 @@ export async function streamChatMessage(
   // If user asks for a current price, force broker-price retrieval and use deterministic copy.
   const livePriceIntent = type === "axe" && isLivePriceIntent(trimmed);
   if (livePriceIntent) {
+    const requestedSymbol =
+      inferRequestedSymbols(trimmed)[0]
+      ?? (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "XAUUSD");
+
     const alreadyUsedLivePrice = executedToolResults.some(({ tc }) => tc.tool === "get_live_price");
     if (!alreadyUsedLivePrice) {
-      const requested = inferRequestedSymbols(trimmed)[0]
-        ?? (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "XAUUSD");
       const forcedTc: AxeToolCall = {
         id: `forced_live_${Date.now()}`,
         tool: "get_live_price",
-        args: { symbol: requested },
+        args: { symbol: requestedSymbol },
       };
       const forcedResult = await runToolWithPolicy(forcedTc, executeTool);
       executedToolResults.push({ tc: forcedTc, result: forcedResult });
@@ -1056,6 +1060,7 @@ export async function streamChatMessage(
     const accounts = contextWithCandles.axe_context?.accounts;
     const activeSymbol = (chart?.symbol ?? contextWithCandles.symbol ?? "ACTIVE").toUpperCase();
     const brokerSymbol = (chart?.brokerSymbol ?? activeSymbol).toUpperCase();
+    const requestedUpper = requestedSymbol.toUpperCase().replace("/", "").trim();
     const accountLabel = accounts?.activeLabel ?? "active broker account";
     const state = brokerPricingState({
       status: chart?.liveStatus ?? null,
@@ -1069,7 +1074,11 @@ export async function streamChatMessage(
       lastAsk: chart?.lastAsk ?? null,
     });
 
-    if (canonical != null && (state === "live" || state === "degraded")) {
+    if (requestedUpper && requestedUpper !== activeSymbol && requestedUpper !== brokerSymbol) {
+      finalReply =
+        `I can see your ${accountLabel}, but your active live chart snapshot is ${activeSymbol} (${brokerSymbol}). ` +
+        `So I can't safely quote ${requestedUpper} from this context yet. Switch chart to ${requestedUpper} and ask again, then I will return that exact live broker price. [[link:/chart|Open chart]]`;
+    } else if (canonical != null && (state === "live" || state === "degraded")) {
       finalReply =
         `Live broker price for ${activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${canonical}. ` +
         `I’m reading this from your active account context.`;
