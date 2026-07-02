@@ -22,7 +22,11 @@ import {
   fetchEconomicCalendar,
   formatEconomicCalendar,
 } from "@/services/marketDataService";
-import { fetchTradingOSContext } from "@/services/contextService";
+import {
+  fetchTradingOSContext,
+  invalidateTradingOSContextCache,
+  precomputeTradingOSContextLane,
+} from "@/services/contextService";
 import { loadNews } from "@/lib/market/newsProvider";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
@@ -39,6 +43,71 @@ import type { User } from "@supabase/supabase-js";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
+
+const TOOL_TIMEOUT_DEFAULT_MS = Number(process.env.AXE_TOOL_TIMEOUT_MS ?? 6_500);
+const TOOL_RETRY_BACKOFF_MS = Number(process.env.AXE_TOOL_RETRY_BACKOFF_MS ?? 180);
+const TOOL_TIMEOUTS_MS: Partial<Record<AxeToolCall["tool"], number>> = {
+  get_news_headlines: 5_500,
+  get_smart_money_intel: 8_000,
+  get_economic_calendar: 4_500,
+  read_journal: 5_500,
+  list_alerts: 4_500,
+};
+const RETRYABLE_TOOLS = new Set<AxeToolCall["tool"]>([
+  "get_news_headlines",
+  "get_smart_money_intel",
+  "get_economic_calendar",
+  "read_journal",
+  "list_alerts",
+  "get_live_price",
+]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout<T>(work: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_timeout_${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function runToolWithPolicy(
+  tc: AxeToolCall,
+  execute: (call: AxeToolCall) => Promise<string>,
+): Promise<string> {
+  const timeoutMs = Math.max(1_500, TOOL_TIMEOUTS_MS[tc.tool] ?? TOOL_TIMEOUT_DEFAULT_MS);
+  const maxAttempts = RETRYABLE_TOOLS.has(tc.tool) ? 2 : 1;
+  let lastErr: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await withTimeout(() => execute(tc), timeoutMs, tc.tool);
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isLast = attempt === maxAttempts;
+      console.warn(`[chatService] tool ${tc.tool} attempt ${attempt}/${maxAttempts} failed: ${msg}`);
+      if (!isLast) {
+        await sleep(TOOL_RETRY_BACKOFF_MS * attempt);
+      }
+    }
+  }
+
+  const lastMsg = lastErr instanceof Error ? lastErr.message : String(lastErr ?? "unknown");
+  if (lastMsg.includes("_timeout_")) {
+    return `Tool ${tc.tool} took too long and was skipped to keep AXE fast.`;
+  }
+  return `Tool ${tc.tool} failed: ${lastMsg}`;
+}
 
 type ConversationRow = {
   id: string;
@@ -231,6 +300,28 @@ async function runAutoJournalTool(
     (r) => `${r.symbol} → ${r.axe_label} (${r.alignment_score}/100)`,
   );
   return `Journaled ${result.journaled} trade(s):\n${lines.join("\n")}\nOpen [[link:/journal|Journal]] to review.`;
+}
+
+async function runPostTurnPrecompute(params: {
+  userId: string;
+  supabase: SupabaseClient;
+  symbol?: string;
+  tf?: string;
+  pinnedContext?: string | null;
+  type: "axe" | "intel";
+}): Promise<void> {
+  await precomputeTradingOSContextLane(
+    params.userId,
+    params.supabase,
+    params.symbol ?? null,
+    params.tf ?? null,
+    params.pinnedContext ?? null,
+  );
+
+  // Warm intel snapshot cache in the background when user is in intel mode.
+  if (params.type === "intel") {
+    await loadIntelSnapshot({ symbol: params.symbol }).catch(() => null);
+  }
 }
 
 export async function ensurePrimaryConversation(
@@ -534,6 +625,7 @@ export async function streamChatMessage(
         status: "open",
       });
       if (commitError) console.error("[track_commitment] insert failed:", commitError.message);
+      if (!commitError) invalidateTradingOSContextCache(user.id);
       return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
 
     } else if (toolCall.tool === "get_live_price") {
@@ -542,15 +634,6 @@ export async function streamChatMessage(
     } else if (toolCall.tool === "get_economic_calendar") {
       const calendar = await fetchEconomicCalendar(toolCall.args.currency, toolCall.args.impact);
       return "error" in calendar ? calendar.error : formatEconomicCalendar(calendar);
-
-    } else if (toolCall.tool === "save_note") {
-      const { content, tag } = toolCall.args;
-      const entryKey = `note-${Date.now()}`;
-      const { error: noteError } = await supabase.from("assistant_memory_entries").insert({
-        user_id: user.id, scope: "notes", entry_key: entryKey,
-        content: tag ? `[${tag}] ${content}` : content,
-      });
-      return noteError ? "Failed to save note." : "Note saved.";
 
     } else if (toolCall.tool === "calculate_fibonacci") {
       return computeFibonacci(toolCall.args);
@@ -707,16 +790,10 @@ export async function streamChatMessage(
       }
       if (out.length === 0) return `No journal entries or closed trades found in the last ${days}d${sym ? ` for ${sym}` : ""}.`;
       return out.join("\n");
-    } else if (toolCall.tool === "calculate_fibonacci") {
-      return computeFibonacci(toolCall.args);
-    } else if (toolCall.tool === "analyze_orderblock") {
-      return computeOrderBlock(toolCall.args);
-    } else if (toolCall.tool === "analyze_pdh_pdl") {
-      return computePdhPdl(toolCall.args);
-    } else if (toolCall.tool === "calculate_trendline") {
-      return computeTrendline(toolCall.args);
     } else if (toolCall.tool === "auto_journal_trades") {
-      return runAutoJournalTool(supabase, user.id, context, toolCall.args);
+      const result = await runAutoJournalTool(supabase, user.id, context, toolCall.args);
+      if (!result.startsWith("Auto-journal failed")) invalidateTradingOSContextCache(user.id);
+      return result;
     } else if (toolCall.tool === "navigate_to") {
       const { page } = toolCall.args;
       const params: string[] = [];
@@ -748,6 +825,7 @@ export async function streamChatMessage(
       if (noteError && journalError) {
         return `Note failed: ${noteError.message}`;
       }
+      invalidateTradingOSContextCache(user.id);
       return "Note saved to your journal.";
     }
     return "Unknown tool.";
@@ -782,7 +860,7 @@ export async function streamChatMessage(
       onEvent({ type: "status", phase: "tools", tools: firstResponse.toolCalls.map((t) => t.tool) });
 
       const round1Results = await Promise.all(
-        firstResponse.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) })),
+        firstResponse.toolCalls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
       );
       executedToolResults.push(...round1Results);
       const afterRound1 = appendToolRound(aiMessages, firstResponse.toolCalls, round1Results);
@@ -799,7 +877,7 @@ export async function streamChatMessage(
         // Third round of tools (rare)
         onEvent({ type: "status", phase: "tools", tools: round2Response.toolCalls.map((t) => t.tool) });
         const round2Results = await Promise.all(
-          round2Response.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) })),
+          round2Response.toolCalls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
         );
         executedToolResults.push(...round2Results);
         const afterRound2 = appendToolRound(afterRound1, round2Response.toolCalls, round2Results);
@@ -949,6 +1027,14 @@ export async function streamChatMessage(
   extractMemoriesAsync(supabase, user.id, trimmed, finalReply).catch((e) =>
     console.error("[chatService] memory extraction failed:", e),
   );
+  runPostTurnPrecompute({
+    userId: user.id,
+    supabase,
+    symbol: symbol ?? contextWithCandles.symbol ?? undefined,
+    tf: tf ?? contextWithCandles.timeframe ?? undefined,
+    pinnedContext: conversation.pinnedContext,
+    type,
+  }).catch((e) => console.error("[chatService] precompute lane failed:", e));
 
   onEvent({ type: "done" });
   return { ok: true };
