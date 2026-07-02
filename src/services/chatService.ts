@@ -242,6 +242,26 @@ function inferRequestedSymbols(text: string): string[] {
   return Array.from(out);
 }
 
+function isLivePriceIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  const asksPrice =
+    t.includes("price") ||
+    t.includes("current price") ||
+    t.includes("live price") ||
+    t.includes("what is") ||
+    t.includes("wat is") ||
+    t.includes("prijs") ||
+    t.includes("koers");
+  const asksSymbol =
+    t.includes("xauusd") ||
+    t.includes("gold") ||
+    t.includes("eurusd") ||
+    t.includes("gbpusd") ||
+    t.includes("nas100") ||
+    /\b[A-Z]{6}\b/.test(text.toUpperCase());
+  return asksPrice && asksSymbol;
+}
+
 function buildAllowedSymbolSet(
   context: Awaited<ReturnType<typeof fetchTradingOSContext>>,
 ): Set<string> {
@@ -1012,6 +1032,51 @@ export async function streamChatMessage(
     // Keep user-facing copy stable while still enforcing anti-stale guardrails.
     if (canonical == null || staleRegime || fibRoute) {
       finalReply = `I've added the Fibonacci retracement to your ${activeSymbol} ${activeTf} chart. ${link}`;
+    }
+  }
+
+  // Hard safety for live-price asks:
+  // If user asks for a current price, force broker-price retrieval and use deterministic copy.
+  const livePriceIntent = type === "axe" && isLivePriceIntent(trimmed);
+  if (livePriceIntent) {
+    const alreadyUsedLivePrice = executedToolResults.some(({ tc }) => tc.tool === "get_live_price");
+    if (!alreadyUsedLivePrice) {
+      const requested = inferRequestedSymbols(trimmed)[0]
+        ?? (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "XAUUSD");
+      const forcedTc: AxeToolCall = {
+        id: `forced_live_${Date.now()}`,
+        tool: "get_live_price",
+        args: { symbol: requested },
+      };
+      const forcedResult = await runToolWithPolicy(forcedTc, executeTool);
+      executedToolResults.push({ tc: forcedTc, result: forcedResult });
+    }
+
+    const chart = contextWithCandles.axe_context?.chart;
+    const accounts = contextWithCandles.axe_context?.accounts;
+    const activeSymbol = (chart?.symbol ?? contextWithCandles.symbol ?? "ACTIVE").toUpperCase();
+    const brokerSymbol = (chart?.brokerSymbol ?? activeSymbol).toUpperCase();
+    const accountLabel = accounts?.activeLabel ?? "active broker account";
+    const state = brokerPricingState({
+      status: chart?.liveStatus ?? null,
+      updatedAt: chart?.updatedAt ?? null,
+      lastTickAt: chart?.lastTickAt ?? null,
+      lastCandleAt: chart?.lastCandleAt ?? null,
+    });
+    const canonical = canonicalBrokerPrice({
+      lastPrice: chart?.lastPrice ?? null,
+      lastBid: chart?.lastBid ?? null,
+      lastAsk: chart?.lastAsk ?? null,
+    });
+
+    if (canonical != null && (state === "live" || state === "degraded")) {
+      finalReply =
+        `Live broker price for ${activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${canonical}. ` +
+        `I’m reading this from your active account context.`;
+    } else {
+      finalReply =
+        `I can see your ${accountLabel}, but live broker pricing for ${activeSymbol} (${brokerSymbol}) is currently unavailable (${state}). ` +
+        `I won't guess prices. Sync account/chart and ask again in a few seconds. [[link:/chart|Open chart]]`;
     }
   }
 
