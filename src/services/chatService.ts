@@ -17,6 +17,7 @@ import {
   type AxeToolCall,
   type TrackCommitmentArgs,
 } from "@/services/axeService";
+import { callLLM } from "@/services/llmClient";
 import {
   fetchEconomicCalendar,
   formatEconomicCalendar,
@@ -977,9 +978,6 @@ async function extractMemoriesAsync(
   userMessage: string,
   assistantReply: string,
 ): Promise<void> {
-  const openaiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
-  if (!openaiKey) return;
-
   // Load recent conversation context (last 6 messages)
   const { data: recentMessages } = await supabase
     .from("messages")
@@ -1014,14 +1012,8 @@ async function extractMemoriesAsync(
     ? `\n\nEXISTING MEMORIES (do not duplicate):\n${(existing ?? []).map((e: { memory_type: string; content: string }) => `- [${e.memory_type}] ${e.content}`).join("\n")}`
     : "";
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${openaiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
+  const llmResult = await callLLM(
+    {
       messages: [
         {
           role: "system",
@@ -1035,20 +1027,19 @@ Only extract behavioral patterns, preferences, rules, and durable insights. Skip
         },
         { role: "user", content: `${conversationText}${existingText}` },
       ],
-      temperature: 0.3,
-      max_tokens: 600,
-    }),
-  });
-
-  if (!res.ok) return;
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
+      temperature: 0.2,
+      max_tokens: 500,
+    },
+    "intel",
+  );
+  const content = llmResult.content?.trim();
   if (!content) return;
 
   try {
     const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(cleaned) as { memories: Array<{ memory_type: string; content: string; symbol: string | null; confidence: number }> };
+    const jsonCandidate = cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned;
+    if (!jsonCandidate) return;
+    const parsed = JSON.parse(jsonCandidate) as { memories: Array<{ memory_type: string; content: string; symbol: string | null; confidence: number }> };
 
     for (const mem of parsed.memories ?? []) {
       if (!mem.content || !mem.memory_type) continue;
