@@ -16,6 +16,7 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { callLLM, type LLMRequest } from "@/services/llmClient";
 import { getTraderLearningArc } from "@/services/learningArcService";
 import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
+import { getAxeEngineProfile } from "@/services/axeEngineService";
 import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { buildBriefHighlights } from "@/lib/briefing/briefingNewsCards";
@@ -118,6 +119,11 @@ export interface TraderBriefingContext {
   tier: "free" | "pro" | "founder" | "elite";
   weather: WeatherSnapshot | null;
   preferences: Record<string, unknown>;
+  engineConfidence: {
+    score: number;
+    tier: "low" | "medium" | "high";
+    gateMode: "strict" | "guided" | "proactive";
+  };
 }
 
 const BRIEF_SECTION_HEADERS = new Set([
@@ -233,6 +239,9 @@ export async function buildBriefingContext(
       fetchProfileDirect(supabase, traderId),
       getTraderLearningArc(traderId, supabase),
     ]);
+    const engineProfile = await getAxeEngineProfile(supabase, traderId, {
+      source: "briefing_context",
+    }).catch(() => null);
 
     const periodPerformance = await fetchBriefPeriodTrades(
       supabase,
@@ -274,6 +283,11 @@ export async function buildBriefingContext(
       tier: profile.tier,
       weather,
       preferences: profile.preferences,
+      engineConfidence: {
+        score: engineProfile?.confidenceScore ?? 0,
+        tier: engineProfile?.confidenceTier ?? "low",
+        gateMode: engineProfile?.gateMode ?? "strict",
+      },
     };
   } catch (error) {
     console.error("[Briefing] Failed to build context:", error);
@@ -296,6 +310,11 @@ export async function buildBriefingContext(
       tier: "free",
       weather: null,
       preferences: {},
+      engineConfidence: {
+        score: 0,
+        tier: "low",
+        gateMode: "strict",
+      },
     };
   }
 }
@@ -322,6 +341,7 @@ Key facts:
 - Tier: ${context.tier}
 - Top pairs: ${hasPairs ? context.preferredPairs.join(", ") : "not yet identified — be encouraging"}
 - AXE alignment score: ${context.alignment}% (how well AXE has learned this trader's style)
+- AXE engine confidence: ${context.engineConfidence.score}/100 (${context.engineConfidence.tier}, gate: ${context.engineConfidence.gateMode})
 - Session focus: ${context.preferredSession}
 - Key indicators they use: ${context.topIndicators.length > 0 ? context.topIndicators.join(", ") : "standard set"}`;
 
@@ -387,6 +407,20 @@ Rules:
 
 Tone: warm, direct, confident. Like a senior trader who actually knows them.
 Length: 160-240 words maximum.`;
+  }
+
+  if (context.engineConfidence.gateMode === "strict") {
+    prompt += `\n\nConfidence gate: STRICT.
+- Avoid hard predictive language.
+- Keep action items conservative and scenario-based.
+- If data confidence is low, explicitly say what needs confirmation first.`;
+  } else if (context.engineConfidence.gateMode === "guided") {
+    prompt += `\n\nConfidence gate: GUIDED.
+- Prefer conditional recommendations ("if/then" framing).
+- Keep one clear primary plan and one fallback.`;
+  } else {
+    prompt += `\n\nConfidence gate: PROACTIVE.
+- You may be direct and proactive, but stay anchored to broker/live context and avoid generic macro hype.`;
   }
 
   return prompt;
@@ -575,6 +609,7 @@ export async function generateMorningBrief(
         traderId,
         alignment: context.alignment,
         topPairs: context.preferredPairs,
+        engineConfidence: context.engineConfidence,
       },
       occurredAt: new Date().toISOString(),
     });

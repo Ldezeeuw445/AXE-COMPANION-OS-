@@ -42,6 +42,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
 import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
+import { buildAxeEngineSystemGate, getAxeEngineProfile } from "@/services/axeEngineService";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -563,7 +564,7 @@ export async function streamChatMessage(
       ? loadIntelSnapshot({ symbol: symbol ?? undefined }).catch(() => null)
       : Promise.resolve(null);
 
-  const [historyResult, context, knowledgeLayer, intelSnapshot] = await Promise.all([
+  const [historyResult, context, knowledgeLayer, intelSnapshot, engineProfile] = await Promise.all([
     supabase
       .from("messages")
       .select("role,content")
@@ -577,6 +578,7 @@ export async function streamChatMessage(
       ? buildIntelKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null)
       : buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
     intelSnapshotPromise,
+    getAxeEngineProfile(supabase, user.id, { source: "chat_turn" }).catch(() => null),
   ]);
 
   const history = ((historyResult.data ?? []) as { role: "user" | "assistant"; content: string }[])
@@ -611,6 +613,12 @@ export async function streamChatMessage(
     aiMessages[0] = {
       ...aiMessages[0],
       content: `${INTEL_CHAT_PREFIX}\n\n${String(aiMessages[0].content ?? "")}`,
+    };
+  }
+  if (aiMessages[0]?.role === "system" && engineProfile) {
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${buildAxeEngineSystemGate(engineProfile)}\n\n${String(aiMessages[0].content ?? "")}`,
     };
   }
 

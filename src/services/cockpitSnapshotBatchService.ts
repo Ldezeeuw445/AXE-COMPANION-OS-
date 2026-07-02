@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isPaidAxePlan } from "@/lib/billing/tiers";
 import { generateCockpitSnapshot } from "@/services/cockpitSnapshotService";
+import { refreshAxeEngineProfile } from "@/services/axeEngineService";
 
 export type CockpitSnapshotBatchSummary = {
   attempted: number;
@@ -55,6 +56,9 @@ export async function runCockpitSnapshotBatch(
       summary.failed += 1;
       console.warn("[cockpitSnapshotBatch] failed", userId, result.error);
     }
+    await refreshAxeEngineProfile(supabase, userId, "cockpit_batch").catch((err) =>
+      console.warn("[cockpitSnapshotBatch] engine refresh failed", userId, err instanceof Error ? err.message : String(err)),
+    );
   }
 
   return summary;
