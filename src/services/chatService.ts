@@ -156,16 +156,12 @@ function mapMessage(row: MessageRow): DomainChatMessage {
   };
 }
 
-function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradingOSContext>>, requestedSymbol: string): string {
+function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradingOSContext>>): string {
   const chart = context.axe_context?.chart;
   const activeSymbol = (chart?.symbol ?? context.symbol ?? "").toUpperCase();
   const brokerSymbol = (chart?.brokerSymbol ?? "").toUpperCase();
-  const requested = requestedSymbol.toUpperCase().replace("/", "").trim();
   if (!chart || !activeSymbol || !brokerSymbol) {
     return "Live broker pricing unavailable. AXE has no active broker-resolved chart context for this session.";
-  }
-  if (requested && requested !== activeSymbol && requested !== brokerSymbol) {
-    return `Live broker pricing unavailable for ${requested}. Active chart is ${activeSymbol} mapped to broker symbol ${brokerSymbol}.`;
   }
   const state = brokerPricingState({
     status: chart.liveStatus,
@@ -621,6 +617,22 @@ export async function streamChatMessage(
     candles_summary: conversation.pinnedContext || null,
     knowledge_layer: knowledgeBlock,
   };
+  const priceContextBySymbol = new Map<string, Awaited<ReturnType<typeof fetchTradingOSContext>>>();
+  async function getPriceContextForSymbol(requestedSymbolRaw: string): Promise<Awaited<ReturnType<typeof fetchTradingOSContext>>> {
+    const requestedSymbol = requestedSymbolRaw.toUpperCase().replace("/", "").trim();
+    if (!requestedSymbol) return contextWithCandles;
+    const cached = priceContextBySymbol.get(requestedSymbol);
+    if (cached) return cached;
+    const next = await fetchTradingOSContext(
+      user.id,
+      supabase,
+      requestedSymbol,
+      tf ?? contextWithCandles.timeframe ?? null,
+      conversation.pinnedContext ?? null,
+    );
+    priceContextBySymbol.set(requestedSymbol, next);
+    return next;
+  }
 
   // 5. Build OpenAI messages using the unified context
   const aiMessages = buildAxeMessagesFromContext(
@@ -688,7 +700,9 @@ export async function streamChatMessage(
       return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
 
     } else if (toolCall.tool === "get_live_price") {
-      return formatBrokerPriceForChat(contextWithCandles, toolCall.args.symbol);
+      const requested = String(toolCall.args.symbol ?? symbol ?? contextWithCandles.symbol ?? "").trim();
+      const requestedContext = await getPriceContextForSymbol(requested);
+      return formatBrokerPriceForChat(requestedContext);
 
     } else if (toolCall.tool === "get_economic_calendar") {
       const calendar = await fetchEconomicCalendar(toolCall.args.currency, toolCall.args.impact);
@@ -1056,8 +1070,9 @@ export async function streamChatMessage(
       executedToolResults.push({ tc: forcedTc, result: forcedResult });
     }
 
-    const chart = contextWithCandles.axe_context?.chart;
-    const accounts = contextWithCandles.axe_context?.accounts;
+    const requestedContext = await getPriceContextForSymbol(requestedSymbol);
+    const chart = requestedContext.axe_context?.chart;
+    const accounts = requestedContext.axe_context?.accounts ?? contextWithCandles.axe_context?.accounts;
     const activeSymbol = (chart?.symbol ?? contextWithCandles.symbol ?? "ACTIVE").toUpperCase();
     const brokerSymbol = (chart?.brokerSymbol ?? activeSymbol).toUpperCase();
     const requestedUpper = requestedSymbol.toUpperCase().replace("/", "").trim();
@@ -1074,24 +1089,20 @@ export async function streamChatMessage(
       lastAsk: chart?.lastAsk ?? null,
     });
 
-    if (requestedUpper && requestedUpper !== activeSymbol && requestedUpper !== brokerSymbol) {
+    if (canonical != null && (state === "live" || state === "degraded")) {
       finalReply =
-        `I can see your ${accountLabel}, but your active live chart snapshot is ${activeSymbol} (${brokerSymbol}). ` +
-        `So I can't safely quote ${requestedUpper} from this context yet. Switch chart to ${requestedUpper} and ask again, then I will return that exact live broker price. [[link:/chart|Open chart]]`;
-    } else if (canonical != null && (state === "live" || state === "degraded")) {
-      finalReply =
-        `Live broker price for ${activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${canonical}. ` +
+        `Live broker price for ${requestedUpper || activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${canonical}. ` +
         `I’m reading this from your active account context.`;
     } else {
       finalReply =
-        `I can see your ${accountLabel}, but live broker pricing for ${activeSymbol} (${brokerSymbol}) is currently unavailable (${state}). ` +
-        `I won't guess prices. Sync account/chart and ask again in a few seconds. [[link:/chart|Open chart]]`;
+        `I can see your ${accountLabel}, but live broker pricing for ${requestedUpper || activeSymbol} (${brokerSymbol}) is currently unavailable (${state}). ` +
+        `I won't guess prices. If this symbol is enabled on your broker, sync the account and ask again in a few seconds. [[link:/chart|Open chart]]`;
     }
   }
 
   // Global broker-symbol and price-regime guard:
   // AXE must only speak in broker-supported symbols and active price regime.
-  if (type === "axe") {
+  if (type === "axe" && !livePriceIntent) {
     const requestedSymbols = inferRequestedSymbols(trimmed);
     const allowedSymbols = buildAllowedSymbolSet(contextWithCandles);
     const blockedSymbol = requestedSymbols.find((s) => !allowedSymbols.has(s));
