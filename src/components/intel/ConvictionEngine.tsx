@@ -39,8 +39,8 @@ export function ConvictionEngine() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const fetchConvictions = useCallback(async () => {
-    setLoading(true);
+  const fetchConvictions = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     setError(null);
     try {
       // Send Bearer token so server auth works regardless of cookie state
@@ -77,20 +77,37 @@ export function ConvictionEngine() {
     } catch {
       setError("Network error");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    let hasFreshCache = false;
     try {
       const cached = window.sessionStorage.getItem(CACHE_KEY) ?? window.localStorage.getItem(CACHE_KEY);
       if (cached) {
-        setData(JSON.parse(cached) as ConvictionSnapshot);
+        const parsed = JSON.parse(cached) as ConvictionSnapshot;
+        setData(parsed);
+        const ageMs = Date.now() - new Date(parsed.generatedAt).getTime();
+        hasFreshCache = Number.isFinite(ageMs) && ageMs >= 0 && ageMs < 12 * 60 * 1000;
       }
     } catch {
       /* ignore */
     }
-    fetchConvictions();
+    const run = () => void fetchConvictions(hasFreshCache);
+    if (hasFreshCache) {
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        const w = window as Window & {
+          requestIdleCallback: (cb: IdleRequestCallback) => number;
+          cancelIdleCallback?: (id: number) => void;
+        };
+        const idleId = w.requestIdleCallback(() => run());
+        return () => w.cancelIdleCallback?.(idleId);
+      }
+      const t = window.setTimeout(run, 220);
+      return () => window.clearTimeout(t);
+    }
+    run();
   }, [fetchConvictions]);
 
   const toggle = (ticker: string) => {
@@ -133,7 +150,7 @@ export function ConvictionEngine() {
           </h2>
         </div>
         <button
-          onClick={fetchConvictions}
+          onClick={() => void fetchConvictions(false)}
           disabled={loading}
           className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/40 transition-colors hover:border-cyan-400/20 hover:text-cyan-300 disabled:opacity-30"
         >

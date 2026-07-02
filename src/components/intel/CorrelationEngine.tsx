@@ -45,8 +45,8 @@ export function CorrelationEngine() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const fetch_ = useCallback(async () => {
-    setLoading(true);
+  const fetch_ = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     setError(null);
     try {
       let authHeader: Record<string, string> = {};
@@ -79,20 +79,37 @@ export function CorrelationEngine() {
     } catch {
       setError("Network error");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    let hasFreshCache = false;
     try {
       const cached = window.sessionStorage.getItem(CACHE_KEY) ?? window.localStorage.getItem(CACHE_KEY);
       if (cached) {
-        setData(JSON.parse(cached) as CorrelationSnapshot);
+        const parsed = JSON.parse(cached) as CorrelationSnapshot;
+        setData(parsed);
+        const ageMs = Date.now() - new Date(parsed.generatedAt).getTime();
+        hasFreshCache = Number.isFinite(ageMs) && ageMs >= 0 && ageMs < 12 * 60 * 1000;
       }
     } catch {
       /* ignore */
     }
-    fetch_();
+    const run = () => void fetch_(hasFreshCache);
+    if (hasFreshCache) {
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        const w = window as Window & {
+          requestIdleCallback: (cb: IdleRequestCallback) => number;
+          cancelIdleCallback?: (id: number) => void;
+        };
+        const idleId = w.requestIdleCallback(() => run());
+        return () => w.cancelIdleCallback?.(idleId);
+      }
+      const t = window.setTimeout(run, 220);
+      return () => window.clearTimeout(t);
+    }
+    run();
   }, [fetch_]);
 
   const toggle = (id: string) => {
@@ -137,7 +154,7 @@ export function CorrelationEngine() {
           </h2>
         </div>
         <button
-          onClick={fetch_}
+          onClick={() => void fetch_(false)}
           disabled={loading}
           className="flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/40 transition-colors hover:border-cyan-400/20 hover:text-cyan-300 disabled:opacity-30"
         >
