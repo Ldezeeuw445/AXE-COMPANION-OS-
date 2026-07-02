@@ -120,6 +120,63 @@ export interface TraderBriefingContext {
   preferences: Record<string, unknown>;
 }
 
+const BRIEF_SECTION_HEADERS = new Set([
+  "MARKET OUTLOOK",
+  "NEWS",
+  "RECENT PERFORMANCE",
+  "ALIGNMENT SCORE",
+  "ACTION ITEMS",
+  "WATCH THIS SESSION",
+  "SESSION WATCH",
+  "SESSION FOCUS",
+  "TODAY'S WATCH",
+]);
+
+function normalizeBriefHeader(line: string): string {
+  return line.trim().replace(/:+$/, "").toUpperCase();
+}
+
+function alignmentSentence(alignment: number): string {
+  return `You're at ${Math.max(0, Math.min(100, Math.round(alignment)))}% aligned — AXE knows your style well.`;
+}
+
+/**
+ * Keep the alignment section deterministic and synced with Cockpit score.
+ * This prevents model drift/hallucinations like "75%" when true score is 48%.
+ */
+function syncBriefAlignmentSection(body: string, alignment: number): string {
+  const source = body.replace(/\r\n/g, "\n").trim();
+  if (!source) return source;
+
+  const lines = source.split("\n");
+  const targetHeader = "ALIGNMENT SCORE";
+  const targetIdx = lines.findIndex((line) => normalizeBriefHeader(line) === targetHeader);
+  const lockedSentence = alignmentSentence(alignment);
+
+  if (targetIdx === -1) {
+    return `${source}\n\nALIGNMENT SCORE\n${lockedSentence}`;
+  }
+
+  let nextHeaderIdx = lines.length;
+  for (let i = targetIdx + 1; i < lines.length; i++) {
+    if (BRIEF_SECTION_HEADERS.has(normalizeBriefHeader(lines[i] ?? ""))) {
+      nextHeaderIdx = i;
+      break;
+    }
+  }
+
+  const rewritten = [
+    ...lines.slice(0, targetIdx + 1),
+    lockedSentence,
+    ...lines.slice(nextHeaderIdx),
+  ]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return rewritten;
+}
+
 // ─── Profile fetch (service-role, no relative URLs) ───────────────────────────
 
 type ProfileBrief = {
@@ -380,9 +437,10 @@ export async function generateMorningBrief(
   const force = options?.force ?? false;
 
   // Reads may use caller client; writes always use service role (RLS is select-only).
-  const readSb = supabase ?? createServiceRoleSupabaseClient();
-  const writeSb = createServiceRoleSupabaseClient() ?? readSb;
-  if (!readSb) throw new Error("Supabase client unavailable");
+  const readSbCandidate = supabase ?? createServiceRoleSupabaseClient();
+  if (!readSbCandidate) throw new Error("Supabase client unavailable");
+  const readSb = readSbCandidate;
+  const writeSb = (createServiceRoleSupabaseClient() ?? readSb) as SupabaseClient;
 
   const contextForDate = await buildBriefingContext(readSb, traderId, { weekly: isWeekly });
   const today = getLocalDateString(contextForDate.timezone);
@@ -399,8 +457,17 @@ export async function generateMorningBrief(
       .maybeSingle();
 
     if (existingRow?.body) {
+      const syncedBody = syncBriefAlignmentSection(String(existingRow.body), contextForDate.alignment);
+      if (syncedBody !== String(existingRow.body)) {
+        await writeSb
+          .from("axe_daily_briefings")
+          .update({ body: syncedBody })
+          .eq("user_id", traderId)
+          .eq("briefing_date", today)
+          .eq("briefing_type", briefingType);
+      }
       return {
-        brief: existingRow.body as string,
+        brief: syncedBody,
         context: contextForDate,
         model: "cached",
         provider: "ollama",
@@ -442,13 +509,16 @@ export async function generateMorningBrief(
     `[Briefing] Generated for ${traderId} in ${latency_ms}ms via ${response.provider}`
   );
 
-  const briefText = (response.content ?? "")
+  const briefText = syncBriefAlignmentSection(
+    (response.content ?? "")
     .replace(/\*\*/g, "")
     .replace(/\bon\s+quote\b/gi, "from History")
     .replace(/\bquotes?\s+tab\b/gi, "History")
     .replace(/https?:\/\/\S+/g, "")
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .trim(),
+    context.alignment,
+  );
 
   const highlightRows: BriefHighlight[] =
     marketCtx && !isWeekly
