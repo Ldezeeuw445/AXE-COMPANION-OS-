@@ -24,8 +24,8 @@ export const metadata: Metadata = {
     startupImage: "/axe-icon-512.png",
   },
   icons: {
-    apple: "/axe-icon-512.png",
-    icon: "/axe-icon-512.png",
+    apple: "/apple-touch-icon.png",
+    icon: "/axe-icon-192.png",
   },
   formatDetection: {
     telephone: false,
@@ -38,6 +38,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-visual",
 };
 
 export default function RootLayout({

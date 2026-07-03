@@ -47,7 +47,7 @@ function timeAgo(iso: string): string {
 
 function sentimentDot(score: number | null | undefined): { className: string; label: string } | null {
   if (score == null || !Number.isFinite(score)) return null;
-  if (score > 0.15) return { className: "bg-cyan-300", label: "positive" };
+  if (score > 0.15) return { className: "bg-emerald-300", label: "positive" };
   if (score < -0.15) return { className: "bg-rose-300", label: "negative" };
   return { className: "bg-white/35", label: "neutral" };
 }
@@ -131,24 +131,24 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
       ) : null}
 
       <aside
-        className={`fixed left-0 top-[3.25rem] z-[45] flex h-[calc(100svh-3.25rem)] w-[92vw] max-w-[420px] flex-col border-r border-white/10 bg-[#04070C]/96 shadow-[0_24px_72px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-200 ease-out ${
+        className={`fixed left-0 top-[var(--tos-topbar-offset)] z-[45] flex h-[calc(100dvh-var(--tos-topbar-offset)-var(--tos-nav-offset))] w-[92vw] max-w-[420px] flex-col border-r border-white/10 bg-[#0c0c0c]/96 shadow-[0_24px_72px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        /* drawer height already stops above the bottom nav */
         aria-hidden={!open}
       >
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-full border border-cyan-400/30 bg-cyan-400/10">
-              <Newspaper className="h-3.5 w-3.5 text-cyan-200" aria-hidden />
+            <span className="grid h-7 w-7 place-items-center rounded-full border border-white/[0.10] bg-white/[0.05]">
+              <Newspaper className="h-3.5 w-3.5 text-white/80" aria-hidden />
             </span>
             <div className="min-w-0">
               <p className="truncate font-mono text-[12px] font-bold uppercase tracking-wider text-tos-text">
                 {symbol} · News
               </p>
               <p className="text-[9px] uppercase tracking-[0.2em] text-tos-dim">
-                Cached 5 min · paid feeds prioritized
+                AXE Intel · cached 5 min
               </p>
             </div>
           </div>
@@ -156,7 +156,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
             <button
               type="button"
               onClick={() => void load()}
-              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-cyan-200"
+              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-[#08080a]/80 text-tos-muted hover:text-white/80"
               aria-label="Refresh news"
               title="Refresh"
               disabled={loading}
@@ -169,7 +169,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-black/55 text-tos-muted hover:text-cyan-200"
+              className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-[#08080a]/80 text-tos-muted hover:text-white/80"
               aria-label="Close news"
             >
               <X className="h-3.5 w-3.5" aria-hidden />
@@ -177,19 +177,22 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
           </div>
         </div>
 
-        {/* Provider chips — three states:
+        {/* AXE source chips — three states:
               fresh    → key configured AND delivered items in this fetch (cyan)
               ready    → key configured but no items returned (dim cyan ring)
               off      → no key configured                       (grey muted)
         */}
         {newsProviders.length > 0 ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-white/[0.05] px-3 py-1.5">
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-tos-dim">
+              AXE sources
+            </span>
             {newsProviders.map((p) => {
               const configured = p.state === "live";
               const delivered = deliveringProviders.has(p.id);
               const tone =
                 configured && delivered
-                  ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
+                  ? "border-white/[0.12] bg-white/[0.06] text-white"
                   : configured
                     ? "border-white/10 bg-white/[0.025] text-tos-muted"
                     : "border-white/10 bg-white/[0.02] text-tos-dim";
@@ -236,7 +239,7 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
               <button
                 type="button"
                 onClick={() => void load()}
-                className="rounded-lg border border-cyan-400/25 bg-cyan-400/8 px-3 py-1.5 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-400/14"
+                className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/90 hover:bg-white/[0.06]"
               >
                 Try again
               </button>
@@ -263,14 +266,14 @@ export function ChartNewsDrawer({ open, onClose, symbol }: Props) {
         <div className="shrink-0 border-t border-white/[0.05] px-3 py-2">
           <Link
             href={`/intel?symbol=${encodeURIComponent(symbol)}`}
-            className="flex items-center justify-between gap-2 rounded-xl border border-cyan-400/22 bg-cyan-400/8 px-3 py-2 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-400/14"
+            className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-semibold text-white/90 hover:bg-white/[0.06]"
             onClick={onClose}
           >
             <span className="flex items-center gap-2">
-              <Target className="h-3.5 w-3.5 text-cyan-300" aria-hidden />
+              <Target className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
               Smart-money intel for {symbol}
             </span>
-            <ExternalLink className="h-3 w-3 text-cyan-300/85" aria-hidden />
+            <ExternalLink className="h-3 w-3 text-emerald-300/85" aria-hidden />
           </Link>
         </div>
       </aside>

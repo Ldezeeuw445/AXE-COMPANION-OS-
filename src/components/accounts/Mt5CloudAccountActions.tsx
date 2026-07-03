@@ -4,11 +4,11 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   disconnectCloudMt5AccountAction,
-  runCloudMt5DoctorAction,
+  recoverCloudMt5AccountAction,
   syncCloudMt5AccountAction,
   testCloudMt5ConnectionAction,
 } from "@/app/actions/mt5Cloud";
-import type { Mt5DoctorReport, Mt5DoctorStepStatus } from "@/types/mt5Doctor";
+import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
 
 type Props = {
   accountId: string;
@@ -17,7 +17,7 @@ type Props = {
 const ACTION_TIMEOUT_MS: Record<string, number> = {
   Test: 25_000,
   Sync: 75_000,
-  Doctor: 60_000,
+  Redeploy: 75_000,
   Disconnect: 25_000,
 };
 
@@ -28,10 +28,8 @@ function timeoutResult(label: string): ActionResult {
     ok: false,
     code: "client_timeout",
     message:
-      label === "Sync"
+      label === "Sync" || label === "Redeploy"
         ? "Sync is still running in the background. Refresh Accounts in a minute or retry if the status does not change."
-        : label === "Doctor"
-          ? "Doctor is still waiting on MetaAPI. Retry in a minute if the account status does not change."
         : "The request is taking longer than expected. You can retry without leaving this screen.",
   };
 }
@@ -80,7 +78,6 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
     runIdRef.current = runId;
     setBusyLabel(label);
     setMsg(null);
-    if (label === "Doctor") setDoctorReport(null);
     const actionPromise = fn(accountId);
 
     void (async () => {
@@ -90,12 +87,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
       if (timedOut) {
         setMsg(
           JSON.stringify({
-            headline:
-              label === "Sync"
-                ? "Still syncing."
-                : label === "Doctor"
-                  ? "Still diagnosing."
-                  : "Still working.",
+            headline: label === "Sync" ? "Still syncing." : "Still working.",
             detail: r.message,
           }),
         );
@@ -108,16 +100,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
         return;
       }
 
-      if (r.ok && label === "Doctor") {
-        const report = r.data && typeof r.data === "object" ? (r.data as Mt5DoctorReport) : null;
-        setDoctorReport(report);
-        setMsg(
-          JSON.stringify({
-            headline: report?.headline ?? "Doctor completed.",
-            detail: report?.summary,
-          }),
-        );
-      } else if (r.ok && label === "Sync") {
+      if (r.ok && label === "Sync") {
         const d =
           r.data && typeof r.data === "object"
             ? (r.data as { dealsFetched?: number; dealsUpserted?: number; tradesNormalized?: number })
@@ -138,7 +121,12 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
       } else if (r.ok) {
         setMsg(
           JSON.stringify({
-            headline: label === "Test" ? "Connection test passed." : "Done.",
+            headline:
+              label === "Test"
+                ? "Connection test passed."
+                : label === "Redeploy"
+                  ? "Recovery request completed."
+                  : "Done.",
             detail: undefined,
           }),
         );
@@ -182,15 +170,23 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           type="button"
           disabled={pending}
           onClick={() => run(syncCloudMt5AccountAction, "Sync")}
-          className="rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-200/90 hover:bg-cyan-500/20 disabled:opacity-50"
+          className="rounded-lg border border-white/[0.08] bg-white/[0.05] px-2.5 py-1.5 text-[10px] font-semibold text-white/80 hover:bg-cyan-500/20 disabled:opacity-50"
         >
           {busyLabel === "Sync" ? "Syncing…" : "Sync"}
         </button>
         <button
           type="button"
           disabled={pending}
+          onClick={() => run(recoverCloudMt5AccountAction, "Redeploy")}
+          className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-1.5 text-[10px] font-semibold text-amber-100/90 hover:bg-amber-400/20 disabled:opacity-50"
+        >
+          {busyLabel === "Redeploy" ? "Recovering…" : "Redeploy"}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
           onClick={() => {
-            if (!confirm("Disconnect this MetaApi cloud account? Trade history in AXE is kept.")) return;
+            if (!confirm("Disconnect this AXE MT5 Cloud account? Trade history in AXE is kept.")) return;
             run(disconnectCloudMt5AccountAction, "Disconnect");
           }}
           className="rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-red-200/90 hover:bg-red-500/20 disabled:opacity-50"
@@ -198,32 +194,15 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           {busyLabel === "Disconnect" ? "Disconnecting…" : "Disconnect"}
         </button>
       </div>
-      <p className="text-[10px] leading-relaxed text-tos-dim">
-        Recovery order: run <span className="font-medium text-tos-muted">Test</span> for credentials/server,{" "}
-        <span className="font-medium text-tos-muted">Sync</span> for account history, then{" "}
-        <span className="font-medium text-tos-muted">Doctor</span> when something still looks degraded.
-      </p>
       {busyLabel ? (
-        <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/[0.04] px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.65)]" aria-hidden />
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-100/90">
-              {busyLabel === "Sync"
-                ? "Broker sync active"
-                : busyLabel === "Doctor"
-                  ? "Connection doctor active"
-                  : "Provider check active"}
-            </p>
-          </div>
-          <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-cyan-300/45" />
-          </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
-            {busyLabel === "Sync"
-              ? "AXE is syncing broker history. If MetaApi is slow, this panel releases and keeps the account usable."
-              : busyLabel === "Doctor"
-                ? "AXE is checking MetaAPI deployment, broker reachability, positions, history and live price health."
-              : "AXE is checking the account. This will release automatically if the provider stalls."}
+        <div className="space-y-1.5">
+          <AxeBreatheLoader label={busyLabel === "Sync" ? "Syncing account" : busyLabel === "Redeploy" ? "Recovering account" : "Checking account"} size="sm" />
+          <p className="text-[10px] leading-relaxed text-tos-dim">
+          {busyLabel === "Sync"
+            ? "AXE is syncing broker history. If the broker is slow, this panel will release and keep the account usable."
+            : busyLabel === "Redeploy"
+              ? "AXE is redeploying the cloud terminal, then checking whether the broker terminal comes back online."
+            : "AXE is checking the account. This will release automatically if the runtime stalls."}
           </p>
         </div>
       ) : null}

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { hasEntitlementFeature } from "@/lib/billing/access";
+import { getUserAxeEntitlement } from "@/services/billingService";
+import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
+import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 
 type CreateAlertBody = {
   symbol?: string | null;
@@ -10,6 +14,13 @@ type CreateAlertBody = {
   status?: "active" | "paused";
   metadata?: Record<string, unknown>;
 };
+
+function isSmartAlertRequest(body: CreateAlertBody): boolean {
+  const meta = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+  if (meta.smartKind || meta.smartTitle) return true;
+  if (meta.evaluator === "smart" || meta.evaluator === "position_risk") return true;
+  return (body.type ?? "").trim() === "news" && Boolean(meta.evaluator);
+}
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
@@ -50,6 +61,16 @@ export async function POST(req: NextRequest) {
   const type = (body.type ?? "").trim();
   if (!type) return NextResponse.json({ error: "Missing type" }, { status: 400 });
 
+  if (isSmartAlertRequest(body)) {
+    const ent = await getUserAxeEntitlement(supabase, user.id);
+    if (!hasEntitlementFeature(ent, "proactive_notifications", user.id)) {
+      return NextResponse.json(
+        { error: "Smart alerts require Pro — upgrade to enable AI-classified monitoring." },
+        { status: 403 },
+      );
+    }
+  }
+
   const symbol = (body.symbol ?? null) ? String(body.symbol).trim().toUpperCase() : null;
   const condition = body.condition ? String(body.condition).trim() : null;
   const keyword = body.keyword ? String(body.keyword).trim() : null;
@@ -61,7 +82,43 @@ export async function POST(req: NextRequest) {
         : null;
 
   const status: "active" | "paused" = body.status === "paused" ? "paused" : "active";
-  const metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+  let metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+
+  if (type === "price") {
+    if (!symbol) return NextResponse.json({ error: "Price alerts need a symbol." }, { status: 400 });
+    const { data: prefs } = await supabase
+      .from("user_workspace_preferences")
+      .select("active_account_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const activeId = (prefs?.active_account_id as string | null | undefined) ?? null;
+    if (!activeId) {
+      return NextResponse.json({ error: "Select an active broker account before creating price alerts." }, { status: 400 });
+    }
+    const { data: account } = await supabase
+      .from("user_broker_accounts")
+      .select("metadata")
+      .eq("user_id", user.id)
+      .eq("id", activeId)
+      .maybeSingle();
+    const accountMetadata = (account?.metadata ?? {}) as Record<string, unknown>;
+    const displaySymbol = cleanDisplaySymbol(symbol) || symbol;
+    const map = getMetadataSymbolMap(accountMetadata);
+    const report = getMetadataSymbolReport(accountMetadata)[displaySymbol];
+    const universe = getMetadataSymbolUniverse(accountMetadata);
+    const brokerSymbol = map[displaySymbol] ?? resolveBrokerSymbol(displaySymbol, universe).brokerSymbol;
+    const supported =
+      Boolean(report?.resolved) ||
+      (Boolean(map[displaySymbol]) && report?.resolved !== false) ||
+      (universe.length > 0 && universe.includes(brokerSymbol));
+    if (!supported) {
+      return NextResponse.json(
+        { error: `${displaySymbol} is not available on the active broker account.`, reason: report?.reason ?? "broker_symbol_not_found" },
+        { status: 400 },
+      );
+    }
+    metadata = { ...metadata, broker_symbol: brokerSymbol, account_id: activeId };
+  }
 
   const { data, error } = await supabase
     .from("user_alerts")
@@ -81,4 +138,3 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ alert: data }, { status: 201 });
 }
-

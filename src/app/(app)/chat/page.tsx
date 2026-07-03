@@ -1,16 +1,23 @@
-import { ChatMessageList } from "@/components/chat/ChatMessageList";
+import { ChatThread } from "@/components/chat/ChatThread";
 import { Composer } from "@/components/chat/Composer";
+import { ChatComposerDock } from "@/components/chat/ChatComposerDock";
 import { PinnedContext } from "@/components/chat/PinnedContext";
-import { ChatAxeContextButton } from "@/components/chat/ChatAxeContextButton";
-import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
+import { ChatMorningBrief } from "@/components/chat/ChatMorningBrief";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
+import { ChatFeedStrip } from "@/components/feed/ChatFeedStrip";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 
-export default async function ChatPage() {
-  const { conversation, messages } = await getChatThread();
+export default async function ChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
+}) {
+  const params = await searchParams;
+  const chatType = params?.intel === "1" ? "intel" : "axe";
+  const { conversation, messages } = await getChatThread(chatType);
   const supabase = await createServerSupabaseClient();
   let operatorName: string | null = null;
   let initialQuota: ChatQuotaPayload | null = null;
@@ -53,13 +60,13 @@ export default async function ChatPage() {
   const totalCount = 2;
 
   return (
-    <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overscroll-none">
       <LiveStatusReporter
         liveCount={liveCount}
         totalCount={totalCount}
         label={`Chat · ${operatorName ?? "AXE"}`}
       />
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
         {CHAT_USES_MOCK_DATA ? (
           <p className="shrink-0 border-b border-white/[0.08] bg-gradient-to-r from-tos-gold-soft/25 via-tos-warm-soft/20 to-tos-gold-soft/25 px-4 py-2.5 text-center text-[11px] text-tos-muted">
             You&apos;re signed in, but this thread is still{" "}
@@ -67,11 +74,18 @@ export default async function ChatPage() {
             Live chat persistence is not wired to the database yet.
           </p>
         ) : null}
-        <PageTitleInjector title="Chat" />
         <PinnedContext text={conversation.pinnedContext} />
-        <ChatMessageList messages={messages} />
-        <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
+        <ChatFeedStrip />
+        <ChatMorningBrief />
+        <ChatThread
+          conversationId={conversation.id}
+          initialMessages={messages}
+          realtimeEnabled={!CHAT_USES_MOCK_DATA}
+        />
       </div>
+      <ChatComposerDock>
+        <Composer initialQuota={initialQuota} showQuota={!CHAT_USES_MOCK_DATA} />
+      </ChatComposerDock>
     </div>
   );
 }

@@ -6,9 +6,12 @@ export default async function PositionsPage() {
   return (
     <PositionsScreen
       positions={data.positions}
+      pendingOrders={data.pendingOrders}
+      accountSummary={data.accountSummary}
       providerStatus={data.providerStatus}
       error={data.error}
       hint={data.hint}
+      brokerAccountId={data.brokerAccountId}
     />
   );
 }

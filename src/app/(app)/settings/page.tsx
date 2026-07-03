@@ -4,6 +4,8 @@ import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
+import { AmbientSoundToggles } from "@/components/settings/AmbientSoundToggles";
+import { ChartThemeSelector } from "@/components/settings/ChartThemeSelector";
 import { listLearningMetricsPreview } from "@/services/learningService";
 import { listMemoryPreview } from "@/services/memoryService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
@@ -14,10 +16,22 @@ import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
 import { InstallPrompt } from "@/components/push/InstallPrompt";
 import { LiveTradingPanel } from "@/components/settings/LiveTradingPanel";
+import { SlTpModifyPanel } from "@/components/settings/SlTpModifyPanel";
 import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
+import { getInstantSlTpModifyServerState } from "@/lib/chart/serverSlTpPrefs";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
+import { SquawkStationPicker } from "@/components/settings/SquawkStationPicker";
+import { getSquawkStationIdsServerState } from "@/lib/squawk/serverPrefs";
+import { FavoriteWorkflowsPicker } from "@/components/settings/FavoriteWorkflowsPicker";
+import { TradeExecutionPrefsPanel } from "@/components/settings/TradeExecutionPrefsPanel";
+import { getFavoriteWorkflowIdsServerState } from "@/lib/workflows/serverFavorites";
+import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { PlanStatusLine } from "@/components/billing/FounderBadge";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getUserAxeEntitlement } from "@/services/billingService";
+import { getAxeEngineProfile } from "@/services/axeEngineService";
 
 async function getPrimaryConversation() {
   const authed = await getAuthedServiceSupabase();
@@ -38,13 +52,40 @@ async function getPrimaryConversation() {
 }
 
 export default async function SettingsPage() {
-  const [metrics, memory, conversation, watchlist, accountName, liveTrading] = await Promise.all([
+  const supabase = await createServerSupabaseClient();
+  let entitlementLabel = "Free";
+  let founderBadge = false;
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const ent = await getUserAxeEntitlement(supabase, user.id);
+      entitlementLabel = ent.label;
+      founderBadge = ent.founderBadge;
+    }
+  }
+
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs, favoriteWorkflowIds, engineProfile] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
     listWatchlistItems(),
     getAccountName(),
     getLiveTradingServerState(),
+    getInstantSlTpModifyServerState(),
+    getSquawkStationIdsServerState(),
+    getTradeExecutionPrefsServerState(),
+    getFavoriteWorkflowIdsServerState(),
+    supabase
+      ? (async () => {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return null;
+          return getAxeEngineProfile(supabase, user.id, { source: "settings_page" }).catch(() => null);
+        })()
+      : Promise.resolve(null),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -93,7 +134,7 @@ export default async function SettingsPage() {
     (accountName ? 1 : 0) +
     1; // liveTrading flag always loaded
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain pb-4">
+    <div className="axe-stagger-enter flex shrink-0 flex-col pb-4">
       <LiveStatusReporter
         liveCount={liveSections}
         totalCount={6}
@@ -111,7 +152,7 @@ export default async function SettingsPage() {
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
           A short name so AXE can reference your account in conversation — e.g. &quot;FTMO Challenge&quot; or &quot;Live IC Markets&quot;.
-          AXE uses your connected MT5 account (MetaApi cloud) to understand balance, equity, margin, trades and open positions — no manual entry.
+          AXE uses your connected AXE MT5 Cloud account to understand balance, equity, margin, trades and open positions — no manual entry.
         </p>
         <div className="mt-3">
           <AccountNameEditor initialValue={accountName} />
@@ -181,10 +222,27 @@ export default async function SettingsPage() {
         <LiveTradingPanel initialEnabled={liveTrading.enabled} />
       </div>
 
+      <div className="mb-4">
+        <SlTpModifyPanel
+          initialInstant={instantSlTpModify}
+          liveTradingEnabled={liveTrading.enabled}
+        />
+      </div>
+
+      <div className="mb-4">
+        <TradeExecutionPrefsPanel
+          initialVolume={tradeExecutionPrefs.defaultVolume}
+          initialAlertAutoTrade={tradeExecutionPrefs.alertAutoTradeEnabled}
+          initialAlertSlOffset={tradeExecutionPrefs.alertSlOffset}
+          initialAlertTpOffset={tradeExecutionPrefs.alertTpOffset}
+          liveTradingEnabled={liveTrading.enabled}
+        />
+      </div>
+
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}
-      <GlassPanel glow="cyan" className="mb-4 p-4">
+      <GlassPanel glow="none" className="mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[10px] font-medium uppercase tracking-widest text-cyan-300/95">
+          <h2 className="text-[10px] font-medium uppercase tracking-widest text-white/80">
             Trading OS terminal · in development
           </h2>
           <Badge variant="long">Same Supabase</Badge>
@@ -196,7 +254,7 @@ export default async function SettingsPage() {
         </p>
         <p className="mt-2 text-[11px] text-tos-dim">
           Need a local MT5 bridge token? It lives under{" "}
-          <Link href="/accounts" className="text-cyan-300/95 underline-offset-2 hover:underline">
+          <Link href="/accounts" className="text-white/80 underline-offset-2 hover:underline">
             Accounts → Advanced
           </Link>
           .
@@ -254,6 +312,31 @@ export default async function SettingsPage() {
         </Link>
       </GlassPanel>
 
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          AXE Engine status
+        </h2>
+        {engineProfile ? (
+          <>
+            <p className="mt-2 text-xs text-tos-muted">
+              {engineProfile.engineName} {engineProfile.engineVersion} · confidence{" "}
+              <span className="font-semibold text-tos-text">{engineProfile.confidenceScore}/100</span> · gate{" "}
+              <span className="font-semibold text-tos-text">{engineProfile.gateMode}</span>
+            </p>
+            <p className="mt-1 text-[11px] text-tos-dim">
+              Signals {engineProfile.signalCount} · Trade labels {engineProfile.tradeLabelCount} · Memory {engineProfile.memoryCount}
+            </p>
+            <p className="mt-1 text-[11px] text-tos-dim">
+              Last refresh: {new Date(engineProfile.updatedAt).toLocaleString()}
+            </p>
+          </>
+        ) : (
+          <p className="mt-2 text-xs text-tos-muted">
+            Engine profile is initializing. Keep chatting, journaling and trading to build confidence depth.
+          </p>
+        )}
+      </GlassPanel>
+
       {/* Memory */}
       <GlassPanel className="mb-4 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
@@ -272,10 +355,52 @@ export default async function SettingsPage() {
         </ul>
       </GlassPanel>
 
+      {/* Chart Theme */}
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Chart quick actions
+        </h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Pin up to 5 AXE workflows on the chart toolbar star menu — same actions as the Actions page.
+        </p>
+        <FavoriteWorkflowsPicker initialIds={favoriteWorkflowIds} />
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Chart theme
+        </h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Pick a background for the chart canvas. Syncs across devices.
+        </p>
+        <ChartThemeSelector />
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Squawk channels
+        </h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Choose which live news audio channels rotate on the chart squawk bar. Syncs across devices.
+        </p>
+        <SquawkStationPicker initialIds={squawkStationIds} />
+      </GlassPanel>
+
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Appearance &amp; Sound</h2>
+        <p className="mb-3 mt-1 text-xs text-tos-muted">
+          Ambient visuals and interaction sounds. These are cosmetic — they never affect trading.
+        </p>
+        <AmbientSoundToggles />
+      </GlassPanel>
+
       <GlassPanel className="mb-4 p-4">
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Subscription</h2>
+        <PlanStatusLine label={entitlementLabel} founderBadge={founderBadge} />
         <p className="mt-1 text-xs text-tos-muted">
-          Free includes the full experience with 20 chat sends per day. Pro removes the daily cap when checkout opens.
+          {founderBadge
+            ? "Founder status is permanent — full Companion access plus Trading OS Founder pricing when the terminal ships."
+            : "Free includes core tools with a daily chat cap. Pro unlocks Cockpit learning, trade prep, and unlimited chat."}
         </p>
         <Link
           href="/upgrade"
@@ -286,7 +411,7 @@ export default async function SettingsPage() {
       </GlassPanel>
 
       {/* Mobile install — folded by default, no QR clutter on the main flow */}
-      <details className="group mb-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/25">
+      <details className="group mb-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0a0a0d]/90">
         <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-tos-dim [&::-webkit-details-marker]:hidden">
           Install on another device
           <span className="text-[10px] text-tos-dim/85 group-open:hidden">Open</span>
@@ -306,7 +431,7 @@ export default async function SettingsPage() {
           Legal &amp; policies
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          Draft documents — replace placeholders and review with counsel before marketing to retail.
+          Terms, privacy, risk and AI disclaimers for AXE Companion.
         </p>
         <LegalNavLinks className="mt-4" />
       </GlassPanel>

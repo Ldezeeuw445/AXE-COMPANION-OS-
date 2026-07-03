@@ -23,6 +23,9 @@
 
 # misc
 .DS_Store
+.DS_Store?
+._*
+**/._*
 *.pem
 
 # local / tooling (do not ship)
@@ -61,3 +64,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+supabase/.temp/
+
+# Cloudflare build artifacts
+cloudflare/*/.wrangler/
+cloudflare/*/bun.lock

@@ -5,14 +5,20 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Authenticated audit writer for the chart live stream.
+ * HARDENED chart snapshot writer with timeout and deduplication.
  *
- * Upserts the latest known snapshot for (user, account, displaySymbol, timeframe).
- * Intentionally bounded so one row per stream — the audit table stays cheap.
+ * This route prevents snapshot writes from blocking the main UI by:
+ * 1. Always responding within 2 seconds (timeout)
+ * 2. Deduplicating writes per (user, account, symbol, timeframe)
+ * 3. Using the deadlock-safe RPC instead of direct table writes
+ * 4. Silently dropping writes if the DB is overloaded (503/500)
  *
- * The browser calls this opportunistically (every ~30s while the WS is live and
- * the tab is visible). The Node streamer can also call it when configured.
+ * The client can safely fire-and-forget this endpoint without fear of hangs.
  */
+
+const THROTTLE_MS = 30_000; // 30 s server-side guard (increased from 15s)
+const TIMEOUT_MS = 2_000; // 2 s max response time
+const _lastWrite = new Map<string, number>();
 
 type SnapshotBody = {
   accountId: string;
@@ -50,16 +56,40 @@ export async function POST(request: NextRequest) {
     return jsonError(400, "missing_fields");
   }
 
-  // Verify the user actually owns this account row before recording a snapshot.
-  const { data: ownerCheck } = await supabase
-    .from("user_broker_accounts")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("id", body.accountId)
-    .maybeSingle();
+  // --- Deduplication per unique stream key ---
+  const throttleKey = `${user.id}:${body.accountId}:${body.displaySymbol.toUpperCase()}:${body.timeframe}`;
+  const now = Date.now();
+  const last = _lastWrite.get(throttleKey) ?? 0;
+  if (now - last < THROTTLE_MS) {
+    // Silently return OK so the client doesn't retry; just skip the DB write.
+    return Response.json({ ok: true, throttled: true });
+  }
+  _lastWrite.set(throttleKey, now);
 
-  if (!ownerCheck) return jsonError(404, "account_not_found");
+  // --- Ownership check (with timeout) ---
+  let ownerCheck: any;
+  try {
+    // Wrap in a timeout so we never wait >TIMEOUT_MS
+    ownerCheck = await Promise.race([
+      supabase
+        .from("user_broker_accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("id", body.accountId)
+        .maybeSingle() as any,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS)),
+    ]);
+  } catch (e) {
+    // If ownership check times out or fails, still return 200 so client doesn't retry
+    console.warn("[chart/snapshot] ownership check failed/timeout, skipping write", e);
+    return Response.json({ ok: true, skipped: "check_timeout" });
+  }
 
+  if (!ownerCheck?.data) {
+    return Response.json({ ok: true, skipped: "not_owned" });
+  }
+
+  // --- Build the row for the RPC ---
   const row = {
     user_id: user.id,
     account_id: body.accountId,
@@ -79,16 +109,28 @@ export async function POST(request: NextRequest) {
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase
-    .from("chart_live_snapshots")
-    .upsert(row, { onConflict: "user_id,account_id,display_symbol,timeframe" });
+  // --- Route through the deadlock-safe RPC with timeout ---
+  try {
+    const result = await Promise.race([
+      supabase.rpc("upsert_chart_live_snapshots_safe", {
+        p_rows: [row],
+      }) as any,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("rpc_timeout")), TIMEOUT_MS)),
+    ]);
 
-  if (error) {
-    if (error.message.toLowerCase().includes("does not exist")) {
-      return jsonError(503, "snapshot_table_missing");
+    const error = (result as any)?.error;
+    if (error) {
+      const msg = (error as any)?.message || String(error);
+      console.warn("[chart/snapshot] RPC warning:", msg);
+      // Silently return OK; don't make the client retry
+      return Response.json({ ok: true, rpc_warn: msg.substring(0, 50) });
     }
-    return jsonError(500, "snapshot_failed");
+  } catch (e) {
+    // RPC timeout or other error; return 200 so client doesn't retry
+    console.warn("[chart/snapshot] RPC failed/timeout", e);
+    return Response.json({ ok: true, skipped: "rpc_timeout" });
   }
+
   return Response.json({ ok: true });
 }
 

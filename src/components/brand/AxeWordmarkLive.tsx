@@ -15,9 +15,9 @@ import {
  * of the wordmark is the single, honest "is this page actually live?"
  * indicator for the whole app:
  *
- *   • green pulsing — every feed this page reported is delivering
- *   • amber static  — at least one feed is degraded / stale
- *   • dim grey      — no feeds claimed on this page (no opinion)
+ *   • green pulsing — core runtime reported fresh/connected
+ *   • amber static  — runtime is partial, warming, degraded, or stale
+ *   • dim grey      — no runtime claim on this page (no opinion)
  *
  * Pages push their state via `setLiveStatus(...)` from
  * `@/lib/liveStatusBus`. Pages with no live concept (Settings, Vault,
@@ -36,7 +36,13 @@ export function AxeWordmarkLive({
   useEffect(() => subscribeLiveStatus(setStatus), []);
 
   const tone =
-    status.allLive === true
+    status.severity === "blocking"
+      ? "red"
+      : status.severity === "inactive"
+        ? "idle"
+        : status.severity === "degraded"
+          ? "amber"
+          : status.severity === "fresh" || status.allLive === true
       ? "green"
       : status.allLive === false
         ? "amber"
@@ -45,20 +51,23 @@ export function AxeWordmarkLive({
   const dotClass =
     tone === "green"
       ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.7)]"
+      : tone === "red"
+        ? "bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.7)]"
       : tone === "amber"
         ? "bg-amber-300/85"
         : "bg-white/22";
 
   const titleParts: string[] = [];
   if (status.label) titleParts.push(status.label);
+  if (status.reason) titleParts.push(status.reason);
   if (status.totalCount > 0) {
-    titleParts.push(`${status.liveCount}/${status.totalCount} feeds live`);
+    titleParts.push(`${status.liveCount}/${status.totalCount} runtime checks fresh`);
   }
   if (status.freshestAgeSec != null) {
     titleParts.push(`refreshed ${status.freshestAgeSec}s ago`);
   }
   if (titleParts.length === 0) {
-    titleParts.push("AXE — no live feeds claimed on this page");
+    titleParts.push("AXE — no runtime claim on this page");
   }
   const title = titleParts.join(" · ");
 
@@ -69,9 +78,9 @@ export function AxeWordmarkLive({
       aria-label={title}
     >
       <span className="relative inline-flex h-1.5 w-1.5 shrink-0">
-        {tone === "green" ? (
+        {tone === "green" || tone === "red" ? (
           <span
-            className="absolute inset-0 rounded-full bg-emerald-400/70 animate-ping"
+            className={`absolute inset-0 rounded-full animate-ping ${tone === "red" ? "bg-rose-400/70" : "bg-emerald-400/70"}`}
             aria-hidden
           />
         ) : null}

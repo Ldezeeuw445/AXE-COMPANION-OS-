@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   ChartLiveEvent,
-  ChartLiveStatus,
   LivePositionPayload,
+  LivePendingOrderPayload,
   LiveCandle,
 } from "@/lib/chart/liveContract";
 
@@ -26,11 +26,13 @@ export type LiveUiStatus =
   | "failed";
 
 export type LivePosition = LivePositionPayload;
+export type LivePendingOrder = LivePendingOrderPayload;
 
 export type LiveChartHandlers = {
   onTick?: (tick: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => void;
   onCandleUpdate?: (candle: LiveCandle) => void;
   onPositions?: (p: { total: number; onSymbol: LivePosition[] }) => void;
+  onOrders?: (p: { total: number; onSymbol: LivePendingOrder[] }) => void;
 };
 
 type Args = LiveChartHandlers & {
@@ -64,6 +66,7 @@ export function useLiveChart({
   onTick,
   onCandleUpdate,
   onPositions,
+  onOrders,
 }: Args) {
   const [uiStatus, setUiStatus] = useState<LiveUiStatus>("idle");
   const [transport, setTransport] = useState<LiveTransport>("off");
@@ -73,8 +76,8 @@ export function useLiveChart({
 
   const handlersRef = useRef<LiveChartHandlers>({});
   useEffect(() => {
-    handlersRef.current = { onTick, onCandleUpdate, onPositions };
-  }, [onTick, onCandleUpdate, onPositions]);
+    handlersRef.current = { onTick, onCandleUpdate, onPositions, onOrders };
+  }, [onTick, onCandleUpdate, onPositions, onOrders]);
 
   useEffect(() => {
     if (!enabled || !accountId || !brokerSymbol || !displaySymbol) {
@@ -89,15 +92,38 @@ export function useLiveChart({
     }
 
     let cancelled = false;
-    let cleanupActive: (() => void) | null = null;
+    // ── Transport isolation: track WS and SSE cleanup separately so
+    //    an incoming WS connection can abort a lingering SSE, preventing
+    //    both transports from polling MetaAPI at the same time (429s).
+    let cleanupWs: (() => void) | null = null;
+    let cleanupSse: (() => void) | null = null;
     let backoff = 1500;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let staleTimer: ReturnType<typeof setTimeout> | null = null;
     let offlineTimer: ReturnType<typeof setTimeout> | null = null;
     let lastDataAt = Date.now();
     let hasStableData = false;
-    let upstreamStatus: ChartLiveStatus | null = null;
     const transportRef = { current: "off" as LiveTransport };
+
+    /** Kill whatever is running on the *other* transport. */
+    function killOtherTransport(active: "ws" | "sse") {
+      if (active === "ws" && cleanupSse) {
+        cleanupSse();
+        cleanupSse = null;
+      } else if (active === "sse" && cleanupWs) {
+        cleanupWs();
+        cleanupWs = null;
+      }
+    }
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setUiStatus("connecting");
+      setTransport("off");
+      setReason(null);
+      setLastUpdateAt(null);
+      setReconnectAttempt(0);
+    });
 
     function clearHealthTimers() {
       if (staleTimer) clearTimeout(staleTimer);
@@ -190,10 +216,37 @@ export function useLiveChart({
       }
     }
 
+    function eventMatchesSubscription(evt: ChartLiveEvent): boolean {
+      const eventAccount = "accountId" in evt ? evt.accountId : null;
+      const eventDisplay = "displaySymbol" in evt ? evt.displaySymbol : null;
+      const eventBroker = "brokerSymbol" in evt ? evt.brokerSymbol : null;
+      const eventTf = "timeframe" in evt ? evt.timeframe : null;
+      const metaTf =
+        timeframeKey === "m5"
+          ? "5m"
+          : timeframeKey === "m15"
+            ? "15m"
+            : timeframeKey === "m30"
+              ? "30m"
+              : timeframeKey === "h1"
+                ? "1h"
+                : timeframeKey === "h4"
+                  ? "4h"
+                  : timeframeKey === "d1"
+                    ? "1d"
+                    : timeframeKey;
+      if (eventAccount && eventAccount !== accountId) return false;
+      if (eventDisplay && eventDisplay.toUpperCase() !== displaySymbol.toUpperCase()) return false;
+      if (eventBroker && eventBroker !== brokerSymbol) return false;
+      if (eventTf && eventTf !== timeframeKey && eventTf !== metaTf) return false;
+      return true;
+    }
+
     function applyEvent(evt: ChartLiveEvent) {
+      if (cancelled || !eventMatchesSubscription(evt)) return;
       switch (evt.type) {
         case "ready":
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          setUi(hasStableData ? "connected" : "connecting");
           return;
         case "tick": {
           const mid = evt.price ?? evt.bid ?? evt.ask ?? null;
@@ -203,26 +256,35 @@ export function useLiveChart({
             ask: evt.ask ?? null,
             time: evt.timestamp ?? null,
           });
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          markHealthy("connected");
           return;
         }
         case "candle_update":
           handlersRef.current.onCandleUpdate?.(evt.candle);
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          markHealthy("connected");
           return;
         case "positions_update":
           handlersRef.current.onPositions?.({
             total: typeof evt.total === "number" ? evt.total : 0,
             onSymbol: Array.isArray(evt.onSymbol) ? evt.onSymbol : [],
           });
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          markHealthy("connected");
+          return;
+        case "orders_update":
+          handlersRef.current.onOrders?.({
+            total: typeof evt.total === "number" ? evt.total : 0,
+            onSymbol: Array.isArray(evt.onSymbol) ? evt.onSymbol : [],
+          });
           return;
         case "live_status":
-          upstreamStatus = evt.status;
           if (evt.status === "live") {
-            markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+            if (hasStableData) {
+              markHealthy("connected");
+            } else {
+              setUi("connecting");
+            }
           } else if (evt.status === "delayed") {
-            markHealthy("stale");
+            markHealthy("delayed_polling");
             setReasonSafe(evt.reason ?? "Live stream is delayed; showing the latest stable broker state.");
           } else if (evt.status === "reconnecting") {
             setReasonSafe(evt.reason ?? "Reconnecting to live broker data.");
@@ -235,8 +297,14 @@ export function useLiveChart({
             setUi("failed");
           }
           return;
+        case "market_alert":
+          // High-impact calendar/news event pushed by the backend.
+          // The UI can subscribe via onMarketAlert in a future pass;
+          // for now we treat it as a health signal.
+          markHealthy("connected");
+          return;
         case "heartbeat":
-          markHealthy(transportRef.current === "ws" ? "connected" : "delayed_polling");
+          if (!hasStableData) setUi("connecting");
           return;
         case "error":
           return;
@@ -270,9 +338,12 @@ export function useLiveChart({
         ws.onopen = () => {
           opened = true;
           backoff = 1500;
-          markHealthy(upstreamStatus === "live" ? "connected" : "connected");
+          // ── WS connected: kill any lingering SSE immediately.
+          killOtherTransport("ws");
+          setUi(hasStableData ? "connected" : "connecting");
         };
         ws.onmessage = (ev) => {
+          if (cancelled) return;
           if (!ev.data) return;
           try {
             const evt = JSON.parse(String(ev.data)) as ChartLiveEvent;
@@ -285,17 +356,17 @@ export function useLiveChart({
           // Let onclose drive recovery to avoid double scheduling.
         };
         ws.onclose = () => {
+          cleanupWs = null;
           if (cancelled) return;
           if (!opened) {
             // Token/edge unhealthy → fall back to SSE.
-            cleanupActive = null;
             void connectSse();
             return;
           }
           scheduleReconnect("ws");
         };
 
-        cleanupActive = () => {
+        cleanupWs = () => {
           try {
             ws.close();
           } catch {
@@ -310,6 +381,9 @@ export function useLiveChart({
 
     async function connectSse() {
       if (cancelled) return;
+      // ── SSE starting: make sure no WS is still alive (its DO would
+      //    keep polling MetaAPI in parallel → 429s).
+      killOtherTransport("sse");
       setT("sse");
       setUi(hasStableData ? "reconnecting" : "connecting");
       const qs = new URLSearchParams({
@@ -323,9 +397,10 @@ export function useLiveChart({
       es.onopen = () => {
         opened = true;
         backoff = 1500;
-        markHealthy("delayed_polling");
+        setUi(hasStableData ? "connected" : "connecting");
       };
       es.onmessage = (ev) => {
+        if (cancelled) return;
         if (!ev.data) return;
         try {
           const evt = JSON.parse(String(ev.data)) as ChartLiveEvent;
@@ -340,6 +415,7 @@ export function useLiveChart({
         } catch {
           /* ignore */
         }
+        cleanupSse = null;
         if (cancelled) return;
         if (!opened && !hasStableData) {
           setUi("offline");
@@ -348,7 +424,7 @@ export function useLiveChart({
         }
         scheduleReconnect("sse");
       };
-      cleanupActive = () => {
+      cleanupSse = () => {
         try {
           es.close();
         } catch {
@@ -365,7 +441,8 @@ export function useLiveChart({
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
       clearHealthTimers();
-      if (cleanupActive) cleanupActive();
+      if (cleanupWs) cleanupWs();
+      if (cleanupSse) cleanupSse();
     };
   }, [enabled, accountId, displaySymbol, brokerSymbol, timeframeKey]);
 

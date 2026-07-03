@@ -8,6 +8,8 @@ import {
   callAxe,
   callAxeAfterTool,
   callAxeFinal,
+  callAxeStreaming,
+  callAxeFinalStreaming,
   computeFibonacci,
   computeOrderBlock,
   computePdhPdl,
@@ -15,21 +17,108 @@ import {
   type AxeToolCall,
   type TrackCommitmentArgs,
 } from "@/services/axeService";
+import { callLLM } from "@/services/llmClient";
 import {
-  fetchLivePrice,
-  formatLivePrice,
   fetchEconomicCalendar,
   formatEconomicCalendar,
 } from "@/services/marketDataService";
-import { fetchTradingOSContext } from "@/services/contextService";
+import {
+  fetchTradingOSContext,
+  invalidateTradingOSContextCache,
+  precomputeTradingOSContextLane,
+} from "@/services/contextService";
 import { loadNews } from "@/lib/market/newsProvider";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
-import { tryConsumeChatQuota } from "@/lib/chatQuota";
-import type { ChatMessage, ConversationSummary } from "@/types/domain";
-import type OpenAI from "openai";
+import { buildIntelKnowledgeLayerBlock } from "@/lib/intel/intelKnowledgeLayer";
+import { buildIntelContext, truncateIntelContext } from "@/lib/intel/buildIntelContext";
+import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
+import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
+import { autoJournalTrades } from "@/services/journalingService";
+import { handlePrepareExecutionRequest, handleRouteChartAction } from "@/services/axeToolHandlers";
+import type { ChatMessage as DomainChatMessage, ConversationSummary } from "@/types/domain";
+import type { LLMMessage, LLMRequest } from "@/services/llmClient";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
+import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
+import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
+import { buildAxeEngineSystemGate, getAxeEngineProfile } from "@/services/axeEngineService";
+import { isForexPairSymbol, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
+
+const TOOL_TIMEOUT_DEFAULT_MS = Number(process.env.AXE_TOOL_TIMEOUT_MS ?? 6_500);
+const TOOL_RETRY_BACKOFF_MS = Number(process.env.AXE_TOOL_RETRY_BACKOFF_MS ?? 180);
+const TOOL_TIMEOUTS_MS: Partial<Record<AxeToolCall["tool"], number>> = {
+  get_news_headlines: 5_500,
+  get_smart_money_intel: 8_000,
+  get_economic_calendar: 4_500,
+  read_journal: 5_500,
+  list_alerts: 4_500,
+};
+const RETRYABLE_TOOLS = new Set<AxeToolCall["tool"]>([
+  "get_news_headlines",
+  "get_smart_money_intel",
+  "get_economic_calendar",
+  "read_journal",
+  "list_alerts",
+  "get_live_price",
+]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout<T>(work: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_timeout_${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function runToolWithPolicy(
+  tc: AxeToolCall,
+  execute: (call: AxeToolCall) => Promise<string>,
+): Promise<string> {
+  const timeoutMs = Math.max(1_500, TOOL_TIMEOUTS_MS[tc.tool] ?? TOOL_TIMEOUT_DEFAULT_MS);
+  const maxAttempts = RETRYABLE_TOOLS.has(tc.tool) ? 2 : 1;
+  let lastErr: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const startedAt = Date.now();
+    try {
+      const result = await withTimeout(() => execute(tc), timeoutMs, tc.tool);
+      const elapsed = Date.now() - startedAt;
+      recordLatencySample(`chat.tool.${tc.tool}.ms`, elapsed);
+      logLatencyIfDue(`chat.tool.${tc.tool}.ms`, 20);
+      return result;
+    } catch (err) {
+      lastErr = err;
+      const elapsed = Date.now() - startedAt;
+      recordLatencySample(`chat.tool.${tc.tool}.error_ms`, elapsed);
+      logLatencyIfDue(`chat.tool.${tc.tool}.error_ms`, 20);
+      const msg = err instanceof Error ? err.message : String(err);
+      const isLast = attempt === maxAttempts;
+      console.warn(`[chatService] tool ${tc.tool} attempt ${attempt}/${maxAttempts} failed: ${msg}`);
+      if (!isLast) {
+        await sleep(TOOL_RETRY_BACKOFF_MS * attempt);
+      }
+    }
+  }
+
+  const lastMsg = lastErr instanceof Error ? lastErr.message : String(lastErr ?? "unknown");
+  if (lastMsg.includes("_timeout_")) {
+    return `Tool ${tc.tool} took too long and was skipped to keep AXE fast.`;
+  }
+  return `Tool ${tc.tool} failed: ${lastMsg}`;
+}
 
 type ConversationRow = {
   id: string;
@@ -40,9 +129,10 @@ type ConversationRow = {
 
 type MessageRow = {
   id: string;
-  role: ChatMessage["role"];
+  role: DomainChatMessage["role"];
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 function mapConversation(row: ConversationRow): ConversationSummary {
@@ -54,25 +144,296 @@ function mapConversation(row: ConversationRow): ConversationSummary {
   };
 }
 
-function mapMessage(row: MessageRow): ChatMessage {
+function mapMessage(row: MessageRow): DomainChatMessage {
+  const metadata = row.metadata ?? {};
+  const feedbackRaw = metadata.feedback;
+  const feedback = feedbackRaw === "up" || feedbackRaw === "down" ? feedbackRaw : null;
   return {
     id: row.id,
     role: row.role,
     content: row.content,
     createdAt: row.created_at,
+    feedback,
   };
 }
 
-export async function ensurePrimaryConversation(userId: string): Promise<ConversationSummary | null> {
-  const authed = await getAuthedServiceSupabase();
+function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradingOSContext>>): string {
+  const chart = context.axe_context?.chart;
+  const activeSymbol = (chart?.symbol ?? context.symbol ?? "").toUpperCase();
+  const brokerSymbol = (chart?.brokerSymbol ?? "").toUpperCase();
+  if (!chart || !activeSymbol || !brokerSymbol) {
+    return "Live broker pricing unavailable. AXE has no active broker-resolved chart context for this session.";
+  }
+  const state = brokerPricingState({
+    status: chart.liveStatus,
+    updatedAt: chart.updatedAt,
+    lastTickAt: chart.lastTickAt,
+    lastCandleAt: chart.lastCandleAt,
+  });
+  const price = canonicalBrokerPrice({
+    lastPrice: chart.lastPrice,
+    lastBid: chart.lastBid,
+    lastAsk: chart.lastAsk,
+  });
+  const prettyPrice = formatPriceCompact(price);
+  if (price == null) {
+    return `Live broker pricing unavailable for ${activeSymbol} (${brokerSymbol}). No canonical broker price is available.`;
+  }
+  if (state !== "live" && state !== "degraded") {
+    return `Live broker pricing unavailable for ${activeSymbol} (${brokerSymbol}). AXE will not use generic provider prices for analysis.`;
+  }
+  const freshness = chart.lastTickAt
+    ? `last broker tick ${chart.lastTickAt}`
+    : chart.lastCandleAt
+      ? `last broker candle ${chart.lastCandleAt}`
+      : chart.updatedAt
+        ? `last chart update ${chart.updatedAt}`
+        : "timestamp unknown";
+  const bidAskSummary = formatBidAskSummary(activeSymbol, chart.lastBid, chart.lastAsk);
+  return [
+    `${activeSymbol} broker price (${brokerSymbol})`,
+    `Canonical price: ${prettyPrice}`,
+    bidAskSummary,
+    `Runtime state: ${state}`,
+    `Freshness: ${freshness}`,
+    "Use this broker context only. Do not substitute Yahoo, generic provider, memory, or stale snapshot prices.",
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+function formatPriceCompact(price: number | null): string {
+  if (price == null || !Number.isFinite(price)) return "n/a";
+  const abs = Math.abs(price);
+  const decimals =
+    abs >= 1000 ? 2 :
+    abs >= 100 ? 3 :
+    abs >= 10 ? 4 :
+    abs >= 1 ? 5 : 6;
+  return Number(price).toFixed(decimals);
+}
+
+function formatPriceForSymbol(symbol: string, price: number): string {
+  const digits = Math.max(0, Math.min(8, priceDigitsForSymbol(symbol)));
+  return Number(price).toFixed(digits);
+}
+
+function spreadUnitSizeForSymbol(symbol: string): { unit: "pip" | "point"; size: number } {
+  const s = (symbol ?? "").toUpperCase();
+  if (isForexPairSymbol(s)) {
+    return { unit: "pip", size: s.endsWith("JPY") ? 0.01 : 0.0001 };
+  }
+  const digits = Math.max(0, Math.min(8, priceDigitsForSymbol(s)));
+  return { unit: "point", size: Math.pow(10, -digits) };
+}
+
+function formatSpreadUnits(value: number): string {
+  if (!Number.isFinite(value)) return "n/a";
+  const abs = Math.abs(value);
+  const fixed = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  return Number(value.toFixed(fixed)).toString();
+}
+
+function formatBidAskSummary(
+  symbol: string,
+  lastBid: number | null | undefined,
+  lastAsk: number | null | undefined,
+): string | null {
+  const hasBid = typeof lastBid === "number" && Number.isFinite(lastBid);
+  const hasAsk = typeof lastAsk === "number" && Number.isFinite(lastAsk);
+  if (!hasBid && !hasAsk) return null;
+
+  if (hasBid && hasAsk) {
+    const spread = Math.max(0, Number(lastAsk) - Number(lastBid));
+    const { unit, size } = spreadUnitSizeForSymbol(symbol);
+    const spreadInUnits = size > 0 ? spread / size : spread;
+    const unitLabel = Math.abs(spreadInUnits) === 1 ? unit : `${unit}s`;
+    return `Bid/Ask: ${formatPriceForSymbol(symbol, Number(lastBid))} / ${formatPriceForSymbol(symbol, Number(lastAsk))} (spread ${formatSpreadUnits(spreadInUnits)} ${unitLabel})`;
+  }
+  if (hasBid) return `Bid: ${formatPriceForSymbol(symbol, Number(lastBid))}`;
+  return `Ask: ${formatPriceForSymbol(symbol, Number(lastAsk))}`;
+}
+
+function isFibChartIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  const asksFib =
+    t.includes("fib") ||
+    t.includes("fibonacci") ||
+    t.includes("retracement");
+  const asksChart =
+    t.includes("chart") ||
+    t.includes("teken") ||
+    t.includes("draw") ||
+    t.includes("add") ||
+    t.includes("zet");
+  return asksFib && asksChart;
+}
+
+function hasOutOfRegimeLevels(reply: string, canonicalPrice: number): boolean {
+  if (!Number.isFinite(canonicalPrice) || canonicalPrice <= 0) return false;
+  const matches = reply.match(/\b\d{3,5}(?:\.\d+)?\b/g) ?? [];
+  if (matches.length < 3) return false;
+  const numbers = matches
+    .map((m) => Number(m))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (numbers.length < 3) return false;
+  const outliers = numbers.filter((n) => Math.abs(n - canonicalPrice) / canonicalPrice > 0.25);
+  return outliers.length >= 2;
+}
+
+function extractFirstLink(text: string | null | undefined): string | null {
+  if (!text) return null;
+  return text.match(/\[\[link:[^\]]+\]\]/)?.[0] ?? null;
+}
+
+function inferRequestedSymbols(text: string): string[] {
+  const upper = text.toUpperCase();
+  const out = new Set<string>();
+  // 6-letter FX/metal pairs (XAUUSD, EURUSD, etc.)
+  for (const m of upper.matchAll(/\b[A-Z]{6}\b/g)) out.add(m[0]);
+  // Common alias: GOLD -> XAUUSD
+  if (/\bGOLD\b/.test(upper)) out.add("XAUUSD");
+  // Common typo seen on mobile keyboards.
+  if (/\bXAAUSD\b/.test(upper)) out.add("XAUUSD");
+  return Array.from(out);
+}
+
+function isLivePriceIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  const asksPrice =
+    t.includes("price") ||
+    t.includes("current price") ||
+    t.includes("live price") ||
+    t.includes("what is") ||
+    t.includes("wat is") ||
+    t.includes("prijs") ||
+    t.includes("koers");
+  const asksSymbol =
+    t.includes("xauusd") ||
+    t.includes("gold") ||
+    t.includes("eurusd") ||
+    t.includes("gbpusd") ||
+    t.includes("nas100") ||
+    /\b[A-Z]{6}\b/.test(text.toUpperCase());
+  return asksPrice && asksSymbol;
+}
+
+function buildAllowedSymbolSet(
+  context: Awaited<ReturnType<typeof fetchTradingOSContext>>,
+): Set<string> {
+  const allowed = new Set<string>();
+  const chartSymbol = (context.axe_context?.chart?.symbol ?? context.symbol ?? "").toUpperCase().trim();
+  const brokerSymbol = (context.axe_context?.chart?.brokerSymbol ?? "").toUpperCase().trim();
+  if (chartSymbol) allowed.add(chartSymbol);
+  if (brokerSymbol) allowed.add(brokerSymbol);
+  for (const w of context.account_state.watchlist ?? []) {
+    const s = (w.symbol ?? "").toUpperCase().trim();
+    if (s) allowed.add(s);
+  }
+  const symbolMap = context.axe_context?.accounts?.activeSymbolMap ?? {};
+  for (const [display, broker] of Object.entries(symbolMap)) {
+    const d = display.toUpperCase().trim();
+    const b = String(broker ?? "").toUpperCase().trim();
+    if (d) allowed.add(d);
+    if (b) allowed.add(b);
+  }
+  return allowed;
+}
+
+function looksLikePriceAnalysisIntent(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    t.includes("price") ||
+    t.includes("thought") ||
+    t.includes("bias") ||
+    t.includes("entry") ||
+    t.includes("setup") ||
+    t.includes("xauusd") ||
+    t.includes("gold")
+  );
+}
+
+function resolveJournalAccountId(
+  accountId: string | undefined,
+  tradingContext: Awaited<ReturnType<typeof fetchTradingOSContext>>,
+): string | null {
+  if (accountId?.trim()) return accountId.trim();
+  return (
+    tradingContext.axe_context?.accounts?.activeAccountId ??
+    tradingContext.companion_active_account_id ??
+    null
+  );
+}
+
+async function runAutoJournalTool(
+  supabase: NonNullable<Awaited<ReturnType<typeof getAuthedServiceSupabase>>>["supabase"],
+  userId: string,
+  tradingContext: Awaited<ReturnType<typeof fetchTradingOSContext>>,
+  args: { account_id?: string; trade_ids?: string[] },
+): Promise<string> {
+  const accountId = resolveJournalAccountId(args.account_id, tradingContext);
+  if (!accountId) {
+    return "No active MT5 account linked. Connect one under Accounts, then ask me to journal again.";
+  }
+
+  const result = await autoJournalTrades(supabase, userId, accountId, args.trade_ids);
+  if (!result.ok) return `Auto-journal failed: ${result.error}`;
+  if (result.journaled === 0) {
+    return result.message ?? "All recent closed trades already have AXE journal scores.";
+  }
+
+  const lines = result.results.map(
+    (r) => `${r.symbol} → ${r.axe_label} (${r.alignment_score}/100)`,
+  );
+  return `Journaled ${result.journaled} trade(s):\n${lines.join("\n")}\nOpen [[link:/journal|Journal]] to review.`;
+}
+
+async function runPostTurnPrecompute(params: {
+  userId: string;
+  supabase: SupabaseClient;
+  symbol?: string;
+  tf?: string;
+  pinnedContext?: string | null;
+  type: "axe" | "intel";
+}): Promise<void> {
+  await precomputeTradingOSContextLane(
+    params.userId,
+    params.supabase,
+    params.symbol ?? null,
+    params.tf ?? null,
+    params.pinnedContext ?? null,
+  );
+
+  // Warm intel snapshot cache in the background when user is in intel mode.
+  if (params.type === "intel") {
+    await loadIntelSnapshot({ symbol: params.symbol }).catch(() => null);
+  }
+}
+
+export async function ensurePrimaryConversation(
+  userId: string,
+  existingAuth?: { supabase: SupabaseClient; user: User } | null,
+  type: "axe" | "intel" = "axe",
+): Promise<ConversationSummary | null> {
+  const authed = existingAuth ?? await getAuthedServiceSupabase();
   if (!authed || authed.user.id !== userId) return null;
   const { supabase } = authed;
 
-  const { data: conversations, error: convErr } = await supabase
+  let convQuery = supabase
     .from("conversations")
     .select("id,title,pinned_context,last_message_at,messages(count)")
-    .eq("user_id", userId)
-    .order("last_message_at", { ascending: false });
+    .eq("user_id", userId);
+
+  if (type === "axe") {
+    convQuery = convQuery.or("conversation_type.eq.axe,conversation_type.is.null");
+  } else {
+    convQuery = convQuery.eq("conversation_type", type);
+  }
+
+  const { data: conversations, error: convErr } = await convQuery.order(
+    "last_message_at",
+    { ascending: false },
+  );
 
   if (convErr) {
     console.error("Failed to load conversations", convErr);
@@ -92,7 +453,8 @@ export async function ensurePrimaryConversation(userId: string): Promise<Convers
     .from("conversations")
     .insert({
       user_id: userId,
-      title: "AXE",
+      title: type === "intel" ? "AXE Intelligence" : "AXE",
+      conversation_type: type,
       pinned_context: null,
       last_message_at: new Date().toISOString(),
     })
@@ -107,17 +469,19 @@ export async function ensurePrimaryConversation(userId: string): Promise<Convers
   return mapConversation(created as ConversationRow);
 }
 
-export async function getChatThread(): Promise<{
+export async function getChatThread(
+  type: "axe" | "intel" = "axe",
+): Promise<{
   conversation: ConversationSummary;
-  messages: ChatMessage[];
+  messages: DomainChatMessage[];
 }> {
   const authed = await getAuthedServiceSupabase();
   if (authed) {
-    const conversation = await ensurePrimaryConversation(authed.user.id);
+    const conversation = await ensurePrimaryConversation(authed.user.id, authed, type);
     if (conversation) {
       const { data, error } = await authed.supabase
         .from("messages")
-        .select("id,role,content,created_at")
+        .select("id,role,content,created_at,metadata")
         .eq("conversation_id", conversation.id)
         .eq("user_id", authed.user.id)
         .order("created_at", { ascending: true });
@@ -136,7 +500,7 @@ export async function getChatThread(): Promise<{
   return {
     conversation: {
       id: "demo",
-      title: "AXE",
+      title: type === "intel" ? "AXE Intelligence" : "AXE",
       pinnedContext: "",
       lastMessageAt: new Date().toISOString(),
     },
@@ -144,33 +508,106 @@ export async function getChatThread(): Promise<{
   };
 }
 
+export async function getIntelThreadSummary(userId: string): Promise<{
+  messageCount: number;
+  lastMessageAt: string | null;
+  lastPreview: string | null;
+}> {
+  const authed = await getAuthedServiceSupabase();
+  if (!authed || authed.user.id !== userId) {
+    return { messageCount: 0, lastMessageAt: null, lastPreview: null };
+  }
+
+  const conversation = await ensurePrimaryConversation(userId, authed, "intel");
+  if (!conversation) {
+    return { messageCount: 0, lastMessageAt: null, lastPreview: null };
+  }
+
+  const { count } = await authed.supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversation.id)
+    .eq("user_id", userId);
+
+  const { data: lastMsg } = await authed.supabase
+    .from("messages")
+    .select("content,created_at")
+    .eq("conversation_id", conversation.id)
+    .eq("user_id", userId)
+    .eq("role", "assistant")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    messageCount: count ?? 0,
+    lastMessageAt: lastMsg?.created_at ?? conversation.lastMessageAt ?? null,
+    lastPreview: lastMsg?.content?.slice(0, 180) ?? null,
+  };
+}
+
 export type SendChatMessageResult =
   | { ok: true }
-  | { ok: false; quotaExceeded?: boolean };
+  | { ok: false; quotaExceeded?: boolean; aiFailed?: boolean; errorDetail?: string };
 
-export async function sendChatMessage(
+export type StreamEvent =
+  | { type: "token"; text: string }
+  | { type: "status"; phase: "tools" | "responding"; tools?: string[] }
+  | { type: "done" }
+  | { type: "error"; message: string };
+
+const INTEL_CHAT_PREFIX = `You are AXE Intelligence — the intel analysis mode of AXE Companion.
+Focus on correlations, smart money flow, macro connections, cross-market reads, jets, vessels, chokepoints, and geopolitical context.
+Be concrete. Use numbers. Connect dots others miss. Same voice as AXE — direct, no filler.
+Use INTEL KNOWLEDGE (RAG) and LIVE INTEL SNAPSHOT together — cite feeds used, confidence, and signal.
+Intel chat feeds the trader's learning arc; reference their memory and saved correlations when relevant.`;
+
+export async function streamChatMessage(
   text: string,
+  onEvent: (event: StreamEvent) => void,
   imageBase64?: string,
   imageType?: string,
   symbol?: string,
-  tf?: string
+  tf?: string,
+  edgeAuth?: { supabase: SupabaseClient; user: User } | null,
+  type: "axe" | "intel" = "axe",
 ): Promise<SendChatMessageResult> {
+  const chatStartedAt = Date.now();
+  const markChatLatency = (status: "ok" | "error" | "quota" | "no_reply") => {
+    const elapsed = Date.now() - chatStartedAt;
+    const metric =
+      status === "ok"
+        ? "chat.turn.total_ms"
+        : status === "quota"
+          ? "chat.turn.quota_reject_ms"
+          : status === "no_reply"
+            ? "chat.turn.no_reply_ms"
+            : "chat.turn.error_ms";
+    recordLatencySample(metric, elapsed);
+    logLatencyIfDue(metric, 20);
+  };
+
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
 
-  const authed = await getAuthedServiceSupabase();
+  const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
-  const conversation = await ensurePrimaryConversation(authed.user.id);
+  const conversation = await ensurePrimaryConversation(authed.user.id, authed, type);
   if (!conversation) return { ok: false };
 
   const { supabase, user } = authed;
 
   const quota = await tryConsumeChatQuota(supabase, user.id);
   if (!quota.ok) {
-    if (quota.quotaExceeded) return { ok: false, quotaExceeded: true };
+    if (quota.quotaExceeded) {
+      markChatLatency("quota");
+      return { ok: false, quotaExceeded: true };
+    }
+    markChatLatency("error");
     return { ok: false };
   }
+  const consumed = quota.consumed;
 
   // 1. Save user message
   const userContent = trimmed || (imageBase64 ? "[chart attached]" : "");
@@ -183,8 +620,12 @@ export async function sendChatMessage(
 
   if (insertError) {
     console.error("Failed to insert chat message", insertError);
+    if (consumed) await refundChatQuota(supabase, user.id);
+    markChatLatency("error");
     return { ok: false };
   }
+
+  onEvent({ type: "status", phase: "responding" });
 
   // 2. Update conversation timestamp
   await supabase
@@ -194,8 +635,12 @@ export async function sendChatMessage(
     .eq("user_id", user.id);
 
   // 3. Fetch message history + central TradingOS context in parallel
-  console.log(`[AXE:chain] symbol=${symbol ?? "—"}  tf=${tf ?? "—"}`);
-  const [historyResult, context, knowledgeLayer] = await Promise.all([
+  const intelSnapshotPromise =
+    type === "intel"
+      ? loadIntelSnapshot({ symbol: symbol ?? undefined }).catch(() => null)
+      : Promise.resolve(null);
+
+  const [historyResult, context, knowledgeLayer, intelSnapshot, engineProfile] = await Promise.all([
     supabase
       .from("messages")
       .select("role,content")
@@ -205,19 +650,47 @@ export async function sendChatMessage(
       .limit(40),
 
     fetchTradingOSContext(user.id, supabase, symbol, tf),
-    buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
+    type === "intel"
+      ? buildIntelKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null)
+      : buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
+    intelSnapshotPromise,
+    getAxeEngineProfile(supabase, user.id, { source: "chat_turn" }).catch(() => null),
   ]);
 
   const history = ((historyResult.data ?? []) as { role: "user" | "assistant"; content: string }[])
     .reverse()
     .slice(0, -1);
 
-  // 4. Inject candles_summary from pinned_context
+  // 4. Inject candles_summary from pinned_context (+ intel snapshot when in intel mode)
+  let knowledgeBlock = knowledgeLayer;
+  if (type === "intel" && intelSnapshot) {
+    const liveContext = truncateIntelContext(buildIntelContext(intelSnapshot, symbol ?? undefined));
+    knowledgeBlock = [knowledgeLayer, liveContext ? `LIVE INTEL SNAPSHOT\n${liveContext}` : null]
+      .filter(Boolean)
+      .join("\n\n---\n");
+  }
+
   const contextWithCandles = {
     ...context,
     candles_summary: conversation.pinnedContext || null,
-    knowledge_layer: knowledgeLayer,
+    knowledge_layer: knowledgeBlock,
   };
+  const priceContextBySymbol = new Map<string, Awaited<ReturnType<typeof fetchTradingOSContext>>>();
+  async function getPriceContextForSymbol(requestedSymbolRaw: string): Promise<Awaited<ReturnType<typeof fetchTradingOSContext>>> {
+    const requestedSymbol = requestedSymbolRaw.toUpperCase().replace("/", "").trim();
+    if (!requestedSymbol) return contextWithCandles;
+    const cached = priceContextBySymbol.get(requestedSymbol);
+    if (cached) return cached;
+    const next = await fetchTradingOSContext(
+      user.id,
+      supabase,
+      requestedSymbol,
+      tf ?? contextWithCandles.timeframe ?? null,
+      conversation.pinnedContext ?? null,
+    );
+    priceContextBySymbol.set(requestedSymbol, next);
+    return next;
+  }
 
   // 5. Build OpenAI messages using the unified context
   const aiMessages = buildAxeMessagesFromContext(
@@ -226,9 +699,20 @@ export async function sendChatMessage(
     trimmed || "(the trader attached a chart image — analyse it)",
     imageBase64,
     imageType
-  );
+  ) as LLMMessage[];
 
-  const axeResponse = await callAxe(aiMessages);
+  if (type === "intel" && aiMessages[0]?.role === "system") {
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${INTEL_CHAT_PREFIX}\n\n${String(aiMessages[0].content ?? "")}`,
+    };
+  }
+  if (aiMessages[0]?.role === "system" && engineProfile) {
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${buildAxeEngineSystemGate(engineProfile)}\n\n${String(aiMessages[0].content ?? "")}`,
+    };
+  }
 
   // Fire-and-forget push notification to user's subscribed devices
   async function firePush(title: string, body: string, url = "/chat") {
@@ -246,41 +730,23 @@ export async function sendChatMessage(
 
   // Helper: execute a single tool call and return its string result
   async function executeTool(tc: AxeToolCall): Promise<string> {
-    if (tc.tool === "create_alert") {
-      const { title, body, type: rawType, symbol: alertSymbol } = tc.args;
-      const allowed = new Set(["price", "news", "risk", "system"]);
-      const type = allowed.has(String(rawType)) ? String(rawType) : "system";
-      let alertError = null;
-      if (alertSymbol) {
-        const { error: e1 } = await supabase.from("alerts").insert({
-          user_id: user.id, type, title, body,
-          symbol: alertSymbol.toUpperCase(), read: false,
-        });
-        if (e1 && e1.message?.includes("column")) {
-          const { error: e2 } = await supabase.from("alerts").insert({
-            user_id: user.id, type, title,
-            body: `${body} [${alertSymbol.toUpperCase()}]`, read: false,
-          });
-          alertError = e2;
-        } else {
-          alertError = e1;
-        }
-      } else {
-        const { error: e } = await supabase.from("alerts").insert({
-          user_id: user.id, type, title, body, read: false,
-        });
-        alertError = e;
-      }
+    const toolCall = tc as AxeToolCall & { args: Record<string, unknown> };
+    if (toolCall.tool === "create_alert") {
+      const { title, body } = toolCall.args;
+      const row = buildUserAlertFromChatTool(toolCall.args);
+      const { error: alertError } = await supabase.from("user_alerts").insert({
+        user_id: user.id,
+        ...row,
+      });
       if (alertError) {
         console.error("[create_alert] insert failed:", alertError.message);
         return `Alert creation failed: ${alertError.message}`;
       }
-      // Push notification: alert is set — fire and don't wait
       firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
       return "Alert created — visible under Alerts in the app.";
 
-    } else if (tc.tool === "track_commitment") {
-      const { description, symbol: commitSymbol } = tc.args as TrackCommitmentArgs;
+    } else if (toolCall.tool === "track_commitment") {
+      const { description, symbol: commitSymbol } = toolCall.args as TrackCommitmentArgs;
       const { error: commitError } = await supabase.from("axe_commitments").insert({
         user_id: user.id,
         description,
@@ -288,37 +754,30 @@ export async function sendChatMessage(
         status: "open",
       });
       if (commitError) console.error("[track_commitment] insert failed:", commitError.message);
+      if (!commitError) invalidateTradingOSContextCache(user.id);
       return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
 
-    } else if (tc.tool === "get_live_price") {
-      const price = await fetchLivePrice(tc.args.symbol);
-      return "error" in price ? price.error : formatLivePrice(price);
+    } else if (toolCall.tool === "get_live_price") {
+      const requested = String(toolCall.args.symbol ?? symbol ?? contextWithCandles.symbol ?? "").trim();
+      const requestedContext = await getPriceContextForSymbol(requested);
+      return formatBrokerPriceForChat(requestedContext);
 
-    } else if (tc.tool === "get_economic_calendar") {
-      const calendar = await fetchEconomicCalendar(tc.args.currency, tc.args.impact);
+    } else if (toolCall.tool === "get_economic_calendar") {
+      const calendar = await fetchEconomicCalendar(toolCall.args.currency, toolCall.args.impact);
       return "error" in calendar ? calendar.error : formatEconomicCalendar(calendar);
 
-    } else if (tc.tool === "save_note") {
-      const { content, tag } = tc.args;
-      const entryKey = `note-${Date.now()}`;
-      const { error: noteError } = await supabase.from("assistant_memory_entries").insert({
-        user_id: user.id, scope: "notes", entry_key: entryKey,
-        content: tag ? `[${tag}] ${content}` : content,
-      });
-      return noteError ? "Failed to save note." : "Note saved.";
+    } else if (toolCall.tool === "calculate_fibonacci") {
+      return computeFibonacci(toolCall.args);
+    } else if (toolCall.tool === "analyze_orderblock") {
+      return computeOrderBlock(toolCall.args);
+    } else if (toolCall.tool === "analyze_pdh_pdl") {
+      return computePdhPdl(toolCall.args);
+    } else if (toolCall.tool === "calculate_trendline") {
+      return computeTrendline(toolCall.args);
 
-    } else if (tc.tool === "calculate_fibonacci") {
-      return computeFibonacci(tc.args);
-    } else if (tc.tool === "analyze_orderblock") {
-      return computeOrderBlock(tc.args);
-    } else if (tc.tool === "analyze_pdh_pdl") {
-      return computePdhPdl(tc.args);
-    } else if (tc.tool === "calculate_trendline") {
-      return computeTrendline(tc.args);
-
-    } else if (tc.tool === "get_news_headlines") {
-      const limit = Math.max(1, Math.min(15, Number(tc.args.limit ?? 8)));
-      const requested = (tc.args.symbol ?? symbol ?? "").toString().toUpperCase().trim();
+    } else if (toolCall.tool === "get_news_headlines") {
+      const limit = Math.max(1, Math.min(15, Number(toolCall.args.limit ?? 8)));
+      const requested = (toolCall.args.symbol ?? symbol ?? "").toString().toUpperCase().trim();
       if (!requested) return "No symbol provided and no active pair on this session.";
       try {
         const items = await loadNews({ symbol: requested, watchlist: [], limit });
@@ -338,12 +797,12 @@ export async function sendChatMessage(
         return `News fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`;
       }
 
-    } else if (tc.tool === "get_smart_money_intel") {
+    } else if (toolCall.tool === "get_smart_money_intel") {
       try {
-        const focus = (tc.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
+        const focus = (toolCall.args.symbol ?? "").toString().toUpperCase().trim() || undefined;
         const intel = await loadIntelSnapshot({ symbol: focus });
         if (!intel.hasLiveData) {
-          return "Smart-money intel unavailable. Either Unusual Whales is not configured or all upstream rows are empty right now.";
+          return "Smart-money intel is limited right now. SEC insider filings and cached DB rows may still be available once feeds warm — Unusual Whales premium flow requires a valid UNUSUAL_WHALES_TOKEN on Supabase.";
         }
         const lines: string[] = [];
         if (intel.tide) {
@@ -392,9 +851,9 @@ export async function sendChatMessage(
         return `Intel fetch failed: ${e instanceof Error ? e.message : "unknown error"}.`;
       }
 
-    } else if (tc.tool === "list_alerts") {
-      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-      const includePaused = tc.args.include_paused !== false;
+    } else if (toolCall.tool === "list_alerts") {
+      const sym = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
+      const includePaused = toolCall.args.include_paused !== false;
       let q = supabase
         .from("user_alerts")
         .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at")
@@ -420,159 +879,484 @@ export async function sendChatMessage(
         return `${a.id}  [${status}] ${a.symbol ?? "—"} ${a.type} ${cond}${fired}`;
       });
       return `ALERTS (${data.length})\n${lines.join("\n")}`;
-
-    } else if (tc.tool === "update_alert") {
-      const { alert_id, action } = tc.args;
+    } else if (toolCall.tool === "update_alert") {
+      const { alert_id, action } = toolCall.args;
       if (!alert_id) return "alert_id is required.";
       if (action === "delete") {
         const { error } = await supabase.from("user_alerts").delete().eq("id", alert_id).eq("user_id", user.id);
         return error ? `Delete failed: ${error.message}` : "Alert deleted.";
       }
       const nextStatus = action === "pause" ? "paused" : "active";
-      const { error } = await supabase
-        .from("user_alerts")
-        .update({ status: nextStatus })
-        .eq("id", alert_id)
-        .eq("user_id", user.id);
+      const { error } = await supabase.from("user_alerts").update({ status: nextStatus }).eq("id", alert_id).eq("user_id", user.id);
       if (error) return `Update failed: ${error.message}`;
       return action === "pause" ? "Alert paused." : "Alert resumed.";
-
-    } else if (tc.tool === "read_journal") {
-      const sym = (tc.args.symbol ?? "").toString().toUpperCase().trim();
-      const days = Math.max(1, Math.min(90, Number(tc.args.days ?? 7)));
+    } else if (toolCall.tool === "read_journal") {
+      const sym = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
+      const days = Math.max(1, Math.min(90, Number(toolCall.args.days ?? 7)));
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-      const journalQ = supabase
-        .from("companion_journal_entries")
-        .select("symbol,notes,created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", since)
-        .order("created_at", { ascending: false })
-        .limit(30);
-      const tradesQ = supabase
-        .from("broker_trades")
-        .select("id,symbol,side,volume,pnl,close_time")
-        .eq("user_id", user.id)
-        .not("close_time", "is", null)
-        .gte("close_time", since)
-        .order("close_time", { ascending: false })
-        .limit(30);
-      const [journalRes, tradesRes] = await Promise.all([journalQ, tradesQ]);
+      const cleanSym = (raw: string) => raw.toUpperCase().replace(/\.[a-z]+$/i, "").trim();
+      const [journalRes, tradesRes] = await Promise.all([
+        supabase.from("user_journal_entries").select("symbol,notes,created_at").eq("user_id", user.id).gte("created_at", since).order("created_at", { ascending: false }).limit(30),
+        supabase.from("broker_trades").select("id,symbol,side,volume,pnl,close_time").eq("user_id", user.id).not("close_time", "is", null).gte("close_time", since).order("close_time", { ascending: false }).limit(30),
+      ]);
       const entries = (journalRes.data ?? []) as { symbol: string; notes: string; created_at: string }[];
-      const trades = (tradesRes.data ?? []) as {
-        id: string;
-        symbol: string;
-        side: string;
-        volume: number;
-        pnl: number;
-        close_time: string | null;
-      }[];
-      const filteredEntries = sym ? entries.filter((e) => (e.symbol ?? "").toUpperCase() === sym) : entries;
-      const filteredTrades = sym ? trades.filter((t) => (t.symbol ?? "").toUpperCase() === sym) : trades;
+      const trades = (tradesRes.data ?? []) as { id: string; symbol: string; side: string; volume: number; pnl: number; close_time: string | null }[];
+      const filteredEntries = sym ? entries.filter((e) => cleanSym(e.symbol ?? "") === cleanSym(sym)) : entries;
+      const filteredTrades = sym ? trades.filter((t) => cleanSym(t.symbol ?? "") === cleanSym(sym)) : trades;
       const out: string[] = [];
       if (filteredTrades.length > 0) {
         out.push(`CLOSED TRADES (last ${days}d, top ${Math.min(filteredTrades.length, 10)})`);
-        out.push(
-          ...filteredTrades.slice(0, 10).map((t) => {
-            const when = t.close_time?.slice(0, 16).replace("T", " ") ?? "—";
-            const pnl = Number(t.pnl ?? 0);
-            const pnlStr = pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2);
-            return `${when}Z  ${t.symbol} ${t.side} ${t.volume}lot  P&L:${pnlStr}`;
-          }),
-        );
+        out.push(...filteredTrades.slice(0, 10).map((t) => {
+          const when = t.close_time?.slice(0, 16).replace("T", " ") ?? "—";
+          const pnl = Number(t.pnl ?? 0);
+          return `${when}Z  ${t.symbol} ${t.side} ${t.volume}lot  P&L:${pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)}`;
+        }));
       }
       if (filteredEntries.length > 0) {
         out.push(`\nJOURNAL ENTRIES (last ${days}d, top ${Math.min(filteredEntries.length, 10)})`);
-        out.push(
-          ...filteredEntries.slice(0, 10).map((e) => {
-            const when = e.created_at?.slice(0, 16).replace("T", " ") ?? "—";
-            const note = (e.notes ?? "").trim().slice(0, 240);
-            return `${when}Z  ${e.symbol}: ${note}`;
-          }),
-        );
+        out.push(...filteredEntries.slice(0, 10).map((e) => {
+          const when = e.created_at?.slice(0, 16).replace("T", " ") ?? "—";
+          return `${when}Z  ${e.symbol}: ${(e.notes ?? "").trim().slice(0, 240)}`;
+        }));
       }
-      if (out.length === 0) {
-        return `No journal entries or closed trades found in the last ${days}d${sym ? ` for ${sym}` : ""}.`;
-      }
+      if (out.length === 0) return `No journal entries or closed trades found in the last ${days}d${sym ? ` for ${sym}` : ""}.`;
       return out.join("\n");
-
-    } else if (tc.tool === "navigate_to") {
-      const { page } = tc.args;
+    } else if (toolCall.tool === "auto_journal_trades") {
+      const result = await runAutoJournalTool(supabase, user.id, context, toolCall.args);
+      if (!result.startsWith("Auto-journal failed")) invalidateTradingOSContextCache(user.id);
+      return result;
+    } else if (toolCall.tool === "navigate_to") {
+      const { page } = toolCall.args;
       const params: string[] = [];
-      if (tc.args.symbol) params.push(`symbol=${encodeURIComponent(tc.args.symbol.toUpperCase())}`);
-      if (tc.args.timeframe) params.push(`tf=${encodeURIComponent(tc.args.timeframe.toUpperCase())}`);
+      if (toolCall.args.symbol) params.push(`symbol=${encodeURIComponent(toolCall.args.symbol.toUpperCase())}`);
+      if (toolCall.args.timeframe) params.push(`tf=${encodeURIComponent(toolCall.args.timeframe.toUpperCase())}`);
       const href = `/${page}${params.length ? `?${params.join("&")}` : ""}`;
-      const label = tc.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
-      // The chat UI parses [[link:...]] markers and renders them as buttons.
+      const label = toolCall.args.label ?? page.charAt(0).toUpperCase() + page.slice(1);
       return `Navigation prepared. Render this as a button in your reply: [[link:${href}|${label}]]`;
+    } else if (toolCall.tool === "route_chart_action") {
+      return handleRouteChartAction(supabase, user.id, toolCall.args);
+    } else if (toolCall.tool === "prepare_execution_request") {
+      return handlePrepareExecutionRequest(supabase, user.id, toolCall.args, (title, body, url) => {
+        firePush(title, body, url);
+      });
+    } else if (toolCall.tool === "save_note") {
+      const { content, tag } = toolCall.args;
+      const entryKey = `note-${Date.now()}`;
+      const noteBody = tag ? `[${tag}] ${content}` : content;
+      const { error: noteError } = await supabase.from("assistant_memory_entries").insert({
+        user_id: user.id, scope: "notes", entry_key: entryKey,
+        content: noteBody,
+      });
+      const { error: journalError } = await supabase.from("user_journal_entries").insert({
+        user_id: user.id,
+        symbol: "NOTE",
+        notes: noteBody,
+        tags: tag ? [tag] : [],
+      });
+      if (noteError && journalError) {
+        return `Note failed: ${noteError.message}`;
+      }
+      invalidateTradingOSContextCache(user.id);
+      return "Note saved to your journal.";
     }
     return "Unknown tool.";
   }
 
   function appendToolRound(
-    msgs: OpenAI.Chat.ChatCompletionMessageParam[],
+    msgs: LLMMessage[],
     tcs: AxeToolCall[],
-    results: { tc: AxeToolCall; result: string }[]
-  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+    results: { tc: AxeToolCall; result: string }[],
+  ): LLMMessage[] {
     return [
       ...msgs,
-      {
-        role: "assistant",
-        content: null,
-        tool_calls: tcs.map((tc) => ({
-          id: tc.id,
-          type: "function" as const,
-          function: { name: tc.tool, arguments: JSON.stringify(tc.args) },
-        })),
-      } as OpenAI.Chat.ChatCompletionAssistantMessageParam,
-      ...results.map(
-        ({ tc, result }) =>
-          ({
-            role: "tool",
-            tool_call_id: tc.id,
-            content: result,
-          }) as OpenAI.Chat.ChatCompletionToolMessageParam
-      ),
+      { role: "assistant", content: null, tool_calls: tcs.map((tc) => ({ id: tc.id, type: "function" as const, function: { name: tc.tool, arguments: JSON.stringify(tc.args) } })) },
+      ...results.map(({ tc, result }) => ({ role: "tool" as const, tool_call_id: tc.id, content: result })),
     ];
   }
 
-  let finalReply: string | null = null;
-
-  if (axeResponse.toolCalls.length > 0) {
-    const round1Results = await Promise.all(
-      axeResponse.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) }))
-    );
-    const afterRound1 = appendToolRound(aiMessages, axeResponse.toolCalls, round1Results);
-
-    const round2Response = await callAxeAfterTool(afterRound1);
-
-    if (round2Response.toolCalls.length > 0) {
-      const round2Results = await Promise.all(
-        round2Response.toolCalls.map(async (tc) => ({ tc, result: await executeTool(tc) }))
-      );
-      const afterRound2 = appendToolRound(afterRound1, round2Response.toolCalls, round2Results);
-      finalReply = await callAxeFinal(afterRound2);
-    } else {
-      finalReply = round2Response.content;
+  function canonicalizeToolArg(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((v) => canonicalizeToolArg(v));
+    if (value && typeof value === "object") {
+      const src = value as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(src).sort()) {
+        out[key] = canonicalizeToolArg(src[key]);
+      }
+      return out;
     }
-  } else {
-    finalReply = axeResponse.content;
+    return value;
   }
 
+  function dedupeToolCalls(calls: AxeToolCall[]): AxeToolCall[] {
+    const seen = new Set<string>();
+    const out: AxeToolCall[] = [];
+    for (const tc of calls) {
+      const key = `${tc.tool}:${JSON.stringify(canonicalizeToolArg(tc.args ?? {}))}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(tc);
+    }
+    return out;
+  }
+
+  // 3. Stream the response — tool rounds are non-streaming, final text is streaming
+  let finalReply: string | null = null;
+  const executedToolResults: Array<{ tc: AxeToolCall; result: string }> = [];
+
+  try {
+    // First call: streaming — may return tool calls or text
+    let firstContent = "";
+    const firstResponse = await callAxeStreaming(aiMessages, (token) => {
+      firstContent += token;
+      onEvent({ type: "token", text: token });
+    });
+
+    if (firstResponse.toolCalls.length > 0) {
+      // Tool calls — execute them
+      const round1Calls = dedupeToolCalls(firstResponse.toolCalls);
+      onEvent({ type: "status", phase: "tools", tools: round1Calls.map((t) => t.tool) });
+
+      const round1Results = await Promise.all(
+        round1Calls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
+      );
+      executedToolResults.push(...round1Results);
+      const afterRound1 = appendToolRound(aiMessages, round1Calls, round1Results);
+
+      // Second call: streaming for text, but may have more tool calls
+      onEvent({ type: "status", phase: "responding" });
+      let round2Content = "";
+      const round2Response = await callAxeStreaming(afterRound1, (token) => {
+        round2Content += token;
+        onEvent({ type: "token", text: token });
+      });
+
+      if (round2Response.toolCalls.length > 0) {
+        // Third round of tools (rare)
+        const round2Calls = dedupeToolCalls(round2Response.toolCalls);
+        onEvent({ type: "status", phase: "tools", tools: round2Calls.map((t) => t.tool) });
+        const round2Results = await Promise.all(
+          round2Calls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
+        );
+        executedToolResults.push(...round2Results);
+        const afterRound2 = appendToolRound(afterRound1, round2Calls, round2Results);
+
+        // Final streaming call (no tools)
+        onEvent({ type: "status", phase: "responding" });
+        let round3Content = "";
+        await callAxeFinalStreaming(afterRound2, (token) => {
+          round3Content += token;
+          onEvent({ type: "token", text: token });
+        });
+        finalReply = round3Content || null;
+      } else {
+        finalReply = round2Content || null;
+      }
+    } else {
+      finalReply = firstContent || null;
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[chatService] streaming error:", detail);
+    // The reserved free-tier slot produced no reply — give it back.
+    if (consumed) await refundChatQuota(supabase, user.id);
+    markChatLatency("error");
+    return { ok: false, aiFailed: true, errorDetail: detail };
+  }
+
+  // AXE produced no reply at all (e.g. OpenAI not configured or errored).
+  // Refund the reserved slot and surface a real error instead of a silent
+  // "done" that leaves the UI spinning forever.
   if (!finalReply) {
-    console.error("[chatService] AXE returned no reply");
-    return { ok: true };
+    console.error("[chatService] AXE returned no reply (stream)");
+    if (consumed) await refundChatQuota(supabase, user.id);
+    markChatLatency("no_reply");
+    return { ok: false, aiFailed: true };
   }
 
+  // Hard safety for fib chart actions:
+  // - if user asked for fib-on-chart, ensure we have a routed chart action link
+  // - if model outputs stale level regime (e.g. 1900 while active XAU is ~4000), replace with deterministic confirmation
+  const fibIntent = type === "axe" && isFibChartIntent(trimmed);
+  let fibRoute = executedToolResults.find(
+    ({ tc }) => tc.tool === "route_chart_action" && tc.args.action_type === "draw_fibonacci",
+  );
+  if (fibIntent && !fibRoute) {
+    const routeSymbol =
+      (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "")
+        .toUpperCase()
+        .trim();
+    const routeTf = String(
+      tf ?? contextWithCandles.timeframe ?? contextWithCandles.axe_context?.chart?.timeframe ?? "h1",
+    )
+      .toLowerCase()
+      .trim();
+    if (routeSymbol) {
+      try {
+        const routeResult = await handleRouteChartAction(supabase, user.id, {
+          action_type: "draw_fibonacci",
+          symbol: routeSymbol,
+          timeframe: routeTf,
+          label: "Open chart",
+        });
+        fibRoute = {
+          tc: {
+            id: `forced_fib_${Date.now()}`,
+            tool: "route_chart_action",
+            args: { action_type: "draw_fibonacci", symbol: routeSymbol, timeframe: routeTf },
+          },
+          result: routeResult,
+        };
+      } catch (e) {
+        console.warn("[chatService] forced fib route failed:", e);
+      }
+    }
+  }
+
+  if (fibIntent) {
+    const activeSymbol =
+      (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "chart")
+        .toUpperCase();
+    const activeTf = String(
+      tf ?? contextWithCandles.timeframe ?? contextWithCandles.axe_context?.chart?.timeframe ?? "h1",
+    ).toUpperCase();
+    const canonical = canonicalBrokerPrice({
+      lastPrice: contextWithCandles.axe_context?.chart?.lastPrice ?? null,
+      lastBid: contextWithCandles.axe_context?.chart?.lastBid ?? null,
+      lastAsk: contextWithCandles.axe_context?.chart?.lastAsk ?? null,
+    });
+    const staleRegime = canonical != null && hasOutOfRegimeLevels(finalReply, canonical);
+    const link =
+      extractFirstLink(fibRoute?.result) ??
+      extractFirstLink(finalReply) ??
+      "[[link:/chart|Open chart]]";
+
+    // Keep user-facing copy stable while still enforcing anti-stale guardrails.
+    if (canonical == null || staleRegime || fibRoute) {
+      finalReply = `I've added the Fibonacci retracement to your ${activeSymbol} ${activeTf} chart. ${link}`;
+    }
+  }
+
+  // Hard safety for live-price asks:
+  // If user asks for a current price, force broker-price retrieval and use deterministic copy.
+  const livePriceIntent = type === "axe" && isLivePriceIntent(trimmed);
+  if (livePriceIntent) {
+    const requestedSymbol =
+      inferRequestedSymbols(trimmed)[0]
+      ?? (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "XAUUSD");
+
+    const alreadyUsedLivePrice = executedToolResults.some(({ tc }) => tc.tool === "get_live_price");
+    if (!alreadyUsedLivePrice) {
+      const forcedTc: AxeToolCall = {
+        id: `forced_live_${Date.now()}`,
+        tool: "get_live_price",
+        args: { symbol: requestedSymbol },
+      };
+      const forcedResult = await runToolWithPolicy(forcedTc, executeTool);
+      executedToolResults.push({ tc: forcedTc, result: forcedResult });
+    }
+
+    const requestedContext = await getPriceContextForSymbol(requestedSymbol);
+    const chart = requestedContext.axe_context?.chart;
+    const accounts = requestedContext.axe_context?.accounts ?? contextWithCandles.axe_context?.accounts;
+    const activeSymbol = (chart?.symbol ?? contextWithCandles.symbol ?? "ACTIVE").toUpperCase();
+    const brokerSymbol = (chart?.brokerSymbol ?? activeSymbol).toUpperCase();
+    const requestedUpper = requestedSymbol.toUpperCase().replace("/", "").trim();
+    const accountLabel = accounts?.activeLabel ?? "active broker account";
+    const state = brokerPricingState({
+      status: chart?.liveStatus ?? null,
+      updatedAt: chart?.updatedAt ?? null,
+      lastTickAt: chart?.lastTickAt ?? null,
+      lastCandleAt: chart?.lastCandleAt ?? null,
+    });
+    const canonical = canonicalBrokerPrice({
+      lastPrice: chart?.lastPrice ?? null,
+      lastBid: chart?.lastBid ?? null,
+      lastAsk: chart?.lastAsk ?? null,
+    });
+
+    if (canonical != null && (state === "live" || state === "degraded")) {
+      const pretty = formatPriceCompact(canonical);
+      const bidAskSummary = formatBidAskSummary(
+        requestedUpper || activeSymbol,
+        chart?.lastBid ?? null,
+        chart?.lastAsk ?? null,
+      );
+      finalReply =
+        `Live broker price for ${requestedUpper || activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${pretty}. ` +
+        (bidAskSummary ? `${bidAskSummary}. ` : "") +
+        `I’m reading this from your active account context.`;
+    } else {
+      finalReply =
+        `I can see your ${accountLabel}, but live broker pricing for ${requestedUpper || activeSymbol} (${brokerSymbol}) is currently unavailable (${state}). ` +
+        `I won't guess prices. If this symbol is enabled on your broker, sync the account and ask again in a few seconds. [[link:/chart|Open chart]]`;
+    }
+  }
+
+  // Global broker-symbol and price-regime guard:
+  // AXE must only speak in broker-supported symbols and active price regime.
+  if (type === "axe" && !livePriceIntent) {
+    const requestedSymbols = inferRequestedSymbols(trimmed);
+    const allowedSymbols = buildAllowedSymbolSet(contextWithCandles);
+    const blockedSymbol = requestedSymbols.find((s) => !allowedSymbols.has(s));
+    if (blockedSymbol) {
+      const active = (contextWithCandles.axe_context?.chart?.symbol ?? contextWithCandles.symbol ?? "your active pair")
+        .toUpperCase();
+      finalReply =
+        `I can only use symbols available on your active broker account. ${blockedSymbol} is not available in this session. ` +
+        `Active broker chart is ${active}. [[link:/chart|Open chart]]`;
+    } else if (looksLikePriceAnalysisIntent(trimmed)) {
+      const canonical = canonicalBrokerPrice({
+        lastPrice: contextWithCandles.axe_context?.chart?.lastPrice ?? null,
+        lastBid: contextWithCandles.axe_context?.chart?.lastBid ?? null,
+        lastAsk: contextWithCandles.axe_context?.chart?.lastAsk ?? null,
+      });
+      const usedLivePriceTool = executedToolResults.some(({ tc }) => tc.tool === "get_live_price");
+      if (canonical != null && hasOutOfRegimeLevels(finalReply, canonical)) {
+        const active =
+          (contextWithCandles.axe_context?.chart?.symbol ?? contextWithCandles.symbol ?? "ACTIVE").toUpperCase();
+        const tfActive = String(
+          contextWithCandles.axe_context?.chart?.timeframe ?? contextWithCandles.timeframe ?? "H1",
+        ).toUpperCase();
+        finalReply =
+          `I am locked to your broker price regime for ${active} ${tfActive}. Current canonical broker price is ${canonical}. ` +
+          `I filtered out stale levels outside your active market. [[link:/chart|Open chart]]`;
+      } else if (canonical == null && !usedLivePriceTool) {
+        const active =
+          (contextWithCandles.axe_context?.chart?.symbol ?? contextWithCandles.symbol ?? "your active pair")
+            .toUpperCase();
+        finalReply =
+          `I can only analyze with your broker context. Live broker pricing is unavailable right now for ${active}, ` +
+          `so I won't output guessed levels. Sync account/chart and I will continue from live broker data. [[link:/chart|Open chart]]`;
+      }
+    }
+  }
+
+  // 4. Save assistant reply
   const { error: replyError } = await supabase.from("messages").insert({
     conversation_id: conversation.id,
     user_id: user.id,
     role: "assistant",
     content: finalReply,
   });
+  if (replyError) console.error("Failed to save AXE reply", replyError);
 
-  if (replyError) {
-    console.error("Failed to save AXE reply", replyError);
-  }
+  extractMemoriesAsync(supabase, user.id, trimmed, finalReply).catch((e) =>
+    console.error("[chatService] memory extraction failed:", e),
+  );
+  runPostTurnPrecompute({
+    userId: user.id,
+    supabase,
+    symbol: symbol ?? contextWithCandles.symbol ?? undefined,
+    tf: tf ?? contextWithCandles.timeframe ?? undefined,
+    pinnedContext: conversation.pinnedContext,
+    type,
+  }).catch((e) => console.error("[chatService] precompute lane failed:", e));
 
+  onEvent({ type: "done" });
+  markChatLatency("ok");
   return { ok: true };
+}
+
+export async function sendChatMessage(
+  text: string,
+  imageBase64?: string,
+  imageType?: string,
+  symbol?: string,
+  tf?: string,
+  edgeAuth?: { supabase: SupabaseClient; user: User } | null,
+  type: "axe" | "intel" = "axe",
+): Promise<SendChatMessageResult> {
+  return streamChatMessage(text, () => {}, imageBase64, imageType, symbol, tf, edgeAuth, type);
+}
+
+/**
+ * Async memory extraction — runs after the reply is saved.
+ * Pulls the last few messages and asks GPT-4o-mini to extract
+ * durable observations about the trader.
+ */
+async function extractMemoriesAsync(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  userId: string,
+  userMessage: string,
+  assistantReply: string,
+): Promise<void> {
+  // Load recent conversation context (last 6 messages)
+  const { data: recentMessages } = await supabase
+    .from("messages")
+    .select("role,content")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  const messages = [
+    ...(recentMessages ?? []).reverse().map((m: { role: string; content: string }) => ({
+      role: m.role,
+      content: m.content,
+    })),
+    { role: "user", content: userMessage },
+    { role: "assistant", content: assistantReply },
+  ];
+
+  // Load existing to avoid duplicates
+  const { data: existing } = await supabase
+    .from("axe_memory")
+    .select("content,memory_type")
+    .eq("user_id", userId)
+    .is("resolved_at", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const conversationText = messages
+    .map((m) => `${m.role.toUpperCase()}: ${m.content.slice(0, 500)}`)
+    .join("\n");
+
+  const existingText = (existing?.length ?? 0) > 0
+    ? `\n\nEXISTING MEMORIES (do not duplicate):\n${(existing ?? []).map((e: { memory_type: string; content: string }) => `- [${e.memory_type}] ${e.content}`).join("\n")}`
+    : "";
+
+  const llmResult = await callLLM(
+    {
+      messages: [
+        {
+          role: "system",
+          content: `You extract durable trader observations from AXE conversations. Extract 0-3 memories.
+
+Types: observation, pattern, preference, weakness, strength, rule, context
+
+Return JSON (no fences): {"memories": [{"memory_type": "...", "content": "...", "symbol": "..." or null, "confidence": 0.5-1.0}]}
+
+Only extract behavioral patterns, preferences, rules, and durable insights. Skip temporary facts. Return empty array if nothing worth remembering.`,
+        },
+        { role: "user", content: `${conversationText}${existingText}` },
+      ],
+      temperature: 0.2,
+      max_tokens: 500,
+    },
+    "intel",
+  );
+  const content = llmResult.content?.trim();
+  if (!content) return;
+
+  try {
+    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const jsonCandidate = cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned;
+    if (!jsonCandidate) return;
+    const parsed = JSON.parse(jsonCandidate) as { memories: Array<{ memory_type: string; content: string; symbol: string | null; confidence: number }> };
+
+    for (const mem of parsed.memories ?? []) {
+      if (!mem.content || !mem.memory_type) continue;
+      await supabase.from("axe_memory").insert({
+        user_id: userId,
+        memory_type: mem.memory_type,
+        content: String(mem.content).slice(0, 500),
+        symbol: mem.symbol || null,
+        confidence: Math.max(0.5, Math.min(1, Number(mem.confidence) || 0.7)),
+        source: "chat",
+        type: mem.memory_type,
+      });
+    }
+  } catch {
+    // Silent — memory extraction is best-effort
+  }
 }

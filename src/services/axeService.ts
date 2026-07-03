@@ -1,6 +1,6 @@
-import OpenAI from "openai";
-import { createChatCompletion, getAIConfig, getModelForProvider } from "@/services/aiProvider";
+import { callLLM, streamLLM, type LLMMessage } from "@/services/llmClient";
 import type { TradingOSContext } from "@/types/context";
+import type OpenAI from "openai";
 
 const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
 
@@ -117,7 +117,8 @@ export const AXE_KNOWLEDGE_GUARDRAILS = `AXE KNOWLEDGE LAYER — RESPONSE RULES
 - Prioritize discipline, risk, execution quality, and pattern recognition over prediction.
 - When curated knowledge or the trader’s rules/history conflict with a hunch, defer to rules + process.
 - Use the trader’s playbook, journal, and broker history when present; do not invent trades or labels.
-- If live prices or engine context are missing from this message, say so briefly and continue from structure and rules only.`;
+- If live prices or engine context are missing from this message, say so briefly and continue from structure and rules only.
+- Never mix price regimes: keep levels anchored to the active symbol + current broker context. Do not reuse stale levels from prior turns/pairs.`;
 
 export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
@@ -496,6 +497,102 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "route_chart_action",
+      description:
+        "Queue an analytical chart action for AXE Companion (/chart). Use this when the trader asks to draw fib, trendline, key level, clear AI drawings, or toggle indicator layers. This never places orders; it only routes chart overlays.",
+      parameters: {
+        type: "object",
+        properties: {
+          action_type: {
+            type: "string",
+            enum: ["draw_fibonacci", "draw_trendline", "mark_key_level", "add_indicator", "clear_ai_drawings"],
+            description: "Chart action type to queue.",
+          },
+          symbol: {
+            type: "string",
+            description: "Instrument symbol, e.g. XAUUSD, EURUSD, BTCUSD.",
+          },
+          timeframe: {
+            type: "string",
+            description: "Optional timeframe key like m1/m5/m15/m30/h1/h4/d1.",
+          },
+          account_id: {
+            type: "string",
+            description: "Optional broker account id.",
+          },
+          indicators: {
+            type: "array",
+            items: { type: "string" },
+            description: "For add_indicator: layer names to toggle (e.g. fvg, ifvg, structure, orderBlocks, rsi, ma).",
+          },
+          enable: {
+            type: "boolean",
+            description: "For add_indicator: true to enable, false to disable.",
+          },
+          label: {
+            type: "string",
+            description: "Optional link label override (default: Open chart).",
+          },
+          payload: {
+            type: "object",
+            description: "Optional custom payload for advanced chart actions.",
+          },
+        },
+        required: ["action_type", "symbol"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "auto_journal_trades",
+      description:
+        "Create AXE journal labels for recent closed broker trades on the active account. Use when the trader asks to auto-journal, score, or label recent trades.",
+      parameters: {
+        type: "object",
+        properties: {
+          account_id: {
+            type: "string",
+            description: "Optional account id. If omitted, AXE uses the active linked account.",
+          },
+          trade_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional subset of trade ids to journal. Omit to process recent trades.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_execution_request",
+      description:
+        "Draft a review-only trade execution ticket in AXE Companion. Use this when the trader asks to prepare a trade plan/ticket for later approval in Actions.",
+      parameters: {
+        type: "object",
+        properties: {
+          instrument: { type: "string", description: "Instrument symbol, e.g. XAUUSD." },
+          symbol: { type: "string", description: "Optional normalized symbol override." },
+          direction: { type: "string", enum: ["long", "short"] },
+          entry_price: { type: "number" },
+          stop_loss: { type: "number" },
+          take_profit: { type: "number" },
+          risk_percent: { type: "number" },
+          risk_amount: { type: "number" },
+          volume: { type: "number" },
+          rationale: { type: "string", description: "Why this setup is being prepared." },
+          notes: { type: "string", description: "Optional execution notes." },
+        },
+        required: ["instrument", "direction", "rationale"],
+      },
+    },
+  },
 ];
 
 export type CreateAlertArgs = {
@@ -568,6 +665,30 @@ export type NavigateToArgs = {
   timeframe?: string;
   label?: string;
 };
+export type RouteChartActionArgs = {
+  action_type: "draw_fibonacci" | "draw_trendline" | "mark_key_level" | "add_indicator" | "clear_ai_drawings";
+  symbol: string;
+  timeframe?: string;
+  account_id?: string;
+  indicators?: string[];
+  enable?: boolean;
+  label?: string;
+  payload?: Record<string, unknown>;
+};
+export type AutoJournalTradesArgs = { account_id?: string; trade_ids?: string[] };
+export type PrepareExecutionRequestArgs = {
+  instrument: string;
+  symbol?: string;
+  direction: "long" | "short";
+  entry_price?: number;
+  stop_loss?: number;
+  take_profit?: number;
+  risk_percent?: number;
+  risk_amount?: number;
+  volume?: number;
+  rationale: string;
+  notes?: string;
+};
 
 export type AxeToolCall =
   | { id: string; tool: "create_alert"; args: CreateAlertArgs }
@@ -584,7 +705,10 @@ export type AxeToolCall =
   | { id: string; tool: "list_alerts"; args: ListAlertsArgs }
   | { id: string; tool: "update_alert"; args: UpdateAlertArgs }
   | { id: string; tool: "read_journal"; args: ReadJournalArgs }
-  | { id: string; tool: "navigate_to"; args: NavigateToArgs };
+  | { id: string; tool: "navigate_to"; args: NavigateToArgs }
+  | { id: string; tool: "route_chart_action"; args: RouteChartActionArgs }
+  | { id: string; tool: "auto_journal_trades"; args: AutoJournalTradesArgs }
+  | { id: string; tool: "prepare_execution_request"; args: PrepareExecutionRequestArgs };
 
 export function computeFibonacci(args: FibonacciArgs): string {
   const { swing_high, swing_low, symbol, direction } = args;
@@ -748,6 +872,41 @@ function formatWatchEntry(w: WatchlistEntry): string {
   return line.join(" ");
 }
 
+function buildSessionLockFromContext(context: TradingOSContext): string {
+  const chart = context.axe_context?.chart;
+  const accounts = context.companion_accounts ?? [];
+  const activeAccountId =
+    context.companion_active_account_id ??
+    context.axe_context?.accounts?.activeAccountId ??
+    null;
+  const activeAccount =
+    (activeAccountId ? accounts.find((a) => a.id === activeAccountId) : null) ??
+    accounts[0] ??
+    null;
+
+  const activePair =
+    context.symbol ??
+    chart?.symbol ??
+    context.account_state.watchlist?.[0]?.symbol ??
+    "UNKNOWN";
+  const activeTf = context.timeframe ?? chart?.timeframe ?? "UNKNOWN";
+  const brokerSymbol = chart?.brokerSymbol ?? "UNRESOLVED";
+  const canonical =
+    chart?.lastPrice ?? chart?.lastBid ?? chart?.lastAsk ?? null;
+  const accountLabel = activeAccount?.label ?? "NONE";
+
+  return [
+    "SESSION LOCK — APPLY ON EVERY ANSWER",
+    `Active account: ${accountLabel}${activeAccountId ? ` (${activeAccountId})` : ""}`,
+    `Active pair/timeframe: ${activePair} ${activeTf}`,
+    `Broker symbol: ${brokerSymbol}`,
+    `Canonical broker price regime: ${canonical != null ? String(canonical) : "unavailable"}`,
+    "Never reuse levels from old turns/pairs. Keep levels in this symbol's current price regime.",
+    "If exact levels are requested and live price is missing/stale, call get_live_price first.",
+    "If you claim a chart drawing was added, you must call route_chart_action and include its [[link:...]] result.",
+  ].join("\n");
+}
+
 export type TerminalAlert = {
   title: string;
   body: string | null;
@@ -880,8 +1039,8 @@ export function buildAxeMessagesFromContext(
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   const pinnedContext = context.candles_summary ?? "";
 
-  // 1. Base system prompt
-  const parts: string[] = [AXE_SYSTEM_PROMPT];
+  // 1. Session lock + base prompt (lock goes first so local-model truncation still keeps it)
+  const parts: string[] = [buildSessionLockFromContext(context), AXE_SYSTEM_PROMPT];
 
   // 2. Active pair / timeframe block
   if (context.symbol || context.timeframe) {
@@ -1203,48 +1362,29 @@ const VALID_TOOL_NAMES: Set<AxeToolCall["tool"]> = new Set([
   "update_alert",
   "read_journal",
   "navigate_to",
+  "route_chart_action",
+  "auto_journal_trades",
+  "prepare_execution_request",
 ]);
 
 export async function callAxe(
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+  messages: LLMMessage[]
 ): Promise<AxeResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error("[axeService] OPENAI_API_KEY not set");
-    return { content: null, toolCalls: [] };
-  }
-
-  const config = getAIConfig();
-  if (!config) {
-    console.error("[axeService] No AI provider configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY.");
-    return { content: null, toolCalls: [] };
-  }
-
-  const model = getModelForProvider(config);
-
   try {
-    const response = await createChatCompletion({
-      model,
+    const result = await callLLM({
       messages,
       tools: AXE_TOOLS,
-      tool_choice: "auto",
-      parallel_tool_calls: true,
+      toolChoice: "auto",
       max_tokens: 800,
       temperature: 0.55,
     });
 
-    const choice = response.choices[0];
-    const rawToolCalls = choice.message.tool_calls ?? [];
-
-    if (rawToolCalls.length > 0) {
+    if (result.toolCalls.length > 0) {
       const toolCalls: AxeToolCall[] = [];
-      for (const raw of rawToolCalls) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fn = (raw as any).function as { name: string; arguments: string };
-        const name = fn.name as AxeToolCall["tool"];
+      for (const tc of result.toolCalls) {
+        const name = tc.tool as AxeToolCall["tool"];
         if (VALID_TOOL_NAMES.has(name)) {
-          const parsed = JSON.parse(fn.arguments);
-          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+          toolCalls.push({ id: tc.id, tool: name, args: tc.args } as AxeToolCall);
         }
       }
       if (toolCalls.length > 0) {
@@ -1252,48 +1392,32 @@ export async function callAxe(
       }
     }
 
-    return { content: choice.message.content ?? null, toolCalls: [] };
+    return { content: result.content, toolCalls: [] };
   } catch (err) {
-    console.error("[axeService] OpenAI error:", err);
+    console.error("[axeService] callAxe error:", err);
     return { content: null, toolCalls: [] };
   }
 }
 
 // Intermediate call after tool results — can still trigger a second tool round (e.g. create_alert after fib)
 export async function callAxeAfterTool(
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+  messages: LLMMessage[]
 ): Promise<AxeResponse> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return { content: null, toolCalls: [] };
-
-  const config = getAIConfig();
-  if (!config) return { content: null, toolCalls: [] };
-
-  const model = getModelForProvider(config);
-
   try {
-    const response = await createChatCompletion({
-      model,
+    const result = await callLLM({
       messages,
       tools: AXE_TOOLS,
-      tool_choice: "auto",
-      parallel_tool_calls: true,
+      toolChoice: "auto",
       max_tokens: 600,
       temperature: 0.4,
     });
 
-    const choice = response.choices[0];
-    const rawToolCalls = choice.message.tool_calls ?? [];
-
-    if (rawToolCalls.length > 0) {
+    if (result.toolCalls.length > 0) {
       const toolCalls: AxeToolCall[] = [];
-      for (const raw of rawToolCalls) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fn = (raw as any).function as { name: string; arguments: string };
-        const name = fn.name as AxeToolCall["tool"];
+      for (const tc of result.toolCalls) {
+        const name = tc.tool as AxeToolCall["tool"];
         if (VALID_TOOL_NAMES.has(name)) {
-          const parsed = JSON.parse(fn.arguments);
-          toolCalls.push({ id: raw.id, tool: name, args: parsed } as AxeToolCall);
+          toolCalls.push({ id: tc.id, tool: name, args: tc.args } as AxeToolCall);
         }
       }
       if (toolCalls.length > 0) {
@@ -1301,7 +1425,7 @@ export async function callAxeAfterTool(
       }
     }
 
-    return { content: choice.message.content ?? null, toolCalls: [] };
+    return { content: result.content, toolCalls: [] };
   } catch (err) {
     console.error("[axeService] callAxeAfterTool error:", err);
     return { content: null, toolCalls: [] };
@@ -1310,26 +1434,75 @@ export async function callAxeAfterTool(
 
 // Final natural-language reply after all tools are done — no more tool calls
 export async function callAxeFinal(
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
+  messages: LLMMessage[]
 ): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  const config = getAIConfig();
-  if (!config) return null;
-
-  const model = getModelForProvider(config);
-
   try {
-    const response = await createChatCompletion({
-      model,
+    const result = await callLLM({
       messages,
       max_tokens: 500,
       temperature: 0.4,
     });
-    return response.choices[0]?.message?.content ?? null;
+    return result.content;
   } catch (err) {
     console.error("[axeService] callAxeFinal error:", err);
     return null;
+  }
+}
+
+/* ── Streaming variants ─────────────────────────────────────────
+   callAxeStreaming  — streaming version of callAxe. Emits text
+   tokens via onToken callback. Returns AxeResponse with full text
+   + any tool calls (model may return tool calls instead of text).
+
+   callAxeFinalStreaming — streaming version of callAxeFinal.
+   No tools, just pure text streaming.
+   ────────────────────────────────────────────────────────────── */
+
+export async function callAxeStreaming(
+  messages: LLMMessage[],
+  onToken: (text: string) => void,
+): Promise<AxeResponse> {
+  try {
+    const result = await streamLLM(
+      {
+        messages,
+        tools: AXE_TOOLS,
+        toolChoice: "auto",
+        max_tokens: 800,
+        temperature: 0.55,
+      },
+      onToken,
+      "chat",
+    );
+
+    if (result.toolCalls.length > 0) {
+      return { content: null, toolCalls: result.toolCalls as AxeToolCall[] };
+    }
+
+    return { content: result.content, toolCalls: [] };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[axeService] callAxeStreaming error:", msg);
+    throw err;
+  }
+}
+
+export async function callAxeFinalStreaming(
+  messages: LLMMessage[],
+  onToken: (text: string) => void,
+): Promise<string | null> {
+  try {
+    const result = await streamLLM(
+      {
+        messages,
+        max_tokens: 500,
+        temperature: 0.4,
+      },
+      onToken,
+    );
+    return result.content;
+  } catch (err) {
+    console.error("[axeService] callAxeFinalStreaming error:", err);
+    throw err;
   }
 }

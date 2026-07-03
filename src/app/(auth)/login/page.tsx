@@ -1,9 +1,11 @@
 import Image from "next/image";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { ComplianceRiskNotice } from "@/components/legal/ComplianceRiskNotice";
 
 export default function LoginPage() {
   return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-6 py-12">
+    <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden overscroll-none bg-[#050608]">
+      <div className="flex h-full w-full items-center justify-center px-6 py-10">
 
       {/* Ambient glow behind wordmark */}
       <div
@@ -20,7 +22,7 @@ export default function LoginPage() {
             height: 200,
             borderRadius: "50%",
             background:
-              "radial-gradient(ellipse at center, rgba(46,196,182,0.10) 0%, rgba(46,196,182,0.03) 55%, transparent 75%)",
+              "radial-gradient(ellipse at center, rgba(0,224,255,0.07) 0%, rgba(0,224,255,0.02) 55%, transparent 75%)",
           }}
         />
       </div>
@@ -32,7 +34,7 @@ export default function LoginPage() {
           <div
             style={{
               filter:
-                "drop-shadow(0 0 22px rgba(46,196,182,0.30)) drop-shadow(0 0 6px rgba(46,196,182,0.18))",
+                "drop-shadow(0 0 22px rgba(0,224,255,0.25)) drop-shadow(0 0 6px rgba(0,224,255,0.12))",
             }}
           >
             <Image
@@ -53,7 +55,7 @@ export default function LoginPage() {
               width: 80,
               height: 1,
               background:
-                "linear-gradient(90deg, transparent, rgba(46,196,182,0.40), transparent)",
+                "linear-gradient(90deg, transparent, rgba(0,224,255,0.30), transparent)",
             }}
           />
 
@@ -66,6 +68,10 @@ export default function LoginPage() {
         {/* Auth form */}
         <LoginForm />
 
+        <div className="mt-6">
+          <ComplianceRiskNotice compact className="text-center" />
+        </div>
+
         {/* Status line */}
         <div className="mt-8 flex items-center justify-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-tos-warm/50" />
@@ -74,6 +80,7 @@ export default function LoginPage() {
           </p>
           <span className="h-1.5 w-1.5 rounded-full bg-tos-warm/50" />
         </div>
+      </div>
       </div>
     </div>
   );

@@ -3,14 +3,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
 
 const PROTECTED_PREFIXES = [
+  "/chart",
   "/chat",
+  "/cockpit",
   "/history",
+  "/intel",
   "/journal",
+  "/market",
   "/accounts",
   "/alerts",
+  "/positions",
   "/vault",
+  "/watchlist",
   "/actions",
-  "/cockpit",
   "/settings",
   "/upgrade",
 ];
@@ -42,6 +47,12 @@ export async function updateSession(request: NextRequest) {
   // unnecessary getUser() round-trip on every Stripe retry.
   if (pathEarly.startsWith("/api/stripe/") || pathEarly === "/api/stripe") {
     return NextResponse.next({ request });
+  }
+  if (pathEarly.startsWith("/demo/embed")) {
+    const res = NextResponse.next({ request });
+    res.headers.set("X-Frame-Options", "SAMEORIGIN");
+    res.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+    return res;
   }
 
   let supabaseResponse = NextResponse.next({ request });
@@ -100,6 +111,11 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/chat";
     return NextResponse.redirect(url);
+  }
+
+  if (request.nextUrl.searchParams.get("embed") === "1") {
+    supabaseResponse.headers.set("X-Frame-Options", "SAMEORIGIN");
+    supabaseResponse.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
   }
 
   return supabaseResponse;

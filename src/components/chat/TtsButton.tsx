@@ -11,15 +11,26 @@ export function TtsButton({ text }: TtsButtonProps) {
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const stopSpeaking = useCallback(() => {
+    setSpeaking(false);
+    window.dispatchEvent(new CustomEvent("axe:speaking", { detail: { speaking: false } }));
+  }, []);
+
+  const startSpeaking = useCallback(() => {
+    setSpeaking(true);
+    window.dispatchEvent(new CustomEvent("axe:speaking", { detail: { speaking: true } }));
+  }, []);
+
   const toggle = useCallback(async () => {
     if (speaking) {
       audioRef.current?.pause();
       if (audioRef.current) audioRef.current.src = "";
-      setSpeaking(false);
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      stopSpeaking();
       return;
     }
 
-    setSpeaking(true);
+    startSpeaking();
 
     try {
       const res = await fetch("/api/chat/tts", {
@@ -29,14 +40,13 @@ export function TtsButton({ text }: TtsButtonProps) {
       });
 
       if (!res.ok) {
-        // Fallback to browser TTS if ElevenLabs unavailable
         if ("speechSynthesis" in window) {
           const utt = new SpeechSynthesisUtterance(text);
-          utt.onend = () => setSpeaking(false);
-          utt.onerror = () => setSpeaking(false);
+          utt.onend = () => stopSpeaking();
+          utt.onerror = () => stopSpeaking();
           window.speechSynthesis.speak(utt);
         } else {
-          setSpeaking(false);
+          stopSpeaking();
         }
         return;
       }
@@ -47,26 +57,26 @@ export function TtsButton({ text }: TtsButtonProps) {
       audioRef.current = audio;
 
       audio.onended = () => {
-        setSpeaking(false);
+        stopSpeaking();
         URL.revokeObjectURL(url);
       };
       audio.onerror = () => {
-        setSpeaking(false);
+        stopSpeaking();
         URL.revokeObjectURL(url);
       };
 
       await audio.play();
     } catch {
-      setSpeaking(false);
+      stopSpeaking();
     }
-  }, [text, speaking]);
+  }, [text, speaking, startSpeaking, stopSpeaking]);
 
   return (
     <button
       type="button"
       onClick={toggle}
       title={speaking ? "Stop" : "Read aloud"}
-      className="flex h-6 w-6 items-center justify-center rounded-md text-tos-dim opacity-0 transition-all group-hover:opacity-100 hover:text-tos-muted"
+      className="flex h-6 w-6 items-center justify-center rounded-md text-tos-dim transition-colors hover:text-tos-muted active:text-tos-muted"
       aria-label={speaking ? "Stop reading" : "Read aloud"}
     >
       {speaking ? (

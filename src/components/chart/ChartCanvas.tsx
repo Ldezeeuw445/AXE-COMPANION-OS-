@@ -12,6 +12,7 @@ import {
 import type {
   CandlestickData,
   IChartApi,
+  Logical,
   IPriceLine,
   ISeriesApi,
   LineData,
@@ -19,20 +20,21 @@ import type {
   UTCTimestamp,
 } from "lightweight-charts";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
-import type { ChartOverlayRow } from "@/lib/broker/loadChartPageData";
-import { CHART_THEME } from "@/components/chart/chartTheme";
+import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
+import { getChartTheme, type ChartThemeKey } from "@/components/chart/chartTheme";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import {
   type AnnotationPoint,
   type ChartAnnotation,
 } from "@/components/chart/annotations/types";
 
-type DrawingMode = "fib_retracement" | "trendline" | null;
+type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | "horizontal_level" | null;
 
 type Props = {
   /** Initial OHLC dataset; replaced on symbol/timeframe change. */
   candles: MetaApiCandle[];
   overlays: ChartOverlayRow[];
+  pendingOrders?: PendingOrderOverlay[];
   /** Used to format right-axis prices (digits) and entry/SL/TP price labels. */
   symbol: string;
   annotations?: ChartAnnotation[];
@@ -40,6 +42,16 @@ type Props = {
   navigationLocked?: boolean;
   /** Called when a chart point is tapped while in drawing mode. */
   onPointClick?: (point: AnnotationPoint) => void;
+  /** Chart color theme key. Defaults to "midnight". */
+  themeKey?: ChartThemeKey;
+  /** "grid" shows gridlines, "solid" hides them. Defaults to "grid". */
+  gridStyle?: "grid" | "solid";
+  /** Reserve top space (e.g. mobile chart toolbar in landscape). */
+  layoutInsetTop?: number;
+  /** Extra bottom inset inside the chart frame for time-axis labels. */
+  layoutInsetBottom?: number;
+  /** Tighter margins for short landscape viewports. */
+  compactLayout?: boolean;
 };
 
 export type ChartCanvasHandle = {
@@ -62,6 +74,8 @@ export type ChartCanvasHandle = {
   subscribeViewport: (cb: () => void) => () => void;
   /** Width (px) the right price scale currently occupies, so panes can mirror it. */
   getRightAxisWidth: () => number;
+  /** Scroll the chart time axis by a pixel delta (negative = scroll left / back in time). */
+  scrollByPixels: (deltaX: number) => void;
 };
 
 /** Default native zoom: how many of the most recent bars are visible at first paint
@@ -70,6 +84,11 @@ const DEFAULT_VISIBLE_BARS = 100;
 const PRESET_VISIBLE_BARS = [60, 120, 240];
 const PRESET_RIGHT_OFFSET = [3, 5, 8];
 
+/**
+ * Compute MT5-style SL/TP label with PnL:
+ *   "SL, -1 123.69 USD"  /  "TP, 5 711.01 USD"
+ * Space as thousands separator, always 2 decimals, no "+" on positive.
+ */
 function toUtcTimestamp(iso: string): UTCTimestamp | null {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return null;
@@ -87,15 +106,99 @@ function buildSeriesData(candles: MetaApiCandle[]): CandlestickData[] {
   return data;
 }
 
+function readSeriesTimes(series: ISeriesApi<"Candlestick"> | null): number[] {
+  if (!series) return [];
+  const rows = series.data() as Array<{ time: unknown }>;
+  const times: number[] = [];
+  for (const row of rows) {
+    const t = Number(row.time);
+    if (Number.isFinite(t)) times.push(t);
+  }
+  return times;
+}
+
+function estimateBarStepSeconds(times: number[]): number {
+  if (times.length < 2) return 60;
+  const deltas: number[] = [];
+  const start = Math.max(1, times.length - 60);
+  for (let i = start; i < times.length; i += 1) {
+    const d = times[i] - times[i - 1];
+    if (Number.isFinite(d) && d > 0) deltas.push(d);
+  }
+  if (deltas.length === 0) return 60;
+  deltas.sort((a, b) => a - b);
+  return deltas[Math.floor(deltas.length / 2)] ?? 60;
+}
+
+function logicalToUnixTime(logical: number, times: number[], stepSec: number): number | null {
+  if (!Number.isFinite(logical) || times.length === 0) return null;
+  const first = times[0];
+  const lastIndex = times.length - 1;
+  const last = times[lastIndex];
+  if (logical <= 0) return Math.round(first + logical * stepSec);
+  if (logical >= lastIndex) return Math.round(last + (logical - lastIndex) * stepSec);
+  const lo = Math.floor(logical);
+  const hi = Math.ceil(logical);
+  if (lo === hi) return Math.round(times[lo] ?? first);
+  const loTime = times[lo] ?? first;
+  const hiTime = times[hi] ?? loTime + stepSec;
+  const frac = logical - lo;
+  return Math.round(loTime + (hiTime - loTime) * frac);
+}
+
+function unixTimeToLogical(timeSec: number, times: number[], stepSec: number): number | null {
+  if (!Number.isFinite(timeSec) || times.length === 0) return null;
+  const first = times[0];
+  const lastIndex = times.length - 1;
+  const last = times[lastIndex];
+  if (timeSec <= first) return (timeSec - first) / stepSec;
+  if (timeSec >= last) return lastIndex + (timeSec - last) / stepSec;
+
+  let lo = 0;
+  let hi = lastIndex;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const t = times[mid];
+    if (t === timeSec) return mid;
+    if (t < timeSec) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  const left = Math.max(0, hi);
+  const right = Math.min(lastIndex, lo);
+  if (left === right) return left;
+  const leftTime = times[left];
+  const rightTime = times[right];
+  const span = rightTime - leftTime;
+  if (!Number.isFinite(span) || span <= 0) return left;
+  const frac = (timeSec - leftTime) / span;
+  return left + frac;
+}
+
 export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCanvas(
-  { candles, overlays, symbol, annotations = [], drawingMode = null, navigationLocked = false, onPointClick },
+  {
+    candles,
+    overlays,
+    pendingOrders = [],
+    symbol,
+    annotations = [],
+    drawingMode = null,
+    navigationLocked = false,
+    onPointClick,
+    themeKey,
+    gridStyle = "grid",
+    layoutInsetTop = 0,
+    layoutInsetBottom = 0,
+    compactLayout = false,
+  },
   ref,
 ) {
+  const theme = getChartTheme(themeKey);
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const lastBarRef = useRef<CandlestickData | null>(null);
   const positionLinesRef = useRef<IPriceLine[]>([]);
+  const pendingOrderLinesRef = useRef<IPriceLine[]>([]);
   const annotationLineSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
   const annotationPriceLinesRef = useRef<IPriceLine[]>([]);
   const drawingModeRef = useRef<DrawingMode>(drawingMode);
@@ -114,32 +217,36 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
 
     const chart = createChart(el, {
       layout: {
-        background: { type: ColorType.Solid, color: CHART_THEME.chartCanvasBackground },
-        textColor: CHART_THEME.textColor,
+        background: { type: ColorType.Solid, color: theme.chartCanvasBackground },
+        textColor: theme.textColor,
         fontSize: 11,
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue'",
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: CHART_THEME.grid, style: LineStyle.Solid },
-        horzLines: { color: CHART_THEME.grid, style: LineStyle.Solid },
+        vertLines: { color: gridStyle === "solid" ? "transparent" : theme.grid, style: LineStyle.Solid },
+        horzLines: { color: gridStyle === "solid" ? "transparent" : theme.grid, style: LineStyle.Solid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#0B1117" },
-        horzLine: { color: CHART_THEME.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: "#0B1117" },
+        vertLine: { color: theme.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: theme.crosshairLabelBg },
+        horzLine: { color: theme.crosshair, width: 1, style: LineStyle.Dotted, labelBackgroundColor: theme.crosshairLabelBg },
       },
       rightPriceScale: {
-        borderVisible: false,
-        scaleMargins: { top: 0.08, bottom: 0.18 },
-        textColor: CHART_THEME.textColor,
+        borderVisible: true,
+        borderColor: theme.axisSeparator,
+        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.22 : 0.18 },
+        textColor: theme.textColor,
       },
       timeScale: {
-        borderVisible: false,
+        borderVisible: true,
+        borderColor: theme.axisSeparator,
         secondsVisible: false,
         rightOffset: 4,
         barSpacing: 6,
+        timeVisible: true,
+        minimumHeight: compactLayout ? 40 : 26,
       },
       autoSize: true,
       handleScroll: {
@@ -153,11 +260,13 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: CHART_THEME.bull,
-      downColor: CHART_THEME.bear,
-      borderVisible: false,
-      wickUpColor: CHART_THEME.bullWick,
-      wickDownColor: CHART_THEME.bearWick,
+      upColor: theme.bull,
+      downColor: theme.bear,
+      borderVisible: theme.borderVisible,
+      borderUpColor: theme.bullBorder,
+      borderDownColor: theme.bearBorder,
+      wickUpColor: theme.bullWick,
+      wickDownColor: theme.bearWick,
       priceFormat: { type: "price", precision: digits, minMove: Number(`1e-${digits}`) },
       lastValueVisible: true,
       priceLineVisible: true,
@@ -232,6 +341,14 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         }
       }
       positionLinesRef.current = [];
+      for (const pl of pendingOrderLinesRef.current) {
+        try {
+          series.removePriceLine(pl);
+        } catch {
+          /* ignore */
+        }
+      }
+      pendingOrderLinesRef.current = [];
       for (const pl of annotationPriceLinesRef.current) {
         try {
           series.removePriceLine(pl);
@@ -259,6 +376,17 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     const chart = chartRef.current;
     if (!chart) return;
     chart.applyOptions({
+      rightPriceScale: {
+        scaleMargins: { top: 0.08, bottom: compactLayout ? 0.22 : 0.18 },
+      },
+      timeScale: { minimumHeight: compactLayout ? 32 : 26 },
+    });
+  }, [compactLayout]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({
       handleScroll: {
         mouseWheel: true,
         pressedMouseMove: !navigationLocked,
@@ -267,6 +395,57 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       },
     });
   }, [navigationLocked]);
+
+  // Live theme switch — chart is created once; apply palette when themeKey changes.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    chart.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: theme.chartCanvasBackground },
+        textColor: theme.textColor,
+      },
+      grid: {
+        vertLines: {
+          color: gridStyle === "solid" ? "transparent" : theme.grid,
+          style: LineStyle.Solid,
+        },
+        horzLines: {
+          color: gridStyle === "solid" ? "transparent" : theme.grid,
+          style: LineStyle.Solid,
+        },
+      },
+      crosshair: {
+        vertLine: {
+          color: theme.crosshair,
+          labelBackgroundColor: theme.crosshairLabelBg,
+        },
+        horzLine: {
+          color: theme.crosshair,
+          labelBackgroundColor: theme.crosshairLabelBg,
+        },
+      },
+      rightPriceScale: {
+        borderColor: theme.axisSeparator,
+        textColor: theme.textColor,
+      },
+      timeScale: {
+        borderColor: theme.axisSeparator,
+      },
+    });
+
+    series.applyOptions({
+      upColor: theme.bull,
+      downColor: theme.bear,
+      borderVisible: theme.borderVisible,
+      borderUpColor: theme.bullBorder,
+      borderDownColor: theme.bearBorder,
+      wickUpColor: theme.bullWick,
+      wickDownColor: theme.bearWick,
+    });
+  }, [theme, gridStyle]);
 
   // Render open-position overlays.
   useEffect(() => {
@@ -282,16 +461,25 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     }
     positionLinesRef.current = [];
 
-    overlays.forEach((o, idx) => {
-      const sideTitle = o.side === "buy" ? "Long" : o.side === "sell" ? "Short" : o.side;
+    overlays.forEach((o) => {
+      // Side-based color — red for sell, cyan for buy.
+      const entryColor =
+        o.side === "sell"
+          ? theme.negativeText
+          : o.side === "buy"
+            ? theme.cyanAccent
+            : theme.entryLine;
+
+      // Lines only — labels rendered by PositionLabelsOverlay (left-side text, no box).
       if (o.entryPrice != null && o.entryPrice > 0) {
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.entryPrice,
-            title: `${sideTitle} ${o.volume}${overlays.length > 1 ? ` · #${idx + 1}` : ""}`,
-            color: CHART_THEME.entryLine,
+            color: entryColor,
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
+            axisLabelVisible: false,
+            title: "",
           }),
         );
       }
@@ -299,10 +487,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.stopLoss,
-            title: "SL",
-            color: CHART_THEME.stopLine,
+            color: theme.stopLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
+            axisLabelVisible: false,
+            title: "",
           }),
         );
       }
@@ -310,15 +499,60 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.takeProfit,
-            title: "TP",
-            color: CHART_THEME.takeLine,
+            color: theme.takeLine,
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
+            axisLabelVisible: false,
+            title: "",
           }),
         );
       }
     });
-  }, [overlays]);
+  }, [overlays, symbol, theme]);
+
+  // Render pending-order overlays (limit & stop orders on chart).
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    for (const pl of pendingOrderLinesRef.current) {
+      try {
+        series.removePriceLine(pl);
+      } catch {
+        /* ignore */
+      }
+    }
+    pendingOrderLinesRef.current = [];
+
+    pendingOrders.forEach((o) => {
+      // SL
+      if (o.stopLoss != null && o.stopLoss > 0) {
+        pendingOrderLinesRef.current.push(
+          series.createPriceLine({
+            price: o.stopLoss,
+            color: theme.stopLine,
+            lineWidth: 1,
+            lineStyle: LineStyle.SparseDotted,
+            axisLabelVisible: false,
+            title: "",
+          }),
+        );
+      }
+      // TP
+      if (o.takeProfit != null && o.takeProfit > 0) {
+        pendingOrderLinesRef.current.push(
+          series.createPriceLine({
+            price: o.takeProfit,
+            color: theme.takeLine,
+            lineWidth: 1,
+            lineStyle: LineStyle.SparseDotted,
+            axisLabelVisible: false,
+            title: "",
+          }),
+        );
+      }
+    });
+  }, [pendingOrders, symbol, theme]);
 
   // Render user annotations (trendline + horizontal levels). Fib retracement
   // is rendered as an interactive SVG overlay outside the canvas.
@@ -345,7 +579,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
     }
     annotationLineSeriesRef.current = [];
 
-    annotations.forEach((ann, idx) => {
+    annotations.forEach((ann) => {
       if (ann.type === "fib_retracement") {
         // handled by FibAnnotationLayer
         return;
@@ -354,16 +588,12 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         // handled by TrendlineAnnotationLayer (interactive SVG overlay)
         return;
       }
-      if (ann.type === "horizontal_level" && ann.points.length >= 1) {
-        annotationPriceLinesRef.current.push(
-          series.createPriceLine({
-            price: ann.points[0].price,
-            title: `Level ${idx + 1}`,
-            color: "rgba(168,180,196,0.55)",
-            lineWidth: 1,
-            lineStyle: LineStyle.Dashed,
-          }),
-        );
+      if (ann.type === "horizontal_level") {
+        // handled by HorizontalLevelAnnotationLayer
+        return;
+      }
+      if (ann.type === "rectangle" || ann.type === "text") {
+        return;
       }
     });
   }, [annotations]);
@@ -385,11 +615,16 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         };
         const last = lastBarRef.current;
         if (last && last.time === incoming.time) {
+          // Keep the displayed/in-progress close anchored to the canonical
+          // quote stream. Candle polling is still allowed to correct OHLC,
+          // but it must not pull the visible price back to a stale candle
+          // close between real broker ticks.
+          const canonicalClose = Number.isFinite(last.close) ? last.close : incoming.close;
           const merged: CandlestickData = {
             ...incoming,
-            high: Math.max(incoming.high, last.high, last.close),
-            low: Math.min(incoming.low, last.low, last.close),
-            close: last.close,
+            high: Math.max(incoming.high, last.high, incoming.close, canonicalClose),
+            low: Math.min(incoming.low, last.low, incoming.close, canonicalClose),
+            close: canonicalClose,
           };
           series.update(merged);
           lastBarRef.current = merged;
@@ -425,7 +660,13 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         const chart = chartRef.current;
         if (!chart || !Number.isFinite(time)) return null;
         const x = chart.timeScale().timeToCoordinate(time as UTCTimestamp);
-        return x == null ? null : Number(x);
+        if (x != null) return Number(x);
+        const times = readSeriesTimes(seriesRef.current);
+        const stepSec = estimateBarStepSeconds(times);
+        const logical = unixTimeToLogical(time, times, stepSec);
+        if (logical == null) return null;
+        const fallback = chart.timeScale().logicalToCoordinate(logical as Logical);
+        return fallback == null ? null : Number(fallback);
       },
       coordinateToPrice(y: number) {
         const ser = seriesRef.current;
@@ -437,7 +678,12 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
         const chart = chartRef.current;
         if (!chart) return null;
         const t = chart.timeScale().coordinateToTime(x);
-        return t == null ? null : Number(t);
+        if (t != null) return Number(t);
+        const logical = chart.timeScale().coordinateToLogical(x);
+        if (logical == null || !Number.isFinite(logical)) return null;
+        const times = readSeriesTimes(seriesRef.current);
+        const stepSec = estimateBarStepSeconds(times);
+        return logicalToUnixTime(Number(logical), times, stepSec);
       },
       fitContent() {
         const chart = chartRef.current;
@@ -499,36 +745,57 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
           return 0;
         }
       },
+      scrollByPixels(deltaX: number) {
+        const chart = chartRef.current;
+        if (!chart) return;
+        try {
+          chart.timeScale().scrollToPosition(
+            chart.timeScale().scrollPosition() + deltaX / 8,
+            false,
+          );
+        } catch { /* ignore */ }
+      },
     }),
     [],
   );
+
+  const insetStyle = {
+    top: layoutInsetTop,
+    bottom: layoutInsetBottom,
+    left: 0,
+    right: 0,
+  };
 
   return (
     <>
       {/* Flat terminal base: keep the chart feeling native, not like a floating card. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ background: CHART_THEME.chartCanvasBackground }}
+        className="pointer-events-none absolute"
+        style={{ ...insetStyle, background: theme.chartCanvasBackground }}
       />
 
-      {/* Chart canvas itself — transparent so the bg blend shows through */}
+      {/* Chart canvas — top/bottom insets must NOT use h-full or the time axis clips off-screen. */}
       <div
         ref={hostRef}
-        className="absolute inset-0 h-full w-full"
+        className="absolute"
         style={{
+          ...insetStyle,
           cursor: drawingMode ? "crosshair" : undefined,
           userSelect: "none",
           WebkitUserSelect: "none",
           WebkitTouchCallout: "none",
+          touchAction: "none",
         }}
       />
 
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{ boxShadow: CHART_THEME.frameGlow }}
-      />
+      {theme.frameGlow && theme.frameGlow !== "none" ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute"
+          style={{ ...insetStyle, boxShadow: theme.frameGlow }}
+        />
+      ) : null}
     </>
   );
 });

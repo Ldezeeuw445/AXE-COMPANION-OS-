@@ -1,11 +1,30 @@
-# axe-metaapi-streamer
+# axe-metaapi-streamer v2
 
 Long-lived Node process that connects to MetaApi via the official streaming
 SDK (`metaapi.cloud-sdk`) and pushes normalized chart events to the Cloudflare
 ChartLiveRoom Durable Object via `/internal/publish`.
 
-This service exists because the SDK is Node-only and cannot run inside a
-Cloudflare Worker runtime. The Worker remains the public-facing realtime edge.
+## What changed in v2
+
+- **Dynamic subscriptions** — loads accounts + watchlist from Supabase on startup
+- **Multi-symbol** — subscribes to ALL watchlist symbols per account on one connection
+- **Orders listener** — pending orders (buy limit, sell stop, etc.) now stream to the client
+- **Hot-add symbols** — new watchlist items detected within 60s, no restart needed
+- **Backwards compatible** — set `STATIC_MODE=true` to use the old `SUBSCRIPTIONS` env
+
+## Architecture
+
+```
+MetaApi SDK (socket.io) → Node Streamer → HTTP POST → CF DO → WebSocket → Browser
+```
+
+The streamer queries Supabase every 60s to discover:
+1. Active MT5 cloud accounts (`user_broker_accounts`)
+2. Watchlist symbols per user (`assistant_memory_entries`)
+3. Broker symbol mapping (`metadata.symbol_map`)
+
+Ticks fan out to ALL timeframe rooms for a symbol. Positions and orders
+broadcast to all rooms for the affected symbol.
 
 ## Setup
 
@@ -13,28 +32,8 @@ Cloudflare Worker runtime. The Worker remains the public-facing realtime edge.
 cd node/metaapi-streamer
 npm install
 cp .env.example .env
-# Fill in METAAPI_TOKEN, WORKER_URL, STREAMER_SECRET, SUBSCRIPTIONS
+# Fill in METAAPI_TOKEN, WORKER_URL, STREAMER_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 ```
-
-## Subscriptions format
-
-`SUBSCRIPTIONS` is a comma-separated list. Each entry follows:
-
-```
-userId|accountId|metaApiAccountId|displaySymbol|brokerSymbol|tf
-```
-
-Example with two rooms:
-
-```
-SUBSCRIPTIONS=u_abc|acc_123|metaapi_xyz|XAUUSD|XAUUSDm|h1,u_abc|acc_123|metaapi_xyz|EURUSD|EURUSD|m15
-```
-
-`tf` must be one of: `m5`, `m15`, `m30`, `h1`, `h4`, `d1`.
-
-(Future: replace this static list with an admin endpoint that asks Supabase
-for the active rooms; or have the Worker request a stream when a websocket
-connects. The current flow is enough for production.)
 
 ## Run locally
 
@@ -42,68 +41,53 @@ connects. The current flow is enough for production.)
 npm run dev
 ```
 
-You should see:
-
-```
-[streamer …] INFO: subscribing XAUUSD (XAUUSDm) h1 on metaapi_xyz
-```
-
-## Build & run
+## Build & deploy
 
 ```bash
 npm run build
 npm start
 ```
 
-## Deploy
+### Railway (aanbevolen — geen Root Directory nodig)
 
-Anywhere that runs Node 20+ as a long-lived process:
+Zie **`docs/railway-streamer-setup-nl.md`** — 3 stappen:
 
-- Railway: push the folder, set env vars in the dashboard.
-- Fly.io: `flyctl launch` with a tiny VM (256–512MB).
-- Render: web service, start command `npm start`.
-- Docker: see the `Dockerfile` snippet below.
+1. Nieuw Railway-project → GitHub repo
+2. Config file path: `/node/metaapi-streamer/railway.json`
+3. Env vars plakken (METAAPI_TOKEN, WORKER_URL, STREAMER_SECRET, Supabase)
 
-```Dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install --omit=dev
-COPY dist ./dist
-CMD ["node", "--enable-source-maps", "dist/index.js"]
+De repo bevat `Dockerfile.streamer` in de root — Railway bouwt automatisch vanuit de monorepo.
+
+### Docker
+
+```bash
+npm run build
+docker build -t axe-streamer .
+docker run --env-file .env axe-streamer
 ```
 
 ## Switching the Cloudflare Worker to push mode
 
-After the streamer is up:
+After the streamer is running:
 
 ```bash
 cd ../../cloudflare/chart-edge
 npx wrangler secret put STREAMER_SECRET
 # Edit wrangler.toml: WORKER_MODE = "push"
-npm run deploy
+npx wrangler deploy
 ```
 
-The Durable Object will stop polling MetaApi REST and rely on
-`/internal/publish` from this streamer.
+## Environment variables
 
-## Backpressure / failure handling
+| Variable | Required | Description |
+|---|---|---|
+| `METAAPI_TOKEN` | ✅ | MetaApi API token |
+| `WORKER_URL` | ✅ | CF Worker base URL |
+| `STREAMER_SECRET` | ✅ | HMAC secret for `/internal/publish` |
+| `SUPABASE_URL` | ✅* | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅* | Supabase service role key |
+| `STATIC_MODE` | | Set `true` for legacy static subscriptions |
+| `SUBSCRIPTIONS` | | Legacy comma-separated subscriptions |
+| `LOG_LEVEL` | | `error` / `warn` / `info` / `debug` |
 
-- `publishEvent` retries up to 3 times with exponential backoff per event.
-- Hard 4xx errors are dropped (likely a misconfigured secret) — the streamer
-  keeps running.
-- On MetaApi disconnect the streamer broadcasts `live_status: reconnecting`
-  to all rooms; the SDK auto-reconnects.
-
-## Security
-
-- Secret-protected publish endpoint (`X-Streamer-Secret`).
-- Streamer never exposes itself to the public; it only makes outbound HTTP.
-- MetaApi token stays on the Node host. Never put it in the browser.
-
-## Limits & next steps
-
-- One process can host many subscriptions but they share the SDK socket.
-- For multi-tenant scale: shard by account; each shard a Fly machine.
-- The `Subscription` parser is fed from env today. The next iteration can
-  pull from Supabase on startup and reconcile changes via webhooks.
+\* Required unless `STATIC_MODE=true`.

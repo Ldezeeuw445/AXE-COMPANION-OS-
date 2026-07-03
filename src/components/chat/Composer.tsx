@@ -1,12 +1,31 @@
 "use client";
 
-import { Suspense, useState, useRef, useCallback, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Mic, MicOff, Paperclip, Send, X, ImageIcon, ChevronRight } from "lucide-react";
+/**
+ * AXEComposer — streamlined chat input.
+ *
+ * Pair/TF selection has moved to PinnedContext.
+ * Queries-left count is now in the placeholder: "Ask AXE… · 12 queries left"
+ * Buttons: attach, mic (skeu inset), send (cyan).
+ *
+ * All business logic (submit, speech-to-text, image attach, chart-action
+ * detection, optimistic bubbles, quota refresh) is preserved unchanged.
+ */
+
+import { Suspense, useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import {
+  CHAT_PREFILL_EVENT,
+  clearStagedChatPrefill,
+  readStagedChatPrefill,
+} from "@/lib/chat/chatPrefill";
+import { Send, X, ImageIcon } from "lucide-react";
+import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
+import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
+import { IntelTerminalComposer } from "@/components/chat/IntelTerminalComposer";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
-import { LEGAL_COPY } from "@/lib/legal/constants";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
+import { useAmbient } from "@/components/ambient/AmbientProvider";
 
 declare global {
   interface Window {
@@ -17,19 +36,21 @@ declare global {
   }
 }
 
-const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "D", "W"];
-
 const LS_SYMBOL = "axe_active_symbol";
 const LS_TF = "axe_active_tf";
 
 type ComposerProps = {
   initialQuota?: ChatQuotaPayload | null;
-  /** When false, hide quota strip (e.g. demo / mock thread). */
   showQuota?: boolean;
 };
 
 function ComposerFallback() {
-  return <div className="mt-3 h-24 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03]" aria-hidden />;
+  return (
+    <div
+      className="mt-3 h-16 shrink-0 rounded-xl border border-white/[0.06] bg-white/[0.03]"
+      aria-hidden
+    />
+  );
 }
 
 function toChartTfKey(raw: string): string {
@@ -43,17 +64,34 @@ function toChartTfKey(raw: string): string {
   return "h1";
 }
 
-function chartActionHref(action: string, symbol: string, tf: string): string {
+function inferIndicatorLayers(text: string): string[] {
+  const n = text.toLowerCase();
+  const layers: string[] = [];
+  if (n.includes("ifvg")) layers.push("ifvg");
+  else if (n.includes("fvg")) layers.push("fvg");
+  if (n.includes("structure")) layers.push("structure");
+  if (n.includes("order block") || n.includes("orderblock") || n.includes(" ob")) layers.push("orderBlocks");
+  if (n.includes("rsi")) layers.push("rsi");
+  if (n.includes("rsi") === false && n.includes(" ma")) layers.push("ma");
+  return layers;
+}
+
+function chartActionHref(action: string, symbol: string, tf: string, layers?: string[]): string {
   const params = new URLSearchParams();
   params.set("symbol", symbol || "XAUUSD");
   params.set("tf", toChartTfKey(tf || "h1"));
   params.set("action", action);
+  if (action === "add_indicator" && layers?.length) {
+    params.set("layers", layers.join(","));
+  }
   return `/chart?${params.toString()}`;
 }
 
 function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { vibrate } = useAmbient();
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,27 +99,63 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const [listening, setListening] = useState(false);
   const [image, setImage] = useState<{ base64: string; type: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const appliedPrefillRef = useRef<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
-  // ── Active pair / timeframe context ────────────────────────────────────────
-  const [symbol, setSymbol] = useState("");
-  const [tf, setTf] = useState("");
-  const [editingSymbol, setEditingSymbol] = useState(false);
-  const [symbolDraft, setSymbolDraft] = useState("");
-  const symbolInputRef = useRef<HTMLInputElement>(null);
-
-  // Hydrate from localStorage after mount (SSR-safe)
-  useEffect(() => {
-    setSymbol(localStorage.getItem(LS_SYMBOL) ?? "");
-    setTf(localStorage.getItem(LS_TF) ?? "");
+  const focusDraft = useCallback((draft: string) => {
+    const el = textareaRef.current;
+    if (!el) return false;
+    el.focus();
+    el.setSelectionRange(draft.length, draft.length);
+    return true;
   }, []);
 
-  useEffect(() => {
+  const applyDraft = useCallback(
+    (draft: string) => {
+      const trimmed = draft.trim();
+      if (!trimmed) return;
+      if (appliedPrefillRef.current === trimmed) return;
+      appliedPrefillRef.current = trimmed;
+      setValue(trimmed);
+      clearStagedChatPrefill();
+      requestAnimationFrame(() => {
+        if (focusDraft(trimmed)) return;
+        window.setTimeout(() => {
+          focusDraft(trimmed);
+        }, 64);
+      });
+    },
+    [focusDraft],
+  );
+
+  // Read pair/TF from localStorage (PinnedContext writes these)
+  const getSymbol = useCallback(() => {
+    try { return localStorage.getItem(LS_SYMBOL) ?? ""; } catch { return ""; }
+  }, []);
+  const getTf = useCallback(() => {
+    try { return localStorage.getItem(LS_TF) ?? ""; } catch { return ""; }
+  }, []);
+
+  const resolvePrefillDraft = useCallback((): string | null => {
+    const staged = readStagedChatPrefill();
+    if (staged?.trim()) return staged;
     const q = searchParams.get("q");
-    if (!q) return;
-    const decoded = decodeURIComponent(q);
-    setValue((prev) => (prev.trim() ? prev : decoded));
+    if (!q) return null;
+    try {
+      return decodeURIComponent(q);
+    } catch {
+      return q;
+    }
+  }, [searchParams]);
+
+  // Prefill from staged session draft or ?q= query param (layout effect for mobile/iPad)
+  useLayoutEffect(() => {
+    if (pathname !== "/chat") return;
+    const draft = resolvePrefillDraft();
+    if (!draft) return;
+    applyDraft(draft);
     if (typeof window !== "undefined") {
       const u = new URL(window.location.href);
       if (u.searchParams.has("q")) {
@@ -89,7 +163,31 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         window.history.replaceState({}, "", `${u.pathname}${u.search}${u.hash}`);
       }
     }
-  }, [searchParams]);
+  }, [pathname, resolvePrefillDraft, applyDraft]);
+
+  // Retry staged prefill after portal mount on touch devices
+  useEffect(() => {
+    if (pathname !== "/chat") return;
+    const draft = readStagedChatPrefill();
+    if (!draft?.trim()) return;
+    const timers = [96, 240].map((ms) =>
+      window.setTimeout(() => {
+        applyDraft(draft);
+      }, ms),
+    );
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [pathname, applyDraft]);
+
+  // Same-route prefill from Actions / chart workflows while Composer stays mounted
+  useEffect(() => {
+    function onPrefill(e: Event) {
+      const ce = e as CustomEvent<{ text?: string }>;
+      const text = ce.detail?.text;
+      if (text) applyDraft(text);
+    }
+    window.addEventListener(CHAT_PREFILL_EVENT, onPrefill);
+    return () => window.removeEventListener(CHAT_PREFILL_EVENT, onPrefill);
+  }, [applyDraft]);
 
   useEffect(() => {
     setQuota(initialQuota);
@@ -107,68 +205,33 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     }
   }, [showQuota]);
 
-  // Focus the symbol input when editing mode opens
-  useEffect(() => {
-    if (editingSymbol) {
-      symbolInputRef.current?.focus();
-      symbolInputRef.current?.select();
-    }
-  }, [editingSymbol]);
+  // ── Placeholder with queries-left ─────────────────────────────────────
+  const placeholder = (() => {
+    if (listening) return "Listening…";
+    if (!showQuota || !quota?.ok) return "Ask AXE…";
+    if (quota.skipped || quota.remaining === -1) return "Ask AXE…";
+    return `Ask AXE… · ${quota.remaining} queries left`;
+  })();
 
-  function openSymbolEdit() {
-    setSymbolDraft(symbol);
-    setEditingSymbol(true);
-  }
-
-  function commitSymbol() {
-    const upper = symbolDraft.trim().toUpperCase();
-    setSymbol(upper);
-    if (upper) {
-      localStorage.setItem(LS_SYMBOL, upper);
-    } else {
-      localStorage.removeItem(LS_SYMBOL);
-    }
-    setEditingSymbol(false);
-  }
-
-  function cycleTf() {
-    const idx = tf ? TIMEFRAMES.indexOf(tf) : -1;
-    const next = idx === TIMEFRAMES.length - 1 ? "" : (TIMEFRAMES[idx + 1] ?? "");
-    setTf(next);
-    if (next) {
-      localStorage.setItem(LS_TF, next);
-    } else {
-      localStorage.removeItem(LS_TF);
-    }
-  }
-
-  function clearContext() {
-    setSymbol("");
-    setTf("");
-    setEditingSymbol(false);
-    localStorage.removeItem(LS_SYMBOL);
-    localStorage.removeItem(LS_TF);
-  }
-
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // ── Submit (streaming) ─────────────────────────────────────────────────
   async function submit() {
     const text = value.trim();
     if ((!text && !image) || sending) return;
 
+    const symbol = getSymbol();
+    const tf = getTf();
+
     const chartAction = detectFallbackChartActionIntent(text);
     if (chartAction && !image) {
       setValue("");
-      router.push(chartActionHref(chartAction, symbol || "XAUUSD", tf || "h1"));
+      const layers = chartAction === "add_indicator" ? inferIndicatorLayers(text) : undefined;
+      router.push(chartActionHref(chartAction, symbol || "XAUUSD", tf || "h1", layers));
       return;
     }
 
     setSending(true);
     setError(null);
     if (typeof window !== "undefined") {
-      // Optimistic user bubble: the message list paints this immediately so
-      // the user never sends into silence. It gets cleared by the
-      // ChatMessageList when a fresh `messages` prop arrives after the
-      // server round-trip (router.refresh()).
       const optimisticId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       window.dispatchEvent(
         new CustomEvent("axe:user-message", {
@@ -180,50 +243,128 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           },
         }),
       );
-      // Tell the message list AXE is thinking so it can show a typing
-      // bubble immediately — the server round-trip can be 3-8s while AXE
-      // chains tools, and silence there feels broken.
       window.dispatchEvent(
         new CustomEvent("axe:thinking", { detail: { thinking: true } }),
       );
     }
-    try {
-      const body: Record<string, unknown> = { text: text || "(chart attached)" };
-      if (image) {
-        body.imageBase64 = image.base64;
-        body.imageType = image.type;
-      }
-      if (symbol) body.symbol = symbol;
-      if (tf) body.tf = tf;
 
-      const res = await fetch("/api/chat/messages", {
+    const body: Record<string, unknown> = {
+      text: text || "(chart attached)",
+      type: intelMode ? "intel" : "axe",
+    };
+    if (image) {
+      body.imageBase64 = image.base64;
+      body.imageType = image.type;
+    }
+    if (symbol) body.symbol = symbol;
+    if (tf) body.tf = tf;
+
+    // Clear input immediately
+    const inputText = value;
+    setValue("");
+    setImage(null);
+
+    try {
+      // Get Supabase session token so server-side auth works even if cookies
+      // aren't forwarded (common on Vercel deployments).
+      let authHeader: Record<string, string> = {};
+      try {
+        const sb = createClient();
+        const { data: { session } } = await sb.auth.getSession();
+        if (session?.access_token) {
+          authHeader = { Authorization: `Bearer ${session.access_token}` };
+        }
+      } catch {
+        // Silently ignore — server will try cookie auth as fallback
+      }
+
+      const res = await fetch("/api/chat/stream", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeader },
         body: JSON.stringify(body),
       });
-      let resBody: { code?: string; error?: string } = {};
-      try {
-        resBody = (await res.json()) as { code?: string; error?: string };
-      } catch {
-        /* non-JSON */
+
+      if (!res.ok || !res.body) {
+        const fallback = await fetch("/api/chat/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeader },
+          body: JSON.stringify(body),
+        });
+        if (!fallback.ok) throw new Error("Message not persisted");
+        void loadQuota();
+        router.refresh();
+        return;
       }
-      if (!res.ok) {
-        if (res.status === 429 && resBody.code === "CHAT_QUOTA") {
-          setError(
-            resBody.error ??
-              "Daily free message limit reached. Upgrade to Pro for unlimited chat."
-          );
-          void loadQuota();
-          return;
+
+      // Read SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+      let currentEvent = "";
+      let tokensReceived = false;
+      let sseError: string | null = null;
+
+      while (true) {
+        const { done, value: chunk } = await reader.read();
+        if (done) break;
+
+        sseBuffer += decoder.decode(chunk, { stream: true });
+
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            const raw = line.slice(6).trim();
+            if (raw === "[DONE]") continue;
+            try {
+              const data = JSON.parse(raw) as {
+                type?: string;
+                text?: string;
+                message?: string;
+              };
+              const eventType = data.type ?? currentEvent;
+              if ((eventType === "token" || currentEvent === "token") && data.text) {
+                tokensReceived = true;
+                window.dispatchEvent(
+                  new CustomEvent("axe:stream-token", { detail: { text: data.text } }),
+                );
+              } else if (eventType === "status" || currentEvent === "status") {
+                window.dispatchEvent(
+                  new CustomEvent("axe:stream-status", { detail: data }),
+                );
+              } else if (eventType === "done" || currentEvent === "done") {
+                void loadQuota();
+                router.refresh();
+              } else if (eventType === "error" || currentEvent === "error") {
+                sseError = data.message ?? "AXE encountered an error.";
+                if (sseError.includes("limit reached") || sseError.includes("Upgrade")) {
+                  void loadQuota();
+                }
+              }
+            } catch {
+              /* malformed JSON line — skip */
+            }
+          }
         }
-        throw new Error("Message not persisted");
       }
-      setValue("");
-      setImage(null);
-      void loadQuota();
-      router.refresh();
-    } catch {
-      setError("Could not save message.");
+
+      if (sseError) {
+        setError(sseError);
+      } else if (tokensReceived) {
+        void loadQuota();
+        router.refresh();
+      }
+    } catch (err) {
+      setValue(inputText);
+      const msg = err instanceof Error ? err.message : "";
+      setError(
+        msg && msg !== "Message not persisted"
+          ? msg
+          : "Connection lost — AXE may still be thinking. Refresh in a moment.",
+      );
     } finally {
       setSending(false);
       if (typeof window !== "undefined") {
@@ -234,7 +375,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     }
   }
 
-  // ── Mic ────────────────────────────────────────────────────────────────────
+  // ── Mic ───────────────────────────────────────────────────────────────
   const toggleMic = useCallback(() => {
     const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
     if (!SR) {
@@ -245,6 +386,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
+      window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       return;
     }
 
@@ -258,18 +400,23 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       const transcript = e.results[0][0].transcript;
       setValue((prev) => (prev ? prev + " " + transcript : transcript));
     };
-    rec.onend = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
+    };
     rec.onerror = () => {
       setListening(false);
+      window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       setError("Mic error — check browser permissions.");
     };
 
     recognitionRef.current = rec;
     rec.start();
     setListening(true);
+    window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: true } }));
   }, [listening]);
 
-  // ── File ───────────────────────────────────────────────────────────────────
+  // ── File ──────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -288,104 +435,25 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     e.target.value = "";
   }
 
-  const hasContext = symbol || tf;
+  const intelMode = useChatIntelMode();
+
+  async function runQuickAction(draft: string) {
+    setValue(draft);
+    await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    void submit();
+  }
 
   return (
-    <div className="mt-3 shrink-0 border-t border-white/[0.06] pt-3">
-      {showQuota && quota?.ok ? (
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1 text-[10px] text-tos-dim">
-          {quota.skipped ? (
-            <span className="text-tos-dim">Quota checks off (dev)</span>
-          ) : quota.remaining === -1 ? (
-            <span className="text-tos-accent-cyan/90">Pro · unlimited sends</span>
-          ) : (
-            <span>
-              <span className="text-tos-muted">{quota.remaining} sends left</span>
-              <span className="text-tos-dim"> · UTC day · </span>
-              <span className="text-tos-dim">limit {quota.limit ?? 20}</span>
-            </span>
-          )}
-          {quota.remaining !== -1 && !quota.skipped ? (
-            <Link
-              href="/upgrade"
-              className="shrink-0 font-medium text-tos-accent-cyan hover:underline"
-            >
-              Upgrade
-            </Link>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* ── Active context strip ──────────────────────────────────────────── */}
-      <div className="mb-2 flex items-center gap-1.5 px-1">
-        {editingSymbol ? (
-          <input
-            ref={symbolInputRef}
-            type="text"
-            value={symbolDraft}
-            onChange={(e) => setSymbolDraft(e.target.value.toUpperCase())}
-            onBlur={commitSymbol}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); commitSymbol(); }
-              if (e.key === "Escape") { setEditingSymbol(false); }
-            }}
-            placeholder="XAUUSD"
-            className="w-24 rounded border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider text-tos-text focus:border-tos-accent-cyan/50 focus:outline-none"
-            maxLength={10}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={openSymbolEdit}
-            title="Set active pair"
-            className={`rounded border px-2 py-0.5 font-mono text-[11px] tracking-wider transition-colors ${
-              symbol
-                ? "border-tos-accent-cyan/30 bg-tos-accent-cyan/10 text-tos-accent-cyan hover:bg-tos-accent-cyan/15"
-                : "border-white/[0.06] bg-white/[0.03] text-tos-dim hover:border-white/10 hover:text-tos-muted"
-            }`}
-          >
-            {symbol || "+ pair"}
-          </button>
-        )}
-
-        {/* TF chip — click to cycle */}
-        <button
-          type="button"
-          onClick={cycleTf}
-          title="Cycle timeframe"
-          className={`flex items-center gap-0.5 rounded border px-2 py-0.5 font-mono text-[11px] tracking-wider transition-colors ${
-            tf
-              ? "border-tos-accent-cyan/30 bg-tos-accent-cyan/10 text-tos-accent-cyan hover:bg-tos-accent-cyan/15"
-              : "border-white/[0.06] bg-white/[0.03] text-tos-dim hover:border-white/10 hover:text-tos-muted"
-          }`}
-        >
-          {tf || "tf"}
-          <ChevronRight className="h-2.5 w-2.5 opacity-50" />
-        </button>
-
-        {/* Clear button — only when something is set */}
-        {hasContext && (
-          <button
-            type="button"
-            onClick={clearContext}
-            title="Clear pair/tf context"
-            className="ml-auto text-tos-dim hover:text-tos-muted transition-colors"
-            aria-label="Clear context"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        )}
-      </div>
-
-      {/* ── Image preview ────────────────────────────────────────────────── */}
+    <div className="mt-auto shrink-0 overflow-visible px-1 pb-1 pt-0">
+      {/* ── Image preview ────────────────────────────────────────────── */}
       {image ? (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">
-          <ImageIcon className="h-4 w-4 shrink-0 text-tos-accent-cyan" />
-          <span className="flex-1 truncate text-xs text-tos-muted">{image.name}</span>
+          <ImageIcon className="h-4 w-4 shrink-0 text-[#00d4f5]" />
+          <span className="flex-1 truncate text-xs text-white/50">{image.name}</span>
           <button
             type="button"
             onClick={() => setImage(null)}
-            className="text-tos-dim hover:text-tos-muted"
+            className="text-white/25 hover:text-white/50"
             aria-label="Remove image"
           >
             <X className="h-3.5 w-3.5" />
@@ -393,70 +461,87 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         </div>
       ) : null}
 
-      {/* ── Composer row ─────────────────────────────────────────────────── */}
-      <div className="tos-neu-composer flex items-end gap-2 rounded-[1.15rem] p-2">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="tos-icon-recessed flex h-10 w-10 shrink-0 items-center justify-center text-tos-dim transition-colors hover:text-tos-muted"
-          aria-label="Attach chart"
-          title="Attach chart image"
-        >
-          <Paperclip className="h-5 w-5" />
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-        <button
-          type="button"
-          onClick={toggleMic}
-          className={`tos-icon-recessed flex h-10 w-10 shrink-0 items-center justify-center transition-colors ${
-            listening ? "text-tos-accent-cyan" : "text-tos-dim hover:text-tos-muted"
-          }`}
-          aria-label={listening ? "Stop recording" : "Voice input"}
-          title={listening ? "Tap to stop" : "Voice input"}
-        >
-          {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-        </button>
-        <label className="sr-only" htmlFor="composer-input">
-          Message
-        </label>
-        <textarea
-          id="composer-input"
-          rows={1}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
+      {/* ── Unified composer bar: quick actions + typing in one row (intel only) ─── */}
+      <div className="relative overflow-visible">
+        {intelMode ? (
+          <IntelTerminalComposer
+            value={value}
+            onChange={setValue}
+            onSubmit={() => {
+              vibrate("medium");
               void submit();
-            }
-          }}
-          placeholder={listening ? "Listening…" : "Private channel…"}
-          className="max-h-28 min-h-10 flex-1 resize-none border-0 bg-transparent py-2.5 text-sm text-tos-text shadow-none placeholder:text-tos-dim focus:outline-none focus:ring-0"
-        />
-        <button
-          type="button"
-          className="tos-btn-cyan flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-opacity disabled:opacity-40"
-          disabled={(!value.trim() && !image) || sending}
-          aria-label="Send"
-          onClick={() => void submit()}
-        >
-          <Send className="h-4 w-4" />
-        </button>
+            }}
+            onQuickAction={(draft) => void runQuickAction(draft)}
+            sending={sending}
+            inputId="composer-input"
+            textareaRef={textareaRef}
+            onFocus={() => {
+              window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+            }}
+          />
+        ) : (
+          // AXE default composer — gradient brand + particle aura
+          <div className="relative overflow-visible">
+            <div
+              className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
+              aria-hidden
+            >
+              <AxeAuraWave variant="composer" palette="axe" />
+            </div>
+            <div
+              className="relative z-10 flex items-center gap-2 overflow-hidden rounded-full border border-white/[0.08] px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+              style={{
+                background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
+                touchAction: "pan-y",
+              }}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
+              <textarea
+                ref={textareaRef}
+                id="composer-input"
+                rows={1}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                enterKeyHint="send"
+                onFocus={() => {
+                  window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void submit();
+                  }
+                }}
+                placeholder={placeholder}
+                className="flex-1 resize-none border-0 bg-transparent px-2 py-1 text-sm text-white/90 placeholder:text-white/30 focus:outline-none"
+              />
+              <button
+                type="button"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-30"
+                style={{
+                  background: "linear-gradient(135deg, #C9F24B 0%, #3FE6CF 52%, #7A57FF 100%)",
+                  boxShadow: "0 0 12px rgba(63,230,207,0.25), 0 2px 8px rgba(0,0,0,0.3)",
+                }}
+                disabled={(!value.trim() && !image) || sending}
+                aria-label="Send"
+                onClick={() => {
+                  vibrate("medium");
+                  void submit();
+                }}
+              >
+                <Send className="h-4 w-4 text-black" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      <p className="mt-2 px-1 text-center text-[10px] leading-relaxed text-tos-dim">{LEGAL_COPY.chatDisclaimer}</p>
-
       {error ? (
-        <p className="mt-2 text-center text-[10px] text-tos-risk">{error}</p>
+        <p className="mt-2 text-center text-[10px] text-red-400/90">{error}</p>
       ) : null}
       {listening ? (
-        <p className="mt-2 text-center text-[10px] text-tos-accent-cyan animate-pulse">
+        <p className="mt-2 text-center text-[10px] text-[#00d4f5] animate-pulse">
           Listening — speak now
         </p>
       ) : null}

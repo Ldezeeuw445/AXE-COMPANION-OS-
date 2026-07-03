@@ -1,5 +1,6 @@
 "use client";
 
+import { LockIconSvg } from "@/components/chart/annotations/LockIconSvg";
 import { useEffect, useRef, useState } from "react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { AnnotationPoint, ChartAnnotation } from "@/components/chart/annotations/types";
@@ -16,6 +17,8 @@ type Props = {
    * future. Falls back to the right edge of the SVG when null.
    */
   futureProjectionX?: number | null;
+  /** Dark theme — Paper mode needs darker colors. */
+  isDark?: boolean;
 };
 
 type TrendGeom = {
@@ -28,7 +31,41 @@ type TrendGeom = {
   rx: number;
   ry: number;
   extend: boolean;
+  /** "up" = lower trendline (through swing lows), "down" = upper (through swing highs). */
+  direction: "up" | "down" | null;
+  locked: boolean;
 };
+
+/**
+ * Derive the line colour from the trendline direction.
+ *   • Upper line (through swing highs, direction="down") → dark red
+ *   • Lower line (through swing lows, direction="up") → blue/cyan (original)
+ *   • No direction → fallback blue
+ */
+function lineColor(direction: "up" | "down" | null, isActive: boolean, dark: boolean): string {
+  if (dark) {
+    if (direction === "down") return isActive ? "rgba(220,38,38,0.92)" : "rgba(185,28,28,0.78)";
+    return isActive ? "rgba(34,211,238,0.92)" : "rgba(110,178,252,0.78)";
+  }
+  if (direction === "down") return isActive ? "rgba(150,18,25,0.95)" : "rgba(130,10,20,0.82)";
+  return isActive ? "rgba(0,100,120,0.95)" : "rgba(20,60,140,0.82)";
+}
+function projectionColor(direction: "up" | "down" | null, isActive: boolean, dark: boolean): string {
+  if (dark) {
+    if (direction === "down") return isActive ? "rgba(220,38,38,0.55)" : "rgba(185,28,28,0.45)";
+    return isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)";
+  }
+  if (direction === "down") return isActive ? "rgba(150,18,25,0.40)" : "rgba(130,10,20,0.30)";
+  return isActive ? "rgba(0,100,120,0.40)" : "rgba(20,60,140,0.30)";
+}
+function handleColor(direction: "up" | "down" | null, dark: boolean): string {
+  if (dark) {
+    if (direction === "down") return "rgba(248,113,113,0.95)";
+    return "rgba(34,211,238,0.95)";
+  }
+  if (direction === "down") return "rgba(130,10,20,0.95)";
+  return "rgba(0,90,100,0.95)";
+}
 
 export function TrendlineAnnotationLayer({
   annotations,
@@ -36,6 +73,7 @@ export function TrendlineAnnotationLayer({
   onUpdate,
   onRemove,
   futureProjectionX = null,
+  isDark = true,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -82,8 +120,11 @@ export function TrendlineAnnotationLayer({
 
   const dragRef = useRef<{
     annotationId: string;
-    handle: 0 | 1;
+    handle: 0 | 1 | "body";
     pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    originPoints: AnnotationPoint[];
   } | null>(null);
 
   useEffect(() => {
@@ -122,14 +163,13 @@ export function TrendlineAnnotationLayer({
         const yB = h.priceToCoordinate(b.price);
         if (xA == null || xB == null || yA == null || yB == null) continue;
 
+        const settings = (ann.settings ?? {}) as Record<string, unknown>;
+        const extend = Boolean(settings.extendRight);
+        const direction = (settings.direction ?? null) as "up" | "down" | null;
+        const locked = Boolean(settings.locked);
         // Honour `settings.extendRight`: project the slope forward so the
         // line keeps going past the second swing all the way to the chart's
         // right edge (or to the future-projection cursor when supplied).
-        // Without this the auto-trendline visually "stops" between the two
-        // swings — way too short for trade planning.
-        const extend = Boolean(
-          ann.settings && (ann.settings as Record<string, unknown>).extendRight,
-        );
         let rx = xB;
         let ry = yB;
         if (extend) {
@@ -142,7 +182,7 @@ export function TrendlineAnnotationLayer({
             ry = yB + slope * (targetX - xB);
           }
         }
-        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB, rx, ry, extend });
+        next.push({ id: ann.id, ax: xA, ay: yA, bx: xB, by: yB, rx, ry, extend, direction, locked });
       }
       setGeoms(next);
     }
@@ -152,11 +192,37 @@ export function TrendlineAnnotationLayer({
     return unsubscribe;
   }, [annotations, canvasRef, futureProjectionX]);
 
-  function startDrag(e: React.PointerEvent<SVGCircleElement>, annotationId: string, handleIdx: 0 | 1) {
+  // ── Drag handling (supports endpoint + body drag) ──────────────────────
+  function stopChartPointer(e: React.PointerEvent<SVGElement>) {
     e.stopPropagation();
     e.preventDefault();
+    e.nativeEvent.stopImmediatePropagation?.();
+  }
+
+  function startDrag(
+    e: React.PointerEvent<SVGElement>,
+    annotationId: string,
+    handleIdx: 0 | 1 | "body",
+  ) {
+    stopChartPointer(e);
+    const ann = annotations.find((a) => a.id === annotationId);
+    if (!ann || ann.type !== "trendline") return;
+    const settings = (ann.settings ?? {}) as Record<string, unknown>;
+    const locked = Boolean(settings.locked);
+    if (activeId !== annotationId) {
+      setActiveId(annotationId);
+      return;
+    }
+    if (locked) return;
     svgRef.current?.setPointerCapture(e.pointerId);
-    dragRef.current = { annotationId, handle: handleIdx, pointerId: e.pointerId };
+    dragRef.current = {
+      annotationId,
+      handle: handleIdx,
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      originPoints: ann.points.map((p) => ({ ...p })),
+    };
     setActiveId(annotationId);
     setIsDragging(true);
   }
@@ -164,8 +230,7 @@ export function TrendlineAnnotationLayer({
   function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    e.stopPropagation();
-    e.preventDefault();
+    stopChartPointer(e);
     const handle = canvasRef.current;
     const host = hostRef.current;
     if (!handle || !host) return;
@@ -179,16 +244,33 @@ export function TrendlineAnnotationLayer({
     const ann = annotations.find((a) => a.id === drag.annotationId);
     if (!ann || ann.type !== "trendline") return;
 
-    const nextPoints: AnnotationPoint[] = [...ann.points] as AnnotationPoint[];
-    nextPoints[drag.handle] = { time, price };
+    let nextPoints: AnnotationPoint[];
+    if (drag.handle === "body") {
+      // Body drag — move both endpoints by the same pixel delta, then
+      // project back to time/price. Same approach as FibAnnotationLayer.
+      const dx = e.clientX - drag.startClientX;
+      const dy = e.clientY - drag.startClientY;
+      nextPoints = drag.originPoints.map((point) => {
+        const originalX = handle.timeToCoordinate(point.time);
+        const originalY = handle.priceToCoordinate(point.price);
+        if (originalX == null || originalY == null) return point;
+        const nextTime = handle.coordinateToTime(originalX + dx);
+        const nextPrice = handle.coordinateToPrice(originalY + dy);
+        if (nextTime == null || nextPrice == null) return point;
+        return { time: nextTime, price: nextPrice };
+      });
+    } else {
+      nextPoints = [...ann.points] as AnnotationPoint[];
+      nextPoints[drag.handle] = { time, price };
+    }
+
     onUpdate({ ...ann, points: nextPoints, updatedAt: new Date().toISOString() });
   }
 
   function endDrag(e: React.PointerEvent<SVGSVGElement>) {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    e.stopPropagation();
-    e.preventDefault();
+    stopChartPointer(e);
     dragRef.current = null;
     setIsDragging(false);
   }
@@ -211,21 +293,47 @@ export function TrendlineAnnotationLayer({
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        style={{ touchAction: isDragging ? "none" : "manipulation" }}
+        style={{
+          touchAction: isDragging || activeId ? "none" : "manipulation",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
+        }}
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;
           const mx = (g.ax + g.bx) / 2;
           const my = (g.ay + g.by) / 2;
+          const controlX = Math.max(6, Math.min(g.ax, g.bx) - 28);
+          const controlY = Math.max(6, Math.min(g.ay, g.by) - 34);
+          const color = lineColor(g.direction, isActive, isDark);
+          const projColor = projectionColor(g.direction, isActive, isDark);
+          const dotColor = handleColor(g.direction, isDark);
           return (
             <g key={g.id}>
+              {/* Invisible fat hit-line for body drag. Covers the
+                  entire line + extension so it's easy to grab in
+                  portrait. 36px wide — exceeds Apple 44pt minimum.
+                  Starts drag immediately (no "tap-to-select" gate). */}
+              <line
+                x1={g.ax}
+                y1={g.ay}
+                x2={g.rx}
+                y2={g.ry}
+                stroke="transparent"
+                strokeWidth={36}
+                pointerEvents="stroke"
+                onPointerDown={(e) => startDrag(e, g.id, "body")}
+                style={{ cursor: "move", touchAction: "none" }}
+              />
+
               {/* Solid segment between the two anchor swings */}
               <line
                 x1={g.ax}
                 y1={g.ay}
                 x2={g.bx}
                 y2={g.by}
-                stroke={isActive ? "rgba(34,211,238,0.92)" : "rgba(110,178,252,0.78)"}
+                stroke={color}
                 strokeWidth={isActive ? 2.4 : 2}
                 strokeLinecap="round"
                 pointerEvents="none"
@@ -240,7 +348,7 @@ export function TrendlineAnnotationLayer({
                   y1={g.by}
                   x2={g.rx}
                   y2={g.ry}
-                  stroke={isActive ? "rgba(34,211,238,0.55)" : "rgba(110,178,252,0.45)"}
+                  stroke={projColor}
                   strokeWidth={isActive ? 1.8 : 1.5}
                   strokeLinecap="round"
                   strokeDasharray="2 4"
@@ -248,80 +356,129 @@ export function TrendlineAnnotationLayer({
                 />
               ) : null}
 
-              {/* Handles only render when the line is "active" — first draw
-                  auto-activates so dots appear, tapping the chart locks it. */}
+              {/* Drag handles are shown only while selected to reduce
+                  accidental moves; selection reveals lock + delete controls. */}
               {isActive ? (
-                <g style={{ pointerEvents: "auto" }}>
-                  <circle
-                    cx={g.ax}
-                    cy={g.ay}
-                    r={8}
-                    fill="rgba(34,211,238,0.95)"
-                    stroke="rgba(255,255,255,0.85)"
-                    strokeWidth={1.5}
+              <g style={{ pointerEvents: "auto" }}>
+                  {/* Handle A */}
+                  <circle cx={g.ax} cy={g.ay} r={28}
+                    fill="transparent" pointerEvents="all"
                     onPointerDown={(e) => startDrag(e, g.id, 0)}
-                    style={{ cursor: "grab" }}
-                  />
-                  <circle
-                    cx={g.bx}
-                    cy={g.by}
-                    r={8}
-                    fill="rgba(34,211,238,0.95)"
-                    stroke="rgba(255,255,255,0.85)"
-                    strokeWidth={1.5}
+                    style={{ cursor: "grab", touchAction: "none" }} />
+                  <circle cx={g.ax} cy={g.ay}
+                    r={isActive ? 8 : 5}
+                    fill={isActive ? dotColor : dotColor.replace(/[\d.]+\)$/, "0.50)")}
+                    stroke={isDark
+                      ? (isActive ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.45)")
+                      : (isActive ? "rgba(60,55,50,0.85)" : "rgba(60,55,50,0.45)")}
+                    strokeWidth={isActive ? 1.5 : 1}
+                    pointerEvents="none" />
+                  {/* Handle B */}
+                  <circle cx={g.bx} cy={g.by} r={28}
+                    fill="transparent" pointerEvents="all"
                     onPointerDown={(e) => startDrag(e, g.id, 1)}
-                    style={{ cursor: "grab" }}
+                    style={{ cursor: "grab", touchAction: "none" }} />
+                  <circle cx={g.bx} cy={g.by}
+                    r={isActive ? 8 : 5}
+                    fill={isActive ? dotColor : dotColor.replace(/[\d.]+\)$/, "0.50)")}
+                    stroke={isDark
+                      ? (isActive ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.45)")
+                      : (isActive ? "rgba(60,55,50,0.85)" : "rgba(60,55,50,0.45)")}
+                    strokeWidth={isActive ? 1.5 : 1}
+                    pointerEvents="none" />
+              </g>
+              ) : null}
+
+              {/* Locked badge — always visible so you know the drawing is pinned */}
+              {g.locked ? (
+                <g pointerEvents="none">
+                  <rect
+                    x={controlX}
+                    y={controlY - 18}
+                    width={58}
+                    height={15}
+                    rx={3}
+                    fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
+                    stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
                   />
+                  <text
+                    x={controlX + 29}
+                    y={controlY - 7}
+                    textAnchor="middle"
+                    fontFamily="ui-sans-serif, system-ui"
+                    fontSize="8.5"
+                    fontWeight={700}
+                    letterSpacing="0.6"
+                    fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
+                  >
+                    LOCKED
+                  </text>
                 </g>
               ) : null}
 
-              {/* Invisible hit-line so the user can re-select the trendline
-                  by tapping it after it has been locked. Hit area covers the
-                  extension as well so the projection ray is also tappable. */}
-              <line
-                x1={g.ax}
-                y1={g.ay}
-                x2={g.rx}
-                y2={g.ry}
-                stroke="transparent"
-                strokeWidth={18}
-                pointerEvents="stroke"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  setActiveId(g.id);
-                }}
-                style={{ cursor: "pointer" }}
-              />
-
               {onRemove && isActive ? (
-                <g
-                  style={{ pointerEvents: "auto", cursor: "pointer" }}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    onRemove(g.id);
-                  }}
-                >
-                  <rect
-                    x={mx - 10}
-                    y={my - 18}
-                    width={20}
-                    height={14}
-                    rx={3}
-                    fill="rgba(0,0,0,0.55)"
-                    stroke="rgba(255,255,255,0.18)"
-                  />
-                  <text
-                    x={mx}
-                    y={my - 8}
-                    textAnchor="middle"
-                    fontFamily="ui-sans-serif, system-ui"
-                    fontSize="9"
-                    fill="rgba(232,238,246,0.92)"
+                <>
+                  <g
+                    style={{ pointerEvents: "auto", cursor: "pointer" }}
+                    onPointerDown={(e) => {
+                      stopChartPointer(e);
+                      const ann = annotations.find((a) => a.id === g.id);
+                      if (!ann || ann.type !== "trendline") return;
+                      const settings = (ann.settings ?? {}) as Record<string, unknown>;
+                      const locked = Boolean(settings.locked);
+                      onUpdate({
+                        ...ann,
+                        settings: { ...settings, locked: !locked },
+                        updatedAt: new Date().toISOString(),
+                      });
+                    }}
                   >
-                    ✕
-                  </text>
-                </g>
+                    <rect
+                      x={controlX}
+                      y={controlY}
+                      width={26}
+                      height={18}
+                      rx={4}
+                      fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
+                      stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
+                    />
+                    <LockIconSvg
+                      locked={g.locked}
+                      x={controlX + 13}
+                      y={controlY + 9}
+                      size={13}
+                      fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
+                    />
+                  </g>
+                  <g
+                    style={{ pointerEvents: "auto", cursor: "pointer" }}
+                    onPointerDown={(e) => {
+                      stopChartPointer(e);
+                      onRemove(g.id);
+                    }}
+                  >
+                    <rect
+                      x={controlX + 28}
+                      y={controlY}
+                      width={26}
+                      height={18}
+                      rx={4}
+                      fill={isDark ? "rgba(0,0,0,0.55)" : "rgba(215,214,208,0.55)"}
+                      stroke={isDark ? "rgba(255,255,255,0.18)" : "rgba(60,55,50,0.18)"}
+                    />
+                    <text
+                      x={controlX + 41}
+                      y={controlY + 13}
+                      textAnchor="middle"
+                      fontFamily="ui-sans-serif, system-ui"
+                      fontSize="11"
+                      fontWeight={600}
+                      fill={isDark ? "rgba(232,238,246,0.92)" : "rgba(30,25,20,0.92)"}
+                    >
+                      ✕
+                    </text>
+                  </g>
+                </>
               ) : null}
             </g>
           );
@@ -330,4 +487,3 @@ export function TrendlineAnnotationLayer({
     </div>
   );
 }
-

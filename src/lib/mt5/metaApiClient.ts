@@ -116,6 +116,52 @@ export async function provisioningGetAccount(accountId: string): Promise<MetaApi
   return (body ?? {}) as MetaApiTradingAccount;
 }
 
+export async function provisioningListAccounts(): Promise<MetaApiTradingAccount[]> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const res = await fetchWithTimeout(`${base}/users/current/accounts`, {
+    method: "GET",
+    headers: authHeadersGet(),
+    timeoutMs: 30_000,
+  });
+  const body = await readJson(res);
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(code, `Provisioning list failed (${res.status})`, res.status, body);
+  }
+  return Array.isArray(body) ? (body as MetaApiTradingAccount[]) : [];
+}
+
+function normalizeMt5Login(login: string | number | null | undefined): string {
+  return String(login ?? "").replace(/\D/g, "");
+}
+
+function normalizeMt5Server(server: string | null | undefined): string {
+  return String(server ?? "").trim().toLowerCase();
+}
+
+export function metaApiTradingAccountId(account: MetaApiTradingAccount): string | null {
+  const id = account.id ?? account._id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+export async function provisioningFindMt5CloudAccount(input: {
+  login: string;
+  server: string;
+}): Promise<MetaApiTradingAccount | null> {
+  const targetLogin = normalizeMt5Login(input.login);
+  const targetServer = normalizeMt5Server(input.server);
+  if (!targetLogin || !targetServer) return null;
+
+  const accounts = await provisioningListAccounts();
+  return (
+    accounts.find((account) => {
+      const sameLogin = normalizeMt5Login(account.login) === targetLogin;
+      const sameServer = normalizeMt5Server(account.server) === targetServer;
+      return sameLogin && sameServer && metaApiTradingAccountId(account) != null;
+    }) ?? null
+  );
+}
+
 export async function provisioningDeleteAccount(accountId: string): Promise<void> {
   const base = getMetaApiProvisioningBaseUrl();
   const res = await fetchWithTimeout(`${base}/users/current/accounts/${encodeURIComponent(accountId)}`, {
@@ -129,14 +175,43 @@ export async function provisioningDeleteAccount(accountId: string): Promise<void
   throw new MetaApiRequestError(code, `Delete account failed (${res.status})`, res.status, body);
 }
 
+async function provisioningPostAccountOperation(
+  accountId: string,
+  operation: "deploy" | "redeploy",
+): Promise<MetaApiTradingAccount> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const res = await fetchWithTimeout(
+    `${base}/users/current/accounts/${encodeURIComponent(accountId)}/${operation}`,
+    {
+      method: "POST",
+      headers: authHeadersJson(),
+      timeoutMs: 60_000,
+    },
+  );
+  const body = await readJson(res);
+  if (!res.ok) {
+    const code = res.status === 404 ? "not_found" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(code, `${operation} account failed (${res.status})`, res.status, body);
+  }
+  return (body ?? {}) as MetaApiTradingAccount;
+}
+
+export async function provisioningDeployAccount(accountId: string): Promise<MetaApiTradingAccount> {
+  return provisioningPostAccountOperation(accountId, "deploy");
+}
+
+export async function provisioningRedeployAccount(accountId: string): Promise<MetaApiTradingAccount> {
+  return provisioningPostAccountOperation(accountId, "redeploy");
+}
+
 export type CreateMt5CloudAccountInput = {
   login: string;
   password: string;
   name: string;
   server: string;
   region: string;
-  /** Investor / read-only password path */
-  manualTrades: true;
+  /** true = investor (read-only) password; false = master password */
+  manualTrades: boolean;
 };
 
 export async function provisioningCreateMt5CloudAccount(
@@ -151,7 +226,7 @@ export async function provisioningCreateMt5CloudAccount(
     server: input.server.trim(),
     platform: "mt5",
     type: "cloud-g2",
-    manualTrades: true,
+    manualTrades: input.manualTrades,
     magic: 0,
     region: input.region,
   };
@@ -263,6 +338,64 @@ export async function clientGetPositions(
   return Array.isArray(body) ? body : [];
 }
 
+/**
+ * Fetch pending orders (buy-limit, sell-limit, buy-stop, sell-stop, etc.)
+ * from MetaApi client API. These are NOT open positions — they are orders
+ * waiting to be triggered.
+ */
+export async function clientGetOrders(
+  accountId: string,
+  refreshTerminalState: boolean,
+  region?: string | null,
+): Promise<unknown[]> {
+  const base = getMetaApiClientBaseUrl(region);
+  const q = refreshTerminalState ? "?refreshTerminalState=true" : "";
+  const res = await fetchWithTimeout(
+    `${base}/users/current/accounts/${encodeURIComponent(accountId)}/orders${q}`,
+    {
+      method: "GET",
+      headers: authHeadersGet(),
+      timeoutMs: 60_000,
+    },
+  );
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new MetaApiRequestError(classifyHttpStatus(res.status), `Orders ${res.status}`, res.status, body);
+  }
+  return Array.isArray(body) ? body : [];
+}
+
+export async function clientListSymbols(
+  accountId: string,
+  region?: string | null,
+): Promise<string[]> {
+  const base = getMetaApiClientBaseUrl(region);
+  const res = await fetchWithTimeout(
+    `${base}/users/current/accounts/${encodeURIComponent(accountId)}/symbols`,
+    {
+      method: "GET",
+      headers: authHeadersGet(),
+      timeoutMs: 20_000,
+    },
+  );
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new MetaApiRequestError(classifyHttpStatus(res.status), `Symbols ${res.status}`, res.status, body);
+  }
+  if (!Array.isArray(body)) return [];
+  return body
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object") {
+        const obj = item as { symbol?: unknown; name?: unknown };
+        return typeof obj.symbol === "string" ? obj.symbol : typeof obj.name === "string" ? obj.name : "";
+      }
+      return "";
+    })
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export type MetaApiSymbolPrice = {
   symbol: string;
   bid: number | null;
@@ -297,6 +430,37 @@ export async function clientGetSymbolPrice(
     brokerTime: r.brokerTime ?? null,
     time: r.time ?? null,
   };
+}
+
+export async function clientGetHistoryOrdersRange(
+  accountId: string,
+  startIso: string,
+  endIso: string,
+  region?: string | null,
+): Promise<unknown[]> {
+  const base = getMetaApiClientBaseUrl(region);
+  const s = encodeURIComponent(startIso);
+  const e = encodeURIComponent(endIso);
+  const all: unknown[] = [];
+  let offset = 0;
+  const limit = 1000;
+  for (;;) {
+    const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/history-orders/time/${s}/${e}?offset=${offset}&limit=${limit}`;
+    const res = await fetchWithTimeout(url, {
+      method: "GET",
+      headers: authHeadersGet(),
+      timeoutMs: 120_000,
+    });
+    const body = await readJson(res);
+    if (!res.ok) {
+      throw new MetaApiRequestError(classifyHttpStatus(res.status), `History orders ${res.status}`, res.status, body);
+    }
+    const chunk = Array.isArray(body) ? body : [];
+    all.push(...chunk);
+    if (chunk.length < limit) break;
+    offset += limit;
+  }
+  return all;
 }
 
 export async function clientGetHistoryDealsRange(
@@ -443,6 +607,245 @@ export async function clientPlaceOrder(input: PlaceOrderInput): Promise<PlaceOrd
     throw new MetaApiRequestError(
       code,
       `Trade failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//   POSITION MODIFY (SL/TP drag)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ModifyPositionInput = {
+  accountId: string;
+  /** MT5 position id (string). */
+  positionId: string;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+  region?: string | null;
+};
+
+/**
+ * Modify an open position's SL / TP via MetaApi.
+ * Uses the same `/trade` endpoint as order placement, with
+ * `actionType: "POSITION_MODIFY"`.
+ */
+export async function clientModifyPosition(
+  input: ModifyPositionInput,
+): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl(input.region);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body: Record<string, unknown> = {
+    actionType: "POSITION_MODIFY",
+    positionId: input.positionId,
+  };
+  if (input.stopLoss != null && Number.isFinite(input.stopLoss)) {
+    body.stopLoss = input.stopLoss;
+  }
+  if (input.takeProfit != null && Number.isFinite(input.takeProfit)) {
+    body.takeProfit = input.takeProfit;
+  }
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Modify position failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//   ORDER MODIFY (pending order SL/TP drag)
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ModifyOrderInput = {
+  accountId: string;
+  /** MT5 order id (string). */
+  orderId: string;
+  /** Pending order trigger / limit price. */
+  openPrice?: number | null;
+  stopLoss?: number | null;
+  takeProfit?: number | null;
+  region?: string | null;
+};
+
+/**
+ * Modify a pending order (price, SL, TP) via MetaApi.
+ * Uses the same `/trade` endpoint, with `actionType: "ORDER_MODIFY"`.
+ */
+export async function clientModifyOrder(
+  input: ModifyOrderInput,
+): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl(input.region);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body: Record<string, unknown> = {
+    actionType: "ORDER_MODIFY",
+    orderId: input.orderId,
+  };
+  if (input.openPrice != null && Number.isFinite(input.openPrice)) {
+    body.openPrice = input.openPrice;
+  }
+  if (input.stopLoss != null && Number.isFinite(input.stopLoss)) {
+    body.stopLoss = input.stopLoss;
+  }
+  if (input.takeProfit != null && Number.isFinite(input.takeProfit)) {
+    body.takeProfit = input.takeProfit;
+  }
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Modify order failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//   ORDER CANCEL
+// ────────────────────────────────────────────────────────────────────────────
+
+export type CancelOrderInput = {
+  accountId: string;
+  /** MT5 order id (string). */
+  orderId: string;
+  region?: string | null;
+};
+
+/**
+ * Cancel a pending order via MetaApi.
+ * Uses the same `/trade` endpoint, with `actionType: "ORDER_CANCEL"`.
+ */
+export async function clientCancelOrder(
+  input: CancelOrderInput,
+): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl(input.region);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body: Record<string, unknown> = {
+    actionType: "ORDER_CANCEL",
+    orderId: input.orderId,
+  };
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Cancel order failed (${res.status})`,
+      res.status,
+      obj,
+    );
+  }
+
+  return {
+    stringCode: typeof obj.stringCode === "string" ? obj.stringCode : undefined,
+    numericCode: typeof obj.numericCode === "number" ? obj.numericCode : undefined,
+    message: typeof obj.message === "string" ? obj.message : undefined,
+    orderId: typeof obj.orderId === "string" ? obj.orderId : undefined,
+    positionId: typeof obj.positionId === "string" ? obj.positionId : undefined,
+    raw: obj,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//   POSITION CLOSE
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ClosePositionInput = {
+  accountId: string;
+  /** MT5 position id (string). */
+  positionId: string;
+  /** MetaApi region (london / new-york / singapore). */
+  region?: string | null;
+};
+
+/**
+ * Close an open position via MetaApi.
+ * Uses `actionType: "POSITION_CLOSE_ID"` on the same `/trade` endpoint.
+ */
+export async function clientClosePosition(
+  input: ClosePositionInput,
+): Promise<PlaceOrderResult> {
+  const base = getMetaApiClientBaseUrl(input.region);
+  const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
+  const body = {
+    actionType: "POSITION_CLOSE_ID",
+    positionId: input.positionId,
+  };
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify(body),
+    timeoutMs: 45_000,
+  });
+  const payload = await readJson(res);
+  const obj = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+
+  if (!res.ok) {
+    const code = res.status === 401 ? "metaapi_auth_failed" : classifyHttpStatus(res.status);
+    throw new MetaApiRequestError(
+      code,
+      `Close position failed (${res.status})`,
       res.status,
       obj,
     );

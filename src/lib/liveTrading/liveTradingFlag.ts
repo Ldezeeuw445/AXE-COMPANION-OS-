@@ -5,10 +5,8 @@
  *
  *   `enabled` is server-side  → user_workspace_preferences.live_trading_enabled.
  *      Survives reinstall, syncs across devices for the same account.
- *   `armed`   is per-device   → localStorage axe.live_trading.armed_until.v1.
- *      Auto-expires after 30 minutes. Each new device starts disarmed even
- *      if the account already has live trading on. The chart still requires
- *      a per-order confirm modal regardless.
+ *   `armed`   mirrors `enabled` — Settings opt-in + chart confirm are the gates.
+ *      (Legacy localStorage arm window is kept for migration but no longer required.)
  *
  * Real security stays server-side in /api/mt5/order (auth, ownership, demo
  * refusal, MetaApi configured). This hook is the UX guardrail, not the
@@ -176,10 +174,9 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
     setArmedUntilMs(0);
   }, []);
 
-  // Derived from state (not Date.now() during render) so React's purity
-  // rule stays clean. nowMs ticks every minute via the interval above and
-  // refreshes whenever we arm/disarm or storage events fire.
-  const armed = enabled && armedUntilMs > nowMs;
+  // When live trading is enabled, treat the session as ready — the Settings
+  // opt-in + per-order confirm modal are the guardrails (no separate 30m arm).
+  const armed = enabled;
 
   return { enabled, armed, armedUntilMs, pending, enable, disable, arm, disarm };
 }

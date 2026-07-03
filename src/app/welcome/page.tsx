@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getPublicAppBaseUrl } from "@/lib/env";
+import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 
 export const metadata = {
   title: "AXE Companion — welcome",
@@ -25,7 +26,7 @@ export default function WelcomePage() {
             width: 420,
             height: 180,
             background:
-              "radial-gradient(ellipse at center, rgba(46,196,182,0.12) 0%, transparent 70%)",
+              "radial-gradient(ellipse at center, rgba(0,224,255,0.08) 0%, transparent 70%)",
           }}
         />
       </div>
@@ -42,7 +43,7 @@ export default function WelcomePage() {
           style={{ mixBlendMode: "screen" }}
         />
         <p className="mt-4 text-sm leading-relaxed text-tos-muted">
-          Your personal trading copilot with memory and knowledge — on your phone. Optionally link broker/MT5 later;
+          Your personal technical analysis tool with memory and knowledge — on your phone. Optionally link broker/MT5 later;
           no desktop terminal required to start.
         </p>
 
@@ -102,6 +103,8 @@ export default function WelcomePage() {
           </p>
         </div>
       </div>
+
+      <ComplianceSiteFooter className="relative z-10 mt-12 w-full" />
     </div>
   );
 }

@@ -14,11 +14,11 @@ export function ScreenHeader({
   right,
 }: ScreenHeaderProps) {
   return (
-    <header className="relative flex shrink-0 items-start justify-between gap-3 px-1 pb-4 pt-1">
+    <header className="relative flex shrink-0 items-start justify-between gap-3 px-1 pb-3 pt-1">
       <div className="flex min-w-0 items-start gap-3">
         {left ? <div className="pt-0.5">{left}</div> : null}
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-bold uppercase tracking-[0.12em] text-cyan-400">
+          <h1 className="truncate text-lg font-bold uppercase tracking-[0.12em] text-white">
             {title}
           </h1>
           {subtitle ? (
@@ -30,12 +30,12 @@ export function ScreenHeader({
       </div>
       {right ? <div className="shrink-0 pt-0.5">{right}</div> : null}
 
-      {/* Accent separator line */}
+      {/* Subtle separator — Linear-style faint gradient */}
       <div
         className="absolute bottom-0 left-0 right-0 h-px"
         style={{
           background:
-            "linear-gradient(90deg, transparent 0%, rgba(46,196,182,0.35) 30%, rgba(46,196,182,0.35) 70%, transparent 100%)",
+            "linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.06) 75%, transparent 95%)",
         }}
       />
     </header>

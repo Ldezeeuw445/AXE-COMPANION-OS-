@@ -1,0 +1,146 @@
+/* Static interactive device mocks (no tilt, no cursor-follow) */
+
+.hero-device-stage {
+  position: relative;
+  width: min(1480px, 100%);
+  min-height: 760px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(20px, 2.2vw, 34px);
+  margin: 0 auto;
+  padding: 10px 10px 6px;
+}
+
+.device-3d {
+  transform: none !important;
+  transition: none !important;
+  will-change: auto;
+}
+
+.device-3d--phone {
+  width: min(338px, 26vw);
+  flex: 0 0 auto;
+  z-index: 2;
+  filter: drop-shadow(0 20px 34px rgba(0, 0, 0, 0.34));
+}
+
+.device-3d--ipad {
+  width: min(1060px, 76vw);
+  flex: 0 0 auto;
+  z-index: 1;
+  filter: drop-shadow(0 22px 40px rgba(0, 0, 0, 0.3));
+}
+
+.device-bezel {
+  position: relative;
+  border-radius: 42px;
+  padding: 10px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03) 38%, rgba(0, 0, 0, 0.44)),
+    linear-gradient(180deg, #24272d, #0f1116);
+  border: 1px solid #000;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 26px 54px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.device-3d--ipad .device-bezel {
+  border-radius: 34px;
+  padding: 14px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 42%, rgba(0, 0, 0, 0.42)),
+    linear-gradient(180deg, #30333b, #0d0f14);
+}
+
+.device-notch {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 96px;
+  height: 24px;
+  border-radius: 14px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 4;
+  pointer-events: none;
+}
+
+.device-3d--ipad .device-notch {
+  display: none;
+}
+
+.device-screen {
+  position: relative;
+  overflow: hidden;
+  border-radius: 32px;
+  background: #020304;
+  border: 1px solid rgba(0, 0, 0, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.device-screen iframe {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #040508;
+  pointer-events: auto;
+}
+
+.hero-ipad-stack-live {
+  position: relative;
+  width: min(1060px, 76vw);
+  flex: 0 0 auto;
+}
+
+.device-3d--ipad .device-screen {
+  border-radius: 16px;
+  aspect-ratio: 4 / 3;
+  min-height: 620px;
+}
+
+.device-3d--phone .device-screen {
+  aspect-ratio: 9 / 19.5;
+  min-height: 730px;
+}
+
+@media (max-width: 1220px) {
+  .device-3d--ipad,
+  .hero-ipad-stack-live {
+    width: min(900px, 72vw);
+  }
+
+  .device-3d--phone {
+    width: min(300px, 24vw);
+  }
+}
+
+@media (max-width: 1100px) {
+  .hero-device-stage {
+    flex-direction: column-reverse;
+    align-items: center;
+    min-height: 0;
+    padding: 16px 8px 8px;
+    gap: 22px;
+  }
+
+  .device-3d--phone,
+  .device-3d--ipad,
+  .hero-ipad-stack-live {
+    width: min(430px, 92vw);
+  }
+
+  .device-3d--ipad .device-screen {
+    min-height: 470px;
+  }
+
+  .device-3d--phone .device-screen {
+    min-height: 640px;
+  }
+}

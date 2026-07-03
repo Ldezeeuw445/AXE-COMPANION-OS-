@@ -1,6 +1,7 @@
 import type { WatchlistEntry, TerminalAlert, TerminalExecution } from "@/services/axeService";
 import type { MarketContext, ProviderStatus } from "@/lib/market/marketTypes";
 import type { Mt5DoctorOverallStatus } from "@/types/mt5Doctor";
+import type { BrokerSymbolReportEntry } from "@/lib/broker/brokerSymbolRuntime";
 
 export type FilteredNewsEvent = {
   title: string;
@@ -239,10 +240,14 @@ export type AccountsContext = {
       tradingState: "read_only" | "live_trading_enabled";
       knownFailureReason: string | null;
     } | null;
+    symbolMap: Record<string, string>;
+    symbolResolutionReport: Record<string, BrokerSymbolReportEntry>;
+    metadata?: Record<string, unknown>;
   }>;
   hasCloudMt5: boolean;
   activeLabel: string | null;
   activeServer: string | null;
+  activeAccountPersona: string | null;
   accountHealth: "connected" | "syncing" | "stale" | "offline" | "not_connected" | "unknown";
   syncFreshness: {
     lastSyncAt: string | null;
@@ -250,6 +255,8 @@ export type AccountsContext = {
     state: "fresh" | "stale" | "old" | "missing";
   };
   activeSymbols: string[];
+  activeSymbolMap: Record<string, string>;
+  activeSymbolResolutionReport: Record<string, BrokerSymbolReportEntry>;
   openExposure: {
     positionsCount: number;
     symbols: string[];
@@ -356,6 +363,45 @@ export type CorrelationInsight = {
   evidence: string[];
 };
 
+export type TradingSpacePendingExecution = {
+  instrument: string;
+  direction: string | null;
+  status: string | null;
+  entry: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  rationale: string | null;
+};
+
+export type TradingSpaceContext = {
+  generatedAt: string;
+  activeAccountId: string | null;
+  activeAccountLabel: string | null;
+  symbol: string | null;
+  timeframe: string | null;
+  openPositions: Array<{
+    symbol: string;
+    side: string;
+    volume: number;
+    entryPrice: number | null;
+    stopLoss: number | null;
+    takeProfit: number | null;
+    profit: number | null;
+  }>;
+  pendingExecutions: TradingSpacePendingExecution[];
+  symbolTrades: Array<{
+    symbol: string;
+    side: string;
+    pnl: number;
+    closeTime: string | null;
+  }>;
+  symbolLabels: string[];
+  activeAlerts: number;
+  cockpitAlignment: string | null;
+  riskPatterns: string[];
+  compactBrief: string;
+};
+
 export type AxeCompanionContext = {
   generatedAt: string;
   symbol: string | null;
@@ -371,4 +417,5 @@ export type AxeCompanionContext = {
   correlations: CorrelationInsight[];
   health: ContextHealth[];
   summary: string;
+  tradingSpace: TradingSpaceContext | null;
 };

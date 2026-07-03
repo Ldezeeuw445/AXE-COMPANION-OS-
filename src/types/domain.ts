@@ -22,6 +22,8 @@ export type ChatMessage = {
   role: MessageRole;
   content: string;
   createdAt: string;
+  /** Thumbs feedback the user gave on this AXE reply */
+  feedback?: "up" | "down" | null;
   /** Inline action card payload (execution preview, alert summary, etc.) */
   actionCard?: ActionCardPayload;
 };
@@ -78,6 +80,7 @@ export type ExecutionRequestCard = {
   stopLoss: number | null;
   takeProfit: number | null;
   riskPercent: number | null;
+  volumeLots: number | null;
   rationale: string;
   status: ExecutionStatus;
   warnings?: string[];

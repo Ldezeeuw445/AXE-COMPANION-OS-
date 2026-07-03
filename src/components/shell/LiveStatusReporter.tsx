@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
+import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 
 /**
  * Tiny client wrapper that lets server-rendered pages push their
@@ -26,12 +26,18 @@ export function LiveStatusReporter({
    *  (e.g. cached/stale state where liveCount === totalCount but data
    *  isn't actually fresh). */
   allLiveOverride,
+  severity,
+  reason,
+  scope = label ?? "page",
 }: {
   liveCount: number;
   totalCount: number;
   freshestAgeSec?: number | null;
   label?: string;
   allLiveOverride?: boolean | null;
+  severity?: "fresh" | "degraded" | "blocking" | "inactive";
+  reason?: string;
+  scope?: string;
 }) {
   useEffect(() => {
     const allLive =
@@ -46,11 +52,14 @@ export function LiveStatusReporter({
       totalCount,
       freshestAgeSec,
       label,
+      severity,
+      reason,
+      scope,
     });
     return () => {
-      clearLiveStatus();
+      clearLiveStatusScope(scope);
     };
-  }, [allLiveOverride, freshestAgeSec, label, liveCount, totalCount]);
+  }, [allLiveOverride, freshestAgeSec, label, liveCount, reason, scope, severity, totalCount]);
 
   return null;
 }

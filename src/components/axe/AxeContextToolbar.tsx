@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronRight, X } from "lucide-react";
-import { BrandMark } from "@/components/brand/BrandMark";
+import Image from "next/image";
 
 export type AxeToolbarItem = {
   id: string;
@@ -84,21 +84,16 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
         aria-expanded={open}
         aria-label={`Open AXE actions for ${title}`}
         onClick={() => setOpen((v) => !v)}
-        className="group relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/12 bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-transparent backdrop-blur transition-all hover:border-cyan-400/45 hover:from-white/[0.10] focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
-        style={{
-          boxShadow:
-            "0 0 0 1px rgba(34,211,238,0.10), 0 8px 24px -10px rgba(34,211,238,0.30), inset 0 1px 0 rgba(255,255,255,0.10)",
-        }}
+        className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center"
       >
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-2xl opacity-60 transition-opacity group-hover:opacity-90"
-          style={{
-            background:
-              "radial-gradient(60% 60% at 50% 0%, rgba(34,211,238,0.20) 0%, rgba(34,211,238,0) 70%)",
-          }}
+        <Image
+          src="/axe-logo-companion.png"
+          alt=""
+          width={32}
+          height={32}
+          className="pointer-events-none h-8 w-8 object-contain"
+          unoptimized
         />
-        <BrandMark size={32} className="!bg-transparent !ring-0" />
         <span className="sr-only">AXE</span>
       </button>
 
@@ -113,18 +108,18 @@ export function AxeContextToolbar({ title, subtitle, sections }: Props) {
             type="button"
             aria-label="Close AXE actions"
             onClick={close}
-            className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+            className="absolute inset-0 bg-[#08080a]/80 backdrop-blur-sm"
           />
           <div
             ref={sheetRef}
-            className="relative z-[81] mt-[3.25rem] w-[min(20rem,calc(100vw-1rem))] origin-top-right rounded-2xl border border-white/10 bg-[#070A10]/95 p-3 shadow-[0_24px_60px_-20px_rgba(34,211,238,0.35),0_0_0_1px_rgba(34,211,238,0.10)] backdrop-blur-xl sm:mt-[3.5rem]"
+            className="relative z-[81] mt-[var(--tos-topbar-offset)] w-[min(20rem,calc(100vw-1rem))] origin-top-right rounded-2xl border border-white/[0.08] bg-[#0a0a0c]/95 p-3 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.50),0_0_0_1px_rgba(255,255,255,0.06)] backdrop-blur-xl sm:mt-[3.5rem]"
             style={{ animation: "axeSheetIn 160ms ease-out both" }}
           >
             <header className="mb-2 flex items-center justify-between gap-3 px-2 pt-1">
               <div className="min-w-0">
                 <p
                   id={`${triggerId}-title`}
-                  className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-300/95"
+                  className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80"
                 >
                   AXE · {title}
                 </p>
@@ -185,10 +180,10 @@ function ToolbarRow({
   onActivate: () => void;
 }) {
   const baseClass =
-    "group/item flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:border-cyan-400/30 hover:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-cyan-400/40";
+    "group/item flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-white/15";
   const labelEl = (
     <>
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.07] bg-black/40 text-cyan-300/85">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-white/[0.07] bg-[#0e0f12]/95 text-white/60">
         {item.icon ?? <ChevronRight className="h-3.5 w-3.5" aria-hidden />}
       </span>
       <span className="min-w-0 flex-1">

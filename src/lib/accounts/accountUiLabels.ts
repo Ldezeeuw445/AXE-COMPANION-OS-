@@ -4,24 +4,27 @@ export function friendlyProviderStatus(raw: string | null | undefined): string {
   const v = (raw ?? "").toLowerCase().trim();
   if (!v || v === "unknown") return "Needs sync";
   const map: Record<string, string> = {
-    connected: "Connected",
-    provisioned: "Connected",
-    provisioning: "Provisioning",
+    connected: "Fresh",
+    provisioned: "Recently synced",
+    provisioning: "Syncing",
     connecting: "Syncing",
     syncing: "Syncing",
     sync_in_progress: "Syncing",
+    recovering: "Reconnecting",
+    recovery_failed: "Connection issue",
+    orphaned: "Connection issue",
     pending: "Needs sync",
     needs_sync: "Needs sync",
-    disconnected: "Disconnected",
-    cloud_mt5_disconnected: "Disconnected",
-    failed: "Failed",
-    sync_failed: "Failed",
-    invalid_credentials: "Failed",
-    provider_not_configured: "Provider not configured",
+    disconnected: "Live data unavailable",
+    cloud_mt5_disconnected: "Live data unavailable",
+    failed: "Connection issue",
+    sync_failed: "Connection issue",
+    invalid_credentials: "Credentials issue",
+    provider_not_configured: "AXE MT5 Cloud not configured",
     not_found: "Needs setup",
-    metaapi_auth_failed: "Failed",
-    metaapi_region_error: "Failed",
-    metaapi_timeout: "Failed",
+    metaapi_auth_failed: "Connection issue",
+    metaapi_region_error: "Connection issue",
+    metaapi_timeout: "Data stale",
   };
   return map[v] ?? capitalizeWords(v.replace(/_/g, " "));
 }
@@ -36,7 +39,9 @@ function capitalizeWords(s: string): string {
 
 export function accountMethodLabel(connectionMethod: string | null | undefined, hasExternalId: boolean): string {
   const m = (connectionMethod ?? "").toLowerCase();
-  if (m === "cloud_mt5" && hasExternalId) return "MetaApi Cloud";
-  if (m === "cloud_mt5" || m === "cloud_mt5_disconnected") return "MetaApi Cloud";
+  if (m === "demo_paper") return "AXE Demo (paper)";
+  if (m === "cloud_alpaca") return "Alpaca Paper";
+  if (m === "cloud_mt5" && hasExternalId) return "AXE MT5 Cloud";
+  if (m === "cloud_mt5" || m === "cloud_mt5_disconnected") return "AXE MT5 Cloud";
   return "Local bridge (token)";
 }

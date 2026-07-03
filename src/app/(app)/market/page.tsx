@@ -3,6 +3,7 @@ import { CalendarDays, Newspaper, Sparkles } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
+import { SymbolDropdown } from "@/components/market/SymbolDropdown";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
@@ -11,7 +12,6 @@ import type {
   EconomicEvent,
   MacroSnapshot,
   NewsItem,
-  ProviderStatus,
 } from "@/lib/market/marketTypes";
 
 const DEFAULT_SYMBOL = "XAUUSD";
@@ -31,6 +31,12 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const symbol = requestedSymbol || watchlist[0]?.toUpperCase() || DEFAULT_SYMBOL;
 
   const ctx = await buildMarketContext({ symbol, watchlist });
+  const macroPoints = ctx.macro?.points.filter((point) => point.value != null) ?? [];
+  const macroReady = macroPoints.length > 0;
+  const calendarReady = ctx.events.length > 0;
+  const newsReady = ctx.news.length > 0;
+  const contentReady = macroReady || calendarReady || newsReady;
+  const liveProviderCount = [macroReady, newsReady, calendarReady].filter(Boolean).length;
 
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -77,24 +83,12 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
-  // The provider label is derived from whatever actually returned items —
-  // that's the most honest signal for the user. Falls back to Google News
-  // (the no-key RSS source we use when no keyed provider is configured).
-  const newsProviderLabel = (() => {
-    if (ctx.news.length === 0) return null;
-    const usedId = ctx.news[0]?.provider;
-    if (usedId === "perigon") return "Perigon";
-    if (usedId === "finnhub") return "Finnhub";
-    if (usedId === "eodhd") return "EODHD";
-    if (usedId === "unusualWhales") return "Unusual Whales";
-    if (usedId === "demo") return "Google News";
-    return null;
-  })();
-
-  const liveProviderCount = ctx.providers.filter((p) => p.state === "live").length;
-
+  const hasFinnhub = ctx.providers.find((p) => p.id === "finnhub")?.state === "live";
+  const hasCalendarFeed =
+    calendarReady ||
+    ctx.providers.some((p) => (p.id === "finnhub" || p.id === "forexFactory") && p.state === "live");
   return (
-    <div className="axe-stagger-enter flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain pb-6">
+    <div className="axe-stagger-enter flex flex-col gap-4 pb-6">
       {/* Mobile top bar: the AXE wordmark in the centre carries the
           single live indicator now, fed by `LiveStatusReporter` below.
           We deliberately no longer inject a "LIVE" pill in the centre
@@ -106,56 +100,50 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       />
       <LiveStatusReporter
         liveCount={liveProviderCount}
-        totalCount={ctx.providers.length}
+        totalCount={3}
         label="Market"
-        allLiveOverride={ctx.hasLiveData ? true : false}
+        allLiveOverride={contentReady ? liveProviderCount === 3 : null}
+        severity={contentReady ? (liveProviderCount === 3 ? "fresh" : "degraded") : "inactive"}
+        reason={contentReady ? `${liveProviderCount}/3 AXE market sections have data.` : "Market context is warming or not configured."}
+        scope="market"
       />
 
-      <ProviderBadges providers={ctx.providers} />
+      <SymbolDropdown symbols={ctx.symbols} current={symbol} />
 
-      {ctx.symbols.length > 1 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {ctx.symbols.map((s) => (
-            <Link
-              key={s}
-              href={`/market?symbol=${encodeURIComponent(s)}`}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                s === symbol
-                  ? "border-cyan-400/35 bg-cyan-500/15 text-cyan-200/95"
-                  : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
-              }`}
-            >
-              {s}
-            </Link>
-          ))}
-        </div>
-      ) : null}
 
       {/* Macro */}
+      <SourceBadge label="AXE Macro" ready={macroReady} configured={hasFred} description="FRED macro observations" />
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Macro snapshot</h2>
-          <span className="text-[10px] text-tos-dim">{hasFred ? "FRED · live" : "Configure FRED_API_KEY"}</span>
+          <span className="text-[10px] text-tos-dim">
+            {macroReady ? "AXE Macro · fresh" : hasFred ? "AXE Macro · warming" : "AXE Macro · not configured"}
+          </span>
         </div>
-        {ctx.macro && ctx.macro.points.length > 0 ? (
+        {macroReady ? (
           <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-            {ctx.macro.points.map((p) => (
+            {macroPoints.map((p) => (
               <MacroPoint key={p.seriesId} point={p} />
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-xs text-tos-muted">
-            {hasFred
-              ? "FRED returned no observations for this symbol's series yet — try another symbol."
-              : "Add FRED_API_KEY on Vercel to unlock yields, rates, CPI and USD-index context."}
-          </p>
+          <div className="mt-3 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-3">
+            <p className="text-sm font-medium text-tos-text">
+              {hasFred ? "AXE Macro is warming" : "AXE Macro is not configured"}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+              {hasFred
+                ? "No macro observations are available for this symbol yet. AXE will not render empty metric cards as live data."
+                : "No server-side macro source is active for this deployment."}
+            </p>
+          </div>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
           <Link
             href={chatQ(
               `[AXE · macro]\nWalk me through today's macro risk on ${symbol}: rates, yields, DXY proxy and the gold/USD axis. Anchor it on my active pair.`,
             )}
-            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+            className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
           >
             Ask AXE about macro
           </Link>
@@ -163,10 +151,11 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       </GlassPanel>
 
       {/* Calendar */}
+      <SourceBadge label="AXE Calendar" ready={calendarReady} configured={hasCalendarFeed} description="Impact-rated economic events" />
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
-            <CalendarDays className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+            <CalendarDays className="h-3.5 w-3.5 text-white/60" aria-hidden />
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
               Upcoming events (5d)
             </h2>
@@ -182,21 +171,29 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-xs text-tos-muted">
-            Configure FINNHUB_API_KEY to load economic events with impact ratings.
-          </p>
+          <div className="mt-2 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-3">
+            <p className="text-sm font-medium text-tos-text">
+              {hasCalendarFeed ? "No high-impact events in the next 5 days" : "AXE Calendar is warming"}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+              {hasCalendarFeed
+                ? "The calendar feed is live — there are simply no scheduled releases in this window for your filter set."
+                : "Economic calendar providers are still starting. Finnhub premium calendar is optional; the free Forex Factory feed is used when Finnhub is unavailable."}
+            </p>
+          </div>
         )}
       </GlassPanel>
 
       {/* News */}
+      <SourceBadge label="AXE News" ready={newsReady} configured={ctx.providers.some((p) => ["perigon", "polygon", "finnhub", "eodhd"].includes(p.id) && p.state === "live")} description="Server-side news feeds" />
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Newspaper className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+            <Newspaper className="h-3.5 w-3.5 text-white/60" aria-hidden />
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Headlines</h2>
           </div>
           <span className="text-[10px] text-tos-dim">
-            {newsProviderLabel ? `${newsProviderLabel} · live` : "No news provider configured"}
+            {newsReady ? "AXE Market Data · fresh" : "AXE Market Data · warming"}
           </span>
         </div>
         {ctx.news.length > 0 ? (
@@ -207,8 +204,8 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
-            No headlines came back for {symbol} just now. Add Perigon / Finnhub / EODHD keys for symbol-tagged premium
-            feeds — Google News is used as a free fallback.
+            No headlines came back for {symbol} just now. AXE Market Data will keep using the configured server-side feeds
+            and safe fallback cache.
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
@@ -216,7 +213,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
             href={chatQ(
               `[AXE · news]\nSummarize the most market-moving headlines for ${symbol} today. Tie them back to my open positions if any.`,
             )}
-            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+            className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
           >
             <Sparkles className="mr-1 inline h-3 w-3" aria-hidden />
             Ask AXE about news
@@ -231,38 +228,45 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
       </GlassPanel>
 
       <p className="px-1 text-[10px] leading-relaxed text-tos-dim">
-        Market context blends FRED macro, your news provider and the economic calendar with your active pair, watchlist
-        and open positions. Nothing here is fabricated — providers report their own state.
+        AXE Market Data blends macro, news and the economic calendar with your active pair, watchlist
+        and open positions. Nothing here is fabricated — expanded technical details report their own state.
       </p>
     </div>
   );
 }
 
-function ProviderBadges({ providers }: { providers: ProviderStatus[] }) {
-  const liveCount = providers.filter((p) => p.state === "live").length;
+/* ── Source badge — placed above each section ─────────────────────── */
+function SourceBadge({
+  label,
+  ready,
+  configured,
+  description,
+}: {
+  label: string;
+  ready: boolean;
+  configured: boolean;
+  description: string;
+}) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-tos-dim">Providers</span>
-      {providers.map((p) => (
-        <span
-          key={p.id}
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-            p.state === "live"
-              ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
+    <div className="flex items-center gap-1.5">
+      <span
+        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+          ready
+            ? "border-white/[0.10] bg-white/[0.05] text-white/90"
+            : configured
+              ? "border-amber-400/25 bg-amber-400/[0.06] text-amber-100/90"
               : "border-white/12 bg-white/[0.04] text-tos-dim"
-          }`}
-          title={p.description}
-        >
-          {p.label}
-          {p.state === "live" ? "" : " · off"}
-        </span>
-      ))}
-      <span className="ml-auto text-[10px] text-tos-dim">
-        {liveCount}/{providers.length} configured
+        }`}
+        title={description}
+      >
+        {label}
+        {ready ? " · fresh" : configured ? " · warming" : " · off"}
       </span>
     </div>
   );
 }
+
+
 
 function MacroPoint({ point }: { point: MacroSnapshot["points"][number] }) {
   const formatted =
@@ -288,7 +292,7 @@ function EventRow({ event }: { event: EconomicEvent }) {
   const ts = new Date(event.startsAt);
   const date = ts.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   return (
-    <li className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2">
+    <li className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2">
       <span className="font-mono text-[10px] uppercase tracking-wider text-tos-dim">{date}</span>
       <span className="min-w-0 flex-1 text-xs text-tos-text">
         <span className="font-medium">{event.title}</span>
@@ -326,11 +330,11 @@ function NewsRow({ item }: { item: NewsItem }) {
         href={item.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="group flex flex-col gap-0.5 rounded-lg border border-white/[0.05] bg-black/25 px-3 py-2 hover:border-cyan-400/25"
+        className="group flex flex-col gap-0.5 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2 hover:border-white/[0.10]"
       >
-        <span className="text-[12px] font-medium text-tos-text group-hover:text-cyan-100/95">{item.title}</span>
+        <span className="text-[12px] font-medium text-tos-text group-hover:text-white/90">{item.title}</span>
         <span className="flex flex-wrap items-baseline gap-2 text-[10px] text-tos-dim">
-          <span>{item.source}</span>
+          <span title={item.source}>AXE Market Data</span>
           {date ? <span>· {date}</span> : null}
           {item.symbols && item.symbols.length > 0 ? (
             <span className="font-mono">· {item.symbols.slice(0, 3).join(", ")}</span>

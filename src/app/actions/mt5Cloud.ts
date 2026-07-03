@@ -3,7 +3,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { normalizeDealsToClosedTrades, type MetaApiDeal } from "@/lib/mt5/dealNormalization";
 import {
   classifyMetaApiProvisioningError,
   userMessageForCode,
@@ -12,23 +11,26 @@ import {
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetAccountInformation,
-  clientGetHistoryDealsRange,
+  clientListSymbols,
   clientGetPositions,
   clientGetSymbolPrice,
   defaultRegionForProvisioning,
+  metaApiTradingAccountId,
   MetaApiRequestError,
   provisioningCreateMt5CloudAccount,
-  provisioningDeleteAccount,
+  provisioningDeployAccount,
+  provisioningFindMt5CloudAccount,
   provisioningGetAccount,
+  provisioningRedeployAccount,
+  type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
-import type {
-  Mt5DoctorOverallStatus,
-  Mt5DoctorReport,
-  Mt5DoctorStep,
-  Mt5DoctorStepId,
-  Mt5DoctorStepStatus,
-} from "@/types/mt5Doctor";
+import { metadataHasSymbolMap, refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
+import { syncBrokerHubFromAccountRow } from "@/lib/broker/hub/sync";
+import {
+  metaApiComplianceConfirmed,
+  META_API_COMPLIANCE_ERROR,
+} from "@/lib/legal/metaApiCompliance";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -77,20 +79,78 @@ function isProvisionedAndReady(
   return c === "CONNECTED" || s === "DEPLOYED";
 }
 
+function triggerSymbolMapRefreshIfNeeded(
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
+  userId: string,
+  accountId: string,
+  metadata: Record<string, unknown> | null | undefined,
+): void {
+  if (!supabase || metadataHasSymbolMap(metadata)) return;
+  void refreshCloudAccountSymbolMap(supabase, userId, accountId, { probe: false }).catch((e) =>
+    console.error("[mt5Cloud] symbol map refresh failed:", e),
+  );
+}
+
+function normalizeLogin(login: string | number | null | undefined): string {
+  return String(login ?? "").replace(/\D/g, "");
+}
+
+function normalizeServer(server: string | null | undefined): string {
+  return String(server ?? "").trim().toLowerCase();
+}
+
+function accountMatchesMt5(
+  account: MetaApiTradingAccount,
+  login: string | number | null | undefined,
+  server: string | null | undefined,
+): boolean {
+  const targetLogin = normalizeLogin(login);
+  const targetServer = normalizeServer(server);
+  if (!targetLogin || !targetServer) return false;
+  return normalizeLogin(account.login) === targetLogin && normalizeServer(account.server) === targetServer;
+}
+
+async function findExistingMetaApiAccount(
+  login: string,
+  server: string,
+): Promise<{ id: string; account: MetaApiTradingAccount } | null> {
+  const account = await provisioningFindMt5CloudAccount({ login, server });
+  if (!account) return null;
+  const id = metaApiTradingAccountId(account);
+  return id ? { id, account } : null;
+}
+
+async function ensureMetaApiAccountDeployment(
+  metaId: string,
+  snapshot: MetaApiTradingAccount | null,
+): Promise<void> {
+  const state = (snapshot?.state ?? "").toUpperCase();
+  const connectionStatus = (snapshot?.connectionStatus ?? "").toUpperCase();
+  if (state === "UNDEPLOYED" || state === "CREATED") {
+    await withActionBudget(
+      "recovery_deploy_account",
+      provisioningDeployAccount(metaId),
+      RECOVERY_OPERATION_TIMEOUT_MS,
+    );
+    return;
+  }
+  if (connectionStatus !== "CONNECTED" || state !== "DEPLOYED") {
+    await withActionBudget(
+      "recovery_redeploy_account",
+      provisioningRedeployAccount(metaId),
+      RECOVERY_OPERATION_TIMEOUT_MS,
+    );
+  }
+}
+
 const PROVISIONING_POLL_INTERVAL_MS = 1_500;
 const PROVISIONING_POLL_BUDGET_MS = 10_000;
 const PROVISIONING_PROBE_STEP_TIMEOUT_MS = 4_000;
 const TEST_PROVISIONING_TIMEOUT_MS = 20_000;
 const TEST_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
-const SYNC_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
-const SYNC_POSITIONS_TIMEOUT_MS = 35_000;
-const SYNC_HISTORY_TIMEOUT_MS = 75_000;
-const SYNC_FINAL_STATUS_TIMEOUT_MS = 10_000;
-const DOCTOR_PROVISIONING_TIMEOUT_MS = 15_000;
-const DOCTOR_ACCOUNT_INFO_TIMEOUT_MS = 25_000;
-const DOCTOR_POSITIONS_TIMEOUT_MS = 20_000;
-const DOCTOR_HISTORY_TIMEOUT_MS = 30_000;
-const DOCTOR_PRICE_TIMEOUT_MS = 12_000;
+const RECOVERY_OPERATION_TIMEOUT_MS = 70_000;
+const RECOVERY_POLL_BUDGET_MS = 60_000;
+const RECOVERY_POLL_INTERVAL_MS = 2_500;
 
 class Mt5ActionTimeoutError extends Error {
   constructor(readonly operation: string) {
@@ -114,93 +174,6 @@ async function withActionBudget<T>(
     ]);
   } finally {
     if (timer) clearTimeout(timer);
-  }
-}
-
-function minutesSince(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms)) return null;
-  return Math.max(0, Math.round(ms / 60_000));
-}
-
-function doctorStep(
-  id: Mt5DoctorStepId,
-  label: string,
-  status: Mt5DoctorStepStatus,
-  detail: string,
-): Mt5DoctorStep {
-  return { id, label, status, detail };
-}
-
-function safeString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function compactMetaError(error: unknown): string {
-  const mapped = mapMetaError(error);
-  return `${mapped.code}: ${mapped.message}`;
-}
-
-function knownFailureFromStatus(status: string | null | undefined): string | null {
-  const s = (status ?? "").toLowerCase();
-  if (!s || s === "connected" || s === "provisioned" || s === "syncing") return null;
-  if (s === "invalid_credentials" || s === "mt5_invalid_credentials") return "Credentials issue";
-  if (s === "provider_not_configured") return "MetaAPI token is not configured on the server";
-  if (s === "not_found") return "MetaAPI account was not found";
-  if (s === "metaapi_region_error") return "MetaAPI region or client host mismatch";
-  if (s === "metaapi_timeout") return "MetaAPI or broker terminal timed out";
-  if (s.includes("fail") || s.includes("error")) return "Previous MT5 operation failed";
-  if (s === "disconnected") return "MetaAPI connection is disconnected";
-  return null;
-}
-
-function overallFromDoctor(args: {
-  providerStatus: string | null;
-  liveTradingEnabled: boolean;
-  deploymentStatus: Mt5DoctorStepStatus;
-  terminalStatus: Mt5DoctorStepStatus;
-  brokerStatus: Mt5DoctorStepStatus;
-  positionsStatus: Mt5DoctorStepStatus;
-  historyStatus: Mt5DoctorStepStatus;
-  priceStatus: Mt5DoctorStepStatus;
-  knownFailure: string | null;
-}): Mt5DoctorOverallStatus {
-  const provider = (args.providerStatus ?? "").toLowerCase();
-  if (provider.includes("credential") || args.knownFailure?.toLowerCase().includes("credential")) {
-    return "credentials_issue";
-  }
-  if (provider === "provisioning" || provider === "created" || provider === "deploying") {
-    return "provisioning_pending";
-  }
-  if (provider === "syncing" || provider === "connecting") return "syncing";
-  if (args.deploymentStatus === "fail" || args.terminalStatus === "fail") return "server_issue";
-  if (args.brokerStatus === "fail" || args.priceStatus === "fail") return "reconnecting";
-  if (args.positionsStatus === "fail" || args.historyStatus === "fail" || args.knownFailure) return "needs_attention";
-  if (!args.liveTradingEnabled && args.terminalStatus === "pass" && args.brokerStatus === "pass") return "read_only";
-  if (args.terminalStatus === "pass" && args.brokerStatus === "pass") return "connected";
-  return "needs_attention";
-}
-
-function doctorHeadline(status: Mt5DoctorOverallStatus): string {
-  switch (status) {
-    case "connected":
-      return "MT5 connection is live.";
-    case "syncing":
-      return "MT5 is syncing.";
-    case "reconnecting":
-      return "MT5 is reachable but live data needs attention.";
-    case "read_only":
-      return "MT5 is live in read-only mode.";
-    case "server_issue":
-      return "MetaAPI deployment or server state needs attention.";
-    case "credentials_issue":
-      return "MT5 credentials need attention.";
-    case "provisioning_pending":
-      return "MT5 cloud terminal is still provisioning.";
-    case "needs_attention":
-    default:
-      return "MT5 connection needs attention.";
   }
 }
 
@@ -244,6 +217,34 @@ async function pollUntilDeployed(metaId: string): Promise<{
   return { ...last, ready: false };
 }
 
+async function pollRecoveryUntilReady(metaId: string): Promise<{
+  connectionStatus?: string;
+  state?: string;
+  ready: boolean;
+}> {
+  const deadline = Date.now() + RECOVERY_POLL_BUDGET_MS;
+  let last: { connectionStatus?: string; state?: string } = {};
+
+  while (Date.now() < deadline) {
+    const acc = await withActionBudget(
+      "recovery_probe",
+      provisioningGetAccount(metaId),
+      PROVISIONING_PROBE_STEP_TIMEOUT_MS,
+    );
+    last = { connectionStatus: acc.connectionStatus, state: acc.state };
+    if (isProvisionedAndReady(acc.connectionStatus, acc.state)) {
+      return { ...last, ready: true };
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(RECOVERY_POLL_INTERVAL_MS, remaining)),
+    );
+  }
+
+  return { ...last, ready: false };
+}
+
 export async function createCloudMt5ConnectionAction(
   _prev: Mt5CloudResult<{ accountId: string }> | undefined,
   formData: FormData,
@@ -263,20 +264,26 @@ export async function createCloudMt5ConnectionAction(
   const label = String(formData.get("label") ?? "").trim();
   const mt5Login = String(formData.get("mt5Login") ?? "").trim().replace(/\D/g, "");
   const mt5Server = String(formData.get("mt5Server") ?? "").trim();
-  const investorPassword = String(formData.get("investorPassword") ?? "");
-  const readOnlyOk = formData.get("readOnlyConfirm") === "on" || formData.get("readOnlyConfirm") === "true";
+  const passwordTypeRaw = String(formData.get("passwordType") ?? "investor").trim();
+  const passwordType = passwordTypeRaw === "master" ? "master" : "investor";
+  const mt5Password =
+    String(formData.get("mt5Password") ?? "").trim() ||
+    String(formData.get("investorPassword") ?? "");
+  if (!metaApiComplianceConfirmed(formData)) {
+    return { ok: false, code: "validation", message: META_API_COMPLIANCE_ERROR };
+  }
 
   if (!label) return { ok: false, code: "validation", message: "Label is required." };
   if (!mt5Login) return { ok: false, code: "validation", message: "MT5 login (digits) is required." };
   if (!mt5Server) return { ok: false, code: "validation", message: "MT5 server name is required." };
-  if (!investorPassword) return { ok: false, code: "validation", message: "Investor (read-only) password is required." };
-  if (!readOnlyOk) {
+  if (!mt5Password) {
     return {
       ok: false,
       code: "validation",
-      message: "Confirm read-only access: tick the checkbox to use investor password only.",
+      message: passwordType === "master" ? "Master password is required." : "Investor (read-only) password is required.",
     };
   }
+  const manualTrades = passwordType === "investor";
 
   // Region must be one of the supported MetaApi clouds. The form already
   // restricts the select to these three; this is a belt-and-braces check so
@@ -287,16 +294,28 @@ export async function createCloudMt5ConnectionAction(
     : (defaultRegionForProvisioning() as MetaApiRegion);
 
   let metaId: string;
+  let existingMetaAccount: MetaApiTradingAccount | null = null;
   try {
-    const created = await provisioningCreateMt5CloudAccount({
-      login: mt5Login,
-      password: investorPassword,
-      name: label,
-      server: mt5Server,
-      region,
-      manualTrades: true,
-    });
-    metaId = created.id;
+    const existing = await withActionBudget(
+      "find_existing_metaapi_account",
+      findExistingMetaApiAccount(mt5Login, mt5Server),
+      TEST_PROVISIONING_TIMEOUT_MS,
+    );
+    if (existing) {
+      metaId = existing.id;
+      existingMetaAccount = existing.account;
+      await ensureMetaApiAccountDeployment(metaId, existingMetaAccount);
+    } else {
+      const created = await provisioningCreateMt5CloudAccount({
+        login: mt5Login,
+        password: mt5Password,
+        name: label,
+        server: mt5Server,
+        region,
+        manualTrades,
+      });
+      metaId = created.id;
+    }
   } catch (e) {
     return mapMetaError(e);
   }
@@ -313,12 +332,73 @@ export async function createCloudMt5ConnectionAction(
 
   const masked_login = maskLogin(mt5Login);
   const metadata = {
-    metaapiRegion: region,
-    readOnlyConfirmed: true,
+    metaapiRegion:
+      (typeof existingMetaAccount?.region === "string" && existingMetaAccount.region.length > 0
+        ? existingMetaAccount.region
+        : region),
+    passwordType,
+    metaApiComplianceConfirmed: true,
+    passwordType,
     createdVia: "axe_companion_cloud_mt5",
+    metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,
     provisioningProbedAt: new Date().toISOString(),
   };
+
+  const { data: existingLocalRow, error: existingLocalErr } = await supabase
+    .from("user_broker_accounts")
+    .select("id,metadata")
+    .eq("user_id", user.id)
+    .eq("provider", "mt5")
+    .eq("mt5_login", mt5Login)
+    .eq("mt5_server", mt5Server)
+    .maybeSingle();
+
+  if (existingLocalErr) {
+    return { ok: false, code: "unknown", message: existingLocalErr.message };
+  }
+
+  if (existingLocalRow?.id) {
+    const previousMeta =
+      existingLocalRow.metadata && typeof existingLocalRow.metadata === "object" && !Array.isArray(existingLocalRow.metadata)
+        ? (existingLocalRow.metadata as Record<string, unknown>)
+        : {};
+    const { error: updateExistingErr } = await supabase
+      .from("user_broker_accounts")
+      .update({
+        label,
+        status: "active",
+        connection_method: "cloud_mt5",
+        external_connection_id: metaId,
+        provider_status: providerStatus,
+        masked_login,
+        metadata: {
+          ...previousMeta,
+          ...metadata,
+          recoveredFromLocalDuplicate: true,
+        },
+      })
+      .eq("id", existingLocalRow.id as string)
+      .eq("user_id", user.id);
+
+    if (updateExistingErr) return { ok: false, code: "unknown", message: updateExistingErr.message };
+
+    if (probe.ready) {
+      triggerSymbolMapRefreshIfNeeded(supabase, user.id, existingLocalRow.id as string, {
+        ...previousMeta,
+        ...metadata,
+      });
+    }
+
+    revalidatePath("/accounts");
+    revalidatePath("/history");
+    revalidatePath("/journal");
+    revalidatePath("/chat");
+
+    void syncBrokerHubFromAccountRow(supabase, existingLocalRow.id as string).catch(() => undefined);
+
+    return { ok: true, data: { accountId: existingLocalRow.id as string } };
+  }
 
   const { data: inserted, error } = await supabase
     .from("user_broker_accounts")
@@ -340,18 +420,19 @@ export async function createCloudMt5ConnectionAction(
     .single();
 
   if (error) {
-    try {
-      await provisioningDeleteAccount(metaId);
-    } catch {
-      /* best-effort rollback */
-    }
     return { ok: false, code: "unknown", message: error.message };
+  }
+
+  if (probe.ready) {
+    triggerSymbolMapRefreshIfNeeded(supabase, user.id, inserted.id as string, metadata);
   }
 
   revalidatePath("/accounts");
   revalidatePath("/history");
   revalidatePath("/journal");
   revalidatePath("/chat");
+
+  void syncBrokerHubFromAccountRow(supabase, inserted.id as string).catch(() => undefined);
 
   return { ok: true, data: { accountId: inserted.id as string } };
 }
@@ -433,11 +514,17 @@ export async function probeCloudMt5StatusAction(accountId: string): Promise<
     if (shouldBackfillRegion) {
       patch.metadata = { ...currentMeta, metaapiRegion: newRegion };
     }
-    await supabase
-      .from("user_broker_accounts")
-      .update(patch)
-      .eq("id", accountId)
-      .eq("user_id", user.id);
+  await supabase
+    .from("user_broker_accounts")
+    .update(patch)
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+    void syncBrokerHubFromAccountRow(supabase, accountId).catch(() => undefined);
+  }
+
+  if (providerStatus === "connected") {
+    triggerSymbolMapRefreshIfNeeded(supabase, user.id, accountId, currentMeta);
   }
 
   return { ok: true, data: { providerStatus } };
@@ -458,7 +545,7 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
 
   const { data: row, error } = await supabase
     .from("user_broker_accounts")
-    .select("id,external_connection_id,connection_method,user_id,metadata")
+    .select("id,external_connection_id,connection_method,user_id,metadata,mt5_login,mt5_server")
     .eq("id", accountId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -468,7 +555,7 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
     return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
   }
 
-  const extId = row.external_connection_id as string;
+  let extId = row.external_connection_id as string;
   const prevMetaRow =
     row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
       ? (row.metadata as Record<string, unknown>)
@@ -477,11 +564,36 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
     typeof prevMetaRow.metaapiRegion === "string" ? prevMetaRow.metaapiRegion : null;
 
   try {
-    const acc = await withActionBudget(
-      "test_provisioning",
-      provisioningGetAccount(extId),
-      TEST_PROVISIONING_TIMEOUT_MS,
-    );
+    const mt5Login = normalizeLogin(row.mt5_login as string | null);
+    const mt5Server = String(row.mt5_server ?? "").trim();
+    let acc: MetaApiTradingAccount | null = null;
+    let relinked = false;
+
+    try {
+      acc = await withActionBudget(
+        "test_provisioning",
+        provisioningGetAccount(extId),
+        TEST_PROVISIONING_TIMEOUT_MS,
+      );
+    } catch (e) {
+      const mapped = mapMetaError(e);
+      if (mapped.code !== "not_found") throw e;
+    }
+
+    if (!acc || !accountMatchesMt5(acc, mt5Login, mt5Server)) {
+      const existing = await withActionBudget(
+        "find_existing_metaapi_account",
+        findExistingMetaApiAccount(mt5Login, mt5Server),
+        TEST_PROVISIONING_TIMEOUT_MS,
+      );
+      if (!existing) {
+        throw new MetaApiRequestError("not_found", "No matching MetaApi account found for MT5 login/server", 404, null);
+      }
+      extId = existing.id;
+      acc = existing.account;
+      relinked = true;
+    }
+
     // Backfill the region for legacy accounts that were created before
     // the region-aware migration. provisioningGetAccount returns the
     // deployed region "for free" so we just persist it here — the next
@@ -500,6 +612,7 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
     const meta = {
       ...prevMetaRow,
       ...(resolvedRegion && !accountRegion ? { metaapiRegion: resolvedRegion } : {}),
+      ...(relinked ? { relinkedMetaapiAccountAt: new Date().toISOString() } : {}),
       accountSummary: {
         balance: info.balance,
         equity: info.equity,
@@ -513,9 +626,17 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
 
     await supabase
       .from("user_broker_accounts")
-      .update({ provider_status, metadata: meta })
+      .update({
+        connection_method: "cloud_mt5",
+        external_connection_id: extId,
+        status: "active",
+        provider_status,
+        metadata: meta,
+      })
       .eq("id", accountId)
       .eq("user_id", user.id);
+
+    triggerSymbolMapRefreshIfNeeded(supabase, user.id, accountId, meta);
   } catch (e) {
     const mapped = mapMetaError(e);
     const failStatus = mapped.code === "mt5_invalid_credentials" ? "invalid_credentials" : "failed";
@@ -538,10 +659,6 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
     tradesNormalized: number;
   }>
 > {
-  if (!getMetaApiToken()) {
-    return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
-  }
-
   const supabase = await createServerSupabaseClient();
   if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
 
@@ -550,189 +667,11 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
-  const { data: row, error } = await supabase
-    .from("user_broker_accounts")
-    .select("id,external_connection_id,connection_method,metadata,user_id")
-    .eq("id", accountId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (error) return { ok: false, code: "unknown", message: error.message };
-  if (!row?.external_connection_id || row.connection_method !== "cloud_mt5") {
-    return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
-  }
-
-  const extId = row.external_connection_id as string;
-  const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
-  const accountRegion =
-    typeof prevMeta.metaapiRegion === "string" ? prevMeta.metaapiRegion : null;
-
-  await supabase
-    .from("user_broker_accounts")
-    .update({ provider_status: "syncing" })
-    .eq("id", accountId)
-    .eq("user_id", user.id);
-
-  let dealsRaw: unknown[] = [];
-  let positions: unknown[] = [];
-  let info: Record<string, unknown> = {};
-
-  try {
-    info = await withActionBudget(
-      "sync_account_information",
-      clientGetAccountInformation(extId, true, accountRegion),
-      SYNC_ACCOUNT_INFO_TIMEOUT_MS,
-    );
-    positions = await withActionBudget(
-      "sync_positions",
-      clientGetPositions(extId, false, accountRegion),
-      SYNC_POSITIONS_TIMEOUT_MS,
-    );
-    const end = new Date();
-    const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
-    dealsRaw = await withActionBudget(
-      "sync_history_deals",
-      clientGetHistoryDealsRange(
-        extId,
-        start.toISOString(),
-        end.toISOString(),
-        accountRegion,
-      ),
-      SYNC_HISTORY_TIMEOUT_MS,
-    );
-  } catch (e) {
-    await supabase
-      .from("user_broker_accounts")
-      .update({ provider_status: "sync_failed", metadata: { ...prevMeta, lastSyncErrorAt: new Date().toISOString() } })
-      .eq("id", accountId)
-      .eq("user_id", user.id);
-    const m = mapMetaError(e);
-    if (m.code === "unknown") return { ok: false, code: "sync_failed", message: userMessageForCode("sync_failed") };
-    return m;
-  }
-
-  const dealsFetched = dealsRaw.length;
-  const normalized = normalizeDealsToClosedTrades(dealsRaw as MetaApiDeal[]);
-  const tradesNormalized = normalized.length;
-
-  let dealsUpserted = 0;
-  for (const t of normalized) {
-    const payload = {
-      user_id: user.id,
-      account_id: accountId,
-      symbol: t.symbol,
-      side: t.side,
-      volume: t.volume,
-      open_time: t.open_time,
-      close_time: t.close_time,
-      open_price: t.open_price,
-      close_price: t.close_price,
-      pnl: t.pnl,
-      fees: t.fees,
-      external_trade_id: t.external_trade_id,
-      raw: t.raw,
-    };
-
-    const { data: existing, error: exErr } = await supabase
-      .from("broker_trades")
-      .select("id")
-      .eq("account_id", accountId)
-      .eq("external_trade_id", t.external_trade_id)
-      .maybeSingle();
-
-    if (exErr) {
-      await supabase
-        .from("user_broker_accounts")
-        .update({ provider_status: "sync_failed" })
-        .eq("id", accountId)
-        .eq("user_id", user.id);
-      return { ok: false, code: "sync_failed", message: exErr.message };
-    }
-
-    if (existing?.id) {
-      const { error: upErr } = await supabase
-        .from("broker_trades")
-        .update({
-          symbol: payload.symbol,
-          side: payload.side,
-          volume: payload.volume,
-          open_time: payload.open_time,
-          close_time: payload.close_time,
-          open_price: payload.open_price,
-          close_price: payload.close_price,
-          pnl: payload.pnl,
-          fees: payload.fees,
-          raw: payload.raw,
-        })
-        .eq("id", existing.id)
-        .eq("user_id", user.id);
-      if (upErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
-        return { ok: false, code: "sync_failed", message: upErr.message };
-      }
-    } else {
-      const { error: inErr } = await supabase.from("broker_trades").insert(payload);
-      if (inErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
-        return { ok: false, code: "sync_failed", message: inErr.message };
-      }
-    }
-    dealsUpserted += 1;
-  }
-
-  let accSnap: { connectionStatus?: string; state?: string } = {};
-  try {
-    accSnap = await withActionBudget(
-      "sync_final_status",
-      provisioningGetAccount(extId),
-      SYNC_FINAL_STATUS_TIMEOUT_MS,
-    );
-  } catch {
-    /* ignore */
-  }
-
-  const provider_status = mapConnectionToProviderStatus(accSnap.connectionStatus, accSnap.state) || "connected";
-
-  const metadata = {
-    ...prevMeta,
-    accountSummary: {
-      balance: info.balance,
-      equity: info.equity,
-      currency: info.currency,
-      server: info.server,
-      login: info.login,
-      broker: info.broker,
-    },
-    openPositions: positions,
-    dealsFetched,
-    dealsUpserted,
-    lastSyncAt: new Date().toISOString(),
-  };
-
-  await supabase
-    .from("user_broker_accounts")
-    .update({
-      provider_status: provider_status === "unknown" ? "connected" : provider_status,
-      last_sync_at: new Date().toISOString(),
-      metadata,
-    })
-    .eq("id", accountId)
-    .eq("user_id", user.id);
-
-  revalidatePath("/accounts");
-  revalidatePath("/history");
-  revalidatePath("/journal");
-  revalidatePath("/chat");
-
-  if (dealsFetched === 0) {
-    return {
-      ok: false,
-      code: "sync_no_deals",
-      message: userMessageForCode("sync_no_deals"),
-    };
-  }
-
-  return { ok: true, data: { dealsFetched, dealsUpserted, tradesNormalized } };
+  return runCloudMt5Sync(supabase, user.id, accountId, {
+    revalidate: true,
+    autoJournal: true,
+    allowEmptyDeals: false,
+  });
 }
 
 export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5CloudResult<Mt5DoctorReport>> {
@@ -1122,19 +1061,16 @@ export async function disconnectCloudMt5AccountAction(accountId: string): Promis
   }
 
   const prevId = row.external_connection_id as string | null;
-  if (prevId && getMetaApiToken()) {
-    try {
-      await provisioningDeleteAccount(prevId);
-    } catch {
-      /* still mark disconnected locally */
-    }
-  }
-
   const prevMetaDisc =
     row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
       ? (row.metadata as Record<string, unknown>)
       : {};
-  const meta = { ...prevMetaDisc, previousMetaapiAccountId: prevId };
+  const meta = {
+    ...prevMetaDisc,
+    previousMetaapiAccountId: prevId,
+    disconnectedAt: new Date().toISOString(),
+    metaapiAccountPreserved: true,
+  };
 
   const { error: upErr } = await supabase
     .from("user_broker_accounts")
@@ -1156,6 +1092,203 @@ export async function disconnectCloudMt5AccountAction(accountId: string): Promis
   revalidatePath("/chat");
 
   return { ok: true };
+}
+
+export async function recoverCloudMt5AccountAction(accountId: string): Promise<Mt5CloudResult> {
+  if (!getMetaApiToken()) {
+    return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "validation", message: "Not signed in." };
+
+  const { data: row, error } = await supabase
+    .from("user_broker_accounts")
+    .select("id,external_connection_id,connection_method,provider_status,metadata,user_id,mt5_login,mt5_server")
+    .eq("id", accountId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) return { ok: false, code: "unknown", message: error.message };
+  if (!row || (row.connection_method !== "cloud_mt5" && row.connection_method !== "cloud_mt5_disconnected")) {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Not a MetaApi cloud account.",
+    };
+  }
+
+  let extId = row.external_connection_id as string | null;
+  const prevMeta =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const recoveryStartedAt = new Date().toISOString();
+
+  await supabase
+    .from("user_broker_accounts")
+    .update({
+      provider_status: "recovering",
+      metadata: {
+        ...prevMeta,
+        lastRecovery: {
+          status: "started",
+          startedAt: recoveryStartedAt,
+        },
+      },
+    })
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+  try {
+    const mt5Login = normalizeLogin(row.mt5_login as string | null);
+    const mt5Server = String(row.mt5_server ?? "").trim();
+    let live: MetaApiTradingAccount | null = null;
+    let relinked = false;
+
+    if (extId) {
+      try {
+        live = await withActionBudget(
+          "recovery_read_account",
+          provisioningGetAccount(extId),
+          TEST_PROVISIONING_TIMEOUT_MS,
+        );
+      } catch (e) {
+        const mapped = mapMetaError(e);
+        if (mapped.code !== "not_found") throw e;
+      }
+    }
+
+    if (!live || !accountMatchesMt5(live, mt5Login, mt5Server)) {
+      if (!mt5Login || !mt5Server) {
+        throw new MetaApiRequestError(
+          "validation",
+          "Missing MT5 login/server for MetaApi account recovery",
+          0,
+          null,
+        );
+      }
+      const existing = await withActionBudget(
+        "find_existing_metaapi_account",
+        findExistingMetaApiAccount(mt5Login, mt5Server),
+        TEST_PROVISIONING_TIMEOUT_MS,
+      );
+      if (!existing) {
+        throw new MetaApiRequestError("not_found", "No matching MetaApi account found for MT5 login/server", 404, null);
+      }
+      extId = existing.id;
+      live = existing.account;
+      relinked = true;
+    }
+
+    if (!extId) {
+      throw new MetaApiRequestError("not_found", "No MetaApi account id found for recovery", 404, null);
+    }
+
+    await ensureMetaApiAccountDeployment(extId, live);
+
+    const final = await pollRecoveryUntilReady(extId);
+    const providerStatus = final.ready
+      ? mapConnectionToProviderStatus(final.connectionStatus, final.state)
+      : mapConnectionToProviderStatus(final.connectionStatus, final.state) || "recovering";
+    const resolvedRegion =
+      typeof live.region === "string" && live.region.length > 0
+        ? live.region
+        : typeof prevMeta.metaapiRegion === "string"
+          ? prevMeta.metaapiRegion
+          : null;
+
+    await supabase
+      .from("user_broker_accounts")
+      .update({
+        connection_method: "cloud_mt5",
+        external_connection_id: extId,
+        status: "active",
+        provider_status: final.ready ? providerStatus : "recovery_failed",
+        metadata: {
+          ...prevMeta,
+          ...(resolvedRegion ? { metaapiRegion: resolvedRegion } : {}),
+          lastRecovery: {
+            status: final.ready ? "ready" : "pending",
+            startedAt: recoveryStartedAt,
+            finishedAt: new Date().toISOString(),
+            state: final.state ?? null,
+            connectionStatus: final.connectionStatus ?? null,
+            relinkedMetaapiAccount: relinked,
+          },
+        },
+      })
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+
+    revalidatePath("/accounts");
+    revalidatePath("/chart");
+    revalidatePath("/positions");
+    revalidatePath("/history");
+    revalidatePath("/journal");
+    revalidatePath("/chat");
+
+    if (!final.ready) {
+      return {
+        ok: false,
+        code: "sync_failed",
+        message: "MetaApi accepted the recovery request, but the broker terminal is still not connected. Retry in a minute.",
+      };
+    }
+
+    return { ok: true };
+  } catch (e) {
+    const mapped = mapMetaError(e);
+    const orphanPatch =
+      mapped.code === "not_found"
+        ? {
+            connection_method: "cloud_mt5_disconnected",
+            external_connection_id: null,
+            provider_status: "orphaned",
+            status: "inactive",
+            metadata: {
+              ...prevMeta,
+              orphanedMetaapiAccountId: extId,
+              lastRecovery: {
+                status: "orphaned",
+                startedAt: recoveryStartedAt,
+                finishedAt: new Date().toISOString(),
+                reason: mapped.code,
+              },
+            },
+          }
+        : {
+            provider_status: "recovery_failed",
+            metadata: {
+              ...prevMeta,
+              lastRecovery: {
+                status: "failed",
+                startedAt: recoveryStartedAt,
+                finishedAt: new Date().toISOString(),
+                reason: mapped.code,
+              },
+            },
+          };
+
+    await supabase
+      .from("user_broker_accounts")
+      .update(orphanPatch)
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+
+    revalidatePath("/accounts");
+    revalidatePath("/chart");
+    revalidatePath("/positions");
+    revalidatePath("/history");
+    revalidatePath("/journal");
+    revalidatePath("/chat");
+    return mapped;
+  }
 }
 
 function mapMetaError(e: unknown): { ok: false; code: Mt5CloudErrorCode; message: string } {

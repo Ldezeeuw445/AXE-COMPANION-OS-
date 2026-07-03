@@ -4,6 +4,7 @@ import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetHistoricalCandles,
   clientGetPositions,
+  clientGetOrders,
   clientGetSymbolPrice,
   MetaApiRequestError,
 } from "@/lib/mt5/metaApiClient";
@@ -12,7 +13,9 @@ import type {
   ChartLiveEvent,
   ChartLiveStatus,
   LivePositionPayload,
+  LivePendingOrderPayload,
 } from "@/lib/chart/liveContract";
+import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,14 +26,15 @@ export const dynamic = "force-dynamic";
  * Same normalized event contract as the Cloudflare ChartLiveRoom websocket
  * (see src/lib/chart/liveContract.ts). The browser uses one parser for both.
  *
- * The SSE keeps the system production-runnable when no Cloudflare edge is
- * deployed (or when WS is blocked by a network/proxy). Bounded by
- * MAX_DURATION_MS — the client auto-reconnects.
+ * Phase 11 rewrite: tick, candle, and position polls now run as independent
+ * concurrent intervals instead of blocking each other sequentially. This
+ * prevents a slow candle/position fetch from starving the tick stream.
  */
 
-const TICK_INTERVAL_MS = 2_500;
-const CANDLE_INTERVAL_MS = 12_000;
+const TICK_INTERVAL_MS = 1_000;
+const CANDLE_INTERVAL_MS = 5_000;
 const POSITIONS_INTERVAL_MS = 8_000;
+const HEARTBEAT_INTERVAL_MS = 4_000;
 const MAX_DURATION_MS = 50_000;
 const DELAYED_THRESHOLD_FAILURES = 3;
 
@@ -43,6 +47,21 @@ function mapSide(t: string | undefined): string {
   if (u.includes("BUY")) return "buy";
   if (u.includes("SELL")) return "sell";
   return (t ?? "").toLowerCase();
+}
+
+function mapOrderType(t: string | undefined): string {
+  const raw = (t ?? "").toLowerCase().replace(/_/g, " ");
+  if (raw.includes("buy") && raw.includes("limit")) return "buy_limit";
+  if (raw.includes("sell") && raw.includes("limit")) return "sell_limit";
+  if (raw.includes("buy") && raw.includes("stop")) return "buy_stop";
+  if (raw.includes("sell") && raw.includes("stop")) return "sell_stop";
+  return raw.trim() || "pending";
+}
+
+function mapOrderSide(type: string): string {
+  if (type.startsWith("buy")) return "buy";
+  if (type.startsWith("sell")) return "sell";
+  return "unknown";
 }
 
 export async function GET(request: NextRequest) {
@@ -60,6 +79,7 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return new Response("unauthorized", { status: 401 });
+  const userId = user.id;
 
   if (!getMetaApiToken()) {
     return new Response("provider_not_configured", { status: 503 });
@@ -80,6 +100,7 @@ export async function GET(request: NextRequest) {
   ) {
     return new Response("account_not_connected", { status: 404 });
   }
+  const accountId = account.id as string;
 
   if (!requestedDisplaySymbol) {
     return new Response("symbol_required", { status: 400 });
@@ -123,17 +144,40 @@ export async function GET(request: NextRequest) {
 
       send({
         type: "ready",
-        userId: user.id,
-        accountId: account.id as string,
+        userId,
+        accountId,
         displaySymbol: requestedDisplaySymbol,
         brokerSymbol,
         timeframe: tf,
         source: "metaapi_mt5",
       });
 
-      let lastTickAt = 0;
-      let lastCandleAt = 0;
-      let lastPositionsAt = 0;
+      // ── Push high-impact calendar events via the existing channel ────
+      try {
+        const events = await loadEconomicCalendar({
+          symbol: requestedDisplaySymbol,
+          daysAhead: 1,
+          limit: 5,
+        });
+        const soon = Date.now() + 30 * 60 * 1000;
+        for (const evt of events) {
+          if (evt.impact !== "high") continue;
+          const t = Date.parse(evt.startsAt);
+          if (!Number.isFinite(t) || t > soon) continue;
+          send({
+            type: "market_alert",
+            alertKind: "calendar",
+            title: evt.title,
+            impact: "high",
+            currency: evt.currency ?? null,
+            startsAt: evt.startsAt,
+            source: "finnhub",
+          });
+        }
+      } catch {
+        /* calendar check is best-effort */
+      }
+
       let consecutiveTickFailures = 0;
       let lastStatus: ChartLiveStatus | null = null;
 
@@ -143,17 +187,12 @@ export async function GET(request: NextRequest) {
         send({ type: "live_status", status: next, reason });
       }
 
-      while (!closed) {
-        if (Date.now() - startedAt > MAX_DURATION_MS) {
-          send({ type: "heartbeat" });
-          close();
-          break;
-        }
+      // ── Independent concurrent poll loops ──────────────────────────
+      // Each data type runs on its own interval. A slow positions fetch
+      // no longer blocks tick updates from reaching the client.
 
-        const now = Date.now();
-
-        if (now - lastTickAt >= TICK_INTERVAL_MS) {
-          lastTickAt = now;
+      async function tickLoop() {
+        while (!closed && Date.now() - startedAt < MAX_DURATION_MS) {
           try {
             const price = await clientGetSymbolPrice(metaAccountId, brokerSymbol, accountRegion);
             const mid =
@@ -162,8 +201,8 @@ export async function GET(request: NextRequest) {
                 : price.bid ?? price.ask;
             send({
               type: "tick",
-              userId: user.id,
-              accountId: account.id as string,
+              userId,
+              accountId,
               displaySymbol: requestedDisplaySymbol,
               brokerSymbol,
               bid: price.bid,
@@ -179,16 +218,20 @@ export async function GET(request: NextRequest) {
             if (e instanceof MetaApiRequestError && e.code === "not_found") {
               setStatus("error", "broker_symbol_not_found");
               close();
-              break;
+              return;
             }
             if (consecutiveTickFailures >= DELAYED_THRESHOLD_FAILURES) {
               setStatus("delayed", "tick_unavailable");
             }
           }
+          await new Promise((r) => setTimeout(r, TICK_INTERVAL_MS));
         }
+      }
 
-        if (now - lastCandleAt >= CANDLE_INTERVAL_MS) {
-          lastCandleAt = now;
+      async function candleLoop() {
+        // Initial delay so first tick arrives before candle fetch
+        await new Promise((r) => setTimeout(r, 2_000));
+        while (!closed && Date.now() - startedAt < MAX_DURATION_MS) {
           try {
             const candles = await clientGetHistoricalCandles(
               metaAccountId,
@@ -201,8 +244,8 @@ export async function GET(request: NextRequest) {
             if (last)
               send({
                 type: "candle_update",
-                userId: user.id,
-                accountId: account.id as string,
+                userId,
+                accountId,
                 displaySymbol: requestedDisplaySymbol,
                 brokerSymbol,
                 timeframe: tf,
@@ -213,10 +256,14 @@ export async function GET(request: NextRequest) {
           } catch {
             /* ignore — tick stream still informative */
           }
+          await new Promise((r) => setTimeout(r, CANDLE_INTERVAL_MS));
         }
+      }
 
-        if (now - lastPositionsAt >= POSITIONS_INTERVAL_MS) {
-          lastPositionsAt = now;
+      async function positionsLoop() {
+        // Initial delay — positions are lower priority than ticks
+        await new Promise((r) => setTimeout(r, 3_000));
+        while (!closed && Date.now() - startedAt < MAX_DURATION_MS) {
           try {
             const raw = (await clientGetPositions(
               metaAccountId,
@@ -245,8 +292,8 @@ export async function GET(request: NextRequest) {
               }));
             send({
               type: "positions_update",
-              userId: user.id,
-              accountId: account.id as string,
+              userId,
+              accountId,
               total: raw.length,
               onSymbol,
               source: "metaapi_mt5",
@@ -254,10 +301,69 @@ export async function GET(request: NextRequest) {
           } catch {
             /* keep stream alive */
           }
+          await new Promise((r) => setTimeout(r, POSITIONS_INTERVAL_MS));
         }
-
-        await new Promise((r) => setTimeout(r, 750));
       }
+
+      async function ordersLoop() {
+        // Slightly offset from positions to avoid concurrent MetaAPI hits
+        await new Promise((r) => setTimeout(r, 5_000));
+        while (!closed && Date.now() - startedAt < MAX_DURATION_MS) {
+          try {
+            const raw = (await clientGetOrders(
+              metaAccountId,
+              false,
+              accountRegion,
+            )) as Record<string, unknown>[];
+            const onSymbol: LivePendingOrderPayload[] = raw
+              .filter((o) => String(o.symbol ?? "") === brokerSymbol)
+              .map((o, i) => {
+                const type = mapOrderType(typeof o.type === "string" ? (o.type as string) : undefined);
+                return {
+                  id: String(o.id ?? o.orderId ?? i),
+                  symbol: String(o.symbol ?? ""),
+                  type,
+                  side: mapOrderSide(type),
+                  volume: Number(o.volume ?? 0) || 0,
+                  openPrice: Number(o.openPrice ?? o.price ?? 0),
+                  currentPrice: o.currentPrice != null ? Number(o.currentPrice) : null,
+                  stopLoss: o.stopLoss != null ? Number(o.stopLoss) : null,
+                  takeProfit: o.takeProfit != null ? Number(o.takeProfit) : null,
+                  openTime: (o.time as string) ?? (o.doneTime as string) ?? null,
+                };
+              });
+            send({
+              type: "orders_update",
+              userId,
+              accountId,
+              total: raw.length,
+              onSymbol,
+              source: "metaapi_mt5",
+            });
+          } catch {
+            /* keep stream alive */
+          }
+          await new Promise((r) => setTimeout(r, POSITIONS_INTERVAL_MS));
+        }
+      }
+
+      async function heartbeatLoop() {
+        while (!closed && Date.now() - startedAt < MAX_DURATION_MS) {
+          await new Promise((r) => setTimeout(r, HEARTBEAT_INTERVAL_MS));
+          send({ type: "heartbeat" });
+        }
+      }
+
+      // Fire all loops concurrently — they each manage their own interval
+      await Promise.allSettled([
+        tickLoop(),
+        candleLoop(),
+        positionsLoop(),
+        ordersLoop(),
+        heartbeatLoop(),
+      ]);
+
+      close();
     },
   });
 

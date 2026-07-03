@@ -9,6 +9,7 @@ import {
   sessionVwap,
   atrSeries,
   smaSeries,
+  emaSeries,
   type IndicatorMathCandle,
 } from "@/lib/chart/indicatorMath";
 
@@ -49,6 +50,8 @@ type Props = {
     pdl?: boolean;
     /** Previous Day Equilibrium — midpoint of yesterday's H+L. */
     pdq?: boolean;
+    /** Current session (UTC day) open — first candle open of today. */
+    sessionOpen?: boolean;
     /** Compact swing high/low levels used as Fib anchor references. */
     swingPoints?: boolean;
     /**
@@ -84,6 +87,12 @@ type Props = {
    * extension (the previous default), independent of this setting.
    */
   projectionCount?: 1 | 2 | 3;
+  /** Moving Average period — SMA or EMA. Default 20. */
+  maPeriod?: number;
+  /** Moving Average type — "sma" or "ema". Default "sma". */
+  maType?: "sma" | "ema";
+  /** Dark theme? Paper mode needs much darker overlay colors. */
+  isDark?: boolean;
 };
 
 type Size = { w: number; h: number };
@@ -176,6 +185,91 @@ type VolumetricBreakdown = {
  */
 const MIN_FUTURE_BARS = 5;
 
+/* ── Overlay color palette ─────────────────────────────────────
+ * Same hues for both themes; Paper variants are much darker so
+ * overlays stay legible on the warm #d7d6d0 background.
+ * Text strokes swap from black (Midnight) to the Paper bg so
+ * labels pop equally on both surfaces.
+ */
+function overlayPalette(dark: boolean) {
+  if (dark) {
+    return {
+      textStroke06: "rgba(0,0,0,0.60)",
+      textStroke07: "rgba(0,0,0,0.65)",
+      textStroke08: "rgba(0,0,0,0.70)",
+      textStroke09: "rgba(0,0,0,0.76)",
+      textStroke10: "rgba(0,0,0,0.78)",
+      textStroke11: "rgba(0,0,0,0.82)",
+      pdhStroke: "rgba(34,211,238,0.92)", pdhLabel: "rgba(125,235,255,0.98)",
+      pdlStroke: "rgba(244,63,94,0.92)", pdlLabel: "rgba(252,165,165,0.98)",
+      pdqStroke: "rgba(96,165,250,0.88)", pdqLabel: "rgba(186,212,255,0.98)",
+      sessionOpenStroke: "rgba(250,204,21,0.92)", sessionOpenLabel: "rgba(253,224,71,0.98)",
+      structBullLine: "rgba(8,153,129,0.90)", structBullText: "rgba(8,153,129,0.95)",
+      structBearLine: "rgba(242,54,69,0.90)", structBearText: "rgba(242,54,69,0.95)",
+      pivotHigh: "rgba(34,211,238,0.88)", pivotLow: "rgba(45,212,191,0.88)",
+      sfpBull: "rgba(8,153,129,0.95)", sfpBear: "rgba(242,54,69,0.95)",
+      swingHighStroke: "rgba(244,63,94,0.85)", swingHighFill: "rgba(244,63,94,0.98)",
+      swingLowStroke: "rgba(45,212,191,0.85)", swingLowFill: "rgba(45,212,191,0.98)",
+      maLine: "rgba(96,165,250,0.95)", maLabel: "rgba(96,165,250,0.95)",
+      bolFill: "rgba(34,211,238,0.10)", bolBand: "rgba(34,211,238,0.65)", bolMid: "rgba(96,165,250,0.55)",
+      vwapLine: "rgba(250,204,21,0.95)", vwapLabel: "rgba(250,204,21,0.95)",
+      pocStroke: "rgba(168,85,247,0.92)", pocLabel: "rgba(216,180,254,0.98)",
+      supplyFill: "rgba(244,63,94,0.12)", supplyStroke: "rgba(244,63,94,0.50)", supplyLabel: "rgba(252,165,165,0.95)",
+      demandFill: "rgba(45,212,191,0.12)", demandStroke: "rgba(45,212,191,0.50)", demandLabel: "rgba(167,243,208,0.95)",
+      eqStroke: "rgba(148,163,184,0.70)", eqLabel: "rgba(148,163,184,0.95)",
+      obUpSource: "rgba(45,212,191,0.38)", obUpExt: "rgba(45,212,191,0.22)", obUpStroke: "rgba(45,212,191,0.88)",
+      obDownSource: "rgba(239,68,68,0.38)", obDownExt: "rgba(239,68,68,0.22)", obDownStroke: "rgba(239,68,68,0.88)",
+      obLabelUp: "rgba(167,243,208,0.82)", obLabelDown: "rgba(252,165,165,0.82)",
+      obVolLabelUp: "rgba(167,243,208,0.90)", obVolLabelDown: "rgba(252,165,165,0.90)",
+      sellerBar: "rgba(244,63,94,0.72)", buyerBar: "rgba(45,212,191,0.72)",
+      fvgUpStroke: "rgba(96,165,250,0.98)", fvgUpFill: "rgba(96,165,250,0.38)",
+      fvgDownStroke: "rgba(217,119,6,0.98)", fvgDownFill: "rgba(217,119,6,0.38)",
+      fvgLabelUp: "rgba(96,165,250,0.90)", fvgLabelDown: "rgba(217,119,6,0.90)",
+      ifvgBullOrig: "rgba(8,153,129,0.38)", ifvgBearOrig: "rgba(242,54,69,0.38)",
+      ifvgBullStroke: "rgba(8,153,129,0.98)", ifvgBearStroke: "rgba(242,54,69,0.98)",
+      ifvgMidline: "rgba(120,123,134,0.78)",
+    };
+  }
+  return {
+    textStroke06: "rgba(215,214,208,0.70)",
+    textStroke07: "rgba(215,214,208,0.75)",
+    textStroke08: "rgba(215,214,208,0.80)",
+    textStroke09: "rgba(215,214,208,0.85)",
+    textStroke10: "rgba(215,214,208,0.88)",
+    textStroke11: "rgba(215,214,208,0.90)",
+    pdhStroke: "rgba(0,100,120,0.95)", pdhLabel: "rgba(0,80,100,0.98)",
+    pdlStroke: "rgba(150,18,35,0.95)", pdlLabel: "rgba(120,10,25,0.98)",
+    pdqStroke: "rgba(30,70,150,0.95)", pdqLabel: "rgba(20,50,120,0.98)",
+    sessionOpenStroke: "rgba(160,110,0,0.95)", sessionOpenLabel: "rgba(140,95,0,0.98)",
+    structBullLine: "rgba(0,90,70,0.95)", structBullText: "rgba(0,80,60,0.98)",
+    structBearLine: "rgba(150,18,25,0.95)", structBearText: "rgba(130,10,20,0.98)",
+    pivotHigh: "rgba(0,90,110,0.95)", pivotLow: "rgba(0,100,85,0.95)",
+    sfpBull: "rgba(0,80,60,0.98)", sfpBear: "rgba(130,10,20,0.98)",
+    swingHighStroke: "rgba(150,18,35,0.88)", swingHighFill: "rgba(130,10,25,0.98)",
+    swingLowStroke: "rgba(0,100,85,0.88)", swingLowFill: "rgba(0,90,70,0.98)",
+    maLine: "rgba(30,70,150,0.98)", maLabel: "rgba(20,50,120,0.98)",
+    bolFill: "rgba(0,100,120,0.10)", bolBand: "rgba(0,90,110,0.72)", bolMid: "rgba(30,70,150,0.60)",
+    vwapLine: "rgba(160,110,0,0.98)", vwapLabel: "rgba(140,95,0,0.98)",
+    pocStroke: "rgba(90,30,160,0.95)", pocLabel: "rgba(70,20,130,0.98)",
+    supplyFill: "rgba(150,18,35,0.14)", supplyStroke: "rgba(150,18,35,0.55)", supplyLabel: "rgba(130,10,25,0.95)",
+    demandFill: "rgba(0,100,85,0.14)", demandStroke: "rgba(0,100,85,0.55)", demandLabel: "rgba(0,80,65,0.95)",
+    eqStroke: "rgba(50,55,65,0.72)", eqLabel: "rgba(40,45,55,0.95)",
+    obUpSource: "rgba(0,100,85,0.42)", obUpExt: "rgba(0,100,85,0.26)", obUpStroke: "rgba(0,90,70,0.90)",
+    obDownSource: "rgba(150,18,18,0.42)", obDownExt: "rgba(150,18,18,0.26)", obDownStroke: "rgba(140,10,10,0.90)",
+    obLabelUp: "rgba(0,80,65,0.90)", obLabelDown: "rgba(130,10,25,0.90)",
+    obVolLabelUp: "rgba(0,80,65,0.95)", obVolLabelDown: "rgba(130,10,25,0.95)",
+    sellerBar: "rgba(150,18,35,0.75)", buyerBar: "rgba(0,100,85,0.75)",
+    fvgUpStroke: "rgba(30,70,150,0.98)", fvgUpFill: "rgba(30,70,150,0.38)",
+    fvgDownStroke: "rgba(160,90,0,0.98)", fvgDownFill: "rgba(160,90,0,0.38)",
+    fvgLabelUp: "rgba(30,70,150,0.90)", fvgLabelDown: "rgba(160,90,0,0.90)",
+    ifvgBullOrig: "rgba(0,90,70,0.38)", ifvgBearOrig: "rgba(150,18,25,0.38)",
+    ifvgBullStroke: "rgba(0,90,70,0.98)", ifvgBearStroke: "rgba(150,18,25,0.98)",
+    ifvgMidline: "rgba(50,55,65,0.78)",
+  };
+}
+
+type OverlayPalette = ReturnType<typeof overlayPalette>;
+
 export function ChartIndicatorLayer({
   candles,
   canvasRef,
@@ -185,7 +279,11 @@ export function ChartIndicatorLayer({
   fvgCount = 1,
   projectionCount = 1,
   futureProjectionX = null,
+  maPeriod = 20,
+  maType = "sma",
+  isDark = true,
 }: Props) {
+  const pal = useMemo(() => overlayPalette(isDark), [isDark]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [version, setVersion] = useState(0);
@@ -215,6 +313,7 @@ export function ChartIndicatorLayer({
     if (!handle || size.w <= 0 || size.h <= 0) {
       return {
         maPath: "",
+        latestMaY: null as number | null,
         bollingerUpperPath: "",
         bollingerMiddlePath: "",
         bollingerLowerPath: "",
@@ -231,6 +330,7 @@ export function ChartIndicatorLayer({
         previousDayHigh: null as { y: number; price: number } | null,
         previousDayLow: null as { y: number; price: number } | null,
         previousDayEq: null as { y: number; price: number } | null,
+        sessionOpen: null as { y: number; price: number } | null,
         swingPointLevels: [] as SwingPointLevel[],
         swingFailures: [] as StructureArrow[],
         supplyDemand: null as SupplyDemandGeom | null,
@@ -260,19 +360,21 @@ export function ChartIndicatorLayer({
       futureProjectionX,
     );
 
-    const ma = sma(visible.map((candle) => candle.close), 20);
+    const closes = visible.map((candle) => candle.close);
+    const ma = maType === "ema"
+      ? emaSeries(closes, maPeriod)
+      : sma(closes, maPeriod);
     const maPoints: Point[] = visible
       .map((candle, index) => {
         if (ma[index] == null || candle.time == null) return null;
         const x = handle.timeToCoordinate(candle.time);
-        const y = handle.priceToCoordinate(ma[index]);
+        const y = handle.priceToCoordinate(ma[index]!);
         if (x == null || y == null) return null;
         return { x, y };
       })
       .filter(Boolean) as Point[];
 
     const mathCandles = visibleWithTime as IndicatorMathCandle[];
-    const closes = visibleWithTime.map((candle) => candle.close);
     const bollinger = bollingerBands(closes, 20, 2);
     const bollingerUpperPoints: Point[] = [];
     const bollingerMiddlePoints: Point[] = [];
@@ -312,7 +414,7 @@ export function ChartIndicatorLayer({
     const poc: PointOfControlGeom =
       pocRaw && pocY != null ? { y: pocY, price: pocRaw.price, volume: pocRaw.volume } : null;
 
-    const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX);
+    const structureOverlay = buildStructureOverlay(visible, handle, futureExtensionX, pal);
     // ATR(200) drives the LuxAlgo iFVG gap-size filter (default 0.25
      // × ATR). Filters out micro-gaps that would otherwise clutter the
      // chart with noise on calmer pairs.
@@ -322,9 +424,11 @@ export function ChartIndicatorLayer({
       handle,
       futureExtensionX,
       atrForIfvg,
+      pal,
     );
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
       buildPreviousDayLevels(visibleWithTime, handle);
+    const sessionOpen = buildSessionOpenLevel(visibleWithTime, handle);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
     const supplyDemand = buildSupplyDemandBands(visibleWithTime, handle);
     // Total tickVolume across the visible window — used as the
@@ -336,8 +440,11 @@ export function ChartIndicatorLayer({
       .slice(-200)
       .reduce((sum, c) => sum + (Number(c.tickVolume ?? c.volume ?? 0) || 0), 0);
 
+    const latestMaY = maPoints.length > 0 ? maPoints[maPoints.length - 1].y : null;
+
     return {
       maPath: toPath(maPoints),
+      latestMaY,
       bollingerUpperPath: toPath(bollingerUpperPoints),
       bollingerMiddlePath: toPath(bollingerMiddlePoints),
       bollingerLowerPath: toPath(bollingerLowerPoints),
@@ -372,31 +479,42 @@ export function ChartIndicatorLayer({
       previousDayHigh,
       previousDayLow,
       previousDayEq,
+      sessionOpen,
       swingPointLevels,
       swingFailures: structureOverlay.swingFailures,
       supplyDemand,
       totalChartVolume,
     };
-  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount]);
+  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
-      <svg width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0">
+      <svg
+        width={size.w}
+        height={size.h}
+        viewBox={`0 0 ${size.w} ${size.h}`}
+        className="absolute inset-0"
+        style={{
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
+        }}
+      >
         {active.orderBlocks
           ? geometry.orderBlocks.map((zone, index) => (
-              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" />
+              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" pal={pal} />
             ))
           : null}
 
         {active.fvg
           ? geometry.fairValueGaps.map((zone, index) => (
-              <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" />
+              <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" pal={pal} />
             ))
           : null}
 
         {active.ifvg
           ? geometry.inverseFairValueGaps.map((zone, index) => (
-              <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" />
+              <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" pal={pal} />
             ))
           : null}
 
@@ -408,101 +526,7 @@ export function ChartIndicatorLayer({
             under those lines in z-order — exactly per spec, since SD
             is contextual background and PDH/PDL/PDQ are tactical. */}
         {active.supplyDemand && geometry.supplyDemand ? (
-          <g pointerEvents="none">
-            {/* Supply (top 25%) band */}
-            <rect
-              x={LEFT_RAIL_OFFSET}
-              y={geometry.supplyDemand.supplyTop.y}
-              width={Math.max(0, size.w - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET)}
-              height={Math.max(
-                1,
-                geometry.supplyDemand.supplyBottom.y - geometry.supplyDemand.supplyTop.y,
-              )}
-              fill="rgba(244,63,94,0.06)"
-              stroke="rgba(244,63,94,0.34)"
-              strokeWidth={0.6}
-              strokeDasharray="3 3"
-            />
-            {/* Demand (bottom 25%) band */}
-            <rect
-              x={LEFT_RAIL_OFFSET}
-              y={geometry.supplyDemand.demandTop.y}
-              width={Math.max(0, size.w - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET)}
-              height={Math.max(
-                1,
-                geometry.supplyDemand.demandBottom.y - geometry.supplyDemand.demandTop.y,
-              )}
-              fill="rgba(45,212,191,0.06)"
-              stroke="rgba(45,212,191,0.34)"
-              strokeWidth={0.6}
-              strokeDasharray="3 3"
-            />
-            {/* EQ midline — single thin dashed line. */}
-            <line
-              x1={LEFT_RAIL_OFFSET}
-              x2={size.w - RIGHT_RAIL_OFFSET}
-              y1={geometry.supplyDemand.eq.y}
-              y2={geometry.supplyDemand.eq.y}
-              stroke="rgba(148,163,184,0.55)"
-              strokeWidth={0.85}
-              strokeDasharray="2 5"
-            />
-            {/* SUPPLY label — left rail, centered on the band. */}
-            <text
-              x={LEFT_RAIL_OFFSET}
-              y={
-                (geometry.supplyDemand.supplyTop.y + geometry.supplyDemand.supplyBottom.y) / 2 +
-                3
-              }
-              textAnchor="start"
-              fontFamily="ui-sans-serif, system-ui, -apple-system"
-              fontSize="9"
-              fontWeight={700}
-              letterSpacing="0.5"
-              fill="rgba(252,165,165,0.88)"
-              stroke="rgba(0,0,0,0.6)"
-              strokeWidth={2}
-              paintOrder="stroke"
-            >
-              SUPPLY
-            </text>
-            {/* DEMAND label */}
-            <text
-              x={LEFT_RAIL_OFFSET}
-              y={
-                (geometry.supplyDemand.demandTop.y + geometry.supplyDemand.demandBottom.y) / 2 +
-                3
-              }
-              textAnchor="start"
-              fontFamily="ui-sans-serif, system-ui, -apple-system"
-              fontSize="9"
-              fontWeight={700}
-              letterSpacing="0.5"
-              fill="rgba(167,243,208,0.88)"
-              stroke="rgba(0,0,0,0.6)"
-              strokeWidth={2}
-              paintOrder="stroke"
-            >
-              DEMAND
-            </text>
-            {/* EQ label sits 4px above the EQ line so it doesn't clip
-                the line stroke. */}
-            <text
-              x={LEFT_RAIL_OFFSET}
-              y={geometry.supplyDemand.eq.y - 3}
-              textAnchor="start"
-              fontFamily="ui-sans-serif, system-ui, -apple-system"
-              fontSize="8.5"
-              fontWeight={600}
-              letterSpacing="0.4"
-              fill="rgba(148,163,184,0.88)"
-              stroke="rgba(0,0,0,0.6)"
-              strokeWidth={2}
-              paintOrder="stroke"
-            >
-              EQ
-            </text>
-          </g>
+          <SupplyDemandOverlay sd={geometry.supplyDemand} width={size.w} pal={pal} />
         ) : null}
 
         {/* Previous Day High / Low / Equilibrium — thin SOLID lines
@@ -518,7 +542,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayHigh.y}
               y2={geometry.previousDayHigh.y}
-              stroke="rgba(34,211,238,0.78)"
+              stroke={pal.pdhStroke}
               strokeWidth={1}
             />
             <text
@@ -528,8 +552,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
-              fill="rgba(125,235,255,0.96)"
-              stroke="rgba(0,0,0,0.78)"
+              fill={pal.pdhLabel}
+              stroke={pal.textStroke11}
               strokeWidth="2.6"
               paintOrder="stroke"
             >
@@ -545,7 +569,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayLow.y}
               y2={geometry.previousDayLow.y}
-              stroke="rgba(244,63,94,0.78)"
+              stroke={pal.pdlStroke}
               strokeWidth={1}
             />
             <text
@@ -555,8 +579,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
-              fill="rgba(252,165,165,0.98)"
-              stroke="rgba(0,0,0,0.78)"
+              fill={pal.pdlLabel}
+              stroke={pal.textStroke11}
               strokeWidth="2.6"
               paintOrder="stroke"
             >
@@ -572,7 +596,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayEq.y}
               y2={geometry.previousDayEq.y}
-              stroke="rgba(96,165,250,0.72)"
+              stroke={pal.pdqStroke}
               strokeWidth={1}
             />
             <text
@@ -582,8 +606,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9.5"
               fontWeight="700"
-              fill="rgba(186,212,255,0.96)"
-              stroke="rgba(0,0,0,0.78)"
+              fill={pal.pdqLabel}
+              stroke={pal.textStroke11}
               strokeWidth="2.6"
               paintOrder="stroke"
             >
@@ -592,11 +616,39 @@ export function ChartIndicatorLayer({
           </g>
         ) : null}
 
+        {active.sessionOpen && geometry.sessionOpen ? (
+          <g>
+            <line
+              x1={LEFT_RAIL_OFFSET}
+              x2={size.w - RIGHT_RAIL_OFFSET}
+              y1={geometry.sessionOpen.y}
+              y2={geometry.sessionOpen.y}
+              stroke={pal.sessionOpenStroke}
+              strokeWidth={1.1}
+              strokeDasharray="6 4"
+            />
+            <text
+              x={LEFT_RAIL_OFFSET}
+              y={geometry.sessionOpen.y - 4}
+              textAnchor="start"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+              fontSize="9.5"
+              fontWeight="700"
+              fill={pal.sessionOpenLabel}
+              stroke={pal.textStroke11}
+              strokeWidth="2.6"
+              paintOrder="stroke"
+            >
+              OPEN
+            </text>
+          </g>
+        ) : null}
+
         {active.swingPoints
           ? geometry.swingPointLevels.map((level, index) => {
               const isHigh = level.kind === "high";
-              const stroke = isHigh ? "rgba(244,63,94,0.68)" : "rgba(45,212,191,0.68)";
-              const fill = isHigh ? "rgba(244,63,94,0.95)" : "rgba(45,212,191,0.95)";
+              const stroke = isHigh ? pal.swingHighStroke : pal.swingLowStroke;
+              const fill = isHigh ? pal.swingHighFill : pal.swingLowFill;
               // When MARKET STRUCTURE is also on, the HH / HL / LH / LL
               // labels sit at ~y-6 above their pivot lines. We push the
               // swing SH / SL labels further out (-18 / +24 instead of
@@ -629,7 +681,7 @@ export function ChartIndicatorLayer({
                     fontSize="9"
                     fontWeight="700"
                     fill={fill}
-                    stroke="rgba(0,0,0,0.74)"
+                    stroke={pal.textStroke10}
                     strokeWidth="2.2"
                     paintOrder="stroke"
                   >
@@ -645,6 +697,9 @@ export function ChartIndicatorLayer({
             and the dedicated PDQ indicator now expresses the same idea
             cleanly with a fixed level from yesterday's H + L. */}
 
+        {/* BOS/MSS structure lines — premium LuxAlgo style: thinner
+            lines, smaller labels, softer opacity. BOS = dashed
+            (continuation), MSS = solid (reversal/break). */}
         {active.structure
           ? geometry.structureLines.map((item, index) => (
               <g key={`line-${item.label}-${index}`}>
@@ -653,20 +708,20 @@ export function ChartIndicatorLayer({
                   x2={item.x2}
                   y1={item.y}
                   y2={item.y}
-                  stroke={item.bullish ? "rgba(8,153,129,0.92)" : "rgba(242,54,69,0.92)"}
-                  strokeWidth={item.continuation ? 1.35 : 2}
-                  strokeDasharray={item.continuation ? "6 5" : undefined}
+                  stroke={item.bullish ? pal.structBullLine : pal.structBearLine}
+                  strokeWidth={item.continuation ? 0.8 : 1.2}
+                  strokeDasharray={item.continuation ? "5 4" : undefined}
                 />
                 <text
                   x={(item.x1 + item.x2) / 2}
-                  y={item.y - 6}
+                  y={item.y - 5}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
+                  fontSize="8"
+                  fontWeight="500"
+                  fill={item.bullish ? pal.structBullText : pal.structBearText}
+                  stroke={pal.textStroke06}
+                  strokeWidth="2"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -676,25 +731,43 @@ export function ChartIndicatorLayer({
           : null}
 
         {active.ma && geometry.maPath ? (
-          <path d={geometry.maPath} fill="none" stroke="rgba(96,165,250,0.92)" strokeWidth={1.7} />
+          <g pointerEvents="none">
+            <path d={geometry.maPath} fill="none" stroke={pal.maLine} strokeWidth={1.7} />
+            {geometry.latestMaY != null ? (
+              <text
+                x={size.w - RIGHT_RAIL_OFFSET}
+                y={Math.max(12, Math.min(size.h - 4, geometry.latestMaY - 4))}
+                textAnchor="end"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                fontSize="9"
+                fontWeight={700}
+                fill={pal.maLabel}
+                stroke={pal.textStroke09}
+                strokeWidth={2.4}
+                paintOrder="stroke"
+              >
+                {maType === "ema" ? "EMA" : "MA"}{maPeriod}
+              </text>
+            ) : null}
+          </g>
         ) : null}
 
         {active.bollinger && geometry.bollingerFillPath ? (
-          <path d={geometry.bollingerFillPath} fill="rgba(34,211,238,0.055)" stroke="none" />
+          <path d={geometry.bollingerFillPath} fill={pal.bolFill} stroke="none" />
         ) : null}
         {active.bollinger && geometry.bollingerUpperPath ? (
-          <path d={geometry.bollingerUpperPath} fill="none" stroke="rgba(34,211,238,0.42)" strokeWidth={1} />
+          <path d={geometry.bollingerUpperPath} fill="none" stroke={pal.bolBand} strokeWidth={1} />
         ) : null}
         {active.bollinger && geometry.bollingerMiddlePath ? (
-          <path d={geometry.bollingerMiddlePath} fill="none" stroke="rgba(96,165,250,0.35)" strokeWidth={0.85} strokeDasharray="4 4" />
+          <path d={geometry.bollingerMiddlePath} fill="none" stroke={pal.bolMid} strokeWidth={0.85} strokeDasharray="4 4" />
         ) : null}
         {active.bollinger && geometry.bollingerLowerPath ? (
-          <path d={geometry.bollingerLowerPath} fill="none" stroke="rgba(34,211,238,0.42)" strokeWidth={1} />
+          <path d={geometry.bollingerLowerPath} fill="none" stroke={pal.bolBand} strokeWidth={1} />
         ) : null}
 
         {active.vwap && geometry.vwapPath ? (
           <g pointerEvents="none">
-            <path d={geometry.vwapPath} fill="none" stroke="rgba(250,204,21,0.88)" strokeWidth={1.35} />
+            <path d={geometry.vwapPath} fill="none" stroke={pal.vwapLine} strokeWidth={1.35} />
             {geometry.latestVwap != null ? (
               <text
                 x={size.w - RIGHT_RAIL_OFFSET}
@@ -703,8 +776,8 @@ export function ChartIndicatorLayer({
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                 fontSize="9"
                 fontWeight={700}
-                fill="rgba(250,204,21,0.9)"
-                stroke="rgba(0,0,0,0.72)"
+                fill={pal.vwapLabel}
+                stroke={pal.textStroke09}
                 strokeWidth={2.4}
                 paintOrder="stroke"
               >
@@ -721,7 +794,7 @@ export function ChartIndicatorLayer({
               x2={size.w - RIGHT_RAIL_OFFSET}
               y1={geometry.poc.y}
               y2={geometry.poc.y}
-              stroke="rgba(168,85,247,0.78)"
+              stroke={pal.pocStroke}
               strokeWidth={1}
               strokeDasharray="6 4"
             />
@@ -732,8 +805,8 @@ export function ChartIndicatorLayer({
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="9"
               fontWeight={700}
-              fill="rgba(216,180,254,0.95)"
-              stroke="rgba(0,0,0,0.72)"
+              fill={pal.pocLabel}
+              stroke={pal.textStroke09}
               strokeWidth={2.4}
               paintOrder="stroke"
             >
@@ -742,6 +815,9 @@ export function ChartIndicatorLayer({
           </g>
         ) : null}
 
+        {/* Structure pivot labels (HH/HL/LH/LL) — subtle, premium style.
+            Smaller font, thinner weight, softer opacity so they inform
+            without screaming over the candles. */}
         {active.structure
           ? geometry.structureLabels.map((item, index) => (
               <g key={`${item.label}-${index}`}>
@@ -750,11 +826,11 @@ export function ChartIndicatorLayer({
                   y={item.y}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.kind === "high" ? "rgba(34,211,238,0.92)" : "rgba(45,212,191,0.92)"}
-                  stroke="rgba(0,0,0,0.75)"
-                  strokeWidth="3"
+                  fontSize="8"
+                  fontWeight="500"
+                  fill={item.kind === "high" ? pal.pivotHigh : pal.pivotLow}
+                  stroke={pal.textStroke07}
+                  strokeWidth="2"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -771,11 +847,11 @@ export function ChartIndicatorLayer({
                   y={item.y}
                   textAnchor="middle"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={item.bullish ? "rgba(8,153,129,0.96)" : "rgba(242,54,69,0.96)"}
-                  stroke="rgba(0,0,0,0.72)"
-                  strokeWidth="3"
+                  fontSize="8"
+                  fontWeight="500"
+                  fill={item.bullish ? pal.sfpBull : pal.sfpBear}
+                  stroke={pal.textStroke06}
+                  strokeWidth="2"
                   paintOrder="stroke"
                 >
                   {item.label}
@@ -795,6 +871,105 @@ export function ChartIndicatorLayer({
  * 11_234 → "11.2K"
  * 1.2M   → "1.20M"
  */
+/**
+ * Extracted Supply / Demand overlay so TypeScript can narrow nullable
+ * fields cleanly — JSX ternaries on struct fields don't narrow through
+ * boolean variables.
+ */
+function SupplyDemandOverlay({ sd, width, pal }: { sd: SupplyDemandGeom; width: number; pal: OverlayPalette }) {
+  const bandW = Math.max(0, width - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET);
+  return (
+    <g pointerEvents="none">
+      {sd.supplyTop && sd.supplyBottom ? (
+        <>
+          <rect
+            x={LEFT_RAIL_OFFSET}
+            y={sd.supplyTop.y}
+            width={bandW}
+            height={Math.max(1, sd.supplyBottom.y - sd.supplyTop.y)}
+            fill={pal.supplyFill}
+            stroke={pal.supplyStroke}
+            strokeWidth={0.6}
+            strokeDasharray="3 3"
+          />
+          <text
+            x={LEFT_RAIL_OFFSET}
+            y={(sd.supplyTop.y + sd.supplyBottom.y) / 2 + 3}
+            textAnchor="start"
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+            fontSize="9"
+            fontWeight={700}
+            letterSpacing="0.5"
+            fill={pal.supplyLabel}
+            stroke={pal.textStroke07}
+            strokeWidth={2}
+            paintOrder="stroke"
+          >
+            SUPPLY
+          </text>
+        </>
+      ) : null}
+      {sd.demandTop && sd.demandBottom ? (
+        <>
+          <rect
+            x={LEFT_RAIL_OFFSET}
+            y={sd.demandTop.y}
+            width={bandW}
+            height={Math.max(1, sd.demandBottom.y - sd.demandTop.y)}
+            fill={pal.demandFill}
+            stroke={pal.demandStroke}
+            strokeWidth={0.6}
+            strokeDasharray="3 3"
+          />
+          <text
+            x={LEFT_RAIL_OFFSET}
+            y={(sd.demandTop.y + sd.demandBottom.y) / 2 + 3}
+            textAnchor="start"
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+            fontSize="9"
+            fontWeight={700}
+            letterSpacing="0.5"
+            fill={pal.demandLabel}
+            stroke={pal.textStroke07}
+            strokeWidth={2}
+            paintOrder="stroke"
+          >
+            DEMAND
+          </text>
+        </>
+      ) : null}
+      {sd.eq ? (
+        <>
+          <line
+            x1={LEFT_RAIL_OFFSET}
+            x2={width - RIGHT_RAIL_OFFSET}
+            y1={sd.eq.y}
+            y2={sd.eq.y}
+            stroke={pal.eqStroke}
+            strokeWidth={0.85}
+            strokeDasharray="2 5"
+          />
+          <text
+            x={LEFT_RAIL_OFFSET}
+            y={sd.eq.y - 3}
+            textAnchor="start"
+            fontFamily="ui-sans-serif, system-ui, -apple-system"
+            fontSize="8.5"
+            fontWeight={600}
+            letterSpacing="0.4"
+            fill={pal.eqLabel}
+            stroke={pal.textStroke07}
+            strokeWidth={2}
+            paintOrder="stroke"
+          >
+            EQ
+          </text>
+        </>
+      ) : null}
+    </g>
+  );
+}
+
 function formatVolume(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -827,7 +1002,7 @@ function formatVolume(n: number): string {
  *
  * Falls back to a single row when the OB is too thin to fit both.
  */
-function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }) {
+function ObInnerVolumeLabel({ zone, obRightX, pal }: { zone: Zone; obRightX: number; pal: OverlayPalette }) {
   const v = zone.volumetric;
   if (!v || v.totalVolume <= 0) return null;
   if (zone.height < 8) return null;
@@ -839,8 +1014,9 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
     : `S ${Math.round(v.sellerPercent)}%`;
   // Both rows use the OB's own direction colour — softer, premium look.
   // No more red/green dominance split: the volumetric inner bars already
-  // show which side is bigger.
-  const labelColor = zone.direction === "up" ? "rgba(167,243,208,0.95)" : "rgba(252,165,165,0.95)";
+  // show which side is bigger. Dialled back to 75% opacity so the labels
+  // read as ambient data, not loud annotations.
+  const labelColor = zone.direction === "up" ? pal.obVolLabelUp : pal.obVolLabelDown;
   const sideColor = labelColor;
   const baseColor = labelColor;
 
@@ -858,11 +1034,11 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
         y={yTop}
         textAnchor="end"
         fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-        fontSize="9.5"
-        fontWeight={700}
+        fontSize="8.5"
+        fontWeight={600}
         fill={baseColor}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.6"
+        stroke={pal.textStroke08}
+        strokeWidth="2.2"
         paintOrder="stroke"
       >
         {volLabel}
@@ -873,11 +1049,11 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
           y={yBottom}
           textAnchor="end"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight={700}
+          fontSize="8"
+          fontWeight={600}
           fill={sideColor}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.6"
+          stroke={pal.textStroke08}
+          strokeWidth="2.2"
           paintOrder="stroke"
         >
           {sideLabel}
@@ -900,8 +1076,8 @@ function ObInnerVolumeLabel({ zone, obRightX }: { zone: Zone; obRightX: number }
  * - iFVG: two-tone box (original colour | inverted colour) split at
  *   the inversion candle, dashed midline, ▲/▼ trigger marker.
  */
-function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg" }) {
-  const labelText = variant === "ifvg" ? "iFVG" : variant === "fvg" ? "FVG" : "OB";
+function ZoneBox({ zone, variant, pal }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"; pal: OverlayPalette }) {
+
   const fadeFactor = zone.mitigated ? 0.45 : 1;
   const detectionWidth = Math.max(0, zone.detectionEndX - zone.x);
   const detectionEndX = zone.x + detectionWidth;
@@ -928,8 +1104,6 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
   if (variant === "ob") {
     const obWidth = Math.max(2, zone.extendX - zone.x);
     const obRightX = zone.x + obWidth;
-    const extensionStartX = detectionEndX;
-    const extensionWidth = Math.max(0, obRightX - extensionStartX);
     const v = zone.volumetric;
     // Inner sub-bars sit inside the SOURCE candle column. They share the
     // same base width so percentages are visually comparable.
@@ -937,39 +1111,23 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
     const sellerW = v && v.totalVolume > 0 ? innerMaxW * (v.sellerPercent / 100) : 0;
     const buyerW = v && v.totalVolume > 0 ? innerMaxW * (v.buyerPercent / 100) : 0;
     const halfH = zone.height / 2;
-    const sellerFill = "rgba(244,63,94,0.55)";
-    const buyerFill = "rgba(45,212,191,0.55)";
-    // Two-tone background: the source area carries the OB's normal
-    // translucent fill, while the forward extension is more transparent
-    // so it reads as "this zone is still relevant" without competing
-    // visually with live candles to its left. Premium-but-quiet look.
-    const sourceFill = zone.direction === "up" ? "rgba(45,212,191,0.20)" : "rgba(239,68,68,0.20)";
-    const extensionFill = zone.direction === "up" ? "rgba(45,212,191,0.08)" : "rgba(239,68,68,0.08)";
+    const sellerFill = pal.sellerBar;
+    const buyerFill = pal.buyerBar;
+    // LuxAlgo-style: single clean box — ONE fill colour, ONE border.
+    // No two-tone source/extension split. Simple and premium.
+    const boxFill = zone.direction === "up" ? pal.obUpExt : pal.obDownExt;
     return (
       <g opacity={fadeFactor}>
         <rect
           x={zone.x}
           y={zone.y}
-          width={Math.max(2, detectionWidth)}
+          width={obWidth}
           height={zone.height}
-          fill={sourceFill}
+          fill={boxFill}
           stroke={zone.stroke}
           strokeWidth={1}
-          rx={3}
+          rx={2}
         />
-        {extensionWidth > 0 ? (
-          <rect
-            x={extensionStartX}
-            y={zone.y}
-            width={extensionWidth}
-            height={zone.height}
-            fill={extensionFill}
-            stroke={zone.stroke}
-            strokeWidth={0.85}
-            strokeOpacity={0.55}
-            rx={3}
-          />
-        ) : null}
         {v && v.totalVolume > 0 && sellerW > 0 && halfH > 1 ? (
           <rect
             x={zone.x}
@@ -977,6 +1135,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             width={Math.max(1, sellerW)}
             height={halfH}
             fill={sellerFill}
+            rx={1}
           />
         ) : null}
         {v && v.totalVolume > 0 && buyerW > 0 && halfH > 1 ? (
@@ -986,19 +1145,22 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             width={Math.max(1, buyerW)}
             height={halfH}
             fill={buyerFill}
+            rx={1}
           />
         ) : null}
+        {/* Dashed midline across the full zone */}
         <line
           x1={zone.x}
           x2={obRightX}
           y1={zone.midY}
           y2={zone.midY}
           stroke={zone.stroke}
-          strokeWidth={1}
-          strokeDasharray="2 3"
-          opacity={0.85}
+          strokeWidth={1.2}
+          strokeDasharray="4 3"
+          opacity={0.90}
         />
-        <ObInnerVolumeLabel zone={zone} obRightX={obRightX} />
+
+        <ObInnerVolumeLabel zone={zone} obRightX={obRightX} pal={pal} />
       </g>
     );
   }
@@ -1022,7 +1184,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
     // rather than zone.fill so the colour pair stays consistent even if
     // the fill is tweaked later.
     const originalIsBull = zone.originalDirection === "up";
-    const originalFill = originalIsBull ? "rgba(8,153,129,0.22)" : "rgba(242,54,69,0.22)";
+    const originalFill = originalIsBull ? pal.ifvgBullOrig : pal.ifvgBearOrig;
     const leftWidth = Math.max(0, inversionX - zone.x);
     const rightWidth = Math.max(0, rightEndX - inversionX);
     return (
@@ -1034,6 +1196,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             width={leftWidth}
             height={zone.height}
             fill={originalFill}
+            rx={2}
           />
         ) : null}
         {rightWidth > 0 ? (
@@ -1043,6 +1206,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
             width={rightWidth}
             height={zone.height}
             fill={zone.fill}
+            rx={2}
           />
         ) : null}
         <line
@@ -1050,57 +1214,22 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
           x2={rightEndX}
           y1={zone.midY}
           y2={zone.midY}
-          stroke="rgba(120,123,134,0.85)"
-          strokeWidth={0.9}
-          strokeDasharray="4 3"
+          stroke={pal.ifvgMidline}
+          strokeWidth={0.7}
+          strokeDasharray="3 4"
         />
-        {/* Tiny trigger marker at the inversion candle so the trader
-            sees the flip moment clearly. ▲ for bullish flip (originalDir
-            = down, now support), ▼ for bearish flip. */}
-        <text
-          x={inversionX}
-          y={originalIsBull ? zone.y - 4 : zone.y + zone.height + 10}
-          textAnchor="middle"
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight="700"
-          fill={zone.stroke}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.4"
-          paintOrder="stroke"
-        >
-          {originalIsBull ? "▼" : "▲"}
-        </text>
-        {/* Label is centred inside the LATEST (right / inverted) half
-            so when the FVG flips, the marker tracks the active state
-            the trader cares about right now. Falls back to the whole
-            zone centre when the right half is too thin to fit. */}
-        <text
-          x={
-            rightWidth > 18
-              ? inversionX + rightWidth / 2
-              : zone.x + Math.max(leftWidth + rightWidth, 2) / 2
-          }
-          y={zone.y + zone.height / 2 + 3}
-          textAnchor="middle"
-          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-          fontSize="9"
-          fontWeight="700"
-          fill={zone.stroke}
-          stroke="rgba(0,0,0,0.78)"
-          strokeWidth="2.4"
-          paintOrder="stroke"
-        >
-          {labelText}
-        </text>
+
+
       </g>
     );
   }
 
   // FVG → only the dense filled block in its own colour. No forward
-  // bleed, no dashed midline, nothing extending past the box. Colour
-  // is amber/gold so FVGs are visually distinct from iFVG (teal/red)
-  // and OB (teal/red). Label is centred inside the block.
+  // bleed, no dashed midline, nothing extending past the box. Bullish
+  // FVG is light blue, bearish is amber — visually distinct from iFVG
+  // (teal/red) and OB (teal/red). Label colour matches the zone fill
+  // so text sits calmly inside the box.
+
   return (
     <g opacity={fadeFactor}>
       <rect
@@ -1113,20 +1242,7 @@ function ZoneBox({ zone, variant }: { zone: Zone; variant: "ob" | "fvg" | "ifvg"
         strokeWidth={1}
         rx={2}
       />
-      <text
-        x={zone.x + Math.max(2, detectionWidth) / 2}
-        y={zone.y + zone.height / 2 + 3}
-        textAnchor="middle"
-        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-        fontSize="9"
-        fontWeight="700"
-        fill={zone.stroke}
-        stroke="rgba(0,0,0,0.78)"
-        strokeWidth="2.4"
-        paintOrder="stroke"
-      >
-        {labelText}
-      </text>
+
     </g>
   );
 }
@@ -1250,6 +1366,7 @@ function buildStructureOverlay(
   candles: IndicatorCandle[],
   handle: ChartCanvasHandle,
   futureExtensionX: number,
+  pal: OverlayPalette,
 ): {
   labels: StructureLabel[];
   lines: StructureLine[];
@@ -1429,8 +1546,14 @@ function buildStructureOverlay(
           // profile bars on the left edge are kept for shape; the
           // split-bar (`volumetric`) gives the LuxAlgo-style buyer/seller
           // dominance read at a glance.
-          const profile = mitigated ? undefined : buildVolumeProfile(visible, top, bottom, topY, bottomY);
-          const volumetric = mitigated ? undefined : buildVolumetricBreakdown(visible, top, bottom);
+          // Mitigated OBs are completely hidden — a red OB below a green
+          // OB means it was breached and is no longer valid. Previously we
+          // rendered at 45% opacity, but Luka confirmed these should not
+          // appear at all ("die zijn mitigated, dat moet niet kunnen").
+          if (mitigated) continue;
+
+          const profile = buildVolumeProfile(visible, top, bottom, topY, bottomY);
+          const volumetric = buildVolumetricBreakdown(visible, top, bottom);
 
           orderBlocks.push({
             x,
@@ -1440,11 +1563,11 @@ function buildStructureOverlay(
             extendX: Math.max(detectionEndX, futureExtensionX),
             detectionEndX,
             midY: (topY + bottomY) / 2,
-            stroke: isBullishOb ? "rgba(45,212,191,0.65)" : "rgba(239,68,68,0.65)",
-            fill: isBullishOb ? "rgba(45,212,191,0.18)" : "rgba(239,68,68,0.18)",
+            stroke: isBullishOb ? pal.obUpStroke : pal.obDownStroke,
+            fill: isBullishOb ? pal.obUpSource : pal.obDownSource,
             direction: isBullishOb ? "up" : "down",
             extend: true,
-            mitigated,
+            mitigated: false,
             volumeProfile: profile,
             volumetric,
           });
@@ -1480,8 +1603,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(250,204,21,0.95)",
-              fill: "rgba(250,204,21,0.22)",
+              stroke: pal.fvgUpStroke,
+              fill: pal.fvgUpFill,
               direction: "up",
               extend: !mitigated,
               mitigated,
@@ -1507,8 +1630,8 @@ function buildStructureOverlay(
               detectionEndX,
               extendX: mitigated ? detectionEndX : Math.max(detectionEndX, futureExtensionX),
               midY: (topY + bottomY) / 2,
-              stroke: "rgba(217,119,6,0.95)",
-              fill: "rgba(217,119,6,0.22)",
+              stroke: pal.fvgDownStroke,
+              fill: pal.fvgDownFill,
               direction: "down",
               extend: !mitigated,
               mitigated,
@@ -1610,15 +1733,17 @@ function pickLatestZonesPerDirection(zones: Zone[], n: 1 | 2 | 3): Zone[] {
  * close, demand below).
  */
 type SupplyDemandGeom = {
-  supplyTop: { y: number; price: number };
-  supplyBottom: { y: number; price: number };
-  demandTop: { y: number; price: number };
-  demandBottom: { y: number; price: number };
-  eq: { y: number; price: number };
+  supplyTop: { y: number; price: number } | null;
+  supplyBottom: { y: number; price: number } | null;
+  demandTop: { y: number; price: number } | null;
+  demandBottom: { y: number; price: number } | null;
+  eq: { y: number; price: number } | null;
 };
 
 function isErcCandle(body: number, avgBody: number): boolean {
-  return avgBody > 0 && body >= 1.5 * avgBody;
+  // Relaxed from 1.5× to 1.25× so more zones appear on volatile
+  // instruments (XAUUSD, BTC) where nearly every candle is large.
+  return avgBody > 0 && body >= 1.25 * avgBody;
 }
 
 /** Average body size over the last `period` candles. */
@@ -1665,7 +1790,7 @@ function findErcZone(
     const baseCandles: typeof candles = [];
     for (let k = i - 1; k >= Math.max(0, i - 3); k -= 1) {
       const bBody = Math.abs(candles[k].close - candles[k].open);
-      if (bBody >= 1.2 * avg) break; // base candles are quiet
+      if (bBody >= 1.25 * avg) break;
       baseCandles.unshift(candles[k]);
     }
     if (baseCandles.length === 0) continue;
@@ -1676,13 +1801,18 @@ function findErcZone(
     // Wrong-side guard.
     if (direction === "supply" && top <= latestClose) continue;
     if (direction === "demand" && bottom >= latestClose) continue;
-    // 50% mitigation check: did any later candle penetrate past the
-    // zone midline?
-    const mid = (top + bottom) / 2;
+    // 75% mitigation check: zone is invalidated only when price
+    // penetrates 75% through the zone body (not just the midline).
+    // The stricter 50% rule invalidated most zones on volatile
+    // instruments like BTC — giving the zone more breathing room
+    // keeps meaningful S/D visible on the chart.
+    const mitigationLine = direction === "supply"
+      ? bottom + height * 0.25   // supply: invalidate if price drops to bottom quarter
+      : top - height * 0.25;     // demand: invalidate if price rises to top quarter
     let mitigated = false;
     for (let k = i + 1; k < candles.length; k += 1) {
-      if (direction === "supply" && candles[k].low < mid) { mitigated = true; break; }
-      if (direction === "demand" && candles[k].high > mid) { mitigated = true; break; }
+      if (direction === "supply" && candles[k].low < mitigationLine) { mitigated = true; break; }
+      if (direction === "demand" && candles[k].high > mitigationLine) { mitigated = true; break; }
     }
     if (mitigated) continue;
     return { top, bottom };
@@ -1690,42 +1820,109 @@ function findErcZone(
   return null;
 }
 
+/** Latest confirmed swing high / low walking backwards from the live bar. */
+function findLatestSwingExtremes(
+  candles: Array<IndicatorCandle & { time: number }>,
+  strength = 4,
+): { swingHigh: number | null; swingLow: number | null } {
+  if (candles.length < strength * 2 + 4) {
+    return { swingHigh: null, swingLow: null };
+  }
+  let swingHigh: number | null = null;
+  let swingLow: number | null = null;
+  for (let index = candles.length - strength - 1; index >= strength; index -= 1) {
+    const candle = candles[index];
+    const neighbors = [
+      ...candles.slice(index - strength, index),
+      ...candles.slice(index + 1, index + strength + 1),
+    ];
+    if (
+      swingHigh == null &&
+      neighbors.every((other) => candle.high > other.high)
+    ) {
+      swingHigh = candle.high;
+    }
+    if (
+      swingLow == null &&
+      neighbors.every((other) => candle.low < other.low)
+    ) {
+      swingLow = candle.low;
+    }
+    if (swingHigh != null && swingLow != null) break;
+  }
+  return { swingHigh, swingLow };
+}
+
+/**
+ * Fallback S/D when ERC zones are missing: top 25% of the latest swing
+ * range = Supply, bottom 25% = Demand (matches toolbar copy).
+ */
+function buildSwingRangeZones(
+  swingHigh: number,
+  swingLow: number,
+): { supply: { top: number; bottom: number } | null; demand: { top: number; bottom: number } | null } {
+  const range = swingHigh - swingLow;
+  if (!Number.isFinite(range) || range <= 0) {
+    return { supply: null, demand: null };
+  }
+  return {
+    supply: { top: swingHigh, bottom: swingHigh - range * 0.25 },
+    demand: { top: swingLow + range * 0.25, bottom: swingLow },
+  };
+}
+
 function buildSupplyDemandBands(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
 ): SupplyDemandGeom | null {
   if (candles.length < 20) return null;
-  const supply = findErcZone(candles, "supply");
-  const demand = findErcZone(candles, "demand");
-  if (!supply || !demand) return null;
-  const highPrice = supply.top;
-  const lowPrice = demand.bottom;
-  if (!(highPrice > lowPrice)) return null;
-  // Render the ACTUAL ERC zones as the supply / demand bands (top edge
-  // = supply.top, bottom edge of supply = supply.bottom — likewise for
-  // demand). EQ is the midline between supply.bottom and demand.top
-  // (the "fair value" range traders treat as neutral).
-  const eqPrice = (supply.bottom + demand.top) / 2;
-  const supplyTopY = handle.priceToCoordinate(supply.top);
-  const supplyBottomY = handle.priceToCoordinate(supply.bottom);
-  const demandTopY = handle.priceToCoordinate(demand.top);
-  const demandBottomY = handle.priceToCoordinate(demand.bottom);
-  const eqY = handle.priceToCoordinate(eqPrice);
-  if (
-    supplyTopY == null ||
-    supplyBottomY == null ||
-    demandTopY == null ||
-    demandBottomY == null ||
-    eqY == null
-  ) {
-    return null;
+  let supply = findErcZone(candles, "supply");
+  let demand = findErcZone(candles, "demand");
+
+  if (!supply || !demand) {
+    const { swingHigh, swingLow } = findLatestSwingExtremes(candles);
+    if (swingHigh != null && swingLow != null && swingHigh > swingLow) {
+      const fallback = buildSwingRangeZones(swingHigh, swingLow);
+      if (!supply) supply = fallback.supply;
+      if (!demand) demand = fallback.demand;
+    }
   }
+
+  // Render whichever zone(s) exist — don't require both. EQ line only
+  // shows when both are present (it's the midpoint between them).
+  if (!supply && !demand) return null;
+
+  // Project each zone that exists; null-safe wrappers.
+  const supplyTopY = supply ? handle.priceToCoordinate(supply.top) : null;
+  const supplyBottomY = supply ? handle.priceToCoordinate(supply.bottom) : null;
+  const demandTopY = demand ? handle.priceToCoordinate(demand.top) : null;
+  const demandBottomY = demand ? handle.priceToCoordinate(demand.bottom) : null;
+
+  const eqPrice =
+    supply && demand ? (supply.bottom + demand.top) / 2 : null;
+  const eqY = eqPrice != null ? handle.priceToCoordinate(eqPrice) : null;
+
   return {
-    supplyTop: { y: supplyTopY, price: supply.top },
-    supplyBottom: { y: supplyBottomY, price: supply.bottom },
-    demandTop: { y: demandTopY, price: demand.top },
-    demandBottom: { y: demandBottomY, price: demand.bottom },
-    eq: { y: eqY, price: eqPrice },
+    supplyTop:
+      supply && supplyTopY != null
+        ? { y: supplyTopY, price: supply.top }
+        : null,
+    supplyBottom:
+      supply && supplyBottomY != null
+        ? { y: supplyBottomY, price: supply.bottom }
+        : null,
+    demandTop:
+      demand && demandTopY != null
+        ? { y: demandTopY, price: demand.top }
+        : null,
+    demandBottom:
+      demand && demandBottomY != null
+        ? { y: demandBottomY, price: demand.bottom }
+        : null,
+    eq:
+      eqPrice != null && eqY != null
+        ? { y: eqY, price: eqPrice }
+        : null,
   };
 }
 
@@ -1955,6 +2152,7 @@ function buildInverseFvgs(
   handle: ChartCanvasHandle,
   futureExtensionX: number,
   atr: Array<number>,
+  pal: OverlayPalette,
 ): Zone[] {
   const out: Zone[] = [];
   if (candles.length < 4) return out;
@@ -2015,8 +2213,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(242,54,69,0.95)",
-            fill: "rgba(242,54,69,0.22)",
+            stroke: pal.ifvgBearStroke,
+            fill: pal.ifvgBearOrig,
             // Inverted bullish FVG flips polarity → behaves like bearish
             // resistance going forward.
             direction: "down",
@@ -2073,8 +2271,8 @@ function buildInverseFvgs(
             detectionEndX,
             extendX: Math.max(detectionEndX, futureExtensionX),
             midY: (yTop + yBot) / 2,
-            stroke: "rgba(8,153,129,0.95)",
-            fill: "rgba(8,153,129,0.22)",
+            stroke: pal.ifvgBullStroke,
+            fill: pal.ifvgBullOrig,
             // Inverted bearish FVG → flips to bullish support.
             direction: "up",
             originalDirection: "down",
@@ -2098,6 +2296,29 @@ function buildInverseFvgs(
  * Compute previous trading day's high/low. We bucket candles by UTC date and
  * pick the bucket immediately before the current one.
  */
+function buildSessionOpenLevel(
+  candles: Array<IndicatorCandle & { time: number }>,
+  handle: ChartCanvasHandle,
+): { y: number; price: number } | null {
+  if (candles.length === 0) return null;
+
+  const todayKey = utcDateKey(candles[candles.length - 1].time);
+  let firstToday: (IndicatorCandle & { time: number }) | null = null;
+  for (const candle of candles) {
+    if (utcDateKey(candle.time) !== todayKey) continue;
+    if (!firstToday || candle.time < firstToday.time) {
+      firstToday = candle;
+    }
+  }
+  if (!firstToday) return null;
+
+  const openPrice = Number(firstToday.open);
+  if (!Number.isFinite(openPrice)) return null;
+  const y = handle.priceToCoordinate(openPrice);
+  if (y == null) return null;
+  return { y, price: openPrice };
+}
+
 function buildPreviousDayLevels(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,

@@ -1,0 +1,1209 @@
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { listWatchlistItems } from "@/app/(app)/settings/actions";
+import { loadAdaptiveChartDefaults } from "@/lib/adaptive/server";
+import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
+import {
+  clientGetHistoricalCandles,
+  clientGetSymbolPrice,
+  clientListSymbols,
+  clientGetPositions,
+  clientGetOrders,
+  MetaApiRequestError,
+  type MetaApiCandle,
+} from "@/lib/mt5/metaApiClient";
+import { metaApiTimeframeFromKey, normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
+import {
+  DEMO_EXTERNAL_ID,
+  ensureDemoAccount,
+  generateDemoCandles,
+  isDemoAccount,
+} from "@/lib/broker/demoAccount";
+import { fetchAlpacaCandles } from "@/lib/alpaca/bars";
+import { listAlpacaOrders, listAlpacaPositions } from "@/lib/alpaca/client";
+import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
+import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { axeSymbolFromAlpaca, isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
+import type { AlpacaOrder, AlpacaPosition } from "@/lib/alpaca/types";
+import {
+  candidateBrokerSymbols,
+  cleanDisplaySymbol,
+  displaySymbolAliases,
+  resolveBrokerSymbol,
+} from "@/lib/broker/symbolResolution";
+import {
+  buildBrokerSymbolRuntimeMetadata,
+  CANONICAL_BROKER_SYMBOLS,
+  getMetadataSymbolMap,
+  getMetadataSymbolUniverse,
+  metadataSymbolUniverseFresh,
+  probeBrokerSymbolReport,
+} from "@/lib/broker/brokerSymbolRuntime";
+import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
+
+const DEFAULT_SYMBOL = "XAUUSD";
+const ALPACA_DEFAULT_SYMBOL = "TSLA";
+const ALPACA_SYMBOL_OPTIONS = ["AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "SPY", "TSLA"] as const;
+const FALLBACK_SYMBOLS = [...CANONICAL_BROKER_SYMBOLS];
+const POSITIONS_RENDER_BUDGET_MS = 12_000;
+const SYMBOLS_RENDER_BUDGET_MS = 8_000;
+const CANDLES_RENDER_BUDGET_MS = 12_000;
+const CANDLES_CANDIDATE_BUDGET_MS = 4_500;
+const CANDLES_RETRY_BACKOFF_MS = 650;
+const CANDLE_CACHE_TTL_MS = 5 * 60 * 1000;
+/** Stale-while-revalidate: serve stale data up to 10 min while refreshing. */
+const CANDLE_CACHE_STALE_TTL_MS = 10 * 60 * 1000;
+const SYMBOL_UNIVERSE_TTL_MS = 30 * 60 * 1000;
+
+type CandleCacheEntry = {
+  candles: MetaApiCandle[];
+  brokerSymbol: string;
+  savedAt: number;
+  lastCandleTime: string | null;
+};
+
+const candleCache = new Map<string, CandleCacheEntry>();
+
+class ChartDataTimeoutError extends Error {
+  constructor(readonly operation: string) {
+    super(`${operation}_timeout`);
+    this.name = "ChartDataTimeoutError";
+  }
+}
+
+export type ChartOverlayRow = {
+  id: string;
+  side: string;
+  volume: number;
+  entryPrice: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  profit: number | null;
+  openTime: string | null;
+  /** Live/last current price snapshot (broker). */
+  currentPrice: number | null;
+};
+
+export type PendingOrderOverlay = {
+  id: string;
+  symbol: string;
+  /** e.g. "buy_limit", "sell_limit", "buy_stop", "sell_stop" */
+  type: string;
+  side: string;
+  volume: number;
+  /** Trigger price for the pending order. */
+  openPrice: number;
+  currentPrice: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  openTime: string | null;
+};
+
+export type AccountSummary = {
+  brokerAccountId: string;
+  metaApiAccountId: string;
+  label: string;
+  mt5Server: string | null;
+  active: boolean;
+  connectionMethod?: string | null;
+  /** MetaApi region the cloud terminal lives in — needed to hit the right host. */
+  metaApiRegion?: string | null;
+};
+
+export type ChartFailureKind =
+  | "ok"
+  | "account_not_connected"
+  | "broker_symbol_not_found"
+  | "candles_unavailable"
+  | "timeframe_unavailable"
+  | "live_stream_unavailable"
+  | "current_price_unavailable"
+  | "metaapi_timeout"
+  | "market_data_unavailable"
+  | "provider_not_configured";
+
+export type ChartPageData = {
+  /** Display symbol the UI shows in headers. */
+  symbol: string;
+  /** Broker-resolved symbol used for actual MetaApi calls. */
+  brokerSymbol: string;
+  timeframeKey: string;
+  metaApiTimeframe: string;
+  candles: MetaApiCandle[];
+  positionsOnSymbol: ChartOverlayRow[];
+  positionsOnSymbolCount: number;
+  totalPositions: number;
+  pendingOrdersOnSymbol: PendingOrderOverlay[];
+  totalPendingOrders: number;
+  lastPrice: number | null;
+  lastBid: number | null;
+  lastAsk: number | null;
+  lastTickAt: string | null;
+  providerStatus: string | null;
+  failure: ChartFailureKind;
+  /** Friendly error sentence for failure. */
+  dataError: string | null;
+  /** Optional helper hint shown under the chart. */
+  hint: string | null;
+  symbolOptions: string[];
+  attemptedSymbols: string[];
+  /** Diagnostics for "Data details" panel. */
+  account: AccountSummary | null;
+  accountChoices: AccountSummary[];
+  /** ISO of the last candle close time (broker time). */
+  lastCandleTime: string | null;
+  /** Keeps copy honest: either real broker data or AXE's built-in paper feed. */
+  source: "MetaApi MT5" | "AXE Demo" | "Alpaca Paper";
+};
+
+function mapAlpacaPositionRow(p: AlpacaPosition): ChartOverlayRow {
+  const qty = Math.abs(Number(p.qty) || 0);
+  return {
+    id: p.asset_id || p.symbol,
+    side: p.side === "short" ? "sell" : "buy",
+    volume: qty,
+    entryPrice: Number(p.avg_entry_price) || null,
+    stopLoss: null,
+    takeProfit: null,
+    profit: Number(p.unrealized_pl) || null,
+    openTime: null,
+    currentPrice: Number(p.current_price) || null,
+  };
+}
+
+/** Attach exit stop/limit orders as SL/TP levels on Alpaca positions for one symbol. */
+function attachAlpacaExitLevels(
+  positions: ChartOverlayRow[],
+  orders: AlpacaOrder[],
+  symbol: string,
+): ChartOverlayRow[] {
+  const sym = symbol.toUpperCase();
+  return positions.map((pos) => {
+    const exitSide = pos.side === "sell" ? "buy" : "sell";
+    const exitOrders = orders.filter(
+      (o) =>
+        axeSymbolFromAlpaca(o.symbol) === sym &&
+        o.side === exitSide &&
+        (o.order_type === "stop" || o.order_type === "limit"),
+    );
+    const stopOrder = exitOrders.find((o) => o.order_type === "stop");
+    const tpOrder = exitOrders.find((o) => o.order_type === "limit");
+    return {
+      ...pos,
+      stopLoss: stopOrder?.stop_price ? Number(stopOrder.stop_price) : pos.stopLoss,
+      takeProfit: tpOrder?.limit_price ? Number(tpOrder.limit_price) : pos.takeProfit,
+    };
+  });
+}
+
+function mapAlpacaPendingOrder(o: AlpacaOrder): PendingOrderOverlay | null {
+  const openStatuses = new Set(["new", "accepted", "pending_new", "held", "partially_filled"]);
+  if (!openStatuses.has(o.status)) return null;
+  const price = Number(o.limit_price ?? o.stop_price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  const orderType =
+    o.order_type === "limit"
+      ? `${o.side}_limit`
+      : o.order_type === "stop"
+        ? `${o.side}_stop`
+        : o.order_type === "stop_limit"
+          ? `${o.side}_stop_limit`
+          : `${o.side}_${o.order_type}`;
+  return {
+    id: o.id,
+    symbol: axeSymbolFromAlpaca(o.symbol),
+    type: orderType,
+    side: o.side,
+    volume: Number(o.qty) || 0,
+    openPrice: price,
+    currentPrice: null,
+    stopLoss: null,
+    takeProfit: null,
+    openTime: o.submitted_at ?? o.created_at ?? null,
+  };
+}
+
+function mapSide(t: string | undefined): string {
+  const u = (t ?? "").toUpperCase();
+  if (u.includes("BUY")) return "buy";
+  if (u.includes("SELL")) return "sell";
+  return (t ?? "").toLowerCase();
+}
+
+function normalizeSymbol(raw: string | undefined): string {
+  const s = (raw ?? "").trim().toUpperCase().replace(/[^A-Z0-9._+\-]/g, "");
+  return s;
+}
+
+function isCleanDisplayCandidate(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  if (!/^[A-Z0-9]{3,12}$/.test(s)) return false;
+  if (s.length < 3) return false;
+  return true;
+}
+
+function chartSymbolSupported(displaySymbol: string, knownSymbols: string[], symbolMap: Record<string, string>): boolean {
+  if (symbolMap[displaySymbol]) return true;
+  if (knownSymbols.length === 0) return false;
+  const resolved = resolveBrokerSymbol(displaySymbol, knownSymbols);
+  return resolved.reason !== "fallback_request" && knownSymbols.includes(resolved.brokerSymbol);
+}
+
+function buildSymbolOptions(input: {
+  requested: string;
+  fallbackSymbols: string[];
+  watchSymbols: string[];
+  positionSymbols: string[];
+  aliases: string[];
+  knownSymbols: string[];
+  symbolMap: Record<string, string>;
+}): string[] {
+  const raw = [
+    input.requested,
+    ...input.fallbackSymbols,
+    ...input.watchSymbols,
+    ...input.positionSymbols,
+    ...input.aliases,
+  ];
+  const cleaned = raw.map(cleanDisplaySymbol).filter(Boolean);
+  const out = new Set<string>();
+  for (const symbol of cleaned) {
+    if (!isCleanDisplayCandidate(symbol)) continue;
+    if (!chartSymbolSupported(symbol, input.knownSymbols, input.symbolMap)) continue;
+    out.add(symbol);
+  }
+  if (isCleanDisplayCandidate(input.requested)) out.add(input.requested);
+  return Array.from(out).sort();
+}
+
+function safeDisplaySymbol(raw: string): string {
+  const display = cleanDisplaySymbol(raw) || raw;
+  return isCleanDisplayCandidate(display) ? display : DEFAULT_SYMBOL;
+}
+
+function chartCacheKey(accountId: string, brokerSymbol: string, timeframe: string): string {
+  return `${accountId}|${brokerSymbol}|${timeframe}`;
+}
+
+function getCachedCandles(
+  accountId: string,
+  brokerSymbol: string,
+  timeframe: string,
+): CandleCacheEntry | null {
+  const cached = candleCache.get(chartCacheKey(accountId, brokerSymbol, timeframe));
+  if (!cached) return null;
+  if (Date.now() - cached.savedAt > CANDLE_CACHE_TTL_MS) return null;
+  return cached;
+}
+
+/** Stale-while-revalidate: return entry even if past TTL (up to stale limit). */
+function getStaleCachedCandles(
+  accountId: string,
+  brokerSymbol: string,
+  timeframe: string,
+): CandleCacheEntry | null {
+  const cached = candleCache.get(chartCacheKey(accountId, brokerSymbol, timeframe));
+  if (!cached) return null;
+  if (Date.now() - cached.savedAt > CANDLE_CACHE_STALE_TTL_MS) return null;
+  return cached;
+}
+
+function rememberCandles(
+  accountId: string,
+  brokerSymbol: string,
+  timeframe: string,
+  candles: MetaApiCandle[],
+) {
+  if (candles.length === 0) return;
+  candleCache.set(chartCacheKey(accountId, brokerSymbol, timeframe), {
+    candles,
+    brokerSymbol,
+    savedAt: Date.now(),
+    lastCandleTime: candles.at(-1)?.time ?? null,
+  });
+}
+
+function mapPositions(raw: Record<string, unknown>[]): OpenPositionRow[] {
+  return raw.map((p, i) => {
+    const id = String(p.id ?? p.positionId ?? i);
+    const symbol = String(p.symbol ?? "");
+    const side = mapSide(typeof p.type === "string" ? (p.type as string) : undefined);
+    return {
+      id,
+      symbol,
+      side,
+      volume: Number(p.volume ?? 0) || 0,
+      openPrice: p.openPrice != null ? Number(p.openPrice) : null,
+      currentPrice: p.currentPrice != null ? Number(p.currentPrice) : p.price != null ? Number(p.price) : null,
+      profit: p.profit != null ? Number(p.profit) : p.unrealizedProfit != null ? Number(p.unrealizedProfit) : null,
+      stopLoss: p.stopLoss != null ? Number(p.stopLoss) : null,
+      takeProfit: p.takeProfit != null ? Number(p.takeProfit) : null,
+      openTime: (p.time as string) ?? (p.updateTime as string) ?? null,
+    };
+  });
+}
+
+function toOverlay(p: OpenPositionRow): ChartOverlayRow {
+  return {
+    id: p.id,
+    side: p.side,
+    volume: p.volume,
+    entryPrice: p.openPrice,
+    stopLoss: p.stopLoss,
+    takeProfit: p.takeProfit,
+    profit: p.profit,
+    openTime: p.openTime,
+    currentPrice: p.currentPrice,
+  };
+}
+
+function mapOrderType(t: string | undefined): string {
+  const raw = (t ?? "").toLowerCase().replace(/_/g, " ");
+  if (raw.includes("buy") && raw.includes("limit")) return "buy_limit";
+  if (raw.includes("sell") && raw.includes("limit")) return "sell_limit";
+  if (raw.includes("buy") && raw.includes("stop")) return "buy_stop";
+  if (raw.includes("sell") && raw.includes("stop")) return "sell_stop";
+  return raw.trim() || "pending";
+}
+
+function mapOrderSide(type: string): string {
+  if (type.startsWith("buy")) return "buy";
+  if (type.startsWith("sell")) return "sell";
+  return "unknown";
+}
+
+function mapPendingOrders(raw: Record<string, unknown>[]): PendingOrderOverlay[] {
+  return raw.map((o, i) => {
+    const id = String(o.id ?? o.orderId ?? i);
+    const symbol = String(o.symbol ?? "");
+    const type = mapOrderType(typeof o.type === "string" ? (o.type as string) : undefined);
+    return {
+      id,
+      symbol,
+      type,
+      side: mapOrderSide(type),
+      volume: Number(o.volume ?? 0) || 0,
+      openPrice: Number(o.openPrice ?? o.price ?? 0),
+      currentPrice: o.currentPrice != null ? Number(o.currentPrice) : null,
+      stopLoss: o.stopLoss != null ? Number(o.stopLoss) : null,
+      takeProfit: o.takeProfit != null ? Number(o.takeProfit) : null,
+      openTime: (o.time as string) ?? (o.doneTime as string) ?? null,
+    };
+  });
+}
+
+async function withRenderBudget<T>(
+  operation: string,
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new ChartDataTimeoutError(operation)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isTimeoutError(e: unknown): e is ChartDataTimeoutError {
+  return e instanceof ChartDataTimeoutError;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadCandlesWithRetry(input: {
+  accountId: string;
+  candidate: string;
+  timeframe: string;
+  limit: number;
+  region: string | null;
+}): Promise<MetaApiCandle[]> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await withRenderBudget(
+        `candles_${input.candidate}_attempt_${attempt + 1}`,
+        clientGetHistoricalCandles(input.accountId, input.candidate, input.timeframe, input.limit, input.region),
+        CANDLES_CANDIDATE_BUDGET_MS,
+      );
+    } catch (e) {
+      lastError = e;
+      if (e instanceof MetaApiRequestError && e.code === "not_found") throw e;
+      if (attempt === 0 && isTimeoutError(e)) await sleep(CANDLES_RETRY_BACKOFF_MS);
+      else break;
+    }
+  }
+  throw lastError;
+}
+
+async function loadFirstCandles(input: {
+  accountId: string;
+  region: string | null;
+  candidates: string[];
+  timeframe: string;
+  limit: number;
+}): Promise<{ candles: MetaApiCandle[]; brokerSymbol: string; attempted: string[] }> {
+  const attempted: string[] = [];
+  let lastError: unknown = null;
+  for (const candidate of input.candidates) {
+    if (!candidate || attempted.includes(candidate)) continue;
+    attempted.push(candidate);
+    const cached = getCachedCandles(input.accountId, candidate, input.timeframe);
+    if (cached) {
+      return { candles: cached.candles, brokerSymbol: cached.brokerSymbol, attempted };
+    }
+    try {
+      const candles = await loadCandlesWithRetry({ ...input, candidate });
+      if (candles.length > 0) {
+        rememberCandles(input.accountId, candidate, input.timeframe, candles);
+        return { candles, brokerSymbol: candidate, attempted };
+      }
+    } catch (e) {
+      lastError = e;
+      if (isTimeoutError(e)) continue;
+      if (!(e instanceof MetaApiRequestError && e.code === "not_found")) continue;
+    }
+  }
+  if (lastError) throw lastError;
+  return { candles: [], brokerSymbol: input.candidates[0] ?? "", attempted };
+}
+
+function emptyData(
+  timeframeKey: string,
+  metaApiTimeframe: string,
+  symbol: string,
+  hint: string | null,
+  failure: ChartFailureKind = "ok",
+  providerStatus: string | null = null,
+  dataError: string | null = null,
+): ChartPageData {
+  return {
+    symbol,
+    brokerSymbol: symbol,
+    timeframeKey,
+    metaApiTimeframe,
+    candles: [],
+    positionsOnSymbol: [],
+    positionsOnSymbolCount: 0,
+    totalPositions: 0,
+    pendingOrdersOnSymbol: [],
+    totalPendingOrders: 0,
+    lastPrice: null,
+    lastBid: null,
+    lastAsk: null,
+    lastTickAt: null,
+    providerStatus,
+    failure,
+    dataError,
+    hint,
+    symbolOptions: [...FALLBACK_SYMBOLS],
+    attemptedSymbols: [],
+    account: null,
+    accountChoices: [],
+    lastCandleTime: null,
+    source: "MetaApi MT5",
+  };
+}
+
+export async function loadChartPageData(
+  symbolParam: string | undefined,
+  tfParam: string | undefined,
+  accountParam: string | undefined,
+): Promise<ChartPageData> {
+  let timeframeKey = normalizeChartTfKey(tfParam);
+  let metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
+
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) {
+    return emptyData(timeframeKey, metaApiTimeframe, DEFAULT_SYMBOL, "Supabase is not configured.");
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return emptyData(timeframeKey, metaApiTimeframe, DEFAULT_SYMBOL, "Sign in to load your MT5 chart.");
+  }
+
+  const [{ data: prefs }, { data: accountsRows }, watchlistRows] = await Promise.all([
+    supabase
+      .from("user_workspace_preferences")
+      .select("active_account_id")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("user_broker_accounts")
+      .select("id,label,provider,connection_method,external_connection_id,mt5_server,provider_status,metadata")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    listWatchlistItems(),
+  ]);
+
+  const rawAccounts: Array<{
+    id: string;
+    label: string | null;
+    provider: string | null;
+    connection_method: string | null;
+    external_connection_id: string | null;
+    mt5_server: string | null;
+    provider_status: string | null;
+    metadata: Record<string, unknown> | null;
+  }> = [...((accountsRows ?? []) as Array<{
+    id: string;
+    label: string | null;
+    provider: string | null;
+    connection_method: string | null;
+    external_connection_id: string | null;
+    mt5_server: string | null;
+    provider_status: string | null;
+    metadata: Record<string, unknown> | null;
+  }>)];
+  const demo = await ensureDemoAccount(supabase, user.id);
+  if (demo && !rawAccounts.some((a) => a.id === demo.id)) rawAccounts.unshift({
+    id: demo.id,
+    label: demo.label,
+    provider: demo.provider,
+    connection_method: demo.connection_method ?? null,
+    external_connection_id: demo.external_connection_id ?? null,
+    mt5_server: demo.mt5_server,
+    provider_status: demo.provider_status ?? null,
+    metadata: demo.metadata ?? null,
+  });
+
+  const accountChoices: AccountSummary[] = rawAccounts
+    .filter(
+      (r) =>
+        isDemoAccount(r) ||
+        isAlpacaAccount(r) ||
+        (r.connection_method === "cloud_mt5" &&
+          typeof r.external_connection_id === "string" &&
+          r.external_connection_id.length > 0),
+    )
+    .map((r) => {
+      const meta = (r.metadata ?? {}) as Record<string, unknown>;
+      const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
+      return {
+        brokerAccountId: r.id as string,
+        metaApiAccountId: isDemoAccount(r)
+          ? DEMO_EXTERNAL_ID
+          : ((r.external_connection_id as string) ?? r.id),
+        label:
+          (r.label as string) ??
+          (isDemoAccount(r) ? "AXE Demo Account" : isAlpacaAccount(r) ? "AXE Alpaca Paper" : "MT5 Account"),
+        mt5Server: (r.mt5_server as string) ?? null,
+        active: prefs?.active_account_id === r.id,
+        connectionMethod: (r.connection_method as string) ?? null,
+        metaApiRegion: region,
+      };
+    });
+
+  const requestedAccountId = (accountParam ?? "").trim();
+  const account =
+    accountChoices.find((a) => a.brokerAccountId === requestedAccountId) ??
+    accountChoices.find((a) => a.active) ??
+    accountChoices[0] ??
+    null;
+  const adaptiveDefaults = await loadAdaptiveChartDefaults(supabase, user.id, account?.brokerAccountId ?? null);
+  if (!tfParam && adaptiveDefaults.timeframe) {
+    timeframeKey = normalizeChartTfKey(adaptiveDefaults.timeframe);
+    metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
+  }
+
+  const watchSyms = watchlistRows.map((w) => w.symbol.trim().toUpperCase()).filter(Boolean);
+  const isDemo = account?.connectionMethod === "demo_paper";
+  const isAlpaca = account?.connectionMethod === "cloud_alpaca";
+
+  if (isAlpaca && account) {
+    const config = getAlpacaPaperConfig();
+    const watchAlpaca = watchSyms.filter((s) => isAlpacaSupportedSymbol(s));
+    const requestedRaw = normalizeSymbol(symbolParam) || adaptiveDefaults.symbol || "";
+    const requested =
+      requestedRaw && isAlpacaSupportedSymbol(requestedRaw)
+        ? safeDisplaySymbol(requestedRaw)
+        : watchAlpaca[0] ?? ALPACA_DEFAULT_SYMBOL;
+
+    const alpacaCandles =
+      config && isAlpacaConfigured() ? await fetchAlpacaCandles(requested, timeframeKey, 500) : null;
+    const candles = alpacaCandles?.length ? alpacaCandles : generateDemoCandles(requested, timeframeKey, 500);
+    const last = candles.at(-1)?.close ?? null;
+    const lastTime = candles.at(-1)?.time ?? null;
+
+    let positionsOnSymbol: ChartOverlayRow[] = [];
+    let pendingOrdersOnSymbol: PendingOrderOverlay[] = [];
+    let totalPositions = 0;
+    let totalPendingOrders = 0;
+
+    if (config) {
+      try {
+        const [positions, orders] = await Promise.all([
+          listAlpacaPositions(config),
+          listAlpacaOrders(config, { status: "open", limit: 100 }),
+        ]);
+        totalPositions = positions.length;
+        positionsOnSymbol = attachAlpacaExitLevels(
+          positions
+            .filter((p) => axeSymbolFromAlpaca(p.symbol) === requested)
+            .map(mapAlpacaPositionRow),
+          orders,
+          requested,
+        );
+        const pending = orders
+          .map(mapAlpacaPendingOrder)
+          .filter((o): o is PendingOrderOverlay => o != null);
+        totalPendingOrders = pending.length;
+        pendingOrdersOnSymbol = pending.filter((o) => o.symbol === requested);
+      } catch (error) {
+        console.warn("[loadChartPageData] alpaca positions/orders failed", error);
+      }
+    }
+
+    const symbolOptions = Array.from(
+      new Set([...ALPACA_SYMBOL_OPTIONS, ...watchAlpaca.map(cleanDisplaySymbol).filter(Boolean)]),
+    ).sort();
+
+    return {
+      symbol: requested,
+      brokerSymbol: requested,
+      timeframeKey,
+      metaApiTimeframe,
+      candles,
+      positionsOnSymbol,
+      positionsOnSymbolCount: positionsOnSymbol.length,
+      totalPositions,
+      pendingOrdersOnSymbol,
+      totalPendingOrders,
+      lastPrice: last,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: lastTime,
+      providerStatus: alpacaCandles?.length ? "connected" : "alpaca_fallback",
+      failure: "ok",
+      dataError: null,
+      hint: alpacaCandles?.length
+        ? "Alpaca paper — US equities with live market data. Switch symbol to TSLA, AAPL, NVDA, etc."
+        : !config || !isAlpacaConfigured()
+          ? "Alpaca market data is not configured on this server. Chart shows synthetic candles until ALPACA_PAPER keys are set."
+          : !isAlpacaSupportedSymbol(requested)
+            ? `${requested} is not on Alpaca. Try TSLA or AAPL for live US equity data.`
+            : `Live Alpaca candles for ${requested} are temporarily unavailable — showing synthetic data. Retry in a moment.`,
+      symbolOptions,
+      attemptedSymbols: [requested],
+      account,
+      accountChoices,
+      lastCandleTime: lastTime,
+      source: "Alpaca Paper",
+    };
+  }
+
+  if (isDemo && account) {
+    const requestedRaw = normalizeSymbol(symbolParam) || adaptiveDefaults.symbol || watchSyms[0] || DEFAULT_SYMBOL;
+    const requested = safeDisplaySymbol(requestedRaw);
+    const alpacaCandles =
+      isAlpacaConfigured() && isAlpacaSupportedSymbol(requested)
+        ? await fetchAlpacaCandles(requested, timeframeKey, 500)
+        : null;
+    const candles = alpacaCandles?.length ? alpacaCandles : generateDemoCandles(requested, timeframeKey, 500);
+    const last = candles.at(-1)?.close ?? null;
+    const lastTime = candles.at(-1)?.time ?? null;
+    const alpacaHint = alpacaCandles?.length
+      ? "AXE Demo with live Alpaca market data. Orders are virtual unless Alpaca Paper is enabled."
+      : "AXE Demo is a virtual paper account. No broker order is sent.";
+    return {
+      symbol: requested,
+      brokerSymbol: requested,
+      timeframeKey,
+      metaApiTimeframe,
+      candles,
+      positionsOnSymbol: [],
+      positionsOnSymbolCount: 0,
+      totalPositions: 0,
+      pendingOrdersOnSymbol: [],
+      totalPendingOrders: 0,
+      lastPrice: last,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: lastTime,
+      providerStatus: alpacaCandles?.length ? "alpaca_data" : "demo",
+      failure: "ok",
+      dataError: null,
+      hint: alpacaHint,
+      symbolOptions: Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms.map(cleanDisplaySymbol).filter(Boolean)])).sort(),
+      attemptedSymbols: [requested],
+      account,
+      accountChoices,
+      lastCandleTime: lastTime,
+      source: "AXE Demo",
+    };
+  }
+
+  if (!getMetaApiToken()) {
+    const requested = safeDisplaySymbol(normalizeSymbol(symbolParam) || adaptiveDefaults.symbol || DEFAULT_SYMBOL);
+    const out = emptyData(
+      timeframeKey,
+      metaApiTimeframe,
+      requested,
+      "AXE MT5 Cloud is not configured on the server. Add the MetaAPI token to enable broker data.",
+      "provider_not_configured",
+      "provider_not_configured",
+      "Chart data is not available because AXE MT5 Cloud is not configured for this deployment.",
+    );
+    out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms.map(cleanDisplaySymbol).filter(Boolean)])).sort();
+    out.accountChoices = accountChoices;
+    return out;
+  }
+
+  if (!account) {
+    const requested = safeDisplaySymbol(normalizeSymbol(symbolParam) || adaptiveDefaults.symbol || DEFAULT_SYMBOL);
+    const out = emptyData(
+      timeframeKey,
+      metaApiTimeframe,
+      requested,
+      "Connect a MetaApi MT5 cloud account to unlock the broker chart.",
+      "account_not_connected",
+      null,
+      "No AXE MT5 Cloud account is connected yet.",
+    );
+    out.symbolOptions = Array.from(new Set([...FALLBACK_SYMBOLS, ...watchSyms.map(cleanDisplaySymbol).filter(Boolean)])).sort();
+    out.accountChoices = accountChoices;
+    return out;
+  }
+
+  // ── Phase 11: parallel positions + symbols fetch ─────────────────
+  // Previously sequential — a slow positions call (up to 12s) would
+  // delay symbol discovery. Now they fire in parallel, shaving up to
+  // 8s off cold-start chart loads.
+  const accountRaw = rawAccounts.find((r) => r.id === account.brokerAccountId);
+  const accountMetadata = (accountRaw?.metadata ?? {}) as Record<string, unknown> & {
+    symbol_map?: Record<string, string>;
+  };
+  let symbolMap = getMetadataSymbolMap(accountMetadata);
+  const knownFromMetadata = Object.values(symbolMap).filter((s): s is string => typeof s === "string" && s.length > 0);
+  const knownFromUniverse = getMetadataSymbolUniverse(accountMetadata);
+  const needSymbolFetch = knownFromUniverse.length === 0 || !metadataSymbolUniverseFresh(accountMetadata, SYMBOL_UNIVERSE_TTL_MS);
+
+  const positionsPromise = withRenderBudget(
+    "positions",
+    clientGetPositions(
+      account.metaApiAccountId,
+      true,
+      account.metaApiRegion ?? null,
+    ),
+    POSITIONS_RENDER_BUDGET_MS,
+  ).then(
+    (raw) => ({ positions: mapPositions(raw as Record<string, unknown>[]), timedOut: false }),
+    (e) => ({ positions: [] as OpenPositionRow[], timedOut: isTimeoutError(e) }),
+  );
+
+  const symbolsPromise = needSymbolFetch
+    ? withRenderBudget(
+        "symbols",
+        clientListSymbols(account.metaApiAccountId, account.metaApiRegion ?? null),
+        SYMBOLS_RENDER_BUDGET_MS,
+      ).catch(() => [] as string[])
+    : Promise.resolve([] as string[]);
+
+  // Fetch pending orders in parallel with positions (same timeout budget).
+  const ordersPromise = withRenderBudget(
+    "orders",
+    clientGetOrders(
+      account.metaApiAccountId,
+      false,
+      account.metaApiRegion ?? null,
+    ),
+    POSITIONS_RENDER_BUDGET_MS,
+  ).then(
+    (raw) => ({ orders: mapPendingOrders(raw as Record<string, unknown>[]) }),
+    () => ({ orders: [] as PendingOrderOverlay[] }),
+  );
+
+  const [posResult, discoveredSymbols, ordResult] = await Promise.all([positionsPromise, symbolsPromise, ordersPromise]);
+  let allPositions = posResult.positions;
+  let positionsTimedOut = posResult.timedOut;
+  const allPendingOrders = ordResult.orders;
+
+  const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);
+  let knownAccountSymbols = Array.from(new Set([
+    ...fromPositions,
+    ...knownFromMetadata,
+    ...knownFromUniverse,
+    ...discoveredSymbols,
+  ]));
+  const requestedRaw =
+    normalizeSymbol(symbolParam) ||
+    adaptiveDefaults.symbol ||
+    allPositions[0]?.symbol ||
+    watchSyms[0] ||
+    DEFAULT_SYMBOL;
+  const requested = safeDisplaySymbol(requestedRaw);
+
+  if (knownAccountSymbols.length > 0) {
+    const runtimeMeta = buildBrokerSymbolRuntimeMetadata({
+      existingMetadata: accountMetadata,
+      knownSymbols: knownAccountSymbols,
+      displaySymbols: [requested, ...watchSyms, ...fromPositions.map(cleanDisplaySymbol).filter(Boolean)],
+    });
+    symbolMap = runtimeMeta.symbol_map;
+    knownAccountSymbols = Array.from(new Set([...knownAccountSymbols, ...Object.values(symbolMap)]));
+    const nextMetadata = { ...accountMetadata, ...runtimeMeta };
+    void supabase
+      .from("user_broker_accounts")
+      .update({ metadata: nextMetadata })
+      .eq("id", account.brokerAccountId)
+      .eq("user_id", user.id);
+    void probeBrokerSymbolReport({
+      accountId: account.metaApiAccountId,
+      region: account.metaApiRegion ?? null,
+      report: runtimeMeta.symbol_resolution_report,
+      timeframe: metaApiTimeframe,
+      displays: [requested, ...CANONICAL_BROKER_SYMBOLS],
+      timeoutMs: 2_000,
+    }).then((symbol_resolution_report) => {
+      void supabase
+        .from("user_broker_accounts")
+        .update({
+          metadata: {
+            ...nextMetadata,
+            symbol_resolution_report,
+          },
+        })
+        .eq("id", account.brokerAccountId)
+        .eq("user_id", user.id);
+    });
+  }
+
+  const rawCachedBroker = symbolMap[requested] ?? symbolMap[requestedRaw];
+  // Validate: if the cached broker symbol is no longer in the account's known universe, evict it.
+  const cachedBroker =
+    rawCachedBroker && knownAccountSymbols.length > 0 && !knownAccountSymbols.includes(rawCachedBroker)
+      ? undefined
+      : rawCachedBroker;
+  const resolution = cachedBroker
+    ? {
+        brokerSymbol: cachedBroker,
+        displaySymbol: requested,
+        exact: cachedBroker === requested,
+        attempted: [requested, cachedBroker].filter((v, i, a) => a.indexOf(v) === i),
+        reason: cachedBroker === requested ? ("exact_match" as const) : ("suffix_variant" as const),
+      }
+    : resolveBrokerSymbol(requested, knownAccountSymbols);
+
+  if (
+    knownAccountSymbols.length > 0 &&
+    resolution.reason === "fallback_request" &&
+    !knownAccountSymbols.includes(resolution.brokerSymbol)
+  ) {
+    const symbolOptions = buildSymbolOptions({
+      requested,
+      fallbackSymbols: FALLBACK_SYMBOLS,
+      watchSymbols: watchSyms,
+      positionSymbols: fromPositions.map(cleanDisplaySymbol).filter(Boolean),
+      aliases: displaySymbolAliases(requested),
+      knownSymbols: knownAccountSymbols,
+      symbolMap,
+    });
+    return {
+      symbol: requested,
+      brokerSymbol: "",
+      timeframeKey,
+      metaApiTimeframe,
+      candles: [],
+      positionsOnSymbol: [],
+      positionsOnSymbolCount: 0,
+      totalPositions: allPositions.length,
+      pendingOrdersOnSymbol: [],
+      totalPendingOrders: allPendingOrders.length,
+      lastPrice: null,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: null,
+      providerStatus: "failed",
+      failure: "broker_symbol_not_found",
+      dataError: `${requested} is not available on this broker account.`,
+      hint: "AXE checked the active broker symbol list and could not resolve a valid MT5 symbol for this account.",
+      symbolOptions,
+      attemptedSymbols: resolution.attempted,
+      account,
+      accountChoices,
+      lastCandleTime: null,
+      source: "MetaApi MT5",
+    };
+  }
+
+  const cleanPositionSymbols = fromPositions.map(cleanDisplaySymbol).filter(Boolean);
+  const symbolOptions = buildSymbolOptions({
+    requested,
+    fallbackSymbols: FALLBACK_SYMBOLS,
+    watchSymbols: watchSyms,
+    positionSymbols: cleanPositionSymbols,
+    aliases: displaySymbolAliases(requested),
+    knownSymbols: knownAccountSymbols,
+    symbolMap,
+  });
+
+  const positionsOnSymbol = allPositions
+    .filter((p) => p.symbol === resolution.brokerSymbol || cleanDisplaySymbol(p.symbol) === requested)
+    .map(toOverlay);
+
+  const pendingOrdersOnSymbol = allPendingOrders
+    .filter((o) => o.symbol === resolution.brokerSymbol || cleanDisplaySymbol(o.symbol) === requested);
+
+  const rawCandidates = Array.from(new Set([
+    ...(cachedBroker ? [cachedBroker] : []),
+    resolution.brokerSymbol,
+    ...resolution.attempted,
+    ...candidateBrokerSymbols(requested, knownAccountSymbols),
+  ].filter(Boolean)));
+
+  // When we have a fresh universe, only try candidates verified to exist on the broker.
+  // This eliminates blind probing (up to 48 × 4.5s worst-case → 1-3 targeted calls).
+  const universeSet = knownAccountSymbols.length > 0 ? new Set(knownAccountSymbols) : null;
+  const verifiedCandidates = universeSet
+    ? rawCandidates.filter((c) => universeSet.has(c))
+    : rawCandidates;
+  // Always keep at least the top resolved candidate so we don't bail with zero candidates.
+  const candleCandidates = verifiedCandidates.length > 0
+    ? verifiedCandidates
+    : rawCandidates.slice(0, 3);
+
+  try {
+    // ── Fast-path: when we have a universe-verified cachedBroker, try it
+    //    directly with the full render budget instead of cycling through
+    //    the candidate list at 4.5 s each.  This makes timeframe switches
+    //    for already-resolved symbols resolve in < 1 s instead of 4-12 s.
+    let loaded: { candles: MetaApiCandle[]; brokerSymbol: string; attempted: string[] } | null = null;
+    if (cachedBroker) {
+      const cachedCandles = getCachedCandles(account.metaApiAccountId, cachedBroker, metaApiTimeframe);
+      if (cachedCandles) {
+        loaded = { candles: cachedCandles.candles, brokerSymbol: cachedCandles.brokerSymbol, attempted: [cachedBroker] };
+      } else {
+        try {
+          const candles = await withRenderBudget(
+            `candles_fastpath_${cachedBroker}`,
+            clientGetHistoricalCandles(account.metaApiAccountId, cachedBroker, metaApiTimeframe, 500, account.metaApiRegion ?? null),
+            CANDLES_RENDER_BUDGET_MS - 2_000, // 10 s — generous, still leaves 2 s headroom
+          );
+          if (candles.length > 0) {
+            rememberCandles(account.metaApiAccountId, cachedBroker, metaApiTimeframe, candles);
+            loaded = { candles, brokerSymbol: cachedBroker, attempted: [cachedBroker] };
+          }
+        } catch {
+          // Fast-path miss — fall through to the full candidate loop below.
+        }
+      }
+    }
+    if (!loaded) {
+      loaded = await withRenderBudget(
+        "candles",
+        loadFirstCandles({
+          accountId: account.metaApiAccountId,
+          region: account.metaApiRegion ?? null,
+          candidates: candleCandidates,
+          timeframe: metaApiTimeframe,
+          limit: 500,
+        }),
+        CANDLES_RENDER_BUDGET_MS,
+      );
+    }
+    const candles = loaded.candles;
+    const brokerSymbol = loaded.brokerSymbol || resolution.brokerSymbol;
+    const attemptedSymbols = Array.from(new Set([...resolution.attempted, ...loaded.attempted]));
+    const last = candles.length > 0 ? candles[candles.length - 1]?.close ?? null : null;
+    const lastTime = candles.length > 0 ? candles[candles.length - 1]?.time ?? null : null;
+    let quote: { bid: number | null; ask: number | null; mid: number | null; time: string | null } | null = null;
+    if (candles.length > 0) {
+      try {
+        const price = await withRenderBudget(
+          `current_price_${brokerSymbol}`,
+          clientGetSymbolPrice(account.metaApiAccountId, brokerSymbol, account.metaApiRegion ?? null),
+          4_000,
+        );
+        const mid =
+          price.bid != null && price.ask != null
+            ? (price.bid + price.ask) / 2
+            : price.bid ?? price.ask ?? null;
+        quote = {
+          bid: price.bid,
+          ask: price.ask,
+          mid,
+          time: price.brokerTime ?? price.time ?? null,
+        };
+      } catch {
+        quote = null;
+      }
+    }
+
+    if (candles.length === 0) {
+      return {
+        symbol: requested,
+        brokerSymbol,
+        timeframeKey,
+        metaApiTimeframe,
+        candles: [],
+        positionsOnSymbol,
+        positionsOnSymbolCount: positionsOnSymbol.length,
+        totalPositions: allPositions.length,
+        pendingOrdersOnSymbol,
+        totalPendingOrders: allPendingOrders.length,
+        lastPrice: null,
+        lastBid: null,
+        lastAsk: null,
+        lastTickAt: null,
+        providerStatus: "stale",
+        failure: "candles_unavailable",
+        dataError: "MT5 market data not available for this symbol yet.",
+        hint: "AXE Market Data could not return candles. Try Sync, another timeframe, or check the broker symbol in Data details.",
+        symbolOptions,
+        attemptedSymbols,
+        account,
+        accountChoices,
+        lastCandleTime: null,
+        source: "MetaApi MT5",
+      };
+    }
+
+    return {
+      symbol: requested,
+      brokerSymbol,
+      timeframeKey,
+      metaApiTimeframe,
+      candles,
+      positionsOnSymbol,
+      positionsOnSymbolCount: positionsOnSymbol.length,
+      totalPositions: allPositions.length,
+      pendingOrdersOnSymbol,
+      totalPendingOrders: allPendingOrders.length,
+      lastPrice:
+        quote?.mid != null && Number.isFinite(quote.mid)
+          ? quote.mid
+          : last != null && !Number.isNaN(last)
+            ? last
+            : null,
+      lastBid: quote?.bid ?? null,
+      lastAsk: quote?.ask ?? null,
+      lastTickAt: quote?.time ?? null,
+      providerStatus: quote?.mid != null ? "connected" : "stale",
+      failure: "ok",
+      dataError: null,
+      hint: quote?.mid == null
+        ? "Candles loaded, but current bid/ask is unavailable. AXE will use the candle close until the next broker tick arrives."
+        : positionsTimedOut
+          ? "Chart candles loaded, but open positions are still refreshing. AXE will update overlays when the live feed catches up."
+          : null,
+      symbolOptions,
+      attemptedSymbols,
+      account,
+      accountChoices,
+      lastCandleTime: lastTime,
+      source: "MetaApi MT5",
+    };
+  } catch (e) {
+    if (isTimeoutError(e)) {
+      // Phase 11: stale-while-revalidate — serve slightly old data rather than
+      // showing an empty chart when MetaAPI is slow.
+      const cached = candleCandidates
+        .map((candidate) => getStaleCachedCandles(account.metaApiAccountId, candidate, metaApiTimeframe))
+        .find((entry): entry is CandleCacheEntry => Boolean(entry));
+      if (cached) {
+        return {
+          symbol: requested,
+          brokerSymbol: cached.brokerSymbol,
+          timeframeKey,
+          metaApiTimeframe,
+          candles: cached.candles,
+          positionsOnSymbol,
+          positionsOnSymbolCount: positionsOnSymbol.length,
+          totalPositions: allPositions.length,
+          pendingOrdersOnSymbol,
+          totalPendingOrders: allPendingOrders.length,
+          lastPrice: cached.candles.at(-1)?.close ?? null,
+          lastBid: null,
+          lastAsk: null,
+          lastTickAt: null,
+          providerStatus: "stale",
+          failure: "ok",
+          dataError: null,
+          hint: "AXE is showing the last stable chart while market data refreshes.",
+          symbolOptions,
+          attemptedSymbols: resolution.attempted,
+          account,
+          accountChoices,
+          lastCandleTime: cached.lastCandleTime,
+          source: "MetaApi MT5",
+        };
+      }
+      return {
+        symbol: requested,
+        brokerSymbol: resolution.brokerSymbol,
+        timeframeKey,
+        metaApiTimeframe,
+        candles: [],
+        positionsOnSymbol,
+        positionsOnSymbolCount: positionsOnSymbol.length,
+        totalPositions: allPositions.length,
+        pendingOrdersOnSymbol,
+        totalPendingOrders: allPendingOrders.length,
+        lastPrice: null,
+        lastBid: null,
+        lastAsk: null,
+        lastTickAt: null,
+        providerStatus: positionsTimedOut ? "stale" : "failed",
+        failure: "metaapi_timeout",
+        dataError: "MetaAPI market data timed out before candles/current price finished.",
+        hint: "The chart request timed out at the MetaAPI market-data step. Sync or retry after the broker terminal is responsive.",
+        symbolOptions,
+        attemptedSymbols: resolution.attempted,
+        account,
+        accountChoices,
+        lastCandleTime: null,
+        source: "MetaApi MT5",
+      };
+    }
+    const isMeta = e instanceof MetaApiRequestError;
+    const code = isMeta ? e.code : null;
+    const failure: ChartFailureKind =
+      code === "not_found"
+        ? "broker_symbol_not_found"
+        : code === "metaapi_region_error" || code === "metaapi_auth_failed"
+          ? "market_data_unavailable"
+          : "candles_unavailable";
+
+    return {
+      symbol: requested,
+      brokerSymbol: resolution.brokerSymbol,
+      timeframeKey,
+      metaApiTimeframe,
+      candles: [],
+      positionsOnSymbol,
+      positionsOnSymbolCount: positionsOnSymbol.length,
+      totalPositions: allPositions.length,
+      pendingOrdersOnSymbol,
+      totalPendingOrders: allPendingOrders.length,
+      lastPrice: null,
+      lastBid: null,
+      lastAsk: null,
+      lastTickAt: null,
+      providerStatus: "failed",
+      failure,
+      dataError:
+        failure === "broker_symbol_not_found"
+          ? "Symbol unsupported by the active broker account."
+          : "MT5 market data not available for this symbol yet.",
+      hint:
+        failure === "broker_symbol_not_found"
+          ? "This broker uses a different symbol. Open Data details and try another suffix or pick from your linked positions."
+          : "Could not load candles from MetaApi. Try Sync from Accounts, or change timeframe.",
+      symbolOptions,
+      attemptedSymbols: resolution.attempted,
+      account,
+      accountChoices,
+      lastCandleTime: null,
+      source: "MetaApi MT5",
+    };
+  }
+}

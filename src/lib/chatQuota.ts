@@ -7,7 +7,10 @@ export function skipChatQuota(): boolean {
 
 /** Comma-separated auth user UUIDs (Vercel env) — unlimited chat without DB row. */
 export function isUnlimitedChatUserId(userId: string): boolean {
-  const raw = process.env.AXE_UNLIMITED_CHAT_USER_IDS ?? "";
+  const raw =
+    process.env.AXE_FULL_ACCESS_USER_IDS ??
+    process.env.AXE_UNLIMITED_CHAT_USER_IDS ??
+    "";
   const ids = raw
     .split(",")
     .map((s) => s.trim())
@@ -33,19 +36,25 @@ type TryConsumeRow = {
 
 /**
  * Atomically reserves one user send for today (UTC). Call before inserting the user message.
+ *
+ * `consumed` is true only when a free-tier daily slot was actually decremented
+ * (i.e. not pro / exempt / skipped). Use it to decide whether a later failure
+ * should refund the slot via `refundChatQuota`.
  */
 export async function tryConsumeChatQuota(
   supabase: SupabaseClient,
   userId: string
-): Promise<{ ok: true } | { ok: false; quotaExceeded: boolean }> {
-  if (skipChatQuota()) return { ok: true };
-  if (isUnlimitedChatUserId(userId)) return { ok: true };
+): Promise<{ ok: true; consumed: boolean } | { ok: false; quotaExceeded: boolean }> {
+  if (skipChatQuota()) return { ok: true, consumed: false };
+  if (isUnlimitedChatUserId(userId)) return { ok: true, consumed: false };
 
   const { data, error } = await supabase.rpc("axe_chat_try_consume");
 
   if (error) {
-    console.error("[chatQuota] axe_chat_try_consume failed", error);
-    return { ok: false, quotaExceeded: false };
+    // RPC missing (migration not applied) — degrade gracefully, allow chat through.
+    // This prevents silent empty responses when quota DB functions don't exist yet.
+    console.warn("[chatQuota] axe_chat_try_consume failed — allowing chat (quota skipped):", error.message);
+    return { ok: true, consumed: false };
   }
 
   const row = data as TryConsumeRow;
@@ -56,5 +65,29 @@ export async function tryConsumeChatQuota(
     };
   }
 
-  return { ok: true };
+  // remaining === -1 means unlimited (pro/exempt) — nothing was decremented.
+  const consumed = (row?.remaining ?? -1) !== -1;
+  return { ok: true, consumed };
+}
+
+/**
+ * Gives back one previously-reserved free-tier slot for today (UTC). Call when a
+ * send was reserved but ultimately produced no AXE reply (e.g. the AI call
+ * failed), so the user isn't charged for a message they never received.
+ *
+ * Best-effort: failures are logged, never thrown.
+ */
+export async function refundChatQuota(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<void> {
+  if (skipChatQuota()) return;
+  if (isUnlimitedChatUserId(userId)) return;
+
+  try {
+    const { error } = await supabase.rpc("axe_chat_refund");
+    if (error) console.error("[chatQuota] axe_chat_refund failed", error);
+  } catch (e) {
+    console.error("[chatQuota] axe_chat_refund threw", e);
+  }
 }

@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getActiveMetaApiCloudAccount } from "@/lib/mt5/activeCloudAccount";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
-import { clientGetPositions } from "@/lib/mt5/metaApiClient";
+import { clientGetPositions, clientGetOrders, clientGetAccountInformation } from "@/lib/mt5/metaApiClient";
 
 export type OpenPositionRow = {
   id: string;
@@ -16,11 +16,36 @@ export type OpenPositionRow = {
   openTime: string | null;
 };
 
+export type PendingOrderRow = {
+  id: string;
+  symbol: string;
+  type: string;        // "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop" | ...
+  volume: number;
+  openPrice: number;   // trigger price
+  currentPrice: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  openTime: string | null;
+};
+
+export type AccountSummary = {
+  balance: number | null;
+  equity: number | null;
+  margin: number | null;
+  freeMargin: number | null;
+  marginLevel: number | null;
+  currency: string | null;
+};
+
 export type PositionsPageData = {
   positions: OpenPositionRow[];
+  pendingOrders: PendingOrderRow[];
+  accountSummary: AccountSummary | null;
   providerStatus: string | null;
   error: string | null;
   hint: string | null;
+  /** Supabase user_broker_accounts.id — needed by client for close/modify calls. */
+  brokerAccountId: string | null;
 };
 
 function mapSide(t: string | undefined): string {
@@ -30,24 +55,38 @@ function mapSide(t: string | undefined): string {
   return (t ?? "").toLowerCase();
 }
 
+function mapOrderType(t: string | undefined): string {
+  const raw = (t ?? "").toLowerCase().replace(/_/g, " ");
+  // MetaApi order types: ORDER_TYPE_BUY_LIMIT, ORDER_TYPE_SELL_LIMIT,
+  // ORDER_TYPE_BUY_STOP, ORDER_TYPE_SELL_STOP, etc.
+  if (raw.includes("buy") && raw.includes("limit")) return "buy_limit";
+  if (raw.includes("sell") && raw.includes("limit")) return "sell_limit";
+  if (raw.includes("buy") && raw.includes("stop")) return "buy_stop";
+  if (raw.includes("sell") && raw.includes("stop")) return "sell_stop";
+  return raw.trim() || "pending";
+}
+
 export async function loadPositionsPageData(): Promise<PositionsPageData> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
-    return { positions: [], providerStatus: null, error: "Supabase is not configured.", hint: null };
+    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Supabase is not configured.", hint: null, brokerAccountId: null };
   }
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { positions: [], providerStatus: null, error: "Not signed in.", hint: null };
+    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Not signed in.", hint: null, brokerAccountId: null };
   }
 
   if (!getMetaApiToken()) {
     return {
       positions: [],
+      pendingOrders: [],
+      accountSummary: null,
       providerStatus: "provider_not_configured",
       error: null,
-      hint: "Add METAAPI_TOKEN (or AXE_METAAPI_TOKEN) on the server to load live MT5 positions.",
+      hint: "AXE MT5 Cloud is not configured on the server yet, so live positions cannot load.",
+      brokerAccountId: null,
     };
   }
 
@@ -55,19 +94,33 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
   if (!cloud) {
     return {
       positions: [],
+      pendingOrders: [],
+      accountSummary: null,
       providerStatus: null,
       error: null,
-      hint: "Set an active account on Accounts that uses MetaApi cloud, then Sync. Positions load from your MT5 terminal via MetaApi.",
+      hint: "Set an active AXE MT5 Cloud account on Accounts, then Sync. Positions load from your MT5 terminal through AXE.",
+      brokerAccountId: null,
     };
   }
 
   try {
-    const raw = (await clientGetPositions(
-      cloud.metaApiAccountId,
-      true,
-      cloud.metaApiRegion,
-    )) as Record<string, unknown>[];
-    const positions: OpenPositionRow[] = raw.map((p, i) => {
+    // Fetch account info, positions, and pending orders in parallel
+    const [rawAccountInfo, rawPositions, rawOrders] = await Promise.all([
+      clientGetAccountInformation(cloud.metaApiAccountId, false, cloud.metaApiRegion).catch(() => ({}) as Record<string, unknown>),
+      clientGetPositions(cloud.metaApiAccountId, true, cloud.metaApiRegion) as Promise<Record<string, unknown>[]>,
+      clientGetOrders(cloud.metaApiAccountId, false, cloud.metaApiRegion).catch(() => [] as Record<string, unknown>[]) as Promise<Record<string, unknown>[]>,
+    ]);
+
+    const accountSummary: AccountSummary = {
+      balance: rawAccountInfo.balance != null ? Number(rawAccountInfo.balance) : null,
+      equity: rawAccountInfo.equity != null ? Number(rawAccountInfo.equity) : null,
+      margin: rawAccountInfo.margin != null ? Number(rawAccountInfo.margin) : null,
+      freeMargin: rawAccountInfo.freeMargin != null ? Number(rawAccountInfo.freeMargin) : null,
+      marginLevel: rawAccountInfo.marginLevel != null ? Number(rawAccountInfo.marginLevel) : null,
+      currency: typeof rawAccountInfo.currency === "string" ? rawAccountInfo.currency : null,
+    };
+
+    const positions: OpenPositionRow[] = rawPositions.map((p, i) => {
       const id = String(p.id ?? p.positionId ?? i);
       const symbol = String(p.symbol ?? "");
       const side = mapSide(typeof p.type === "string" ? (p.type as string) : undefined);
@@ -85,18 +138,42 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       };
     });
 
+    const pendingOrders: PendingOrderRow[] = rawOrders.map((o, i) => {
+      const id = String(o.id ?? o.orderId ?? i);
+      const symbol = String(o.symbol ?? "");
+      const type = mapOrderType(typeof o.type === "string" ? (o.type as string) : undefined);
+      return {
+        id,
+        symbol,
+        type,
+        volume: Number(o.volume ?? 0) || 0,
+        openPrice: Number(o.openPrice ?? o.price ?? 0),
+        currentPrice: o.currentPrice != null ? Number(o.currentPrice) : null,
+        stopLoss: o.stopLoss != null ? Number(o.stopLoss) : null,
+        takeProfit: o.takeProfit != null ? Number(o.takeProfit) : null,
+        openTime: (o.time as string) ?? (o.doneTime as string) ?? null,
+      };
+    });
+
+    const isEmpty = positions.length === 0 && pendingOrders.length === 0;
     return {
       positions,
+      pendingOrders,
+      accountSummary,
       providerStatus: "connected",
       error: null,
-      hint: positions.length === 0 ? "No open positions on this account right now." : null,
+      hint: isEmpty ? "No open positions or pending orders on this account right now." : null,
+      brokerAccountId: cloud.brokerAccountId,
     };
   } catch {
     return {
       positions: [],
+      pendingOrders: [],
+      accountSummary: null,
       providerStatus: "failed",
       error: null,
-      hint: "Could not load positions from MetaApi. Try Test/Sync on Accounts, or check server logs.",
+      hint: "Could not load positions through AXE MT5 Cloud. Try Test/Sync on Accounts, or check server logs.",
+      brokerAccountId: cloud.brokerAccountId,
     };
   }
 }

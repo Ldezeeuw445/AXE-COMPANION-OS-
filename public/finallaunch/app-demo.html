@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AXE App Demo</title>
+  <style>
+    :root {
+      --bg: #04070b;
+      --card: #0a1119;
+      --line: rgba(255,255,255,.1);
+      --text: #eaf4ff;
+      --muted: rgba(214,227,240,.62);
+      --cyan: #41dcff;
+      --green: #32d6a1;
+      --red: #ec5f73;
+      --amber: #f6c253;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: radial-gradient(circle at 10% 0%, #0b1a2e, #04070b 45%); color: var(--text); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { display: grid; place-items: center; padding: 18px; }
+
+    .device {
+      width: min(1180px, 96vw);
+      height: min(860px, 94vh);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(8,12,18,.95), rgba(4,7,12,.98));
+      box-shadow: 0 32px 72px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.06);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .device.mobile { width: min(440px, 96vw); height: min(880px, 95vh); border-radius: 36px; }
+    .device.mobile::before {
+      content: "";
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 142px;
+      height: 26px;
+      border-radius: 14px;
+      background: #000;
+      border: 1px solid rgba(255,255,255,.06);
+      z-index: 60;
+    }
+
+    .topbar {
+      height: 68px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 14px;
+      background: rgba(6,10,16,.9);
+      backdrop-filter: blur(10px);
+    }
+
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--green); box-shadow: 0 0 12px rgba(50,214,161,.7); }
+    .brand { font-size: 13px; letter-spacing: .2em; text-transform: uppercase; color: rgba(232,244,255,.9); }
+    .status { margin-left: auto; font-size: 11px; border: 1px solid rgba(65,220,255,.35); color: rgba(65,220,255,.95); border-radius: 999px; padding: 6px 10px; background: rgba(65,220,255,.08); }
+
+    .layout { height: calc(100% - 68px); display: grid; grid-template-columns: 1fr; }
+    .device.tablet .layout { grid-template-columns: 74px 1fr; }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      padding: 12px 8px;
+      display: none;
+      gap: 8px;
+      background: rgba(7,10,16,.92);
+    }
+    .device.tablet .sidebar { display: grid; align-content: start; }
+
+    .sbtn {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color: rgba(221,236,250,.8);
+      border-radius: 12px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .sbtn.active { border-color: rgba(65,220,255,.5); color: #c9f7ff; background: rgba(65,220,255,.12); }
+
+    .main { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+
+    .screen-wrap { min-height: 0; overflow: auto; }
+    .screen { display: none; padding: 14px; }
+    .screen.active { display: block; }
+
+    .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .chip {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      color: rgba(226,238,248,.86);
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+
+    .chart-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(2,5,8,.95), rgba(5,8,12,.98));
+      padding: 10px;
+      min-height: 420px;
+    }
+    .chart-head { display:flex; align-items:center; justify-content:space-between; font-size:12px; margin-bottom:8px; color: var(--muted); }
+    .chart-canvas { width: 100%; height: 320px; border: 1px solid rgba(255,255,255,.06); border-radius: 10px; display:block; background:#020508; }
+    .exec {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 1fr 110px 1fr;
+      gap: 8px;
+    }
+    .exec .sell, .exec .buy, .exec .lot {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .exec .sell { background: linear-gradient(180deg, #b4293f, #7b1f2f); }
+    .exec .buy { background: linear-gradient(180deg, #1e98af, #136d7f); }
+    .exec .lot { background: rgba(9,12,18,.95); }
+
+    .grid { display:grid; gap:10px; }
+    .grid.two { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .grid.three { grid-template-columns: repeat(3,minmax(0,1fr)); }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(8,14,22,.92), rgba(7,10,16,.96));
+      padding: 12px;
+    }
+    .card h4 { margin: 0 0 6px; font-size: 14px; }
+    .card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+
+    .kpi { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:10px; margin-bottom: 10px; }
+    .kpi .item { border:1px solid var(--line); border-radius: 12px; background: rgba(6,11,17,.92); padding:10px; }
+    .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .kpi .value { margin-top: 6px; font-size: 18px; font-weight: 700; }
+
+    .chat-log {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(4,8,13,.9);
+      min-height: 320px;
+      max-height: 54vh;
+      overflow: auto;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+    .bubble { max-width: 84%; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.45; }
+    .bubble.ai { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); }
+    .bubble.user { background: rgba(65,220,255,.18); border: 1px solid rgba(65,220,255,.35); margin-left: auto; }
+
+    .chat-input { margin-top: 10px; display: grid; grid-template-columns: 1fr 110px; gap: 8px; }
+    .chat-input input {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 11px 12px;
+      background: rgba(5,10,16,.96);
+      color: var(--text);
+      font-size: 13px;
+    }
+    .chat-input button {
+      border-radius: 10px;
+      border: 1px solid rgba(65,220,255,.42);
+      background: rgba(65,220,255,.16);
+      color: #d8f8ff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .bottom-nav {
+      border-top: 1px solid var(--line);
+      padding: 10px;
+      display: grid;
+      grid-template-columns: repeat(6,minmax(0,1fr));
+      gap: 8px;
+      background: rgba(6,10,16,.94);
+    }
+    .tab {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      color: rgba(217,232,246,.8);
+      cursor: pointer;
+      user-select: none;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      background: rgba(255,255,255,.02);
+    }
+    .tab.active { border-color: rgba(65,220,255,.5); color: #c9f7ff; background: rgba(65,220,255,.14); }
+
+    @media (max-width: 860px) {
+      .device { width: 100vw; height: 100vh; border-radius: 0; border: 0; }
+      body { padding: 0; }
+      .kpi { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .grid.two, .grid.three { grid-template-columns: 1fr; }
+      .chart-canvas { height: 280px; }
+      .exec { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="device" class="device mobile">
+    <div class="topbar">
+      <span class="dot"></span>
+      <span class="brand" id="brand">AXE Mobile Demo</span>
+      <span class="status">NO LOGIN · DEMO</span>
+    </div>
+    <div class="layout">
+      <aside class="sidebar">
+        <button class="sbtn active" data-screen="chart">Chart</button>
+        <button class="sbtn" data-screen="intel">Intel</button>
+        <button class="sbtn" data-screen="cockpit">Fit</button>
+        <button class="sbtn" data-screen="trade">Trade</button>
+        <button class="sbtn" data-screen="history">History</button>
+        <button class="sbtn" data-screen="chat">AXE</button>
+      </aside>
+      <div class="main">
+        <div class="screen-wrap">
+          <section class="screen active" data-screen="chart">
+            <div class="toolbar">
+              <div class="chip">XAUUSD</div>
+              <div class="chip">H1</div>
+              <div class="chip">London + NY</div>
+              <div class="chip">Demo FTMO 100K</div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head"><span>Live-style demo chart</span><span id="price">4215.15</span></div>
+              <canvas id="chartCanvas" class="chart-canvas" width="1200" height="640"></canvas>
+              <div class="exec">
+                <div class="sell">SELL 4215.15</div>
+                <div class="lot">0.10</div>
+                <div class="buy">BUY 4215.15</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="intel">
+            <div class="grid two">
+              <article class="card"><h4>AXE Intel Tide</h4><p>Net call premium $1.71B vs net put premium $2.29B. Bias: selective bullish while 4208 holds.</p></article>
+              <article class="card"><h4>AXE Macro</h4><p>Rates hold bias. USD mixed. Gold volatility expected near NY open.</p></article>
+              <article class="card"><h4>AXE Policy Flow</h4><p>Two congressional buy disclosures and one defense-sector add in 24h.</p></article>
+              <article class="card"><h4>AXE Dark Pool</h4><p>Clustered prints around 4209-4213 suggest support liquidity zone.</p></article>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="cockpit">
+            <div class="kpi">
+              <div class="item"><div class="label">FIT</div><div class="value">84</div></div>
+              <div class="item"><div class="label">Rules kept</div><div class="value">18</div></div>
+              <div class="item"><div class="label">Rules passed</div><div class="value">6</div></div>
+              <div class="item"><div class="label">Session</div><div class="value">LDN+NY</div></div>
+            </div>
+            <div class="grid three">
+              <article class="card"><h4>Planning</h4><p>Strong. Most winners align with pre-session narrative and session timing.</p></article>
+              <article class="card"><h4>Execution</h4><p>Stable. Better pullback entries when NY overlap starts.</p></article>
+              <article class="card"><h4>Discipline</h4><p>Calibrating. Avoid late chase after second impulse candle.</p></article>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="trade">
+            <div class="grid two">
+              <article class="card"><h4>Execution Dock</h4><p>Market, limit and stop style flow like in app. Demo orders are local and safe.</p></article>
+              <article class="card"><h4>Pending</h4><p>Buy limit 4209.85 · TP 4248.67 · SL 4090.56</p></article>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="history">
+            <div class="grid two">
+              <article class="card"><h4>XAUUSD +450.00</h4><p>Tag: Perfect · Session: London · Rule match 92%</p></article>
+              <article class="card"><h4>NAS100 -120.00</h4><p>Tag: Early Entry · Lesson: wait for reclaim close</p></article>
+              <article class="card"><h4>XAUUSD +210.00</h4><p>Tag: Good Patience · Followed execution checklist</p></article>
+              <article class="card"><h4>Journal Insight</h4><p>Best outcomes occur when Intel + chart structure agree pre-entry.</p></article>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="chat">
+            <div id="chatLog" class="chat-log">
+              <div class="bubble ai">AXE: I can summarize chart + intel + risk context in one message.</div>
+              <div class="bubble user">What is the setup on XAUUSD?</div>
+              <div class="bubble ai">Bias mildly bullish above 4208. If NY reclaims 4222 with volume, target 4240-4248. Invalidate below 4202 close.</div>
+            </div>
+            <div class="chat-input">
+              <input id="chatInput" value="Give me a 3-bullet plan for next 2 hours" />
+              <button id="chatSend">Send</button>
+            </div>
+          </section>
+        </div>
+
+        <nav class="bottom-nav">
+          <div class="tab active" data-screen="chart">Chart</div>
+          <div class="tab" data-screen="intel">Intel</div>
+          <div class="tab" data-screen="cockpit">Cockpit</div>
+          <div class="tab" data-screen="trade">Trade</div>
+          <div class="tab" data-screen="history">History</div>
+          <div class="tab" data-screen="chat">AXE</div>
+        </nav>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const qs = new URLSearchParams(window.location.search);
+    const mode = qs.get('device') === 'tablet' ? 'tablet' : 'mobile';
+    const device = document.getElementById('device');
+    device.classList.remove('mobile');
+    device.classList.add(mode);
+    document.getElementById('brand').textContent = mode === 'tablet' ? 'AXE Tablet Demo' : 'AXE Mobile Demo';
+
+    const tabs = [...document.querySelectorAll('.tab')];
+    const side = [...document.querySelectorAll('.sbtn')];
+    const screens = [...document.querySelectorAll('.screen')];
+
+    const setScreen = (key) => {
+      screens.forEach((s) => s.classList.toggle('active', s.dataset.screen === key));
+      tabs.forEach((t) => t.classList.toggle('active', t.dataset.screen === key));
+      side.forEach((b) => b.classList.toggle('active', b.dataset.screen === key));
+    };
+
+    tabs.forEach((t) => t.addEventListener('click', () => setScreen(t.dataset.screen)));
+    side.forEach((b) => b.addEventListener('click', () => setScreen(b.dataset.screen)));
+
+    const chatLog = document.getElementById('chatLog');
+    const chatInput = document.getElementById('chatInput');
+    const chatSend = document.getElementById('chatSend');
+    const replies = [
+      'Session read: wait for a pullback to VWAP and confirm with Intel Tide before adding.',
+      'Risk-first: max 0.5R until NY confirms direction above 4222.',
+      'If 4208 breaks on closing candle, pause longs and wait for reclaim.',
+      'Confluence strong when structure + dark-pool zone + tide bias all align.'
+    ];
+    let r = 0;
+
+    const bubble = (txt, cls) => {
+      const el = document.createElement('div');
+      el.className = 'bubble ' + cls;
+      el.textContent = txt;
+      chatLog.appendChild(el);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    };
+
+    const send = () => {
+      const value = chatInput.value.trim();
+      if (!value) return;
+      bubble(value, 'user');
+      chatInput.value = '';
+      setTimeout(() => bubble('AXE: ' + replies[r++ % replies.length], 'ai'), 300);
+    };
+
+    chatSend.addEventListener('click', send);
+    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+
+    const canvas = document.getElementById('chartCanvas');
+    const ctx = canvas.getContext('2d');
+    const priceEl = document.getElementById('price');
+    const candles = [];
+    const seed = () => {
+      let p = 4210;
+      for (let i = 0; i < 70; i++) {
+        const drift = (Math.random() - 0.48) * 9;
+        const open = p;
+        const close = p + drift;
+        const high = Math.max(open, close) + Math.random() * 4;
+        const low = Math.min(open, close) - Math.random() * 4;
+        candles.push({ open, close, high, low });
+        p = close;
+      }
+    };
+
+    const draw = () => {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.fillStyle = '#020508';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = 'rgba(255,255,255,.06)';
+      ctx.lineWidth = 1;
+      for (let y = 40; y < h; y += 60) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+      for (let x = 40; x < w; x += 72) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+
+      const min = Math.min(...candles.map(c => c.low)) - 4;
+      const max = Math.max(...candles.map(c => c.high)) + 4;
+      const span = max - min || 1;
+      const step = w / candles.length;
+
+      candles.forEach((c, i) => {
+        const x = i * step + step * 0.5;
+        const yo = h - ((c.open - min) / span) * h;
+        const yc = h - ((c.close - min) / span) * h;
+        const yh = h - ((c.high - min) / span) * h;
+        const yl = h - ((c.low - min) / span) * h;
+        const up = c.close >= c.open;
+
+        ctx.strokeStyle = up ? '#2fd3ea' : '#e0636f';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x, yh); ctx.lineTo(x, yl); ctx.stroke();
+
+        ctx.fillStyle = up ? '#2fd3ea' : '#e0636f';
+        const bodyY = Math.min(yo, yc);
+        const bodyH = Math.max(2, Math.abs(yc - yo));
+        ctx.fillRect(x - step * 0.28, bodyY, step * 0.56, bodyH);
+      });
+
+      const last = candles[candles.length - 1].close;
+      priceEl.textContent = last.toFixed(2);
+    };
+
+    const tick = () => {
+      const prev = candles[candles.length - 1].close;
+      const drift = (Math.random() - 0.5) * 10;
+      const open = prev;
+      const close = prev + drift;
+      candles.push({
+        open,
+        close,
+        high: Math.max(open, close) + Math.random() * 3.6,
+        low: Math.min(open, close) - Math.random() * 3.6,
+      });
+      if (candles.length > 86) candles.shift();
+      draw();
+    };
+
+    seed();
+    draw();
+    setInterval(tick, 1200);
+  </script>
+</body>
+</html>

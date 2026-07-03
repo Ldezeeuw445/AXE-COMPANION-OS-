@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Activity, Lock, ShieldAlert, X } from "lucide-react";
+import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
 type Props = {
   symbol: string;
@@ -38,7 +39,6 @@ export function ChartExecutionBridge({
   brokerSymbol,
   timeframeLabel,
   lastPrice,
-  digits,
   defaultSide = "buy",
   defaultOrderType = "market",
   defaultVolume = "0.10",
@@ -50,7 +50,7 @@ export function ChartExecutionBridge({
   const [side, setSide] = useState<"buy" | "sell">(defaultSide);
   const [orderType, setOrderType] = useState<"market" | "limit" | "stop">(defaultOrderType);
   const [volume, setVolume] = useState<string>(defaultVolume);
-  const [entry, setEntry] = useState<string>((entryPrice ?? lastPrice) ? (entryPrice ?? lastPrice)?.toFixed(digits) ?? "" : "");
+  const [entry, setEntry] = useState<string>((entryPrice ?? lastPrice) ? formatBrokerPrice(brokerSymbol, entryPrice ?? lastPrice) : "");
   const [stopLoss, setStopLoss] = useState<string>("");
   const [takeProfit, setTakeProfit] = useState<string>("");
   const [risk, setRisk] = useState<string>("0.5");
@@ -71,16 +71,16 @@ export function ChartExecutionBridge({
 
   useEffect(() => {
     const next = entryPrice ?? lastPrice;
-    if (next != null && Number.isFinite(next)) setEntry(next.toFixed(digits));
-  }, [digits, entryPrice, lastPrice]);
+    if (next != null && Number.isFinite(next)) setEntry(formatBrokerPrice(brokerSymbol, next));
+  }, [brokerSymbol, entryPrice, lastPrice]);
 
   useEffect(() => {
-    if (stopLossPrice != null && Number.isFinite(stopLossPrice)) setStopLoss(stopLossPrice.toFixed(digits));
-  }, [digits, stopLossPrice]);
+    if (stopLossPrice != null && Number.isFinite(stopLossPrice)) setStopLoss(formatBrokerPrice(brokerSymbol, stopLossPrice));
+  }, [brokerSymbol, stopLossPrice]);
 
   useEffect(() => {
-    if (takeProfitPrice != null && Number.isFinite(takeProfitPrice)) setTakeProfit(takeProfitPrice.toFixed(digits));
-  }, [digits, takeProfitPrice]);
+    if (takeProfitPrice != null && Number.isFinite(takeProfitPrice)) setTakeProfit(formatBrokerPrice(brokerSymbol, takeProfitPrice));
+  }, [brokerSymbol, takeProfitPrice]);
 
   const planText = buildPlanText({
     symbol,
@@ -96,10 +96,10 @@ export function ChartExecutionBridge({
   });
 
   return (
-    <section className="-mx-4 relative shrink-0 overflow-hidden border-b border-white/[0.08] bg-[#05070A] md:mx-0 md:border-x">
+    <section className="-mx-4 relative shrink-0 overflow-hidden border-b border-white/[0.08] bg-[#030508] md:mx-0 md:border-x">
       <header className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <Activity className="h-3.5 w-3.5 text-cyan-300/85" aria-hidden />
+          <Activity className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
             Execution bridge
           </p>
@@ -158,7 +158,7 @@ export function ChartExecutionBridge({
               onClick={() => setOrderType(t)}
               className={`rounded border px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${
                 orderType === t
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100/95"
+                  ? "border-white/[0.12] bg-white/[0.05] text-white/90"
                   : "border-white/10 bg-white/[0.03] text-tos-muted hover:bg-white/[0.06]"
               }`}
             >
@@ -174,7 +174,7 @@ export function ChartExecutionBridge({
             label={orderType === "market" ? "Entry (last)" : "Entry"}
             value={entry}
             onChange={setEntry}
-            placeholder={lastPrice ? lastPrice.toFixed(digits) : "—"}
+            placeholder={lastPrice ? formatBrokerPrice(brokerSymbol, lastPrice) : "—"}
           />
           <Field label="Stop loss" value={stopLoss} onChange={setStopLoss} placeholder="—" />
           <Field
@@ -186,7 +186,7 @@ export function ChartExecutionBridge({
           />
         </div>
 
-        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/[0.06] bg-black/35 p-2 text-[11px] leading-relaxed text-tos-muted">
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/[0.06] bg-[#0c0d0e] p-2 text-[11px] leading-relaxed text-tos-muted">
           <input
             type="checkbox"
             checked={acknowledged}
@@ -202,7 +202,7 @@ export function ChartExecutionBridge({
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/chat?q=${encodeURIComponent(planText)}`}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2.5 text-[11px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2.5 text-[11px] font-semibold text-white/90 hover:bg-white/[0.08]"
           >
             <ShieldAlert className="h-3.5 w-3.5" />
             Prepare order ticket (review)
@@ -227,8 +227,8 @@ export function ChartExecutionBridge({
       </div>
 
       {approvalOpen ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#04070C]/90 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-rose-400/25 bg-[#0A0E14] p-4">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0c0c0c]/90 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-rose-400/25 bg-[#060c16] p-4">
             <p className="text-sm font-semibold text-tos-text">Final approval</p>
             <p className="mt-2 text-[12px] leading-relaxed text-tos-muted">
               {EXECUTION_FEATURE_FLAG
@@ -281,7 +281,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="rounded-lg border border-white/10 bg-black/35 px-2 py-1.5 font-mono text-[12px] text-tos-text outline-none focus:border-cyan-500/40"
+        className="rounded-lg border border-white/10 bg-[#0c0d0e] px-2 py-1.5 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
       />
     </label>
   );

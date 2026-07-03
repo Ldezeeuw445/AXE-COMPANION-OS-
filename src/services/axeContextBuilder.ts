@@ -26,10 +26,20 @@ import type {
   SettingsUserContext,
   TradesJournalContext,
   TradingOSContext,
+  TradingSpaceContext,
 } from "@/types/context";
 import type { TerminalAlert, TerminalExecution, WatchlistEntry } from "@/services/axeService";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
+import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
+import { getMetadataSymbolMap, getMetadataSymbolReport } from "@/lib/broker/brokerSymbolRuntime";
+import {
+  AXE_CAPABILITY_ROADMAP,
+  AXE_CAPABILITY_ROADMAP_KEY,
+  AXE_CAPABILITY_ROADMAP_SCOPE,
+} from "@/lib/axe/capabilityRoadmap";
+import { buildTradingSpaceContext } from "@/lib/axe/tradingSpaceContext";
+import { BROKER_ACCOUNT_MEMORY_SCOPE, buildAccountPersona } from "@/lib/axe/accountPersona";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
 const INTEL_TIMEOUT_MS = 14_000;
@@ -53,6 +63,9 @@ const EMPTY_ACCOUNTS: AccountsContext = {
   accountHealth: "unknown",
   syncFreshness: { lastSyncAt: null, ageMinutes: null, state: "missing" },
   activeSymbols: [],
+  activeSymbolMap: {},
+  activeSymbolResolutionReport: {},
+  activeAccountPersona: null,
   openExposure: { positionsCount: 0, symbols: [], netBySymbol: [] },
 };
 
@@ -419,21 +432,27 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
   ]);
 
   const activeAccountId = (prefsRes.data?.active_account_id as string | null | undefined) ?? null;
-  const accounts = ((accountsRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
-    id: String(r.id),
-    label: String(r.label ?? "MT5 Account"),
-    provider: String(r.provider ?? "mt5"),
-    status: r.status != null ? String(r.status) : null,
-    connectionMethod: r.connection_method != null ? String(r.connection_method) : null,
-    providerStatus: r.provider_status != null ? String(r.provider_status) : null,
-    lastSyncAt: (r.last_sync_at as string | null | undefined) ?? null,
-    maskedLogin:
-      (r.masked_login as string | null | undefined) ??
-      (r.mt5_login != null ? String(r.mt5_login) : null),
-    mt5Server: (r.mt5_server as string | null | undefined) ?? null,
-    active: activeAccountId === r.id,
-    mt5Doctor: normalizeDoctorContext(r.metadata),
-  }));
+  const accounts = ((accountsRes.data ?? []) as Array<Record<string, unknown>>).map((r) => {
+    const metadata = (r.metadata ?? {}) as Record<string, unknown>;
+    return {
+      id: String(r.id),
+      label: String(r.label ?? "MT5 Account"),
+      provider: String(r.provider ?? "mt5"),
+      status: r.status != null ? String(r.status) : null,
+      connectionMethod: r.connection_method != null ? String(r.connection_method) : null,
+      providerStatus: r.provider_status != null ? String(r.provider_status) : null,
+      lastSyncAt: (r.last_sync_at as string | null | undefined) ?? null,
+      maskedLogin:
+        (r.masked_login as string | null | undefined) ??
+        (r.mt5_login != null ? String(r.mt5_login) : null),
+      mt5Server: (r.mt5_server as string | null | undefined) ?? null,
+      active: activeAccountId === r.id,
+      mt5Doctor: normalizeDoctorContext(r.metadata),
+      symbolMap: getMetadataSymbolMap(metadata),
+      symbolResolutionReport: getMetadataSymbolReport(metadata),
+      metadata,
+    };
+  });
   const active = accounts.find((a) => a.active) ?? accounts[0] ?? null;
   const ageMinutes = minutesSince(active?.lastSyncAt);
   const freshness = syncState(ageMinutes);
@@ -457,13 +476,16 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
     hasCloudMt5: accounts.some((a) => a.connectionMethod === "cloud_mt5"),
     activeLabel: active?.label ?? null,
     activeServer: active?.mt5Server ?? null,
+    activeAccountPersona: null,
     accountHealth,
     syncFreshness: {
       lastSyncAt: active?.lastSyncAt ?? null,
       ageMinutes,
       state: freshness,
     },
-    activeSymbols: [],
+    activeSymbols: Object.keys(active?.symbolMap ?? {}).sort(),
+    activeSymbolMap: active?.symbolMap ?? {},
+    activeSymbolResolutionReport: active?.symbolResolutionReport ?? {},
     openExposure: { positionsCount: 0, symbols: [], netBySymbol: [] },
   };
 }
@@ -664,13 +686,25 @@ async function buildAlerts(
 }
 
 async function buildMemory(supabase: SupabaseClient, userId: string): Promise<MemoryContext> {
-  const [memoryRes, commitmentsRes] = await Promise.all([
+  const [memoryRes, autoMemoryRes, commitmentsRes] = await Promise.all([
     supabase
       .from("assistant_memory_entries")
       .select("scope,entry_key,content")
       .eq("user_id", userId)
+      .in("scope", ["notes", "account", "axe", "broker_account", "preference", "strategy"])
       .order("created_at", { ascending: false })
-      .limit(30),
+      .limit(40),
+    // Auto-extracted memories written after each chat turn (extractMemoriesAsync).
+    // Previously these were only surfaced via the knowledge layer; merge them into
+    // the main TRADER MEMORY block so AXE consistently recalls what it learned.
+    supabase
+      .from("axe_memory")
+      .select("memory_type,symbol,content,confidence")
+      .eq("user_id", userId)
+      .is("resolved_at", null)
+      .order("confidence", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(20),
     supabase
       .from("axe_commitments")
       .select("id,symbol,description,created_at")
@@ -680,18 +714,52 @@ async function buildMemory(supabase: SupabaseClient, userId: string): Promise<Me
       .limit(10),
   ]);
 
-  const entries: AxeMemoryEntry[] = ((memoryRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+  const manualEntries: AxeMemoryEntry[] = ((memoryRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
     scope: String(r.scope ?? ""),
     entryKey: (r.entry_key as string | null | undefined) ?? null,
     content: String(r.content ?? ""),
   }));
+
+  const hasRoadmap = manualEntries.some(
+    (e) => e.scope === AXE_CAPABILITY_ROADMAP_SCOPE && e.entryKey === AXE_CAPABILITY_ROADMAP_KEY,
+  );
+  if (!hasRoadmap) {
+    manualEntries.unshift({
+      scope: AXE_CAPABILITY_ROADMAP_SCOPE,
+      entryKey: AXE_CAPABILITY_ROADMAP_KEY,
+      content: AXE_CAPABILITY_ROADMAP,
+    });
+    void supabase
+      .from("assistant_memory_entries")
+      .upsert(
+        {
+          user_id: userId,
+          scope: AXE_CAPABILITY_ROADMAP_SCOPE,
+          entry_key: AXE_CAPABILITY_ROADMAP_KEY,
+          content: AXE_CAPABILITY_ROADMAP,
+        },
+        { onConflict: "user_id,scope,entry_key" },
+      )
+      .then(({ error }) => {
+        if (error) console.error("[axeContext] capability roadmap persist failed:", error.message);
+      });
+  }
+
+  const autoEntries: AxeMemoryEntry[] = ((autoMemoryRes.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+    scope: `axe/${String(r.memory_type ?? "note")}`,
+    entryKey: (r.symbol as string | null | undefined) ?? null,
+    content: String(r.content ?? ""),
+  }));
+
+  const entries: AxeMemoryEntry[] = [...manualEntries, ...autoEntries];
   const seen = new Set<string>();
   const prioritizedEntries = entries.filter((entry) => {
+    if (!entry.content.trim()) return false;
     const key = `${entry.scope}:${entry.entryKey ?? ""}:${entry.content.trim().toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 14);
+  }).slice(0, 18);
   const compactSummary =
     prioritizedEntries.length > 0
       ? prioritizedEntries
@@ -706,6 +774,64 @@ async function buildMemory(supabase: SupabaseClient, userId: string): Promise<Me
     openCommitments: (commitmentsRes.data ?? []) as OpenCommitment[],
     compactSummary,
   };
+}
+
+async function persistAccountPersona(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+  persona: string,
+): Promise<void> {
+  if (!persona.trim()) return;
+  await supabase.from("assistant_memory_entries").upsert(
+    {
+      user_id: userId,
+      scope: BROKER_ACCOUNT_MEMORY_SCOPE,
+      entry_key: accountId,
+      content: persona,
+    },
+    { onConflict: "user_id,scope,entry_key" },
+  );
+}
+
+function enrichMemoryWithAccountPersona(
+  memory: MemoryContext,
+  accounts: AccountsContext,
+  trades: TradesJournalContext,
+): MemoryContext {
+  const activeId = accounts.activeAccountId;
+  const active = accounts.accounts.find((a) => a.id === activeId) ?? null;
+  if (!active) {
+    return { ...memory, entries: memory.entries, prioritizedEntries: memory.prioritizedEntries };
+  }
+
+  const persona = buildAccountPersona(active, trades);
+  const personaEntry: AxeMemoryEntry = {
+    scope: BROKER_ACCOUNT_MEMORY_SCOPE,
+    entryKey: active.id,
+    content: persona,
+  };
+
+  const withoutDup = memory.entries.filter(
+    (e) => !(e.scope === BROKER_ACCOUNT_MEMORY_SCOPE && e.entryKey === active.id),
+  );
+  const entries = [personaEntry, ...withoutDup];
+  const prioritizedEntries = [
+    personaEntry,
+    ...memory.prioritizedEntries.filter(
+      (e) => !(e.scope === BROKER_ACCOUNT_MEMORY_SCOPE && e.entryKey === active.id),
+    ),
+  ].slice(0, 18);
+
+  const compactSummary =
+    prioritizedEntries.length > 0
+      ? prioritizedEntries
+          .slice(0, 8)
+          .map((m) => `${[m.scope, m.entryKey].filter(Boolean).join("/")}: ${m.content.slice(0, 140)}`)
+          .join(" | ")
+      : memory.compactSummary;
+
+  return { ...memory, entries, prioritizedEntries, compactSummary };
 }
 
 async function buildIntel(symbol: string | null): Promise<IntelContext> {
@@ -916,7 +1042,55 @@ function buildCorrelations(ctx: {
   return insights.slice(0, 6);
 }
 
-function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
+async function buildTradingSpaceExtras(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{
+  pendingExecutions: TradingSpaceContext["pendingExecutions"];
+  cockpitAlignment: string | null;
+}> {
+  const [execRes, cockpitRes] = await Promise.all([
+    supabase
+      .from("execution_requests")
+      .select("instrument,direction,entry_price,stop_loss,take_profit,rationale,status")
+      .eq("user_id", userId)
+      .in("status", ["pending", "pending_approval", "draft"])
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("assistant_cockpit_snapshots")
+      .select("alignment_score,learning_progress,captured_at")
+      .eq("user_id", userId)
+      .order("captured_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const pendingExecutions = (execRes.data ?? []).map((row) => ({
+    instrument: String(row.instrument ?? "Unknown"),
+    direction: (row.direction as string | null) ?? null,
+    status: (row.status as string | null) ?? null,
+    entry: row.entry_price != null ? Number(row.entry_price) : null,
+    stopLoss: row.stop_loss != null ? Number(row.stop_loss) : null,
+    takeProfit: row.take_profit != null ? Number(row.take_profit) : null,
+    rationale: (row.rationale as string | null) ?? null,
+  }));
+
+  let cockpitAlignment: string | null = null;
+  if (cockpitRes.data) {
+    const score = cockpitRes.data.alignment_score;
+    const progress = cockpitRes.data.learning_progress as { headline?: string } | null;
+    const headline = progress?.headline?.trim();
+    cockpitAlignment =
+      score != null
+        ? `alignment ${Number(score).toFixed(0)}/100${headline ? ` — ${headline}` : ""}`
+        : headline ?? null;
+  }
+
+  return { pendingExecutions, cockpitAlignment };
+}
+
+function buildSummary(ctx: Omit<AxeCompanionContext, "summary" | "tradingSpace">): string {
   const lines: string[] = [];
   lines.push(`AXE Companion operating brief generated ${ctx.generatedAt}.`);
   lines.push(`Focus: ${ctx.symbol ?? "no active symbol"}${ctx.timeframe ? ` · ${ctx.timeframe}` : ""}.`);
@@ -936,6 +1110,18 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
         `MT5 doctor: ${activeDoctor.overallStatus}; ${readable}; trading ${activeDoctor.tradingState}; ${activeDoctor.knownFailureReason ?? activeDoctor.headline}.`,
       );
     }
+    const mappedSymbols = Object.entries(ctx.accounts.activeSymbolMap)
+      .slice(0, 12)
+      .map(([display, broker]) => `${display}->${broker}`);
+    const unresolvedSymbols = Object.values(ctx.accounts.activeSymbolResolutionReport)
+      .filter((entry) => !entry.resolved)
+      .slice(0, 6)
+      .map((entry) => `${entry.displaySymbol}:${entry.reason}`);
+    if (mappedSymbols.length > 0 || unresolvedSymbols.length > 0) {
+      lines.push(
+        `Broker symbols: ${mappedSymbols.length > 0 ? mappedSymbols.join(", ") : "none mapped"}${unresolvedSymbols.length > 0 ? `; unresolved ${unresolvedSymbols.join(", ")}` : ""}.`,
+      );
+    }
   }
   if (ctx.accounts.openExposure.positionsCount > 0) {
     const exposure = ctx.accounts.openExposure.netBySymbol
@@ -943,9 +1129,19 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
       .join(", ");
     lines.push(`Exposure: ${ctx.accounts.openExposure.positionsCount} open positions${exposure ? `; ${exposure}` : ""}.`);
   }
-  if (ctx.chart.lastPrice != null) {
+  const chartPricingState = brokerPricingState({
+    status: ctx.chart.liveStatus,
+    updatedAt: ctx.chart.updatedAt,
+    lastTickAt: ctx.chart.lastTickAt,
+    lastCandleAt: ctx.chart.lastCandleAt,
+  });
+  if (ctx.chart.lastPrice != null && (chartPricingState === "live" || chartPricingState === "degraded")) {
     lines.push(
-      `Chart: ${ctx.chart.symbol ?? ctx.symbol} ${ctx.chart.timeframe ?? ""} last ${ctx.chart.lastPrice}; ${ctx.chart.staleState}; ${ctx.chart.recentState ?? "no recent candle"}.`,
+      `Chart: ${ctx.chart.symbol ?? ctx.symbol} ${ctx.chart.timeframe ?? ""} broker ${ctx.chart.brokerSymbol ?? "unresolved"} canonical ${ctx.chart.lastPrice}; ${chartPricingState}; ${ctx.chart.recentState ?? "no recent candle"}.`,
+    );
+  } else if (ctx.chart.symbol) {
+    lines.push(
+      `Chart: ${ctx.chart.symbol} broker ${ctx.chart.brokerSymbol ?? "unresolved"}; live broker pricing unavailable; do not invent current price or levels.`,
     );
   }
   if (ctx.trades.recentTrades.length > 0) {
@@ -963,6 +1159,9 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary">): string {
   }
   if (ctx.intel.compactSummary) lines.push(`Intel: ${ctx.intel.compactSummary}; cache ${ctx.intel.cache.state}.`);
   if (ctx.memory.compactSummary) lines.push(`Memory: ${ctx.memory.compactSummary}`);
+  if (ctx.accounts.activeAccountPersona) {
+    lines.push(`Active account persona: ${ctx.accounts.activeAccountPersona}`);
+  }
   if (ctx.correlations.length > 0) lines.push(`Correlations: ${ctx.correlations.map((c) => c.message).join(" | ")}`);
   if (ctx.market.summary) lines.push(ctx.market.summary);
   const degraded = ctx.health.filter((h) => h.state === "timeout" || h.state === "error");
@@ -997,6 +1196,17 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
   ]);
 
   const accounts = enrichAccounts(accountsRes.value, chartRes.value, tradesRes.value, watchlist);
+  const activeAccount = accounts.accounts.find((a) => a.id === accounts.activeAccountId) ?? null;
+  const activePersona = activeAccount ? buildAccountPersona(activeAccount, tradesRes.value) : null;
+  accounts.activeAccountPersona = activePersona;
+
+  if (activeAccount && activePersona) {
+    void persistAccountPersona(args.supabase, args.userId, activeAccount.id, activePersona).catch((e) =>
+      console.error("[axeContext] persona persist failed:", e),
+    );
+  }
+
+  const memory = enrichMemoryWithAccountPersona(memoryRes.value, accounts, tradesRes.value);
   const correlations = buildCorrelations({
     symbol,
     chart: chartRes.value,
@@ -1017,7 +1227,7 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
     intel: intelRes.value,
     alerts: alertsRes.value,
     market: marketRes.value,
-    memory: memoryRes.value,
+    memory,
     correlations,
     health: [
       settingsRes.health,
@@ -1031,9 +1241,13 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
     ],
   };
 
+  const tradingExtras = await buildTradingSpaceExtras(args.supabase, args.userId);
+  const tradingSpace = buildTradingSpaceContext(contextWithoutSummary, tradingExtras);
+
   return {
     ...contextWithoutSummary,
     summary: buildSummary(contextWithoutSummary),
+    tradingSpace,
   };
 }
 

@@ -51,7 +51,7 @@ export async function listVaultMedia(): Promise<VaultMediaItem[]> {
 
   return (data ?? []).map((row) => ({
     id: row.id,
-    type: row.type,
+    type: row.type as VaultMediaItem["type"],
     title: row.title,
     symbol: row.symbol ?? null,
     tags: row.tags ?? [],

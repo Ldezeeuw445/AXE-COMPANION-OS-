@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const secret = process.env.PUSH_WEBHOOK_SECRET;
   const incoming = req.headers.get("x-webhook-secret");
 
-  if (secret && incoming !== secret) {
+  if (!secret || incoming !== secret) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { hasSupabaseConfig } from "@/lib/env";
 import { signInAction, signUpAction } from "@/app/actions/auth";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { DotPatternCanvas } from "@/components/auth/DotPatternCanvas";
 
 type ActionResult = { error?: string; message?: string } | undefined;
 
@@ -28,7 +29,10 @@ export function LoginForm() {
   const state = mode === "signin" ? signInState : signUpState;
 
   return (
-    <GlassPanel glow="warm" className="p-6">
+    <GlassPanel glow="warm" className="relative overflow-hidden p-6">
+      <DotPatternCanvas />
+      <div className="relative z-10">
+      {/* Title */}
       <div>
         <h2 className="text-sm font-bold text-tos-text">{mode === "signin" ? "Sign in" : "Create account"}</h2>
         <p className="mt-1 text-xs text-tos-muted">
@@ -120,7 +124,8 @@ export function LoginForm() {
                   <Link href="/privacy" className="text-tos-warm underline-offset-2 hover:underline">
                     Privacy Policy
                   </Link>{" "}
-                  and understand that AXE does not provide financial advice.
+                  and understand that AXE Companion is analytical software only — not a financial
+                  adviser or broker.
                 </span>
               </label>
               {state?.error ? (
@@ -176,6 +181,7 @@ export function LoginForm() {
           </p>
         </div>
       )}
+      </div>{/* /z-10 content wrapper */}
     </GlassPanel>
   );
 }

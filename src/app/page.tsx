@@ -22,7 +22,7 @@ import {
 import { LandingHeroPhone } from "@/components/marketing/LandingHeroPhone";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
-import { LegalNavLinks } from "@/components/legal/LegalNavLinks";
+import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 
 export const metadata: Metadata = {
@@ -81,8 +81,8 @@ const LANDING_FEATURES = [
     color: "text-emerald-300",
   },
   {
-    title: "AXE — copilot that knows the app",
-    desc: "Chat that can read your chart, your accounts, your journal, news and intel. It explains structure, suggests journal labels, and answers honestly when there's nothing to say.",
+    title: "AXE — AI-powered market analytics",
+    desc: "Chat that reads your chart, accounts, journal, news and intel. Technical analysis and educational context — you make every trading decision.",
     Icon: Brain,
     color: "text-cyan-300",
   },
@@ -171,12 +171,12 @@ export default function HomeLandingPage() {
         className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-[820px]"
         style={{
           background:
-            "radial-gradient(900px circle at 22% 18%, rgba(34,211,238,0.10), transparent 55%), radial-gradient(900px circle at 80% 8%, rgba(46,196,182,0.08), transparent 55%), radial-gradient(800px circle at 50% 60%, rgba(34,211,238,0.05), transparent 65%)",
+            "radial-gradient(900px circle at 22% 18%, rgba(0,224,255,0.07), transparent 55%), radial-gradient(900px circle at 80% 8%, rgba(0,224,255,0.05), transparent 55%), radial-gradient(800px circle at 50% 60%, rgba(0,224,255,0.03), transparent 65%)",
         }}
       />
 
       {/* ─── header ─── */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#050508]/85 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020406]/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
           <Link href="/" className="flex items-center gap-2">
             <Image
@@ -256,9 +256,9 @@ export default function HomeLandingPage() {
               className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium"
               style={{
                 background:
-                  "linear-gradient(135deg, rgba(34,211,238,0.18) 0%, rgba(46,196,182,0.08) 100%)",
+                  "linear-gradient(135deg, rgba(0,224,255,0.14) 0%, rgba(0,224,255,0.05) 100%)",
                 border: "1px solid rgba(34,211,238,0.32)",
-                boxShadow: "0 0 22px rgba(34,211,238,0.10)",
+                boxShadow: "0 0 22px rgba(0,224,255,0.07)",
               }}
             >
               <span className="relative flex h-2 w-2">
@@ -595,20 +595,10 @@ export default function HomeLandingPage() {
         </div>
       </section>
 
-      {/* ─── footer ─── */}
-      <footer className="relative z-10 border-t border-white/[0.04] px-5 py-8 text-center text-[11px] text-tos-dim">
-        <p>AXE Companion OS · not financial advice · trade responsibly</p>
-        <p className="mt-2 text-tos-muted">
-          Trading OS — desktop terminal in private beta · same Supabase spine ·{" "}
-          <a
-            href="#waitlist"
-            className="text-cyan-300/85 underline-offset-2 transition hover:text-cyan-200 hover:underline"
-          >
-            Join the Trading OS waitlist
-          </a>
-        </p>
-        <LegalNavLinks className="mt-6" />
-      </footer>
+      <ComplianceSiteFooter
+        className="relative z-10"
+        tagline="AXE Companion OS · Algorithmic insights & technical analysis tool"
+      />
     </div>
   );
 }

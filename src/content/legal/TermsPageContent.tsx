@@ -35,11 +35,9 @@ export function TermsPageContent() {
       </p>
 
       <h2>2. What AXE Companion is</h2>
-      <p>
-        AXE Companion is an AI-powered trading intelligence and journaling assistant. It helps users structure trading
+      <p>AXE Companion is an AI-powered market analytics and journaling tool. It helps users structure trading
         notes, review trades, analyse trading behaviour, connect trading accounts for analytics, and build a personal
-        trading memory.
-      </p>
+        trading memory.</p>
       <p>
         AXE Companion may use user-provided data, journal entries, connected account data, trading history, watchlists,
         notes, market context and knowledge-base content to generate analytical and educational output.
@@ -107,14 +105,34 @@ export function TermsPageContent() {
         context. You control what you connect or add, subject to product functionality.
       </p>
 
-      <h2>9. Connected trading accounts</h2>
+      <h2>9. Connected trading accounts and broker API credentials</h2>
       <p>
         AXE Companion may allow you to connect trading accounts such as MT5 accounts through supported methods,
-        including cloud connectors or local bridge/token flows.
+        including cloud connectors (e.g. MetaAPI) or local bridge/token flows.
       </p>
       <p>
-        Where possible, use read-only or investor access for analytics. We do not recommend giving trading permission
-        unless a future execution feature explicitly requires it and you understand the risk.
+        Where possible, use read-only or investor access for analytics. Trading permission (master password or
+        equivalent API credentials) is only needed when you explicitly enable live order execution and understand
+        the risk.
+      </p>
+      <h3>9.1 End-to-end encrypted credential storage</h3>
+      <p>
+        Broker API credentials, investor passwords and master passwords (or equivalent tokens you provide) are
+        transmitted over TLS and stored using end-to-end encryption as user-side secrets. AXE Companion does not
+        store plaintext trading passwords in our application database. Credentials are used solely to authenticate
+        with your broker or MetaAPI on your behalf, as configured by you.
+      </p>
+      <p>
+        AXE Companion never requests, stores or uses credentials that would allow withdrawals from your broker
+        account. The software is designed for market data, analytics, journaling and order forwarding only —
+        not fund movement off your account.
+      </p>
+      <h3>9.2 MetaAPI and third-party infrastructure</h3>
+      <p>
+        Cloud MT5 connections rely on MetaAPI and your broker&apos;s infrastructure. We are not liable for MetaAPI
+        outages, broker downtime, connectivity failures, rejected orders, partial fills, slippage, latency or
+        delayed order transmission. You accept that orders may execute at prices different from those shown in the
+        app when markets move quickly or infrastructure is under load.
       </p>
       <p>
         Connected-account data may include account metadata, balance/equity snapshots, open positions, trade history,
@@ -122,7 +140,7 @@ export function TermsPageContent() {
       </p>
       <p>
         We are not responsible for broker outages, incorrect broker data, third-party API limitations, delayed sync,
-        rejected connections or platform restrictions.
+        rejected connections or platform restrictions beyond our reasonable control.
       </p>
 
       <h2>10. Execution and orders</h2>

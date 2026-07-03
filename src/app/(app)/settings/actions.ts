@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getMetadataSymbolMap } from "@/lib/broker/brokerSymbolRuntime";
+import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 
 export async function updatePinnedContext(
@@ -73,6 +75,74 @@ export async function addWatchlistItem(
   if (error) return { error: error.message };
   revalidatePath("/settings");
   revalidatePath("/watchlist");
+  return {};
+}
+
+/** Add a display symbol to watchlist and ensure active account symbol_map includes it. */
+export async function addBrokerWatchlistSymbol(
+  displaySymbol: string,
+  brokerSymbol?: string,
+): Promise<{ error?: string }> {
+  const authed = await getAuthedServiceSupabase();
+  if (!authed) return { error: "Not authenticated" };
+
+  const display = cleanDisplaySymbol(displaySymbol) || displaySymbol.trim().toUpperCase();
+  if (!display) return { error: "Symbol required" };
+
+  const watchlistResult = await addWatchlistItem(display, display);
+  if (watchlistResult.error) return watchlistResult;
+
+  const { supabase, user } = authed;
+  const { data: prefs } = await supabase
+    .from("user_workspace_preferences")
+    .select("active_account_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const activeId = (prefs?.active_account_id as string | null | undefined) ?? null;
+  if (!activeId) return {};
+
+  const { data: account } = await supabase
+    .from("user_broker_accounts")
+    .select("id,metadata,connection_method")
+    .eq("user_id", user.id)
+    .eq("id", activeId)
+    .maybeSingle();
+  if (!account || account.connection_method !== "cloud_mt5") return {};
+
+  const meta = ((account.metadata ?? {}) as Record<string, unknown>) ?? {};
+  const existingMap = getMetadataSymbolMap(meta);
+  if (existingMap[display]) return {};
+
+  const universeRaw = meta.symbol_universe;
+  const universe =
+    universeRaw &&
+    typeof universeRaw === "object" &&
+    !Array.isArray(universeRaw) &&
+    Array.isArray((universeRaw as { symbols?: unknown }).symbols)
+      ? ((universeRaw as { symbols: string[] }).symbols ?? [])
+      : [];
+
+  const resolvedBroker =
+    brokerSymbol?.trim() ||
+    existingMap[display] ||
+    resolveBrokerSymbol(display, universe).brokerSymbol;
+  if (!resolvedBroker) return {};
+
+  const nextMap = { ...existingMap, [display]: resolvedBroker };
+  await supabase
+    .from("user_broker_accounts")
+    .update({
+      metadata: {
+        ...meta,
+        symbol_map: nextMap,
+        symbol_map_updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", activeId)
+    .eq("user_id", user.id);
+
+  revalidatePath("/watchlist");
+  revalidatePath("/chart");
   return {};
 }
 

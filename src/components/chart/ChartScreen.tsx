@@ -6,12 +6,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import type { RefObject } from "react";
 import {
   Activity,
+  ArrowRight,
   ArrowUpDown,
   BarChart2,
   BarChart3,
-  Bell,
   BookOpen,
   ChevronDown,
+  ChevronUp,
   ClipboardList,
   Crosshair,
   GitBranch,
@@ -20,6 +21,7 @@ import {
   LineChart,
   MessageSquare,
   Maximize2,
+  Minimize2,
   MoveHorizontal,
   Newspaper,
   Plus,
@@ -28,33 +30,71 @@ import {
   Save,
   Settings2,
   Sparkles,
+  Sun,
+  Trash2,
+  Zap,
   Spline,
   Square,
   TrendingUp,
+  Type,
 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { TosNotice, type TosNoticeAccent } from "@/components/ui/TosNotice";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } from "@/lib/viewport/tablet";
+import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
+import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
+import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
+import { ChartWorkflowFavorites } from "@/components/chart/ChartWorkflowFavorites";
+import { ChartDismissibleNotice, useChartDismissedNotices } from "@/components/chart/ChartDismissibleNotice";
+import { SquawkBar } from "@/components/market/SquawkBar";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
-import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
-import type { ChartOverlayRow, ChartPageData } from "@/lib/broker/loadChartPageData";
+import {
+  formatBrokerPrice,
+  priceDigitsForSymbol,
+} from "@/lib/broker/symbolFormat";
+import type { ChartOverlayRow, ChartPageData, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
 import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
 import {
   buildFibonacciActionFromCandles,
   buildTrendlineActionFromCandles,
+  buildTrendlinePairFromCandles,
 } from "@/lib/axeChartActions/swingAnalysis";
 import type {
   ChartActionCommand,
   ChartActionResult,
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { ChartThemeTogglerButton, CHART_THEME_VIEW_TRANSITION } from "@/components/chart/ChartThemeTogglerButton";
+import { ChartPendingOrderSheet } from "@/components/chart/ChartPendingOrderSheet";
+import { TradePlanLine } from "@/components/chart/TradePlanLine";
+import {
+  PositionLabelsOverlay,
+  type SlTpDraft,
+  slTpDraftKeyForOrder,
+  slTpDraftKeyForPosition,
+} from "@/components/chart/PositionLabelsOverlay";
 import {
   useLiveChart,
   type LivePosition,
+  type LivePendingOrder,
   type LiveTransport,
   type LiveUiStatus,
 } from "@/components/chart/useLiveChart";
 import { usePageVisible } from "@/components/chart/usePageVisible";
-import { CHART_THEME } from "@/components/chart/chartTheme";
+import {
+  getChartTheme,
+  readChartThemeKey,
+  readGridStyle,
+  CHART_ORDER_BUY_COLOR,
+  CHART_ORDER_SELL_COLOR,
+  type ChartThemeKey,
+  type ChartGridStyle,
+} from "@/components/chart/chartTheme";
+import { seedGlobalsFromAccount, seedGlobalsFromSymbol, writePref, writeSymbolPref } from "@/lib/accountPreferences";
+import { describeResolvedLayers, resolveIndicatorNames } from "@/lib/axeChartActions/indicatorMapping";
+import { consumeLocalChartActions } from "@/lib/axeChartActions/chartActionQueue";
 import {
   AxeContextToolbar,
   type AxeToolbarSection,
@@ -71,6 +111,9 @@ import type {
 } from "@/components/chart/annotations/types";
 import { FibAnnotationLayer } from "@/components/chart/annotations/FibAnnotationLayer";
 import { TrendlineAnnotationLayer } from "@/components/chart/annotations/TrendlineAnnotationLayer";
+import { RectangleAnnotationLayer } from "@/components/chart/annotations/RectangleAnnotationLayer";
+import { TextAnnotationLayer } from "@/components/chart/annotations/TextAnnotationLayer";
+import { HorizontalLevelAnnotationLayer } from "@/components/chart/annotations/HorizontalLevelAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
@@ -81,12 +124,20 @@ import {
   type OrderConfirmInput,
   type OrderConfirmStatus,
 } from "@/components/chart/ChartOrderConfirm";
-import { useDemoPositions } from "@/components/chart/useDemoPositions";
+import { computeLivePnl, useDemoPositions } from "@/components/chart/useDemoPositions";
+import { AccountRiskBand } from "@/components/risk/AccountRiskBand";
+import { useDemoPendingOrders } from "@/components/chart/useDemoPendingOrders";
+import { useDemoLivePrice } from "@/components/chart/useDemoLivePrice";
+import { useInstantSlTpModify } from "@/lib/chart/instantSlTpModify";
 import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
+import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useAlertEvaluator, type AlertFiredEvent } from "@/lib/alerts/useAlertEvaluator";
+import type { WorkflowRuntime } from "@/lib/workflows/status";
+import { writeCachedChart, prefetchTimeframes } from "@/lib/chart/clientChartCache";
+import { setActiveAccountAction } from "@/app/actions/brokerAccounts";
 
 const TICK_REACT_THROTTLE_MS = 150;
-const SNAPSHOT_INTERVAL_MS = 30_000;
+const SNAPSHOT_INTERVAL_MS = 60_000;
 const ROUTE_PENDING_VISUAL_BUDGET_MS = 12_000;
 
 const CHART_SCALE_MODES = [
@@ -100,9 +151,52 @@ type Props = {
   initialAction?: string;
   /** Server-loaded live-trading enabled flag (from user_workspace_preferences). */
   liveTradingEnabled?: boolean;
+  /** Server-loaded instant SL/TP on drag release preference. */
+  instantSlTpModify?: boolean;
+  favoriteWorkflowIds?: string[];
+  workflowRuntime?: WorkflowRuntime;
+  /** Pro+ unlocks MACD, Bollinger, VWAP, POC and SMC overlay suite. */
+  canFullIndicators?: boolean;
 };
 
-type DrawingMode = "fib_retracement" | "trendline" | null;
+type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | "horizontal_level" | null;
+
+const DRAWING_POINT_COUNT: Record<Exclude<DrawingMode, null>, number> = {
+  fib_retracement: 2,
+  trendline: 2,
+  rectangle: 2,
+  text: 1,
+  horizontal_level: 1,
+};
+
+function drawingStartHint(mode: Exclude<DrawingMode, null>): string {
+  switch (mode) {
+    case "fib_retracement":
+      return "Tap the swing high, then the swing low";
+    case "trendline":
+      return "Tap the first anchor, then the second";
+    case "rectangle":
+      return "Tap one corner, then the opposite corner";
+    case "text":
+      return "Tap where the label should sit";
+    case "horizontal_level":
+      return "Tap the price level for the horizontal line";
+  }
+}
+
+function drawingNextHint(mode: Exclude<DrawingMode, null>): string {
+  switch (mode) {
+    case "fib_retracement":
+      return "Now tap the swing low to complete Fibonacci";
+    case "trendline":
+      return "Now tap the second anchor to complete the trendline";
+    case "rectangle":
+      return "Now tap the opposite corner to complete the rectangle";
+    case "text":
+    case "horizontal_level":
+      return "";
+  }
+}
 type OrderTicketType = "market" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop";
 type PendingOrderTicketType = Exclude<OrderTicketType, "market">;
 
@@ -127,6 +221,33 @@ function sessionCopy(now = new Date()): string {
   return sessions.length ? sessions.join(" + ") : "After-hours";
 }
 
+function marketSessionState(symbol: string, now = new Date()): { state: "open" | "after_hours" | "closed"; label: string; reason: string } {
+  const s = symbol.toUpperCase();
+  if (s.startsWith("BTC") || s.startsWith("ETH")) {
+    return { state: "open", label: "Open", reason: "Crypto trades continuously." };
+  }
+  const day = now.getUTCDay();
+  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const weekendClosed = day === 6 || (day === 5 && hour >= 22) || (day === 0 && hour < 22);
+  if (weekendClosed) {
+    return {
+      state: "closed",
+      label: "Closed",
+      reason: "Broker session is closed; AXE freezes the last stable broker price until a fresh tick arrives.",
+    };
+  }
+  if (["XAU", "XAG", "EUR", "GBP", "USD", "NAS", "US100", "SPX", "US500", "US30", "DOW"].some((prefix) => s.startsWith(prefix))) {
+    return { state: "open", label: "Open", reason: "Broker session is open." };
+  }
+  return { state: "after_hours", label: "After-hours", reason: "No confirmed live market session for this symbol." };
+}
+
+function eventFreshEnough(iso: string | null | undefined, maxAgeMs = 30_000): boolean {
+  if (!iso) return false;
+  const time = Date.parse(iso);
+  return Number.isFinite(time) && Math.abs(Date.now() - time) <= maxAgeMs;
+}
+
 function newAnnotationId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -137,10 +258,19 @@ function statusPillCopy(
   transport: LiveTransport,
   providerStatus: string | null,
   hasCandles: boolean,
+  hasFreshLiveData: boolean,
+  sessionState: ReturnType<typeof marketSessionState>,
 ): { label: string; className: string; dot: string } {
+  if (sessionState.state !== "open" && hasCandles && !hasFreshLiveData) {
+    return {
+      label: sessionState.label,
+      className: "border-white/12 bg-white/[0.04] text-tos-muted",
+      dot: "bg-white/30",
+    };
+  }
   if (providerStatus === "failed") {
     return {
-      label: "Failed",
+      label: "Connection issue",
       className: "border-rose-500/30 bg-rose-500/12 text-rose-200/95",
       dot: "bg-rose-400/85",
     };
@@ -155,27 +285,43 @@ function statusPillCopy(
   if (providerStatus === "demo") {
     return {
       label: "Demo",
-      className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95",
-      dot: "bg-cyan-300/80",
+      className: "border-white/[0.10] bg-white/[0.05] text-white/90",
+      dot: "bg-white/60",
     };
   }
-  if (live === "connected" || live === "live_stream") {
+  if ((live === "connected" || live === "live_stream") && hasFreshLiveData) {
+    const transportTag =
+      transport === "ws" ? " · WS" : transport === "sse" ? " · SSE" : "";
     return {
-      label: transport === "ws" ? "WS live" : "Live",
+      label: `AXE Live${transportTag}`,
       className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95 shadow-[0_0_22px_-16px_rgba(52,211,153,0.9)]",
       dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.75)]",
     };
   }
+  if (live === "connected" || live === "live_stream") {
+    return {
+      label: hasCandles ? "Warming" : "Loading",
+      className: "border-white/[0.08] bg-white/[0.04] text-white/90",
+      dot: "bg-white/60",
+    };
+  }
   if (live === "stale") {
     return {
-      label: "Stale feed",
+      label: "Data stale",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85",
     };
   }
   if (live === "delayed_polling") {
+    if (hasFreshLiveData) {
+      return {
+        label: "AXE Live",
+        className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200/95 shadow-[0_0_22px_-16px_rgba(52,211,153,0.9)]",
+        dot: "bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.75)]",
+      };
+    }
     return {
-      label: transport === "sse" ? "SSE fallback" : "Delayed",
+      label: "Delayed",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-200/95",
       dot: "bg-amber-300/85",
     };
@@ -197,15 +343,15 @@ function statusPillCopy(
   if (live === "connecting") {
     return {
       label: "Connecting",
-      className: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200/90",
-      dot: "bg-cyan-300/80 animate-pulse",
+      className: "border-white/[0.08] bg-white/[0.04] text-white/80",
+      dot: "bg-white/60 animate-pulse",
     };
   }
   if (hasCandles) {
     return {
-      label: "Connected",
-      className: "border-cyan-400/25 bg-cyan-400/8 text-cyan-200/95",
-      dot: "bg-cyan-300/80",
+      label: providerStatus === "stale" ? "Cached" : "Loaded",
+      className: "border-white/12 bg-white/[0.04] text-tos-muted",
+      dot: "bg-white/30",
     };
   }
   return {
@@ -213,6 +359,60 @@ function statusPillCopy(
     className: "border-white/12 bg-white/[0.04] text-tos-muted",
     dot: "bg-white/30",
   };
+}
+
+/** Compact WS / SSE badge for the chart overlay header (mobile + desktop). */
+function chartTransportBadge(
+  live: LiveUiStatus,
+  transport: LiveTransport,
+  providerStatus: string | null,
+  liveFresh: boolean,
+): { label: string; className: string; title: string } | null {
+  if (providerStatus === "demo") {
+    return {
+      label: "Demo",
+      className: "border-white/12 bg-white/[0.05] text-white/70",
+      title: "Demo price stream — not a live broker feed",
+    };
+  }
+  if (liveFresh && (live === "connected" || live === "live_stream" || live === "delayed_polling")) {
+    if (transport === "ws") {
+      return {
+        label: "WS",
+        className: "border-emerald-400/30 bg-emerald-400/12 text-emerald-200/95",
+        title: "AXE Live · WebSocket (primary stream)",
+      };
+    }
+    if (transport === "sse") {
+      return {
+        label: "SSE",
+        className: "border-amber-400/30 bg-amber-400/12 text-amber-200/95",
+        title: "AXE Live · SSE fallback stream",
+      };
+    }
+  }
+  if (live === "connecting") {
+    return {
+      label: "…",
+      className: "border-white/10 bg-white/[0.04] text-white/60",
+      title: "Opening live feed",
+    };
+  }
+  if (live === "reconnecting") {
+    return {
+      label: "↻",
+      className: "border-amber-400/25 bg-amber-400/10 text-amber-200/90",
+      title: "Recovering live feed",
+    };
+  }
+  if (live === "offline" || live === "stale") {
+    return {
+      label: "Cache",
+      className: "border-white/12 bg-white/[0.04] text-tos-muted",
+      title: "Cached broker candles — live stream unavailable",
+    };
+  }
+  return null;
 }
 
 function formatLiveAge(iso: string | null): string | null {
@@ -253,19 +453,19 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
       return {
         title: "Connect MT5 account to unlock broker chart",
         body:
-          "AXE Companion uses your MetaApi-connected MT5 account as the only chart source. No external feed.",
+          "AXE Companion uses AXE MT5 Cloud as the broker chart source. No frontend feed keys are used.",
       };
     case "broker_symbol_not_found":
       return {
-        title: "Broker symbol not found on this account",
+        title: "Symbol unsupported by active broker",
         body:
-          "Different brokers use suffixes like XAUUSDm or XAUUSD.r. Try another suffix from your account, or pick a symbol from your open positions.",
+          "AXE could not map this clean symbol to a broker symbol on the active MT5 account. Sync the account, pick a supported symbol, or check Data details.",
       };
     case "candles_unavailable":
       return {
-        title: "MT5 market data not available yet",
+        title: "Broker candles unavailable",
         body:
-          "MetaApi could not return candles for this broker symbol or timeframe. Try Sync, change timeframe, or check the broker symbol.",
+          "The symbol mapping exists, but this account did not return candles for the selected timeframe. The market may be closed or the account needs Sync.",
       };
     case "timeframe_unavailable":
       return {
@@ -277,15 +477,25 @@ function failureCardCopy(failure: ChartPageData["failure"]) {
         title: "Live stream unavailable",
         body: "REST data still works. Live updates will resume when the stream reconnects.",
       };
+    case "current_price_unavailable":
+      return {
+        title: "Current broker price unavailable",
+        body: "Candles loaded, but MetaAPI did not return bid/ask for this broker symbol. AXE will not mark the feed live until a real quote arrives.",
+      };
+    case "metaapi_timeout":
+      return {
+        title: "MetaAPI market data timed out",
+        body: "The broker terminal did not answer the candle/current-price request within AXE's render budget. Retry after Sync or redeploy.",
+      };
     case "market_data_unavailable":
       return {
-        title: "Chart connection failed",
-        body: "MetaApi market data did not respond. Try again or check Accounts → Sync.",
+        title: "Broker market data unavailable",
+        body: "AXE could not complete the broker market-data request for this symbol/timeframe.",
       };
     case "provider_not_configured":
       return {
         title: "Chart not configured for this deployment",
-        body: "MetaApi is not configured on the server. Connect a token to enable broker data.",
+        body: "AXE MT5 Cloud is not configured on the server. Connect the server token to enable broker data.",
       };
     case "ok":
     default:
@@ -310,6 +520,10 @@ function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice:
  * above), dragging it down shrinks it. Pointer capture keeps the drag glued
  * to the finger even when it leaves the handle area.
  */
+/* ── Indicator pane ordering ──────────────────────────────────── */
+type PaneMode = "volume" | "rsi" | "macd";
+const PANE_MODE_DEFAULT: PaneMode[] = ["volume", "rsi", "macd"];
+
 function ResizablePane({
   height,
   onResize,
@@ -317,6 +531,8 @@ function ResizablePane({
   maxHeight,
   children,
   ariaLabel,
+  onMoveUp,
+  onMoveDown,
 }: {
   height: number;
   onResize: (next: number) => void;
@@ -324,230 +540,98 @@ function ResizablePane({
   maxHeight: number;
   children: React.ReactNode;
   ariaLabel: string;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const reorderRef = useRef<{ startY: number; moved: boolean } | null>(null);
+  const canReorder = Boolean(onMoveUp || onMoveDown);
+  const REORDER_THRESHOLD = 40; // px to trigger swap
 
   return (
     <div className="relative shrink-0" style={{ height }}>
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label={ariaLabel}
-        className="absolute inset-x-0 -top-1 z-30 flex h-3 cursor-ns-resize items-center justify-center"
-        style={{ touchAction: "none" }}
-        onPointerDown={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          event.currentTarget.setPointerCapture(event.pointerId);
-          dragRef.current = { startY: event.clientY, startH: height };
-        }}
-        onPointerMove={(event) => {
-          const drag = dragRef.current;
-          if (!drag) return;
-          const delta = drag.startY - event.clientY; // up = grow
-          const next = Math.min(maxHeight, Math.max(minHeight, drag.startH + delta));
-          onResize(next);
-        }}
-        onPointerUp={(event) => {
-          if (!dragRef.current) return;
-          dragRef.current = null;
-          try {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          } catch {
-            /* noop */
-          }
-        }}
-        onPointerCancel={() => {
-          dragRef.current = null;
-        }}
-      >
-        <span className="h-0.5 w-10 rounded-full bg-white/20" aria-hidden />
+      {/* Separator bar: right side = resize handle, left side = reorder grip */}
+      <div className="absolute inset-x-0 -top-1 z-30 flex h-3 items-center" style={{ touchAction: "none" }}>
+        {/* Reorder grip — left zone (48px wide, only when multiple panes) */}
+        {canReorder && (
+          <div
+            className="flex h-full w-12 shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              reorderRef.current = { startY: event.clientY, moved: false };
+            }}
+            onPointerMove={(event) => {
+              const ro = reorderRef.current;
+              if (!ro) return;
+              const delta = event.clientY - ro.startY;
+              if (!ro.moved && Math.abs(delta) >= REORDER_THRESHOLD) {
+                ro.moved = true;
+                if (delta < 0 && onMoveUp) onMoveUp();
+                if (delta > 0 && onMoveDown) onMoveDown();
+              }
+            }}
+            onPointerUp={(event) => {
+              reorderRef.current = null;
+              try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* noop */ }
+            }}
+            onPointerCancel={() => { reorderRef.current = null; }}
+            aria-label={`Drag to reorder ${ariaLabel}`}
+          >
+            {/* ≡ grip dots */}
+            <div className="flex flex-col gap-[2px]">
+              <span className="block h-[1.5px] w-3 rounded-full bg-white/25" />
+              <span className="block h-[1.5px] w-3 rounded-full bg-white/25" />
+              <span className="block h-[1.5px] w-3 rounded-full bg-white/25" />
+            </div>
+          </div>
+        )}
+        {/* Resize handle — the rest of the bar */}
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={ariaLabel}
+          className="flex h-full flex-1 cursor-ns-resize items-center justify-center"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragRef.current = { startY: event.clientY, startH: height };
+          }}
+          onPointerMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag) return;
+            const delta = drag.startY - event.clientY; // up = grow
+            const next = Math.min(maxHeight, Math.max(minHeight, drag.startH + delta));
+            onResize(next);
+          }}
+          onPointerUp={(event) => {
+            if (!dragRef.current) return;
+            dragRef.current = null;
+            try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* noop */ }
+          }}
+          onPointerCancel={() => { dragRef.current = null; }}
+        >
+          <span className="h-0.5 w-10 rounded-full bg-white/20" aria-hidden />
+        </div>
       </div>
       {children}
     </div>
   );
 }
 
-function TradePlanLine({
-  canvasRef,
-  price,
-  label,
-  color,
-  digits,
-  onChange,
-  dashed = false,
-}: {
-  canvasRef: RefObject<ChartCanvasHandle | null>;
-  price: number | null;
-  label: string;
-  color: string;
-  digits: number;
-  onChange: (price: number) => void;
-  /** TP/SL render dashed; entry/limit renders solid — same convention MT5 uses. */
-  dashed?: boolean;
-}) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const [axisWidth, setAxisWidth] = useState(0);
-  const [y, setY] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
-
-  useEffect(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const rect = el.getBoundingClientRect();
-      setSize({ w: rect.width, h: rect.height });
-    });
-    ro.observe(el);
-    const rect = el.getBoundingClientRect();
-    setSize({ w: rect.width, h: rect.height });
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const handle = canvasRef.current;
-    if (!handle) return;
-    const compute = () => {
-      setY(price == null ? null : handle.priceToCoordinate(price));
-      setAxisWidth(handle.getRightAxisWidth());
-    };
-    compute();
-    return handle.subscribeViewport(compute);
-  }, [canvasRef, price]);
-
-  function updateFromPointer(clientY: number) {
-    const host = hostRef.current;
-    const handle = canvasRef.current;
-    if (!host || !handle) return;
-    const rect = host.getBoundingClientRect();
-    const next = handle.coordinateToPrice(clientY - rect.top);
-    if (next != null && Number.isFinite(next)) onChange(next);
-  }
-
-  if (price == null || y == null || size.w <= 0 || size.h <= 0) {
-    return <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />;
-  }
-
-  // Plot area ends where the right price axis starts. Drawing the line up to
-  // there (instead of edge-to-edge) keeps the chart legible — exactly like
-  // MT5's pending-order overlay.
-  const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
-  const labelText = label.toUpperCase();
-  const labelWidth = Math.max(46, labelText.length * 7 + 14);
-  const priceWidth = Math.max(58, axisWidth - 4);
-  const priceX = size.w - priceWidth - 2;
-
-  return (
-    <div
-      ref={hostRef}
-      className="pointer-events-none absolute inset-0 z-[24]"
-      style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <svg
-        width={size.w}
-        height={size.h}
-        viewBox={`0 0 ${size.w} ${size.h}`}
-        className="absolute inset-0"
-        style={{
-          touchAction: dragging ? "none" : "manipulation",
-          userSelect: "none",
-          WebkitUserSelect: "none",
-          WebkitTouchCallout: "none",
-        }}
-        onPointerMove={(event) => {
-          if (!dragging) return;
-          event.preventDefault();
-          event.stopPropagation();
-          updateFromPointer(event.clientY);
-        }}
-        onPointerUp={(event) => {
-          if (!dragging) return;
-          event.preventDefault();
-          event.stopPropagation();
-          setDragging(false);
-        }}
-        onPointerCancel={() => setDragging(false)}
-      >
-        {/* Single thin line across the plot — solid for entry, dashed for TP/SL */}
-        <line
-          x1={labelWidth + 8}
-          x2={plotRight}
-          y1={y}
-          y2={y}
-          stroke={color}
-          strokeWidth={1}
-          strokeDasharray={dashed ? "4 4" : ""}
-        />
-
-        {/* Left side: small drag handle + label pill (MT5 style) */}
-        <g
-          style={{ pointerEvents: "auto", cursor: "ns-resize" }}
-          onPointerDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setDragging(true);
-            event.currentTarget.setPointerCapture(event.pointerId);
-            updateFromPointer(event.clientY);
-          }}
-        >
-          {/* Generous invisible hit area so finger taps land reliably */}
-          <rect x={0} y={y - 14} width={labelWidth + 16} height={28} fill="transparent" />
-          <rect
-            x={4}
-            y={y - 9}
-            width={labelWidth}
-            height={18}
-            rx={3}
-            fill="rgba(0,0,0,0.78)"
-            stroke={color}
-            strokeWidth={1}
-          />
-          <text
-            x={4 + labelWidth / 2}
-            y={y + 4}
-            textAnchor="middle"
-            fontFamily="ui-sans-serif, system-ui, -apple-system"
-            fontSize={9}
-            fontWeight={700}
-            fill={color}
-          >
-            {labelText}
-          </text>
-        </g>
-
-        {/* Right side: price label that visually sits in the price-axis gutter */}
-        <g style={{ pointerEvents: "none" }}>
-          <rect
-            x={priceX}
-            y={y - 9}
-            width={priceWidth}
-            height={18}
-            rx={3}
-            fill="rgba(0,0,0,0.82)"
-            stroke={color}
-            strokeWidth={1}
-          />
-          <text
-            x={priceX + priceWidth / 2}
-            y={y + 4}
-            textAnchor="middle"
-            fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-            fontSize={10}
-            fontWeight={700}
-            fill={color}
-          >
-            {price.toFixed(digits)}
-          </text>
-        </g>
-      </svg>
-    </div>
-  );
-}
-
-export function ChartScreen({ data, initialAction, liveTradingEnabled = false }: Props) {
+export function ChartScreen({
+  data,
+  initialAction,
+  liveTradingEnabled = false,
+  instantSlTpModify = false,
+  favoriteWorkflowIds = [],
+  workflowRuntime,
+  canFullIndicators = false,
+}: Props) {
   const router = useRouter();
+  const { playSound, vibrate } = useAmbient();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
   const [isRoutePending, startRouteTransition] = useTransition();
@@ -556,16 +640,212 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const isTimeframePending =
     !routeFallbackMessage && (isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey));
 
+  // Chart-only guard against accidental horizontal page drift on iOS/PWA.
+  // Desktop stays untouched.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    const isMobileViewport = window.matchMedia("(max-width: 1024px)").matches;
+    const isStandalonePwa =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+    if (!isMobileViewport && !isStandalonePwa) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflowX = html.style.overflowX;
+    const prevBodyOverflowX = body.style.overflowX;
+    html.style.overflowX = "hidden";
+    body.style.overflowX = "hidden";
+    return () => {
+      html.style.overflowX = prevHtmlOverflowX;
+      body.style.overflowX = prevBodyOverflowX;
+    };
+  }, []);
+
   const [livePrice, setLivePrice] = useState<number | null>(data.lastPrice);
-  const [lastTickAt, setLastTickAt] = useState<string | null>(null);
+  const [liveBid, setLiveBid] = useState<number | null>(data.lastBid);
+  const [liveAsk, setLiveAsk] = useState<number | null>(data.lastAsk);
+  const [lastTickAt, setLastTickAt] = useState<string | null>(data.lastTickAt);
   const [overlays, setOverlays] = useState<ChartOverlayRow[]>(data.positionsOnSymbol);
   const [livePositionsCount, setLivePositionsCount] = useState<number>(data.totalPositions);
+  const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
-  const lastBidRef = useRef<number | null>(null);
-  const lastAskRef = useRef<number | null>(null);
+  // ── Per-account settings: seed global localStorage from scoped keys ──
+  // When accountId changes (account switch), overwrite global keys with
+  // that account's stored values so all downstream reads (indicators,
+  // theme, pane heights) instantly reflect the account's settings.
+  const prevAccountRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (accountId && accountId !== prevAccountRef.current) {
+      seedGlobalsFromAccount(accountId);
+      prevAccountRef.current = accountId;
+      // Re-read chart theme + grid after seeding (may differ per account)
+      setChartThemeKey(readChartThemeKey());
+      setChartGridStyle(readGridStyle());
+    }
+  }, [accountId]);
+
+  /** Write to symbol-scoped + global localStorage for the active pair. */
+  const savePref = useCallback(
+    (key: string, value: string) => writeSymbolPref(accountId, data.symbol, key, value),
+    [accountId, data.symbol],
+  );
+
+  const [chartThemeKey, setChartThemeKey] = useState<ChartThemeKey>(() => readChartThemeKey());
+  const [chartGridStyle, setChartGridStyle] = useState<ChartGridStyle>(() => readGridStyle());
+  const chartTheme = useMemo(() => getChartTheme(chartThemeKey), [chartThemeKey]);
+  const handleChartThemeChange = useCallback((key: ChartThemeKey) => {
+    writePref(accountId ?? null, "axe-chart-theme", key);
+    setChartThemeKey(key);
+    fetch("/api/preferences/chart-theme", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: key }),
+      credentials: "include",
+    }).catch(() => {});
+  }, [accountId]);
   const isVisible = usePageVisible();
-  const liveEnabled = data.failure === "ok" && data.source !== "AXE Demo" && Boolean(accountId) && isVisible;
+  const liveEnabled =
+    data.failure === "ok" && data.source === "MetaApi MT5" && Boolean(accountId) && isVisible;
+  const isDemoAccount = data.account?.connectionMethod === "demo_paper";
+  const sessionState = useMemo(() => marketSessionState(data.symbol), [data.symbol]);
+  const closedCanonicalPrice = useMemo(() => data.lastPrice ?? data.candles.at(-1)?.close ?? null, [data.candles, data.lastPrice]);
+  const demoTickPrice = useDemoLivePrice(isDemoAccount, data.symbol, closedCanonicalPrice);
+  useEffect(() => {
+    if (!isDemoAccount || demoTickPrice == null || !Number.isFinite(demoTickPrice)) return;
+    setLivePrice(demoTickPrice);
+    setLastTickAt(new Date().toISOString());
+  }, [isDemoAccount, demoTickPrice]);
+
+  /* ── Landscape fullscreen mode ───────────────────────────────── */
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isTabletLayout, setIsTabletLayout] = useState(false);
+  const { enabled: tabletNavCollapse, collapsed: tabletNavCollapsed, collapse: collapseTabletNav } =
+    useTabletNavCollapse();
+  const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
+  const chartFrameRef = useRef<HTMLDivElement | null>(null);
+  const userDismissedLandscapeRef = useRef(false);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      if (!next) userDismissedLandscapeRef.current = true;
+      if (next) {
+        try {
+          const s = screen as unknown as { orientation?: { lock?: (o: string) => Promise<void> } };
+          s.orientation?.lock?.("landscape-primary")?.catch(() => {});
+        } catch { /* not supported */ }
+      } else {
+        try {
+          const s = screen as unknown as { orientation?: { unlock?: () => void } };
+          s.orientation?.unlock?.();
+        } catch { /* not supported */ }
+      }
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => setIsTabletLayout(isTabletChartLayout());
+    sync();
+    window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTabletLayout) return;
+    lockTabletLandscape();
+  }, [isTabletLayout]);
+
+  // Auto-enter immersive chart on phone landscape; restore portrait layout on exit.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function unlockOrientation() {
+      try {
+        const s = screen as unknown as { orientation?: { unlock?: () => void } };
+        s.orientation?.unlock?.();
+      } catch {
+        /* not supported */
+      }
+    }
+
+    function resetPortraitViewport() {
+      document.body.classList.remove("chart-landscape-active");
+      document.body.style.removeProperty("position");
+      document.body.style.removeProperty("top");
+      document.body.style.removeProperty("width");
+      document.body.style.removeProperty("height");
+      document.documentElement.style.removeProperty("height");
+      window.scrollTo(0, 0);
+    }
+
+    function syncLandscape() {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        const landscapeQuery = window.matchMedia("(orientation: landscape)").matches;
+        if (isPhoneLandscapeViewport() && !userDismissedLandscapeRef.current) {
+          setIsFullscreen(true);
+          return;
+        }
+        if (!landscapeQuery) {
+          userDismissedLandscapeRef.current = false;
+          setIsFullscreen(false);
+          unlockOrientation();
+          resetPortraitViewport();
+        }
+      }, 160);
+    }
+
+    syncLandscape();
+    window.addEventListener("resize", syncLandscape);
+    window.addEventListener("orientationchange", syncLandscape);
+    window.visualViewport?.addEventListener("resize", syncLandscape);
+    return () => {
+      if (settleTimer) clearTimeout(settleTimer);
+      window.removeEventListener("resize", syncLandscape);
+      window.removeEventListener("orientationchange", syncLandscape);
+      window.visualViewport?.removeEventListener("resize", syncLandscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("chart-landscape-active", isFullscreen);
+    if (!isFullscreen) {
+      document.body.style.removeProperty("position");
+      document.body.style.removeProperty("top");
+      window.scrollTo(0, 0);
+    }
+    return () => document.body.classList.remove("chart-landscape-active");
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!isFullscreen) setLandscapeDockOpen(false);
+  }, [isFullscreen]);
+
+  // Escape closes landscape drawer first, then exits immersive chart
+  useEffect(() => {
+    if (!isFullscreen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (landscapeDockOpen) {
+        setLandscapeDockOpen(false);
+        return;
+      }
+      userDismissedLandscapeRef.current = true;
+      setIsFullscreen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, landscapeDockOpen]);
 
   useEffect(() => {
     setPendingTfKey(null);
@@ -603,7 +883,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
-  const [indicatorRailOpen, setIndicatorRailOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
   const [indicatorToolFlags, setIndicatorToolFlags] = useState<Record<string, boolean>>({});
   // How many order blocks to render per direction. Default 1 bullish + 1
@@ -618,6 +897,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // Project count: how many of each indicator extend forward when the
   // future-projection cursor is on. 1 = only the latest each side.
   const [projectionCount, setProjectionCount] = useState<1 | 2 | 3>(1);
+  // MA period + type — user-configurable via the indicator picker. The
+  // four periods mirror MT5's standard lines; EMA toggle gives traders
+  // the faster-reacting alternative they often prefer.
+  const [maPeriod, setMaPeriod] = useState<9 | 20 | 50 | 200>(20);
+  const [maType, setMaType] = useState<"sma" | "ema">("sma");
   // Auto-Fib source mode:
   //   "auto"   — most recent good trend leg on the active TF (default)
   //   "swing"  — latest SH ↔ SL pair from the swing-dot detection
@@ -630,16 +914,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   type FibMode = "auto" | "swing" | "pd" | "sd";
   const [fibMode, setFibMode] = useState<FibMode>("auto");
   const [fibSwingOffset, setFibSwingOffset] = useState<0 | 1 | 2 | 3>(0);
+
+  // Hydrate SMC + indicator prefs per account + symbol whenever either changes.
   useEffect(() => {
     try {
-      const raw = Number(localStorage.getItem("axe.chart.obCount") ?? "");
-      if (raw === 1 || raw === 2 || raw === 3) setOrderBlockCount(raw);
+      seedGlobalsFromSymbol(accountId, data.symbol);
+      const rawOb = Number(localStorage.getItem("axe.chart.obCount") ?? "");
+      if (rawOb === 1 || rawOb === 2 || rawOb === 3) setOrderBlockCount(rawOb);
       const rawIfvg = Number(localStorage.getItem("axe.chart.ifvgCount") ?? "");
       if (rawIfvg === 1 || rawIfvg === 2 || rawIfvg === 3) setInverseFvgCount(rawIfvg);
       const rawFvg = Number(localStorage.getItem("axe.chart.fvgCount") ?? "");
       if (rawFvg === 1 || rawFvg === 2 || rawFvg === 3) setFvgCount(rawFvg);
       const rawProj = Number(localStorage.getItem("axe.chart.projectionCount") ?? "");
       if (rawProj === 1 || rawProj === 2 || rawProj === 3) setProjectionCount(rawProj);
+      const rawMaPeriod = Number(localStorage.getItem("axe.chart.maPeriod") ?? "");
+      if (rawMaPeriod === 9 || rawMaPeriod === 20 || rawMaPeriod === 50 || rawMaPeriod === 200) {
+        setMaPeriod(rawMaPeriod);
+      }
+      const rawMaType = localStorage.getItem("axe.chart.maType");
+      if (rawMaType === "sma" || rawMaType === "ema") setMaType(rawMaType);
       const rawIndicatorFlags = localStorage.getItem("axe.chart.indicatorFlags");
       if (rawIndicatorFlags) {
         const parsed = JSON.parse(rawIndicatorFlags) as Record<string, unknown>;
@@ -653,26 +946,32 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           poc: Boolean(parsed.poc),
         });
       } else {
-        // Carry existing users forward: VOL / MA / RSI used to live in
-        // the SMC rail under activeToolFlags. New installs default to
-        // off, but if those old flags are in localStorage later this
-        // leaves room for a non-breaking migration.
         setIndicatorToolFlags({});
+      }
+      const rawSmcFlags = localStorage.getItem("axe.chart.smcFlags");
+      if (rawSmcFlags) {
+        const parsed = JSON.parse(rawSmcFlags) as Record<string, unknown>;
+        setActiveToolFlags({
+          structure: Boolean(parsed.structure),
+          orderBlocks: Boolean(parsed.orderBlocks),
+          fvg: Boolean(parsed.fvg),
+          ifvg: Boolean(parsed.ifvg),
+          pdh: Boolean(parsed.pdh),
+          pdl: Boolean(parsed.pdl),
+          pdq: Boolean(parsed.pdq),
+          sessionOpen: Boolean(parsed.sessionOpen),
+          swingPoints: Boolean(parsed.swingPoints),
+          supplyDemand: Boolean(parsed.supplyDemand),
+        });
+      } else {
+        setActiveToolFlags({});
       }
       const rawFib = localStorage.getItem("axe.chart.fibMode");
       if (rawFib === "auto" || rawFib === "swing" || rawFib === "pd" || rawFib === "sd") {
         setFibMode(rawFib);
       } else if (rawFib === "pd_band") {
-        // Legacy mode replaced by the standalone S/D indicator. Migrate
-        // the saved preference forward so the next launch picks the
-        // closest equivalent (S/D fib mode) instead of resetting to
-        // "auto".
         setFibMode("sd");
-        try {
-          localStorage.setItem("axe.chart.fibMode", "sd");
-        } catch {
-          /* ignore */
-        }
+        try { writeSymbolPref(accountId, data.symbol, "axe.chart.fibMode", "sd"); } catch { /* ignore */ }
       }
       const rawFibSwing = Number(localStorage.getItem("axe.chart.fibSwingOffset") ?? "");
       if (rawFibSwing === 0 || rawFibSwing === 1 || rawFibSwing === 2 || rawFibSwing === 3) {
@@ -681,11 +980,32 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     } catch {
       /* localStorage may be blocked */
     }
-  }, []);
+  }, [accountId, data.symbol]);
+
+  // ── Cache candles to localStorage so the next visit renders instantly ──
+  useEffect(() => {
+    if (data.candles.length > 0 && data.failure === "ok") {
+      writeCachedChart(data);
+    }
+  }, [data]);
+
+  // ── Prefetch adjacent timeframes for instant TF switches ──
+  useEffect(() => {
+    if (data.failure !== "ok" || data.candles.length === 0) return;
+    // Wait until after first paint, then prefetch adjacent TF routes
+    const id = requestAnimationFrame(() => {
+      const uncached = prefetchTimeframes(data.timeframeKey, data.symbol);
+      for (const tf of uncached) {
+        router.prefetch(buildHref(accountId, data.symbol, tf));
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [data.timeframeKey, data.symbol, data.failure, data.candles.length, router, accountId]);
+
   const updateOrderBlockCount = useCallback((next: 1 | 2 | 3) => {
     setOrderBlockCount(next);
     try {
-      localStorage.setItem("axe.chart.obCount", String(next));
+      savePref("axe.chart.obCount", String(next));
     } catch {
       /* ignore */
     }
@@ -693,7 +1013,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateInverseFvgCount = useCallback((next: 1 | 2 | 3) => {
     setInverseFvgCount(next);
     try {
-      localStorage.setItem("axe.chart.ifvgCount", String(next));
+      savePref("axe.chart.ifvgCount", String(next));
     } catch {
       /* ignore */
     }
@@ -701,7 +1021,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateFvgCount = useCallback((next: 1 | 2 | 3) => {
     setFvgCount(next);
     try {
-      localStorage.setItem("axe.chart.fvgCount", String(next));
+      savePref("axe.chart.fvgCount", String(next));
     } catch {
       /* ignore */
     }
@@ -709,10 +1029,33 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateProjectionCount = useCallback((next: 1 | 2 | 3) => {
     setProjectionCount(next);
     try {
-      localStorage.setItem("axe.chart.projectionCount", String(next));
+      savePref("axe.chart.projectionCount", String(next));
     } catch {
       /* ignore */
     }
+  }, []);
+  const cycleMaPeriod = useCallback(() => {
+    const periods: Array<9 | 20 | 50 | 200> = [9, 20, 50, 200];
+    setMaPeriod((prev) => {
+      const next = periods[(periods.indexOf(prev) + 1) % periods.length];
+      try {
+        savePref("axe.chart.maPeriod", String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+  const toggleMaType = useCallback(() => {
+    setMaType((prev) => {
+      const next = prev === "sma" ? "ema" : "sma";
+      try {
+        savePref("axe.chart.maType", next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }, []);
   // Persist + apply on change. The actual "rebuild the fib annotation
   // when the mode changes while a Fib is active" hook lives further down,
@@ -720,7 +1063,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateFibMode = useCallback((next: FibMode) => {
     setFibMode(next);
     try {
-      localStorage.setItem("axe.chart.fibMode", next);
+      savePref("axe.chart.fibMode", next);
     } catch {
       /* ignore */
     }
@@ -728,7 +1071,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const updateFibSwingOffset = useCallback((next: 0 | 1 | 2 | 3) => {
     setFibSwingOffset(next);
     try {
-      localStorage.setItem("axe.chart.fibSwingOffset", String(next));
+      savePref("axe.chart.fibSwingOffset", String(next));
     } catch {
       /* ignore */
     }
@@ -772,7 +1115,18 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     macd: 112,
   });
 
-  // Hydrate pane heights from localStorage once on mount.
+  const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
+    setPaneHeights((prev) => ({ ...prev, [mode]: next }));
+    try {
+      savePref(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
+    } catch {
+      /* ignore — best-effort persistence */
+    }
+  }, [savePref]);
+
+  // Indicator pane display order — persisted per account + symbol.
+  const [paneOrder, setPaneOrder] = useState<PaneMode[]>(PANE_MODE_DEFAULT);
+
   useEffect(() => {
     try {
       const v = Number(localStorage.getItem("axe.chart.paneHeight.volume") ?? "");
@@ -783,19 +1137,30 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         rsi: Number.isFinite(r) && r >= 70 ? r : prev.rsi,
         macd: Number.isFinite(m) && m >= 70 ? m : prev.macd,
       }));
+      const storedPaneOrder = localStorage.getItem("axe.chart.paneOrder");
+      if (storedPaneOrder) {
+        const parsed: unknown = JSON.parse(storedPaneOrder);
+        if (Array.isArray(parsed) && parsed.length === 3) {
+          setPaneOrder(parsed as PaneMode[]);
+        }
+      }
     } catch {
-      /* localStorage may be blocked — fall back to defaults */
+      /* localStorage may be blocked */
     }
-  }, []);
+  }, [accountId, data.symbol]);
 
-  const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
-    setPaneHeights((prev) => ({ ...prev, [mode]: next }));
-    try {
-      localStorage.setItem(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
-    } catch {
-      /* ignore — best-effort persistence */
-    }
-  }, []);
+  const movePaneInOrder = useCallback((mode: PaneMode, dir: -1 | 1) => {
+    setPaneOrder((prev) => {
+      const idx = prev.indexOf(mode);
+      if (idx < 0) return prev;
+      const swapIdx = idx + dir;
+      if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx]!, next[swapIdx]!] = [next[swapIdx]!, next[idx]!];
+      try { savePref("axe.chart.paneOrder", JSON.stringify(next)); } catch { /* noop */ }
+      return next;
+    });
+  }, [savePref]);
 
   const hasFibAnnotation = useMemo(
     () => annotations.some((a) => a.type === "fib_retracement"),
@@ -856,14 +1221,22 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const [pendingOrderType, setPendingOrderType] = useState<OrderTicketType>("market");
   const [orderTypeMenuOpen, setOrderTypeMenuOpen] = useState(false);
   const [lotMenuOpen, setLotMenuOpen] = useState(false);
+  const [lotVolumeDraft, setLotVolumeDraft] = useState("0.10");
   const [deviationPoints, setDeviationPoints] = useState(10);
+  const [oneClickVisible, setOneClickVisible] = useState(false);
+  const [pendingSheetExpanded, setPendingSheetExpanded] = useState(false);
+  const executionSwipeStartYRef = useRef<number | null>(null);
   const [firedAlert, setFiredAlert] = useState<AlertFiredEvent | null>(null);
 
   // Order send wiring — demo fills locally, live opens a confirm modal that
   // POSTs to /api/mt5/order. `enabled` is server-persisted; armed window
   // is per-device. See liveTradingFlag.ts for the split-storage model.
   const liveTrading = useLiveTradingFlag(liveTradingEnabled);
-  const isDemoAccount = data.account?.connectionMethod === "demo_paper";
+  const slTpModifyPref = useInstantSlTpModify(instantSlTpModify);
+  const [slTpDrafts, setSlTpDrafts] = useState<Record<string, SlTpDraft>>({});
+  const [confirmSlTpSignal, setConfirmSlTpSignal] = useState(0);
+  const [activeSlTpDraftKey, setActiveSlTpDraftKey] = useState<string | null>(null);
+  const isAlpacaAccount = data.account?.connectionMethod === "cloud_alpaca";
   const demoBook = useDemoPositions(
     data.account?.brokerAccountId ?? null,
     data.symbol,
@@ -876,6 +1249,38 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     title: string;
     body?: string;
   } | null>(null);
+  const slTpDraftCount = Object.keys(slTpDrafts).length;
+  const hasSlTpDrafts = slTpDraftCount > 0;
+  const triggerSlTpConfirm = useCallback(() => {
+    if (!hasSlTpDrafts) return;
+    setConfirmSlTpSignal((v) => v + 1);
+    vibrate("medium");
+    playSound("tap");
+  }, [hasSlTpDrafts, vibrate, playSound]);
+  const handleDemoOrderFill = useCallback(
+    (input: {
+      symbol: string;
+      side: "buy" | "sell";
+      volume: number;
+      entryPrice: number;
+      stopLoss: number | null;
+      takeProfit: number | null;
+    }) => {
+      demoBook.open(input);
+      setTradeToast({
+        kind: "demo",
+        title: `Demo ${input.side.toUpperCase()} ${input.symbol} filled`,
+        body: `${input.volume.toFixed(2)} lots @ ${formatBrokerPrice(data.brokerSymbol, input.entryPrice)} — pending order triggered.`,
+      });
+    },
+    [data.brokerSymbol, demoBook],
+  );
+  const demoPending = useDemoPendingOrders(
+    data.account?.brokerAccountId ?? null,
+    data.symbol,
+    livePrice,
+    handleDemoOrderFill,
+  );
 
   // Auto-clear toast after 4s.
   useEffect(() => {
@@ -884,24 +1289,134 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     return () => clearTimeout(id);
   }, [tradeToast]);
 
+  // First demo visit: surface the MT5-style execution bar automatically.
+  useEffect(() => {
+    if (!isDemoAccount || typeof window === "undefined") return;
+    const key = "axe.chart.demo.oneclick";
+    if (window.localStorage.getItem(key) === "1") return;
+    window.localStorage.setItem(key, "1");
+    setOneClickVisible(true);
+  }, [isDemoAccount]);
+
+  // iPad: tuck nav away when execution bar opens so buy/sell row isn't stacked under tabs.
+  useEffect(() => {
+    if (!isTabletLayout || !oneClickVisible || !tabletNavCollapse) return;
+    collapseTabletNav();
+  }, [collapseTabletNav, isTabletLayout, oneClickVisible, tabletNavCollapse]);
+
   const showPendingTradePlan = useCallback(
     (side: "buy" | "sell", type?: PendingOrderTicketType) => {
-      const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-      const distance = draggablePlanDistance(data.candles, entry);
+      const market = livePrice ?? data.lastPrice ?? pendingOrderPrice;
+      const distance = draggablePlanDistance(data.candles, market);
+      const orderType = type ?? (side === "buy" ? "buy_limit" : "sell_limit");
+      const isLimit = orderType === "buy_limit" || orderType === "sell_limit";
+      const isStop = orderType === "buy_stop" || orderType === "sell_stop";
+
+      let entry = market;
+      if (market != null && Number.isFinite(market)) {
+        if (isLimit) {
+          entry = side === "buy" ? market - distance : market + distance;
+        } else if (isStop) {
+          entry = side === "buy" ? market + distance : market - distance;
+        }
+      }
+
       setPendingOrderSide(side);
       setExecutionMode("pending");
-      setPendingOrderType(type ?? (side === "buy" ? "buy_limit" : "sell_limit"));
+      setPendingOrderType(orderType);
       setPendingOrderVisible(true);
+      setPendingSheetExpanded(false);
       if (entry != null && Number.isFinite(entry)) {
         const sideChanged = side !== pendingOrderSide;
         setPendingOrderPrice(entry);
-        setPendingStopLossPrice((prev) => (prev != null && !sideChanged ? prev : side === "buy" ? entry - distance : entry + distance));
+        setPendingStopLossPrice((prev) =>
+          prev != null && !sideChanged ? prev : side === "buy" ? entry - distance : entry + distance,
+        );
         setPendingTakeProfitPrice((prev) =>
           prev != null && !sideChanged ? prev : side === "buy" ? entry + distance * 1.6 : entry - distance * 1.6,
         );
       }
     },
     [data.candles, data.lastPrice, livePrice, pendingOrderPrice, pendingOrderSide],
+  );
+
+  const dismissExecutionBar = useCallback(
+    (withFeedback = true) => {
+      setOneClickVisible(false);
+      setExecutionMode("market");
+      setPendingOrderVisible(false);
+      setLotMenuOpen(false);
+      setOrderTypeMenuOpen(false);
+      setPendingSheetExpanded(false);
+      if (withFeedback) {
+        vibrate("light");
+        playSound("tap");
+      }
+    },
+    [playSound, vibrate],
+  );
+
+  const toggleOneClickTrade = useCallback(() => {
+    if (oneClickVisible) {
+      dismissExecutionBar(false);
+    } else {
+      setOneClickVisible(true);
+      setExecutionMode("market");
+      setPendingOrderVisible(false);
+    }
+    vibrate("light");
+    playSound("tap");
+  }, [dismissExecutionBar, oneClickVisible, vibrate, playSound]);
+
+  const togglePendingTrade = useCallback(() => {
+    if (executionMode === "pending" && pendingOrderVisible) {
+      dismissExecutionBar(false);
+    } else {
+      setOneClickVisible(true);
+      showPendingTradePlan(pendingOrderSide, pendingOrderSide === "buy" ? "buy_limit" : "sell_limit");
+    }
+    vibrate("light");
+    playSound("tap");
+  }, [
+    dismissExecutionBar,
+    executionMode,
+    pendingOrderVisible,
+    pendingOrderSide,
+    showPendingTradePlan,
+    vibrate,
+    playSound,
+  ]);
+
+  /**
+   * Auto-flip buy/sell side when dragging the pending entry price line.
+   * Limit orders: entry below live → buy_limit, entry above live → sell_limit.
+   * Stop orders:  entry above live → buy_stop,  entry below live → sell_stop.
+   */
+  const handlePendingEntryPriceChange = useCallback(
+    (newPrice: number) => {
+      setPendingOrderPrice(newPrice);
+      const ref = livePrice ?? data.lastPrice;
+      if (ref == null || !Number.isFinite(ref)) return;
+      const isStop = pendingOrderType === "buy_stop" || pendingOrderType === "sell_stop";
+      if (isStop) {
+        if (newPrice > ref && pendingOrderType !== "buy_stop") {
+          setPendingOrderSide("buy");
+          setPendingOrderType("buy_stop");
+        } else if (newPrice < ref && pendingOrderType !== "sell_stop") {
+          setPendingOrderSide("sell");
+          setPendingOrderType("sell_stop");
+        }
+      } else {
+        if (newPrice < ref && pendingOrderType !== "buy_limit") {
+          setPendingOrderSide("buy");
+          setPendingOrderType("buy_limit");
+        } else if (newPrice > ref && pendingOrderType !== "sell_limit") {
+          setPendingOrderSide("sell");
+          setPendingOrderType("sell_limit");
+        }
+      }
+    },
+    [livePrice, data.lastPrice, pendingOrderType],
   );
 
   const tradeVolumeNum = useMemo(() => {
@@ -942,20 +1457,57 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     }
 
     if (isDemoAccount) {
+      if (!isMarketOrder) {
+        const pendType = pendingOrderType;
+        if (
+          pendType !== "buy_limit" &&
+          pendType !== "sell_limit" &&
+          pendType !== "buy_stop" &&
+          pendType !== "sell_stop"
+        ) {
+          setTradeToast({ kind: "error", title: "Pick a limit or stop type" });
+          return;
+        }
+        const placed = demoPending.place({
+          symbol: data.symbol,
+          type: pendType,
+          side,
+          volume: tradeVolumeNum,
+          openPrice: entry,
+          stopLoss: pendingStopLossPrice,
+          takeProfit: pendingTakeProfitPrice,
+        });
+        if (placed) {
+          setPendingOrderVisible(false);
+          setTradeToast({
+            kind: "demo",
+            title: `Demo ${orderTypeLabel(pendType)} placed`,
+            body: `${tradeVolumeNum.toFixed(2)} lots @ ${formatBrokerPrice(data.brokerSymbol, entry)}. Resting on chart — tap line to adjust.`,
+          });
+        } else {
+          setTradeToast({
+            kind: "error",
+            title: "Couldn't place demo order",
+            body: "Try reloading the chart.",
+          });
+        }
+        return;
+      }
+
       const opened = demoBook.open({
         symbol: data.symbol,
         side,
         volume: tradeVolumeNum,
         entryPrice: entry,
-        stopLoss: isMarketOrder ? null : pendingStopLossPrice,
-        takeProfit: isMarketOrder ? null : pendingTakeProfitPrice,
+        stopLoss: pendingStopLossPrice,
+        takeProfit: pendingTakeProfitPrice,
       });
       if (opened) {
         setPendingOrderVisible(false);
         setTradeToast({
           kind: "demo",
-          title: `Demo ${side.toUpperCase()} ${data.symbol} ${isMarketOrder ? "market filled" : "plan filled"}`,
-          body: `${tradeVolumeNum.toFixed(2)} lots @ ${entry.toFixed(priceDigitsForSymbol(data.brokerSymbol))}. Virtual position only — no broker order sent.`,
+          title: `Demo ${side.toUpperCase()} ${data.symbol} market filled`,
+          body: `${tradeVolumeNum.toFixed(2)} lots @ ${formatBrokerPrice(data.brokerSymbol, entry)}. Virtual position only — no broker order sent.`,
         });
       } else {
         setTradeToast({
@@ -967,21 +1519,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       return;
     }
 
-    // Live MT5 account path
-    if (!liveTrading.enabled) {
+    // Live broker path (MT5 or Alpaca paper)
+    if (!isAlpacaAccount && !liveTrading.enabled) {
       setTradeToast({
         kind: "info",
-        title: "Live trading is OFF on this device",
-        body: "Open Settings → Live trading to activate. Demo Account paper trading still works.",
-      });
-      return;
-    }
-
-    if (!liveTrading.armed) {
-      setTradeToast({
-        kind: "info",
-        title: "Re-arm to send live orders",
-        body: "Open Settings → Live trading and tap “Arm for 30m”.",
+        title: "Live trading is OFF",
+        body: "Open Settings → Live trading to send real broker orders. Demo paper trading still works without this.",
       });
       return;
     }
@@ -1000,6 +1543,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       takeProfit: isMarketOrder ? null : pendingTakeProfitPrice,
       slippagePoints: deviationPoints,
       accountLabel: data.account?.label ?? "MT5 Account",
+      volumeUnit: isAlpacaAccount ? "shares" : "lots",
     });
   }, [
     data.account?.brokerAccountId,
@@ -1008,9 +1552,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     data.lastPrice,
     data.symbol,
     demoBook,
+    demoPending,
     deviationPoints,
+    isAlpacaAccount,
     isDemoAccount,
-    liveTrading.armed,
     liveTrading.enabled,
     livePrice,
     pendingOrderPrice,
@@ -1026,21 +1571,35 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     if (!orderConfirmInput || !brokerAccountId) return;
     setOrderConfirmStatus({ kind: "sending" });
     try {
-      const res = await fetch("/api/mt5/order", {
+      const endpoint = isAlpacaAccount ? "/api/alpaca/order" : "/api/mt5/order";
+      const body = isAlpacaAccount
+        ? {
+            brokerAccountId,
+            symbol: orderConfirmInput.brokerSymbol,
+            side: orderConfirmInput.side,
+            orderType: orderConfirmInput.orderType,
+            volume: orderConfirmInput.volume,
+            openPrice: orderConfirmInput.openPrice,
+            stopLoss: orderConfirmInput.stopLoss,
+            takeProfit: orderConfirmInput.takeProfit,
+          }
+        : {
+            brokerAccountId,
+            symbol: orderConfirmInput.brokerSymbol,
+            side: orderConfirmInput.side,
+            orderType: orderConfirmInput.orderType,
+            volume: orderConfirmInput.volume,
+            openPrice: orderConfirmInput.openPrice,
+            stopLoss: orderConfirmInput.stopLoss,
+            takeProfit: orderConfirmInput.takeProfit,
+            slippage: orderConfirmInput.slippagePoints,
+            comment: "AXE",
+          };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          brokerAccountId,
-          symbol: orderConfirmInput.brokerSymbol,
-          side: orderConfirmInput.side,
-          orderType: orderConfirmInput.orderType,
-          volume: orderConfirmInput.volume,
-          openPrice: orderConfirmInput.openPrice,
-          stopLoss: orderConfirmInput.stopLoss,
-          takeProfit: orderConfirmInput.takeProfit,
-          slippage: orderConfirmInput.slippagePoints,
-          comment: "AXE",
-        }),
+        body: JSON.stringify(body),
       });
       const payload = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
@@ -1051,11 +1610,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         code?: string;
       };
       if (res.ok && payload.ok) {
+        const unit = isAlpacaAccount ? "shares" : "lots";
         setOrderConfirmStatus({
           kind: "ok",
-          message: `${orderConfirmInput.side.toUpperCase()} sent — ${payload.stringCode ?? "TRADE_RETCODE_DONE"}${
-            payload.positionId ? ` · position ${payload.positionId}` : ""
-          }.`,
+          message: `${orderConfirmInput.side.toUpperCase()} sent — ${
+            isAlpacaAccount ? "Alpaca accepted" : payload.stringCode ?? "TRADE_RETCODE_DONE"
+          }${payload.orderId ? ` · order ${payload.orderId}` : payload.positionId ? ` · position ${payload.positionId}` : ""}.`,
         });
         setPendingOrderVisible(false);
         setTimeout(() => {
@@ -1064,7 +1624,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           setTradeToast({
             kind: "live",
             title: `${orderConfirmInput.side.toUpperCase()} ${orderConfirmInput.symbol} sent`,
-            body: `${orderConfirmInput.volume.toFixed(2)} lots — broker accepted the order.`,
+            body: `${orderConfirmInput.volume.toFixed(2)} ${unit} — broker accepted the order.`,
           });
         }, 1_200);
       } else {
@@ -1081,7 +1641,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         message: err instanceof Error ? err.message : "Network error — no order sent.",
       });
     }
-  }, [data.account?.brokerAccountId, orderConfirmInput]);
+  }, [data.account?.brokerAccountId, isAlpacaAccount, orderConfirmInput]);
 
   // Load saved annotations when symbol/tf changes
   useEffect(() => {
@@ -1105,6 +1665,33 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   useEffect(() => {
     setPendingOrderPrice((prev) => prev ?? data.lastPrice);
   }, [data.lastPrice]);
+
+  // Lock page scroll on chart — only the canvas/panes should pan.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!oneClickVisible) {
+      setLotMenuOpen(false);
+      setOrderTypeMenuOpen(false);
+    }
+  }, [oneClickVisible]);
+
+  // Keep portrait viewport stable when the execution bar opens/closes.
+  useEffect(() => {
+    if (typeof window === "undefined" || isFullscreen) return;
+    const timer = window.setTimeout(() => window.scrollTo(0, 0), 120);
+    return () => window.clearTimeout(timer);
+  }, [oneClickVisible, executionMode, pendingOrderVisible, isFullscreen]);
+
+  useEffect(() => {
+    if (lotMenuOpen) setLotVolumeDraft(tradeVolume);
+  }, [lotMenuOpen, tradeVolume]);
 
   // Live mirror of the last candle so the indicator panes (RSI/Volume) can
   // tick in lockstep with the candle stream instead of staying frozen on the
@@ -1174,8 +1761,9 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const onTick = useCallback(
     ({ mid, bid, ask, time }: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => {
       if (mid == null || !Number.isFinite(mid)) return;
-      lastBidRef.current = bid;
-      lastAskRef.current = ask;
+      if (sessionState.state !== "open" && !eventFreshEnough(time)) return;
+      setLiveBid(bid);
+      setLiveAsk(ask);
       canvasRef.current?.applyTick(mid);
       // Update the mirrored last candle's close so RSI/Volume see live data.
       setLiveLastCandle((prev) => {
@@ -1194,28 +1782,35 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         setLastTickAt(time ?? new Date().toISOString());
       }
     },
-    [evaluateAlerts],
+    [evaluateAlerts, sessionState.state],
   );
 
   const onCandleUpdate = useCallback(
     (candle: { time: string; open: number; high: number; low: number; close: number; tickVolume?: number; volume?: number }) => {
+      if (sessionState.state !== "open" && !eventFreshEnough(candle.time)) return;
       canvasRef.current?.updateLastCandle(candle);
       // Mirror to React state so the indicator panes recompute on each
       // candle update — guarantees RSI / Volume tick live with the chart.
-      setLiveLastCandle({
-        time: candle.time,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        tickVolume: candle.tickVolume,
-        volume: candle.volume,
+      setLiveLastCandle((prev) => {
+        const sameBucket = prev?.time === candle.time;
+        const canonicalClose = sameBucket && livePrice != null && Number.isFinite(livePrice)
+          ? livePrice
+          : candle.close;
+        return {
+          time: candle.time,
+          open: candle.open,
+          high: Math.max(candle.high, canonicalClose),
+          low: Math.min(candle.low, canonicalClose),
+          close: canonicalClose,
+          tickVolume: candle.tickVolume,
+          volume: candle.volume,
+        };
       });
-      if (Number.isFinite(candle.close) && Date.now() - lastReactPriceAt.current > 1_500) {
-        setLivePrice(candle.close);
-      }
+      // Candle close updates the candle body only. The visible quote stays
+      // on the current bid/ask mid so candle-close and tick streams cannot
+      // fight each other visually.
     },
-    [],
+    [livePrice, sessionState.state],
   );
 
   const onPositions = useCallback(({ total, onSymbol }: { total: number; onSymbol: LivePosition[] }) => {
@@ -1234,6 +1829,106 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     setOverlays((prev) => (sameOverlayRows(prev, next) ? prev : next));
   }, []);
 
+  const onOrders = useCallback(({ onSymbol }: { total: number; onSymbol: LivePendingOrder[] }) => {
+    const next: PendingOrderOverlay[] = onSymbol.map((o) => ({
+      id: o.id,
+      symbol: o.symbol,
+      type: o.type,
+      side: o.side,
+      volume: o.volume,
+      openPrice: o.openPrice,
+      currentPrice: o.currentPrice,
+      stopLoss: o.stopLoss,
+      takeProfit: o.takeProfit,
+      openTime: o.openTime,
+    }));
+    setPendingOrders((prev) => {
+      if (prev.length === next.length && prev.every((p, i) => p.id === next[i]?.id && p.openPrice === next[i]?.openPrice && p.stopLoss === next[i]?.stopLoss && p.takeProfit === next[i]?.takeProfit)) return prev;
+      return next;
+    });
+  }, []);
+
+  const baseOverlays = useMemo(() => {
+    if (!isDemoAccount) return overlays;
+    const demoRows: ChartOverlayRow[] = demoBook.forSymbol.map((p) => ({
+      id: p.id,
+      side: p.side,
+      volume: p.volume,
+      entryPrice: p.entryPrice,
+      stopLoss: p.stopLoss,
+      takeProfit: p.takeProfit,
+      profit: computeLivePnl(p, livePrice),
+      openTime: p.openedAt,
+      currentPrice: livePrice,
+    }));
+    const liveIds = new Set(overlays.map((o) => o.id));
+    return [...overlays, ...demoRows.filter((d) => !liveIds.has(d.id))];
+  }, [isDemoAccount, overlays, demoBook.forSymbol, livePrice]);
+
+  const displayOverlays = useMemo(
+    () =>
+      baseOverlays.map((o) => {
+        const draft = slTpDrafts[slTpDraftKeyForPosition(o.id)];
+        if (!draft) return o;
+        return {
+          ...o,
+          stopLoss: draft.stopLoss ?? o.stopLoss,
+          takeProfit: draft.takeProfit ?? o.takeProfit,
+        };
+      }),
+    [baseOverlays, slTpDrafts],
+  );
+
+  const displayPendingOrders = useMemo(() => {
+    const base = isDemoAccount ? demoPending.forSymbol : pendingOrders;
+    return base.map((o) => {
+      const draft = slTpDrafts[slTpDraftKeyForOrder(o.id)];
+      if (!draft) return o;
+      return {
+        ...o,
+        openPrice: draft.openPrice ?? o.openPrice,
+        stopLoss: draft.stopLoss ?? o.stopLoss,
+        takeProfit: draft.takeProfit ?? o.takeProfit,
+      };
+    });
+  }, [demoPending.forSymbol, isDemoAccount, pendingOrders, slTpDrafts]);
+
+  useEffect(() => {
+    setSlTpDrafts((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const next = { ...prev };
+      let changed = false;
+      const match = (a: number | null | undefined, b: number | null | undefined) => {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return Math.abs(a - b) < 1e-9;
+      };
+      for (const key of Object.keys(prev)) {
+        const draft = prev[key];
+        if (!draft) continue;
+        if (key.startsWith("pos:")) {
+          const row = overlays.find((o) => o.id === key.slice(4));
+          if (row && match(row.stopLoss, draft.stopLoss) && match(row.takeProfit, draft.takeProfit)) {
+            delete next[key];
+            changed = true;
+          }
+        } else if (key.startsWith("ord:")) {
+          const row = pendingOrders.find((o) => o.id === key.slice(4));
+          if (
+            row &&
+            match(row.stopLoss, draft.stopLoss) &&
+            match(row.takeProfit, draft.takeProfit) &&
+            match(row.openPrice, draft.openPrice ?? row.openPrice)
+          ) {
+            delete next[key];
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [overlays, pendingOrders]);
+
   const {
     status: liveStatus,
     transport: liveTransport,
@@ -1249,44 +1944,77 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     onTick,
     onCandleUpdate,
     onPositions,
+    onOrders,
   });
 
-  // Periodic audit snapshot — best-effort, fails silently if migration not applied.
+  // Canonical chart runtime snapshot. Chat, Watchlist and Alerts read this
+  // same Supabase row, so write it as soon as broker candles hydrate and then
+  // keep it fresh while live data arrives.
+  // HARDENED: added timeout to prevent UI hangs if snapshot writes fail.
   useEffect(() => {
-    if (!liveEnabled || (liveStatus !== "connected" && liveStatus !== "live_stream") || !accountId) return;
+    if (data.failure !== "ok" || !accountId || !data.brokerSymbol) return;
     const post = () => {
-      void fetch("/api/chart/snapshot", {
+      const lastCandle = liveLastCandle ?? data.candles.at(-1) ?? null;
+      const fresh =
+        liveLastUpdateAt != null &&
+        Date.now() - Date.parse(liveLastUpdateAt) < 30_000 &&
+        (liveStatus === "connected" || liveStatus === "live_stream");
+      const status =
+        fresh
+          ? "live"
+          : sessionState.state !== "open"
+            ? sessionState.state
+            : liveStatus === "offline" || liveStatus === "failed"
+              ? liveStatus
+              : "degraded";
+      
+      // Fire-and-forget with timeout to prevent UI hangs
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3_000);
+      
+      fetch("/api/chart/snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: controller.signal,
         body: JSON.stringify({
           accountId,
           displaySymbol: data.symbol,
           brokerSymbol: data.brokerSymbol,
           timeframe: data.timeframeKey,
           lastPrice: livePrice,
-          lastBid: lastBidRef.current,
-          lastAsk: lastAskRef.current,
+          lastBid: liveBid,
+          lastAsk: liveAsk,
           lastTickAt,
-          lastCandleAt: data.lastCandleTime,
+          lastCandleAt: lastCandle?.time ?? data.lastCandleTime,
+          lastCandle,
           openPositionsCount: livePositionsCount,
           openPositions: overlays,
-          status: liveStatus,
+          status,
         }),
-      }).catch(() => undefined);
+      })
+        .catch(() => undefined)
+        .finally(() => clearTimeout(timeoutId));
     };
+    post();
     const t = setInterval(post, SNAPSHOT_INTERVAL_MS);
     return () => clearInterval(t);
   }, [
-    liveEnabled,
+    data.failure,
     liveStatus,
     accountId,
     data.symbol,
     data.brokerSymbol,
     data.timeframeKey,
+    data.candles,
     livePrice,
+    liveBid,
+    liveAsk,
     lastTickAt,
     data.lastCandleTime,
+    liveLastCandle,
+    liveLastUpdateAt,
+    sessionState.state,
     livePositionsCount,
     overlays,
   ]);
@@ -1299,28 +2027,66 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     lastResetKeyRef.current = key;
     queueMicrotask(() => {
       setLivePrice(data.lastPrice);
+      setLiveBid(data.lastBid);
+      setLiveAsk(data.lastAsk);
       setOverlays(data.positionsOnSymbol);
       setLivePositionsCount(data.totalPositions);
-      setLastTickAt(null);
+      setPendingOrders(data.pendingOrdersOnSymbol);
+      setLastTickAt(data.lastTickAt);
     });
   }, [
     data.account?.brokerAccountId,
     data.brokerSymbol,
     data.timeframeKey,
     data.lastPrice,
+    data.lastBid,
+    data.lastAsk,
+    data.lastTickAt,
     data.positionsOnSymbol,
     data.totalPositions,
   ]);
 
-  const statusPill = statusPillCopy(liveStatus, liveTransport, data.providerStatus, data.candles.length > 0);
-  const liveAge = formatLiveAge(liveLastUpdateAt);
+  useEffect(() => {
+    if (sessionState.state === "open") return;
+    setLivePrice(closedCanonicalPrice);
+    setLiveBid(data.lastBid);
+    setLiveAsk(data.lastAsk);
+    setLastTickAt(null);
+    const last = data.candles.at(-1);
+    setLiveLastCandle(last ? { ...last } : null);
+  }, [closedCanonicalPrice, data.candles, data.lastBid, data.lastAsk, sessionState.state]);
+
+  const freshestRuntimeAt = sessionState.state === "open" ? liveLastUpdateAt : lastTickAt;
+  const liveAge = formatLiveAge(freshestRuntimeAt);
+  const liveFresh =
+    freshestRuntimeAt != null &&
+    Date.now() - Date.parse(freshestRuntimeAt) < 30_000 &&
+    (liveStatus === "connected" || liveStatus === "live_stream" || liveStatus === "delayed_polling");
+  const statusPill = statusPillCopy(
+    liveStatus,
+    liveTransport,
+    data.providerStatus,
+    data.candles.length > 0,
+    liveFresh,
+    sessionState,
+  );
+  const transportBadge = chartTransportBadge(
+    liveStatus,
+    liveTransport,
+    data.providerStatus,
+    liveFresh,
+  );
   const liveDetail = useMemo(() => {
     if (data.providerStatus === "demo") return "Demo stream";
+    if (sessionState.state !== "open" && !liveFresh) return sessionState.reason;
+    if ((liveStatus === "connected" || liveStatus === "live_stream") && liveFresh) {
+      return liveAge ? `Updated ${liveAge}` : "AXE Live feed";
+    }
     if (liveStatus === "connected" || liveStatus === "live_stream") {
-      return liveAge ? `Updated ${liveAge}` : liveTransport === "ws" ? "Cloudflare WebSocket" : "Live feed";
+      return data.candles.length > 0 ? "Waiting for first live tick" : "Opening AXE Live";
     }
     if (liveStatus === "delayed_polling") {
-      return liveAge ? `Poll updated ${liveAge}` : "SSE fallback active";
+      return liveAge ? `Updated ${liveAge}` : "Broker feed delayed";
     }
     if (liveStatus === "reconnecting") {
       return reconnectAttempt > 0 ? `Recovering feed · attempt ${reconnectAttempt}` : "Recovering feed";
@@ -1329,7 +2095,28 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     if (liveStatus === "offline") return liveAge ? `Cached from ${liveAge}` : "Cached broker candles";
     if (liveStatus === "connecting") return "Opening live feed";
     return data.candles.length > 0 ? "Cached candles" : "No live feed";
-  }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveTransport, reconnectAttempt]);
+  }, [data.candles.length, data.providerStatus, liveAge, liveStatus, liveFresh, reconnectAttempt, sessionState]);
+  const headerSeverity: "fresh" | "degraded" | "blocking" | "inactive" =
+    data.failure !== "ok"
+      ? "blocking"
+      : liveFresh
+        ? "fresh"
+        : data.candles.length > 0 || sessionState.state !== "open"
+          ? "degraded"
+          : "inactive";
+  const headerReason =
+    headerSeverity === "fresh"
+      ? "Fresh real broker tick received."
+      : sessionState.state !== "open"
+        ? sessionState.reason
+        : data.failure !== "ok"
+          ? failureCardCopy(data.failure)?.title ?? "Chart runtime is blocked."
+          : liveDetail;
+
+  const headerReasonWithTransport =
+    headerSeverity === "fresh" && liveTransport !== "off"
+      ? `${headerReason} · ${liveTransport === "ws" ? "WebSocket" : "SSE fallback"}`
+      : headerReason;
 
   const goSymbol = useCallback(
     (sym: string) => {
@@ -1351,6 +2138,19 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     [router, accountId, data.symbol, startRouteTransition],
   );
 
+  const goAccount = useCallback(
+    (newAccountId: string) => {
+      if (newAccountId === accountId) return;
+      setRouteFallbackMessage(null);
+      // Persist choice so other pages pick it up
+      void setActiveAccountAction(newAccountId);
+      startRouteTransition(() => {
+        router.push(buildHref(newAccountId, data.symbol, data.timeframeKey));
+      });
+    },
+    [router, accountId, data.symbol, data.timeframeKey, startRouteTransition],
+  );
+
   const lastPriceText = useMemo(
     () => formatBrokerPrice(data.brokerSymbol, livePrice),
     [data.brokerSymbol, livePrice],
@@ -1362,11 +2162,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const startDrawing = useCallback((mode: Exclude<DrawingMode, null>) => {
     drawingPointsRef.current = [];
     setDrawingMode(mode);
-    setDrawingHint(
-      mode === "fib_retracement"
-        ? "Tap the swing high, then the swing low"
-        : "Tap the first anchor, then the second",
-    );
+    setDrawingHint(drawingStartHint(mode));
   }, []);
 
   const cancelDrawing = useCallback(() => {
@@ -1378,15 +2174,25 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   const handlePointClick = useCallback(
     (pt: AnnotationPoint) => {
       if (!drawingMode) return;
+      const needed = DRAWING_POINT_COUNT[drawingMode];
       const next = [...drawingPointsRef.current, pt];
       drawingPointsRef.current = next;
-      if (next.length >= 2) {
+      if (next.length >= needed) {
         const annotation: ChartAnnotation = {
           id: newAnnotationId(),
           symbol: data.symbol,
           timeframe: data.timeframeKey,
           type: drawingMode,
-          points: next.slice(-2),
+          points:
+            drawingMode === "text" || drawingMode === "horizontal_level"
+              ? [pt]
+              : next.slice(-2),
+          settings:
+            drawingMode === "text"
+              ? { text: "Note" }
+              : drawingMode === "horizontal_level"
+                ? { label: "Level" }
+                : undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -1396,11 +2202,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         setDrawingMode(null);
         setDrawingHint(null);
       } else {
-        setDrawingHint(
-          drawingMode === "fib_retracement"
-            ? "Now tap the swing low to complete Fibonacci"
-            : "Now tap the second anchor to complete the trendline",
-        );
+        setDrawingHint(drawingNextHint(drawingMode));
       }
     },
     [drawingMode, data.symbol, data.timeframeKey],
@@ -1425,6 +2227,14 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     [data.symbol, data.timeframeKey],
   );
 
+  const clearAllDrawings = useCallback(() => {
+    cancelDrawing();
+    saveAnnotations(data.symbol, data.timeframeKey, []);
+    setAnnotations([]);
+    setSnapshotMessage("Cleared all chart drawings.");
+    setTimeout(() => setSnapshotMessage(null), 3000);
+  }, [cancelDrawing, data.symbol, data.timeframeKey]);
+
   const appendAndRenderAnnotation = useCallback(
     (annotation: ChartAnnotation): ChartAnnotation[] => {
       const list = appendAnnotation(data.symbol, data.timeframeKey, annotation);
@@ -1432,6 +2242,40 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       return list;
     },
     [data.symbol, data.timeframeKey],
+  );
+
+  const applyLayerFlags = useCallback(
+    (smc: Partial<Record<string, boolean>>, indicators: Partial<Record<string, boolean>>, enable = true) => {
+      if (Object.keys(smc).length > 0) {
+        setActiveToolFlags((prev) => {
+          const next = { ...prev };
+          for (const [key, value] of Object.entries(smc)) {
+            next[key] = enable ? Boolean(value) : false;
+          }
+          try {
+            savePref("axe.chart.smcFlags", JSON.stringify(next));
+          } catch {
+            /* localStorage may be blocked */
+          }
+          return next;
+        });
+      }
+      if (Object.keys(indicators).length > 0) {
+        setIndicatorToolFlags((prev) => {
+          const next = { ...prev };
+          for (const [key, value] of Object.entries(indicators)) {
+            next[key] = enable ? Boolean(value) : false;
+          }
+          try {
+            savePref("axe.chart.indicatorFlags", JSON.stringify(next));
+          } catch {
+            /* localStorage may be blocked */
+          }
+          return next;
+        });
+      }
+    },
+    [savePref],
   );
 
   const executeChartAction = useCallback(
@@ -1550,12 +2394,34 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             annotation,
           };
         },
-        addIndicator: (cmd) => ({
-          id: cmd.id,
-          type: cmd.type,
-          status: "prepared",
-          message: "Indicator layer prepared, renderer not connected yet.",
-        }),
+        addIndicator: (cmd) => {
+          const rawNames = Array.isArray(cmd.payload.indicators) ? cmd.payload.indicators : [];
+          const names = rawNames.map((n) => String(n));
+          const enable = cmd.payload.enable !== false;
+          const { smc, indicators, unknown } = resolveIndicatorNames(names);
+          if (smc.length === 0 && indicators.length === 0) {
+            return {
+              id: cmd.id,
+              type: cmd.type,
+              status: "failed",
+              message:
+                unknown.length > 0
+                  ? `AXE could not map: ${unknown.join(", ")}`
+                  : "No indicator layers specified.",
+            };
+          }
+          const smcPatch: Record<string, boolean> = {};
+          const indPatch: Record<string, boolean> = {};
+          for (const key of smc) smcPatch[key] = true;
+          for (const key of indicators) indPatch[key] = true;
+          applyLayerFlags(smcPatch, indPatch, enable);
+          return {
+            id: cmd.id,
+            type: cmd.type,
+            status: "rendered",
+            message: `AXE ${enable ? "enabled" : "disabled"}: ${describeResolvedLayers(smc, indicators)}.`,
+          };
+        },
         clearAiDrawings: (cmd) => {
           saveAnnotations(cmd.symbol, cmd.timeframe, []);
           setAnnotations([]);
@@ -1574,7 +2440,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       setTimeout(() => setSnapshotMessage(null), 4_000);
       return result;
     },
-    [appendAndRenderAnnotation, startDrawing],
+    [appendAndRenderAnnotation, applyLayerFlags, startDrawing],
   );
 
   const executeActionByType = useCallback(
@@ -1618,8 +2484,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       if (type === "draw_trendline") {
         try {
-          const command = buildTrendlineActionFromCandles({
-            id: newAnnotationId(),
+          // Draw BOTH upper (through swing highs) and lower (through
+          // swing lows) trendlines so the chart shows the full channel.
+          const commands = buildTrendlinePairFromCandles({
+            idUpper: newAnnotationId(),
+            idLower: newAnnotationId(),
             source,
             symbol: data.symbol,
             timeframe: data.timeframeKey,
@@ -1627,7 +2496,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             candles: data.candles,
             strength: 3,
           });
-          return executeChartAction(command);
+          let lastResult: ChartActionResult | undefined;
+          for (const command of commands) {
+            lastResult = executeChartAction(command);
+          }
+          return lastResult!;
         } catch {
           const failed: ChartActionResult = {
             id: newAnnotationId(),
@@ -1734,26 +2607,146 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     if (data.failure !== "ok") return;
 
     const normalized = initialAction.toLowerCase();
-    const action =
-      normalized === "draw_fibonacci" || normalized === "draw_trendline" || normalized === "clear_ai_drawings"
-        ? normalized
-        : null;
-    if (!action) return;
+    const supported = new Set([
+      "draw_fibonacci",
+      "draw_trendline",
+      "clear_ai_drawings",
+      "add_indicator",
+      "mark_key_level",
+    ]);
+    if (!supported.has(normalized)) return;
 
-    executeActionByType(action);
+    if (normalized === "add_indicator") {
+      const params = new URLSearchParams(window.location.search);
+      const layers = (params.get("layers") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      executeChartAction({
+        id: newAnnotationId(),
+        type: "add_indicator",
+        source: "axe",
+        symbol: data.symbol,
+        timeframe: data.timeframeKey,
+        accountId: accountId ?? undefined,
+        payload: { indicators: layers, enable: true },
+      });
+    } else if (normalized === "mark_key_level") {
+      const params = new URLSearchParams(window.location.search);
+      const price = Number(params.get("price"));
+      executeChartAction({
+        id: newAnnotationId(),
+        type: "mark_key_level",
+        source: "axe",
+        symbol: data.symbol,
+        timeframe: data.timeframeKey,
+        accountId: accountId ?? undefined,
+        payload: {
+          price,
+          label: params.get("label") ?? undefined,
+        },
+      });
+    } else {
+      executeActionByType(normalized as ChartActionCommand["type"]);
+    }
 
     const params = new URLSearchParams(window.location.search);
     params.delete("action");
+    params.delete("layers");
+    params.delete("price");
+    params.delete("label");
+    params.delete("queued");
     const next = params.toString();
     router.replace(next ? `/chart?${next}` : "/chart", { scroll: false });
   }, [
+    accountId,
     annotationsLoadedKey,
     data.failure,
     data.symbol,
     data.timeframeKey,
     executeActionByType,
+    executeChartAction,
     initialAction,
     router,
+  ]);
+
+  useEffect(() => {
+    if (annotationsLoadedKey !== `${data.symbol}|${data.timeframeKey}`) return;
+    if (data.failure !== "ok") return;
+
+    const runQueued = async () => {
+      const local = consumeLocalChartActions(data.symbol, data.timeframeKey);
+      for (const item of local) {
+        if (item.type === "add_indicator" || item.type === "mark_key_level") {
+          executeChartAction({
+            id: item.id,
+            type: item.type,
+            source: "axe",
+            symbol: item.symbol,
+            timeframe: item.timeframe,
+            accountId: item.accountId ?? accountId ?? undefined,
+            payload: item.payload ?? {},
+          });
+        } else {
+          executeActionByType(item.type, "axe");
+        }
+      }
+
+      try {
+        const qs = new URLSearchParams({
+          symbol: data.symbol,
+          tf: data.timeframeKey,
+        });
+        const res = await fetch(`/api/chart/pending-actions?${qs.toString()}`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          actions?: Array<{
+            id: string;
+            action_type: ChartActionCommand["type"];
+            payload: Record<string, unknown>;
+          }>;
+        };
+        for (const action of json.actions ?? []) {
+          if (
+            action.action_type === "draw_fibonacci" ||
+            action.action_type === "draw_trendline" ||
+            action.action_type === "clear_ai_drawings"
+          ) {
+            executeActionByType(action.action_type, "axe");
+          } else {
+            executeChartAction({
+              id: action.id,
+              type: action.action_type,
+              source: "axe",
+              symbol: data.symbol,
+              timeframe: data.timeframeKey,
+              accountId: accountId ?? undefined,
+              payload: action.payload ?? {},
+            });
+          }
+          await fetch("/api/chart/pending-actions", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ id: action.id }),
+          });
+        }
+      } catch {
+        /* network may be unavailable */
+      }
+    };
+
+    void runQueued();
+  }, [
+    accountId,
+    annotationsLoadedKey,
+    data.failure,
+    data.symbol,
+    data.timeframeKey,
+    executeActionByType,
+    executeChartAction,
   ]);
 
   const saveSnapshotToVault = useCallback(async () => {
@@ -1769,8 +2762,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           brokerSymbol: data.brokerSymbol,
           timeframe: data.timeframeKey,
           lastPrice: livePrice,
-          lastBid: lastBidRef.current,
-          lastAsk: lastAskRef.current,
+          lastBid: liveBid,
+          lastAsk: liveAsk,
           lastTickAt,
           lastCandleAt: data.lastCandleTime,
           openPositionsCount: livePositionsCount,
@@ -1788,7 +2781,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     } finally {
       setTimeout(() => setSnapshotMessage(null), 4_000);
     }
-  }, [accountId, data, livePrice, lastTickAt, livePositionsCount, overlays, liveStatus]);
+  }, [accountId, data, livePrice, liveBid, liveAsk, lastTickAt, livePositionsCount, overlays, liveStatus]);
 
   const resetChartView = useCallback(() => {
     const nextIndex = (scaleModeIndex + 1) % CHART_SCALE_MODES.length;
@@ -1799,20 +2792,46 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   }, [scaleModeIndex]);
 
   const toggleToolFlag = useCallback((id: string) => {
-    setActiveToolFlags((prev) => ({ ...prev, [id]: !prev[id] }));
-  }, []);
-
-  const toggleIndicatorFlag = useCallback((id: string) => {
-    setIndicatorToolFlags((prev) => {
+    if (!canFullIndicators) {
+      setTradeToast({
+        kind: "info",
+        title: "Pro indicator",
+        body: "SMC overlays (FVG, OB, structure…) require Pro. Upgrade for the full indicator suite.",
+      });
+      return;
+    }
+    setActiveToolFlags((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       try {
-        localStorage.setItem("axe.chart.indicatorFlags", JSON.stringify(next));
+        savePref("axe.chart.smcFlags", JSON.stringify(next));
       } catch {
         /* localStorage may be blocked */
       }
       return next;
     });
-  }, []);
+  }, [canFullIndicators, savePref]);
+
+  const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc"]);
+
+  const toggleIndicatorFlag = useCallback((id: string) => {
+    if (!canFullIndicators && PRO_ONLY_INDICATORS.has(id)) {
+      setTradeToast({
+        kind: "info",
+        title: "Pro indicator",
+        body: `${id.toUpperCase()} is part of the full indicator suite — upgrade to Pro to unlock.`,
+      });
+      return;
+    }
+    setIndicatorToolFlags((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try {
+        savePref("axe.chart.indicatorFlags", JSON.stringify(next));
+      } catch {
+        /* localStorage may be blocked */
+      }
+      return next;
+    });
+  }, [canFullIndicators, savePref]);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
     return [
@@ -1896,50 +2915,45 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
   // the chart screen.
   const { setCenter, setRight } = useAppTopBar();
   useEffect(() => {
-    const baseBtn =
-      "inline-flex h-8 w-8 items-center justify-center rounded-full border bg-black/72 text-cyan-200 shadow-[0_8px_20px_rgba(0,0,0,0.45)] backdrop-blur active:scale-95";
-    const idle = "border-cyan-400/30";
-    const active = "border-cyan-300/60 bg-cyan-400/14 text-cyan-100";
+    if (isFullscreen || isTabletLayout) {
+      setCenter(null);
+      setRight(null);
+      return () => {
+        setCenter(null);
+        setRight(null);
+      };
+    }
+
+    const favoritesChip =
+      workflowRuntime && favoriteWorkflowIds.length > 0 ? (
+        <ChartWorkflowFavorites
+          favoriteIds={favoriteWorkflowIds}
+          runtime={workflowRuntime}
+        />
+      ) : null;
+
     setCenter(
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
-          className={`${baseBtn} ${orderBookOpen ? active : idle}`}
-          aria-label="Market depth"
-          title="Market depth"
-          aria-pressed={orderBookOpen}
-        >
-          <BarChart2 className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => (newsOpen ? setNewsOpen(false) : openNews())}
-          className={`${baseBtn} ${newsOpen ? active : idle}`}
-          aria-label="News and intel"
-          title="News & intel"
-          aria-pressed={newsOpen}
-        >
-          <Newspaper className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setToolRailOpen((v) => !v)}
-          className={`${baseBtn} ${idle}`}
-          aria-label="Indicators"
-          title="Indicators"
-        >
-          <Crosshair className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={resetChartView}
-          className={`${baseBtn} ${idle}`}
-          aria-label="Chart settings"
-          title="Chart settings / view"
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-        </button>
+      <div className="flex items-center justify-center gap-1">
+        <ChartThemeTogglerButton
+          themeKey={chartThemeKey}
+          tone={chartTheme.isDark ? "dark" : "light"}
+          variant="toolbar"
+          size="toolbar"
+          direction="ttb"
+          onThemeChange={handleChartThemeChange}
+        />
+        <ChartQuickActions
+          orderBookOpen={orderBookOpen}
+          newsOpen={newsOpen}
+          oneClickVisible={oneClickVisible}
+          executionMode={executionMode}
+          pendingOrderVisible={pendingOrderVisible}
+          onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+          onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+          onOneClick={toggleOneClickTrade}
+          onPending={togglePendingTrade}
+          trailing={favoritesChip}
+        />
       </div>,
     );
     setRight(
@@ -1957,18 +2971,112 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
     data.symbol,
     tfLabel,
     toolbarSections,
+    favoriteWorkflowIds,
+    workflowRuntime,
     orderBookOpen,
     newsOpen,
     openOrderBook,
     openNews,
+    oneClickVisible,
+    executionMode,
+    pendingOrderVisible,
+    toggleOneClickTrade,
+    togglePendingTrade,
+    isFullscreen,
+    isTabletLayout,
+    chartThemeKey,
+    chartTheme.isDark,
+    handleChartThemeChange,
+  ]);
+
+  const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
+  const execBarOverNav = !isFullscreen;
+  const tabletExecPad =
+    oneClickVisible && isTabletLayout && !isFullscreen
+      ? "calc(3.35rem + max(env(safe-area-inset-bottom, 0px), 0.35rem))"
+      : undefined;
+  const { dismiss: dismissChartNotice, isDismissed: isChartNoticeDismissed } = useChartDismissedNotices();
+  const chartNoticeBottom = oneClickVisible ? "3.35rem" : "0.75rem";
+
+  const chartNotices = useMemo(() => {
+    const items: { key: string; tone: "muted" | "amber"; content: React.ReactNode }[] = [];
+    if (routeFallbackMessage) {
+      items.push({ key: `route:${routeFallbackMessage}`, tone: "amber", content: routeFallbackMessage });
+    }
+    if ((liveStatus === "stale" || liveStatus === "offline") && data.candles.length > 0) {
+      items.push({
+        key: `live:${liveStatus}:${liveAge ?? ""}`,
+        tone: "muted",
+        content: (
+          <>
+            <p className="font-semibold text-tos-text/90">
+              {liveStatus === "offline" ? "Using cached broker chart" : "Recovering live broker feed"}
+            </p>
+            <p className="mt-0.5">
+              Showing the last stable broker candles
+              {liveAge ? ` from ${liveAge}` : ""}.{" "}
+              {liveReason ?? "AXE is keeping the chart responsive while the realtime path reconnects."}
+              {reconnectAttempt > 0 ? ` Attempt ${reconnectAttempt}.` : ""}
+            </p>
+          </>
+        ),
+      });
+    }
+    if (data.hint && !failureCopy && liveStatus !== "stale" && liveStatus !== "offline") {
+      items.push({ key: `hint:${data.hint}`, tone: "muted", content: data.hint });
+    }
+    return items;
+  }, [
+    data.candles.length,
+    data.hint,
+    failureCopy,
+    liveAge,
+    liveReason,
+    liveStatus,
+    reconnectAttempt,
+    routeFallbackMessage,
   ]);
 
   return (
     <div
-      className="relative z-30 flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none md:z-auto md:overflow-visible"
+      ref={chartFrameRef}
+      className={`${chartTheme.isDark ? "tos-ambient-glow" : ""} relative flex min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden overscroll-none ${
+        isFullscreen
+          ? "chart-immersive-shell fixed inset-0 z-[9999]"
+          : "flex-1"
+      }`}
+      style={
+        isFullscreen
+          ? {
+              paddingTop: "env(safe-area-inset-top, 0px)",
+              paddingLeft: "env(safe-area-inset-left, 0px)",
+              paddingRight: "env(safe-area-inset-right, 0px)",
+              height: "100dvh",
+              maxHeight: "100dvh",
+              boxSizing: "border-box",
+              background: "#000",
+            }
+          : tabletExecPad
+            ? { paddingBottom: tabletExecPad }
+            : undefined
+      }
     >
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
+          isFullscreen ? "chart-immersive-main" : ""
+        }`}
+      >
+      <LiveStatusReporter
+        liveCount={headerSeverity === "fresh" ? 1 : 0}
+        totalCount={1}
+        freshestAgeSec={liveFresh && freshestRuntimeAt ? Math.max(0, Math.round((Date.now() - Date.parse(freshestRuntimeAt)) / 1000)) : null}
+        label={`Chart · ${data.symbol}`}
+        allLiveOverride={headerSeverity === "fresh" ? true : headerSeverity === "inactive" ? null : false}
+        severity={headerSeverity}
+        reason={headerReasonWithTransport}
+      />
       {/* Desktop-only inline top row — mobile uses the global top bar slots above */}
-      <div className="hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2 md:grid">
+      <div className="tos-shell-desktop-only hidden grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/[0.04] py-2">
         <div className="flex shrink-0 items-baseline gap-1.5">
           <span className="font-mono text-sm font-semibold uppercase tracking-wider text-tos-text">
             {data.symbol}
@@ -1998,7 +3106,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* Drawing mode hint */}
       {drawingHint ? (
-        <div className="mt-2 hidden items-center justify-between gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/8 px-3 py-2 text-[11px] text-cyan-100/95 md:flex">
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] text-white/90">
           <span>
             Drawing: <span className="font-semibold">{drawingHint}</span>
           </span>
@@ -2014,28 +3122,99 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        className="relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden border-t border-white/[0.08] md:min-h-[420px] md:rounded-none md:border-x"
-        style={{ background: CHART_THEME.background }}
+        className={`relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden select-none md:min-h-[420px] md:rounded-none ${
+          chartTheme.isDark ? "border-t border-white/[0.08]" : ""
+        }`}
+        style={{
+          background: chartTheme.background,
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none",
+          viewTransitionName: CHART_THEME_VIEW_TRANSITION,
+        }}
       >
         <ChartCanvas
           ref={canvasRef}
           candles={data.candles}
-          overlays={overlays}
+          overlays={displayOverlays}
+          pendingOrders={displayPendingOrders}
           symbol={data.brokerSymbol}
           annotations={annotations}
           drawingMode={drawingMode}
-          navigationLocked={pendingOrderVisible && executionMode === "pending"}
+          navigationLocked={false}
           onPointClick={handlePointClick}
+          themeKey={chartThemeKey}
+          gridStyle={chartGridStyle}
+          layoutInsetTop={isFullscreen ? 92 : 0}
+          layoutInsetBottom={landscapeLayoutInsetBottom}
+          compactLayout={isFullscreen}
+        />
+
+        {/* Left-side position labels (entry / SL / TP) — drag SL/TP to modify */}
+        <PositionLabelsOverlay
+          canvasRef={canvasRef}
+          overlays={displayOverlays}
+          pendingOrders={displayPendingOrders}
+          symbol={data.brokerSymbol}
+          brokerAccountId={data.account?.brokerAccountId}
+          liveTradingEnabled={liveTrading.enabled || isAlpacaAccount}
+          isDemoAccount={isDemoAccount}
+          isAlpacaAccount={isAlpacaAccount}
+          instantSlTpModify={slTpModifyPref.enabled}
+          slTpDrafts={slTpDrafts}
+          confirmDraftSignal={confirmSlTpSignal}
+          preferredConfirmKey={activeSlTpDraftKey}
+          useExecutionBarConfirm
+          onSlTpDraftChange={(input) => {
+            setSlTpDrafts((prev) => ({
+              ...prev,
+              [input.key]: {
+                stopLoss: input.stopLoss,
+                takeProfit: input.takeProfit,
+                openPrice: input.openPrice,
+              },
+            }));
+            setActiveSlTpDraftKey(input.key);
+            if (!slTpModifyPref.enabled) {
+              setOneClickVisible(true);
+            }
+          }}
+          onSlTpDraftClear={(key) => {
+            setSlTpDrafts((prev) => {
+              if (!prev[key]) return prev;
+              const next = { ...prev };
+              delete next[key];
+              return next;
+            });
+            setActiveSlTpDraftKey((prev) => (prev === key ? null : prev));
+          }}
+          onDemoModify={({ positionId, stopLoss, takeProfit }) => {
+            demoBook.modify(positionId, { stopLoss, takeProfit });
+          }}
+          onDemoOrderModify={({ orderId, openPrice, stopLoss, takeProfit }) => {
+            demoPending.modify(orderId, { openPrice, stopLoss, takeProfit });
+          }}
+          onModifyFeedback={(result) => {
+            setTradeToast({
+              kind: result.ok ? "live" : "error",
+              title: result.ok ? "Order updated" : "Modify failed",
+              body: result.message,
+            });
+          }}
+          isDark={chartTheme.isDark}
         />
 
         <ChartIndicatorLayer
           candles={liveCandles}
           canvasRef={canvasRef}
+          isDark={chartTheme.isDark}
           futureProjectionX={futureProjectionX}
           orderBlockCount={orderBlockCount}
           inverseFvgCount={inverseFvgCount}
           fvgCount={fvgCount}
           projectionCount={projectionCount}
+          maPeriod={maPeriod}
+          maType={maType}
           active={{
             ma: indicatorToolFlags.ma,
             bollinger: indicatorToolFlags.bollinger,
@@ -2048,6 +3227,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             pdh: activeToolFlags.pdh,
             pdl: activeToolFlags.pdl,
             pdq: activeToolFlags.pdq,
+            sessionOpen: activeToolFlags.sessionOpen,
             swingPoints: activeToolFlags.swingPoints,
             supplyDemand: activeToolFlags.supplyDemand,
           }}
@@ -2070,10 +3250,13 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             <TradePlanLine
               canvasRef={canvasRef}
               price={pendingOrderPrice}
-              label={orderTypeLabel(pendingOrderType)}
-              color={pendingOrderSide === "buy" ? "#22D3EE" : "#E13947"}
+              label={`${orderTypeLabel(pendingOrderType)} ${tradeVolume}`}
+              color={pendingOrderSide === "buy" ? CHART_ORDER_BUY_COLOR : CHART_ORDER_SELL_COLOR}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
-              onChange={setPendingOrderPrice}
+              symbol={data.brokerSymbol}
+              onChange={handlePendingEntryPriceChange}
+              onDragStart={() => vibrate("light")}
+              onDragEnd={() => vibrate("light")}
             />
             <TradePlanLine
               canvasRef={canvasRef}
@@ -2081,107 +3264,267 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               label="SL"
               color="#E13947"
               digits={priceDigitsForSymbol(data.brokerSymbol)}
+              symbol={data.brokerSymbol}
               onChange={setPendingStopLossPrice}
               dashed
+              tapToArm
+              entryPrice={pendingOrderPrice}
+              volume={tradeVolume}
+              side={pendingOrderSide}
+              onDragStart={() => vibrate("light")}
+              onDragEnd={() => { vibrate("light"); playSound("tap"); }}
             />
             <TradePlanLine
               canvasRef={canvasRef}
               price={pendingTakeProfitPrice}
               label="TP"
-              color="#22D3EE"
+              color="#1F9C7B"
               digits={priceDigitsForSymbol(data.brokerSymbol)}
+              symbol={data.brokerSymbol}
               onChange={setPendingTakeProfitPrice}
               dashed
+              tapToArm
+              entryPrice={pendingOrderPrice}
+              volume={tradeVolume}
+              side={pendingOrderSide}
+              onDragStart={() => vibrate("light")}
+              onDragEnd={() => { vibrate("light"); playSound("tap"); }}
             />
+            {/* Small cancel button — actions live in bottom bar now */}
             <button
               type="button"
               onClick={() => {
                 setPendingOrderVisible(false);
                 setExecutionMode("market");
               }}
-              className="absolute right-3 top-12 z-30 inline-flex items-center gap-1 rounded-full border border-white/15 bg-black/82 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
-              aria-label="Cancel pending order overlay"
+              className="absolute right-3 top-12 z-30 flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/82 text-[12px] text-white/70 shadow-[0_4px_12px_rgba(0,0,0,0.45)] backdrop-blur"
+              aria-label="Cancel pending order"
             >
-              <span aria-hidden>✕</span>
-              <span>Clear plan</span>
-            </button>
-            {/* Send pill — sole entry point for actually opening a position.
-                Demo: virtual fill. Live: ChartOrderConfirm. */}
-            <button
-              type="button"
-              onClick={() => handleSendCurrentPlan()}
-              className={`absolute right-3 top-[5.25rem] z-30 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wider shadow-[0_10px_28px_rgba(0,0,0,0.55)] backdrop-blur transition ${
-                pendingOrderSide === "buy"
-                  ? "border border-cyan-300/60 bg-cyan-400/22 text-cyan-50 hover:bg-cyan-400/30"
-                  : "border border-rose-300/60 bg-rose-400/22 text-rose-50 hover:bg-rose-400/30"
-              }`}
-              aria-label={`Send ${pendingOrderSide.toUpperCase()} ${
-                isDemoAccount ? "(demo virtual fill)" : "(live order)"
-              }`}
-            >
-              {pendingOrderSide === "buy" ? "▲" : "▼"}{" "}
-              {isDemoAccount ? "Send · DEMO" : liveTrading.enabled ? "Send · LIVE" : "Live OFF"}
+              ✕
             </button>
           </>
         ) : null}
 
-        <div className="absolute left-0 right-0 top-0 z-30 border-b border-white/[0.07] bg-black/68 px-2 py-1.5 backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
+        {/* Tablet — compact toolbar: left meta, centered depth/news | squawk | exec, right account */}
+        <div
+          className={`tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 bg-black/72 px-2 py-1.5 backdrop-blur-lg ${
+            chartTheme.isDark ? "border-b border-white/[0.06]" : ""
+          }`}
+        >
+          <div className="flex min-w-0 items-center justify-self-start gap-1">
+            <div className="relative">
+              <select
+                value={data.symbol}
+                onChange={(e) => goSymbol(e.target.value)}
+                className="max-w-[6.5rem] appearance-none rounded-lg border border-white/[0.10] bg-white/[0.05] px-2 py-0.5 pr-5 font-mono text-[11px] font-bold uppercase text-cyan-400 outline-none"
+                aria-label="Symbol"
+              >
+                {data.symbolOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-cyan-400/60" />
+            </div>
+            <div className="relative">
+              <select
+                value={pendingTfKey ?? data.timeframeKey}
+                onChange={(e) => goTf(e.target.value)}
+                className="appearance-none rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 pr-5 font-mono text-[11px] font-semibold uppercase text-white/80 outline-none"
+                aria-label="Timeframe"
+              >
+                {CHART_TF_OPTIONS.map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
+            </div>
+            <span className="font-mono text-[11px] font-medium text-white/85">{lastPriceText}</span>
+            {transportBadge ? (
+              <span
+                className={`shrink-0 rounded border px-1 py-0.5 font-mono text-[7px] font-bold uppercase ${transportBadge.className}`}
+                title={transportBadge.title}
+              >
+                {transportBadge.label}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-center gap-1 justify-self-center px-1">
+            <ChartThemeTogglerButton
+              themeKey={chartThemeKey}
+              tone={chartTheme.isDark ? "dark" : "light"}
+              variant="toolbar"
+              size="toolbar"
+              direction="ttb"
+              onThemeChange={handleChartThemeChange}
+            />
+            <ChartQuickActions
+              variant="tablet"
+              orderBookOpen={orderBookOpen}
+              newsOpen={newsOpen}
+              oneClickVisible={oneClickVisible}
+              executionMode={executionMode}
+              pendingOrderVisible={pendingOrderVisible}
+              onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+              onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+              onOneClick={toggleOneClickTrade}
+              onPending={togglePendingTrade}
+              trailing={
+                workflowRuntime && favoriteWorkflowIds.length > 0 ? (
+                  <ChartWorkflowFavorites
+                    favoriteIds={favoriteWorkflowIds}
+                    runtime={workflowRuntime}
+                    compact
+                  />
+                ) : null
+              }
+            />
+          </div>
+          {data.accountChoices.length > 0 ? (
+            <div className="relative shrink-0 justify-self-end">
+              <select
+                value={accountId ?? ""}
+                onChange={(e) => goAccount(e.target.value)}
+                className="max-w-[9rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2 py-0.5 pr-5 text-[9px] font-semibold text-emerald-100/90 outline-none"
+                aria-label="Account"
+              >
+                {data.accountChoices.map((a) => (
+                  <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
+            </div>
+          ) : (
+            <div aria-hidden className="justify-self-end" />
+          )}
+        </div>
+
+        {/* Phone — two-row toolbar (unchanged layout) */}
+        <div className="tos-chart-phone-header absolute left-0 right-0 top-0 z-30 border-b border-white/[0.06] bg-black/72 px-2.5 py-1.5 backdrop-blur-lg">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <div className="relative">
                 <select
                   value={data.symbol}
                   onChange={(e) => goSymbol(e.target.value)}
-                  className="min-w-0 max-w-[7.5rem] appearance-none bg-transparent font-mono text-[13px] font-bold uppercase tracking-tight text-[#1f8cff] outline-none"
+                  className="min-w-0 max-w-[7.5rem] appearance-none rounded-lg border border-white/[0.10] bg-white/[0.05] px-2 py-0.5 pr-5 font-mono text-[12px] font-bold uppercase tracking-tight text-cyan-400 outline-none transition-colors hover:bg-white/[0.08]"
                   aria-label="Symbol"
                 >
                   {data.symbolOptions.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
+                    <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
+                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-cyan-400/60" />
+              </div>
+              <div className="relative">
                 <select
                   value={pendingTfKey ?? data.timeframeKey}
                   onChange={(e) => goTf(e.target.value)}
-                  className="appearance-none bg-transparent font-mono text-[13px] font-semibold uppercase text-tos-text outline-none"
+                  className="appearance-none rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 pr-5 font-mono text-[12px] font-semibold uppercase text-white/80 outline-none transition-colors hover:bg-white/[0.07]"
                   aria-label="Timeframe"
                 >
                   {CHART_TF_OPTIONS.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
+                    <option key={t.key} value={t.key}>{t.label}</option>
                   ))}
                 </select>
+                <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
               </div>
-              <p className="mt-0.5 font-mono text-[11px] text-tos-text/82">{lastPriceText}</p>
             </div>
-            <div className="pt-0.5 text-right text-[9px] font-semibold uppercase tracking-[0.16em] text-tos-dim">
+            <div className="flex shrink-0 items-center gap-1.5">
+              {data.accountChoices.length > 1 ? (
+                <div className="relative shrink-0">
+                  <select
+                    value={accountId ?? ""}
+                    onChange={(e) => goAccount(e.target.value)}
+                    className="max-w-[10.4rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2.5 py-1 pr-6 text-[10px] font-semibold text-emerald-100/90 outline-none transition-colors hover:bg-emerald-400/[0.15]"
+                    aria-label="Account"
+                  >
+                    {data.accountChoices.map((a) => (
+                      <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="tos-chart-fullscreen-btn grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-white/50 transition-colors hover:bg-white/[0.08] hover:text-white/70"
+                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+              >
+                {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+              </button>
+            </div>
+          </div>
+          <div className="mt-1 flex w-full items-center gap-2 overflow-hidden">
+            <span className="shrink-0 font-mono text-[9.5px] font-semibold uppercase tracking-[0.11em] text-cyan-300/80">
+              {data.symbol}
+            </span>
+            <span className="shrink-0 font-mono text-[11px] font-medium text-white/80">{lastPriceText}</span>
+            {transportBadge ? (
+              <span
+                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.12em] ${transportBadge.className}`}
+                title={transportBadge.title}
+              >
+                {transportBadge.label}
+              </span>
+            ) : null}
+            <span
+              className="ml-auto shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em]"
+              style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}
+            >
               {sessionCopy()}
-            </div>
+            </span>
           </div>
         </div>
 
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
-          className={`absolute left-0 top-[36%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
+          className={`absolute left-0 top-0 z-40 grid h-14 w-6 place-items-center rounded-r-2xl border border-l-0 transition ${
             toolRailOpen
-              ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.2)]"
-              : "border-cyan-400/18 bg-black/78 text-cyan-200"
+              ? chartTheme.isDark
+                ? "border-white/[0.18] bg-white/[0.10] text-white shadow-[0_0_14px_rgba(255,255,255,0.12)] backdrop-blur"
+                : "border-black/[0.12] bg-[#d7d6d0]/95 text-black/80 shadow-none"
+              : chartTheme.isDark
+                ? "border-white/[0.10] bg-black/42 text-white/82 backdrop-blur"
+                : "border-transparent bg-transparent text-black/45 shadow-none"
           }`}
-          aria-label="Toggle SMC chart toolbar"
+          style={{ top: isTabletLayout ? "var(--tos-tablet-chart-header-h)" : "calc(env(safe-area-inset-top, 0px) + 5rem)" }}
+          aria-label="Toggle chart tools drawer"
         >
-          <span className="h-8 w-1 rounded-full bg-current opacity-80" aria-hidden />
+          <span className="h-7 w-1 rounded-full bg-current opacity-75" aria-hidden />
         </button>
 
         <div
-          className={`absolute left-0 top-[36%] z-30 w-[13.75rem] max-h-[46vh] -translate-y-1/2 overflow-y-auto rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
-            toolRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
+          className={`absolute left-0 top-0 z-30 overflow-y-auto rounded-r-2xl border border-l-0 p-2.5 transition-[transform,opacity] ${
+            chartTheme.isDark
+              ? "border-white/16 bg-[rgba(20,22,28,0.64)]"
+              : "border-black/20 bg-[rgba(242,244,246,0.95)]"
+          } ${
+            toolRailOpen
+              ? chartTheme.isDark
+                ? "translate-x-6 opacity-100 shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
+                : "translate-x-6 opacity-100 shadow-none"
+              : "pointer-events-none -translate-x-full opacity-0"
           }`}
+          style={{
+            top: isTabletLayout ? "calc(var(--tos-tablet-chart-header-h) - 0.35rem)" : "calc(env(safe-area-inset-top, 0px) + 4.6rem)",
+            width: isTabletLayout ? "min(22rem, calc(100% - 5rem))" : "calc(100% - 80px)",
+            maxHeight: isTabletLayout
+              ? "calc(100% - var(--tos-tablet-chart-header-h) - 0.5rem)"
+              : "calc(100% - env(safe-area-inset-top, 0px) - 5rem)",
+            backdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
+            WebkitBackdropFilter: chartTheme.isDark && toolRailOpen ? "blur(14px)" : "none",
+          }}
         >
-          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-cyan-100/85">Chart tools</div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div
+            className={`mb-2 text-[9px] font-bold uppercase tracking-[0.2em] ${
+              chartTheme.isDark ? "text-white/72" : "text-black/62"
+            }`}
+          >
+            Tools + indicators
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
           {[
             { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
             {
@@ -2213,6 +3556,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             { id: "pdh", label: "PDH", icon: Maximize2, active: Boolean(activeToolFlags.pdh), action: () => toggleToolFlag("pdh") },
             { id: "pdl", label: "PDL", icon: Maximize2, active: Boolean(activeToolFlags.pdl), action: () => toggleToolFlag("pdl") },
             { id: "pdq", label: "PDQ", icon: Maximize2, active: Boolean(activeToolFlags.pdq), action: () => toggleToolFlag("pdq") },
+            { id: "sessionOpen", label: "Open", icon: Sun, active: Boolean(activeToolFlags.sessionOpen), action: () => toggleToolFlag("sessionOpen") },
             { id: "supplyDemand", label: "S/D", icon: Layers, active: Boolean(activeToolFlags.supplyDemand), action: () => toggleToolFlag("supplyDemand") },
             { id: "swingPoints", label: "Swings", icon: GitBranch, active: Boolean(activeToolFlags.swingPoints), action: () => toggleToolFlag("swingPoints") },
             // Future projection cursor — toggleable so traders who don't
@@ -2237,10 +3581,16 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                 title={item.label}
                 className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
                   isDisabled
-                    ? "cursor-not-allowed border-white/[0.04] bg-white/[0.02] text-tos-dim opacity-50"
+                    ? chartTheme.isDark
+                      ? "cursor-not-allowed border-white/[0.04] bg-white/[0.02] text-tos-dim opacity-50"
+                      : "cursor-not-allowed border-black/[0.08] bg-black/[0.03] text-black/35 opacity-60"
                     : item.active
-                      ? "border-cyan-300/45 bg-cyan-400/18 text-cyan-100"
-                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                      ? chartTheme.isDark
+                        ? "border-white/[0.14] bg-white/[0.08] text-white"
+                        : "border-cyan-700/40 bg-cyan-500/14 text-cyan-900"
+                      : chartTheme.isDark
+                        ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-white"
+                        : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-black"
                 }`}
                 aria-label={item.label}
               >
@@ -2250,12 +3600,225 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             );
           })}
 
+          <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
+            <div className={`mb-1 text-[8px] font-bold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-white/60" : "text-black/55"}`}>
+              Draw
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                {
+                  id: "draw-line",
+                  label: "Line",
+                  icon: TrendingUp,
+                  active: drawingMode === "trendline",
+                  action: () => (drawingMode === "trendline" ? cancelDrawing() : startDrawing("trendline")),
+                },
+                {
+                  id: "draw-rect",
+                  label: "Rect",
+                  icon: Square,
+                  active: drawingMode === "rectangle",
+                  action: () => (drawingMode === "rectangle" ? cancelDrawing() : startDrawing("rectangle")),
+                },
+                {
+                  id: "draw-text",
+                  label: "Text",
+                  icon: Type,
+                  active: drawingMode === "text",
+                  action: () => (drawingMode === "text" ? cancelDrawing() : startDrawing("text")),
+                },
+                {
+                  id: "draw-hline",
+                  label: "H-Line",
+                  icon: Minus,
+                  active: drawingMode === "horizontal_level",
+                  action: () =>
+                    drawingMode === "horizontal_level"
+                      ? cancelDrawing()
+                      : startDrawing("horizontal_level"),
+                },
+                {
+                  id: "draw-clear",
+                  label: "Clear",
+                  icon: Trash2,
+                  active: false,
+                  action: () => clearAllDrawings(),
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={item.action}
+                    title={item.label}
+                    className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                      item.active
+                        ? chartTheme.isDark
+                          ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-white"
+                          : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-black"
+                    }`}
+                    aria-label={item.label}
+                    aria-pressed={item.active}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                    <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
+            <div className={`mb-1 text-[8px] font-bold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-white/60" : "text-black/55"}`}>
+              Indicators
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { id: "volume", label: "VOL", icon: BarChart3 },
+                { id: "ma", label: "MA", icon: LineChart },
+                { id: "macd", label: "MACD", icon: Activity },
+                { id: "bollinger", label: "BOL", icon: BarChart2 },
+                { id: "rsi", label: "RSI", icon: Activity },
+                { id: "vwap", label: "VWAP", icon: Landmark },
+                { id: "poc", label: "POC", icon: Crosshair },
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = Boolean(indicatorToolFlags[item.id]);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleIndicatorFlag(item.id)}
+                    title={item.label}
+                    className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                      active
+                        ? chartTheme.isDark
+                          ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                          : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                    }`}
+                    aria-label={`Toggle ${item.label}`}
+                    aria-pressed={active}
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                    <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {indicatorToolFlags.ma ? (
+            <div className="col-span-4 mt-1 flex items-center gap-1.5 border-t border-white/[0.08] pt-2">
+              <span className={`text-[8px] font-bold uppercase tracking-widest ${chartTheme.isDark ? "text-cyan-100/60" : "text-cyan-900/70"}`}>MA</span>
+              {([9, 20, 50, 200] as const).map((period) => (
+                <button
+                  key={period}
+                  type="button"
+                  onClick={() => {
+                    setMaPeriod(period);
+                    try { savePref("axe.chart.maPeriod", String(period)); } catch { /* ignore */ }
+                  }}
+                  className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold transition ${
+                    maPeriod === period
+                      ? chartTheme.isDark
+                        ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                        : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                      : chartTheme.isDark
+                        ? "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                        : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                  }`}
+                >
+                  {period}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={toggleMaType}
+                className={`ml-auto rounded-md border px-1.5 py-0.5 text-[9px] font-bold transition ${
+                  maType === "ema"
+                    ? chartTheme.isDark
+                      ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                      : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                    : chartTheme.isDark
+                      ? "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                      : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                }`}
+                title={`Switch to ${maType === "sma" ? "EMA" : "SMA"}`}
+              >
+                {maType === "ema" ? "EMA" : "SMA"}
+              </button>
+            </div>
+          ) : null}
+
+          {(() => {
+            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m]);
+            if (enabledPanes.length < 2) return null;
+            const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
+            return (
+              <div className="col-span-4 mt-1 border-t border-white/[0.08] pt-2">
+                <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${chartTheme.isDark ? "text-cyan-100/60" : "text-cyan-900/70"}`}>
+                  Pane order
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {enabledPanes.map((mode, i) => (
+                    <div key={mode} className="flex items-center gap-1">
+                      <span className={`min-w-[2.2rem] text-[9px] font-semibold ${chartTheme.isDark ? "text-white/75" : "text-black/75"}`}>
+                        {labels[mode] ?? mode.toUpperCase()}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => movePaneInOrder(mode, -1)}
+                        className={`rounded border px-1 py-0.5 text-[8px] ${
+                          i === 0
+                            ? chartTheme.isDark
+                              ? "border-white/[0.04] text-white/25"
+                              : "border-black/[0.08] text-black/30"
+                            : chartTheme.isDark
+                              ? "border-white/[0.08] text-white/65 hover:text-white"
+                              : "border-black/[0.16] text-black/65 hover:text-black"
+                        }`}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === enabledPanes.length - 1}
+                        onClick={() => movePaneInOrder(mode, 1)}
+                        className={`rounded border px-1 py-0.5 text-[8px] ${
+                          i === enabledPanes.length - 1
+                            ? chartTheme.isDark
+                              ? "border-white/[0.04] text-white/25"
+                              : "border-black/[0.08] text-black/30"
+                            : chartTheme.isDark
+                              ? "border-white/[0.08] text-white/65 hover:text-white"
+                              : "border-black/[0.16] text-black/65 hover:text-black"
+                        }`}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* OB count picker — only visible while the OB indicator is on.
               Lets the user choose how many bullish + bearish blocks to
               show (1 each = cleanest, up to 3 each for context). */}
           {activeToolFlags.orderBlocks ? (
-            <div className="col-span-3 mt-1 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 mt-1 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 OB · per side
               </span>
               <div className="flex items-center gap-1">
@@ -2268,8 +3831,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateOrderBlockCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Show ${value} order block${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2285,8 +3852,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           {/* FVG count picker — mirrors OB / iFVG. Latest N bullish + N
               bearish unmitigated gaps. Only visible while FVG is on. */}
           {activeToolFlags.fvg ? (
-            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 FVG · per side
               </span>
               <div className="flex items-center gap-1">
@@ -2299,8 +3868,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateFvgCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Show ${value} FVG${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2318,8 +3891,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               to the future-projection cursor; reclaimed ones stop at
               the inversion candle. */}
           {activeToolFlags.ifvg ? (
-            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 iFVG · per side
               </span>
               <div className="flex items-center gap-1">
@@ -2332,8 +3907,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateInverseFvgCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Show ${value} iFVG${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2351,8 +3930,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               extend forward to the projection cursor. 1 = only the
               latest, 2 / 3 = latest two / three. */}
           {futureCursorEnabled ? (
-            <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+            <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+              chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+            }`}>
+              <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                 Project · per side
               </span>
               <div className="flex items-center gap-1">
@@ -2365,8 +3946,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                       onClick={() => updateProjectionCount(value as 1 | 2 | 3)}
                       className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
                         isActive
-                          ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                          : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                          ? chartTheme.isDark
+                            ? "border-white/[0.16] bg-white/[0.10] text-white"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                            : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                       }`}
                       aria-label={`Project ${value} indicator${value === 1 ? "" : "s"} per direction`}
                       aria-pressed={isActive}
@@ -2388,8 +3973,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               snap to the same levels). */}
           {hasFibAnnotation ? (
             <>
-              <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-                <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+              <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+              }`}>
+                <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                   Fib · source
                 </span>
                 <div className="flex items-center gap-1">
@@ -2397,7 +3984,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     { value: "auto", label: "Auto" },
                     { value: "swing", label: "Swing" },
                     { value: "pd", label: "Day" },
-                    { value: "sd", label: "S/D" },
                   ] as Array<{ value: FibMode; label: string }>).map((opt) => {
                     const isActive = fibMode === opt.value;
                     return (
@@ -2407,8 +3993,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                         onClick={() => updateFibMode(opt.value)}
                         className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
                           isActive
-                            ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                            : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                            ? chartTheme.isDark
+                              ? "border-white/[0.16] bg-white/[0.10] text-white"
+                              : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                            : chartTheme.isDark
+                              ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                              : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                         }`}
                         aria-label={`Fib source ${opt.label}`}
                         aria-pressed={isActive}
@@ -2426,8 +4016,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   side independently to widen or tighten the rendered fib
                   without touching the underlying anchors. Persisted on
                   every fib annotation via setFibExtendOnAll. */}
-              <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-                <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+              <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+              }`}>
+                <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                   Fib · extend
                 </span>
                 <div className="flex items-center gap-1">
@@ -2436,8 +4028,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     onClick={() => setFibExtendOnAll("extendLeft", !allFibsExtendLeft)}
                     className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
                       allFibsExtendLeft
-                        ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                        ? chartTheme.isDark
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                     }`}
                     aria-label="Extend fib lines left"
                     aria-pressed={allFibsExtendLeft}
@@ -2449,8 +4045,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     onClick={() => setFibExtendOnAll("extendRight", !allFibsExtendRight)}
                     className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
                       allFibsExtendRight
-                        ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                        : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                        ? chartTheme.isDark
+                          ? "border-white/[0.16] bg-white/[0.10] text-white"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                          : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                     }`}
                     aria-label="Extend fib lines right"
                     aria-pressed={allFibsExtendRight}
@@ -2461,8 +4061,10 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               </div>
 
               {fibMode === "swing" ? (
-                <div className="col-span-3 flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-2 py-1.5">
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-tos-muted">
+                <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                  chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+                }`}>
+                  <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
                     Swing leg
                   </span>
                   <div className="flex items-center gap-1">
@@ -2480,8 +4082,12 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                           onClick={() => updateFibSwingOffset(opt.value)}
                           className={`grid h-6 min-w-[1.8rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
                             isActive
-                              ? "border-cyan-300/55 bg-cyan-400/22 text-cyan-100"
-                              : "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-cyan-100"
+                              ? chartTheme.isDark
+                                ? "border-white/[0.16] bg-white/[0.10] text-white"
+                                : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                              : chartTheme.isDark
+                                ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                                : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
                           }`}
                           aria-label={`Use swing leg ${opt.label}`}
                           aria-pressed={isActive}
@@ -2498,61 +4104,6 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIndicatorRailOpen((v) => !v)}
-          className={`absolute left-0 top-[70%] z-40 grid h-16 w-6 -translate-y-1/2 place-items-center rounded-r-2xl border border-l-0 backdrop-blur transition ${
-            indicatorRailOpen
-              ? "border-amber-300/45 bg-amber-400/18 text-amber-100 shadow-[0_0_24px_rgba(251,191,36,0.18)]"
-              : "border-amber-400/18 bg-black/78 text-amber-200"
-          }`}
-          aria-label="Toggle indicator toolbar"
-        >
-          <span className="h-8 w-1 rounded-full bg-current opacity-80" aria-hidden />
-        </button>
-
-        <div
-          className={`absolute left-0 top-[70%] z-30 w-[13.75rem] -translate-y-1/2 rounded-r-2xl border border-l-0 border-white/10 bg-black/82 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.62)] backdrop-blur-xl transition-transform ${
-            indicatorRailOpen ? "translate-x-6" : "pointer-events-none -translate-x-full"
-          }`}
-        >
-          <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-amber-100/85">
-            Indicators
-          </div>
-          <div className="grid grid-cols-3 gap-1.5">
-            {[
-              { id: "volume", label: "VOL", icon: BarChart3 },
-              { id: "ma", label: "MA", icon: LineChart },
-              { id: "macd", label: "MACD", icon: Activity },
-              { id: "bollinger", label: "BOL", icon: BarChart2 },
-              { id: "rsi", label: "RSI", icon: Activity },
-              { id: "vwap", label: "VWAP", icon: Landmark },
-              { id: "poc", label: "POC", icon: Crosshair },
-            ].map((item) => {
-              const Icon = item.icon;
-              const active = Boolean(indicatorToolFlags[item.id]);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => toggleIndicatorFlag(item.id)}
-                  title={item.label}
-                  className={`flex h-11 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
-                    active
-                      ? "border-amber-300/45 bg-amber-400/16 text-amber-100"
-                      : "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-amber-100"
-                  }`}
-                  aria-label={`Toggle ${item.label}`}
-                  aria-pressed={active}
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                  <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
         <div className="pointer-events-none absolute inset-0 z-[25]">
           <FibAnnotationLayer
@@ -2564,6 +4115,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             futureProjectionX={futureProjectionX}
             lastBarTimeSec={recentCandleTimes[recentCandleTimes.length - 1] ?? null}
             prevBarTimeSec={recentCandleTimes[recentCandleTimes.length - 2] ?? null}
+            isDark={chartTheme.isDark}
           />
 
           {/* Interactive Trendline layer — draggable endpoints */}
@@ -2573,27 +4125,66 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             onUpdate={updateAnnotation}
             onRemove={removeAnnotationById}
             futureProjectionX={futureProjectionX}
+            isDark={chartTheme.isDark}
+          />
+
+          <RectangleAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
+            isDark={chartTheme.isDark}
+          />
+
+          <TextAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
+            isDark={chartTheme.isDark}
+          />
+
+          <HorizontalLevelAnnotationLayer
+            annotations={annotations}
+            canvasRef={canvasRef}
+            onUpdate={updateAnnotation}
+            onRemove={removeAnnotationById}
+            isDark={chartTheme.isDark}
           />
         </div>
 
         {/* Failure overlay sits on top of the chart frame so layout stays stable */}
         {failureCopy ? (
-          <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-b from-transparent via-[#04070C]/60 to-[#04070C]/95 p-4 sm:items-center">
-            <GlassPanel className="w-full max-w-md p-4 sm:p-5" glow="warm">
+          <div className="absolute inset-0 z-20 flex items-end justify-center bg-gradient-to-b from-[#04070C]/35 via-[#04070C]/72 to-[#04070C]/96 p-4 sm:items-center">
+            <GlassPanel className="w-full max-w-md p-4 sm:p-5" glow="none">
+              {data.candles.length === 0 ? (
+                <div className="mb-3 flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400/70" />
+                  <span className="text-[11px] font-medium uppercase tracking-widest text-white/40">
+                    {data.failure === "broker_symbol_not_found"
+                      ? "Mapping symbol"
+                      : data.failure === "market_data_unavailable"
+                        ? "Checking market data"
+                        : data.failure === "metaapi_timeout"
+                          ? "MetaAPI timed out"
+                        : "Checking broker data"}
+                  </span>
+                </div>
+              ) : null}
               <p className="text-sm font-semibold text-tos-text">{failureCopy.title}</p>
               <p className="mt-1.5 text-xs leading-relaxed text-tos-muted">{failureCopy.body}</p>
               <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
                 {data.failure === "account_not_connected" || data.failure === "provider_not_configured" ? (
                   <Link
                     href="/accounts"
-                    className="rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+                    className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
                   >
                     Connect account
                   </Link>
                 ) : (
                   <Link
                     href="/accounts"
-                    className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-100/95 hover:bg-cyan-500/18"
+                    className="rounded-lg border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 font-semibold text-white/90 hover:bg-white/[0.08]"
                   >
                     Sync account
                   </Link>
@@ -2607,6 +4198,21 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                     Try H1
                   </button>
                 ) : null}
+                {/* Quick switch to demo when broker account is failing */}
+                {data.accountChoices.length > 1 &&
+                  data.account?.connectionMethod !== "demo_paper" &&
+                  data.accountChoices.find((a) => a.connectionMethod === "demo_paper") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const demo = data.accountChoices.find((a) => a.connectionMethod === "demo_paper");
+                      if (demo) goAccount(demo.brokerAccountId);
+                    }}
+                    className="rounded-lg border border-cyan-400/25 bg-cyan-400/[0.08] px-3 py-1.5 font-semibold text-cyan-300/90 hover:bg-cyan-400/[0.14]"
+                  >
+                    Use Demo
+                  </button>
+                ) : null}
                 <Link
                   href={chatQ(`Help me debug my MT5 chart on ${data.symbol} ${tfLabel}. Failure: ${data.failure}.`)}
                   className="rounded-lg border border-white/12 bg-white/[0.04] px-3 py-1.5 font-semibold text-tos-muted hover:bg-white/[0.08]"
@@ -2618,15 +4224,8 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : null}
 
-        <button
-          type="button"
-          onClick={resetChartView}
-          className="absolute bottom-3 right-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/76 text-cyan-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/45 hover:bg-cyan-400/12 active:scale-95"
-          aria-label={CHART_SCALE_MODES[scaleModeIndex].label}
-          title={CHART_SCALE_MODES[scaleModeIndex].label}
-        >
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-        </button>
+        {/* Floating reset button removed — chart reset accessible via
+            long-press or indicator tool rail instead. */}
 
         {/* Floating toast: lives INSIDE the chart frame so it can never push the
             indicator panes or the execution bar around. pointer-events:none so
@@ -2637,240 +4236,267 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
           </div>
         ) : null}
 
-        {isTimeframePending ? (
-          <div className="pointer-events-none absolute right-3 top-12 z-30 rounded-full border border-cyan-300/20 bg-black/78 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/85 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-            Loading {CHART_TF_OPTIONS.find((t) => t.key === pendingTfKey)?.label ?? "TF"}
-          </div>
-        ) : null}
-        {routeFallbackMessage ? (
-          <div className="pointer-events-none absolute right-3 top-12 z-30 max-w-[18rem] rounded-xl border border-amber-300/20 bg-black/82 px-3 py-2 text-[10.5px] font-medium leading-snug text-amber-100/90 shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-            {routeFallbackMessage}
-          </div>
-        ) : null}
-        {(liveStatus === "stale" || liveStatus === "offline") && data.candles.length > 0 ? (
-          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-white/10 bg-black/82 px-3 py-2 text-[10.5px] leading-snug text-tos-muted shadow-[0_10px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-            <p className="font-semibold text-tos-text/90">
-              {liveStatus === "offline" ? "Using cached broker chart" : "Recovering live broker feed"}
-            </p>
-            <p className="mt-0.5">
-              Showing the last stable broker candles
-              {liveAge ? ` from ${liveAge}` : ""}.{" "}
-              {liveReason ?? "AXE is keeping the chart responsive while the realtime path reconnects."}
-              {reconnectAttempt > 0 ? ` Attempt ${reconnectAttempt}.` : ""}
-            </p>
-          </div>
-        ) : null}
-        {data.hint && !failureCopy && liveStatus !== "stale" && liveStatus !== "offline" ? (
-          <div className="pointer-events-none absolute left-3 top-12 z-30 max-w-[18rem] rounded-xl border border-cyan-300/15 bg-black/76 px-3 py-2 text-[10.5px] leading-snug text-cyan-100/82 shadow-[0_10px_30px_rgba(0,0,0,0.42)] backdrop-blur">
-            {data.hint}
-          </div>
-        ) : null}
+        {/* "Running TF" orb removed — the AxeBreatheLoader particle globe
+            was visually distracting on every TF/symbol switch. The chart
+            already shows candles appearing; no extra indicator needed. */}
+        {chartNotices.map((notice, idx) => (
+          <ChartDismissibleNotice
+            key={notice.key}
+            noticeKey={notice.key}
+            tone={notice.tone}
+            dismissed={isChartNoticeDismissed(notice.key)}
+            onDismiss={dismissChartNotice}
+            bottomOffset={chartNoticeBottom}
+            stackIndex={idx}
+          >
+            {notice.content}
+          </ChartDismissibleNotice>
+        ))}
+      </div>
       </div>
 
-      {/* Indicator panes: each one is its own bounded box, so the chart can
-          never bleed into the volume/RSI area and vice versa. They share the
-          main chart's time scale via canvasRef.timeToCoordinate(...). */}
-      {indicatorToolFlags.volume ? (
-        <ResizablePane
-          height={paneHeights.volume}
-          onResize={(next) => setPaneHeight("volume", next)}
-          minHeight={70}
-          maxHeight={260}
-          ariaLabel="Resize volume pane"
-        >
-          <IndicatorPane mode="volume" candles={liveCandles} canvasRef={canvasRef} />
-        </ResizablePane>
-      ) : null}
-      {indicatorToolFlags.rsi ? (
-        <ResizablePane
-          height={paneHeights.rsi}
-          onResize={(next) => setPaneHeight("rsi", next)}
-          minHeight={70}
-          maxHeight={280}
-          ariaLabel="Resize RSI pane"
-        >
-          <IndicatorPane mode="rsi" candles={liveCandles} canvasRef={canvasRef} />
-        </ResizablePane>
-      ) : null}
-      {indicatorToolFlags.macd ? (
-        <ResizablePane
-          height={paneHeights.macd}
-          onResize={(next) => setPaneHeight("macd", next)}
-          minHeight={70}
-          maxHeight={280}
-          ariaLabel="Resize MACD pane"
-        >
-          <IndicatorPane mode="macd" candles={liveCandles} canvasRef={canvasRef} />
-        </ResizablePane>
-      ) : null}
+      {/* Indicator panes hidden in landscape immersive — keeps room for dates + execution bar */}
+      {!isFullscreen
+        ? (() => {
+        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m]);
+        const multiPane = enabledPanesList.length > 1;
+        return enabledPanesList.map((mode, idx) => (
+          <ResizablePane
+            key={mode}
+            height={paneHeights[mode]}
+            onResize={(next) => setPaneHeight(mode, next)}
+            minHeight={70}
+            maxHeight={mode === "volume" ? 260 : 280}
+            ariaLabel={`Resize ${mode.toUpperCase()} pane`}
+            onMoveUp={multiPane && idx > 0 ? () => movePaneInOrder(mode, -1) : undefined}
+            onMoveDown={multiPane && idx < enabledPanesList.length - 1 ? () => movePaneInOrder(mode, 1) : undefined}
+          >
+            <IndicatorPane mode={mode} candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
+          </ResizablePane>
+        ));
+      })()
+        : null}
 
-      {/* Execution bar — flush to the device bottom. Safe-area inset is
-          applied INSIDE the bar so the colored gradients reach the very edge
-          of the screen on iPhone (no black gap below the rounded corner). */}
-      <div className="mx-2 mb-2 shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="relative overflow-hidden rounded-[1.75rem] border border-white/[0.12] bg-white/[0.055] p-1.5 shadow-[0_-18px_52px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.10)] backdrop-blur-2xl">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.16),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]" />
-          <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/35 to-transparent" />
-          <div className="relative z-10">
-        {/* Row 1: SELL · MKT / Lots / BUY · MKT. These buttons are
-            market-only now. Pending orders are sent from the separate
-            gold Set ▶ row below, so a Buy/ Sell tap can never
-            accidentally place a limit/stop. */}
-        <div className="flex h-11 items-stretch gap-1">
-          <button
-            type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
-              executionMode === "market" && pendingOrderSide === "sell"
-                ? "bg-gradient-to-r from-[#3A0710] via-[#9C1A26] to-[#E13947] text-white shadow-[inset_0_0_24px_rgba(225,57,71,0.32)]"
-                : "bg-gradient-to-r from-[#1A0408] via-[#4A0C13] to-[#7A1722] text-white/85"
-            }`}
-            onClick={() => {
-              setPendingOrderSide("sell");
-              setExecutionMode("market");
-              setPendingOrderType("market");
-              setPendingOrderVisible(false);
-              handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
-            }}
-            aria-label="Sell market"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Sell · MKT</span>
-            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
-          </button>
-          <button
-            type="button"
-            className="flex min-w-[5rem] flex-col items-center justify-center rounded-[1.15rem] border border-white/[0.08] bg-black/55 px-2 text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-            onClick={() => setLotMenuOpen((v) => !v)}
-            aria-label="Choose lot size"
-          >
-            <span className="text-[8px] font-bold uppercase tracking-[0.22em] text-tos-dim">Lots</span>
-            <span className="mt-0.5 font-mono text-[12px] font-semibold">{tradeVolume}</span>
-          </button>
-          <button
-            type="button"
-            className={`flex min-w-0 flex-1 items-center justify-between rounded-[1.15rem] px-3 text-left transition-shadow ${
-              executionMode === "market" && pendingOrderSide === "buy"
-                ? "bg-gradient-to-r from-[#063D44] via-[#0F94A5] to-[#22D3EE] text-white shadow-[inset_0_0_24px_rgba(34,211,238,0.32)]"
-                : "bg-gradient-to-r from-[#03252A] via-[#0A5662] to-[#11808D] text-white/85"
-            }`}
-            onClick={() => {
-              setPendingOrderSide("buy");
-              setExecutionMode("market");
-              setPendingOrderType("market");
-              setPendingOrderVisible(false);
-              handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
-            }}
-            aria-label="Buy market"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Buy · MKT</span>
-            <span className="font-mono text-[15px] font-bold leading-none">{lastPriceText}</span>
-          </button>
+      {/* Live open-book risk — SL/TP scenarios for active account */}
+      {(demoBook.all.length > 0 || overlays.length > 0) && !isFullscreen ? (
+        <div className="shrink-0 border-t border-white/[0.05] px-2 py-1">
+          <AccountRiskBand
+            compact
+            demoPositions={demoBook.all.map((p) => ({
+              id: p.id,
+              symbol: p.symbol,
+              side: p.side,
+              volume: p.volume,
+              entryPrice: p.entryPrice,
+              stopLoss: p.stopLoss,
+              takeProfit: p.takeProfit,
+              livePrice,
+            }))}
+          />
         </div>
+      ) : null}
 
-        {/* Order-type chip row. Selecting a pending type opens the
-            dedicated pending row; selecting Market hides it. */}
-        <div className="mt-1 flex h-9 items-stretch gap-1">
+      {/* ─── MT5-style execution bar (market) + landscape pending inline ─── */}
+      {oneClickVisible && (executionMode === "market" || (executionMode === "pending" && isFullscreen)) ? (
+      <div
+        className={
+          execBarOverNav
+            ? "tos-chart-exec-overlay pointer-events-auto fixed inset-x-0 bottom-0 z-[70] border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+            : `shrink-0 ${isFullscreen ? "chart-immersive-exec" : ""}`
+        }
+        style={{
+          background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)",
+          borderTop: execBarOverNav ? undefined : "1px solid rgba(255,255,255,0.05)",
+          boxShadow: execBarOverNav ? undefined : "inset 0 1px 0 rgba(255,255,255,0.04)",
+          paddingBottom: execBarOverNav ? "max(env(safe-area-inset-bottom, 0px), 0.35rem)" : undefined,
+        }}
+      >
+        <div className="flex justify-center pt-1 pb-0.5">
           <button
             type="button"
-            onClick={() => setOrderTypeMenuOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-[1.05rem] border border-white/[0.08] bg-black/50 px-3 text-left text-[11px] font-semibold text-tos-text shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-            aria-label="Choose execution type"
-          >
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400/12 text-cyan-200">
-              <ChevronDown className="h-3 w-3" />
-            </span>
-            <span className="truncate uppercase tracking-wide text-tos-text">
-              {executionMode === "market" ? "Market execution" : orderTypeLabel(pendingOrderType)}
-            </span>
-            <span className="ml-auto font-mono text-[11px] text-tos-muted">
-              {executionMode === "pending" && pendingOrderPrice != null
-                ? pendingOrderPrice.toFixed(priceDigitsForSymbol(data.brokerSymbol))
-                : tradeVolume}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeviationPoints((v) => (v >= 100 ? 1 : v + 5))}
-            className="flex min-w-[3.4rem] items-center justify-center gap-1 rounded-[1.05rem] border border-white/[0.08] bg-black/45 px-2 text-[9px] font-bold uppercase tracking-wider text-tos-muted hover:bg-white/[0.04]"
-            aria-label="Cycle slippage / deviation"
-            title="Slippage / Deviation in points"
-          >
-            <span>DEV</span>
-            <span className="font-mono text-[10px] text-tos-text">{deviationPoints}</span>
-          </button>
+            className="h-1.5 w-12 rounded-full bg-white/20 active:bg-white/35"
+            aria-label="Swipe down to close execution bar"
+            onPointerDown={(e) => {
+              executionSwipeStartYRef.current = e.clientY;
+            }}
+            onPointerUp={(e) => {
+              const startY = executionSwipeStartYRef.current;
+              executionSwipeStartYRef.current = null;
+              if (startY == null) return;
+              if (e.clientY - startY > 44) {
+                dismissExecutionBar();
+              }
+            }}
+            onPointerCancel={() => {
+              executionSwipeStartYRef.current = null;
+            }}
+          />
         </div>
-
-        {/* Row 2: pending-only ticket. This is the only place pending
-            Limit/Stop orders can be submitted. */}
-        {executionMode === "pending" ? (
-        <div className="mt-1 flex h-9 items-stretch gap-1">
-          <div className={`flex min-w-[5.1rem] items-center justify-center rounded-[1.05rem] border px-2 text-[10px] font-bold uppercase tracking-wide ${
-            pendingOrderSide === "buy"
-              ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
-              : "border-rose-300/35 bg-rose-400/12 text-rose-100"
-          }`}>
-            {orderTypeLabel(pendingOrderType)}
+        {hasSlTpDrafts && !slTpModifyPref.enabled ? (
+          <div className="px-2 pb-1.5">
+            <button
+              type="button"
+              onClick={triggerSlTpConfirm}
+              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-full border border-cyan-400/35 bg-cyan-400/12 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-200 active:scale-[0.995]"
+              aria-label="Confirm SL and TP changes"
+              title="Confirm SL/TP changes"
+            >
+              <ArrowRight className="h-4 w-4" />
+              Confirm active SL/TP {slTpDraftCount > 1 ? `(${slTpDraftCount} drafts)` : ""}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-              if (entry == null || !Number.isFinite(entry)) return;
-              const distance = draggablePlanDistance(data.candles, entry);
-              setPendingStopLossPrice((prev) =>
-                prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
-              );
-              setPendingOrderVisible(true);
-            }}
-            className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
-              pendingStopLossPrice != null
-                ? "border border-rose-500/60 bg-rose-500/15 text-rose-200/95"
-                : "border border-white/[0.08] bg-black/45 text-rose-300/85 hover:bg-rose-500/8"
-            }`}
-            aria-label="Set stop loss"
-          >
-            SL
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-              if (entry == null || !Number.isFinite(entry)) return;
-              const distance = draggablePlanDistance(data.candles, entry);
-              setPendingTakeProfitPrice((prev) =>
-                prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
-              );
-              setPendingOrderVisible(true);
-            }}
-            className={`flex min-w-[2.75rem] items-center justify-center gap-1 rounded-[1.05rem] px-2 text-[10px] font-bold uppercase tracking-wider ${
-              pendingTakeProfitPrice != null
-                ? "border border-emerald-400/60 bg-emerald-400/15 text-emerald-200/95"
-                : "border border-white/[0.08] bg-black/45 text-emerald-300/85 hover:bg-emerald-400/8"
-            }`}
-            aria-label="Set take profit"
-          >
-            TP
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSendCurrentPlan()}
-            className="flex min-w-[4.15rem] items-center justify-center rounded-[1.05rem] border border-amber-300/55 bg-amber-400/18 px-2 text-[10px] font-black uppercase tracking-wider text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.12)] hover:bg-amber-400/25"
-            aria-label={`Set pending ${orderTypeLabel(pendingOrderType)}`}
-          >
-            Set ▶
-          </button>
-        </div>
         ) : null}
+        {executionMode === "pending" && isFullscreen ? (
+          /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
+          <div className="flex h-[2.75rem] items-center gap-0 px-0">
+            {/* Submit arrow — rounded pill */}
+            <button
+              type="button"
+              onClick={() => { vibrate("medium"); playSound("chime"); handleSendCurrentPlan(); }}
+              className="ml-2 flex h-8 w-8 items-center justify-center rounded-full text-white active:scale-95"
+              style={{
+                background: pendingOrderSide === "buy"
+                  ? "linear-gradient(180deg, #14a0b5 0%, #0a5e6c 100%)"
+                  : "linear-gradient(180deg, #d42a36 0%, #8a1522 100%)",
+                boxShadow: pendingOrderSide === "buy"
+                  ? "0 0 14px rgba(20,160,181,0.3), inset 0 1px 0 rgba(255,255,255,0.18)"
+                  : "0 0 14px rgba(212,42,54,0.3), inset 0 1px 0 rgba(255,255,255,0.18)",
+              }}
+              aria-label={`Place ${orderTypeLabel(pendingOrderType)}`}
+            >
+              <ArrowRight className="h-5 w-5" />
+            </button>
+            {/* Order label + volume — center (volume tappable → opens lot picker) */}
+            <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold">
+              <span className={pendingOrderSide === "buy" ? "text-[#1A729E]" : "text-[#E13947]"}>{orderTypeLabel(pendingOrderType)}</span>
+              <button
+                type="button"
+                onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
+                className="flex items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-white/90 active:bg-white/[0.08]"
+              >
+                {tradeVolume}
+                <ChevronDown className="ml-0.5 h-2.5 w-2.5 text-white/40" />
+              </button>
+            </div>
+            {/* SL toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                if (entry == null || !Number.isFinite(entry)) return;
+                const distance = draggablePlanDistance(data.candles, entry);
+                setPendingStopLossPrice((prev) =>
+                  prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
+                );
+                setPendingOrderVisible(true);
+                vibrate("light"); playSound("tap");
+              }}
+              className="flex h-full w-12 items-center justify-center"
+              aria-label="Toggle stop loss"
+            >
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
+                pendingStopLossPrice != null
+                  ? "border-[#E13947] bg-[#E13947]/15 text-[#E13947]"
+                  : "border-white/15 text-white/25"
+              }`}>SL</span>
+            </button>
+            {/* TP toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                if (entry == null || !Number.isFinite(entry)) return;
+                const distance = draggablePlanDistance(data.candles, entry);
+                setPendingTakeProfitPrice((prev) =>
+                  prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
+                );
+                setPendingOrderVisible(true);
+                vibrate("light"); playSound("tap");
+              }}
+              className="flex h-full w-12 items-center justify-center"
+              aria-label="Toggle take profit"
+            >
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
+                pendingTakeProfitPrice != null
+                  ? "border-[#4ECBA0] bg-[#4ECBA0]/15 text-[#4ECBA0]"
+                  : "border-white/15 text-white/25"
+              }`}>TP</span>
+            </button>
+            {/* Order-type picker */}
+            <button
+              type="button"
+              onClick={() => { setOrderTypeMenuOpen((v) => !v); vibrate("light"); }}
+              className="flex h-full w-11 items-center justify-center"
+              aria-label="Change order type"
+            >
+              <ChevronUp className="h-4 w-4 text-white/40" />
+            </button>
           </div>
-        </div>
+        ) : (
+          /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
+          <div className="flex h-[2.75rem] items-stretch gap-px" style={{ background: "#000" }}>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
+              style={{
+                background: "linear-gradient(180deg, #d42a36 0%, #a01d28 50%, #6e1018 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(212,42,54,0.2)",
+              }}
+              onClick={() => {
+                setPendingOrderSide("sell");
+                setExecutionMode("market");
+                setPendingOrderType("market");
+                setPendingOrderVisible(false);
+                vibrate("heavy"); playSound("chime");
+                handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
+              }}
+              aria-label="Sell market"
+            >
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Sell</span>
+              <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(212,42,54,0.35)" }}>{lastPriceText}</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-14 flex-col items-center justify-center text-white active:bg-white/[0.06]"
+              style={{ background: "linear-gradient(180deg, #0c0e14 0%, #060608 100%)" }}
+              onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
+              aria-label="Choose lot size"
+            >
+              <ChevronDown className="h-2.5 w-2.5 text-white/40" />
+              <span className="font-mono text-[13px] font-bold">{tradeVolume}</span>
+              <ChevronUp className="h-2.5 w-2.5 text-white/40" />
+            </button>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
+              style={{
+                background: "linear-gradient(180deg, #14a0b5 0%, #0d7080 50%, #084d5c 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(20,160,181,0.2)",
+              }}
+              onClick={() => {
+                setPendingOrderSide("buy");
+                setExecutionMode("market");
+                setPendingOrderType("market");
+                setPendingOrderVisible(false);
+                vibrate("heavy"); playSound("chime");
+                handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
+              }}
+              aria-label="Buy market"
+            >
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Buy</span>
+              <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(20,160,181,0.35)" }}>{lastPriceText}</span>
+            </button>
+          </div>
+        )}
       </div>
+      ) : null}
 
-      {/* Order-type chooser popover */}
+      {/* Order-type chooser popover — MT5-style vertical list */}
       {orderTypeMenuOpen ? (
         <div
-          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#080c12]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+          className="absolute inset-x-2 bottom-[3.5rem] z-40 rounded-2xl border border-white/10 bg-[#060c14]/97 p-0 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur overflow-hidden"
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.06]">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-tos-dim">Execution type</p>
             <button
               type="button"
@@ -2880,56 +4506,66 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               Close
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="flex flex-col">
             {([
-              { id: "market", label: "Market execution" },
-              { id: "buy_limit", label: "Buy Limit" },
-              { id: "sell_limit", label: "Sell Limit" },
-              { id: "buy_stop", label: "Buy Stop" },
-              { id: "sell_stop", label: "Sell Stop" },
+              { id: "market", label: "Buy" },
+              { id: "market_sell", label: "Sell" },
+              { id: "buy_limit", label: "Limit" },
+              { id: "buy_stop", label: "Stop" },
+              { id: "sell_stop", label: "Stop Limit" },
             ] as const).map((opt) => {
-              const isActive = pendingOrderType === opt.id;
+              const isActive = opt.id === "market"
+                ? executionMode === "market" && pendingOrderSide === "buy"
+                : opt.id === "market_sell"
+                  ? executionMode === "market" && pendingOrderSide === "sell"
+                  : pendingOrderType === opt.id;
               return (
                 <button
                   key={opt.id}
                   type="button"
                   onClick={() => {
-                    setPendingOrderType(opt.id);
-                    if (opt.id !== "market") {
-                      const sideForType = opt.id.startsWith("buy") ? "buy" : "sell";
-                      showPendingTradePlan(sideForType, opt.id);
-                    } else {
+                    if (opt.id === "market" || opt.id === "market_sell") {
+                      setPendingOrderType("market");
                       setExecutionMode("market");
                       setPendingOrderVisible(false);
+                      setPendingOrderSide(opt.id === "market" ? "buy" : "sell");
+                    } else {
+                      setPendingOrderType(opt.id === "buy_limit" ? (pendingOrderSide === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (pendingOrderSide === "sell" ? "sell_stop" : "buy_stop") : opt.id);
+                      const sideForType = pendingOrderSide;
+                      const typeId = opt.id === "buy_limit" ? (sideForType === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (sideForType === "sell" ? "sell_stop" : "buy_stop") : opt.id;
+                      showPendingTradePlan(sideForType, typeId as any);
                     }
                     setOrderTypeMenuOpen(false);
+                    vibrate("light"); playSound("tap");
                   }}
-                  className={`rounded-xl border px-3 py-2 text-left text-[12px] font-semibold ${
-                    isActive
-                      ? "border-cyan-300/45 bg-cyan-400/12 text-cyan-100"
-                      : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
+                  className={`flex items-center gap-3 border-b border-white/[0.06] px-3 py-2.5 text-left text-[14px] ${
+                    isActive ? "font-bold text-white" : "font-medium text-white/70"
                   }`}
                 >
-                  {opt.label}
+                  {isActive ? <span className="text-[14px]">✓</span> : <span className="w-[14px]" />}
+                  <span>{opt.label}</span>
                 </button>
               );
             })}
           </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-tos-dim">
-            Market uses the red/cyan MKT tickets immediately. Pending types draw a movable plan line —
-            drag entry/SL/TP, then press the gold Set ▶ button.
-          </p>
         </div>
       ) : null}
 
-      {/* Lot quick picker — same UX as MT5 mobile */}
+      {/* Lot quick picker — MT5-style vertical scroll list */}
       {lotMenuOpen ? (
+        <>
+          <button
+            type="button"
+            className="absolute inset-0 z-30 bg-black/40"
+            aria-label="Close volume picker"
+            onClick={() => setLotMenuOpen(false)}
+          />
         <div
-          className="absolute inset-x-2 bottom-[6.5rem] z-40 rounded-2xl border border-white/10 bg-[#080c12]/97 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.75rem)" }}
+          className="absolute inset-x-4 bottom-[3rem] z-40 overflow-hidden rounded-2xl border border-white/10 shadow-[0_18px_48px_rgba(0,0,0,0.6)] backdrop-blur-xl"
+          style={{ background: "linear-gradient(180deg, rgba(12,16,24,0.97) 0%, rgba(6,8,12,0.98) 100%)" }}
         >
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-tos-dim">Lots</p>
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
+            <p className="text-[15px] font-bold text-white">Volume</p>
             <button
               type="button"
               onClick={() => setLotMenuOpen(false)}
@@ -2938,10 +4574,49 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
               Close
             </button>
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {[0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 2].map((v) => {
-              const txt = v < 1 ? v.toFixed(2) : v.toFixed(1).replace(/\.0$/, "");
-              const isActive = parseFloat(tradeVolume) === v;
+          <div className="border-b border-white/[0.06] px-3 py-2">
+            <label className="text-[10px] font-medium uppercase tracking-wider text-white/35">
+              Type lot size
+            </label>
+            <div className="mt-1 flex gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={lotVolumeDraft}
+                onChange={(e) => setLotVolumeDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const v = parseFloat(lotVolumeDraft.replace(",", "."));
+                    if (Number.isFinite(v) && v >= 0.01) {
+                      setTradeVolume(v < 1 ? v.toFixed(2) : v.toFixed(2));
+                      setLotMenuOpen(false);
+                      vibrate("light");
+                    }
+                  }
+                }}
+                className="flex-1 rounded-lg border border-white/10 bg-[#0c0c0f] px-2.5 py-2 font-mono text-[14px] text-white outline-none"
+                placeholder="0.10"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const v = parseFloat(lotVolumeDraft.replace(",", "."));
+                  if (!Number.isFinite(v) || v < 0.01) return;
+                  setTradeVolume(v < 1 ? v.toFixed(2) : v.toFixed(2));
+                  setLotMenuOpen(false);
+                  vibrate("light");
+                }}
+                className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 text-[11px] font-semibold text-cyan-200"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+          {/* Vertical scroll list */}
+          <div className="max-h-[220px] overflow-y-auto overscroll-contain px-3" style={{ scrollSnapType: "y mandatory" }}>
+            {[0.01, 0.02, 0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10, 1.20, 1.30, 1.50, 2.00, 3.00, 5.00, 10.00].map((v) => {
+              const txt = v < 1 ? v.toFixed(2) : v >= 10 ? v.toFixed(1).replace(/\.0$/, "") : v.toFixed(2);
+              const isActive = Math.abs(parseFloat(tradeVolume) - v) < 0.001;
               return (
                 <button
                   key={v}
@@ -2949,53 +4624,61 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
                   onClick={() => {
                     setTradeVolume(txt);
                     setLotMenuOpen(false);
+                    vibrate("light");
                   }}
-                  className={`rounded-lg border px-2 py-2 text-center font-mono text-[12px] font-bold ${
-                    isActive
-                      ? "border-cyan-300/45 bg-cyan-400/12 text-cyan-100"
-                      : "border-white/10 bg-white/[0.03] text-tos-text hover:bg-white/[0.06]"
-                  }`}
+                  className="flex w-full items-center justify-center py-2 font-mono transition-colors"
+                  style={{ scrollSnapAlign: "center" }}
                 >
-                  {txt}
+                  <span className={isActive
+                    ? "rounded-xl bg-white/[0.08] px-8 py-1.5 text-[18px] font-bold text-white"
+                    : "text-[16px] font-medium text-white/35"
+                  }>{txt}</span>
                 </button>
               );
             })}
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
-            {[0.01, 0.1, 1].map((step) => (
+          {/* Bottom increment buttons — MT5 style: -1.00  -0.10 | +0.10  +1.00 */}
+          <div className="flex items-center border-t border-white/[0.06] px-2 py-2">
+            {[
+              { step: -1, label: "-1.00", color: "text-[#E13947]" },
+              { step: -0.1, label: "-0.10", color: "text-[#E13947]" },
+            ].map(({ step, label, color }) => (
               <button
-                key={step}
+                key={label}
                 type="button"
                 onClick={() => {
                   const cur = parseFloat(tradeVolume) || 0;
                   const next = Math.max(0.01, +(cur + step).toFixed(2));
-                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(1).replace(/\.0$/, ""));
+                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(2));
+                  vibrate("light");
                 }}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2 py-1.5 text-[11px] font-bold text-cyan-200/95"
+                className={`flex-1 py-1.5 text-center font-mono text-[14px] font-bold ${color} active:opacity-60`}
               >
-                <Plus className="h-3 w-3" />
-                {step}
+                {label}
               </button>
             ))}
-          </div>
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-            {[0.01, 0.1, 1].map((step) => (
+            <div className="mx-2 h-5 w-px bg-white/[0.08]" />
+            {[
+              { step: 0.1, label: "+0.10", color: "text-[#4ECBA0]" },
+              { step: 1, label: "+1.00", color: "text-[#4ECBA0]" },
+            ].map(({ step, label, color }) => (
               <button
-                key={`m-${step}`}
+                key={label}
                 type="button"
                 onClick={() => {
                   const cur = parseFloat(tradeVolume) || 0;
-                  const next = Math.max(0.01, +(cur - step).toFixed(2));
-                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(1).replace(/\.0$/, ""));
+                  const next = Math.max(0.01, +(cur + step).toFixed(2));
+                  setTradeVolume(next < 1 ? next.toFixed(2) : next.toFixed(2));
+                  vibrate("light");
                 }}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.04] px-2 py-1.5 text-[11px] font-bold text-tos-muted"
+                className={`flex-1 py-1.5 text-center font-mono text-[14px] font-bold ${color} active:opacity-60`}
               >
-                <Minus className="h-3 w-3" />
-                {step}
+                {label}
               </button>
             ))}
           </div>
         </div>
+        </>
       ) : null}
 
       {/* Slide-out drawers: anchored to the top of the chart frame so the
@@ -3004,11 +4687,11 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
       <ChartOrderBookDrawer
         open={orderBookOpen}
         onClose={() => setOrderBookOpen(false)}
-        symbol={data.symbol}
+        symbol={data.brokerSymbol}
         digits={priceDigitsForSymbol(data.brokerSymbol)}
         livePrice={livePrice}
-        bid={lastBidRef.current}
-        ask={lastAskRef.current}
+        bid={liveBid}
+        ask={liveAsk}
       />
 
       <ChartNewsDrawer
@@ -3019,63 +4702,50 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
 
       {/* Standalone alert fired toast */}
       {firedAlert ? (
-        <div
-          className="pointer-events-auto absolute left-1/2 top-16 z-50 flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl border border-cyan-300/45 bg-[#04161b]/95 px-3 py-2 text-[11px] text-cyan-100 shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur"
-          role="status"
-        >
-          <Bell className="h-4 w-4 text-cyan-300" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">Alert · {firedAlert.message}</p>
-            <p className="text-[10px] text-cyan-200/70">
-              {firedAlert.pushed ? "Push delivered" : "Delivered in-app"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setFiredAlert(null)}
-            className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-tos-muted"
-          >
-            Dismiss
-          </button>
-        </div>
+        <TosNotice
+          accent="emerald"
+          className="pointer-events-auto absolute left-1/2 top-16 z-50 max-w-[88%] -translate-x-1/2"
+          title={`Alert · ${firedAlert.message}`}
+          body={firedAlert.pushed ? "Push delivered" : "Delivered in-app"}
+          onDismiss={() => setFiredAlert(null)}
+        />
       ) : null}
 
       {/* Trade toast — demo / live confirm + soft errors */}
       {tradeToast ? (
-        <div
-          className={`pointer-events-auto absolute left-1/2 bottom-[8.5rem] z-[60] flex max-w-[88%] -translate-x-1/2 items-start gap-2 rounded-xl border px-3 py-2 text-[11px] shadow-[0_18px_48px_rgba(0,0,0,0.55)] backdrop-blur ${
-            tradeToast.kind === "demo"
-              ? "border-cyan-300/40 bg-cyan-400/10 text-cyan-100"
-              : tradeToast.kind === "live"
-                ? "border-cyan-200/55 bg-cyan-300/14 text-cyan-50"
-                : tradeToast.kind === "error"
-                  ? "border-rose-400/45 bg-rose-400/12 text-rose-100"
-                  : "border-amber-400/35 bg-amber-400/8 text-amber-100"
-          }`}
-          role="status"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold">{tradeToast.title}</p>
-            {tradeToast.body ? (
-              <p className="mt-0.5 text-[10.5px] opacity-85">{tradeToast.body}</p>
-            ) : null}
-          </div>
-          {tradeToast.kind === "info" ? (
-            <Link
-              href="/settings"
-              className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold"
-              onClick={() => setTradeToast(null)}
-            >
-              Settings
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setTradeToast(null)}
-            className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-semibold opacity-90"
-          >
-            Dismiss
-          </button>
+        <TosNotice
+          accent={
+            ({
+              demo: "cyan",
+              live: "emerald",
+              error: "rose",
+              info: "amber",
+            } satisfies Record<typeof tradeToast.kind, TosNoticeAccent>)[tradeToast.kind]
+          }
+          className="pointer-events-auto absolute left-1/2 bottom-[8.5rem] z-[60] max-w-[88%] -translate-x-1/2"
+          title={tradeToast.title}
+          body={tradeToast.body}
+          action={
+            tradeToast.kind === "info" ? (
+              <Link
+                href="/settings"
+                className="rounded-full border border-white/12 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold text-white/85"
+                onClick={() => setTradeToast(null)}
+              >
+                Settings
+              </Link>
+            ) : undefined
+          }
+          onDismiss={() => setTradeToast(null)}
+        />
+      ) : null}
+
+      {/* Demo mode indicator — always visible on demo account */}
+      {isDemoAccount ? (
+        <div className="pointer-events-none absolute left-3 top-[4.25rem] z-30">
+          <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-200/90">
+            Demo · paper
+          </span>
         </div>
       ) : null}
 
@@ -3089,24 +4759,24 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
             const newest = demoBook.forSymbol[0];
             if (newest) demoBook.close(newest.id);
           }}
-          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-300/40 bg-[#04161b]/92 px-2.5 py-1 text-[10px] font-semibold text-cyan-100 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-cyan-300/12"
+          className="absolute left-1/2 top-12 z-30 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/[0.12] bg-[#0c0c0c]/92 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur hover:bg-emerald-300/12"
           aria-label="Close most recent demo position"
         >
-          <span className="rounded-full bg-cyan-400/25 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-cyan-50">
+          <span className="rounded-full bg-white/[0.10] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-white/90">
             DEMO
           </span>
           <span>
             {demoBook.forSymbol.length} open ·{" "}
             <span
               className={`font-mono ${
-                demoBook.pnlOnSymbol >= 0 ? "text-cyan-200" : "text-rose-300"
+                demoBook.pnlOnSymbol >= 0 ? "text-white/80" : "text-rose-300"
               }`}
             >
               {demoBook.pnlOnSymbol >= 0 ? "+" : ""}
               {demoBook.pnlOnSymbol.toFixed(2)} $
             </span>
           </span>
-          <span className="text-[9px] text-cyan-200/70">tap to close</span>
+          <span className="text-[9px] text-white/50">tap to close</span>
         </button>
       ) : null}
 
@@ -3121,6 +4791,88 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false }:
         }}
         onConfirm={sendLiveConfirmedOrder}
       />
+
+      {isFullscreen ? (
+        <>
+          <ChartLandscapeDockHandle
+            onOpen={() => setLandscapeDockOpen(true)}
+            bottomOffset={oneClickVisible ? "2.85rem" : undefined}
+          />
+          <ChartLandscapeDrawer
+            open={landscapeDockOpen}
+            onClose={() => setLandscapeDockOpen(false)}
+            orderBookOpen={orderBookOpen}
+            newsOpen={newsOpen}
+            oneClickActive={oneClickVisible && executionMode === "market"}
+            pendingActive={executionMode === "pending" && pendingOrderVisible}
+            onDepth={() => (orderBookOpen ? setOrderBookOpen(false) : openOrderBook())}
+            onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
+            onOneClick={toggleOneClickTrade}
+            onPending={togglePendingTrade}
+            onTools={() => setToolRailOpen(true)}
+          />
+        </>
+      ) : null}
+
+      {oneClickVisible && executionMode === "pending" && pendingOrderVisible && !isFullscreen ? (
+        <ChartPendingOrderSheet
+          symbol={data.brokerSymbol}
+          orderLabel={orderTypeLabel(pendingOrderType)}
+          side={pendingOrderSide}
+          volume={tradeVolume}
+          price={pendingOrderPrice}
+          stopLoss={pendingStopLossPrice}
+          takeProfit={pendingTakeProfitPrice}
+          expanded={pendingSheetExpanded}
+          onToggleExpand={() => {
+            setPendingSheetExpanded((v) => !v);
+            vibrate("light");
+          }}
+          onDismiss={() => {
+            dismissExecutionBar();
+          }}
+          onSubmit={() => {
+            vibrate("medium");
+            playSound("chime");
+            handleSendCurrentPlan();
+          }}
+          onOpenLot={() => {
+            setLotMenuOpen((v) => !v);
+            vibrate("light");
+          }}
+          onOpenType={() => {
+            setOrderTypeMenuOpen((v) => !v);
+            vibrate("light");
+          }}
+          onToggleSl={() => {
+            const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+            if (entry == null || !Number.isFinite(entry)) return;
+            const distance = draggablePlanDistance(data.candles, entry);
+            setPendingStopLossPrice((prev) =>
+              prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
+            );
+            vibrate("light");
+            playSound("tap");
+          }}
+          onToggleTp={() => {
+            const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+            if (entry == null || !Number.isFinite(entry)) return;
+            const distance = draggablePlanDistance(data.candles, entry);
+            setPendingTakeProfitPrice((prev) =>
+              prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
+            );
+            vibrate("light");
+            playSound("tap");
+          }}
+          onPriceChange={(next) => {
+            handlePendingEntryPriceChange(next);
+          }}
+          onSlChange={setPendingStopLossPrice}
+          onTpChange={setPendingTakeProfitPrice}
+        />
+      ) : null}
+
+      {!isFullscreen && !isTabletLayout ? <SquawkBar /> : null}
 
     </div>
   );

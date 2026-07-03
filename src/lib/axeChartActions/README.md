@@ -9,10 +9,9 @@ Supported now:
 - `draw_fibonacci`
 - `draw_trendline`
 - `clear_ai_drawings`
-
-Prepared for later:
-
+- `add_indicator` (SMC + indicator layer toggles, per account+symbol prefs)
 - `mark_key_level`
-- `add_indicator`
+
+Queued from chat via `route_chart_action` tool → `axe_pending_chart_actions` → chart applies on open.
 
 The real app already has draggable `FibAnnotationLayer` and `TrendlineAnnotationLayer`, so this module reuses them instead of shipping replacement overlay files.

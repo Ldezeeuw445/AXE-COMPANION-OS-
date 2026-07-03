@@ -19,6 +19,9 @@
 
 import { NextResponse } from "next/server";
 import { sendChatMessage } from "@/services/chatService";
+import { getEdgeAuthedServiceSupabase } from "@/services/serviceSupabase";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
@@ -35,7 +38,16 @@ export async function POST(request: Request) {
   const imageBase64 = typeof body?.imageBase64 === "string" ? body.imageBase64 : undefined;
   const imageType = typeof body?.imageType === "string" ? body.imageType : undefined;
 
-  const result = await sendChatMessage(text, imageBase64, imageType, symbol, tf);
+  // Edge auth
+  const edgeAuth = await getEdgeAuthedServiceSupabase(request);
+  if (!edgeAuth) {
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  const result = await sendChatMessage(text, imageBase64, imageType, symbol, tf, edgeAuth);
 
   if (!result.ok) {
     if (result.quotaExceeded) {

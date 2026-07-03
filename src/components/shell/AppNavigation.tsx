@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -14,16 +14,26 @@ import {
   LineChart,
   Menu,
   MessageSquare,
+  Rss,
   ScrollText,
   Settings,
   Sparkles,
-  Target,
   Vault,
+  Wallet,
   X,
   Landmark,
 } from "lucide-react";
 import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
-import { AxeWordmarkLive } from "@/components/brand/AxeWordmarkLive";
+import { ChatHeaderSwitch } from "@/components/chat/ChatHeaderSwitch";
+import { AxeWordmark } from "@/components/brand/AxeWordmark";
+import { AxeTriangle } from "@/components/brand/AxeTriangle";
+import Image from "next/image";
+import { QuickActionMenu } from "@/components/shell/QuickActionMenu";
+
+/* ── Wrapper so AxeTriangle fits the same slot as Lucide icons ──── */
+function IntelTriangleIcon({ className }: { className?: string; strokeWidth?: number }) {
+  return <AxeTriangle size={20} className={className} />;
+}
 
 type NavItem = {
   href: string;
@@ -31,17 +41,21 @@ type NavItem = {
   Icon: typeof MessageSquare;
   /** If true, still routing but labeled coming soon in drawer */
   comingSoon?: boolean;
+  /** Premium-only nav item — show lock badge */
+  premium?: boolean;
 };
 
 const NAV: NavItem[] = [
   { href: "/chat", label: "Chat", Icon: MessageSquare },
+  { href: "/feed", label: "AXE Feed", Icon: Rss, premium: true },
   { href: "/accounts", label: "Accounts", Icon: Landmark },
   { href: "/positions", label: "Positions", Icon: Layers },
   { href: "/chart", label: "Chart", Icon: LineChart },
   { href: "/history", label: "History", Icon: ScrollText },
+  { href: "/wallets", label: "Wallets", Icon: Wallet },
   { href: "/journal", label: "Journal", Icon: BookOpen },
   { href: "/watchlist", label: "Watchlist", Icon: BarChart3 },
-  { href: "/intel", label: "Intel", Icon: Target },
+  { href: "/intel", label: "Intel", Icon: IntelTriangleIcon as unknown as typeof MessageSquare, premium: true },
   { href: "/market", label: "Market", Icon: Sparkles },
   { href: "/alerts", label: "Alerts", Icon: Bell },
   { href: "/vault", label: "Vault", Icon: Vault },
@@ -62,6 +76,7 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const premium = item.premium;
 
   return (
     <Link
@@ -70,18 +85,37 @@ function NavLink({
       onClick={onNavigate}
       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
         active
-          ? "bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-500/25"
-          : "text-tos-muted hover:bg-white/[0.05] hover:text-tos-text"
+          ? premium
+            ? "bg-cyan-400/[0.08] text-cyan-100 ring-1 ring-cyan-400/25"
+            : "bg-white/[0.07] text-white ring-1 ring-white/[0.10]"
+          : premium
+            ? "text-cyan-200/80 hover:bg-cyan-400/[0.06] hover:text-cyan-100"
+            : "text-tos-muted hover:bg-white/[0.04] hover:text-tos-text"
       } ${compact ? "justify-center px-0 py-3" : ""}`}
       title={item.label}
     >
-      <item.Icon className={`h-5 w-5 shrink-0 ${active ? "text-cyan-300" : "text-tos-dim"}`} strokeWidth={active ? 2.1 : 1.7} />
+      <item.Icon
+        className={`h-5 w-5 shrink-0 ${
+          premium
+            ? active
+              ? "text-cyan-300"
+              : "text-cyan-400/80"
+            : active
+              ? "text-white"
+              : "text-tos-dim"
+        }`}
+        strokeWidth={active ? 2 : 1.6}
+      />
       {!compact ? (
         <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
           <span>{item.label}</span>
           {item.comingSoon ? (
             <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-tos-dim">
               soon
+            </span>
+          ) : premium ? (
+            <span className="rounded border border-cyan-400/20 bg-cyan-400/[0.08] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-300/80">
+              PRO
             </span>
           ) : null}
         </span>
@@ -98,7 +132,6 @@ export function AppNavigation() {
 
   const close = useCallback(() => setOpen(false), []);
   useEffect(() => {
-    // Close mobile drawer after client-side navigation (no Link click).
     queueMicrotask(() => setOpen(false));
   }, [pathname]);
 
@@ -118,47 +151,42 @@ export function AppNavigation() {
 
   return (
     <>
-      {/* Mobile top bar — hamburger | page center slot | page right slot */}
-      <div className="sticky top-0 z-40 grid h-[3.25rem] shrink-0 grid-cols-[3.25rem_1fr_3.25rem] items-center border-b border-white/[0.06] bg-tos-bg/90 px-2 backdrop-blur-md md:hidden">
-        <div className="flex justify-start">
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-white/[0.04] text-cyan-300 transition-colors hover:bg-white/[0.08]"
-            aria-label="Open menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-        </div>
+      {/* Mobile top bar */}
+      <div className="tos-shell-mobile-chrome sticky top-0 z-40 flex min-h-[var(--tos-topbar-h)] shrink-0 items-center justify-between border-b border-white/[0.05] bg-[var(--tos-bg-base)]/88 px-2.5 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        {/* Left — hamburger */}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.10] bg-white/[0.04] text-white/70 transition-colors hover:bg-white/[0.07] active:bg-white/[0.10]"
+          aria-label="Open menu"
+        >
+          <Menu className="h-[16px] w-[16px]" />
+        </button>
 
-        {/* True center column — AXE wordmark + live pulse stay visually
-            centred regardless of injected slots. The pulse to the LEFT
-            of the wordmark is the only "is this page actually live?"
-            indicator for the whole app. Pages push their state via
-            `setLiveStatus` from `@/lib/liveStatusBus`. Chart page is
-            opted out of the wordmark — it has its own dedicated controls
-            in this slot (depth, news, settings, indicators). */}
-        <div className="pointer-events-none relative flex min-w-0 items-center justify-center">
-          {isChart ? null : <AxeWordmarkLive />}
-
-          {/* Optional page-injected center content (stacked under AXE, does not shift the wordmark) */}
+        {/* Center — chart controls OR chat header switcher / wordmark */}
+        <div className="pointer-events-none relative flex min-w-0 flex-1 items-center justify-center px-2">
           {slots.center ? (
-            <div
-              className={`pointer-events-auto absolute left-1/2 z-[41] flex -translate-x-1/2 justify-center px-1 ${
-                isChart ? "top-1/2 -translate-y-1/2" : "top-[calc(100%-0.15rem)]"
-              }`}
-            >
-              <div className="max-w-[min(18rem,calc(100vw-7rem))]">{slots.center}</div>
+            <div className="pointer-events-auto flex items-center justify-center">
+              <div className="max-w-[min(20rem,calc(100vw-8rem))]">{slots.center}</div>
             </div>
-          ) : null}
+          ) : (
+            <div className="pointer-events-auto">
+              <Suspense fallback={<AxeWordmark size="xs" />}>
+                <ChatHeaderSwitch />
+              </Suspense>
+            </div>
+          )}
         </div>
 
-        <div className="flex justify-end">{slots.right}</div>
+        {/* Right — AXE context (page-injected) or quick-action menu */}
+        <div className="flex items-center">
+          {slots.right ?? <QuickActionMenu />}
+        </div>
       </div>
 
       {/* Desktop rail */}
       <aside
-        className="fixed bottom-0 left-0 top-0 z-40 hidden w-[4.25rem] flex-col border-r border-white/[0.06] bg-black/50 py-3 backdrop-blur-xl md:flex"
+        className="tos-shell-desktop-rail fixed bottom-0 left-0 top-0 z-40 hidden w-[4.25rem] flex-col border-r border-white/[0.06] bg-[var(--tos-bg-base)]/80 py-3 backdrop-blur-xl"
         aria-label="Primary"
       >
         <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-1.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
@@ -168,28 +196,30 @@ export function AppNavigation() {
         </div>
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — must sit above composer dock (z-85) and particles */}
       <div
-        className={`fixed inset-0 z-[60] md:hidden ${open ? "pointer-events-auto" : "pointer-events-none"}`}
+        className={`fixed inset-0 z-[100] tos-shell-mobile-chrome ${open ? "pointer-events-auto" : "pointer-events-none"}`}
         aria-hidden={!open}
       >
         <button
           type="button"
-          className={`absolute inset-0 bg-black/60 transition-opacity ${open ? "opacity-100" : "opacity-0"}`}
+          className={`absolute inset-0 bg-black/65 transition-opacity ${
+            open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          }`}
           onClick={close}
           aria-label="Close menu"
         />
         <div
-          className={`absolute left-0 top-0 flex h-full w-[min(20rem,88vw)] max-w-full flex-col border-r border-white/10 bg-tos-bg shadow-2xl transition-transform ${
+          className={`absolute left-0 top-0 flex h-full w-[min(20rem,88vw)] max-w-full flex-col border-r border-white/[0.08] bg-[var(--tos-bg-base)] shadow-2xl transition-transform ${
             open ? "translate-x-0" : "-translate-x-full"
           }`}
         >
           <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Navigate</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">Navigate</span>
             <button
               type="button"
               onClick={close}
-              className="rounded-lg p-2 text-tos-muted hover:bg-white/10"
+              className="rounded-lg p-2 text-tos-muted hover:bg-white/[0.06]"
               aria-label="Close"
             >
               <X className="h-5 w-5" />

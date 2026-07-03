@@ -5,6 +5,7 @@ export type ProviderId =
   | "perigon"
   | "polygon"
   | "finnhub"
+  | "forexFactory"
   | "eodhd"
   | "unusualWhales"
   | "demo";
@@ -16,6 +17,7 @@ export type ProviderStatus = {
   label: string;
   state: ProviderState;
   description?: string;
+  env?: string[];
 };
 
 export type MacroSnapshotPoint = {

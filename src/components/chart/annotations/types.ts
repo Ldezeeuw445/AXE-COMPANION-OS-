@@ -3,6 +3,8 @@
 export type ChartAnnotationType =
   | "fib_retracement"
   | "trendline"
+  | "rectangle"
+  | "text"
   | "horizontal_level"
   | "order_block"
   | "fvg";
@@ -28,4 +30,4 @@ export type ChartAnnotation = {
 };
 
 /** Standard Fibonacci retracement levels (0 → 1 from anchor → swing). */
-export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.65, 0.786, 1] as const;
+export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;

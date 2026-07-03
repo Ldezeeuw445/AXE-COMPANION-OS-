@@ -14,7 +14,10 @@
  * user when the price oscillates around the threshold.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
+import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
 
 type Body = {
   price?: number | null;
@@ -86,6 +89,22 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
 
+  const message =
+    body.message ??
+    buildDefaultMessage(existing.symbol, existing.condition, existing.threshold, body.price);
+
+  const feedUrl = existing.symbol ? chartDeepLink(existing.symbol) : "/alerts";
+  await recordProactiveFeedEvent(
+    supabase,
+    user.id,
+    `alert:${id}:${now}`,
+    `Alert · ${existing.symbol ?? existing.type}`,
+    message,
+    feedUrl,
+  );
+
+  const autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
+
   // Best-effort push delivery — fire and forget. If VAPID isn't configured
   // or the user has no subscribed device, /api/push/send returns gracefully
   // and we still consider the trigger successful (in-app already shows it).
@@ -93,9 +112,6 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-    const message =
-      body.message ??
-      buildDefaultMessage(existing.symbol, existing.condition, existing.threshold, body.price);
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -103,7 +119,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         userId: user.id,
         title: `Alert · ${existing.symbol ?? existing.type}`,
         body: message,
-        url: existing.symbol ? `/chart?symbol=${existing.symbol}` : "/alerts",
+        url: existing.symbol ? chartDeepLink(existing.symbol) : "/alerts",
         tag: `alert-${id}`,
       }),
     });
@@ -112,7 +128,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     pushed = false;
   }
 
-  return NextResponse.json({ ok: true, triggered_at: now, pushed });
+  return NextResponse.json({ ok: true, triggered_at: now, pushed, autoTrade });
 }
 
 function buildDefaultMessage(

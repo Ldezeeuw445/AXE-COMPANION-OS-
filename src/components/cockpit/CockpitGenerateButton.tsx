@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function CockpitGenerateButton({ label }: { label?: string } = {}) {
+export function CockpitGenerateButton({
+  label,
+  snapshotType,
+}: {
+  label?: string;
+  snapshotType?: "axe" | "intel";
+} = {}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -12,7 +18,8 @@ export function CockpitGenerateButton({ label }: { label?: string } = {}) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/cockpit/generate", { method: "POST" });
+      const qs = snapshotType === "intel" ? "?type=intel" : "";
+      const res = await fetch(`/api/cockpit/generate${qs}`, { method: "POST" });
       const json = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
         setError(json.error ?? "Something went wrong");

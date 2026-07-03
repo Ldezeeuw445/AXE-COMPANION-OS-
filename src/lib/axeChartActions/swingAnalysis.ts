@@ -3,7 +3,7 @@ import type {
   ChartActionCommand,
 } from "@/lib/axeChartActions/chartActionTypes";
 
-const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.65, 0.786, 1] as const;
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
 
 /** URL-key → seconds-per-bar so we can aggregate higher timeframes. */
 const TF_SECONDS: Record<string, number> = {
@@ -300,13 +300,100 @@ export function buildTrendlineActionFromCandles(input: {
       direction: trend.direction,
       // Render the line all the way to the right edge of the chart.
       // The annotation layer reads `extendRight` from settings.
-      settings: { extendRight: true, source: input.source, sourceTimeframe: trend.sourceTf },
+      settings: { extendRight: true, direction: trend.direction, source: input.source, sourceTimeframe: trend.sourceTf },
       explanation:
         trend.direction === "up"
           ? `AXE drew a rising ${trend.sourceTf.toUpperCase()} trendline through the two most recent swing lows.`
           : `AXE drew a falling ${trend.sourceTf.toUpperCase()} trendline through the two most recent swing highs.`,
     },
   };
+}
+
+/**
+ * Build BOTH upper (through swing highs) and lower (through swing lows)
+ * trendlines from the same candle series. Returns 1 or 2 commands — the
+ * caller should execute each to draw both lines on the chart.
+ *
+ * The original `buildTrendlineActionFromCandles` only returns the single
+ * most-recent trendline (ascending lows OR descending highs). This
+ * variant attempts both directions independently so the chart shows
+ * a rising support AND a falling resistance channel simultaneously.
+ */
+export function buildTrendlinePairFromCandles(input: {
+  idUpper: string;
+  idLower: string;
+  source: "axe" | "user";
+  symbol: string;
+  timeframe: string;
+  accountId?: string;
+  candles: ChartActionCandle[];
+  lookback?: number;
+  strength?: number;
+}): ChartActionCommand[] {
+  const results: ChartActionCommand[] = [];
+  const pair = findHigherTfTrendlinePair(input.candles, input.timeframe, {
+    lookback: input.lookback,
+    strength: input.strength,
+  });
+
+  if (pair.lower) {
+    results.push({
+      id: input.idLower,
+      type: "draw_trendline",
+      source: input.source,
+      symbol: input.symbol,
+      timeframe: input.timeframe,
+      accountId: input.accountId,
+      requiresUserAcceptance: false,
+      payload: {
+        points: [
+          { time: pair.lower.earlier.time, price: pair.lower.earlier.price },
+          { time: pair.lower.later.time, price: pair.lower.later.price },
+        ],
+        direction: "up",
+        settings: { extendRight: true, direction: "up", source: input.source, sourceTimeframe: pair.lower.sourceTf },
+        explanation: `AXE drew a rising ${pair.lower.sourceTf.toUpperCase()} trendline through the two most recent swing lows.`,
+      },
+    });
+  }
+
+  if (pair.upper) {
+    results.push({
+      id: input.idUpper,
+      type: "draw_trendline",
+      source: input.source,
+      symbol: input.symbol,
+      timeframe: input.timeframe,
+      accountId: input.accountId,
+      requiresUserAcceptance: false,
+      payload: {
+        points: [
+          { time: pair.upper.earlier.time, price: pair.upper.earlier.price },
+          { time: pair.upper.later.time, price: pair.upper.later.price },
+        ],
+        direction: "down",
+        settings: { extendRight: true, direction: "down", source: input.source, sourceTimeframe: pair.upper.sourceTf },
+        explanation: `AXE drew a falling ${pair.upper.sourceTf.toUpperCase()} trendline through the two most recent swing highs.`,
+      },
+    });
+  }
+
+  // Fallback: if neither direction found independently, use the original
+  // single-line finder so the user at least sees something.
+  if (results.length === 0) {
+    results.push(buildTrendlineActionFromCandles({
+      id: input.idLower,
+      source: input.source,
+      symbol: input.symbol,
+      timeframe: input.timeframe,
+      accountId: input.accountId,
+      candles: input.candles,
+      lookback: input.lookback,
+      strength: input.strength,
+    }));
+  }
+
+  return results;
 }
 
 /**
@@ -382,6 +469,67 @@ function findHigherTfTrendline(
   };
 }
 
+type TrendlineResult = { earlier: SwingAnchor; later: SwingAnchor; sourceTf: string };
+
+/**
+ * Find BOTH upper (through swing highs) and lower (through swing lows)
+ * trendlines independently. Uses the same higher-TF promotion ladder as
+ * findHigherTfTrendline, but instead of returning a single winner it
+ * attempts to find one line per polarity. Either or both may be null
+ * when the data doesn't contain enough swings of that type.
+ */
+function findHigherTfTrendlinePair(
+  candles: ChartActionCandle[],
+  activeTimeframe: string,
+  options: { lookback?: number; strength?: number } = {},
+): { upper: TrendlineResult | null; lower: TrendlineResult | null } {
+  const normalized = normalizeCandles(candles);
+  const activeSec = TF_SECONDS[activeTimeframe.toLowerCase()] ?? 3600;
+
+  const ladder: Array<{ key: string; seconds: number }> = [];
+  if (activeSec < TF_SECONDS.d1) ladder.push({ key: "d1", seconds: TF_SECONDS.d1 });
+  if (activeSec < TF_SECONDS.h4) ladder.push({ key: "h4", seconds: TF_SECONDS.h4 });
+  ladder.push({ key: activeTimeframe.toLowerCase(), seconds: activeSec });
+
+  let upper: TrendlineResult | null = null;
+  let lower: TrendlineResult | null = null;
+
+  for (const step of ladder) {
+    const series = step.seconds === activeSec
+      ? normalized
+      : aggregateToHigherTf(normalized, step.seconds);
+    if (series.length < 12) continue;
+    const both = pickBothTypePairs(series, options.strength ?? 3);
+    // Accept the first TF ladder step that yields each direction.
+    // A lower trendline goes through ascending swing lows (support);
+    // an upper trendline goes through descending swing highs (resistance).
+    if (!lower && both.upPair) {
+      lower = { earlier: both.upPair.earlier, later: both.upPair.later, sourceTf: step.key };
+    }
+    if (!upper && both.downPair) {
+      upper = { earlier: both.downPair.earlier, later: both.downPair.later, sourceTf: step.key };
+    }
+    if (upper && lower) break;
+  }
+
+  // Fallback for whichever side is still missing: try lows[0]→lows[-1]
+  // or highs[0]→highs[-1] on the active TF so we still draw something.
+  if (!upper || !lower) {
+    const series = normalized;
+    if (series.length >= 10) {
+      const fallbackBoth = pickBothTypePairs(series, options.strength ?? 3);
+      if (!lower && fallbackBoth.lowFallback) {
+        lower = { ...fallbackBoth.lowFallback, sourceTf: activeTimeframe };
+      }
+      if (!upper && fallbackBoth.highFallback) {
+        upper = { ...fallbackBoth.highFallback, sourceTf: activeTimeframe };
+      }
+    }
+  }
+
+  return { upper, lower };
+}
+
 /**
  * On a (possibly aggregated) candle series, find the most recent pair of
  * same-type swings that visually represents the trend. Prefers ascending
@@ -436,6 +584,68 @@ function pickSameTypePair(
   if (highs.length >= 2) return { earlier: highs[0], later: highs.at(-1)!, direction: "down" as const };
 
   return null;
+}
+
+/**
+ * Return BOTH ascending-low and descending-high pairs independently.
+ * Unlike `pickSameTypePair` which picks a single winner, this returns
+ * both so the caller can draw an upper + lower trendline simultaneously.
+ */
+function pickBothTypePairs(
+  series: NormCandle[],
+  strength: number,
+): {
+  upPair: { earlier: SwingAnchor; later: SwingAnchor } | null;
+  downPair: { earlier: SwingAnchor; later: SwingAnchor } | null;
+  lowFallback: { earlier: SwingAnchor; later: SwingAnchor } | null;
+  highFallback: { earlier: SwingAnchor; later: SwingAnchor } | null;
+} {
+  if (series.length < strength * 2 + 4) {
+    return { upPair: null, downPair: null, lowFallback: null, highFallback: null };
+  }
+
+  const pivots: SwingAnchor[] = [];
+  for (let index = strength; index < series.length - strength; index += 1) {
+    const candle = series[index];
+    const neighbors = [
+      ...series.slice(index - strength, index),
+      ...series.slice(index + 1, index + strength + 1),
+    ];
+    if (neighbors.every((other) => candle.high > other.high)) {
+      pivots.push({ type: "high", index, time: candle.time, price: candle.high });
+    }
+    if (neighbors.every((other) => candle.low < other.low)) {
+      pivots.push({ type: "low", index, time: candle.time, price: candle.low });
+    }
+  }
+
+  const lows = pivots.filter((p) => p.type === "low");
+  const highs = pivots.filter((p) => p.type === "high");
+
+  const lastLow = lows.at(-1);
+  const prevLow = lows.length >= 2 ? lows[lows.length - 2] : null;
+  const lastHigh = highs.at(-1);
+  const prevHigh = highs.length >= 2 ? highs[highs.length - 2] : null;
+
+  // Ascending lows = rising support trendline (lower line)
+  const upPair =
+    prevLow && lastLow && lastLow.price > prevLow.price && lastLow.index > prevLow.index
+      ? { earlier: prevLow, later: lastLow }
+      : null;
+  // Descending highs = falling resistance trendline (upper line)
+  const downPair =
+    prevHigh && lastHigh && lastHigh.price < prevHigh.price && lastHigh.index > prevHigh.index
+      ? { earlier: prevHigh, later: lastHigh }
+      : null;
+
+  // Fallbacks: earliest→latest of same type, even if not monotonic.
+  // This gives a "best effort" line when the strict condition fails.
+  const lowFallback =
+    lows.length >= 2 ? { earlier: lows[0], later: lows.at(-1)! } : null;
+  const highFallback =
+    highs.length >= 2 ? { earlier: highs[0], later: highs.at(-1)! } : null;
+
+  return { upPair, downPair, lowFallback, highFallback };
 }
 
 /**

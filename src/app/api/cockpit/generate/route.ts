@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createChatCompletion, getAIConfig, getModelForProvider } from "@/services/aiProvider";
+import { callLLM } from "@/services/llmClient";
 
 const COCKPIT_PROMPT = `You are analyzing a trader's private session history with their AI trading companion (AXE).
 Your job is to generate a structured cockpit snapshot that reflects the trader's actual behavior, patterns, and how well the AI has learned their style.
@@ -56,7 +56,7 @@ Rules:
 - confidence_trend: generate realistic daily points spanning the message history period
 - Return ONLY the JSON object, no other text.`;
 
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -69,14 +69,30 @@ export async function POST() {
 
   // AI provider check is handled by aiProvider service
 
-  // Fetch data in parallel
+  // Allow generating cockpit for a specific assistant type (axe|intel)
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type") === "intel" ? "intel" : "axe";
+
+  // Find conversations for this user and type
+  const { data: convs } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("conversation_type", type)
+    .order("last_message_at", { ascending: false })
+    .limit(5);
+
+  const convIds: string[] = Array.isArray(convs) ? convs.map((c: any) => c.id) : [];
+
+  // Fetch data in parallel, scoped to the selected conversation type
   const [messagesResult, memoryResult, alertsResult, execResult] = await Promise.all([
     supabase
       .from("messages")
-      .select("role,content,created_at")
+      .select("role,content,created_at,conversation_id")
+      .in("conversation_id", convIds.length ? convIds : ["dummy-no-conv"])
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(200),
 
     supabase
       .from("assistant_memory_entries")
@@ -107,7 +123,7 @@ export async function POST() {
 
   if (messages.length < 2) {
     return NextResponse.json(
-      { error: "Not enough conversation history to generate a snapshot. Have a few sessions with AXE first." },
+      { error: `Not enough conversation history to generate a snapshot for ${type}. Have a few sessions with the ${type.toUpperCase()} agent first.` },
       { status: 422 }
     );
   }
@@ -119,7 +135,7 @@ export async function POST() {
       from: messages[0]?.created_at,
       to: messages[messages.length - 1]?.created_at,
     },
-    recentMessages: messages.slice(-60).map((m) => ({
+    recentMessages: messages.slice(-200).map((m) => ({
       role: m.role,
       at: m.created_at,
       content: (m.content as string).slice(0, 300),
@@ -129,16 +145,8 @@ export async function POST() {
     executions: execs.map((e) => ({ symbol: e.symbol, direction: e.direction, status: e.status, at: e.created_at })),
   };
 
-  const config = getAIConfig();
-  if (!config) {
-    return NextResponse.json({ error: "No AI provider configured. Set OLLAMA_BASE_URL or OPENAI_API_KEY." }, { status: 500 });
-  }
-
-  const model = getModelForProvider(config);
-
   try {
-    const completion = await createChatCompletion({
-      model,
+    const result = await callLLM({
       temperature: 0.3,
       max_tokens: 2000,
       messages: [
@@ -150,7 +158,7 @@ export async function POST() {
       ],
     });
 
-    const raw = completion.choices[0]?.message?.content ?? "";
+    const raw = result.content ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
     var snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;

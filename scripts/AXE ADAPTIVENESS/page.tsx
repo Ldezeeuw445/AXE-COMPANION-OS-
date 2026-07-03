@@ -1,0 +1,179 @@
+import { CockpitAlignment } from "@/components/cockpit/CockpitAlignment";
+import { CockpitBehaviorMap } from "@/components/cockpit/CockpitBehaviorMap";
+import { CockpitConfidenceChart } from "@/components/cockpit/CockpitConfidenceChart";
+import { CockpitFeedbackImpact } from "@/components/cockpit/CockpitFeedbackImpact";
+import { CockpitFooterNote } from "@/components/cockpit/CockpitFooterNote";
+import { CockpitLearningProgress } from "@/components/cockpit/CockpitLearningProgress";
+import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
+import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
+import { CockpitAdaptiveSuggestions } from "@/components/adaptive/CockpitAdaptiveSuggestions";
+import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
+import { GlassPanel } from "@/components/ui/GlassPanel";
+import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { loadAdaptiveDecisionSet } from "@/lib/adaptive/server";
+import { getCockpitDashboard } from "@/services/cockpitService";
+import type { AdaptiveSuggestionState } from "@/types/adaptive";
+
+export default async function CockpitPage() {
+  const [dash, supabase] = await Promise.all([
+    getCockpitDashboard(),
+    createServerSupabaseClient(),
+  ]);
+  let adaptiveGreeting = "Good morning.";
+  let adaptiveFocus: string | null = null;
+  let adaptivePairs: string[] = [];
+  let adaptiveSuggestions: AdaptiveSuggestionState[] = [];
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const [{ data: profile }, decisions] = await Promise.all([
+        supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+        loadAdaptiveDecisionSet(supabase, { userId: user.id }),
+      ]);
+      adaptiveGreeting = profile?.display_name
+        ? `Good morning, ${profile.display_name}.`
+        : decisions.briefing.greeting;
+      adaptiveFocus = decisions.briefing.sessionFocus ? String(decisions.briefing.sessionFocus) : null;
+      adaptivePairs = decisions.briefing.preferredPairs;
+      adaptiveSuggestions = decisions.suggestions.filter((item) => item.kind === "session_briefing_focus");
+    }
+  }
+  const hasSnapshot = Boolean(dash.snapshotId);
+  const cockpitCalibrated = hasSnapshot && dash.calibration.state === "active";
+  const cockpitPreview = hasSnapshot && dash.calibration.state !== "active";
+
+  return (
+    <div className="axe-stagger-enter flex flex-col gap-5 pb-2">
+      <LiveStatusReporter
+        liveCount={hasSnapshot ? 1 : 0}
+        totalCount={1}
+        label={
+          cockpitCalibrated
+            ? "Cockpit · calibrated"
+            : cockpitPreview
+              ? "Cockpit · early snapshot"
+              : "Cockpit · calibrating"
+        }
+        allLiveOverride={cockpitCalibrated ? true : hasSnapshot ? false : null}
+        severity={cockpitCalibrated ? "fresh" : hasSnapshot ? "inactive" : "inactive"}
+        reason={
+          cockpitCalibrated
+            ? `${dash.calibration.signalCount} real signals are available.`
+            : hasSnapshot
+              ? `Snapshot ready with ${dash.calibration.signalCount} signals — scores stay conservative until more history exists.`
+              : `${dash.calibration.signalCount} real signals found; missing ${dash.calibration.missingSignals.join(", ") || "snapshot"}.`
+        }
+        scope="cockpit"
+      />
+      <PageTitleInjector title="Cockpit" />
+      <div className="-mt-1 border-l-2 border-tos-warm/35 pl-3.5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-[color:var(--icon-cockpit)]">
+          {adaptiveGreeting}
+        </p>
+        <p className="text-[13px] leading-relaxed text-tos-text/95">
+          A quiet read on the same brain you message in Chat — pacing, doubt,
+          and what stuck after feedback.
+        </p>
+        {adaptiveFocus || adaptivePairs.length ? (
+          <p className="mt-2 text-[11px] leading-relaxed text-tos-dim">
+            {adaptiveFocus ? `Focus: ${adaptiveFocus}. ` : ""}
+            {adaptivePairs.length ? `Pairs AXE sees most: ${adaptivePairs.join(", ")}.` : ""}
+          </p>
+        ) : null}
+      </div>
+
+      <CockpitAdaptiveSuggestions initialSuggestions={adaptiveSuggestions} />
+
+      <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
+
+      {!hasSnapshot ? (
+        <GlassPanel className="p-6 text-center">
+          <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-tos-dim">
+            {dash.calibration.state === "insufficient_data" ? "Insufficient data" : "Calibrating"}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-tos-muted">
+            {dash.calibration.message}
+          </p>
+          <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-tos-dim">
+            {dash.calibration.signalCount} real signals found
+          </p>
+          {dash.calibration.missingSignals.length > 0 ? (
+            <p className="mt-2 text-[11px] text-tos-dim">
+              Missing: {dash.calibration.missingSignals.join(", ")}
+            </p>
+          ) : null}
+          <CockpitGenerateButton />
+        </GlassPanel>
+      ) : (
+        <>
+          {cockpitPreview ? (
+            <GlassPanel className="border-tos-warm/20 p-4">
+              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-tos-warm/90">
+                Early calibration
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-tos-muted">
+                {dash.calibration.message}
+              </p>
+              <p className="mt-2 text-[11px] text-tos-dim">
+                {dash.calibration.signalCount} signals ·{" "}
+                {dash.calibration.missingSignals.length
+                  ? `still missing ${dash.calibration.missingSignals.join(", ")}`
+                  : "building toward full calibration"}
+              </p>
+            </GlassPanel>
+          ) : null}
+
+          <CockpitAlignment data={dash.alignment} calibrationMessage={dash.calibration.message} />
+
+          <GlassPanel className="p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Score basis</p>
+            <p className="mt-1 text-xs leading-relaxed text-tos-muted">
+              {dash.alignment.score} is based on {dash.calibration.signalCount} real workspace signals. Mock/fallback cockpit
+              data is ignored once live user data exists.
+            </p>
+            <p className="mt-1 text-[11px] text-tos-dim">
+              Last recalculated:{" "}
+              {dash.calibration.lastCalculatedAt
+                ? new Date(dash.calibration.lastCalculatedAt).toLocaleString()
+                : "not yet"}
+              {dash.calibration.missingSignals.length
+                ? ` · Missing: ${dash.calibration.missingSignals.join(", ")}`
+                : ""}
+            </p>
+          </GlassPanel>
+
+          <CockpitLearningProgress
+            headline={dash.learningProgress.headline}
+            milestones={dash.learningProgress.milestones}
+          />
+
+          <CockpitConfidenceChart
+            headline={dash.confidence.headline}
+            series={dash.confidence.series}
+          />
+
+          <CockpitFeedbackImpact data={dash.feedback} />
+
+          <CockpitBehaviorMap data={dash.behavior} />
+
+          <CockpitFooterNote metricKeysSample={dash.metricKeysSample} />
+
+          <div className="pt-2">
+            <p className="mb-2 text-center text-[11px] text-tos-dim">
+              Snapshot from{" "}
+              {new Date(dash.alignment.capturedAt).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </p>
+            <CockpitGenerateButton label="Refresh snapshot" />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

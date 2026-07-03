@@ -19,7 +19,7 @@
  */
 
 import { verifyChartSessionToken } from "./sessionToken";
-import type { ChartLiveEvent, ChartLiveStatus, LiveCandle, LivePositionPayload } from "./liveContract";
+import type { ChartLiveEvent, ChartLiveStatus, LiveCandle, LivePositionPayload, LivePendingOrderPayload } from "./liveContract";
 
 export interface Env {
   CHART_LIVE_ROOM: DurableObjectNamespace;
@@ -35,6 +35,33 @@ export interface Env {
 const DEFAULT_CLIENT = "https://mt-client-api-vzsrmwxzqcwfarnn.london.agiliumtrade.ai";
 const DEFAULT_MARKET = "https://mt-market-data-client-api-v1.london.agiliumtrade.ai";
 
+const REGION_CLIENT: Record<string, string> = {
+  london: DEFAULT_CLIENT,
+  "new-york": "https://mt-client-api-vzsrmwxzqcwfarnn.new-york.agiliumtrade.ai",
+  singapore: "https://mt-client-api-vzsrmwxzqcwfarnn.singapore.agiliumtrade.ai",
+};
+
+const REGION_MARKET: Record<string, string> = {
+  london: DEFAULT_MARKET,
+  "new-york": "https://mt-market-data-client-api-v1.new-york.agiliumtrade.ai",
+  singapore: "https://mt-market-data-client-api-v1.singapore.agiliumtrade.ai",
+};
+
+function hostsForRegion(region: string | undefined, env: Env): { clientBase: string; marketBase: string } {
+  const key = (region ?? "").trim().toLowerCase();
+  const clientBase = (
+    (key && REGION_CLIENT[key]) ||
+    env.METAAPI_CLIENT_API_URL ||
+    DEFAULT_CLIENT
+  ).replace(/\/$/, "");
+  const marketBase = (
+    (key && REGION_MARKET[key]) ||
+    env.METAAPI_MARKET_DATA_URL ||
+    DEFAULT_MARKET
+  ).replace(/\/$/, "");
+  return { clientBase, marketBase };
+}
+
 const TF_MAP: Record<string, string> = {
   m5: "5m",
   m15: "15m",
@@ -44,8 +71,8 @@ const TF_MAP: Record<string, string> = {
   d1: "1d",
 };
 
-const TICK_INTERVAL_MS = 2_500;
-const CANDLE_INTERVAL_MS = 12_000;
+const TICK_INTERVAL_MS = 1_000;
+const CANDLE_INTERVAL_MS = 5_000;
 const POSITIONS_INTERVAL_MS = 8_000;
 const DELAYED_THRESHOLD_FAILURES = 3;
 const IDLE_HARD_CLOSE_MS = 5 * 60_000;
@@ -174,6 +201,7 @@ type RoomState = {
   userId: string;
   accountId: string;
   metaApiAccountId: string;
+  metaapiRegion?: string;
   displaySymbol: string;
   brokerSymbol: string;
   timeframe: string;
@@ -181,6 +209,20 @@ type RoomState = {
 };
 
 const ROOM_STORAGE_KEY = "room_state_v1";
+
+function roomMatchesPayload(current: RoomState | null, next: RoomState): boolean {
+  return Boolean(
+    current &&
+      current.userId === next.userId &&
+      current.accountId === next.accountId &&
+      current.metaApiAccountId === next.metaApiAccountId &&
+      (current.metaapiRegion ?? "") === (next.metaapiRegion ?? "") &&
+      current.displaySymbol === next.displaySymbol &&
+      current.brokerSymbol === next.brokerSymbol &&
+      current.timeframe === next.timeframe &&
+      current.metaApiTimeframe === next.metaApiTimeframe,
+  );
+}
 
 export class ChartLiveRoom implements DurableObject {
   private readonly state: DurableObjectState;
@@ -192,6 +234,7 @@ export class ChartLiveRoom implements DurableObject {
   private lastTickAt = 0;
   private lastCandleAt = 0;
   private lastPositionsAt = 0;
+  private lastOrdersAt = 0;
   private consecutiveTickFailures = 0;
   private status: ChartLiveStatus = "reconnecting";
   private idleSince: number | null = null;
@@ -216,17 +259,28 @@ export class ChartLiveRoom implements DurableObject {
     const payload = await verifyChartSessionToken(token, this.env.CHART_SESSION_JWT_SECRET);
     if (!payload) return new Response("invalid_token", { status: 401 });
 
+    const nextRoom: RoomState = {
+      userId: payload.userId,
+      accountId: payload.accountId,
+      metaApiAccountId: payload.metaApiAccountId,
+      metaapiRegion: payload.metaapiRegion,
+      displaySymbol: payload.displaySymbol,
+      brokerSymbol: payload.brokerSymbol,
+      timeframe: payload.timeframe,
+      metaApiTimeframe: TF_MAP[payload.timeframe] ?? "1h",
+    };
     if (!this.room) {
       const stored = (await this.state.storage.get<RoomState>(ROOM_STORAGE_KEY)) ?? null;
-      this.room = stored ?? {
-        userId: payload.userId,
-        accountId: payload.accountId,
-        metaApiAccountId: payload.metaApiAccountId,
-        displaySymbol: payload.displaySymbol,
-        brokerSymbol: payload.brokerSymbol,
-        timeframe: payload.timeframe,
-        metaApiTimeframe: TF_MAP[payload.timeframe] ?? "1h",
-      };
+      this.room = roomMatchesPayload(stored, nextRoom) ? stored : nextRoom;
+      await this.state.storage.put(ROOM_STORAGE_KEY, this.room);
+    } else if (!roomMatchesPayload(this.room, nextRoom)) {
+      this.room = nextRoom;
+      this.lastTickAt = 0;
+      this.lastCandleAt = 0;
+      this.lastPositionsAt = 0;
+      this.lastOrdersAt = 0;
+      this.consecutiveTickFailures = 0;
+      this.status = "reconnecting";
       await this.state.storage.put(ROOM_STORAGE_KEY, this.room);
     }
 
@@ -351,8 +405,7 @@ export class ChartLiveRoom implements DurableObject {
     const r = this.room;
     if (!r) return;
     const now = Date.now();
-    const clientBase = (this.env.METAAPI_CLIENT_API_URL ?? DEFAULT_CLIENT).replace(/\/$/, "");
-    const marketBase = (this.env.METAAPI_MARKET_DATA_URL ?? DEFAULT_MARKET).replace(/\/$/, "");
+    const { clientBase, marketBase } = hostsForRegion(r.metaapiRegion, this.env);
 
     if (now - this.lastTickAt >= TICK_INTERVAL_MS) {
       this.lastTickAt = now;
@@ -471,6 +524,68 @@ export class ChartLiveRoom implements DurableObject {
         /* tolerate */
       }
     }
+
+    // ── Pending orders poll (same interval, offset by 2s from positions) ──
+    if (now - this.lastOrdersAt >= POSITIONS_INTERVAL_MS) {
+      this.lastOrdersAt = now;
+      try {
+        const url = `${clientBase}/users/current/accounts/${encodeURIComponent(r.metaApiAccountId)}/orders`;
+        const res = await fetchWithTimeout(
+          url,
+          { headers: { Accept: "application/json", "auth-token": this.env.METAAPI_TOKEN } },
+          METAAPI_POSITIONS_TIMEOUT_MS,
+        );
+        if (res.ok) {
+          const arr = (await res.json()) as Array<Record<string, unknown>>;
+          const onSymbol: LivePendingOrderPayload[] = arr
+            .filter((q) => String(q.symbol ?? "") === r.brokerSymbol)
+            .map((q, i) => {
+              const rawType = (String(q.type ?? "")).toLowerCase().replace(/_/g, " ");
+              let type = rawType.trim() || "pending";
+              if (rawType.includes("buy") && rawType.includes("limit")) type = "buy_limit";
+              else if (rawType.includes("sell") && rawType.includes("limit")) type = "sell_limit";
+              else if (rawType.includes("buy") && rawType.includes("stop")) type = "buy_stop";
+              else if (rawType.includes("sell") && rawType.includes("stop")) type = "sell_stop";
+              const side = type.startsWith("buy") ? "buy" : type.startsWith("sell") ? "sell" : "unknown";
+              return {
+                id: String(q.id ?? q.orderId ?? i),
+                symbol: String(q.symbol ?? ""),
+                type,
+                side,
+                volume: Number(q.volume ?? 0) || 0,
+                openPrice: Number(q.openPrice ?? q.price ?? 0),
+                currentPrice: q.currentPrice != null ? Number(q.currentPrice) : null,
+                stopLoss: q.stopLoss != null ? Number(q.stopLoss) : null,
+                takeProfit: q.takeProfit != null ? Number(q.takeProfit) : null,
+                openTime: (q.time as string) ?? null,
+              };
+            });
+          this.broadcast({
+            type: "orders_update",
+            userId: r.userId,
+            accountId: r.accountId,
+            total: arr.length,
+            onSymbol,
+            source: "metaapi_mt5",
+          });
+        } else {
+          this.clearOrdersOverlay(r);
+        }
+      } catch {
+        this.clearOrdersOverlay(r);
+      }
+    }
+  }
+
+  private clearOrdersOverlay(r: RoomState) {
+    this.broadcast({
+      type: "orders_update",
+      userId: r.userId,
+      accountId: r.accountId,
+      total: 0,
+      onSymbol: [],
+      source: "metaapi_mt5",
+    });
   }
 
   private setStatus(next: ChartLiveStatus, reason?: string) {

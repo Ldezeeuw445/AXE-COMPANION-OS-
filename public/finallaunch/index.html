@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AXE Companion Final Launch</title>
+  <link rel="stylesheet" href="./hero-devices.css" />
+  <style>
+    :root {
+      --bg-0: #07080a;
+      --bg-1: #0b0d11;
+      --panel: #090b0f;
+      --panel-2: #0d1016;
+      --line: rgba(255, 255, 255, 0.1);
+      --line-strong: rgba(72, 222, 246, 0.34);
+      --text: #ecf3ff;
+      --muted: rgba(224, 236, 255, 0.58);
+      --cyan: #48def6;
+      --cyan-soft: #83e9ff;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(900px circle at 50% -8%, rgba(72, 222, 246, 0.16), transparent 52%),
+        linear-gradient(180deg, #151c27 0%, #111824 16%, #0d131d 34%, #090e15 55%, #060a0f 76%, #040507 100%);
+      background-attachment: fixed;
+    }
+
+    .page { min-height: 100vh; }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(16px);
+      background: rgba(8, 9, 12, 0.8);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .nav-inner,
+    .hero-inner,
+    .section-inner,
+    .footer-inner {
+      width: min(1300px, calc(100vw - 42px));
+      margin: 0 auto;
+    }
+
+    .nav-inner {
+      min-height: 84px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .nav-brand img {
+      width: 86px;
+      height: 86px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      transition: color 180ms ease;
+    }
+
+    .nav-links a:hover { color: var(--cyan-soft); }
+
+    .btn {
+      border-radius: 999px;
+      padding: 12px 20px;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      transition: transform 180ms ease, border-color 180ms ease;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+
+    .btn-primary {
+      color: #051015;
+      background: linear-gradient(135deg, #6c5cff 0%, #43d7ff 100%);
+      box-shadow: 0 16px 30px rgba(66, 214, 255, 0.26);
+    }
+
+    .btn-secondary {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .hero {
+      position: relative;
+      padding: 44px 0 34px;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(680px circle at 50% 8%, rgba(84, 195, 255, 0.1), transparent 56%);
+      pointer-events: none;
+    }
+
+    .hero-inner { text-align: center; }
+
+    .hero-kicker {
+      margin: 0 auto;
+      width: fit-content;
+      border: 1px solid var(--line-strong);
+      color: var(--cyan-soft);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .hero h1 {
+      margin: 16px 0 10px;
+      font-size: clamp(34px, 5.2vw, 72px);
+      line-height: 1.02;
+      letter-spacing: -0.02em;
+    }
+
+    .hero h1 span {
+      display: block;
+      background: linear-gradient(95deg, #fff, #92eaff 62%, #c7c1ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .hero-copy {
+      margin: 0 auto;
+      max-width: 840px;
+      color: var(--muted);
+      line-height: 1.72;
+      font-size: 17px;
+    }
+
+    .hero-actions {
+      margin-top: 24px;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .hero-device-shell {
+      margin-top: 26px;
+      border: 1px solid rgba(92, 128, 182, 0.28);
+      border-radius: 30px;
+      padding: 18px;
+      background:
+        radial-gradient(780px circle at 50% -16%, rgba(72, 222, 246, 0.14), transparent 52%),
+        linear-gradient(180deg, rgba(10, 14, 21, 0.96), rgba(6, 8, 12, 0.98));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 24px 48px rgba(0, 0, 0, 0.34);
+    }
+
+    .section {
+      padding: 70px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .section-kicker {
+      margin: 0;
+      color: var(--cyan-soft);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .section-title {
+      margin: 14px 0 0;
+      font-size: clamp(30px, 4.2vw, 56px);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+    }
+
+    .section-copy {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.72;
+      max-width: 900px;
+    }
+
+    .bento-grid {
+      margin-top: 32px;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      grid-auto-rows: minmax(74px, auto);
+      grid-auto-flow: dense;
+      gap: 16px;
+    }
+
+    .feed-card {
+      position: relative;
+      border-radius: 22px;
+      border: 1px solid rgba(140, 170, 210, 0.2);
+      background:
+        radial-gradient(520px circle at 100% -12%, rgba(72, 222, 246, 0.18), transparent 48%),
+        radial-gradient(380px circle at 0% 120%, rgba(17, 42, 88, 0.34), transparent 52%),
+        linear-gradient(180deg, #07090d 0%, #040508 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+        0 18px 34px rgba(0, 0, 0, 0.34);
+      padding: 22px;
+      min-height: 180px;
+      overflow: hidden;
+    }
+
+    .feed-card::before {
+      content: "";
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      top: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(72, 222, 246, 0.7), transparent);
+      opacity: 0.9;
+    }
+
+    .feed-card h3 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.16;
+      letter-spacing: -0.01em;
+    }
+
+    .feed-card p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .feed-card .tag {
+      margin: 0 0 12px;
+      color: var(--cyan-soft);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .feed-card strong {
+      color: #f3f8ff;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .feed-stats {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .feed-stat {
+      border: 1px solid rgba(148, 179, 255, 0.22);
+      border-radius: 12px;
+      background: rgba(9, 13, 20, 0.72);
+      padding: 10px;
+    }
+
+    .feed-stat b {
+      display: block;
+      font-size: 21px;
+      line-height: 1;
+    }
+
+    .feed-stat span {
+      display: block;
+      margin-top: 5px;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .feed-progress {
+      margin-top: 14px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.09);
+      overflow: hidden;
+    }
+
+    .feed-progress i {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #0ea5ff, #48def6);
+    }
+
+    .hero-feed { min-height: 256px; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .row-2 { grid-row: span 2; }
+
+    .system-grid {
+      margin-top: 26px;
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .visual-panel {
+      grid-column: span 6;
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      background: linear-gradient(180deg, #0b0d11, #080a0d);
+      overflow: hidden;
+      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.26);
+    }
+
+    .visual-panel img {
+      width: 100%;
+      display: block;
+      height: auto;
+    }
+
+    .cockpit-note {
+      grid-column: span 12;
+      border-radius: 24px;
+      border: 1px solid rgba(72, 222, 246, 0.24);
+      background:
+        radial-gradient(700px circle at 20% -8%, rgba(72, 222, 246, 0.11), transparent 42%),
+        linear-gradient(180deg, #0b0f15, #080a0d);
+      padding: 30px;
+    }
+
+    .cockpit-note h3 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 42px);
+      letter-spacing: -0.02em;
+      line-height: 1.08;
+    }
+
+    .cockpit-note p {
+      margin: 14px 0 0;
+      max-width: 900px;
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    .cockpit-note .hero-actions { justify-content: flex-start; }
+
+    .pricing-grid {
+      margin-top: 26px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .price-card {
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, #0b0d12, #080a0d);
+      padding: 24px;
+    }
+
+    .price-card h3 { margin: 0; font-size: 26px; }
+
+    .price {
+      margin-top: 10px;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .price small {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .price-copy {
+      margin-top: 10px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .final-cta {
+      border: 1px solid rgba(72, 222, 246, 0.3);
+      border-radius: 24px;
+      padding: 36px;
+      background:
+        radial-gradient(750px circle at 35% -15%, rgba(72, 222, 246, 0.15), transparent 50%),
+        linear-gradient(180deg, #0a0d12 0%, #080a0d 100%);
+      text-align: center;
+    }
+
+    .final-cta h2 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 52px);
+      line-height: 1.06;
+      letter-spacing: -0.02em;
+    }
+
+    .final-cta p {
+      margin: 14px auto 0;
+      max-width: 760px;
+      color: var(--muted);
+      line-height: 1.72;
+    }
+
+    .faq-list {
+      margin-top: 24px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .faq-list details {
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(8, 10, 13, 0.72);
+      padding: 14px 16px;
+    }
+
+    .faq-list summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .faq-list p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.66;
+      font-size: 14px;
+    }
+
+    .footer {
+      padding: 34px 0 40px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      color: rgba(230, 240, 255, 0.52);
+      font-size: 12px;
+    }
+
+    .footer-inner {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    @media (max-width: 1180px) {
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-8,
+      .visual-panel,
+      .cockpit-note { grid-column: span 12; }
+
+      .pricing-grid { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+    }
+
+    @media (max-width: 760px) {
+      .nav-inner,
+      .hero-inner,
+      .section-inner,
+      .footer-inner { width: min(100vw - 26px, 1300px); }
+
+      .nav-brand img { width: 72px; height: 72px; }
+      .hero { padding-top: 26px; }
+      .hero-device-shell { padding: 12px; border-radius: 22px; }
+      .section { padding: 56px 0; }
+      .final-cta,
+      .cockpit-note { padding: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-brand" href="#hero" aria-label="AXE home">
+          <img src="../figma-assets/images/nav-logo-axe-full.png" alt="AXE logo" />
+        </a>
+        <nav class="nav-links" aria-label="Primary">
+          <a href="#product">Product</a>
+          <a href="#cockpit">Cockpit</a>
+          <a href="#pricing">Pricing</a>
+        </nav>
+        <a class="btn btn-primary" href="/upgrade">Go to Subscriptions</a>
+      </div>
+    </header>
+
+    <section class="hero" id="hero">
+      <div class="hero-inner">
+        <p class="hero-kicker">AXE Companion Final Launch</p>
+        <h1>Trade What Matters.<span>One Calm Dark Operating Surface.</span></h1>
+        <p class="hero-copy">
+          AXE Companion brings chart, execution, intelligence, feed, and cockpit learning into one continuous trading workflow.
+          iPad stays the command center, iPhone stays ready for instant action.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/upgrade">Start with Subscriptions</a>
+          <a class="btn btn-secondary" href="#product">Explore the Product</a>
+        </div>
+
+        <div class="hero-device-shell">
+          <div class="hero-device-stage">
+            <div class="device-3d device-3d--phone">
+              <div class="device-bezel">
+                <div class="device-notch" aria-hidden="true"></div>
+                <div class="device-screen">
+                  <iframe
+                    title="AXE iPhone 15 Pro demo"
+                    src="/demo/embed?device=phone&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                    loading="eager"
+                    allow="clipboard-write"
+                  ></iframe>
+                </div>
+              </div>
+            </div>
+            <div class="hero-ipad-stack-live">
+              <div class="device-3d device-3d--ipad">
+                <div class="device-bezel">
+                  <div class="device-screen">
+                    <iframe
+                      title="AXE iPad Pro demo"
+                      src="/demo/embed?device=tablet&amp;to=%2Fchart%3Fsymbol%3DXAUUSD%26tf%3DH1"
+                      loading="lazy"
+                      allow="clipboard-write"
+                    ></iframe>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="product">
+      <div class="section-inner">
+        <p class="section-kicker">Product</p>
+        <h2 class="section-title">23 Live AXE Feeds in a Dark Bento Grid</h2>
+        <p class="section-copy">
+          We keep the black card style and restructure the full feed library into a tighter TradingOS-style bento system so the hierarchy is clear instantly.
+        </p>
+
+        <div class="bento-grid">
+          <article class="feed-card hero-feed span-8 row-2">
+            <p class="tag">Feed 01 · Core Cockpit</p>
+            <h3>One Dark Control Layer for <strong>Execution + Learning</strong></h3>
+            <p>Live score stack, corrections, edge map and trader behavior all in one cockpit so the whole workflow is visible at once.</p>
+            <div class="feed-stats">
+              <div class="feed-stat"><b>56</b><span>Trader score</span></div>
+              <div class="feed-stat"><b>48/100</b><span>AXE alignment</span></div>
+              <div class="feed-stat"><b>146</b><span>Kept setups</span></div>
+              <div class="feed-stat"><b>299</b><span>Passed setups</span></div>
+            </div>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 02 · AXE Engine</p>
+            <h3>Adaptive Core</h3>
+            <p>Learns from your approvals, rejects and timing behavior continuously.</p>
+            <div class="feed-progress"><i style="width:74%"></i></div>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 03 · Intel Chat</p>
+            <h3>Memory Chat</h3>
+            <p>Persistent context from chart, journal and decision history.</p>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 04 · News Context</p>
+            <h3>Macro Signal Layer</h3>
+            <p>Market events translated to execution-relevant context in seconds.</p>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 05 · Chart Edge</p>
+            <h3>Structure + Session</h3>
+            <p>Session-aware view for London, New York, and Asia behavior shifts.</p>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 06 · Execution</p>
+            <h3>Order Layer</h3>
+            <p>Fast entries with risk framing and clean post-trade traceability.</p>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 07 · Risk</p>
+            <h3>Exposure Watch</h3>
+            <p>Dynamic risk monitor synced to live account behavior.</p>
+            <div class="feed-progress"><i style="width:61%"></i></div>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 08 · Behavior Map</p>
+            <h3>Where Your Edge Lives</h3>
+            <p>Pinpoints where your best setups actually happen versus where you overtrade.</p>
+          </article>
+
+          <article class="feed-card span-4">
+            <p class="tag">Feed 09 · Learning Arc</p>
+            <h3>Feedback Rhythm</h3>
+            <p>Tracks your correction loop quality across weeks, not just single trades.</p>
+          </article>
+
+          <article class="feed-card span-5">
+            <p class="tag">Feed 10 · Pattern Library</p>
+            <h3>What Repeats Wins</h3>
+            <p>Breakout, liquidity sweep, imbalance fill and continuation quality stats.</p>
+          </article>
+
+          <article class="feed-card span-7">
+            <p class="tag">Feed 11 · Conviction Over Time</p>
+            <h3>Confidence Curve</h3>
+            <p>Shows whether your conviction is earned by process quality or distorted by random outcome.</p>
+          </article>
+
+          <article class="feed-card span-3"><p class="tag">Feed 12</p><h3>Smart Money</h3><p>Flow context on top of your own narrative.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 13</p><h3>Orderflow</h3><p>Pressure shifts around key levels.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 14</p><h3>Journal Sync</h3><p>Auto-links ideas to outcomes.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 15</p><h3>Label Engine</h3><p>Consistent tags that improve review.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 16</p><h3>Score Delta</h3><p>See what moved your score up or down.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 17</p><h3>AXE Memory</h3><p>Long-term context retention loop.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 18</p><h3>Patience Meter</h3><p>Timing quality around entries and exits.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 19</p><h3>Discipline Meter</h3><p>Rule adherence under pressure.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 20</p><h3>Execution Meter</h3><p>Entry precision and response quality.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 21</p><h3>Risk Meter</h3><p>Sizing and downside consistency.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 22</p><h3>Market Intel</h3><p>Multi-source context in one stream.</p></article>
+          <article class="feed-card span-3"><p class="tag">Feed 23</p><h3>OS Sync</h3><p>Companion and Trading OS run as one.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="cockpit">
+      <div class="section-inner">
+        <p class="section-kicker">Cockpit &amp; System</p>
+        <h2 class="section-title">The Entire Trading System, Visible at Once</h2>
+        <p class="section-copy">
+          These two views anchor the full story: how AXE thinks, and how your trading behavior evolves under one unified operating model.
+        </p>
+
+        <div class="system-grid">
+          <article class="visual-panel">
+            <img src="./assets/cockpit-full.png" alt="AXE Companion cockpit full overview" loading="lazy" />
+          </article>
+          <article class="visual-panel">
+            <img src="./assets/axe-system.png" alt="AXE engine and system architecture cards" loading="lazy" />
+          </article>
+          <article class="cockpit-note">
+            <h3>Everything points back to execution quality, consistency, and edge protection.</h3>
+            <p>
+              The cockpit is not decoration: it is the decision layer that keeps trades tied to real outcomes. AXE learns from what you approve,
+              what you reject, and how you adapt across sessions. This is where your process becomes measurable and repeatable.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="/upgrade">Open Subscriptions</a>
+              <a class="btn btn-secondary" href="#pricing">See Launch Pricing</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="pricing">
+      <div class="section-inner">
+        <p class="section-kicker">Pricing</p>
+        <h2 class="section-title">Simple Launch Access</h2>
+        <p class="section-copy">Choose your tier in Subscriptions and move from exploration to full execution flow instantly.</p>
+
+        <div class="pricing-grid">
+          <article class="price-card">
+            <h3>Free</h3>
+            <div class="price">€0 <small>/month</small></div>
+            <p class="price-copy">Core experience with chart, feed, and base workflow to get started.</p>
+            <div class="hero-actions" style="justify-content:flex-start; margin-top: 18px;">
+              <a class="btn btn-secondary" href="/upgrade">Go to Subscriptions</a>
+            </div>
+          </article>
+          <article class="price-card">
+            <h3>Pro / Founder / Elite</h3>
+            <div class="price">Live tiers <small>inside /upgrade</small></div>
+            <p class="price-copy">Unlock deeper limits, advanced usage, and full launch-level access based on your plan.</p>
+            <div class="hero-actions" style="justify-content:flex-start; margin-top: 18px;">
+              <a class="btn btn-primary" href="/upgrade">Choose Your Plan</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-inner">
+        <div class="final-cta">
+          <h2>AXE is ready.<br />Launch your setup now.</h2>
+          <p>
+            Open Subscriptions, pick your tier, and run the full AXE Companion workflow from chart to cockpit without friction.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/upgrade">Open Subscriptions</a>
+            <a class="btn btn-secondary" href="#product">Review 23 Feeds</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top: 0;">
+      <div class="section-inner">
+        <p class="section-kicker">FAQ</p>
+        <div class="faq-list">
+          <details>
+            <summary>Is the hero demo interactive?</summary>
+            <p>Yes. Both iPad and iPhone frames are live interactive demos in the landing hero.</p>
+          </details>
+          <details>
+            <summary>Why route everything to Subscriptions?</summary>
+            <p>It is the cleanest launch conversion path: one destination for Free, Pro, Founder, and Elite.</p>
+          </details>
+          <details>
+            <summary>Is this financial advice?</summary>
+            <p>No. AXE is tooling and workflow support. Trading carries risk and results are never guaranteed.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div>AXE Companion OS · Final Launch</div>
+        <div>Not financial advice · Trade responsibly</div>
+      </div>
+    </footer>
+  </div>
+  <script src="./hero-devices.js" defer></script>
+</body>
+</html>

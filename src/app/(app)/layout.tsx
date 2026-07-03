@@ -1,5 +1,6 @@
+import { Suspense } from "react";
 import { MobileShell } from "@/components/shell/MobileShell";
-import { SplashOverlay } from "@/components/shell/SplashOverlay";
+import { EmbedDemoFlags } from "@/components/shell/EmbedDemoFlags";
 
 export default function AppLayout({
   children,
@@ -8,7 +9,9 @@ export default function AppLayout({
 }) {
   return (
     <>
-      <SplashOverlay />
+      <Suspense fallback={null}>
+        <EmbedDemoFlags />
+      </Suspense>
       <MobileShell>{children}</MobileShell>
     </>
   );

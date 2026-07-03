@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { sendChatMessage } from "@/services/chatService";
+import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { text?: unknown; imageBase64?: unknown; imageType?: unknown; symbol?: unknown; tf?: unknown }
+    | { text?: unknown; imageBase64?: unknown; imageType?: unknown; symbol?: unknown; tf?: unknown; type?: unknown }
     | null;
 
   const text = typeof body?.text === "string" ? body.text : "";
@@ -11,8 +15,18 @@ export async function POST(request: Request) {
   const imageType = typeof body?.imageType === "string" ? body.imageType : undefined;
   const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
   const tf = typeof body?.tf === "string" ? body.tf : undefined;
+  const chatType = body?.type === "intel" ? "intel" : "axe";
 
-  const result = await sendChatMessage(text, imageBase64, imageType, symbol, tf);
+  // Server auth
+  const edgeAuth = await getAuthedServiceSupabase();
+  if (!edgeAuth) {
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  const result = await sendChatMessage(text, imageBase64, imageType, symbol, tf, edgeAuth, chatType);
 
   if (!result.ok) {
     if (result.quotaExceeded) {
@@ -23,6 +37,16 @@ export async function POST(request: Request) {
           error: "Daily free message limit reached. Upgrade to Pro for unlimited chat.",
         },
         { status: 429 }
+      );
+    }
+    if (result.aiFailed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "AI_FAILED",
+          error: "AXE couldn't generate a reply right now — please try again in a moment.",
+        },
+        { status: 503 }
       );
     }
     return NextResponse.json(

@@ -1,14 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, Check, Loader2, Pause, Play, Plus, Trash2 } from "lucide-react";
+import { Bell, Check, Loader2, Pause, Play, Plus, Shield, Trash2, Zap } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { TosMatteBanner } from "@/components/ui/TosNotice";
 import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { PushPermission } from "@/components/push/PushPermission";
-import { setLiveStatus, clearLiveStatus } from "@/lib/liveStatusBus";
+import { UpgradeGate } from "@/components/billing/UpgradeGate";
+import { SmartAlertsPanel } from "@/components/alerts/SmartAlertsPanel";
+import { RiskConfirmationModal } from "@/components/risk/RiskConfirmationModal";
+import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
+import { applyChatPrefill, chatHrefWithPrefill } from "@/lib/chat/chatPrefill";
+import {
+  parseOptionalPrice,
+  readAlertStopsFromMetadata,
+  readTradeSideFromMetadata,
+  slTpHints,
+  suggestAlertStopsFromOffsets,
+  validateAlertTradeStops,
+  type AlertTradeSide,
+} from "@/lib/trading/alertTradeStops";
+import type { TradeExecutionPrefs } from "@/lib/trading/tradeExecutionPrefs";
+import { readAlertAutoTradeEnabled } from "@/lib/trading/alertMetadata";
+import { alertAutoTradeArmedRemainingMs } from "@/lib/trading/alertAutoTradeArmed";
 
 type AlertRow = {
   id: string;
@@ -28,10 +46,48 @@ type PushStatus = {
   hasSubscription: boolean;
 };
 
+type AlertRuntimeCheck = {
+  state: "checking" | "valid" | "degraded" | "unavailable" | "inactive";
+  brokerSymbol: string | null;
+  reason: string;
+};
+
 function chatQ(text: string): string {
   return `/chat?q=${encodeURIComponent(text)}`;
 }
 
+function deliveryNoteForType(type: string): string {
+  switch (type) {
+    case "price":
+      return "Live on Chart when this symbol is active";
+    case "position_risk":
+      return "Monitored — missing SL & book risk (cron + chart)";
+    case "news":
+    case "macro":
+      return "Saved — intel feed hook coming soon";
+    case "journal_reminder":
+      return "Reminder only — no auto-fire yet";
+    default:
+      return "In-app only";
+  }
+}
+
+function humanAlertType(type: string): string {
+  switch (type) {
+    case "price":
+      return "Price";
+    case "position_risk":
+      return "Position risk";
+    case "news":
+      return "News";
+    case "macro":
+      return "Macro";
+    case "journal_reminder":
+      return "Journal reminder";
+    default:
+      return type.replace(/_/g, " ");
+  }
+}
 function badgeVariantForType(type: string): "price" | "news" | "risk" | "warm" | "neutral" {
   if (type === "price") return "price";
   if (type === "news") return "news";
@@ -57,9 +113,9 @@ function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
   if (!status) {
     return {
       label: "Delivery: in-app",
-      short: "Live",
-      className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
-      dot: "bg-cyan-300/85",
+      short: "In-app",
+      className: "border-white/[0.08] bg-white/[0.05] text-white/90",
+      dot: "bg-white/60",
     };
   }
   if (status.vapidConfigured && status.hasSubscription) {
@@ -73,20 +129,61 @@ function deliveryPill(status: PushStatus | null): DeliveryDescriptor {
   if (status.vapidConfigured) {
     return {
       label: "Delivery: in-app · enable push",
-      short: "Live",
-      className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
-      dot: "bg-cyan-300/85",
+      short: "In-app",
+      className: "border-white/[0.08] bg-white/[0.05] text-white/90",
+      dot: "bg-white/60",
     };
   }
   return {
     label: "Delivery: in-app",
-    short: "Live",
-    className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-100/95",
-    dot: "bg-cyan-300/85",
+    short: "In-app",
+    className: "border-white/[0.08] bg-white/[0.05] text-white/90",
+    dot: "bg-white/60",
   };
 }
 
-export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
+function priceAlertRuntimeOk(state: AlertRuntimeCheck["state"]): boolean {
+  return state === "valid" || state === "degraded";
+}
+
+function buildAlertRefineDraft(args: {
+  symbol: string;
+  type: string;
+  condition: string;
+  tradeSide: string;
+  threshold: string;
+  keyword: string;
+  defaultVolume: number;
+  alertAutoTradeEnabled: boolean;
+  stopLoss: string;
+  takeProfit: string;
+}): string {
+  const sym = args.symbol.trim().toUpperCase() || "XAUUSD";
+  return `[AXE · alerts]
+Refine this alert rule for ${sym}:
+- Type: ${args.type}
+- Fires when price: ${args.condition === "below" ? "drops to" : "rises to"} ${args.threshold || "?"}
+- Auto-trade direction: ${args.tradeSide.toUpperCase()}
+- Entry price: ${args.threshold || "?"}
+- Stop loss price: ${args.stopLoss || "?"}
+- Take profit price: ${args.takeProfit || "?"}
+- Keyword: ${args.keyword || "—"}
+- My default size: ${args.defaultVolume.toFixed(2)} lots
+- Alert auto-trade: ${args.alertAutoTradeEnabled ? "ON (market + SL/TP required)" : "OFF"}
+
+Return one crisp alert I can save, with threshold, SL, TP prices, and a one-line rationale.`;
+}
+
+export function AlertsClient({
+  initialSymbol,
+  tradePrefs,
+  canSmartAlerts = false,
+}: {
+  initialSymbol: string;
+  tradePrefs: TradeExecutionPrefs;
+  canSmartAlerts?: boolean;
+}) {
+  const router = useRouter();
   const focusSymbol = initialSymbol.trim().toUpperCase();
 
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
@@ -94,17 +191,94 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [push, setPush] = useState<PushStatus | null>(null);
+  const [runtimeCheck, setRuntimeCheck] = useState<AlertRuntimeCheck>({
+    state: "inactive",
+    brokerSymbol: null,
+    reason: "No symbol selected.",
+  });
 
   const [formType, setFormType] = useState<string>("price");
   const [formSymbol, setFormSymbol] = useState<string>(focusSymbol || "");
-  const [formCondition, setFormCondition] = useState<string>("above");
+  const [formCondition, setFormCondition] = useState<string>("below");
+  const [formTradeSide, setFormTradeSide] = useState<AlertTradeSide>("buy");
   const [formThreshold, setFormThreshold] = useState<string>("");
+  const [formStopLoss, setFormStopLoss] = useState<string>("");
+  const [formTakeProfit, setFormTakeProfit] = useState<string>("");
   const [formKeyword, setFormKeyword] = useState<string>("");
+  const [armed, setArmed] = useState(tradePrefs.alertAutoTradeArmed);
+  const [armedAt, setArmedAt] = useState<string | null>(tradePrefs.alertAutoTradeArmedAt);
+  const [armPending, setArmPending] = useState(false);
+  const [armTick, setArmTick] = useState(0);
+  const [stopsTouched, setStopsTouched] = useState(false);
+  const [confirmAutoAlertId, setConfirmAutoAlertId] = useState<string | null>(null);
+  const [confirmAutoPending, setConfirmAutoPending] = useState(false);
 
   useEffect(() => {
     if (!focusSymbol) return;
     setFormSymbol(focusSymbol);
   }, [focusSymbol]);
+
+  useEffect(() => {
+    const symbol = formSymbol.trim().toUpperCase();
+    if (!symbol) {
+      setRuntimeCheck({ state: "inactive", brokerSymbol: null, reason: "No symbol selected." });
+      return;
+    }
+    const ctrl = new AbortController();
+    setRuntimeCheck((prev) => ({ ...prev, state: "checking", reason: "Checking active broker runtime." }));
+    const timer = setTimeout(() => {
+      void fetch(`/api/broker/symbol?symbol=${encodeURIComponent(symbol)}`, {
+        credentials: "include",
+        signal: ctrl.signal,
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Broker runtime unavailable");
+          return (await res.json()) as {
+            state: "valid" | "degraded" | "unavailable" | "inactive" | "warming";
+            brokerSymbol?: string | null;
+            reason?: string;
+            freshness?: string | null;
+          };
+        })
+        .then((runtime) => {
+          setRuntimeCheck({
+            state: runtime.state === "warming" ? "degraded" : runtime.state,
+            brokerSymbol: runtime.brokerSymbol ?? null,
+            reason: runtime.reason ?? "Broker runtime checked.",
+          });
+        })
+        .catch(() => {
+          if (!ctrl.signal.aborted) {
+            setRuntimeCheck({ state: "unavailable", brokerSymbol: null, reason: "Could not verify broker runtime for this symbol." });
+          }
+        });
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [formSymbol]);
+
+  useEffect(() => {
+    if (formType !== "price" || stopsTouched) return;
+    const threshold = parseOptionalPrice(formThreshold);
+    if (threshold == null) return;
+    const suggested = suggestAlertStopsFromOffsets(
+      formTradeSide,
+      threshold,
+      tradePrefs.alertSlOffset,
+      tradePrefs.alertTpOffset,
+    );
+    if (suggested.stopLoss != null) setFormStopLoss(String(suggested.stopLoss));
+    if (suggested.takeProfit != null) setFormTakeProfit(String(suggested.takeProfit));
+  }, [
+    formType,
+    formThreshold,
+    formTradeSide,
+    tradePrefs.alertSlOffset,
+    tradePrefs.alertTpOffset,
+    stopsTouched,
+  ]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -143,6 +317,69 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!armed) return;
+    const id = setInterval(() => setArmTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [armed]);
+
+  const armedRemainingMin = useMemo(() => {
+    void armTick;
+    if (!armedAt) return 0;
+    return Math.ceil(alertAutoTradeArmedRemainingMs(armedAt) / 60_000);
+  }, [armTick, armedAt]);
+
+  useEffect(() => {
+    if (!armed || !armedAt) return;
+    if (alertAutoTradeArmedRemainingMs(armedAt) <= 0) setArmed(false);
+  }, [armTick, armed, armedAt]);
+
+  const setArmState = useCallback(async (nextArm: boolean) => {
+    setArmPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/preferences/alert-armed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ arm: nextArm }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(j?.error ?? "Could not update arm state.");
+        return;
+      }
+      const json = (await res.json()) as { armed?: boolean; armedAt?: string | null };
+      setArmed(Boolean(json.armed));
+      setArmedAt(json.armedAt ?? null);
+    } finally {
+      setArmPending(false);
+    }
+  }, []);
+
+  const toggleAlertAutoTrade = useCallback(
+    async (alert: AlertRow, enabled: boolean) => {
+      setError(null);
+      const metadata = {
+        ...(alert.metadata && typeof alert.metadata === "object" ? alert.metadata : {}),
+        auto_trade_enabled: enabled,
+      };
+      const res = await fetch(`/api/alerts/${encodeURIComponent(alert.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ metadata }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        setError(j?.error ?? "Could not update alert.");
+        return;
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   const visibleAlerts = useMemo(() => {
     if (!focusSymbol) return alerts;
     return alerts.filter((a) => (a.symbol ?? "").toUpperCase() === focusSymbol);
@@ -160,9 +397,31 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       setError("Price alerts need a valid threshold.");
       return;
     }
+    if (type === "price" && !priceAlertRuntimeOk(runtimeCheck.state)) {
+      setError(runtimeCheck.reason || "Broker runtime not ready for this symbol.");
+      return;
+    }
     if ((type === "news" || type === "macro") && !keyword) {
       setError("News/Macro alerts need a keyword.");
       return;
+    }
+
+    const stopLoss = type === "price" ? parseOptionalPrice(formStopLoss) : null;
+    const takeProfit = type === "price" ? parseOptionalPrice(formTakeProfit) : null;
+
+    if (type === "price" && tradePrefs.alertAutoTradeEnabled) {
+      if (stopLoss == null || takeProfit == null) {
+        setError("Alert auto-trade is on — set stop loss and take profit on this alert.");
+        return;
+      }
+      const side = formTradeSide;
+      if (threshold != null) {
+        const stopErr = validateAlertTradeStops(side, threshold, stopLoss, takeProfit);
+        if (stopErr) {
+          setError(stopErr);
+          return;
+        }
+      }
     }
 
     setSaving(true);
@@ -179,7 +438,15 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           threshold: type === "price" ? threshold : null,
           keyword: type === "news" || type === "macro" ? keyword : null,
           status: "active",
-          metadata: { delivery: push?.hasSubscription && push?.vapidConfigured ? "push" : "in_app" },
+          metadata: {
+            delivery: push?.hasSubscription && push?.vapidConfigured ? "push" : "in_app",
+            ...(type === "price" ? { trade_side: formTradeSide } : {}),
+            ...(type === "price" && tradePrefs.alertAutoTradeEnabled
+              ? { auto_trade_enabled: true }
+              : {}),
+            ...(type === "price" && stopLoss != null ? { stop_loss: stopLoss } : {}),
+            ...(type === "price" && takeProfit != null ? { take_profit: takeProfit } : {}),
+          },
         }),
       });
 
@@ -190,12 +457,28 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       }
 
       setFormThreshold("");
+      setFormStopLoss("");
+      setFormTakeProfit("");
+      setStopsTouched(false);
       setFormKeyword("");
       await refresh();
     } finally {
       setSaving(false);
     }
-  }, [formType, formSymbol, formCondition, formThreshold, formKeyword, push, refresh]);
+  }, [
+    formType,
+    formSymbol,
+    formCondition,
+    formTradeSide,
+    formThreshold,
+    formStopLoss,
+    formTakeProfit,
+    formKeyword,
+    push,
+    refresh,
+    runtimeCheck,
+    tradePrefs.alertAutoTradeEnabled,
+  ]);
 
   const setAlertStatus = useCallback(
     async (id: string, status: "active" | "paused") => {
@@ -233,7 +516,42 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
     [refresh],
   );
 
+  const refineDraft = useMemo(
+    () =>
+      buildAlertRefineDraft({
+        symbol: formSymbol,
+        type: formType,
+        condition: formCondition,
+        tradeSide: formTradeSide,
+        threshold: formThreshold,
+        keyword: formKeyword,
+        defaultVolume: tradePrefs.defaultVolume,
+        alertAutoTradeEnabled: tradePrefs.alertAutoTradeEnabled,
+        stopLoss: formStopLoss,
+        takeProfit: formTakeProfit,
+      }),
+    [
+      formSymbol,
+      formType,
+      formCondition,
+      formTradeSide,
+      formThreshold,
+      formStopLoss,
+      formTakeProfit,
+      formKeyword,
+      tradePrefs.defaultVolume,
+      tradePrefs.alertAutoTradeEnabled,
+    ],
+  );
+
+  const goRefineInChat = useCallback(() => {
+    applyChatPrefill(refineDraft);
+    router.push(chatHrefWithPrefill(refineDraft));
+  }, [refineDraft, router]);
+
   const delivery = deliveryPill(push);
+  const entryPrice = parseOptionalPrice(formThreshold);
+  const priceHints = slTpHints(formTradeSide, entryPrice);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(
     () => [
@@ -315,18 +633,21 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
       totalCount: totalChannels,
       freshestAgeSec: null,
       label: `Alerts · ${delivery.short}`,
+      severity: error ? "degraded" : "fresh",
+      reason: error ?? "Alert manager reachable. Price alerts still require a verified broker symbol.",
+      scope: "alerts",
     });
     return () => {
-      clearLiveStatus();
+      clearLiveStatusScope("alerts");
     };
   }, [error, push?.vapidConfigured, push?.hasSubscription, delivery.short]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto gap-3 pb-2">
       {/* Desktop header; mobile uses AppTopBar slots */}
       <div className="hidden items-center justify-between gap-3 border-b border-white/[0.04] py-2 md:flex">
         <div className="flex items-center gap-2">
-          <Bell className="h-5 w-5 text-cyan-400/80" aria-hidden />
+          <Bell className="h-5 w-5 text-white/60" aria-hidden />
           <div>
             <p className="text-sm font-semibold text-tos-text">Alerts</p>
             <p className="text-xs text-tos-muted">No simulated triggers. Push stays explicit.</p>
@@ -342,8 +663,8 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
 
       {focusSymbol ? (
         <p className="text-xs text-tos-muted">
-          Focus symbol: <span className="font-mono text-cyan-200/90">{focusSymbol}</span> —{" "}
-          <Link href="/alerts" className="text-cyan-400 hover:underline">
+          Focus symbol: <span className="font-mono text-white/80">{focusSymbol}</span> —{" "}
+          <Link href="/alerts" className="text-white/70 hover:underline">
             clear
           </Link>
         </p>
@@ -353,7 +674,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           dig into Settings. Only renders when push is actually configured on
           the deployment AND the user hasn't subscribed yet. */}
       {push?.vapidConfigured && !push.hasSubscription ? (
-        <GlassPanel className="p-4" glow="cyan">
+        <GlassPanel className="p-4" glow="none">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
             Enable notifications on this device
           </p>
@@ -365,14 +686,24 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           fires the alert locally. Web-push is optional / additive. */}
       {push && !push.vapidConfigured ? (
         <GlassPanel className="p-3 text-[11px] text-tos-muted">
-          <span className="font-semibold text-cyan-200/95">In-app alerts are live.</span>{" "}
-          Open <Link href="/chart" className="text-cyan-400 hover:underline">Chart</Link> to evaluate
+          <span className="font-semibold text-white/90">In-app alerts are live.</span>{" "}
+          Open <Link href="/chart" className="text-white/70 hover:underline">Chart</Link> to evaluate
           price alerts on the active symbol. Push notifications are an extra channel — add VAPID
           keys on Vercel to also send them when the app is closed.
         </GlassPanel>
       ) : null}
 
-      <GlassPanel className="p-4" glow="cyan">
+      {canSmartAlerts ? (
+        <SmartAlertsPanel onCreated={() => void refresh()} />
+      ) : (
+        <UpgradeGate
+          feature="proactive_notifications"
+          title="Smart alerts"
+          description="AI-classified alerts with book + market context — missing SL, sentiment shifts, correlation clusters, and multi-indicator confluence. Included with Pro."
+        />
+      )}
+
+      <GlassPanel className="p-4" glow="none">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-tos-dim">Create alert</p>
           <p className="text-[11px] text-tos-muted">
@@ -382,6 +713,76 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             </span>
           </p>
         </div>
+        <TosMatteBanner className="mt-3">
+          <span className="font-semibold text-white/92">Runtime:</span>{" "}
+          <span className="font-semibold text-white/88">
+            {runtimeCheck.state === "valid"
+              ? "Broker verified"
+              : runtimeCheck.state === "checking"
+                ? "Checking"
+                : runtimeCheck.state === "degraded"
+                  ? "Degraded"
+                  : runtimeCheck.state === "unavailable"
+                    ? "Unavailable"
+                    : "Inactive"}
+          </span>
+          {runtimeCheck.brokerSymbol ? <span className="font-mono"> · {runtimeCheck.brokerSymbol}</span> : null}
+          <span> · {runtimeCheck.reason}</span>
+          {formType === "price" && runtimeCheck.state === "degraded" ? (
+            <span className="mt-1 block text-amber-200/85">
+              Live price is warming — you can still save the alert; evaluation runs when Chart is open.
+            </span>
+          ) : null}
+        </TosMatteBanner>
+
+        <TosMatteBanner accent="cyan" className="mt-3">
+          <span className="font-semibold text-white/92">Your trade size (saved per account):</span>{" "}
+          <span className="font-mono text-white/88">{tradePrefs.defaultVolume.toFixed(2)} lots</span>
+          {" · "}
+          Alert auto-trade:{" "}
+          <span className={tradePrefs.alertAutoTradeEnabled ? "text-amber-200/90" : "text-white/72"}>
+            {tradePrefs.alertAutoTradeEnabled ? "ON" : "OFF"}
+          </span>
+          {tradePrefs.alertAutoTradeEnabled ? (
+            <>
+              {" · "}
+              Armed:{" "}
+              <span className={armed ? "text-emerald-200/90" : "text-amber-200/90"}>
+                {armed ? `YES (${armedRemainingMin}m left)` : "NO — tap Arm below"}
+              </span>
+              <span className="mt-1 block text-white/58">
+                Global auto-trade is on, but orders only fire while armed (30 min window) and when each alert has auto-trade enabled.
+              </span>
+              <span className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={armPending || armed}
+                  onClick={() => void setArmState(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-100/90 disabled:opacity-50"
+                >
+                  <Shield className="h-3 w-3" aria-hidden />
+                  Arm 30m
+                </button>
+                <button
+                  type="button"
+                  disabled={armPending || !armed}
+                  onClick={() => void setArmState(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/70 disabled:opacity-50"
+                >
+                  Disarm
+                </button>
+              </span>
+            </>
+          ) : (
+            <span className="mt-1 block text-white/58">
+              Change in{" "}
+              <Link href="/settings" className="text-cyan-300/90 hover:underline">
+                Settings → Trade size &amp; alerts
+              </Link>
+              .
+            </span>
+          )}
+        </TosMatteBanner>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="text-[11px] text-tos-dim">
@@ -389,14 +790,19 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
             <select
               value={formType}
               onChange={(e) => setFormType(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
             >
-              <option value="price">price</option>
-              <option value="position_risk">position_risk</option>
-              <option value="news">news</option>
-              <option value="macro">macro</option>
-              <option value="journal_reminder">journal_reminder</option>
+              <option value="price">Price (live on Chart)</option>
+              <option value="position_risk">Position risk (saved)</option>
+              <option value="news">News keyword (saved)</option>
+              <option value="macro">Macro keyword (saved)</option>
+              <option value="journal_reminder">Journal reminder (saved)</option>
             </select>
+            {formType !== "price" ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-tos-dim">
+                Only price alerts auto-evaluate today. Other types are stored for AXE context and future push hooks.
+              </p>
+            ) : null}
           </label>
 
           <label className="text-[11px] text-tos-dim">
@@ -405,33 +811,95 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
               value={formSymbol}
               onChange={(e) => setFormSymbol(e.target.value)}
               placeholder="XAUUSD"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] uppercase tracking-wider text-tos-text outline-none focus:border-cyan-500/35"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] uppercase tracking-wider text-tos-text outline-none focus:border-white/[0.15]"
             />
           </label>
 
           {formType === "price" ? (
             <>
-              <label className="text-[11px] text-tos-dim">
-                Condition
+              <label className="text-[11px] text-tos-dim sm:col-span-2">
+                Alert fires when price
                 <select
                   value={formCondition}
                   onChange={(e) => setFormCondition(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 >
-                  <option value="above">above</option>
-                  <option value="below">below</option>
+                  <option value="below">Drops to level (price falls)</option>
+                  <option value="above">Rises to level (price climbs)</option>
                 </select>
+                <span className="mt-1 block text-[10px] leading-relaxed text-tos-dim">
+                  Example: gold at 4110 now, you want 4099 → choose <strong className="text-white/70">Drops to 4099</strong>.
+                  That only controls <em>when</em> the alert fires — not buy vs sell.
+                </span>
               </label>
               <label className="text-[11px] text-tos-dim">
-                Threshold
+                Price level
                 <input
                   value={formThreshold}
                   onChange={(e) => setFormThreshold(e.target.value)}
-                  placeholder="2356.50"
+                  placeholder="4099.00"
                   inputMode="decimal"
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
                 />
               </label>
+              {(tradePrefs.alertAutoTradeEnabled || formStopLoss || formTakeProfit) ? (
+                <label className="text-[11px] text-tos-dim">
+                  Auto-trade direction
+                  <select
+                    value={formTradeSide}
+                    onChange={(e) => setFormTradeSide(e.target.value as AlertTradeSide)}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+                  >
+                    <option value="buy">Buy (long)</option>
+                    <option value="sell">Sell (short)</option>
+                  </select>
+                  <span className="mt-1 block text-[10px] text-tos-dim">
+                    {formCondition === "below" && formTradeSide === "buy"
+                      ? "Buy on dip — like a buy limit when price reaches your level."
+                      : formCondition === "above" && formTradeSide === "sell"
+                        ? "Sell on rally — like a sell limit when price reaches your level."
+                        : formCondition === "below" && formTradeSide === "sell"
+                          ? "Sell breakdown — short when price breaks below your level."
+                          : "Buy breakout — long when price breaks above your level."}
+                  </span>
+                </label>
+              ) : null}
+              <label className="text-[11px] text-tos-dim">
+                Stop loss price {tradePrefs.alertAutoTradeEnabled ? "(required)" : "(optional)"}
+                <input
+                  value={formStopLoss}
+                  onChange={(e) => {
+                    setStopsTouched(true);
+                    setFormStopLoss(e.target.value);
+                  }}
+                  placeholder={priceHints.stopLossPlaceholder}
+                  inputMode="decimal"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+                />
+              </label>
+              <label className="text-[11px] text-tos-dim">
+                Take profit price {tradePrefs.alertAutoTradeEnabled ? "(required)" : "(optional)"}
+                <input
+                  value={formTakeProfit}
+                  onChange={(e) => {
+                    setStopsTouched(true);
+                    setFormTakeProfit(e.target.value);
+                  }}
+                  placeholder={priceHints.takeProfitPlaceholder}
+                  inputMode="decimal"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 font-mono text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
+                />
+              </label>
+              {tradePrefs.alertAutoTradeEnabled ? (
+                <p className="sm:col-span-2 text-[10px] leading-relaxed text-tos-dim">
+                  SL and TP are absolute prices sent to MT5. {priceHints.summary}
+                  {entryPrice != null ? (
+                    <span className="mt-1 block text-white/45">
+                      Entry ≈ {entryPrice} when the alert fires.
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
             </>
           ) : null}
 
@@ -442,7 +910,7 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                 value={formKeyword}
                 onChange={(e) => setFormKeyword(e.target.value)}
                 placeholder={formType === "news" ? "Powell, CPI, gold…" : "CPI, NFP, FOMC…"}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-tos-text outline-none focus:border-cyan-500/35"
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#0c0d0e] px-3 py-2 text-[12px] text-tos-text outline-none focus:border-white/[0.15]"
               />
             </label>
           ) : null}
@@ -454,21 +922,20 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
           <button
             type="button"
             onClick={() => void createAlert()}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/12 px-3 py-2 text-[12px] font-semibold text-cyan-100/95 hover:bg-cyan-500/18 disabled:opacity-60"
+            disabled={saving || (formType === "price" && runtimeCheck.state === "checking")}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2 text-[12px] font-semibold text-white/90 hover:bg-white/[0.08] disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
             Create
           </button>
-          <Link
-            href={chatQ(
-              `[AXE · alerts]\nDraft a single alert for ${formSymbol || "my account"}.\nType: ${formType}\nCondition: ${formCondition}\nThreshold: ${formThreshold || "?"}\nKeyword: ${formKeyword || "?"}\nReturn a crisp rule + suggested values.`,
-            )}
+          <button
+            type="button"
+            onClick={goRefineInChat}
             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[12px] font-semibold text-tos-muted hover:bg-white/[0.06]"
           >
-            <Check className="h-4 w-4 text-cyan-400/80" aria-hidden />
+            <Check className="h-4 w-4 text-white/60" aria-hidden />
             Ask AXE to refine
-          </Link>
+          </button>
         </div>
       </GlassPanel>
 
@@ -481,24 +948,51 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
         </GlassPanel>
       ) : visibleAlerts.length === 0 ? (
         <GlassPanel className="p-4 text-sm text-tos-muted">
-          <p>No alerts yet. Create one above, or set from Chart → “Set price alert”.</p>
+          <p>No alerts yet. Create one above, or open Chart with a symbol to evaluate price alerts live.</p>
           <p className="mt-2 text-xs text-tos-dim">
-            Note: push delivery only happens when a device is subscribed and TradingOS triggers `/api/push/alert`.
+            Price alerts trip in-app while Chart is open. Push is optional when VAPID keys and a device subscription exist.
           </p>
         </GlassPanel>
       ) : (
         <div className="space-y-2">
           {visibleAlerts.map((a) => {
             const paused = a.status === "paused";
+            const stops = readAlertStopsFromMetadata(a.metadata);
+            const tradeSide = readTradeSideFromMetadata(a.metadata, a.condition);
+            const alertAutoOn =
+              a.type === "price" &&
+              tradePrefs.alertAutoTradeEnabled &&
+              readAlertAutoTradeEnabled(a.metadata, true);
             return (
               <GlassPanel key={a.id} className="!p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm text-tos-text">{a.symbol ?? "—"}</span>
-                    <Badge variant={badgeVariantForType(a.type)}>{a.type}</Badge>
+                    <Badge variant={badgeVariantForType(a.type)}>{humanAlertType(a.type)}</Badge>
                     <Badge variant={paused ? "neutral" : "long"}>{paused ? "paused" : "active"}</Badge>
+                    {a.type === "price" && tradePrefs.alertAutoTradeEnabled ? (
+                      <Badge variant={alertAutoOn ? "warm" : "neutral"}>
+                        {alertAutoOn ? "auto-trade" : "notify only"}
+                      </Badge>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {a.type === "price" && tradePrefs.alertAutoTradeEnabled ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!alertAutoOn) {
+                            setConfirmAutoAlertId(a.id);
+                            return;
+                          }
+                          void toggleAlertAutoTrade(a, false);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-semibold text-tos-muted hover:bg-white/[0.06]"
+                      >
+                        <Zap className="h-3.5 w-3.5" aria-hidden />
+                        {alertAutoOn ? "Disable auto" : "Enable auto"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void setAlertStatus(a.id, paused ? "active" : "paused")}
@@ -518,14 +1012,23 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
                   </div>
                 </div>
                 <p className="mt-1 text-[11px] text-tos-dim">
-                  {a.condition ? `${a.condition}` : null}
-                  {a.threshold != null ? ` · ${a.threshold}` : ""}
+                  {a.condition === "below"
+                    ? "Fires below"
+                    : a.condition === "above"
+                      ? "Fires above"
+                      : a.condition ?? ""}
+                  {a.threshold != null ? ` ${a.threshold}` : ""}
+                  {tradeSide ? ` · ${tradeSide.toUpperCase()}` : ""}
+                  {stops.stopLoss != null ? ` · SL ${stops.stopLoss}` : ""}
+                  {stops.takeProfit != null ? ` · TP ${stops.takeProfit}` : ""}
                   {a.keyword ? ` · “${a.keyword}”` : ""}
                 </p>
                 <p className="mt-1 text-[10px] text-tos-dim">
                   {a.triggered_at ? `Triggered ${a.triggered_at}` : "Not triggered"}
                   {" · "}
                   {a.created_at}
+                  {" · "}
+                  {deliveryNoteForType(a.type)}
                 </p>
               </GlassPanel>
             );
@@ -538,7 +1041,29 @@ export function AlertsClient({ initialSymbol }: { initialSymbol: string }) {
         extra channel. TradingOS can also fire push via{" "}
         <code className="text-tos-muted">POST /api/push/alert</code> when both apps are online.
       </p>
+      <RiskConfirmationModal
+        open={confirmAutoAlertId != null}
+        pending={confirmAutoPending}
+        title="Enable alert auto-trade on this alert"
+        subtitle="This alert may place market orders with SL/TP while armed."
+        confirmLabel="Enable for this alert"
+        onClose={() => setConfirmAutoAlertId(null)}
+        onConfirm={async () => {
+          if (!confirmAutoAlertId) return;
+          const alert = alerts.find((a) => a.id === confirmAutoAlertId);
+          if (!alert) {
+            setConfirmAutoAlertId(null);
+            return;
+          }
+          setConfirmAutoPending(true);
+          try {
+            await toggleAlertAutoTrade(alert, true);
+            setConfirmAutoAlertId(null);
+          } finally {
+            setConfirmAutoPending(false);
+          }
+        }}
+      />
     </div>
   );
 }
-

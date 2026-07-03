@@ -6,6 +6,7 @@ import type { CockpitDashboard } from "@/types/cockpit";
  */
 export const mockCockpitDashboard: CockpitDashboard = {
   snapshotId: "snap_2026_03_29_0630z",
+  shouldAutoRefresh: false,
   learningProgress: {
     headline:
       "After CPI week, the model leaned harder into how you define invalidation — fewer tick-scratch exits, more 5-minute closes. NY size-up only fires once London context is tagged “clean.”",
@@ -144,4 +145,44 @@ export const mockCockpitDashboard: CockpitDashboard = {
     "confidence_mean_7d",
     "session_london_weight",
   ],
+  calibration: {
+    state: "active",
+    signalCount: 64,
+    missingSignals: [],
+    lastCalculatedAt: "2026-03-29T06:30:00.000Z",
+    message: "Mock dashboard only: real cockpit scores stay conservative until live user signals exist.",
+  },
+  today: {
+    chatMessages: 4,
+    tradesClosed: 1,
+    feedEvents: 3,
+    journalNotes: 1,
+  },
+  learningArc: {
+    headline: "Mock arc: invalidation language and NY size discipline are your strongest teaching signals this month.",
+    weeklyFocus: [
+      { label: "Reasoning fixes", count: 14 },
+      { label: "Trade alignment", count: 9 },
+      { label: "Chat response quality", count: 6 },
+    ],
+    messageFeedback: { up: 11, down: 3 },
+    weeklyFeedbackTrend: [
+      { weekLabel: "3 Mar", up: 2, down: 1 },
+      { weekLabel: "10 Mar", up: 3, down: 0 },
+      { weekLabel: "17 Mar", up: 4, down: 1 },
+      { weekLabel: "24 Mar", up: 2, down: 1 },
+    ],
+  },
+  traderScores: {
+    periodDays: 90,
+    sampleSize: 64,
+    tradeCount: 28,
+    traderOverallScore: 69,
+    scores: [
+      { key: "discipline", label: "Discipline", score: 68, available: true, hint: "Mock — emotional discipline from journal breakdowns." },
+      { key: "execution", label: "Execution", score: 74, available: true, hint: "Mock — playbook + rule adherence." },
+      { key: "risk", label: "Risk", score: 71, available: true, hint: "Mock — risk management dimension." },
+      { key: "patience", label: "Patience", score: 62, available: true, hint: "Mock — label + frequency rollup." },
+    ],
+  },
 };

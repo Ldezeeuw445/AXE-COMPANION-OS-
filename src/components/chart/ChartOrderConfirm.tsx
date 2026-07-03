@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, X } from "lucide-react";
+import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
 export type OrderConfirmInput = {
   symbol: string;
@@ -24,6 +25,8 @@ export type OrderConfirmInput = {
   slippagePoints: number;
   /** Human-readable account label so the user can sanity-check it isn't demo. */
   accountLabel: string;
+  /** lots for MT5, shares for Alpaca paper. */
+  volumeUnit?: "lots" | "shares";
 };
 
 export type OrderConfirmStatus =
@@ -55,16 +58,17 @@ export function ChartOrderConfirm({
 
   const isBuy = input.side === "buy";
   const sideClasses = isBuy
-    ? "border-cyan-400/40 bg-cyan-400/12 text-cyan-100"
+    ? "border-white/[0.12] bg-emerald-400/12 text-white"
     : "border-rose-400/40 bg-rose-400/12 text-rose-100";
 
   const orderTypeLabel = labelOrderType(input.orderType);
+  const volumeUnit = input.volumeUnit ?? "lots";
   const priceLabel = input.orderType === "market"
     ? input.livePrice != null
-      ? input.livePrice.toFixed(input.digits)
+      ? formatBrokerPrice(input.brokerSymbol, input.livePrice)
       : "—"
     : input.openPrice != null
-      ? input.openPrice.toFixed(input.digits)
+      ? formatBrokerPrice(input.brokerSymbol, input.openPrice)
       : "—";
 
   return (
@@ -74,7 +78,7 @@ export function ChartOrderConfirm({
       aria-modal="true"
       aria-label="Confirm live order"
     >
-      <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#08080C] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
+      <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#060a14] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
         <header className="mb-3 flex items-start justify-between gap-3">
           <div className="flex items-start gap-2">
             <span className={`grid h-9 w-9 place-items-center rounded-full border ${sideClasses}`}>
@@ -87,13 +91,13 @@ export function ChartOrderConfirm({
             <div>
               <p className="text-[15px] font-semibold tracking-tight text-tos-text">
                 Send{" "}
-                <span className={isBuy ? "text-cyan-300" : "text-rose-300"}>
+                <span className={isBuy ? "text-emerald-300" : "text-rose-300"}>
                   {input.side.toUpperCase()}
                 </span>{" "}
                 · {input.symbol}
               </p>
               <p className="mt-0.5 text-[11px] text-tos-muted">
-                {orderTypeLabel} · {input.volume.toFixed(2)} lots · {input.accountLabel}
+                {orderTypeLabel} · {input.volume.toFixed(2)} {volumeUnit} · {input.accountLabel}
               </p>
             </div>
           </div>
@@ -120,17 +124,17 @@ export function ChartOrderConfirm({
           <Row label="Account" value={input.accountLabel} mono={false} />
           <Row label="Broker symbol" value={input.brokerSymbol} />
           <Row label="Type" value={orderTypeLabel} mono={false} />
-          <Row label="Volume" value={`${input.volume.toFixed(2)} lots`} />
-          <Row label="Price" value={priceLabel} highlight={isBuy ? "cyan" : "rose"} />
+          <Row label="Volume" value={`${input.volume.toFixed(2)} ${volumeUnit}`} />
+          <Row label="Price" value={priceLabel} highlight={isBuy ? "buy" : "rose"} />
           <Row
             label="Stop loss"
-            value={input.stopLoss != null ? input.stopLoss.toFixed(input.digits) : "—"}
+            value={input.stopLoss != null ? formatBrokerPrice(input.brokerSymbol, input.stopLoss) : "—"}
             highlight={input.stopLoss != null ? "rose" : null}
           />
           <Row
             label="Take profit"
-            value={input.takeProfit != null ? input.takeProfit.toFixed(input.digits) : "—"}
-            highlight={input.takeProfit != null ? "cyan" : null}
+            value={input.takeProfit != null ? formatBrokerPrice(input.brokerSymbol, input.takeProfit) : "—"}
+            highlight={input.takeProfit != null ? "buy" : null}
           />
           <Row label="Slippage" value={`${input.slippagePoints} pts`} />
         </dl>
@@ -141,7 +145,7 @@ export function ChartOrderConfirm({
           </div>
         ) : null}
         {status.kind === "ok" ? (
-          <div className="mt-3 rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-3 py-2 text-[11.5px] leading-relaxed text-cyan-100/95">
+          <div className="mt-3 rounded-xl border border-white/[0.10] bg-white/[0.05] px-3 py-2 text-[11.5px] leading-relaxed text-white/90">
             {status.message}
           </div>
         ) : null}
@@ -162,7 +166,7 @@ export function ChartOrderConfirm({
               disabled={status.kind === "sending"}
               className={`rounded-xl border px-4 py-2.5 text-[12px] font-semibold ${
                 isBuy
-                  ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/16"
+                  ? "border-white/[0.12] bg-white/[0.05] text-white hover:bg-emerald-400/16"
                   : "border-rose-400/40 bg-rose-400/10 text-rose-100 hover:bg-rose-400/16"
               } disabled:opacity-45`}
             >
@@ -175,7 +179,7 @@ export function ChartOrderConfirm({
               disabled={status.kind === "sending" || status.kind === "ok"}
               className={`rounded-xl border px-4 py-2.5 text-[12px] font-semibold ${
                 isBuy
-                  ? "border-cyan-400/65 bg-cyan-400/22 text-cyan-50 shadow-[0_0_0_3px_rgba(34,211,238,0.16)] hover:bg-cyan-400/28"
+                  ? "border-emerald-400/65 bg-emerald-400/22 text-white/90 shadow-[0_0_0_3px_rgba(52,211,153,0.16)] hover:bg-emerald-400/28"
                   : "border-rose-400/65 bg-rose-400/22 text-rose-50 shadow-[0_0_0_3px_rgba(244,63,94,0.16)] hover:bg-rose-400/28"
               } disabled:opacity-55`}
             >
@@ -205,10 +209,10 @@ function Row({
   label: string;
   value: string;
   mono?: boolean;
-  highlight?: "cyan" | "rose" | null;
+  highlight?: "buy" | "rose" | null;
 }) {
-  const valueClass = highlight === "cyan"
-    ? "text-cyan-200"
+  const valueClass = highlight === "buy"
+    ? "text-emerald-200"
     : highlight === "rose"
       ? "text-rose-200"
       : "text-tos-text";

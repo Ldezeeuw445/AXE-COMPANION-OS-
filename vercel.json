@@ -1,0 +1,36 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/mt5-sync",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/axe-watcher",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/intel-warmup",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/daily-briefing",
+      "schedule": "*/15 4-11 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-briefing",
+      "schedule": "*/15 4-11 * * 1"
+    },
+    {
+      "path": "/api/cron/cockpit-snapshots",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/knowledge-sync",
+      "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/krater-feed-sync",
+      "schedule": "*/10 4-20 * * *"
+    }
+  ]
+}

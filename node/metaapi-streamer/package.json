@@ -1,9 +1,9 @@
 {
   "name": "axe-metaapi-streamer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "MetaApi MT5 streaming service. Subscribes via the official socket.io SDK and pushes normalized events to the Cloudflare ChartLiveRoom /internal/publish endpoint.",
+  "description": "MetaApi MT5 streaming service v2. Dynamically loads watchlist symbols from Supabase. Subscribes via the official socket.io SDK and pushes normalized events to the Cloudflare ChartLiveRoom.",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node --enable-source-maps dist/index.js",
@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
     "metaapi.cloud-sdk": "^29.0.5"
   },
   "devDependencies": {

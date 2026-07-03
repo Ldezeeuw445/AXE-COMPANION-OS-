@@ -13,6 +13,7 @@ export type CockpitLearningMilestone = {
   narrative: string;
 };
 
+/** Snapshot score: how well AXE fits *your* book (100 = fully aligned). Not the trader pillar rollup. */
 export type CockpitAlignment = {
   /** 0–100 — mirrors `alignment_score` on snapshots */
   score: number;
@@ -66,6 +67,8 @@ export type CockpitBehaviorMap = {
 export type CockpitDashboard = {
   /** Mirrors `assistant_cockpit_snapshots.id` when live */
   snapshotId: string;
+  /** True when new signals exist since last snapshot — triggers background recalibration */
+  shouldAutoRefresh: boolean;
   learningProgress: {
     headline: string;
     milestones: CockpitLearningMilestone[];
@@ -82,4 +85,63 @@ export type CockpitDashboard = {
    * replace with live rollup keys when fetching from DB.
    */
   metricKeysSample: string[];
+  calibration: {
+    state: "calibrating" | "insufficient_data" | "active";
+    signalCount: number;
+    missingSignals: string[];
+    lastCalculatedAt: string | null;
+    message: string;
+  };
+  engine: {
+    name: string;
+    version: string;
+    confidenceScore: number;
+    confidenceTier: "low" | "medium" | "high";
+    gateMode: "strict" | "guided" | "proactive";
+    signalCount: number;
+    tradeLabelCount: number;
+    memoryCount: number;
+    updatedAt: string | null;
+    rationale: Record<string, unknown>;
+  };
+  today: CockpitTodaySummary;
+  learningArc: CockpitLearningArc;
+  traderScores: CockpitTraderScores;
+};
+
+export type CockpitTodaySummary = {
+  chatMessages: number;
+  tradesClosed: number;
+  feedEvents: number;
+  journalNotes: number;
+};
+
+export type CockpitLearningArc = {
+  headline: string;
+  weeklyFocus: { label: string; count: number }[];
+  messageFeedback: { up: number; down: number };
+  weeklyFeedbackTrend: { weekLabel: string; up: number; down: number }[];
+};
+
+export type CockpitTraderScoreKey =
+  | "discipline"
+  | "execution"
+  | "risk"
+  | "patience";
+
+export type CockpitTraderScoreItem = {
+  key: CockpitTraderScoreKey;
+  label: string;
+  score: number;
+  available: boolean;
+  hint: string;
+};
+
+export type CockpitTraderScores = {
+  periodDays: number;
+  sampleSize: number;
+  tradeCount: number;
+  /** Mean of available pillar scores (discipline, execution, risk, patience). Not AXE snapshot alignment. */
+  traderOverallScore: number | null;
+  scores: CockpitTraderScoreItem[];
 };

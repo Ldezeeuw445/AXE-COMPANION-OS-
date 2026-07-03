@@ -83,5 +83,15 @@ export function detectFallbackChartActionIntent(text: string): ChartActionComman
   ) {
     return "clear_ai_drawings";
   }
+  if (
+    normalized.includes("zet fvg") ||
+    normalized.includes("zet ifvg") ||
+    normalized.includes("zet structure") ||
+    normalized.includes("zet rsi") ||
+    normalized.includes("enable fvg") ||
+    normalized.includes("turn on fvg")
+  ) {
+    return "add_indicator";
+  }
   return null;
 }

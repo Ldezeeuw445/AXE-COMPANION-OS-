@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
-import { macdSeries } from "@/lib/chart/indicatorMath";
+import { macdSeries, rsiSeries } from "@/lib/chart/indicatorMath";
 
 /**
  * IndicatorPane renders a single technical indicator (volume or RSI) in its
@@ -19,17 +19,61 @@ type Props = {
   mode: Mode;
   candles: MetaApiCandle[];
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
+  /** Match the main chart background so indicator panes look seamless. */
+  background?: string;
+  /** Whether the theme is dark (adjusts separator/label colors). */
+  isDark?: boolean;
 };
 
 type Size = { w: number; h: number };
 
 const MIN_AXIS_WIDTH = 56;
 
-export function IndicatorPane({ mode, candles, canvasRef }: Props) {
+/**
+ * Theme-aware indicator colors — ensures visibility on both dark and light backgrounds.
+ * Dark themes use bright/vivid colors; light (Paper) uses deeper, saturated tones.
+ */
+function indicatorColors(dark: boolean) {
+  return dark
+    ? {
+        bullBar: "rgba(45,212,191,0.78)",
+        bearBar: "rgba(239,68,68,0.78)",
+        rsiLine: "rgba(34,211,238,0.95)",
+        macdLine: "rgba(34,211,238,0.95)",
+        macdSignal: "rgba(250,204,21,0.92)",
+        macdHistBull: "rgba(45,212,191,0.72)",
+        macdHistBear: "rgba(244,63,94,0.72)",
+        levelLine: "rgba(255,255,255,0.16)",
+        levelLineDim: "rgba(255,255,255,0.08)",
+        separator: "rgba(255,255,255,0.04)",
+        labelEmphasis: "rgba(232,238,246,0.85)",
+        labelNormal: "rgba(168,180,196,0.7)",
+        titleText: "text-white/70",
+      }
+    : {
+        /* Paper palette — candle-coloured volume bars: light bull, darker bear */
+        bullBar: "rgba(42,46,57,0.38)",        /* #2a2e39 lighter — bullish candle hint */
+        bearBar: "rgba(19,23,34,0.72)",       /* #131722 — bearish candle body */
+        rsiLine: "rgba(0,90,110,1)",          /* dark cyan — same hue as RSI cyan */
+        macdLine: "rgba(0,90,110,1)",         /* dark cyan */
+        macdSignal: "rgba(160,110,0,1)",      /* dark amber — same hue as yellow signal */
+        macdHistBull: "rgba(0,100,85,0.92)",  /* dark teal */
+        macdHistBear: "rgba(150,18,35,0.92)", /* dark rose */
+        levelLine: "rgba(0,0,0,0.22)",
+        levelLineDim: "rgba(0,0,0,0.12)",
+        separator: "rgba(0,0,0,0.10)",
+        labelEmphasis: "rgba(20,25,35,0.92)",
+        labelNormal: "rgba(50,55,65,0.82)",
+        titleText: "text-black/80",
+      };
+}
+
+export function IndicatorPane({ mode, candles, canvasRef, background, isDark = true }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState<number>(MIN_AXIS_WIDTH);
   const [version, setVersion] = useState(0);
+  const colors = useMemo(() => indicatorColors(isDark), [isDark]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -120,8 +164,8 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
           h,
           color:
             candle.close >= candle.open
-              ? "rgba(45,212,191,0.78)"
-              : "rgba(239,68,68,0.78)",
+              ? colors.bullBar
+              : colors.bearBar,
         });
       }
       return {
@@ -158,7 +202,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
             x,
             y: point.histogram >= 0 ? zeroY - barHeight : zeroY,
             h: Math.max(1, barHeight),
-            color: point.histogram >= 0 ? "rgba(45,212,191,0.72)" : "rgba(244,63,94,0.72)",
+            color: point.histogram >= 0 ? colors.macdHistBull : colors.macdHistBear,
           });
         }
         if (point.macd != null) macdPoints.push({ x, y: zeroY - (point.macd / maxAbs) * (usable / 2) });
@@ -177,7 +221,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
       };
     }
 
-    const rsiValues = rsi(
+    const rsiValues = rsiSeries(
       visible.map((candle) => candle.close),
       14,
     );
@@ -231,12 +275,44 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
           ];
         })();
 
+  /* ── Touch/pointer pan: dragging in indicator pane scrolls the main chart ── */
+  const panRef = useRef<{ startX: number; pointerId: number } | null>(null);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    // Only start pan on the plot area (not the axis gutter)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const localX = e.clientX - rect.left;
+    if (localX > plotWidth) return; // tapped in axis gutter
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    panRef.current = { startX: e.clientX, pointerId: e.pointerId };
+  }, [plotWidth]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const pan = panRef.current;
+    if (!pan || e.pointerId !== pan.pointerId) return;
+    const dx = pan.startX - e.clientX; // positive = dragged left = scroll right (back in time)
+    pan.startX = e.clientX;
+    canvasRef.current?.scrollByPixels(dx);
+  }, [canvasRef]);
+
+  const onPointerEnd = useCallback((e: React.PointerEvent) => {
+    if (!panRef.current || e.pointerId !== panRef.current.pointerId) return;
+    panRef.current = null;
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* noop */ }
+  }, []);
+
   return (
     <div
       ref={hostRef}
-      className="relative h-full w-full overflow-hidden border-t border-white/[0.06] bg-black/55"
+      className="tos-indicator-pane relative h-full w-full overflow-hidden touch-none"
+      style={background ? { background } : undefined}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
     >
-      <span className="pointer-events-none absolute left-2 top-1 text-[9px] font-bold uppercase tracking-[0.22em] text-cyan-100/85">
+      <span className={`pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] ${colors.titleText}`}>
         {mode === "rsi"
           ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
           : mode === "macd"
@@ -259,7 +335,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
             x2={plotWidth}
             y1={0}
             y2={size.h}
-            stroke="rgba(255,255,255,0.04)"
+            stroke={colors.separator}
             strokeWidth={1}
           />
 
@@ -275,8 +351,8 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
                     y2={y}
                     stroke={
                       level === 50
-                        ? "rgba(255,255,255,0.16)"
-                        : "rgba(255,255,255,0.08)"
+                        ? colors.levelLine
+                        : colors.levelLineDim
                     }
                     strokeDasharray="4 4"
                   />
@@ -290,7 +366,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
               x2={plotWidth}
               y1={top + usable / 2}
               y2={top + usable / 2}
-              stroke="rgba(255,255,255,0.16)"
+              stroke={colors.levelLine}
               strokeDasharray="4 4"
             />
           ) : null}
@@ -327,7 +403,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
             <path
               d={geometry.rsiPath}
               fill="none"
-              stroke="rgba(34,211,238,0.95)"
+              stroke={colors.rsiLine}
               strokeWidth={1.6}
             />
           ) : null}
@@ -336,7 +412,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
             <path
               d={geometry.macdPath}
               fill="none"
-              stroke="rgba(34,211,238,0.95)"
+              stroke={colors.macdLine}
               strokeWidth={1.4}
             />
           ) : null}
@@ -344,7 +420,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
             <path
               d={geometry.macdSignalPath}
               fill="none"
-              stroke="rgba(250,204,21,0.92)"
+              stroke={colors.macdSignal}
               strokeWidth={1.15}
             />
           ) : null}
@@ -358,7 +434,7 @@ export function IndicatorPane({ mode, candles, canvasRef }: Props) {
               textAnchor="start"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontSize="10"
-              fill={label.emphasis ? "rgba(232,238,246,0.85)" : "rgba(168,180,196,0.7)"}
+              fill={label.emphasis ? colors.labelEmphasis : colors.labelNormal}
             >
               {label.text}
             </text>
@@ -398,20 +474,3 @@ function formatThousands(value: number): string {
   return value.toFixed(0);
 }
 
-function rsi(values: number[], period: number): Array<number | null> {
-  const out: Array<number | null> = Array(values.length).fill(null);
-  if (values.length <= period) return out;
-  for (let index = period; index < values.length; index += 1) {
-    let gains = 0;
-    let losses = 0;
-    for (let cursor = index - period + 1; cursor <= index; cursor += 1) {
-      const change = values[cursor] - values[cursor - 1];
-      if (change >= 0) gains += change;
-      else losses += Math.abs(change);
-    }
-    const averageGain = gains / period;
-    const averageLoss = losses / period;
-    out[index] = averageLoss === 0 ? 100 : 100 - 100 / (1 + averageGain / averageLoss);
-  }
-  return out;
-}
