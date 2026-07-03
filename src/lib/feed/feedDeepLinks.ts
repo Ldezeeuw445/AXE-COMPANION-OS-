@@ -12,6 +12,7 @@ export function feedItemLinkLabel(item: AxeFeedItem): string {
   if (item.kind === "briefing") return "Ask AXE";
   if (item.kind === "chart_action") return "Open chart";
   if (item.kind === "trade_draft") return "Review draft";
+  if (item.kind === "daily_news" || item.kind === "market_recap") return "Read full";
   if (item.kind === "proactive") {
     if (item.url?.startsWith("/chart")) return "Open chart";
     if (item.url === "/positions") return "Open positions";

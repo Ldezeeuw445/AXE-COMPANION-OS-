@@ -6,6 +6,9 @@ import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
 import { getInstantSlTpModifyServerState } from "@/lib/chart/serverSlTpPrefs";
 import { detectActionRuntime, buildWorkflowRuntime } from "@/lib/workflows/runtime";
 import { getFavoriteWorkflowIdsServerState } from "@/lib/workflows/serverFavorites";
+import { hasEntitlementFeature } from "@/lib/billing/access";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getUserAxeEntitlement } from "@/services/billingService";
 import {
   getEodhdKey,
   getFinnhubKey,
@@ -39,6 +42,18 @@ async function ChartData({
   const hasMacro = Boolean(getFredKey()) || hasNews;
   const workflowRuntime = buildWorkflowRuntime(runtime, hasNews, hasMacro);
 
+  let canFullIndicators = false;
+  const supabase = await createServerSupabaseClient();
+  if (supabase) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const ent = await getUserAxeEntitlement(supabase, user.id);
+      canFullIndicators = hasEntitlementFeature(ent, "full_indicators", user.id);
+    }
+  }
+
   return (
     <ChartScreen
       data={data}
@@ -47,6 +62,7 @@ async function ChartData({
       instantSlTpModify={instantSlTpModify}
       favoriteWorkflowIds={favoriteWorkflowIds}
       workflowRuntime={workflowRuntime}
+      canFullIndicators={canFullIndicators}
     />
   );
 }

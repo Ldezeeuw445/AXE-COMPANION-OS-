@@ -13,6 +13,7 @@ import { TabletNavCollapseProvider } from "@/components/shell/TabletNavCollapse"
 import { TabletNavPeekHandle } from "@/components/shell/TabletNavPeekHandle";
 import { Toaster } from "@/components/ui/sonner";
 import { AppComplianceStrip } from "@/components/legal/AppComplianceStrip";
+import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 
 /**
  * Shell: top bar + hamburger nav + bottom tab bar + main column.
@@ -47,6 +48,7 @@ export function AppChrome({ children }: { children: ReactNode }) {
         </SwipeNavProvider>
       </AmbientProvider>
       <ClientSplashOverlay />
+      <OnboardingGate />
       <Toaster />
       </TabletNavCollapseProvider>
     </AppTopBarProvider>

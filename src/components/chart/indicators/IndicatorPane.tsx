@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
-import { macdSeries } from "@/lib/chart/indicatorMath";
+import { macdSeries, rsiSeries } from "@/lib/chart/indicatorMath";
 
 /**
  * IndicatorPane renders a single technical indicator (volume or RSI) in its
@@ -221,7 +221,7 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
       };
     }
 
-    const rsiValues = rsi(
+    const rsiValues = rsiSeries(
       visible.map((candle) => candle.close),
       14,
     );
@@ -474,39 +474,3 @@ function formatThousands(value: number): string {
   return value.toFixed(0);
 }
 
-/**
- * Wilder's smoothed RSI — matches MT5's RSI indicator exactly.
- *
- * First `period` bars: seed avgGain/avgLoss with a simple average.
- * Subsequent bars: exponential smoothing via
- *   avgGain = (prevAvgGain × (period - 1) + gain) / period
- *   avgLoss = (prevAvgLoss × (period - 1) + loss) / period
- */
-function rsi(values: number[], period: number): Array<number | null> {
-  const out: Array<number | null> = Array(values.length).fill(null);
-  if (values.length <= period) return out;
-
-  // Seed: simple average of first `period` changes (indices 1..period)
-  let seedGain = 0;
-  let seedLoss = 0;
-  for (let i = 1; i <= period; i += 1) {
-    const change = values[i] - values[i - 1];
-    if (change >= 0) seedGain += change;
-    else seedLoss += Math.abs(change);
-  }
-  let avgGain = seedGain / period;
-  let avgLoss = seedLoss / period;
-  out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-
-  // Wilder smoothing for subsequent bars
-  for (let i = period + 1; i < values.length; i += 1) {
-    const change = values[i] - values[i - 1];
-    const gain = change >= 0 ? change : 0;
-    const loss = change < 0 ? Math.abs(change) : 0;
-    avgGain = (avgGain * (period - 1) + gain) / period;
-    avgLoss = (avgLoss * (period - 1) + loss) / period;
-    out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-  }
-
-  return out;
-}

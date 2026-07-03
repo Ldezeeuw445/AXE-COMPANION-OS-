@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/Badge";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { AxeContextToolbar, type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { PushPermission } from "@/components/push/PushPermission";
+import { UpgradeGate } from "@/components/billing/UpgradeGate";
+import { SmartAlertsPanel } from "@/components/alerts/SmartAlertsPanel";
 import { RiskConfirmationModal } from "@/components/risk/RiskConfirmationModal";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import { applyChatPrefill, chatHrefWithPrefill } from "@/lib/chat/chatPrefill";
@@ -59,7 +61,7 @@ function deliveryNoteForType(type: string): string {
     case "price":
       return "Live on Chart when this symbol is active";
     case "position_risk":
-      return "Saved — position monitor evaluator coming soon";
+      return "Monitored — missing SL & book risk (cron + chart)";
     case "news":
     case "macro":
       return "Saved — intel feed hook coming soon";
@@ -175,9 +177,11 @@ Return one crisp alert I can save, with threshold, SL, TP prices, and a one-line
 export function AlertsClient({
   initialSymbol,
   tradePrefs,
+  canSmartAlerts = false,
 }: {
   initialSymbol: string;
   tradePrefs: TradeExecutionPrefs;
+  canSmartAlerts?: boolean;
 }) {
   const router = useRouter();
   const focusSymbol = initialSymbol.trim().toUpperCase();
@@ -688,6 +692,16 @@ export function AlertsClient({
           keys on Vercel to also send them when the app is closed.
         </GlassPanel>
       ) : null}
+
+      {canSmartAlerts ? (
+        <SmartAlertsPanel onCreated={() => void refresh()} />
+      ) : (
+        <UpgradeGate
+          feature="proactive_notifications"
+          title="Smart alerts"
+          description="AI-classified alerts with book + market context — missing SL, sentiment shifts, correlation clusters, and multi-indicator confluence. Included with Pro."
+        />
+      )}
 
       <GlassPanel className="p-4" glow="none">
         <div className="flex flex-wrap items-center justify-between gap-2">

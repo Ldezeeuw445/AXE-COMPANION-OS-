@@ -5,6 +5,8 @@ import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolReso
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
 import { getDemoQuotePrice, isDemoAccount } from "@/lib/broker/demoAccount";
+import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
 
 export default async function WatchlistPage() {
   const items = await listWatchlistItems();
@@ -37,6 +39,7 @@ export default async function WatchlistPage() {
   const report = getMetadataSymbolReport(metadata);
   const connected = ["connected", "provisioned"].includes(String(account?.provider_status ?? "").toLowerCase());
   const demoMode = isDemoAccount(account);
+  const alpacaMode = isAlpacaAccount(account);
 
   const { data: snapshots } = demoMode
     ? { data: null }
@@ -113,12 +116,28 @@ export default async function WatchlistPage() {
     };
   });
 
+  const brokerCatalog = alpacaMode
+    ? items
+        .map((i) => cleanDisplaySymbol(i.symbol) || i.symbol.toUpperCase())
+        .filter((s) => isAlpacaSupportedSymbol(s))
+    : universe;
+
+  const visible = enriched.filter((row) => {
+    if (demoMode) return true;
+    if (alpacaMode) return isAlpacaSupportedSymbol(row.symbol);
+    if (universe.length === 0) return true;
+    return row.runtimeState !== "unavailable";
+  });
+
   return (
     <WatchlistPageScreen
-      items={enriched}
-      brokerUniverse={universe}
+      items={visible}
+      brokerUniverse={brokerCatalog}
       symbolMap={map}
-      accountLabel={(account?.label as string | null) ?? (demoMode ? "AXE Demo Account" : "Active account")}
+      accountLabel={
+        (account?.label as string | null) ??
+        (demoMode ? "AXE Demo Account" : alpacaMode ? "AXE Alpaca Paper" : "Active account")
+      }
     />
   );
 }

@@ -76,6 +76,19 @@
   --font-sans: var(--font-inter);
   --font-mono: var(--font-inter);
 
+  /* ─── Spacing + motion tokens (selective polish — chart/chat colors unchanged) ─── */
+  --axe-space-1: 0.25rem;
+  --axe-space-2: 0.5rem;
+  --axe-space-3: 0.75rem;
+  --axe-space-4: 1rem;
+  --axe-space-6: 1.5rem;
+  --motion-fast: 150ms ease-out;
+  --motion-normal: 220ms ease-out;
+  --motion-slow: 320ms ease-out;
+  --axe-tracking-label: 0.14em;
+  --axe-tracking-section: 0.16em;
+  --axe-tracking-heading: -0.015em;
+
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
   --tos-nav-h: 4.1rem;
@@ -139,6 +152,37 @@ body {
 ::selection {
   background: rgba(0, 212, 245, 0.18);
   color: var(--tos-text);
+}
+
+/* Selective typography hierarchy — feed, settings, copy blocks */
+.axe-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: var(--axe-tracking-label);
+  text-transform: uppercase;
+  line-height: 1.35;
+}
+
+.axe-section-label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: var(--axe-tracking-section);
+  text-transform: uppercase;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.axe-heading-sm {
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: var(--axe-tracking-heading);
+  line-height: 1.35;
+}
+
+.axe-body {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--tos-text-muted);
 }
 
 /* ═══════════════════════════════════════════════════════════

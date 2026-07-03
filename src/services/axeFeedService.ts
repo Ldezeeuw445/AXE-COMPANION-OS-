@@ -18,7 +18,7 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
 
   const since = feedSinceIso();
 
-  const [eventsRes, execRes, chartRes, briefingsRes] = await Promise.all([
+  const [eventsRes, execRes, chartRes, briefingsRes, broadcastRes] = await Promise.all([
     authed.supabase
       .from("axe_proactive_events")
       .select("id,title,body,url,created_at")
@@ -46,6 +46,12 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
       .from("axe_daily_briefings")
       .select("id,title,body,briefing_type,briefing_date,chat_prefill,created_at")
       .eq("user_id", authed.user.id)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(14),
+    authed.supabase
+      .from("axe_broadcast_feed")
+      .select("id,broadcast_type,title,body,content_date,created_at")
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(14),
@@ -105,7 +111,21 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
     };
   });
 
-  return [...briefings, ...proactive, ...drafts, ...chartActions]
+  const broadcasts: AxeFeedItem[] = (broadcastRes.data ?? []).map((row) => {
+    const broadcastType = String(row.broadcast_type ?? "daily_news");
+    const kind = broadcastType === "market_recap" ? "market_recap" as const : "daily_news" as const;
+    const tab = kind === "market_recap" ? "market_recap" : "daily_news";
+    return {
+      id: `broadcast:${row.id}`,
+      kind,
+      title: String(row.title ?? (kind === "market_recap" ? "Market Recap" : "Daily News")),
+      body: String(row.body ?? ""),
+      url: `/feed?tab=${tab}`,
+      createdAt: String(row.created_at ?? row.content_date),
+    };
+  });
+
+  return [...briefings, ...broadcasts, ...proactive, ...drafts, ...chartActions]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, limit);
 }

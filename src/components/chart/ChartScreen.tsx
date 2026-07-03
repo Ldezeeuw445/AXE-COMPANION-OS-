@@ -125,6 +125,7 @@ import {
   type OrderConfirmStatus,
 } from "@/components/chart/ChartOrderConfirm";
 import { computeLivePnl, useDemoPositions } from "@/components/chart/useDemoPositions";
+import { AccountRiskBand } from "@/components/risk/AccountRiskBand";
 import { useDemoPendingOrders } from "@/components/chart/useDemoPendingOrders";
 import { useDemoLivePrice } from "@/components/chart/useDemoLivePrice";
 import { useInstantSlTpModify } from "@/lib/chart/instantSlTpModify";
@@ -154,6 +155,8 @@ type Props = {
   instantSlTpModify?: boolean;
   favoriteWorkflowIds?: string[];
   workflowRuntime?: WorkflowRuntime;
+  /** Pro+ unlocks MACD, Bollinger, VWAP, POC and SMC overlay suite. */
+  canFullIndicators?: boolean;
 };
 
 type DrawingMode = "fib_retracement" | "trendline" | "rectangle" | "text" | "horizontal_level" | null;
@@ -625,6 +628,7 @@ export function ChartScreen({
   instantSlTpModify = false,
   favoriteWorkflowIds = [],
   workflowRuntime,
+  canFullIndicators = false,
 }: Props) {
   const router = useRouter();
   const { playSound, vibrate } = useAmbient();
@@ -2788,6 +2792,14 @@ export function ChartScreen({
   }, [scaleModeIndex]);
 
   const toggleToolFlag = useCallback((id: string) => {
+    if (!canFullIndicators) {
+      setTradeToast({
+        kind: "info",
+        title: "Pro indicator",
+        body: "SMC overlays (FVG, OB, structure…) require Pro. Upgrade for the full indicator suite.",
+      });
+      return;
+    }
     setActiveToolFlags((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       try {
@@ -2797,9 +2809,19 @@ export function ChartScreen({
       }
       return next;
     });
-  }, [savePref]);
+  }, [canFullIndicators, savePref]);
+
+  const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc"]);
 
   const toggleIndicatorFlag = useCallback((id: string) => {
+    if (!canFullIndicators && PRO_ONLY_INDICATORS.has(id)) {
+      setTradeToast({
+        kind: "info",
+        title: "Pro indicator",
+        body: `${id.toUpperCase()} is part of the full indicator suite — upgrade to Pro to unlock.`,
+      });
+      return;
+    }
     setIndicatorToolFlags((prev) => {
       const next = { ...prev, [id]: !prev[id] };
       try {
@@ -2809,7 +2831,7 @@ export function ChartScreen({
       }
       return next;
     });
-  }, [savePref]);
+  }, [canFullIndicators, savePref]);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
     return [
@@ -4254,6 +4276,25 @@ export function ChartScreen({
         ));
       })()
         : null}
+
+      {/* Live open-book risk — SL/TP scenarios for active account */}
+      {(demoBook.all.length > 0 || overlays.length > 0) && !isFullscreen ? (
+        <div className="shrink-0 border-t border-white/[0.05] px-2 py-1">
+          <AccountRiskBand
+            compact
+            demoPositions={demoBook.all.map((p) => ({
+              id: p.id,
+              symbol: p.symbol,
+              side: p.side,
+              volume: p.volume,
+              entryPrice: p.entryPrice,
+              stopLoss: p.stopLoss,
+              takeProfit: p.takeProfit,
+              livePrice,
+            }))}
+          />
+        </div>
+      ) : null}
 
       {/* ─── MT5-style execution bar (market) + landscape pending inline ─── */}
       {oneClickVisible && (executionMode === "market" || (executionMode === "pending" && isFullscreen)) ? (

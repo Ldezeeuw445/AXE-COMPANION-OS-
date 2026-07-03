@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
+import { feedItemTab } from "@/lib/feed/feedTabs";
+import { summarizeFeedUnread, feedUnreadBadgeClass } from "@/lib/feed/feedUnread";
 import { inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import { feedKindStyle } from "@/lib/feed/feedKindStyle";
-import { getFeedLastSeenAt, markAllFeedItemsRead } from "@/lib/feed/feedSeen";
+import { getFeedTabLastSeenAt, markAllFeedTabsRead } from "@/lib/feed/feedSeen";
 import { isTabletViewport } from "@/lib/viewport/tablet";
 import type { AxeFeedItem } from "@/types/feed";
 
@@ -26,6 +27,7 @@ export function ChatFeedStrip() {
   const [items, setItems] = useState<AxeFeedItem[]>([]);
   const [allItems, setAllItems] = useState<AxeFeedItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [badgeClass, setBadgeClass] = useState("bg-cyan-400");
   const [isTablet, setIsTablet] = useState(false);
 
   useEffect(() => {
@@ -52,7 +54,9 @@ export function ChatFeedStrip() {
           setAllItems(list);
           const visibleCount = isTablet ? 1 : 2;
           setItems(list.slice(0, visibleCount));
-          setUnread(countUnreadFeedItems(list, getFeedLastSeenAt()));
+          const summary = summarizeFeedUnread(list);
+          setUnread(summary.total);
+          setBadgeClass(feedUnreadBadgeClass(summary.primaryTab));
         }
       } catch {
         /* ignore */
@@ -60,7 +64,10 @@ export function ChatFeedStrip() {
     }
 
     void load();
-    const onSeen = () => setUnread(0);
+    const onSeen = () => {
+      setUnread(0);
+      setBadgeClass("bg-cyan-400");
+    };
     window.addEventListener("axe:feed-seen", onSeen);
     const id = setInterval(load, 45_000);
     return () => {
@@ -71,8 +78,9 @@ export function ChatFeedStrip() {
   }, [isTablet]);
 
   const handleMarkRead = () => {
-    markAllFeedItemsRead(allItems);
+    markAllFeedTabsRead(allItems);
     setUnread(0);
+    setBadgeClass("bg-cyan-400");
   };
 
   if (intelMode) return null;
@@ -96,7 +104,7 @@ export function ChatFeedStrip() {
           <span className="tos-accent-dot tos-accent-dot--cyan" aria-hidden />
           AXE Feed
           {unread > 0 ? (
-            <span className="rounded-full bg-cyan-400 px-1.5 py-0.5 text-[7px] font-bold text-black">
+            <span className={`rounded-full px-1.5 py-0.5 text-[7px] font-bold text-black ${badgeClass}`}>
               {unread > 9 ? "9+" : unread}
             </span>
           ) : null}
@@ -129,7 +137,7 @@ export function ChatFeedStrip() {
           return (
           <li key={item.id}>
             <Link
-              href={inferFeedItemUrl(item) ?? "/feed"}
+              href={inferFeedItemUrl(item) ?? `/feed?tab=${feedItemTab(item)}`}
               className={`tos-matte-banner flex items-center justify-between gap-2 transition-colors hover:border-white/[0.1] ${
                 isTablet ? "px-2 py-1" : ""
               }`}

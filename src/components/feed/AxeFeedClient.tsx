@@ -2,21 +2,28 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Check, RefreshCw } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
-import { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 import { feedItemLinkLabel, inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import { feedKindLabel, feedKindStyle } from "@/lib/feed/feedKindStyle";
+import {
+  FEED_TABS,
+  type FeedTabId,
+  itemBelongsToFeedTab,
+  parseFeedTabParam,
+} from "@/lib/feed/feedTabs";
 import { stripBriefMarkdown } from "@/lib/briefing/briefBodyFormat";
 import {
-  getFeedLastSeenAt,
-  markAllFeedItemsRead,
+  getFeedTabLastSeenAt,
+  markFeedTabItemsRead,
   AXE_FEED_LAST_SEEN_KEY,
 } from "@/lib/feed/feedSeen";
+import { countUnreadFeedItemsForTab } from "@/lib/feed/feedUnread";
 import { cn } from "@/lib/utils";
 import type { AxeFeedItem } from "@/types/feed";
 
-export { getFeedLastSeenAt, AXE_FEED_LAST_SEEN_KEY };
+export { getFeedTabLastSeenAt as getFeedLastSeenAt, AXE_FEED_LAST_SEEN_KEY };
 
 const FEED_HISTORY_DAYS = 7;
 
@@ -38,42 +45,69 @@ function dayKey(iso: string): string {
 }
 
 function kindLabel(item: AxeFeedItem): string {
-  return feedKindLabel(item.kind, {
-    briefingType: item.briefingType,
-  });
+  return feedKindLabel(item.kind, { briefingType: item.briefingType });
 }
 
-export function AxeFeedClient() {
+type AxeFeedClientProps = {
+  initialTab?: FeedTabId;
+};
+
+export function AxeFeedClient({ initialTab = "morning_brief" }: AxeFeedClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<FeedTabId>(initialTab);
   const [items, setItems] = useState<AxeFeedItem[]>([]);
-  const [unread, setUnread] = useState(0);
+  const [tabUnread, setTabUnread] = useState<Record<FeedTabId, number>>({
+    morning_brief: 0,
+    daily_news: 0,
+    market_recap: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshDone, setRefreshDone] = useState(false);
   const [markReadDone, setMarkReadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const applyItems = useCallback((list: AxeFeedItem[], markSeen: boolean) => {
-    setItems(list);
-    if (markSeen) {
-      markAllFeedItemsRead(list);
-      setUnread(0);
-    } else {
-      setUnread(countUnreadFeedItems(list, getFeedLastSeenAt()));
-    }
+  useEffect(() => {
+    const tab = parseFeedTabParam(searchParams.get("tab") ?? initialTab);
+    setActiveTab(tab);
+  }, [searchParams, initialTab]);
+
+  const refreshTabUnread = useCallback((list: AxeFeedItem[]) => {
+    setTabUnread({
+      morning_brief: countUnreadFeedItemsForTab(list, "morning_brief"),
+      daily_news: countUnreadFeedItemsForTab(list, "daily_news"),
+      market_recap: countUnreadFeedItemsForTab(list, "market_recap"),
+    });
   }, []);
 
-  const loadFeed = useCallback(async (markSeen: boolean) => {
-    const res = await fetch("/api/feed", { credentials: "include" });
-    if (!res.ok) throw new Error("Could not load feed");
-    const json = (await res.json()) as { items?: AxeFeedItem[] };
-    applyItems(json.items ?? [], markSeen);
-  }, [applyItems]);
+  const applyItems = useCallback(
+    (list: AxeFeedItem[], markSeenTab?: FeedTabId) => {
+      setItems(list);
+      refreshTabUnread(list);
+      if (markSeenTab) {
+        markFeedTabItemsRead(markSeenTab, list);
+        refreshTabUnread(list);
+      }
+    },
+    [refreshTabUnread],
+  );
+
+  const loadFeed = useCallback(
+    async (markSeenTab?: FeedTabId) => {
+      const res = await fetch("/api/feed", { credentials: "include" });
+      if (!res.ok) throw new Error("Could not load feed");
+      const json = (await res.json()) as { items?: AxeFeedItem[] };
+      applyItems(json.items ?? [], markSeenTab);
+    },
+    [applyItems],
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        await loadFeed(true);
+        await loadFeed();
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
@@ -86,28 +120,45 @@ export function AxeFeedClient() {
   }, [loadFeed]);
 
   useEffect(() => {
-    const onSeen = () => setUnread(0);
+    if (loading || items.length === 0) return;
+    markFeedTabItemsRead(activeTab, items);
+    refreshTabUnread(items);
+  }, [activeTab, loading, items, refreshTabUnread]);
+
+  useEffect(() => {
+    const onSeen = () => refreshTabUnread(items);
     window.addEventListener("axe:feed-seen", onSeen);
     return () => window.removeEventListener("axe:feed-seen", onSeen);
-  }, []);
+  }, [items, refreshTabUnread]);
+
+  const visibleItems = useMemo(
+    () => items.filter((item) => itemBelongsToFeedTab(item, activeTab)),
+    [items, activeTab],
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<string, AxeFeedItem[]>();
-    for (const item of items) {
+    for (const item of visibleItems) {
       const key = dayKey(item.createdAt);
       const list = map.get(key) ?? [];
       list.push(item);
       map.set(key, list);
     }
     return [...map.entries()];
-  }, [items]);
+  }, [visibleItems]);
+
+  const handleTabChange = (tab: FeedTabId) => {
+    setActiveTab(tab);
+    const href = tab === "morning_brief" ? "/feed" : `/feed?tab=${tab}`;
+    router.replace(href, { scroll: false });
+  };
 
   const handleRefresh = async () => {
     if (refreshing) return;
     setRefreshing(true);
     setRefreshDone(false);
     try {
-      await loadFeed(false);
+      await loadFeed();
       setRefreshDone(true);
       window.setTimeout(() => setRefreshDone(false), 1600);
     } catch (e) {
@@ -117,16 +168,18 @@ export function AxeFeedClient() {
     }
   };
 
-  const handleMarkAllRead = () => {
-    markAllFeedItemsRead(items);
-    setUnread(0);
+  const handleMarkTabRead = () => {
+    markFeedTabItemsRead(activeTab, items);
+    refreshTabUnread(items);
     setMarkReadDone(true);
     window.setTimeout(() => setMarkReadDone(false), 1600);
   };
 
+  const activeUnread = tabUnread[activeTab];
+
   if (loading) {
     return (
-      <GlassPanel className="p-6 text-center text-sm text-tos-muted">
+      <GlassPanel className="axe-body p-6 text-center text-tos-muted">
         Loading AXE feed…
       </GlassPanel>
     );
@@ -134,28 +187,55 @@ export function AxeFeedClient() {
 
   if (error) {
     return (
-      <GlassPanel className="p-6 text-center text-sm text-tos-risk">
+      <GlassPanel className="axe-body p-6 text-center text-tos-risk">
         {error}
-      </GlassPanel>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <GlassPanel className="p-6 text-center">
-        <p className="text-sm text-tos-muted">Nothing in your feed yet.</p>
-        <p className="mt-2 text-[11px] leading-relaxed text-tos-dim">
-          AXE will post here when trades close, drafts are ready, chart actions queue, or news risk hits open exposure.
-        </p>
       </GlassPanel>
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
+      <div
+        className="flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+        aria-label="AXE Feed categories"
+      >
+        {FEED_TABS.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const unread = tabUnread[tab.id];
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => handleTabChange(tab.id)}
+              className={cn(
+                "axe-label relative shrink-0 rounded-lg border px-3 py-2 transition-[background-color,border-color,color] duration-[var(--motion-fast)]",
+                isActive
+                  ? cn(tab.accentBg, tab.accentBorder, tab.accentText)
+                  : "border-transparent text-tos-dim hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-tos-muted",
+              )}
+            >
+              {tab.label}
+              {unread > 0 ? (
+                <span
+                  className={cn(
+                    "ml-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[8px] font-bold text-black",
+                    tab.badgeBg,
+                  )}
+                >
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
-          Last {FEED_HISTORY_DAYS} days · {items.length} items
+        <p className="axe-label text-white/45">
+          Last {FEED_HISTORY_DAYS} days · {visibleItems.length} items
         </p>
         <div className="flex items-center gap-2">
           <button
@@ -163,7 +243,7 @@ export function AxeFeedClient() {
             onClick={() => void handleRefresh()}
             disabled={refreshing}
             className={cn(
-              "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95 disabled:opacity-50",
+              "axe-label inline-flex items-center gap-1 rounded-md px-2 py-1 transition-all active:scale-95 disabled:opacity-50",
               refreshDone
                 ? "bg-emerald-500/12 text-emerald-300"
                 : refreshing
@@ -178,24 +258,24 @@ export function AxeFeedClient() {
             )}
             {refreshDone ? "Refreshed" : refreshing ? "Refreshing…" : "Refresh"}
           </button>
-          {unread > 0 ? (
+          {activeUnread > 0 ? (
             <button
               type="button"
-              onClick={handleMarkAllRead}
+              onClick={handleMarkTabRead}
               className={cn(
-                "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-all active:scale-95",
+                "axe-label inline-flex items-center gap-1 rounded-md px-2 py-1 transition-all active:scale-95",
                 markReadDone
                   ? "bg-emerald-500/12 text-emerald-300"
                   : "text-cyan-400/90 hover:bg-cyan-400/10 hover:text-cyan-300",
               )}
             >
               {markReadDone ? <Check className="h-3 w-3" /> : null}
-              {markReadDone ? "All read" : `Mark all read (${unread > 9 ? "9+" : unread})`}
+              {markReadDone ? "All read" : `Mark read (${activeUnread > 9 ? "9+" : activeUnread})`}
             </button>
           ) : (
             <span
               className={cn(
-                "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors",
+                "axe-label inline-flex items-center gap-1 rounded-md px-2 py-1 transition-colors",
                 markReadDone || refreshDone
                   ? "bg-emerald-500/10 text-emerald-300"
                   : "text-tos-dim",
@@ -208,60 +288,63 @@ export function AxeFeedClient() {
         </div>
       </div>
 
-      {grouped.map(([day, dayItems]) => (
-        <section key={day}>
-          <h2 className="mb-2 px-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/40">
-            {day}
-          </h2>
-          <ul className="flex flex-col gap-2.5">
-            {dayItems.map((item) => {
-              const href = inferFeedItemUrl(item);
-              const linkLabel = feedItemLinkLabel(item);
-              const style = feedKindStyle(item.kind);
-              const panel = (
-                <GlassPanel className="p-4 transition-colors hover:border-white/12">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-[9px] font-semibold uppercase tracking-[0.16em] ${style.text}`}>
-                        {kindLabel(item)}
-                      </p>
-                      <p className="mt-1 text-sm font-medium text-tos-text">{item.title}</p>
-                      {item.body ? (
-                        <p className="mt-1.5 text-[13px] leading-relaxed text-tos-muted">
-                          {stripBriefMarkdown(item.body)}
-                        </p>
-                      ) : null}
+      {visibleItems.length === 0 ? (
+        <GlassPanel className="axe-body p-6 text-center">
+          <p className="text-tos-muted">Nothing here yet.</p>
+          <p className="mt-2 text-tos-dim">
+            {activeTab === "morning_brief"
+              ? "Your personal brief, trade drafts, and AXE notices will show here."
+              : activeTab === "daily_news"
+                ? "Daily News arrives around 07:00 Amsterdam — broadcast to all AXE users."
+                : "Market Recap lands around 20:00 Amsterdam with the day’s wrap-up."}
+          </p>
+        </GlassPanel>
+      ) : (
+        grouped.map(([day, dayItems]) => (
+          <section key={day}>
+            <h2 className="axe-section-label mb-2 px-0.5">{day}</h2>
+            <ul className="flex flex-col gap-2.5">
+              {dayItems.map((item) => {
+                const href = inferFeedItemUrl(item);
+                const linkLabel = feedItemLinkLabel(item);
+                const style = feedKindStyle(item.kind);
+                const panel = (
+                  <GlassPanel className="p-4 transition-colors hover:border-white/12">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className={cn("axe-section-label", style.text)}>{kindLabel(item)}</p>
+                        <p className="axe-heading-sm mt-1 text-tos-text">{item.title}</p>
+                        {item.body ? (
+                          <p className="axe-body mt-1.5 text-tos-muted">{stripBriefMarkdown(item.body)}</p>
+                        ) : null}
+                      </div>
+                      <span className="axe-label shrink-0 text-tos-dim">{formatWhen(item.createdAt)}</span>
                     </div>
-                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-tos-dim">
-                      {formatWhen(item.createdAt)}
-                    </span>
-                  </div>
-                  {href ? (
-                    <span className="mt-3 inline-flex text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-400/90">
-                      {linkLabel} →
-                    </span>
-                  ) : null}
-                </GlassPanel>
-              );
+                    {href ? (
+                      <span className="axe-label mt-3 inline-flex text-cyan-400/90">{linkLabel} →</span>
+                    ) : null}
+                  </GlassPanel>
+                );
 
-              return (
-                <li key={item.id}>
-                  {href ? (
-                    <Link
-                      href={href}
-                      className="block rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400/50"
-                    >
-                      {panel}
-                    </Link>
-                  ) : (
-                    panel
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+                return (
+                  <li key={item.id}>
+                    {href ? (
+                      <Link
+                        href={href}
+                        className="block rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400/50"
+                      >
+                        {panel}
+                      </Link>
+                    ) : (
+                      panel
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))
+      )}
     </div>
   );
 }

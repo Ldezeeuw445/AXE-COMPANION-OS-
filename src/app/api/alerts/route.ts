@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { hasEntitlementFeature } from "@/lib/billing/access";
+import { getUserAxeEntitlement } from "@/services/billingService";
 import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 
@@ -12,6 +14,13 @@ type CreateAlertBody = {
   status?: "active" | "paused";
   metadata?: Record<string, unknown>;
 };
+
+function isSmartAlertRequest(body: CreateAlertBody): boolean {
+  const meta = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+  if (meta.smartKind || meta.smartTitle) return true;
+  if (meta.evaluator === "smart" || meta.evaluator === "position_risk") return true;
+  return (body.type ?? "").trim() === "news" && Boolean(meta.evaluator);
+}
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
@@ -51,6 +60,16 @@ export async function POST(req: NextRequest) {
 
   const type = (body.type ?? "").trim();
   if (!type) return NextResponse.json({ error: "Missing type" }, { status: 400 });
+
+  if (isSmartAlertRequest(body)) {
+    const ent = await getUserAxeEntitlement(supabase, user.id);
+    if (!hasEntitlementFeature(ent, "proactive_notifications", user.id)) {
+      return NextResponse.json(
+        { error: "Smart alerts require Pro — upgrade to enable AI-classified monitoring." },
+        { status: 403 },
+      );
+    }
+  }
 
   const symbol = (body.symbol ?? null) ? String(body.symbol).trim().toUpperCase() : null;
   const condition = body.condition ? String(body.condition).trim() : null;

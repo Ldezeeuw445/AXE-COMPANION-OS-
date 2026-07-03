@@ -11,6 +11,8 @@ export function feedKindLabel(
   if (kind === "trade_draft") return "Trade draft";
   if (kind === "chart_action") return "Chart action";
   if (kind === "proactive") return "AXE noticed";
+  if (kind === "daily_news") return "Daily news";
+  if (kind === "market_recap") return "Market recap";
   return "System";
 }
 
@@ -52,6 +54,18 @@ const FEED_KIND_STYLES: Record<AxeFeedItemKind, FeedKindStyle> = {
     text: "text-tos-audio/95",
     badge: "bg-tos-audio/10 text-tos-audio",
     accentVar: "var(--tos-audio)",
+    dot: "tos-accent-dot--emerald",
+  },
+  daily_news: {
+    text: "text-tos-news/95",
+    badge: "bg-tos-news/10 text-tos-news",
+    accentVar: "var(--tos-news)",
+    dot: "tos-accent-dot--cyan",
+  },
+  market_recap: {
+    text: "text-emerald-400/95",
+    badge: "bg-emerald-500/10 text-emerald-400",
+    accentVar: "#34d399",
     dot: "tos-accent-dot--emerald",
   },
   system: {

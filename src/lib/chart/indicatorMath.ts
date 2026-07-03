@@ -144,6 +144,34 @@ export function sessionVwap(candles: IndicatorMathCandle[]): Array<number | null
   return out;
 }
 
+
+/** Wilder-smoothed RSI — matches MT5 RSI(14). */
+export function rsiSeries(values: number[], period: number): Array<number | null> {
+  const out: Array<number | null> = Array(values.length).fill(null);
+  if (values.length <= period || period <= 0) return out;
+
+  let seedGain = 0;
+  let seedLoss = 0;
+  for (let i = 1; i <= period; i += 1) {
+    const change = values[i] - values[i - 1];
+    if (change >= 0) seedGain += change;
+    else seedLoss += Math.abs(change);
+  }
+  let avgGain = seedGain / period;
+  let avgLoss = seedLoss / period;
+  out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+
+  for (let i = period + 1; i < values.length; i += 1) {
+    const change = values[i] - values[i - 1];
+    const gain = change >= 0 ? change : 0;
+    const loss = change < 0 ? Math.abs(change) : 0;
+    avgGain = (avgGain * (period - 1) + gain) / period;
+    avgLoss = (avgLoss * (period - 1) + loss) / period;
+    out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+  return out;
+}
+
 export function macdSeries(
   values: number[],
   fastPeriod = 12,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
+import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -54,11 +55,11 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
 
   const { data: prefs } = await supabase
     .from("user_workspace_preferences")
-    .select("active_broker_account_id")
+    .select("active_account_id")
     .eq("user_id", userId)
     .maybeSingle();
 
-  const accountId = prefs?.active_broker_account_id as string | undefined;
+  const accountId = prefs?.active_account_id as string | undefined;
 
   const since = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
@@ -154,6 +155,17 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     }
   }
 
+  try {
+    const smart = await evaluateSmartAlertsForUser(supabase, userId, {
+      accountId: accountId ?? null,
+      hasPush,
+    });
+    created += smart.triggered;
+    pushed += smart.pushed;
+  } catch {
+    /* smart alerts optional */
+  }
+
   return { created, pushed };
 }
 
@@ -185,7 +197,7 @@ export async function runAxeProactiveWatcher(
     if (uniqueUsers.length >= maxUsers) break;
   }
 
-  if (uniqueUsers.length === 0) {
+  if (uniqueUsers.length < maxUsers) {
     const { data: tradeUsers } = await supabase
       .from("broker_trades")
       .select("user_id")
@@ -196,6 +208,30 @@ export async function runAxeProactiveWatcher(
       if (!id || seen.has(id)) continue;
       seen.add(id);
       uniqueUsers.push({ id });
+      if (uniqueUsers.length >= maxUsers) break;
+    }
+  }
+
+  if (uniqueUsers.length < maxUsers) {
+    const { data: alertUsers } = await supabase
+      .from("user_alerts")
+      .select("user_id,metadata,type")
+      .eq("status", "active")
+      .in("type", ["position_risk", "news", "price"])
+      .limit(maxUsers * 4);
+    for (const row of alertUsers ?? []) {
+      const id = row.user_id as string;
+      if (!id || seen.has(id)) continue;
+      const meta = (row.metadata ?? {}) as Record<string, unknown>;
+      const isSmart =
+        Boolean(meta.smartKind) ||
+        Boolean(meta.smartTitle) ||
+        meta.evaluator === "smart" ||
+        meta.evaluator === "position_risk";
+      if (!isSmart) continue;
+      seen.add(id);
+      uniqueUsers.push({ id });
+      if (uniqueUsers.length >= maxUsers) break;
     }
   }
 

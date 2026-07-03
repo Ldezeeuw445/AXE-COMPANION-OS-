@@ -131,6 +131,29 @@ export async function closeAllAlpacaPositions(config: AlpacaEnvConfig): Promise<
   await alpacaFetch(config, "trading", "/v2/positions", { method: "DELETE" });
 }
 
+export type AlpacaSnapshot = {
+  latestTrade?: { p?: number; t?: string };
+  latestQuote?: { bp?: number; ap?: number; t?: string };
+  minuteBar?: { c?: number; t?: string };
+};
+
+export async function getAlpacaSnapshots(
+  config: AlpacaEnvConfig,
+  symbols: string[],
+  feed: "iex" | "sip" = "iex",
+): Promise<Record<string, AlpacaSnapshot>> {
+  const list = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+  if (list.length === 0) return {};
+  const q = new URLSearchParams();
+  q.set("symbols", list.join(","));
+  q.set("feed", feed);
+  return alpacaFetch<Record<string, AlpacaSnapshot>>(
+    config,
+    "data",
+    `/v2/stocks/snapshots?${q.toString()}`,
+  );
+}
+
 export async function getAlpacaBars(
   config: AlpacaEnvConfig,
   symbol: string,

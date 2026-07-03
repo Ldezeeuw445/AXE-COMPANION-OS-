@@ -1,17 +1,27 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getAlpacaSnapshots } from "@/lib/alpaca/client";
+import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
+import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { isAlpacaSupportedSymbol, toAlpacaSymbol } from "@/lib/alpaca/symbols";
 import { getDemoQuotePrice, isDemoAccount } from "@/lib/broker/demoAccount";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type QuotePrice = {
+  bid: number | null;
+  ask: number | null;
+  price: number | null;
+  spread: number | null;
+  tickAt: string | null;
+  status: string | null;
+};
+
 /**
  * GET /api/quotes/prices
  *
- * Returns the latest bid/ask/price for all symbols in chart_live_snapshots
- * for the authenticated user's active account. Timeframe = "quote" rows
- * are written by the Node streamer every 3s.
- *
- * The Quotes page polls this endpoint every 2s for near-real-time updates.
+ * Returns latest bid/ask for watchlist symbols on the active broker account.
+ * Demo → synthetic ticks; Alpaca → live snapshots; MT5 → chart_live_snapshots stream.
  */
 export async function GET() {
   const supabase = await createServerSupabaseClient();
@@ -22,7 +32,6 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return jsonError(401, "unauthorized");
 
-  // Get active account
   const { data: prefs } = await supabase
     .from("user_workspace_preferences")
     .select("active_account_id")
@@ -40,45 +49,19 @@ export async function GET() {
     .maybeSingle();
 
   if (isDemoAccount(account)) {
-    const { data: watchlist } = await supabase
-      .from("assistant_memory_entries")
-      .select("entry_key")
-      .eq("user_id", user.id)
-      .eq("scope", "watchlist")
-      .order("created_at", { ascending: true });
-
-    const symbols = (watchlist ?? [])
-      .map((row) => String(row.entry_key ?? "").toUpperCase())
-      .filter(Boolean);
-    const tickMs = Date.now();
-    const prices: Record<
-      string,
-      {
-        bid: number | null;
-        ask: number | null;
-        price: number | null;
-        spread: number | null;
-        tickAt: string | null;
-        status: string | null;
-      }
-    > = {};
-
-    for (const sym of symbols) {
-      const q = getDemoQuotePrice(sym, tickMs);
-      prices[sym] = {
-        bid: q.bid,
-        ask: q.ask,
-        price: q.price,
-        spread: q.spread,
-        tickAt: new Date(tickMs).toISOString(),
-        status: "live",
-      };
-    }
-
-    return Response.json({ prices }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json(
+      { prices: await demoPrices(supabase, user.id) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   }
 
-  // Get all "quote" snapshots for this account
+  if (isAlpacaAccount(account)) {
+    return Response.json(
+      { prices: await alpacaPrices(supabase, user.id) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   const { data: snapshots, error } = await supabase
     .from("chart_live_snapshots")
     .select("display_symbol,broker_symbol,last_price,last_bid,last_ask,last_tick_at,status,updated_at")
@@ -90,35 +73,105 @@ export async function GET() {
 
   if (error) return jsonError(500, "query_failed");
 
-  const prices: Record<
-    string,
-    {
-      bid: number | null;
-      ask: number | null;
-      price: number | null;
-      spread: number | null;
-      tickAt: string | null;
-      status: string | null;
-    }
-  > = {};
-
+  const prices: Record<string, QuotePrice> = {};
   for (const s of snapshots ?? []) {
     const sym = String(s.display_symbol ?? "").toUpperCase();
     if (!sym) continue;
     const bid = s.last_bid != null ? Number(s.last_bid) : null;
     const ask = s.last_ask != null ? Number(s.last_ask) : null;
-    const spread = bid != null && ask != null ? Math.abs(ask - bid) : null;
+    if (bid == null && ask == null && s.last_price == null) continue;
     prices[sym] = {
       bid,
       ask,
       price: s.last_price != null ? Number(s.last_price) : null,
-      spread,
+      spread: bid != null && ask != null ? Math.abs(ask - bid) : null,
       tickAt: (s.last_tick_at as string) ?? null,
       status: (s.status as string) ?? null,
     };
   }
 
   return Response.json({ prices }, { headers: { "Cache-Control": "no-store" } });
+}
+
+async function demoPrices(
+  supabase: NonNullable<Awaited<ReturnType<typeof createServerSupabaseClient>>>,
+  userId: string,
+): Promise<Record<string, QuotePrice>> {
+  const { data: watchlist } = await supabase
+    .from("assistant_memory_entries")
+    .select("entry_key")
+    .eq("user_id", userId)
+    .eq("scope", "watchlist")
+    .order("created_at", { ascending: true });
+
+  const symbols = (watchlist ?? [])
+    .map((row) => String(row.entry_key ?? "").toUpperCase())
+    .filter(Boolean);
+  const tickMs = Date.now();
+  const prices: Record<string, QuotePrice> = {};
+
+  for (const sym of symbols) {
+    const q = getDemoQuotePrice(sym, tickMs);
+    prices[sym] = {
+      bid: q.bid,
+      ask: q.ask,
+      price: q.price,
+      spread: q.spread,
+      tickAt: new Date(tickMs).toISOString(),
+      status: "live",
+    };
+  }
+
+  return prices;
+}
+
+async function alpacaPrices(
+  supabase: NonNullable<Awaited<ReturnType<typeof createServerSupabaseClient>>>,
+  userId: string,
+): Promise<Record<string, QuotePrice>> {
+  const { data: watchlist } = await supabase
+    .from("assistant_memory_entries")
+    .select("entry_key")
+    .eq("user_id", userId)
+    .eq("scope", "watchlist")
+    .order("created_at", { ascending: true });
+
+  const symbols = (watchlist ?? [])
+    .map((row) => String(row.entry_key ?? "").toUpperCase())
+    .filter((s) => isAlpacaSupportedSymbol(s));
+
+  const prices: Record<string, QuotePrice> = {};
+  if (symbols.length === 0) return prices;
+
+  const config = isAlpacaConfigured() ? getAlpacaPaperConfig() : null;
+  if (!config) return prices;
+
+  try {
+    const tickers = symbols.map((s) => toAlpacaSymbol(s)).filter((s): s is string => Boolean(s));
+    const snaps = await getAlpacaSnapshots(config, tickers);
+    for (const sym of symbols) {
+      const ticker = toAlpacaSymbol(sym);
+      if (!ticker) continue;
+      const snap = snaps[ticker];
+      if (!snap) continue;
+      const bid = snap.latestQuote?.bp ?? null;
+      const ask = snap.latestQuote?.ap ?? null;
+      const price = snap.latestTrade?.p ?? snap.minuteBar?.c ?? (bid != null && ask != null ? (bid + ask) / 2 : null);
+      if (price == null && bid == null && ask == null) continue;
+      prices[sym] = {
+        bid,
+        ask,
+        price,
+        spread: bid != null && ask != null ? Math.abs(ask - bid) : null,
+        tickAt: snap.latestQuote?.t ?? snap.latestTrade?.t ?? new Date().toISOString(),
+        status: "live",
+      };
+    }
+  } catch (error) {
+    console.warn("[quotes/prices] alpaca snapshots failed", error);
+  }
+
+  return prices;
 }
 
 function jsonError(status: number, code: string) {

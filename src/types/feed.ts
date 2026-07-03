@@ -3,6 +3,8 @@ export type AxeFeedItemKind =
   | "trade_draft"
   | "chart_action"
   | "briefing"
+  | "daily_news"
+  | "market_recap"
   | "system";
 
 export type AxeFeedItem = {
