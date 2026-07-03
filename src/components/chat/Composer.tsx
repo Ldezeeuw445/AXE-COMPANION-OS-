@@ -490,7 +490,12 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
             </div>
             <div
               className="relative z-10 flex items-center gap-2 overflow-hidden rounded-full border border-white/[0.08] px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
-              style={{ background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)" }}
+              style={{
+                background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
+                touchAction: "pan-y",
+              }}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
             >
               <textarea
                 ref={textareaRef}
@@ -498,6 +503,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
                 rows={1}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
+                enterKeyHint="send"
                 onFocus={() => {
                   window.dispatchEvent(new CustomEvent("axe:chat-pin"));
                 }}

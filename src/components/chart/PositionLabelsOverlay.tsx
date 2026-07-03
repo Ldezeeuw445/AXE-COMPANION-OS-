@@ -128,6 +128,9 @@ export function PositionLabelsOverlay({
   onDemoModify,
   onDemoOrderModify,
   onModifyFeedback,
+  confirmDraftSignal = 0,
+  preferredConfirmKey = null,
+  useExecutionBarConfirm = false,
   isDark = true,
 }: {
   canvasRef: RefObject<ChartCanvasHandle | null>;
@@ -156,6 +159,9 @@ export function PositionLabelsOverlay({
     takeProfit?: number | null;
   }) => void;
   onModifyFeedback?: (result: { ok: boolean; message?: string }) => void;
+  confirmDraftSignal?: number;
+  preferredConfirmKey?: string | null;
+  useExecutionBarConfirm?: boolean;
   isDark?: boolean;
 }) {
   const theme = isDark ? CHART_THEME : getChartTheme("paper");
@@ -166,6 +172,7 @@ export function PositionLabelsOverlay({
 
   const [entryLabels, setEntryLabels] = useState<EntryLabel[]>([]);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
+  const lastConfirmSignalRef = useRef(confirmDraftSignal);
   const slTpDraftsRef = useRef(slTpDrafts);
   slTpDraftsRef.current = slTpDrafts;
 
@@ -352,18 +359,21 @@ export function PositionLabelsOverlay({
     return canvas.subscribeViewport(computeEntryLabels);
   }, [canvasRef, computeEntryLabels, overlays, pendingOrders, slTpDrafts]);
 
-  const handleConfirm = useCallback(
-    async (label: EntryLabel) => {
-      if (!label.confirmTargetKey || confirmingKey) return;
-      const draft = slTpDraftsRef.current[label.confirmTargetKey];
+  const confirmDraftByKey = useCallback(
+    async (targetKey: string, meta?: { positionId?: string; orderId?: string }) => {
+      if (!targetKey || confirmingKey) return;
+      const draft = slTpDraftsRef.current[targetKey];
       if (!draft) return;
 
-      setConfirmingKey(label.confirmTargetKey);
+      const positionId = meta?.positionId ?? (targetKey.startsWith("pos:") ? targetKey.slice(4) : undefined);
+      const orderId = meta?.orderId ?? (targetKey.startsWith("ord:") ? targetKey.slice(4) : undefined);
+
+      setConfirmingKey(targetKey);
       try {
         await submitModify({
-          targetKey: label.confirmTargetKey,
-          positionId: label.positionId,
-          orderId: label.orderId,
+          targetKey,
+          positionId,
+          orderId,
           stopLoss: draft.stopLoss,
           takeProfit: draft.takeProfit,
           openPrice: draft.openPrice ?? undefined,
@@ -374,6 +384,32 @@ export function PositionLabelsOverlay({
     },
     [confirmingKey, submitModify],
   );
+
+  const handleConfirm = useCallback(
+    async (label: EntryLabel) => {
+      if (!label.confirmTargetKey) return;
+      await confirmDraftByKey(label.confirmTargetKey, {
+        positionId: label.positionId,
+        orderId: label.orderId,
+      });
+    },
+    [confirmDraftByKey],
+  );
+
+  useEffect(() => {
+    if (!useExecutionBarConfirm) return;
+    if (!confirmDraftSignal || confirmDraftSignal === lastConfirmSignalRef.current) return;
+    lastConfirmSignalRef.current = confirmDraftSignal;
+    if (confirmingKey) return;
+    const draftKeys = Object.keys(slTpDraftsRef.current);
+    if (draftKeys.length === 0) return;
+    const nextKey =
+      preferredConfirmKey && draftKeys.includes(preferredConfirmKey)
+        ? preferredConfirmKey
+        : draftKeys[0];
+    if (!nextKey) return;
+    void confirmDraftByKey(nextKey);
+  }, [confirmDraftSignal, confirmDraftByKey, confirmingKey, preferredConfirmKey, useExecutionBarConfirm]);
 
   const lineItems: Array<{
     key: string;
@@ -591,7 +627,7 @@ export function PositionLabelsOverlay({
           style={{ top: label.y }}
         >
           <div className="pointer-events-auto flex items-center gap-1">
-            {label.showConfirm ? (
+            {label.showConfirm && !useExecutionBarConfirm ? (
               <button
                 type="button"
                 onClick={() => void handleConfirm(label)}
@@ -610,7 +646,7 @@ export function PositionLabelsOverlay({
                 fontWeight: 600,
                 letterSpacing: "0.02em",
                 textShadow: labelShadow,
-                paddingLeft: label.showConfirm ? 0 : 6,
+                paddingLeft: label.showConfirm && !useExecutionBarConfirm ? 0 : 6,
               }}
             >
               {label.text}

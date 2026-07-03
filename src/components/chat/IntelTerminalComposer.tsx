@@ -74,6 +74,7 @@ export function IntelTerminalComposer({
           rows={1}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          enterKeyHint="send"
           onFocus={onFocus}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

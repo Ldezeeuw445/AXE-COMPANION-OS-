@@ -307,10 +307,12 @@ export const TradePlanLine = memo(function TradePlanLine({
   }
 
   const plotRight = Math.max(0, size.w - Math.max(axisWidth, 56));
-  const info = dashed ? slTpInfo(entryPrice, price, volume, side, digits, symbol) : null;
+  const shouldShowPnl = dashed && (!tapToArm || armed);
+  const info = shouldShowPnl ? slTpInfo(entryPrice, price, volume, side, digits, symbol) : null;
   const labelText = info ? `${label.toUpperCase()}, ${info.label}` : label.toUpperCase();
   const priceText = price.toFixed(digits);
-  const showVisual = !tapToArm || armed || !dashed;
+  // MT5 parity: keep SL/TP lines and labels visible at all times.
+  const showVisual = true;
   const labelPixels = showVisual ? Math.max(40, labelText.length * 5.5 + 8) : 40;
   const priceWidth = Math.max(58, axisWidth - 4);
   const priceX = size.w - priceWidth - 2;

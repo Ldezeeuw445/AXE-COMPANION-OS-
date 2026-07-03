@@ -51,6 +51,9 @@ export default async function CockpitPage() {
   const hasSnapshot = Boolean(dash.snapshotId);
   const cockpitCalibrated = hasSnapshot && dash.calibration.state === "active";
   const cockpitPreview = hasSnapshot && dash.calibration.state !== "active";
+  const alignmentDelta = dash.alignment.deltaFromPrior;
+  const showRecalibrationCue = hasSnapshot && dash.calibration.lastCalculatedAt != null;
+  const significantShift = Math.abs(alignmentDelta) >= 10;
 
   return (
     <div className="axe-stagger-enter flex flex-col gap-5 pb-2">
@@ -193,6 +196,19 @@ export default async function CockpitPage() {
                 ? ` · Missing: ${dash.calibration.missingSignals.join(", ")}`
                 : ""}
             </p>
+            {showRecalibrationCue ? (
+              <p
+                className={`mt-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                  significantShift
+                    ? "border-tos-warm/40 bg-tos-warm/10 text-tos-warm"
+                    : "border-emerald-400/35 bg-emerald-500/10 text-emerald-300"
+                }`}
+              >
+                {significantShift
+                  ? `Latest recalibration · ${alignmentDelta >= 0 ? "+" : ""}${alignmentDelta} pts`
+                  : "Latest recalibration · stable"}
+              </p>
+            ) : null}
           </GlassPanel>
 
           <CockpitLearningProgress

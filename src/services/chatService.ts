@@ -43,6 +43,7 @@ import type { User } from "@supabase/supabase-js";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";
 import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
 import { buildAxeEngineSystemGate, getAxeEngineProfile } from "@/services/axeEngineService";
+import { isForexPairSymbol, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -188,13 +189,17 @@ function formatBrokerPriceForChat(context: Awaited<ReturnType<typeof fetchTradin
       : chart.updatedAt
         ? `last chart update ${chart.updatedAt}`
         : "timestamp unknown";
+  const bidAskSummary = formatBidAskSummary(activeSymbol, chart.lastBid, chart.lastAsk);
   return [
     `${activeSymbol} broker price (${brokerSymbol})`,
     `Canonical price: ${prettyPrice}`,
+    bidAskSummary,
     `Runtime state: ${state}`,
     `Freshness: ${freshness}`,
     "Use this broker context only. Do not substitute Yahoo, generic provider, memory, or stale snapshot prices.",
-  ].join("\n");
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
 }
 
 function formatPriceCompact(price: number | null): string {
@@ -206,6 +211,47 @@ function formatPriceCompact(price: number | null): string {
     abs >= 10 ? 4 :
     abs >= 1 ? 5 : 6;
   return Number(price).toFixed(decimals);
+}
+
+function formatPriceForSymbol(symbol: string, price: number): string {
+  const digits = Math.max(0, Math.min(8, priceDigitsForSymbol(symbol)));
+  return Number(price).toFixed(digits);
+}
+
+function spreadUnitSizeForSymbol(symbol: string): { unit: "pip" | "point"; size: number } {
+  const s = (symbol ?? "").toUpperCase();
+  if (isForexPairSymbol(s)) {
+    return { unit: "pip", size: s.endsWith("JPY") ? 0.01 : 0.0001 };
+  }
+  const digits = Math.max(0, Math.min(8, priceDigitsForSymbol(s)));
+  return { unit: "point", size: Math.pow(10, -digits) };
+}
+
+function formatSpreadUnits(value: number): string {
+  if (!Number.isFinite(value)) return "n/a";
+  const abs = Math.abs(value);
+  const fixed = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  return Number(value.toFixed(fixed)).toString();
+}
+
+function formatBidAskSummary(
+  symbol: string,
+  lastBid: number | null | undefined,
+  lastAsk: number | null | undefined,
+): string | null {
+  const hasBid = typeof lastBid === "number" && Number.isFinite(lastBid);
+  const hasAsk = typeof lastAsk === "number" && Number.isFinite(lastAsk);
+  if (!hasBid && !hasAsk) return null;
+
+  if (hasBid && hasAsk) {
+    const spread = Math.max(0, Number(lastAsk) - Number(lastBid));
+    const { unit, size } = spreadUnitSizeForSymbol(symbol);
+    const spreadInUnits = size > 0 ? spread / size : spread;
+    const unitLabel = Math.abs(spreadInUnits) === 1 ? unit : `${unit}s`;
+    return `Bid/Ask: ${formatPriceForSymbol(symbol, Number(lastBid))} / ${formatPriceForSymbol(symbol, Number(lastAsk))} (spread ${formatSpreadUnits(spreadInUnits)} ${unitLabel})`;
+  }
+  if (hasBid) return `Bid: ${formatPriceForSymbol(symbol, Number(lastBid))}`;
+  return `Ask: ${formatPriceForSymbol(symbol, Number(lastAsk))}`;
 }
 
 function isFibChartIntent(text: string): boolean {
@@ -928,6 +974,31 @@ export async function streamChatMessage(
     ];
   }
 
+  function canonicalizeToolArg(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((v) => canonicalizeToolArg(v));
+    if (value && typeof value === "object") {
+      const src = value as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(src).sort()) {
+        out[key] = canonicalizeToolArg(src[key]);
+      }
+      return out;
+    }
+    return value;
+  }
+
+  function dedupeToolCalls(calls: AxeToolCall[]): AxeToolCall[] {
+    const seen = new Set<string>();
+    const out: AxeToolCall[] = [];
+    for (const tc of calls) {
+      const key = `${tc.tool}:${JSON.stringify(canonicalizeToolArg(tc.args ?? {}))}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(tc);
+    }
+    return out;
+  }
+
   // 3. Stream the response — tool rounds are non-streaming, final text is streaming
   let finalReply: string | null = null;
   const executedToolResults: Array<{ tc: AxeToolCall; result: string }> = [];
@@ -942,13 +1013,14 @@ export async function streamChatMessage(
 
     if (firstResponse.toolCalls.length > 0) {
       // Tool calls — execute them
-      onEvent({ type: "status", phase: "tools", tools: firstResponse.toolCalls.map((t) => t.tool) });
+      const round1Calls = dedupeToolCalls(firstResponse.toolCalls);
+      onEvent({ type: "status", phase: "tools", tools: round1Calls.map((t) => t.tool) });
 
       const round1Results = await Promise.all(
-        firstResponse.toolCalls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
+        round1Calls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
       );
       executedToolResults.push(...round1Results);
-      const afterRound1 = appendToolRound(aiMessages, firstResponse.toolCalls, round1Results);
+      const afterRound1 = appendToolRound(aiMessages, round1Calls, round1Results);
 
       // Second call: streaming for text, but may have more tool calls
       onEvent({ type: "status", phase: "responding" });
@@ -960,12 +1032,13 @@ export async function streamChatMessage(
 
       if (round2Response.toolCalls.length > 0) {
         // Third round of tools (rare)
-        onEvent({ type: "status", phase: "tools", tools: round2Response.toolCalls.map((t) => t.tool) });
+        const round2Calls = dedupeToolCalls(round2Response.toolCalls);
+        onEvent({ type: "status", phase: "tools", tools: round2Calls.map((t) => t.tool) });
         const round2Results = await Promise.all(
-          round2Response.toolCalls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
+          round2Calls.map(async (tc) => ({ tc, result: await runToolWithPolicy(tc, executeTool) })),
         );
         executedToolResults.push(...round2Results);
-        const afterRound2 = appendToolRound(afterRound1, round2Response.toolCalls, round2Results);
+        const afterRound2 = appendToolRound(afterRound1, round2Calls, round2Results);
 
         // Final streaming call (no tools)
         onEvent({ type: "status", phase: "responding" });
@@ -1103,8 +1176,14 @@ export async function streamChatMessage(
 
     if (canonical != null && (state === "live" || state === "degraded")) {
       const pretty = formatPriceCompact(canonical);
+      const bidAskSummary = formatBidAskSummary(
+        requestedUpper || activeSymbol,
+        chart?.lastBid ?? null,
+        chart?.lastAsk ?? null,
+      );
       finalReply =
         `Live broker price for ${requestedUpper || activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${pretty}. ` +
+        (bidAskSummary ? `${bidAskSummary}. ` : "") +
         `I’m reading this from your active account context.`;
     } else {
       finalReply =

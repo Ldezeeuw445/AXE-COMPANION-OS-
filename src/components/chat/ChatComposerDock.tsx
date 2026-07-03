@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   children: ReactNode;
@@ -12,7 +12,9 @@ function readKeyboardInset(): number {
   if (typeof window === "undefined") return 0;
   const vv = window.visualViewport;
   if (!vv) return 0;
-  return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  const raw = window.innerHeight - vv.height - vv.offsetTop;
+  const rounded = Number.isFinite(raw) ? Math.round(raw) : 0;
+  return Math.max(0, Math.min(420, rounded));
 }
 
 /**
@@ -22,6 +24,8 @@ function readKeyboardInset(): number {
 export function ChatComposerDock({ children }: Props) {
   const [mounted, setMounted] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const insetRef = useRef(0);
 
   useEffect(() => {
     setMounted(true);
@@ -32,7 +36,15 @@ export function ChatComposerDock({ children }: Props) {
     if (!vv) return;
 
     function sync() {
-      setKeyboardInset(readKeyboardInset());
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+      rafRef.current = requestAnimationFrame(() => {
+        const next = readKeyboardInset();
+        if (Math.abs(next - insetRef.current) < 2) return;
+        insetRef.current = next;
+        setKeyboardInset(next);
+      });
     }
 
     sync();
@@ -46,15 +58,22 @@ export function ChatComposerDock({ children }: Props) {
       vv.removeEventListener("scroll", sync);
       window.removeEventListener("focusin", sync);
       window.removeEventListener("focusout", sync);
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+      }
     };
   }, []);
 
-  const dockBottom = `calc(var(--tos-chat-composer-bottom, var(--tos-nav-h)) + ${keyboardInset}px)`;
+  const dockBottom = "var(--tos-chat-composer-bottom, var(--tos-nav-h))";
 
   const stack = (
     <div
       className="tos-chat-composer-dock pointer-events-none fixed inset-x-0 z-[85] block px-3"
-      style={{ bottom: dockBottom }}
+      style={{
+        bottom: dockBottom,
+        transform: `translate3d(0, -${keyboardInset}px, 0)`,
+        willChange: keyboardInset > 0 ? "transform" : undefined,
+      }}
     >
       <div className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">
         {children}

@@ -1230,6 +1230,8 @@ export function ChartScreen({
   const liveTrading = useLiveTradingFlag(liveTradingEnabled);
   const slTpModifyPref = useInstantSlTpModify(instantSlTpModify);
   const [slTpDrafts, setSlTpDrafts] = useState<Record<string, SlTpDraft>>({});
+  const [confirmSlTpSignal, setConfirmSlTpSignal] = useState(0);
+  const [activeSlTpDraftKey, setActiveSlTpDraftKey] = useState<string | null>(null);
   const isAlpacaAccount = data.account?.connectionMethod === "cloud_alpaca";
   const demoBook = useDemoPositions(
     data.account?.brokerAccountId ?? null,
@@ -1243,6 +1245,14 @@ export function ChartScreen({
     title: string;
     body?: string;
   } | null>(null);
+  const slTpDraftCount = Object.keys(slTpDrafts).length;
+  const hasSlTpDrafts = slTpDraftCount > 0;
+  const triggerSlTpConfirm = useCallback(() => {
+    if (!hasSlTpDrafts) return;
+    setConfirmSlTpSignal((v) => v + 1);
+    vibrate("medium");
+    playSound("tap");
+  }, [hasSlTpDrafts, vibrate, playSound]);
   const handleDemoOrderFill = useCallback(
     (input: {
       symbol: string;
@@ -3130,6 +3140,9 @@ export function ChartScreen({
           isAlpacaAccount={isAlpacaAccount}
           instantSlTpModify={slTpModifyPref.enabled}
           slTpDrafts={slTpDrafts}
+          confirmDraftSignal={confirmSlTpSignal}
+          preferredConfirmKey={activeSlTpDraftKey}
+          useExecutionBarConfirm
           onSlTpDraftChange={(input) => {
             setSlTpDrafts((prev) => ({
               ...prev,
@@ -3139,6 +3152,10 @@ export function ChartScreen({
                 openPrice: input.openPrice,
               },
             }));
+            setActiveSlTpDraftKey(input.key);
+            if (!slTpModifyPref.enabled) {
+              setOneClickVisible(true);
+            }
           }}
           onSlTpDraftClear={(key) => {
             setSlTpDrafts((prev) => {
@@ -3147,6 +3164,7 @@ export function ChartScreen({
               delete next[key];
               return next;
             });
+            setActiveSlTpDraftKey((prev) => (prev === key ? null : prev));
           }}
           onDemoModify={({ positionId, stopLoss, takeProfit }) => {
             demoBook.modify(positionId, { stopLoss, takeProfit });
@@ -4273,6 +4291,20 @@ export function ChartScreen({
             }}
           />
         </div>
+        {hasSlTpDrafts && !slTpModifyPref.enabled ? (
+          <div className="px-2 pb-1.5">
+            <button
+              type="button"
+              onClick={triggerSlTpConfirm}
+              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-full border border-cyan-400/35 bg-cyan-400/12 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-200 active:scale-[0.995]"
+              aria-label="Confirm SL and TP changes"
+              title="Confirm SL/TP changes"
+            >
+              <ArrowRight className="h-4 w-4" />
+              Confirm active SL/TP {slTpDraftCount > 1 ? `(${slTpDraftCount} drafts)` : ""}
+            </button>
+          </div>
+        ) : null}
         {executionMode === "pending" && isFullscreen ? (
           /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
           <div className="flex h-[2.75rem] items-center gap-0 px-0">
