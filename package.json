@@ -15,7 +15,8 @@
     "embed:axe-knowledge": "node scripts/embed-axe-knowledge.mjs",
     "setup:rag": "node scripts/seed-axe-knowledge.mjs && node scripts/embed-axe-knowledge.mjs",
     "verify:legal": "node scripts/check-legal-routes.mjs",
-    "setup:stripe": "node scripts/setup-stripe-billing.mjs"
+    "setup:stripe": "node scripts/setup-stripe-billing.mjs",
+    "smoke:launch": "node scripts/smoke-launch.mjs"
   },
   "engines": {
     "node": "22.x"

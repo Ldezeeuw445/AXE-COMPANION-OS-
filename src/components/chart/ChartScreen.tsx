@@ -447,13 +447,17 @@ function sameOverlayRows(a: ChartOverlayRow[], b: ChartOverlayRow[]): boolean {
   return true;
 }
 
-function failureCardCopy(failure: ChartPageData["failure"]) {
+function failureCardCopy(
+  failure: ChartPageData["failure"],
+  opts?: { hasDemo?: boolean; hasAlpaca?: boolean },
+) {
   switch (failure) {
     case "account_not_connected":
       return {
-        title: "Connect MT5 account to unlock broker chart",
-        body:
-          "AXE Companion uses AXE MT5 Cloud as the broker chart source. No frontend feed keys are used.",
+        title: opts?.hasDemo ? "Select an account to load the chart" : "Connect a broker account",
+        body: opts?.hasDemo
+          ? "Use AXE Demo Account for instant virtual charts and paper fills, or connect MT5 / Alpaca Paper under Accounts."
+          : "Connect MT5 Cloud or enable Alpaca Paper under Accounts to unlock broker charts.",
       };
     case "broker_symbol_not_found":
       return {
@@ -2155,7 +2159,10 @@ export function ChartScreen({
     () => formatBrokerPrice(data.brokerSymbol, livePrice),
     [data.brokerSymbol, livePrice],
   );
-  const failureCopy = failureCardCopy(data.failure);
+  const failureCopy = failureCardCopy(data.failure, {
+    hasDemo: data.accountChoices.some((a) => a.connectionMethod === "demo_paper"),
+    hasAlpaca: data.accountChoices.some((a) => a.connectionMethod === "cloud_alpaca"),
+  });
   const accountLabel = data.account?.label ?? null;
 
   // Drawing tools ─ tap-to-place workflow

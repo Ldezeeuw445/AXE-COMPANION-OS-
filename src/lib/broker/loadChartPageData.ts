@@ -13,10 +13,11 @@ import {
 import { metaApiTimeframeFromKey, normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
 import {
   DEMO_EXTERNAL_ID,
-  ensureDemoAccount,
+  ensureActiveDemoWhenEmpty,
   generateDemoCandles,
   isDemoAccount,
 } from "@/lib/broker/demoAccount";
+import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
 import { fetchAlpacaCandles } from "@/lib/alpaca/bars";
 import { listAlpacaOrders, listAlpacaPositions } from "@/lib/alpaca/client";
 import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
@@ -544,6 +545,15 @@ export async function loadChartPageData(
     listWatchlistItems(),
   ]);
 
+  const rawAccountsFromDb = (accountsRows ?? []) as BrokerAccountRow[];
+  const seeded = await ensureActiveDemoWhenEmpty(
+    supabase,
+    user.id,
+    prefs?.active_account_id ?? null,
+    rawAccountsFromDb,
+  );
+  const resolvedActiveId = seeded.activeAccountId;
+
   const rawAccounts: Array<{
     id: string;
     label: string | null;
@@ -553,27 +563,16 @@ export async function loadChartPageData(
     mt5_server: string | null;
     provider_status: string | null;
     metadata: Record<string, unknown> | null;
-  }> = [...((accountsRows ?? []) as Array<{
-    id: string;
-    label: string | null;
-    provider: string | null;
-    connection_method: string | null;
-    external_connection_id: string | null;
-    mt5_server: string | null;
-    provider_status: string | null;
-    metadata: Record<string, unknown> | null;
-  }>)];
-  const demo = await ensureDemoAccount(supabase, user.id);
-  if (demo && !rawAccounts.some((a) => a.id === demo.id)) rawAccounts.unshift({
-    id: demo.id,
-    label: demo.label,
-    provider: demo.provider,
-    connection_method: demo.connection_method ?? null,
-    external_connection_id: demo.external_connection_id ?? null,
-    mt5_server: demo.mt5_server,
-    provider_status: demo.provider_status ?? null,
-    metadata: demo.metadata ?? null,
-  });
+  }> = seeded.accounts.map((r) => ({
+    id: r.id,
+    label: r.label,
+    provider: r.provider,
+    connection_method: r.connection_method ?? null,
+    external_connection_id: r.external_connection_id ?? null,
+    mt5_server: r.mt5_server,
+    provider_status: r.provider_status ?? null,
+    metadata: (r.metadata ?? null) as Record<string, unknown> | null,
+  }));
 
   const accountChoices: AccountSummary[] = rawAccounts
     .filter(
@@ -596,7 +595,7 @@ export async function loadChartPageData(
           (r.label as string) ??
           (isDemoAccount(r) ? "AXE Demo Account" : isAlpacaAccount(r) ? "AXE Alpaca Paper" : "MT5 Account"),
         mt5Server: (r.mt5_server as string) ?? null,
-        active: prefs?.active_account_id === r.id,
+        active: resolvedActiveId === r.id || prefs?.active_account_id === r.id,
         connectionMethod: (r.connection_method as string) ?? null,
         metaApiRegion: region,
       };
@@ -605,6 +604,9 @@ export async function loadChartPageData(
   const requestedAccountId = (accountParam ?? "").trim();
   const account =
     accountChoices.find((a) => a.brokerAccountId === requestedAccountId) ??
+    accountChoices.find((a) => a.brokerAccountId === resolvedActiveId) ??
+    accountChoices.find((a) => a.connectionMethod === "demo_paper") ??
+    accountChoices.find((a) => a.connectionMethod === "cloud_alpaca") ??
     accountChoices.find((a) => a.active) ??
     accountChoices[0] ??
     null;
