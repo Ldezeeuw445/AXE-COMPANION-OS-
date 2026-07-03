@@ -59,6 +59,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
   const runIdRef = useRef(0);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [doctorReport, setDoctorReport] = useState<Mt5DoctorReport | null>(null);
 
   function parseMsg(): { headline: string; detail?: string } | null {
     if (!msg) return null;
@@ -218,6 +219,89 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           ) : null}
         </div>
       ) : null}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(runCloudMt5DoctorAction, "Doctor")}
+          className="rounded-lg border border-cyan-400/25 bg-cyan-400/[0.07] px-2.5 py-1.5 text-[10px] font-semibold text-cyan-100/90 hover:bg-cyan-400/14 disabled:opacity-50"
+        >
+          {busyLabel === "Doctor" ? "Diagnosing…" : "Run Doctor"}
+        </button>
+        {feedback?.headline === "Still syncing." || feedback?.headline === "Still diagnosing." ? (
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            className="rounded-lg border border-white/12 bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-tos-muted hover:bg-white/[0.08]"
+          >
+            Refresh status
+          </button>
+        ) : null}
+      </div>
+      {doctorReport ? <DoctorReportCard report={doctorReport} /> : null}
+    </div>
+  );
+}
+
+function statusTone(status: Mt5DoctorStepStatus): string {
+  switch (status) {
+    case "pass":
+      return "border-emerald-400/20 bg-emerald-400/10 text-emerald-100/90";
+    case "warn":
+      return "border-amber-400/22 bg-amber-400/[0.08] text-amber-100/90";
+    case "fail":
+      return "border-rose-400/24 bg-rose-400/[0.08] text-rose-100/90";
+    case "skipped":
+      return "border-white/10 bg-white/[0.03] text-tos-dim";
+    case "unknown":
+    default:
+      return "border-white/10 bg-white/[0.04] text-tos-muted";
+  }
+}
+
+function statusDot(status: Mt5DoctorStepStatus): string {
+  switch (status) {
+    case "pass":
+      return "bg-emerald-300";
+    case "warn":
+      return "bg-amber-300";
+    case "fail":
+      return "bg-rose-300";
+    case "skipped":
+      return "bg-white/25";
+    case "unknown":
+    default:
+      return "bg-white/35";
+  }
+}
+
+function DoctorReportCard({ report }: { report: Mt5DoctorReport }) {
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-black/25 px-3 py-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold text-tos-text">{report.headline}</p>
+          <p className="mt-1 text-[10px] leading-relaxed text-tos-dim">{report.summary}</p>
+        </div>
+        <span className="shrink-0 rounded-full border border-cyan-400/20 bg-cyan-400/[0.06] px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-cyan-100/80">
+          {report.overallStatus.replace(/_/g, " ")}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-1.5">
+        {report.steps.map((step) => (
+          <div
+            key={step.id}
+            className={`rounded-xl border px-2.5 py-2 text-[10px] leading-relaxed ${statusTone(step.status)}`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`h-1.5 w-1.5 rounded-full ${statusDot(step.status)}`} aria-hidden />
+              <p className="font-semibold uppercase tracking-wider">{step.label}</p>
+              <span className="ml-auto font-mono text-[9px] uppercase opacity-70">{step.status}</span>
+            </div>
+            <p className="mt-1 text-tos-dim">{step.detail}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

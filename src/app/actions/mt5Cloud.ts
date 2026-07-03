@@ -13,6 +13,7 @@ import {
   clientGetAccountInformation,
   clientListSymbols,
   clientGetPositions,
+  clientGetSymbolPrice,
   defaultRegionForProvisioning,
   metaApiTradingAccountId,
   MetaApiRequestError,
@@ -671,6 +672,371 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
     autoJournal: true,
     allowEmptyDeals: false,
   });
+}
+
+export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5CloudResult<Mt5DoctorReport>> {
+  const checkedAt = new Date().toISOString();
+  if (!getMetaApiToken()) {
+    return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
+  }
+
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "validation", message: "Not signed in." };
+
+  const [{ data: row, error }, prefsRes, chartRes] = await Promise.all([
+    supabase
+      .from("user_broker_accounts")
+      .select("id,label,external_connection_id,connection_method,provider_status,last_sync_at,masked_login,mt5_login,mt5_server,metadata,user_id")
+      .eq("id", accountId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("user_workspace_preferences")
+      .select("live_trading_enabled")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("chart_live_snapshots")
+      .select("broker_symbol,display_symbol,updated_at")
+      .eq("user_id", user.id)
+      .eq("account_id", accountId)
+      .order("updated_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  if (error) return { ok: false, code: "unknown", message: error.message };
+  if (!row?.external_connection_id || row.connection_method !== "cloud_mt5") {
+    return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
+  }
+
+  const extId = row.external_connection_id as string;
+  const prevMeta =
+    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? (row.metadata as Record<string, unknown>)
+      : {};
+  const accountRegion = safeString(prevMeta.metaapiRegion);
+  const liveTradingEnabled = Boolean(prefsRes.data?.live_trading_enabled);
+  const lastSyncAt = (row.last_sync_at as string | null | undefined) ?? null;
+  const lastSyncAgeMinutes = minutesSince(lastSyncAt);
+  const providerStatus = (row.provider_status as string | null | undefined) ?? null;
+  const knownFailure = knownFailureFromStatus(providerStatus);
+  const steps: Mt5DoctorStep[] = [];
+
+  let deploymentState: string | null = null;
+  let terminalStatus: string | null = null;
+  let brokerServer = (row.mt5_server as string | null | undefined) ?? null;
+  let brokerName: string | null = null;
+  let loginMasked =
+    (row.masked_login as string | null | undefined) ??
+    (row.mt5_login != null ? maskLogin(String(row.mt5_login)) : null);
+  let positionsCount: number | null = null;
+  let historyDealsChecked: number | null = null;
+  let priceSymbolChecked: string | null = null;
+  let resolvedRegion = accountRegion;
+
+  let provisioningStepStatus: Mt5DoctorStepStatus = "unknown";
+  let terminalStepStatus: Mt5DoctorStepStatus = "unknown";
+  let brokerStepStatus: Mt5DoctorStepStatus = "unknown";
+  let positionsStepStatus: Mt5DoctorStepStatus = "unknown";
+  let historyStepStatus: Mt5DoctorStepStatus = "unknown";
+  let priceStepStatus: Mt5DoctorStepStatus = "skipped";
+  let credentialsStatus: Mt5DoctorStepStatus = "unknown";
+  let serverStatus: Mt5DoctorStepStatus = brokerServer ? "warn" : "unknown";
+  let activeSymbols: string[] = [];
+  let provisioningError: string | null = null;
+
+  try {
+    const acc = await withActionBudget(
+      "doctor_provisioning",
+      provisioningGetAccount(extId),
+      DOCTOR_PROVISIONING_TIMEOUT_MS,
+    );
+    deploymentState = safeString(acc.state);
+    terminalStatus = safeString(acc.connectionStatus);
+    brokerServer = safeString(acc.server) ?? brokerServer;
+    if (!loginMasked && acc.login) loginMasked = maskLogin(String(acc.login));
+    if (!resolvedRegion && acc.region) resolvedRegion = acc.region;
+    provisioningStepStatus = "pass";
+    const provider_status = mapConnectionToProviderStatus(acc.connectionStatus, acc.state);
+    terminalStepStatus = (acc.connectionStatus ?? "").toUpperCase() === "CONNECTED" ? "pass" : "warn";
+    steps.push(doctorStep("metaapi_account_exists", "MetaAPI account exists", "pass", "MetaAPI returned this account."));
+    steps.push(
+      doctorStep(
+        "deployment_state",
+        "MetaAPI deployment state",
+        isProvisionedAndReady(acc.connectionStatus, acc.state) ? "pass" : "warn",
+        `State ${acc.state ?? "unknown"} · terminal ${acc.connectionStatus ?? "unknown"}.`,
+      ),
+    );
+    await supabase
+      .from("user_broker_accounts")
+      .update({
+        provider_status,
+        metadata: { ...prevMeta, ...(resolvedRegion ? { metaapiRegion: resolvedRegion } : {}) },
+      })
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+  } catch (e) {
+    provisioningError = compactMetaError(e);
+    provisioningStepStatus = "fail";
+    terminalStepStatus = "fail";
+    steps.push(doctorStep("metaapi_account_exists", "MetaAPI account exists", "fail", provisioningError));
+    steps.push(doctorStep("deployment_state", "MetaAPI deployment state", "fail", provisioningError));
+  }
+
+  let accountInfo: Record<string, unknown> | null = null;
+  let accountInfoError: string | null = null;
+  if (provisioningStepStatus === "pass") {
+    try {
+      accountInfo = await withActionBudget(
+        "doctor_account_information",
+        clientGetAccountInformation(extId, true, resolvedRegion),
+        DOCTOR_ACCOUNT_INFO_TIMEOUT_MS,
+      );
+      credentialsStatus = "pass";
+      serverStatus = "pass";
+      brokerStepStatus = "pass";
+      brokerServer = safeString(accountInfo.server) ?? brokerServer;
+      brokerName = safeString(accountInfo.broker);
+      if (!loginMasked && accountInfo.login) loginMasked = maskLogin(String(accountInfo.login));
+    } catch (e) {
+      accountInfoError = compactMetaError(e);
+      const mapped = mapMetaError(e);
+      credentialsStatus = mapped.code === "mt5_invalid_credentials" ? "fail" : "unknown";
+      serverStatus = mapped.code === "metaapi_region_error" || mapped.code === "not_found" ? "fail" : serverStatus;
+      brokerStepStatus = "fail";
+    }
+  }
+
+  steps.unshift(
+    doctorStep(
+      "server_detected",
+      "Broker server detected",
+      serverStatus,
+      brokerServer ? `Server ${brokerServer}.` : "No broker server was returned by MetaAPI.",
+    ),
+  );
+  steps.unshift(
+    doctorStep(
+      "credentials_accepted",
+      "Credentials accepted",
+      credentialsStatus,
+      credentialsStatus === "pass"
+        ? "MetaAPI account-information accepted the linked MT5 credentials."
+        : accountInfoError ?? provisioningError ?? "Could not confirm credentials without account information.",
+    ),
+  );
+  steps.push(
+    doctorStep(
+      "terminal_connected",
+      "Terminal connected",
+      terminalStepStatus,
+      terminalStatus ? `Terminal status ${terminalStatus}.` : "Terminal status unavailable.",
+    ),
+  );
+  steps.push(
+    doctorStep(
+      "broker_connected",
+      "Broker data reachable",
+      brokerStepStatus,
+      brokerStepStatus === "pass"
+        ? `${brokerName ? `${brokerName} · ` : ""}${brokerServer ?? "server confirmed"}.`
+        : accountInfoError ?? "Account information could not be read.",
+    ),
+  );
+
+  let positions: Record<string, unknown>[] = [];
+  if (brokerStepStatus === "pass") {
+    try {
+      positions = (await withActionBudget(
+        "doctor_positions",
+        clientGetPositions(extId, false, resolvedRegion),
+        DOCTOR_POSITIONS_TIMEOUT_MS,
+      )) as Record<string, unknown>[];
+      positionsCount = positions.length;
+      activeSymbols = Array.from(
+        new Set(positions.map((p) => safeString(p.symbol)?.toUpperCase()).filter((s): s is string => Boolean(s))),
+      ).slice(0, 8);
+      positionsStepStatus = "pass";
+    } catch (e) {
+      positionsStepStatus = "fail";
+      steps.push(doctorStep("positions_readable", "Positions readable", "fail", compactMetaError(e)));
+    }
+  } else {
+    positionsStepStatus = "skipped";
+  }
+  if (positionsStepStatus !== "fail") {
+    steps.push(
+      doctorStep(
+        "positions_readable",
+        "Positions readable",
+        positionsStepStatus,
+        positionsStepStatus === "pass"
+          ? `${positionsCount ?? 0} open position${positionsCount === 1 ? "" : "s"} readable.`
+          : "Skipped because broker data is not reachable yet.",
+      ),
+    );
+  }
+
+  if (brokerStepStatus === "pass") {
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const deals = await withActionBudget(
+        "doctor_history",
+        clientGetHistoryDealsRange(extId, start.toISOString(), end.toISOString(), resolvedRegion),
+        DOCTOR_HISTORY_TIMEOUT_MS,
+      );
+      historyDealsChecked = deals.length;
+      historyStepStatus = "pass";
+    } catch (e) {
+      historyStepStatus = "fail";
+      steps.push(doctorStep("history_readable", "History readable", "fail", compactMetaError(e)));
+    }
+  } else {
+    historyStepStatus = "skipped";
+  }
+  if (historyStepStatus !== "fail") {
+    steps.push(
+      doctorStep(
+        "history_readable",
+        "History readable",
+        historyStepStatus,
+        historyStepStatus === "pass"
+          ? `${historyDealsChecked ?? 0} recent history deal${historyDealsChecked === 1 ? "" : "s"} returned.`
+          : "Skipped because broker data is not reachable yet.",
+      ),
+    );
+  }
+
+  const chartSnapshot = Array.isArray(chartRes.data) ? (chartRes.data[0] as Record<string, unknown> | undefined) : undefined;
+  const chartSymbol = safeString(chartSnapshot?.broker_symbol) ?? safeString(chartSnapshot?.display_symbol);
+  const priceSymbol = activeSymbols[0] ?? chartSymbol;
+  if (brokerStepStatus === "pass" && priceSymbol) {
+    priceSymbolChecked = priceSymbol;
+    try {
+      const price = await withActionBudget(
+        "doctor_live_price",
+        clientGetSymbolPrice(extId, priceSymbol, resolvedRegion),
+        DOCTOR_PRICE_TIMEOUT_MS,
+      );
+      const hasPrice = price.bid != null || price.ask != null;
+      priceStepStatus = hasPrice ? "pass" : "warn";
+      steps.push(
+        doctorStep(
+          "live_prices_available",
+          "Live price available",
+          priceStepStatus,
+          hasPrice
+            ? `${priceSymbol}: bid ${price.bid ?? "—"} · ask ${price.ask ?? "—"}.`
+            : `${priceSymbol}: MetaAPI responded without bid/ask.`,
+        ),
+      );
+    } catch (e) {
+      priceStepStatus = "fail";
+      steps.push(doctorStep("live_prices_available", "Live price available", "fail", compactMetaError(e)));
+    }
+  } else {
+    steps.push(
+      doctorStep(
+        "live_prices_available",
+        "Live price available",
+        "skipped",
+        brokerStepStatus === "pass"
+          ? "No open-position or recent chart symbol was available to probe."
+          : "Skipped because broker data is not reachable yet.",
+      ),
+    );
+  }
+
+  steps.push(
+    doctorStep(
+      "trading_permission",
+      "Trading permission",
+      liveTradingEnabled ? "warn" : "pass",
+      liveTradingEnabled
+        ? "AXE live trading is enabled; every order still requires explicit confirmation. Broker trade permission is not probed without placing an order."
+        : "AXE is in read-only mode. No live orders can be sent from Companion.",
+    ),
+  );
+  steps.push(
+    doctorStep(
+      "sync_freshness",
+      "Last sync freshness",
+      lastSyncAgeMinutes == null ? "warn" : lastSyncAgeMinutes <= 120 ? "pass" : "warn",
+      lastSyncAgeMinutes == null ? "No completed sync recorded yet." : `Last sync ${lastSyncAgeMinutes} minutes ago.`,
+    ),
+  );
+  steps.push(
+    doctorStep(
+      "known_failure_reason",
+      "Known failure reason",
+      knownFailure ? "warn" : "pass",
+      knownFailure ?? "No stored failure reason on this account.",
+    ),
+  );
+
+  const overallStatus = overallFromDoctor({
+    providerStatus,
+    liveTradingEnabled,
+    deploymentStatus: provisioningStepStatus,
+    terminalStatus: terminalStepStatus,
+    brokerStatus: brokerStepStatus,
+    positionsStatus: positionsStepStatus,
+    historyStatus: historyStepStatus,
+    priceStatus: priceStepStatus,
+    knownFailure,
+  });
+  const headline = doctorHeadline(overallStatus);
+  const summary = [
+    headline,
+    brokerServer ? `Server ${brokerServer}.` : null,
+    positionsCount != null ? `${positionsCount} open positions readable.` : null,
+    lastSyncAgeMinutes != null ? `Last sync ${lastSyncAgeMinutes}m ago.` : "No completed sync recorded.",
+    liveTradingEnabled ? "Live trading flag is on." : "Read-only mode is on.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const report: Mt5DoctorReport = {
+    accountId,
+    accountLabel: String(row.label ?? "MT5 Account"),
+    checkedAt,
+    overallStatus,
+    headline,
+    summary,
+    providerStatus,
+    deploymentState,
+    terminalStatus,
+    brokerServer,
+    brokerName,
+    loginMasked,
+    liveTradingEnabled,
+    lastSyncAt,
+    lastSyncAgeMinutes,
+    activeSymbols,
+    positionsCount,
+    historyDealsChecked,
+    priceSymbolChecked,
+    knownFailureReason: knownFailure,
+    steps,
+  };
+
+  await supabase
+    .from("user_broker_accounts")
+    .update({ metadata: { ...prevMeta, ...(resolvedRegion ? { metaapiRegion: resolvedRegion } : {}), lastDoctor: report } })
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+  revalidatePath("/accounts");
+  revalidatePath("/chat");
+
+  return { ok: true, data: report };
 }
 
 export async function disconnectCloudMt5AccountAction(accountId: string): Promise<Mt5CloudResult> {
