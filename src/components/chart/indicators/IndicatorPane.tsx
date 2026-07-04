@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useCallback } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import { macdSeries, rsiSeries } from "@/lib/chart/indicatorMath";
@@ -69,6 +69,7 @@ function indicatorColors(dark: boolean) {
 }
 
 export function IndicatorPane({ mode, candles, canvasRef, background, isDark = true }: Props) {
+  const clipId = `indicator-pane-plot-${useId().replace(/:/g, "")}`;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState<number>(MIN_AXIS_WIDTH);
@@ -329,6 +330,12 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
           viewBox={`0 0 ${size.w} ${size.h}`}
           className="absolute inset-0"
         >
+          <defs>
+            <clipPath id={clipId}>
+              <rect x={0} y={0} width={plotWidth} height={size.h} />
+            </clipPath>
+          </defs>
+
           {/* Vertical separator between plot and axis gutter (subtle) */}
           <line
             x1={plotWidth}
@@ -339,91 +346,93 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
             strokeWidth={1}
           />
 
-          {mode === "rsi"
-            ? [25, 50, 75].map((level) => {
-                const y = top + (1 - level / 100) * usable;
-                return (
-                  <line
-                    key={level}
-                    x1={0}
-                    x2={plotWidth}
-                    y1={y}
-                    y2={y}
-                    stroke={
-                      level === 50
-                        ? colors.levelLine
-                        : colors.levelLineDim
-                    }
-                    strokeDasharray="4 4"
+          <g clipPath={`url(#${clipId})`}>
+            {mode === "rsi"
+              ? [25, 50, 75].map((level) => {
+                  const y = top + (1 - level / 100) * usable;
+                  return (
+                    <line
+                      key={level}
+                      x1={0}
+                      x2={plotWidth}
+                      y1={y}
+                      y2={y}
+                      stroke={
+                        level === 50
+                          ? colors.levelLine
+                          : colors.levelLineDim
+                      }
+                      strokeDasharray="4 4"
+                    />
+                  );
+                })
+              : null}
+
+            {mode === "macd" ? (
+              <line
+                x1={0}
+                x2={plotWidth}
+                y1={top + usable / 2}
+                y2={top + usable / 2}
+                stroke={colors.levelLine}
+                strokeDasharray="4 4"
+              />
+            ) : null}
+
+            {mode === "volume"
+              ? geometry.volumeBars.map((bar, index) => (
+                  <rect
+                    key={index}
+                    x={bar.x - 2}
+                    y={bar.y}
+                    width={4}
+                    height={bar.h}
+                    rx={1}
+                    fill={bar.color}
                   />
-                );
-              })
-            : null}
+                ))
+              : null}
 
-          {mode === "macd" ? (
-            <line
-              x1={0}
-              x2={plotWidth}
-              y1={top + usable / 2}
-              y2={top + usable / 2}
-              stroke={colors.levelLine}
-              strokeDasharray="4 4"
-            />
-          ) : null}
+            {mode === "macd"
+              ? geometry.macdBars.map((bar, index) => (
+                  <rect
+                    key={index}
+                    x={bar.x - 2}
+                    y={bar.y}
+                    width={4}
+                    height={bar.h}
+                    rx={1}
+                    fill={bar.color}
+                  />
+                ))
+              : null}
 
-          {mode === "volume"
-            ? geometry.volumeBars.map((bar, index) => (
-                <rect
-                  key={index}
-                  x={bar.x - 2}
-                  y={bar.y}
-                  width={4}
-                  height={bar.h}
-                  rx={1}
-                  fill={bar.color}
-                />
-              ))
-            : null}
+            {mode === "rsi" && geometry.rsiPath ? (
+              <path
+                d={geometry.rsiPath}
+                fill="none"
+                stroke={colors.rsiLine}
+                strokeWidth={1.6}
+              />
+            ) : null}
 
-          {mode === "macd"
-            ? geometry.macdBars.map((bar, index) => (
-                <rect
-                  key={index}
-                  x={bar.x - 2}
-                  y={bar.y}
-                  width={4}
-                  height={bar.h}
-                  rx={1}
-                  fill={bar.color}
-                />
-              ))
-            : null}
-
-          {mode === "rsi" && geometry.rsiPath ? (
-            <path
-              d={geometry.rsiPath}
-              fill="none"
-              stroke={colors.rsiLine}
-              strokeWidth={1.6}
-            />
-          ) : null}
-
-          {mode === "macd" && geometry.macdPath ? (
-            <path
-              d={geometry.macdPath}
-              fill="none"
-              stroke={colors.macdLine}
-              strokeWidth={1.4}
-            />
-          ) : null}
-          {mode === "macd" && geometry.macdSignalPath ? (
-            <path
-              d={geometry.macdSignalPath}
-              fill="none"
-              stroke={colors.macdSignal}
-              strokeWidth={1.15}
-            />
-          ) : null}
+            {mode === "macd" && geometry.macdPath ? (
+              <path
+                d={geometry.macdPath}
+                fill="none"
+                stroke={colors.macdLine}
+                strokeWidth={1.4}
+              />
+            ) : null}
+            {mode === "macd" && geometry.macdSignalPath ? (
+              <path
+                d={geometry.macdSignalPath}
+                fill="none"
+                stroke={colors.macdSignal}
+                strokeWidth={1.15}
+              />
+            ) : null}
+          </g>
 
           {/* Right-axis labels — MT5 style numbers in the gutter */}
           {axisLabels.map((label, idx) => (
