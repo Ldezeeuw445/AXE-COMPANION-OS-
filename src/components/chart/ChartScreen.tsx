@@ -4178,9 +4178,9 @@ export function ChartScreen({
         </div>
 
         {indicatorCardOpen ? (
-          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center px-4">
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-start justify-center px-3 py-3">
             <div
-              className={`pointer-events-auto w-full max-w-[22rem] rounded-2xl border p-3 shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-xl ${
+              className={`pointer-events-auto max-h-[calc(100%-1.5rem)] w-full max-w-[24rem] overflow-y-auto overscroll-contain rounded-2xl border p-3 shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-xl ${
                 chartTheme.isDark
                   ? "border-white/16 bg-[rgba(20,22,28,0.78)]"
                   : "border-black/20 bg-[rgba(242,244,246,0.96)]"
@@ -4189,10 +4189,10 @@ export function ChartScreen({
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
                   <p className={`text-[9px] font-bold uppercase tracking-[0.22em] ${chartTheme.isDark ? "text-white/72" : "text-black/62"}`}>
-                    Indicators
+                    Tools + Indicators
                   </p>
                   <p className={`mt-0.5 text-[10px] ${chartTheme.isDark ? "text-tos-muted" : "text-black/55"}`}>
-                    Center card preview · drawer stays available
+                    Full chart controls
                   </p>
                 </div>
                 <button
@@ -4209,50 +4209,133 @@ export function ChartScreen({
               </div>
               <div className="grid grid-cols-4 gap-1.5">
                 {[
-                  { id: "volume", label: "VOL", icon: BarChart3, kind: "indicator" },
-                  { id: "ma", label: "MA", icon: LineChart, kind: "indicator" },
-                  { id: "macd", label: "MACD", icon: Activity, kind: "indicator" },
-                  { id: "rsi", label: "RSI", icon: Activity, kind: "indicator" },
-                  { id: "bollinger", label: "BOL", icon: BarChart2, kind: "indicator" },
-                  { id: "vwap", label: "VWAP", icon: Landmark, kind: "indicator" },
-                  { id: "poc", label: "POC", icon: Crosshair, kind: "indicator" },
-                  { id: "structure", label: "Struct", icon: Sparkles, kind: "smc" },
-                  { id: "orderBlocks", label: "OB", icon: Layers, kind: "smc" },
-                  { id: "fvg", label: "FVG", icon: Square, kind: "smc" },
-                  { id: "ifvg", label: "iFVG", icon: GitBranch, kind: "smc" },
-                  { id: "supplyDemand", label: "S/D", icon: Layers, kind: "smc" },
+                  { id: "axe", label: "AXE", icon: MessageSquare, active: false, action: () => router.push(chatQ(`[AXE · chart ${data.symbol} ${tfLabel}]\nRead this chart and tell me what matters now.`)) },
+                  { id: "fib", label: "Auto Fib", icon: Spline, active: hasFibAnnotation, action: () => toggleAutoAnnotation("fib_retracement") },
+                  { id: "fibFlip", label: "Flip Fib", icon: ArrowUpDown, active: false, disabled: !hasFibAnnotation, action: flipFibAnnotation },
+                  { id: "trend", label: "Auto Trend", icon: TrendingUp, active: hasTrendAnnotation, action: () => toggleAutoAnnotation("trendline") },
+                  { id: "structure", label: "Structure", icon: Sparkles, active: Boolean(activeToolFlags.structure), action: () => toggleToolFlag("structure") },
+                  { id: "orderBlocks", label: "OB", icon: Layers, active: Boolean(activeToolFlags.orderBlocks), action: () => toggleToolFlag("orderBlocks") },
+                  { id: "fvg", label: "FVG", icon: Square, active: Boolean(activeToolFlags.fvg), action: () => toggleToolFlag("fvg") },
+                  { id: "ifvg", label: "iFVG", icon: GitBranch, active: Boolean(activeToolFlags.ifvg), action: () => toggleToolFlag("ifvg") },
+                  { id: "pdh", label: "PDH", icon: Maximize2, active: Boolean(activeToolFlags.pdh), action: () => toggleToolFlag("pdh") },
+                  { id: "pdl", label: "PDL", icon: Maximize2, active: Boolean(activeToolFlags.pdl), action: () => toggleToolFlag("pdl") },
+                  { id: "pdq", label: "PDQ", icon: Maximize2, active: Boolean(activeToolFlags.pdq), action: () => toggleToolFlag("pdq") },
+                  { id: "sessionOpen", label: "Open", icon: Sun, active: Boolean(activeToolFlags.sessionOpen), action: () => toggleToolFlag("sessionOpen") },
+                  { id: "supplyDemand", label: "S/D", icon: Layers, active: Boolean(activeToolFlags.supplyDemand), action: () => toggleToolFlag("supplyDemand") },
+                  { id: "swingPoints", label: "Swings", icon: GitBranch, active: Boolean(activeToolFlags.swingPoints), action: () => toggleToolFlag("swingPoints") },
+                  { id: "futureCursor", label: "Project", icon: MoveHorizontal, active: futureCursorEnabled, action: () => setFutureCursorEnabled((v) => !v) },
                 ].map((item) => {
                   const Icon = item.icon;
-                  const active =
-                    item.kind === "indicator"
-                      ? Boolean(indicatorToolFlags[item.id]) && (canFullIndicators || !PRO_ONLY_INDICATORS.has(item.id))
-                      : Boolean(activeToolFlags[item.id]) && (canFullIndicators || !PRO_ONLY_SMC_TOOLS.has(item.id));
+                  const isDisabled = "disabled" in item && item.disabled;
                   return (
                     <button
-                      key={`center-${item.kind}-${item.id}`}
+                      key={`card-tool-${item.id}`}
                       type="button"
-                      onClick={() =>
-                        item.kind === "indicator"
-                          ? toggleIndicatorFlag(item.id)
-                          : toggleToolFlag(item.id)
-                      }
+                      onClick={item.action}
+                      disabled={isDisabled}
+                      title={item.label}
                       className={`flex h-12 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
-                        active
+                        isDisabled
                           ? chartTheme.isDark
-                            ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
-                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
-                          : chartTheme.isDark
-                            ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
-                            : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                            ? "cursor-not-allowed border-white/[0.04] bg-white/[0.02] text-tos-dim opacity-50"
+                            : "cursor-not-allowed border-black/[0.08] bg-black/[0.03] text-black/35 opacity-60"
+                          : item.active
+                            ? chartTheme.isDark
+                              ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                              : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                            : chartTheme.isDark
+                              ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                              : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
                       }`}
-                      aria-label={`Toggle ${item.label}`}
-                      aria-pressed={active}
+                      aria-label={item.label}
+                      aria-pressed={item.active}
                     >
                       <Icon className="h-4 w-4" aria-hidden />
                       <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
                     </button>
                   );
                 })}
+              </div>
+
+              <div className={`mt-2 border-t pt-2 ${chartTheme.isDark ? "border-white/[0.08]" : "border-black/[0.12]"}`}>
+                <div className={`mb-1 text-[8px] font-bold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-white/60" : "text-black/55"}`}>
+                  Draw
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { id: "draw-line", label: "Line", icon: TrendingUp, active: drawingMode === "trendline", action: () => (drawingMode === "trendline" ? cancelDrawing() : startDrawing("trendline")) },
+                    { id: "draw-rect", label: "Rect", icon: Square, active: drawingMode === "rectangle", action: () => (drawingMode === "rectangle" ? cancelDrawing() : startDrawing("rectangle")) },
+                    { id: "draw-text", label: "Text", icon: Type, active: drawingMode === "text", action: () => (drawingMode === "text" ? cancelDrawing() : startDrawing("text")) },
+                    { id: "draw-hline", label: "H-Line", icon: Minus, active: drawingMode === "horizontal_level", action: () => (drawingMode === "horizontal_level" ? cancelDrawing() : startDrawing("horizontal_level")) },
+                    { id: "draw-clear", label: "Clear", icon: Trash2, active: false, action: () => clearAllDrawings() },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={`card-${item.id}`}
+                        type="button"
+                        onClick={item.action}
+                        title={item.label}
+                        className={`flex h-12 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                          item.active
+                            ? chartTheme.isDark
+                              ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                              : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                            : chartTheme.isDark
+                              ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                              : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                        }`}
+                        aria-label={item.label}
+                        aria-pressed={item.active}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden />
+                        <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className={`mt-2 border-t pt-2 ${chartTheme.isDark ? "border-white/[0.08]" : "border-black/[0.12]"}`}>
+                <div className={`mb-1 text-[8px] font-bold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-white/60" : "text-black/55"}`}>
+                  Indicators
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { id: "volume", label: "VOL", icon: BarChart3 },
+                    { id: "ma", label: "MA", icon: LineChart },
+                    { id: "macd", label: "MACD", icon: Activity },
+                    { id: "bollinger", label: "BOL", icon: BarChart2 },
+                    { id: "rsi", label: "RSI", icon: Activity },
+                    { id: "vwap", label: "VWAP", icon: Landmark },
+                    { id: "poc", label: "POC", icon: Crosshair },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    const active = Boolean(indicatorToolFlags[item.id]) && (canFullIndicators || !PRO_ONLY_INDICATORS.has(item.id));
+                    return (
+                      <button
+                        key={`card-indicator-${item.id}`}
+                        type="button"
+                        onClick={() => toggleIndicatorFlag(item.id)}
+                        title={item.label}
+                        className={`flex h-12 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                          active
+                            ? chartTheme.isDark
+                              ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                              : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                            : chartTheme.isDark
+                              ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                              : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                        }`}
+                        aria-label={`Toggle ${item.label}`}
+                        aria-pressed={active}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden />
+                        <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {indicatorToolFlags.ma ? (
                 <div className={`mt-2 flex items-center gap-1.5 border-t pt-2 ${
@@ -4404,6 +4487,131 @@ export function ChartScreen({
                   </div>
                 </div>
               ))}
+
+              {hasFibAnnotation ? (
+                <>
+                  <div className={`mt-2 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                    chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+                  }`}>
+                    <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
+                      Fib · source
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {([
+                        { value: "auto", label: "Auto" },
+                        { value: "swing", label: "Swing" },
+                        { value: "pd", label: "Day" },
+                      ] as Array<{ value: FibMode; label: string }>).map((opt) => {
+                        const isActive = fibMode === opt.value;
+                        return (
+                          <button
+                            key={`card-fib-source-${opt.value}`}
+                            type="button"
+                            onClick={() => updateFibMode(opt.value)}
+                            className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
+                              isActive
+                                ? chartTheme.isDark
+                                  ? "border-white/[0.16] bg-white/[0.10] text-white"
+                                  : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                                : chartTheme.isDark
+                                  ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                                  : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
+                            }`}
+                            aria-label={`Fib source ${opt.label}`}
+                            aria-pressed={isActive}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className={`mt-2 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                    chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+                  }`}>
+                    <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
+                      Fib · extend
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setFibExtendOnAll("extendLeft", !allFibsExtendLeft)}
+                        className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                          allFibsExtendLeft
+                            ? chartTheme.isDark
+                              ? "border-white/[0.16] bg-white/[0.10] text-white"
+                              : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                            : chartTheme.isDark
+                              ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                              : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
+                        }`}
+                        aria-label="Extend fib lines left"
+                        aria-pressed={allFibsExtendLeft}
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFibExtendOnAll("extendRight", !allFibsExtendRight)}
+                        className={`grid h-6 min-w-[2.4rem] place-items-center rounded-md border px-1.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                          allFibsExtendRight
+                            ? chartTheme.isDark
+                              ? "border-white/[0.16] bg-white/[0.10] text-white"
+                              : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                            : chartTheme.isDark
+                              ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                              : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
+                        }`}
+                        aria-label="Extend fib lines right"
+                        aria-pressed={allFibsExtendRight}
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+
+                  {fibMode === "swing" ? (
+                    <div className={`mt-2 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                      chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+                    }`}>
+                      <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
+                        Swing leg
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {([
+                          { value: 0, label: "0" },
+                          { value: 1, label: "-1" },
+                          { value: 2, label: "-2" },
+                          { value: 3, label: "-3" },
+                        ] as Array<{ value: 0 | 1 | 2 | 3; label: string }>).map((opt) => {
+                          const isActive = fibSwingOffset === opt.value;
+                          return (
+                            <button
+                              key={`card-swing-leg-${opt.value}`}
+                              type="button"
+                              onClick={() => updateFibSwingOffset(opt.value)}
+                              className={`grid h-6 min-w-[1.8rem] place-items-center rounded-md border px-1.5 text-[9.5px] font-semibold uppercase tracking-wide transition ${
+                                isActive
+                                  ? chartTheme.isDark
+                                    ? "border-white/[0.16] bg-white/[0.10] text-white"
+                                    : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                                  : chartTheme.isDark
+                                    ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                                    : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
+                              }`}
+                              aria-label={`Use swing leg ${opt.label}`}
+                              aria-pressed={isActive}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
             </div>
           </div>
         ) : null}
