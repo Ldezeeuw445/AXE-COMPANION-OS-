@@ -516,8 +516,8 @@ export async function loadChartPageData(
   tfParam: string | undefined,
   accountParam: string | undefined,
 ): Promise<ChartPageData> {
-  const timeframeKey = normalizeChartTfKey(tfParam);
-  const metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
+  let timeframeKey = normalizeChartTfKey(tfParam);
+  let metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
 
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
@@ -534,7 +534,7 @@ export async function loadChartPageData(
   const [{ data: prefs }, { data: accountsRows }, watchlistRows] = await Promise.all([
     supabase
       .from("user_workspace_preferences")
-      .select("active_account_id")
+      .select("active_account_id,default_chart_timeframe")
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
@@ -544,6 +544,11 @@ export async function loadChartPageData(
       .order("created_at", { ascending: false }),
     listWatchlistItems(),
   ]);
+
+  if (!tfParam && typeof prefs?.default_chart_timeframe === "string") {
+    timeframeKey = normalizeChartTfKey(prefs.default_chart_timeframe);
+    metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
+  }
 
   const rawAccountsFromDb = (accountsRows ?? []) as BrokerAccountRow[];
   const seeded = await ensureActiveDemoWhenEmpty(
@@ -819,8 +824,8 @@ export async function loadChartPageData(
   );
 
   const [posResult, discoveredSymbols, ordResult] = await Promise.all([positionsPromise, symbolsPromise, ordersPromise]);
-  let allPositions = posResult.positions;
-  let positionsTimedOut = posResult.timedOut;
+  const allPositions = posResult.positions;
+  const positionsTimedOut = posResult.timedOut;
   const allPendingOrders = ordResult.orders;
 
   const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);

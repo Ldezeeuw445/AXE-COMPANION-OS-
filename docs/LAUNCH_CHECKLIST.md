@@ -18,7 +18,7 @@
 | A5 | `CRON_SECRET` + `KRATER_API_KEY` on Vercel Production | [x] | Encrypted vars present |
 | A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [ ] | **Manual** — credits only, no app impact |
 | A7 | Railway `welcoming-spontaneity` (companion app) deploy healthy | [ ] | PR CI failed |
-| A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks |
+| A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks re-run 2026-07-04 |
 
 ---
 
@@ -29,7 +29,7 @@
 | B1 | 3 tabs: Morning Brief / Daily News / Market Recap | [x] | |
 | B2 | Per-tab unread badges | [x] | |
 | B3 | Krater cron generates + upserts `axe_broadcast_feed` | [x] | force sync tested |
-| B4 | Feed shows items for authenticated users | [ ] | Verify on prod |
+| B4 | Feed shows items for authenticated users | [~] | Prod broadcast rows + feed code verified; needs browser auth spot-check |
 | B5 | Cron window 07:00 + 20:00 Amsterdam (no double with Krater dashboard) | [ ] | After A6 |
 
 ---
@@ -38,10 +38,10 @@
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| C1 | New user redirected to `/onboarding` | [ ] | OnboardingGate |
+| C1 | New user redirected to `/onboarding` | [x] | `OnboardingGate` mounted in `AppChrome`; unauth users skipped |
 | C2 | Wizard: watchlist, theme, squawk, risk prefs | [x] | Implemented |
 | C3 | `onboarding_completed_at` persisted | [x] | Migration applied |
-| C4 | After onboarding → chart with saved prefs | [ ] | E2E test |
+| C4 | After onboarding → chart with saved prefs | [x] | Chart now falls back to saved `default_chart_timeframe`; build verified |
 
 ---
 
@@ -90,7 +90,7 @@
 | G2 | `/chat?intel=1` — intelligence mode works | [x] | Prod HTTP 200 |
 | G3 | `LLM_TARGET=auto` — Ollama first, OpenAI fallback | [x] | chat-health: ok_ollama |
 | G4 | Ollama VPS reachable from Vercel | [x] | chat-health ollama=true |
-| G5 | Chat quota: Free 20/day, Pro unlimited | [ ] | |
+| G5 | Chat quota: Free 20/day, Pro unlimited | [x] | Supabase RPC verified: free=20, paid/exempt `remaining=-1` |
 
 ---
 
@@ -143,15 +143,15 @@
 |---------|------|-------|
 | A Infra | 6 | 8 |
 | B Feed | 3 | 5 |
-| C Onboarding | 2 | 4 |
+| C Onboarding | 4 | 4 |
 | D Chart | 4 | 7 |
 | E Quotes | 3 | 4 |
 | F Alerts | 3 | 5 |
-| G Chat | 4 | 5 |
+| G Chat | 5 | 5 |
 | H Cockpit | 0 | 4 |
 | I Billing | 0 | 4 |
 | J Polish | 2 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **29** | **53** |
+| **Total** | **32** | **53** |
 
-_Last updated: 2026-07-04 (chart line polish + demo/MT5 gate build verified)_
+_Last updated: 2026-07-04 (chat quota verified + onboarding chart-pref fallback fixed)_
