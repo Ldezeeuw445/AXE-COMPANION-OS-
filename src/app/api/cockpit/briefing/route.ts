@@ -30,7 +30,7 @@ export async function GET() {
     return Response.json({ error: gate.error, brief: null, upgradeRequired: true }, { status: gate.status });
   }
 
-  let brief = await getActiveBrief(auth.supabase, auth.user.id);
+  const brief = await getActiveBrief(auth.supabase, auth.user.id);
 
   if (!brief) {
     const { due } = await shouldDeliverTodaysDailyBrief(auth.supabase, auth.user.id);

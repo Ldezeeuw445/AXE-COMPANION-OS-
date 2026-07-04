@@ -98,10 +98,10 @@
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| H1 | Cockpit loads for Pro users | [ ] | |
-| H2 | Morning Brief + Learning Arc gated correctly | [ ] | |
-| H3 | Daily + weekly briefing cron | [ ] | |
-| H4 | Intel section (seismic, vessels, jets labels correct) | [ ] | |
+| H1 | Cockpit loads for Pro users | [~] | `/cockpit` prod HTTP 200; needs signed-in Pro browser spot-check |
+| H2 | Morning Brief + Learning Arc gated correctly | [x] | Page + API both use entitlement gates (`briefings`, `cockpit_learning`) |
+| H3 | Daily + weekly briefing cron | [~] | Routes present and anonymous 401; needs authenticated cron/live delivery check |
+| H4 | Intel section (seismic, vessels, jets labels correct) | [x] | Intel labels/code spot-check verified |
 
 ---
 
@@ -112,7 +112,7 @@
 | I1 | Stripe checkout Pro/Founder/Elite | [~] | Payment-link flow + webhook mapping verified in code; needs live Stripe env/E2E |
 | I2 | Upgrade page + portal | [~] | Upgrade grid + portal route present; needs live Stripe env/E2E |
 | I3 | Founder seat cap (100) enforced | [x] | UI hides Founder after cap; webhook validates cap server-side |
-| I4 | Feature gates match `tiers.ts` (chat, cockpit, indicators, alerts) | [~] | Chat, alerts, indicators verified; cockpit still pending |
+| I4 | Feature gates match `tiers.ts` (chat, cockpit, indicators, alerts) | [x] | Chat, alerts, indicators, cockpit gates verified in code |
 
 ---
 
@@ -148,10 +148,10 @@
 | E Quotes | 3 | 4 |
 | F Alerts | 4 | 5 |
 | G Chat | 5 | 5 |
-| H Cockpit | 0 | 4 |
-| I Billing | 1 | 4 |
+| H Cockpit | 2 | 4 |
+| I Billing | 2 | 4 |
 | J Polish | 2 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **35** | **53** |
+| **Total** | **38** | **53** |
 
-_Last updated: 2026-07-04 (Vercel latest deploy verified + billing code audit)_
+_Last updated: 2026-07-04 (cockpit gates/guards verified + build green)_
