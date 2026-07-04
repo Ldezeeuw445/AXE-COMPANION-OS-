@@ -77,8 +77,8 @@
 | F1 | Templates panel on `/alerts` (Pro) | [x] | |
 | F2 | Free users see UpgradeGate | [x] | |
 | F3 | Server evaluators: missing SL, sentiment, correlation, context, confluence, predictive | [x] | axe-watcher cron |
-| F4 | Price alerts on chart (client evaluator) | [~] | `useAlertEvaluator` wired — needs live tick E2E |
-| F5 | End-to-end trigger + feed event on prod | [ ] | |
+| F4 | Price alerts on chart (client evaluator) | [x] | Evaluator wired; Demo/Alpaca price-alert creation fixed; build verified |
+| F5 | End-to-end trigger + feed event on prod | [~] | Trigger route records feed event; needs authenticated prod trigger spot-check |
 
 ---
 
@@ -146,12 +146,12 @@
 | C Onboarding | 4 | 4 |
 | D Chart | 4 | 7 |
 | E Quotes | 3 | 4 |
-| F Alerts | 3 | 5 |
+| F Alerts | 4 | 5 |
 | G Chat | 5 | 5 |
 | H Cockpit | 0 | 4 |
 | I Billing | 0 | 4 |
 | J Polish | 2 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **32** | **53** |
+| **Total** | **33** | **53** |
 
-_Last updated: 2026-07-04 (chat quota verified + onboarding chart-pref fallback fixed)_
+_Last updated: 2026-07-04 (onboarding fallback + price-alert Demo/Alpaca support fixed)_

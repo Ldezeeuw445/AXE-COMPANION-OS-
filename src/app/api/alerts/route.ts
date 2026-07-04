@@ -4,6 +4,8 @@ import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
 import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
+import { DEMO_WATCHLIST_SYMBOLS, isDemoAccount } from "@/lib/broker/demoAccount";
+import { isAlpacaSupportedSymbol, toAlpacaSymbol } from "@/lib/alpaca/symbols";
 
 type CreateAlertBody = {
   symbol?: string | null;
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
     const { data: account } = await supabase
       .from("user_broker_accounts")
-      .select("metadata")
+      .select("provider,connection_method,metadata")
       .eq("user_id", user.id)
       .eq("id", activeId)
       .maybeSingle();
@@ -110,14 +112,20 @@ export async function POST(req: NextRequest) {
     const supported =
       Boolean(report?.resolved) ||
       (Boolean(map[displaySymbol]) && report?.resolved !== false) ||
-      (universe.length > 0 && universe.includes(brokerSymbol));
+      (universe.length > 0 && universe.includes(brokerSymbol)) ||
+      (isDemoAccount(account) && DEMO_WATCHLIST_SYMBOLS.includes(displaySymbol as (typeof DEMO_WATCHLIST_SYMBOLS)[number])) ||
+      (account?.connection_method === "cloud_alpaca" && isAlpacaSupportedSymbol(displaySymbol));
     if (!supported) {
       return NextResponse.json(
         { error: `${displaySymbol} is not available on the active broker account.`, reason: report?.reason ?? "broker_symbol_not_found" },
         { status: 400 },
       );
     }
-    metadata = { ...metadata, broker_symbol: brokerSymbol, account_id: activeId };
+    metadata = {
+      ...metadata,
+      broker_symbol: account?.connection_method === "cloud_alpaca" ? toAlpacaSymbol(displaySymbol) ?? displaySymbol : brokerSymbol,
+      account_id: activeId,
+    };
   }
 
   const { data, error } = await supabase
