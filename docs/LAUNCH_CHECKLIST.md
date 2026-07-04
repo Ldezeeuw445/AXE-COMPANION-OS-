@@ -12,12 +12,12 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | A1 | `main` branch contains launch foundation (feed, onboarding, alerts, risk) | [x] | PR #11 merged |
-| A2 | Production deploy from `main` on Vercel | [x] | axecompanion.com |
+| A2 | Production deploy from `main` on Vercel | [x] | Latest checked commit `84860d1` deployed successfully |
 | A3 | Supabase migrations applied (broadcast feed, onboarding prefs) | [x] | Verified via MCP |
 | A4 | `KRATER_SYNC_MODE=generate` on Vercel Production | [x] | Set explicitly |
 | A5 | `CRON_SECRET` + `KRATER_API_KEY` on Vercel Production | [x] | Encrypted vars present |
 | A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [ ] | **Manual** — credits only, no app impact |
-| A7 | Railway `welcoming-spontaneity` (companion app) deploy healthy | [ ] | PR CI failed |
+| A7 | Railway `welcoming-spontaneity` / related Railway deploy healthy | [!] | Railway status still failing; Vercel production is healthy |
 | A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks re-run 2026-07-04 |
 
 ---
@@ -109,10 +109,10 @@
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| I1 | Stripe checkout Pro/Founder/Elite | [ ] | |
-| I2 | Upgrade page + portal | [ ] | |
-| I3 | Founder seat cap (100) enforced | [ ] | |
-| I4 | Feature gates match `tiers.ts` (chat, cockpit, indicators, alerts) | [~] | Partial |
+| I1 | Stripe checkout Pro/Founder/Elite | [~] | Payment-link flow + webhook mapping verified in code; needs live Stripe env/E2E |
+| I2 | Upgrade page + portal | [~] | Upgrade grid + portal route present; needs live Stripe env/E2E |
+| I3 | Founder seat cap (100) enforced | [x] | UI hides Founder after cap; webhook validates cap server-side |
+| I4 | Feature gates match `tiers.ts` (chat, cockpit, indicators, alerts) | [~] | Chat, alerts, indicators verified; cockpit still pending |
 
 ---
 
@@ -149,9 +149,9 @@
 | F Alerts | 4 | 5 |
 | G Chat | 5 | 5 |
 | H Cockpit | 0 | 4 |
-| I Billing | 0 | 4 |
+| I Billing | 1 | 4 |
 | J Polish | 2 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **34** | **53** |
+| **Total** | **35** | **53** |
 
-_Last updated: 2026-07-04 (price alerts + Pro indicator gate hardened)_
+_Last updated: 2026-07-04 (Vercel latest deploy verified + billing code audit)_
