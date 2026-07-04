@@ -29,6 +29,16 @@ type ClientDemoPosition = {
   livePrice?: number | null;
 };
 
+type ClientPendingOrder = {
+  id: string;
+  symbol: string;
+  side: string;
+  volume: number;
+  openPrice: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
+};
+
 function demoUnrealized(p: ClientDemoPosition): number {
   const live = p.livePrice ?? p.entryPrice;
   const direction = mapSide(p.side) === "buy" ? 1 : -1;
@@ -45,11 +55,17 @@ export async function POST(req: Request) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   let demoPositions: ClientDemoPosition[] = [];
+  let pendingOrders: ClientPendingOrder[] = [];
   try {
-    const body = (await req.json()) as { demoPositions?: ClientDemoPosition[] };
+    const body = (await req.json()) as {
+      demoPositions?: ClientDemoPosition[];
+      pendingOrders?: ClientPendingOrder[];
+    };
     demoPositions = Array.isArray(body.demoPositions) ? body.demoPositions : [];
+    pendingOrders = Array.isArray(body.pendingOrders) ? body.pendingOrders : [];
   } catch {
     demoPositions = [];
+    pendingOrders = [];
   }
 
   const { data: prefs } = await supabase
@@ -71,6 +87,21 @@ export async function POST(req: Request) {
     takeProfit: p.takeProfit,
     unrealizedPnl: demoUnrealized(p),
   }));
+
+  for (const order of pendingOrders) {
+    if (!Number.isFinite(order.openPrice) || !Number.isFinite(order.volume)) continue;
+    positions.push({
+      id: `pending:${order.id}`,
+      symbol: order.symbol,
+      side: order.side,
+      volume: order.volume,
+      entryPrice: order.openPrice,
+      currentPrice: order.openPrice,
+      stopLoss: order.stopLoss,
+      takeProfit: order.takeProfit,
+      unrealizedPnl: 0,
+    });
+  }
 
   let equity = 100_000;
   let balance: number | null = equity;

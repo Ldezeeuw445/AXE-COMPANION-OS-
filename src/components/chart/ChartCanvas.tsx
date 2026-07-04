@@ -470,14 +470,15 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             ? theme.cyanAccent
             : theme.entryLine;
 
-      // Lines only — labels rendered by PositionLabelsOverlay (left-side text, no box).
+      // MT5-style: one thin solid level per entry/SL/TP. Labels are rendered
+      // separately by PositionLabelsOverlay so the line never looks doubled.
       if (o.entryPrice != null && o.entryPrice > 0) {
         positionLinesRef.current.push(
           series.createPriceLine({
             price: o.entryPrice,
             color: entryColor,
             lineWidth: 1,
-            lineStyle: LineStyle.Dashed,
+            lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
             title: "",
           }),
@@ -489,7 +490,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             price: o.stopLoss,
             color: theme.stopLine,
             lineWidth: 1,
-            lineStyle: LineStyle.Dotted,
+            lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
             title: "",
           }),
@@ -501,7 +502,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             price: o.takeProfit,
             color: theme.takeLine,
             lineWidth: 1,
-            lineStyle: LineStyle.Dotted,
+            lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
             title: "",
           }),
@@ -532,7 +533,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             price: o.stopLoss,
             color: theme.stopLine,
             lineWidth: 1,
-            lineStyle: LineStyle.SparseDotted,
+            lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
             title: "",
           }),
@@ -545,7 +546,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             price: o.takeProfit,
             color: theme.takeLine,
             lineWidth: 1,
-            lineStyle: LineStyle.SparseDotted,
+            lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
             title: "",
           }),

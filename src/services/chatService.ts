@@ -1185,6 +1185,11 @@ export async function streamChatMessage(
         `Live broker price for ${requestedUpper || activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${pretty}. ` +
         (bidAskSummary ? `${bidAskSummary}. ` : "") +
         `I’m reading this from your active account context.`;
+    } else if (canonical != null) {
+      const pretty = formatPriceCompact(canonical);
+      finalReply =
+        `Last broker price for ${requestedUpper || activeSymbol} (${brokerSymbol}) on ${accountLabel}: ${pretty}. ` +
+        `The live feed is currently ${state}, so treat this as the latest cached broker value until the next fresh tick. [[link:/chart|Open chart]]`;
     } else {
       finalReply =
         `I can see your ${accountLabel}, but live broker pricing for ${requestedUpper || activeSymbol} (${brokerSymbol}) is currently unavailable (${state}). ` +

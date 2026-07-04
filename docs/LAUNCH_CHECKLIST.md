@@ -49,10 +49,10 @@
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| D1 | AXE Demo Account — virtual market fills (no MT5 gate) | [~] | `ensureActiveDemoWhenEmpty` — deploy pending |
+| D1 | AXE Demo Account — virtual market fills (no MT5 gate) | [x] | `ensureActiveDemoWhenEmpty` + chart build verified |
 | D2 | Alpaca paper — US equities chart + orders (TSLA/AAPL) | [ ] | |
 | D3 | MT5 cloud — live chart + orders with live-trading flag | [ ] | |
-| D4 | No false "Connect MT5" block when demo/alpaca active | [~] | Copy + account fallback — deploy pending |
+| D4 | No false "Connect MT5" block when demo/alpaca active | [x] | Copy + account fallback build verified |
 | D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [x] | Implemented |
 | D6 | Free tier: VOL, MA, RSI only | [x] | Pro gate |
 | D7 | Pro tier: full indicators + SMC overlays | [ ] | Verify gate + unlock |
@@ -144,7 +144,7 @@
 | A Infra | 6 | 8 |
 | B Feed | 3 | 5 |
 | C Onboarding | 2 | 4 |
-| D Chart | 2 | 7 |
+| D Chart | 4 | 7 |
 | E Quotes | 3 | 4 |
 | F Alerts | 3 | 5 |
 | G Chat | 4 | 5 |
@@ -152,6 +152,6 @@
 | I Billing | 0 | 4 |
 | J Polish | 2 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **27** | **53** |
+| **Total** | **29** | **53** |
 
-_Last updated: 2026-07-03 (smoke + chat-health + legal verified)_
+_Last updated: 2026-07-04 (chart line polish + demo/MT5 gate build verified)_

@@ -16,18 +16,29 @@ type DemoPositionPayload = {
   livePrice?: number | null;
 };
 
+type PendingOrderPayload = {
+  id: string;
+  symbol: string;
+  side: string;
+  volume: number;
+  openPrice: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
+};
+
 type Props = {
   demoPositions?: DemoPositionPayload[];
+  pendingOrders?: PendingOrderPayload[];
   compact?: boolean;
   className?: string;
 };
 
 /** Live open-book risk: SL/TP scenarios + % of equity at risk. */
-export function AccountRiskBand({ demoPositions = [], compact = false, className }: Props) {
+export function AccountRiskBand({ demoPositions = [], pendingOrders = [], compact = false, className }: Props) {
   const [band, setBand] = useState<AccountRiskBandSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const payloadKey = useMemo(() => JSON.stringify(demoPositions), [demoPositions]);
+  const payloadKey = useMemo(() => JSON.stringify({ demoPositions, pendingOrders }), [demoPositions, pendingOrders]);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +48,7 @@ export function AccountRiskBand({ demoPositions = [], compact = false, className
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ demoPositions }),
+          body: JSON.stringify({ demoPositions, pendingOrders }),
         });
         if (!res.ok || cancelled) return;
         const json = (await res.json()) as { band?: AccountRiskBandSnapshot };
@@ -51,7 +62,7 @@ export function AccountRiskBand({ demoPositions = [], compact = false, className
     return () => {
       cancelled = true;
     };
-  }, [payloadKey, demoPositions]);
+  }, [payloadKey, demoPositions, pendingOrders]);
 
   if (loading && !band) {
     return (

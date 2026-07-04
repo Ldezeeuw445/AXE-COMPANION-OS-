@@ -887,6 +887,7 @@ export function ChartScreen({
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const [scaleModeIndex, setScaleModeIndex] = useState(0);
   const [toolRailOpen, setToolRailOpen] = useState(false);
+  const [indicatorCardOpen, setIndicatorCardOpen] = useState(false);
   const [activeToolFlags, setActiveToolFlags] = useState<Record<string, boolean>>({});
   const [indicatorToolFlags, setIndicatorToolFlags] = useState<Record<string, boolean>>({});
   // How many order blocks to render per direction. Default 1 bullish + 1
@@ -2164,6 +2165,24 @@ export function ChartScreen({
     hasAlpaca: data.accountChoices.some((a) => a.connectionMethod === "cloud_alpaca"),
   });
   const accountLabel = data.account?.label ?? null;
+  const activeIndicatorCount = useMemo(
+    () =>
+      [
+        indicatorToolFlags.volume,
+        indicatorToolFlags.ma,
+        indicatorToolFlags.macd,
+        indicatorToolFlags.bollinger,
+        indicatorToolFlags.rsi,
+        indicatorToolFlags.vwap,
+        indicatorToolFlags.poc,
+        activeToolFlags.structure,
+        activeToolFlags.orderBlocks,
+        activeToolFlags.fvg,
+        activeToolFlags.ifvg,
+        activeToolFlags.supplyDemand,
+      ].filter(Boolean).length,
+    [activeToolFlags, indicatorToolFlags],
+  );
 
   // Drawing tools ─ tap-to-place workflow
   const startDrawing = useCallback((mode: Exclude<DrawingMode, null>) => {
@@ -2938,6 +2957,31 @@ export function ChartScreen({
           runtime={workflowRuntime}
         />
       ) : null;
+    const indicatorsChip = (
+      <button
+        type="button"
+        onClick={() => setIndicatorCardOpen((v) => !v)}
+        className={`relative inline-flex h-8 w-8 items-center justify-center rounded-md border bg-black/78 text-white/85 shadow-[0_4px_14px_rgba(0,0,0,0.4)] backdrop-blur active:scale-[0.97] ${
+          indicatorCardOpen ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100" : "border-white/[0.10]"
+        }`}
+        aria-label="Indicators card"
+        title="Indicators"
+        aria-pressed={indicatorCardOpen}
+      >
+        <BarChart3 className="h-3.5 w-3.5" />
+        {activeIndicatorCount > 0 ? (
+          <span className="absolute -right-1 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full border border-black/50 bg-cyan-300 px-0.5 text-[8px] font-black leading-none text-black">
+            {activeIndicatorCount}
+          </span>
+        ) : null}
+      </button>
+    );
+    const trailingChips = (
+      <div className="flex items-center gap-1">
+        {indicatorsChip}
+        {favoritesChip}
+      </div>
+    );
 
     setCenter(
       <div className="flex items-center justify-center gap-1">
@@ -2959,7 +3003,7 @@ export function ChartScreen({
           onNews={() => (newsOpen ? setNewsOpen(false) : openNews())}
           onOneClick={toggleOneClickTrade}
           onPending={togglePendingTrade}
-          trailing={favoritesChip}
+          trailing={trailingChips}
         />
       </div>,
     );
@@ -2980,6 +3024,8 @@ export function ChartScreen({
     toolbarSections,
     favoriteWorkflowIds,
     workflowRuntime,
+    indicatorCardOpen,
+    activeIndicatorCount,
     orderBookOpen,
     newsOpen,
     openOrderBook,
@@ -3238,6 +3284,7 @@ export function ChartScreen({
             swingPoints: activeToolFlags.swingPoints,
             supplyDemand: activeToolFlags.supplyDemand,
           }}
+          bottomAxisHeight={isFullscreen ? 40 : 34}
         />
 
         {/* Draggable future-projection vertical cursor — anchors how far
@@ -3345,7 +3392,6 @@ export function ChartScreen({
               </select>
               <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
             </div>
-            <span className="font-mono text-[11px] font-medium text-white/85">{lastPriceText}</span>
             {transportBadge ? (
               <span
                 className={`shrink-0 rounded border px-1 py-0.5 font-mono text-[7px] font-bold uppercase ${transportBadge.className}`}
@@ -3354,6 +3400,7 @@ export function ChartScreen({
                 {transportBadge.label}
               </span>
             ) : null}
+            <span className="font-mono text-[11px] font-medium text-white/85">{lastPriceText}</span>
           </div>
           <div className="flex items-center justify-center gap-1 justify-self-center px-1">
             <ChartThemeTogglerButton
@@ -3376,13 +3423,32 @@ export function ChartScreen({
               onOneClick={toggleOneClickTrade}
               onPending={togglePendingTrade}
               trailing={
-                workflowRuntime && favoriteWorkflowIds.length > 0 ? (
-                  <ChartWorkflowFavorites
-                    favoriteIds={favoriteWorkflowIds}
-                    runtime={workflowRuntime}
-                    compact
-                  />
-                ) : null
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setIndicatorCardOpen((v) => !v)}
+                    className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg border bg-black/78 text-white/85 shadow-[0_4px_14px_rgba(0,0,0,0.4)] backdrop-blur active:scale-[0.97] ${
+                      indicatorCardOpen ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100" : "border-white/[0.10]"
+                    }`}
+                    aria-label="Indicators card"
+                    title="Indicators"
+                    aria-pressed={indicatorCardOpen}
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    {activeIndicatorCount > 0 ? (
+                      <span className="absolute -right-1 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full border border-black/50 bg-cyan-300 px-0.5 text-[8px] font-black leading-none text-black">
+                        {activeIndicatorCount}
+                      </span>
+                    ) : null}
+                  </button>
+                  {workflowRuntime && favoriteWorkflowIds.length > 0 ? (
+                    <ChartWorkflowFavorites
+                      favoriteIds={favoriteWorkflowIds}
+                      runtime={workflowRuntime}
+                      compact
+                    />
+                  ) : null}
+                </div>
               }
             />
           </div>
@@ -3435,6 +3501,14 @@ export function ChartScreen({
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
               </div>
+              {transportBadge ? (
+                <span
+                  className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.12em] ${transportBadge.className}`}
+                  title={transportBadge.title}
+                >
+                  {transportBadge.label}
+                </span>
+              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               {data.accountChoices.length > 1 ? (
@@ -3467,14 +3541,6 @@ export function ChartScreen({
               {data.symbol}
             </span>
             <span className="shrink-0 font-mono text-[11px] font-medium text-white/80">{lastPriceText}</span>
-            {transportBadge ? (
-              <span
-                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-[0.12em] ${transportBadge.className}`}
-                title={transportBadge.title}
-              >
-                {transportBadge.label}
-              </span>
-            ) : null}
             <span
               className="ml-auto shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em]"
               style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}
@@ -4111,6 +4177,87 @@ export function ChartScreen({
           </div>
         </div>
 
+        {indicatorCardOpen ? (
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center px-4">
+            <div
+              className={`pointer-events-auto w-full max-w-[22rem] rounded-2xl border p-3 shadow-[0_18px_44px_rgba(0,0,0,0.42)] backdrop-blur-xl ${
+                chartTheme.isDark
+                  ? "border-white/16 bg-[rgba(20,22,28,0.78)]"
+                  : "border-black/20 bg-[rgba(242,244,246,0.96)]"
+              }`}
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className={`text-[9px] font-bold uppercase tracking-[0.22em] ${chartTheme.isDark ? "text-white/72" : "text-black/62"}`}>
+                    Indicators
+                  </p>
+                  <p className={`mt-0.5 text-[10px] ${chartTheme.isDark ? "text-tos-muted" : "text-black/55"}`}>
+                    Center card preview · drawer stays available
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIndicatorCardOpen(false)}
+                  className={`rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                    chartTheme.isDark
+                      ? "border-white/[0.08] bg-white/[0.04] text-white/70"
+                      : "border-black/[0.14] bg-white/70 text-black/65"
+                  }`}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { id: "volume", label: "VOL", icon: BarChart3, kind: "indicator" },
+                  { id: "ma", label: "MA", icon: LineChart, kind: "indicator" },
+                  { id: "macd", label: "MACD", icon: Activity, kind: "indicator" },
+                  { id: "rsi", label: "RSI", icon: Activity, kind: "indicator" },
+                  { id: "bollinger", label: "BOL", icon: BarChart2, kind: "indicator" },
+                  { id: "vwap", label: "VWAP", icon: Landmark, kind: "indicator" },
+                  { id: "poc", label: "POC", icon: Crosshair, kind: "indicator" },
+                  { id: "structure", label: "Struct", icon: Sparkles, kind: "smc" },
+                  { id: "orderBlocks", label: "OB", icon: Layers, kind: "smc" },
+                  { id: "fvg", label: "FVG", icon: Square, kind: "smc" },
+                  { id: "ifvg", label: "iFVG", icon: GitBranch, kind: "smc" },
+                  { id: "supplyDemand", label: "S/D", icon: Layers, kind: "smc" },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    item.kind === "indicator"
+                      ? Boolean(indicatorToolFlags[item.id])
+                      : Boolean(activeToolFlags[item.id]);
+                  return (
+                    <button
+                      key={`center-${item.kind}-${item.id}`}
+                      type="button"
+                      onClick={() =>
+                        item.kind === "indicator"
+                          ? toggleIndicatorFlag(item.id)
+                          : toggleToolFlag(item.id)
+                      }
+                      className={`flex h-12 flex-col items-center justify-center rounded-xl border text-[10px] transition ${
+                        active
+                          ? chartTheme.isDark
+                            ? "border-cyan-300/35 bg-cyan-400/12 text-cyan-100"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.035] text-tos-muted hover:text-cyan-100"
+                            : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                      }`}
+                      aria-label={`Toggle ${item.label}`}
+                      aria-pressed={active}
+                    >
+                      <Icon className="h-4 w-4" aria-hidden />
+                      <span className="mt-0.5 text-[7px] font-semibold uppercase tracking-wide">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {/* Drawing overlays: must NOT steal chart pan/zoom except on handles */}
         <div className="pointer-events-none absolute inset-0 z-[25]">
           <FibAnnotationLayer
@@ -4285,7 +4432,7 @@ export function ChartScreen({
         : null}
 
       {/* Live open-book risk — SL/TP scenarios for active account */}
-      {(demoBook.all.length > 0 || overlays.length > 0) && !isFullscreen ? (
+      {(demoBook.all.length > 0 || overlays.length > 0 || displayPendingOrders.length > 0) && !isFullscreen ? (
         <div className="shrink-0 border-t border-white/[0.05] px-2 py-1">
           <AccountRiskBand
             compact
@@ -4298,6 +4445,15 @@ export function ChartScreen({
               stopLoss: p.stopLoss,
               takeProfit: p.takeProfit,
               livePrice,
+            }))}
+            pendingOrders={displayPendingOrders.map((o) => ({
+              id: o.id,
+              symbol: o.symbol,
+              side: o.side,
+              volume: o.volume,
+              openPrice: o.openPrice,
+              stopLoss: o.stopLoss,
+              takeProfit: o.takeProfit,
             }))}
           />
         </div>
@@ -4539,8 +4695,17 @@ export function ChartScreen({
                     } else {
                       setPendingOrderType(opt.id === "buy_limit" ? (pendingOrderSide === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (pendingOrderSide === "sell" ? "sell_stop" : "buy_stop") : opt.id);
                       const sideForType = pendingOrderSide;
-                      const typeId = opt.id === "buy_limit" ? (sideForType === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (sideForType === "sell" ? "sell_stop" : "buy_stop") : opt.id;
-                      showPendingTradePlan(sideForType, typeId as any);
+                      const typeId: PendingOrderTicketType =
+                        opt.id === "buy_limit"
+                          ? sideForType === "sell"
+                            ? "sell_limit"
+                            : "buy_limit"
+                          : opt.id === "buy_stop"
+                            ? sideForType === "sell"
+                              ? "sell_stop"
+                              : "buy_stop"
+                            : opt.id;
+                      showPendingTradePlan(sideForType, typeId);
                     }
                     setOrderTypeMenuOpen(false);
                     vibrate("light"); playSound("tap");

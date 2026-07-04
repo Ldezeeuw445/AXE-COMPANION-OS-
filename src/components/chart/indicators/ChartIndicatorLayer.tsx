@@ -93,6 +93,8 @@ type Props = {
   maType?: "sma" | "ema";
   /** Dark theme? Paper mode needs much darker overlay colors. */
   isDark?: boolean;
+  /** Reserved native time-axis height so overlays never draw through dates. */
+  bottomAxisHeight?: number;
 };
 
 type Size = { w: number; h: number };
@@ -282,10 +284,12 @@ export function ChartIndicatorLayer({
   maPeriod = 20,
   maType = "sma",
   isDark = true,
+  bottomAxisHeight = 34,
 }: Props) {
   const pal = useMemo(() => overlayPalette(isDark), [isDark]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
+  const [axisWidth, setAxisWidth] = useState(56);
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
@@ -304,8 +308,17 @@ export function ChartIndicatorLayer({
   useEffect(() => {
     const handle = canvasRef.current;
     if (!handle) return;
-    return handle.subscribeViewport(() => setVersion((v) => v + 1));
+    const refresh = () => {
+      const nextAxisWidth = handle.getRightAxisWidth();
+      setAxisWidth(nextAxisWidth > 0 ? Math.max(48, nextAxisWidth) : 56);
+      setVersion((v) => v + 1);
+    };
+    refresh();
+    return handle.subscribeViewport(refresh);
   }, [canvasRef]);
+
+  const plotRight = Math.max(0, size.w - axisWidth);
+  const plotBottom = Math.max(0, size.h - bottomAxisHeight);
 
   const geometry = useMemo(() => {
     void version;
@@ -356,7 +369,7 @@ export function ChartIndicatorLayer({
     const futureExtensionX = computeFutureExtensionX(
       visibleWithTime,
       handle,
-      size.w,
+      plotRight,
       futureProjectionX,
     );
 
@@ -485,7 +498,7 @@ export function ChartIndicatorLayer({
       supplyDemand,
       totalChartVolume,
     };
-  }, [candles, canvasRef, size.h, size.w, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal]);
+  }, [candles, canvasRef, size.h, size.w, plotRight, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
@@ -500,23 +513,30 @@ export function ChartIndicatorLayer({
           WebkitTouchCallout: "none",
         }}
       >
-        {active.orderBlocks
-          ? geometry.orderBlocks.map((zone, index) => (
-              <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" pal={pal} />
-            ))
-          : null}
+        <defs>
+          <clipPath id="chart-indicator-plot-clip">
+            <rect x={0} y={0} width={plotRight} height={plotBottom} />
+          </clipPath>
+        </defs>
 
-        {active.fvg
-          ? geometry.fairValueGaps.map((zone, index) => (
-              <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" pal={pal} />
-            ))
-          : null}
+        <g clipPath="url(#chart-indicator-plot-clip)">
+          {active.orderBlocks
+            ? geometry.orderBlocks.map((zone, index) => (
+                <ZoneBox key={`ob-${index}`} zone={zone} variant="ob" pal={pal} />
+              ))
+            : null}
 
-        {active.ifvg
-          ? geometry.inverseFairValueGaps.map((zone, index) => (
-              <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" pal={pal} />
-            ))
-          : null}
+          {active.fvg
+            ? geometry.fairValueGaps.map((zone, index) => (
+                <ZoneBox key={`fvg-${index}`} zone={zone} variant="fvg" pal={pal} />
+              ))
+            : null}
+
+          {active.ifvg
+            ? geometry.inverseFairValueGaps.map((zone, index) => (
+                <ZoneBox key={`ifvg-${index}`} zone={zone} variant="ifvg" pal={pal} />
+              ))
+            : null}
 
         {/* Supply / Demand bands — top 25% of the latest swing range
             is Supply (faint red), bottom 25% is Demand (faint emerald),
@@ -525,9 +545,9 @@ export function ChartIndicatorLayer({
             Renders BEFORE PDH/PDL/PDQ in the JSX, which means it sits
             under those lines in z-order — exactly per spec, since SD
             is contextual background and PDH/PDL/PDQ are tactical. */}
-        {active.supplyDemand && geometry.supplyDemand ? (
-          <SupplyDemandOverlay sd={geometry.supplyDemand} width={size.w} pal={pal} />
-        ) : null}
+          {active.supplyDemand && geometry.supplyDemand ? (
+            <SupplyDemandOverlay sd={geometry.supplyDemand} width={plotRight} pal={pal} />
+          ) : null}
 
         {/* Previous Day High / Low / Equilibrium — thin SOLID lines
             spanning the left rail to the right rail, with their LABELS
@@ -535,11 +555,11 @@ export function ChartIndicatorLayer({
             labels on the left frees the right rail for fib %, fib
             price, OB volume and the Supply / Demand band tags above
             so the two columns never collide on small phone screens. */}
-        {active.pdh && geometry.previousDayHigh ? (
+          {active.pdh && geometry.previousDayHigh ? (
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={size.w - RIGHT_RAIL_OFFSET}
+              x2={plotRight - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayHigh.y}
               y2={geometry.previousDayHigh.y}
               stroke={pal.pdhStroke}
@@ -566,7 +586,7 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={size.w - RIGHT_RAIL_OFFSET}
+              x2={plotRight - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayLow.y}
               y2={geometry.previousDayLow.y}
               stroke={pal.pdlStroke}
@@ -593,7 +613,7 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={size.w - RIGHT_RAIL_OFFSET}
+              x2={plotRight - RIGHT_RAIL_OFFSET}
               y1={geometry.previousDayEq.y}
               y2={geometry.previousDayEq.y}
               stroke={pal.pdqStroke}
@@ -620,7 +640,7 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={size.w - RIGHT_RAIL_OFFSET}
+              x2={plotRight - RIGHT_RAIL_OFFSET}
               y1={geometry.sessionOpen.y}
               y2={geometry.sessionOpen.y}
               stroke={pal.sessionOpenStroke}
@@ -735,7 +755,7 @@ export function ChartIndicatorLayer({
             <path d={geometry.maPath} fill="none" stroke={pal.maLine} strokeWidth={1.7} />
             {geometry.latestMaY != null ? (
               <text
-                x={size.w - RIGHT_RAIL_OFFSET}
+                x={plotRight - RIGHT_RAIL_OFFSET}
                 y={Math.max(12, Math.min(size.h - 4, geometry.latestMaY - 4))}
                 textAnchor="end"
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -770,7 +790,7 @@ export function ChartIndicatorLayer({
             <path d={geometry.vwapPath} fill="none" stroke={pal.vwapLine} strokeWidth={1.35} />
             {geometry.latestVwap != null ? (
               <text
-                x={size.w - RIGHT_RAIL_OFFSET}
+                x={plotRight - RIGHT_RAIL_OFFSET}
                 y={Math.max(12, Math.min(size.h - 4, (geometry.latestVwapY ?? 14) - 4))}
                 textAnchor="end"
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -791,7 +811,7 @@ export function ChartIndicatorLayer({
           <g pointerEvents="none">
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={size.w - RIGHT_RAIL_OFFSET}
+              x2={plotRight - RIGHT_RAIL_OFFSET}
               y1={geometry.poc.y}
               y2={geometry.poc.y}
               stroke={pal.pocStroke}
@@ -799,7 +819,7 @@ export function ChartIndicatorLayer({
               strokeDasharray="6 4"
             />
             <text
-              x={size.w - RIGHT_RAIL_OFFSET}
+              x={plotRight - RIGHT_RAIL_OFFSET}
               y={geometry.poc.y - 4}
               textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -860,6 +880,7 @@ export function ChartIndicatorLayer({
             ))
           : null}
 
+        </g>
       </svg>
     </div>
   );

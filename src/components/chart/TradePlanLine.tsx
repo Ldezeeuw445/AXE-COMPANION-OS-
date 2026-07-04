@@ -348,8 +348,8 @@ export const TradePlanLine = memo(function TradePlanLine({
                 y1={0}
                 y2={0}
                 stroke={color}
-                strokeWidth={dashed ? 1 : 1.5}
-                strokeDasharray={dashed ? "6 4" : ""}
+                strokeWidth={1}
+                strokeDasharray=""
               />
 
               <text

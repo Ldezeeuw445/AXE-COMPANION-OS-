@@ -1139,6 +1139,10 @@ function buildSummary(ctx: Omit<AxeCompanionContext, "summary" | "tradingSpace">
     lines.push(
       `Chart: ${ctx.chart.symbol ?? ctx.symbol} ${ctx.chart.timeframe ?? ""} broker ${ctx.chart.brokerSymbol ?? "unresolved"} canonical ${ctx.chart.lastPrice}; ${chartPricingState}; ${ctx.chart.recentState ?? "no recent candle"}.`,
     );
+  } else if (ctx.chart.symbol && ctx.chart.lastPrice != null) {
+    lines.push(
+      `Chart: ${ctx.chart.symbol} broker ${ctx.chart.brokerSymbol ?? "unresolved"} last broker price ${ctx.chart.lastPrice}; ${chartPricingState}; do not call it live unless a fresh tick is available.`,
+    );
   } else if (ctx.chart.symbol) {
     lines.push(
       `Chart: ${ctx.chart.symbol} broker ${ctx.chart.brokerSymbol ?? "unresolved"}; live broker pricing unavailable; do not invent current price or levels.`,
