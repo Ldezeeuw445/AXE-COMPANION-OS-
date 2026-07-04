@@ -50,12 +50,12 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | D1 | AXE Demo Account — virtual market fills (no MT5 gate) | [x] | `ensureActiveDemoWhenEmpty` + chart build verified |
-| D2 | Alpaca paper — US equities chart + orders (TSLA/AAPL) | [ ] | |
+| D2 | Alpaca paper — US equities chart + orders (TSLA/AAPL) | [~] | Chart → `/api/alpaca/order` flow build-verified; needs authenticated paper order spot-check |
 | D3 | MT5 cloud — live chart + orders with live-trading flag | [ ] | |
 | D4 | No false "Connect MT5" block when demo/alpaca active | [x] | Copy + account fallback build verified |
 | D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [x] | Implemented |
 | D6 | Free tier: VOL, MA, RSI only | [x] | Pro gate |
-| D7 | Pro tier: full indicators + SMC overlays | [ ] | Verify gate + unlock |
+| D7 | Pro tier: full indicators + SMC overlays | [x] | Pro gate render-hardened; Free cannot show Pro flags from stale localStorage |
 
 ---
 
@@ -144,7 +144,7 @@
 | A Infra | 6 | 8 |
 | B Feed | 3 | 5 |
 | C Onboarding | 4 | 4 |
-| D Chart | 4 | 7 |
+| D Chart | 5 | 7 |
 | E Quotes | 3 | 4 |
 | F Alerts | 4 | 5 |
 | G Chat | 5 | 5 |
@@ -152,6 +152,6 @@
 | I Billing | 0 | 4 |
 | J Polish | 2 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **33** | **53** |
+| **Total** | **34** | **53** |
 
-_Last updated: 2026-07-04 (onboarding fallback + price-alert Demo/Alpaca support fixed)_
+_Last updated: 2026-07-04 (price alerts + Pro indicator gate hardened)_

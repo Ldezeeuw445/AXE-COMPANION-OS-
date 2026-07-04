@@ -527,6 +527,8 @@ function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice:
 /* ── Indicator pane ordering ──────────────────────────────────── */
 type PaneMode = "volume" | "rsi" | "macd";
 const PANE_MODE_DEFAULT: PaneMode[] = ["volume", "rsi", "macd"];
+const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc"]);
+const PRO_ONLY_SMC_TOOLS = new Set(["structure", "orderBlocks", "fvg", "ifvg", "supplyDemand"]);
 
 function ResizablePane({
   height,
@@ -2170,18 +2172,18 @@ export function ChartScreen({
       [
         indicatorToolFlags.volume,
         indicatorToolFlags.ma,
-        indicatorToolFlags.macd,
-        indicatorToolFlags.bollinger,
+        canFullIndicators && indicatorToolFlags.macd,
+        canFullIndicators && indicatorToolFlags.bollinger,
         indicatorToolFlags.rsi,
-        indicatorToolFlags.vwap,
-        indicatorToolFlags.poc,
-        activeToolFlags.structure,
-        activeToolFlags.orderBlocks,
-        activeToolFlags.fvg,
-        activeToolFlags.ifvg,
-        activeToolFlags.supplyDemand,
+        canFullIndicators && indicatorToolFlags.vwap,
+        canFullIndicators && indicatorToolFlags.poc,
+        canFullIndicators && activeToolFlags.structure,
+        canFullIndicators && activeToolFlags.orderBlocks,
+        canFullIndicators && activeToolFlags.fvg,
+        canFullIndicators && activeToolFlags.ifvg,
+        canFullIndicators && activeToolFlags.supplyDemand,
       ].filter(Boolean).length,
-    [activeToolFlags, indicatorToolFlags],
+    [activeToolFlags, canFullIndicators, indicatorToolFlags],
   );
 
   // Drawing tools ─ tap-to-place workflow
@@ -2837,8 +2839,6 @@ export function ChartScreen({
     });
   }, [canFullIndicators, savePref]);
 
-  const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc"]);
-
   const toggleIndicatorFlag = useCallback((id: string) => {
     if (!canFullIndicators && PRO_ONLY_INDICATORS.has(id)) {
       setTradeToast({
@@ -3270,19 +3270,19 @@ export function ChartScreen({
           maType={maType}
           active={{
             ma: indicatorToolFlags.ma,
-            bollinger: indicatorToolFlags.bollinger,
-            vwap: indicatorToolFlags.vwap,
-            poc: indicatorToolFlags.poc,
-            structure: activeToolFlags.structure,
-            orderBlocks: activeToolFlags.orderBlocks,
-            fvg: activeToolFlags.fvg,
-            ifvg: activeToolFlags.ifvg,
+            bollinger: canFullIndicators && indicatorToolFlags.bollinger,
+            vwap: canFullIndicators && indicatorToolFlags.vwap,
+            poc: canFullIndicators && indicatorToolFlags.poc,
+            structure: canFullIndicators && activeToolFlags.structure,
+            orderBlocks: canFullIndicators && activeToolFlags.orderBlocks,
+            fvg: canFullIndicators && activeToolFlags.fvg,
+            ifvg: canFullIndicators && activeToolFlags.ifvg,
             pdh: activeToolFlags.pdh,
             pdl: activeToolFlags.pdl,
             pdq: activeToolFlags.pdq,
             sessionOpen: activeToolFlags.sessionOpen,
             swingPoints: activeToolFlags.swingPoints,
-            supplyDemand: activeToolFlags.supplyDemand,
+            supplyDemand: canFullIndicators && activeToolFlags.supplyDemand,
           }}
           bottomAxisHeight={isFullscreen ? 40 : 34}
         />
@@ -4225,8 +4225,8 @@ export function ChartScreen({
                   const Icon = item.icon;
                   const active =
                     item.kind === "indicator"
-                      ? Boolean(indicatorToolFlags[item.id])
-                      : Boolean(activeToolFlags[item.id]);
+                      ? Boolean(indicatorToolFlags[item.id]) && (canFullIndicators || !PRO_ONLY_INDICATORS.has(item.id))
+                      : Boolean(activeToolFlags[item.id]) && (canFullIndicators || !PRO_ONLY_SMC_TOOLS.has(item.id));
                   return (
                     <button
                       key={`center-${item.kind}-${item.id}`}
@@ -4412,7 +4412,7 @@ export function ChartScreen({
       {/* Indicator panes hidden in landscape immersive — keeps room for dates + execution bar */}
       {!isFullscreen
         ? (() => {
-        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m]);
+        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
         const multiPane = enabledPanesList.length > 1;
         return enabledPanesList.map((mode, idx) => (
           <ResizablePane
