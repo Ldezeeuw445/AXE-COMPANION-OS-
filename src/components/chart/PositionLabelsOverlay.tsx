@@ -332,6 +332,7 @@ export function PositionLabelsOverlay({
       const targetKey = slTpDraftKeyForOrder(o.id);
       const draft = drafts[targetKey];
       const hasDraft = Boolean(draft);
+      if (!hasDraft || useExecutionBarConfirm) continue;
       const entry = draft?.openPrice ?? o.openPrice;
       if (entry == null || entry <= 0) continue;
       const y = canvas.priceToCoordinate(entry);
@@ -350,7 +351,7 @@ export function PositionLabelsOverlay({
     }
 
     setEntryLabels(next);
-  }, [canvasRef, canModify, overlays, pendingOrders]);
+  }, [canvasRef, canModify, overlays, pendingOrders, useExecutionBarConfirm]);
 
   useEffect(() => {
     computeEntryLabels();
@@ -505,7 +506,7 @@ export function PositionLabelsOverlay({
       pendingEntryLines.push({
         key: `pend-entry-${o.id}`,
         price: entryPrice,
-        label: typeLabel,
+        label: `${typeLabel} ${o.volume}`,
         color: entryColor(side),
         targetKey,
         orderId: o.id,

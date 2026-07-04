@@ -3760,7 +3760,7 @@ export function ChartScreen({
                 { id: "poc", label: "POC", icon: Crosshair },
               ].map((item) => {
                 const Icon = item.icon;
-                const active = Boolean(indicatorToolFlags[item.id]);
+                const active = Boolean(indicatorToolFlags[item.id]) && (canFullIndicators || !PRO_ONLY_INDICATORS.has(item.id));
                 return (
                   <button
                     key={item.id}
@@ -3831,7 +3831,7 @@ export function ChartScreen({
           ) : null}
 
           {(() => {
-            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m]);
+            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
             if (enabledPanes.length < 2) return null;
             const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
             return (
@@ -3887,7 +3887,7 @@ export function ChartScreen({
           {/* OB count picker — only visible while the OB indicator is on.
               Lets the user choose how many bullish + bearish blocks to
               show (1 each = cleanest, up to 3 each for context). */}
-          {activeToolFlags.orderBlocks ? (
+          {canFullIndicators && activeToolFlags.orderBlocks ? (
             <div className={`col-span-4 mt-1 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
               chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
             }`}>
@@ -3924,7 +3924,7 @@ export function ChartScreen({
 
           {/* FVG count picker — mirrors OB / iFVG. Latest N bullish + N
               bearish unmitigated gaps. Only visible while FVG is on. */}
-          {activeToolFlags.fvg ? (
+          {canFullIndicators && activeToolFlags.fvg ? (
             <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
               chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
             }`}>
@@ -3963,7 +3963,7 @@ export function ChartScreen({
               is on. Useful iFVGs (no second mitigation) extend forward
               to the future-projection cursor; reclaimed ones stop at
               the inversion candle. */}
-          {activeToolFlags.ifvg ? (
+          {canFullIndicators && activeToolFlags.ifvg ? (
             <div className={`col-span-4 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
               chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
             }`}>
@@ -4254,6 +4254,156 @@ export function ChartScreen({
                   );
                 })}
               </div>
+              {indicatorToolFlags.ma ? (
+                <div className={`mt-2 flex items-center gap-1.5 border-t pt-2 ${
+                  chartTheme.isDark ? "border-white/[0.08]" : "border-black/[0.12]"
+                }`}>
+                  <span className={`text-[8px] font-bold uppercase tracking-widest ${chartTheme.isDark ? "text-cyan-100/60" : "text-cyan-900/70"}`}>MA</span>
+                  {([9, 20, 50, 200] as const).map((period) => (
+                    <button
+                      key={`card-ma-${period}`}
+                      type="button"
+                      onClick={() => {
+                        setMaPeriod(period);
+                        try { savePref("axe.chart.maPeriod", String(period)); } catch { /* ignore */ }
+                      }}
+                      className={`rounded-md border px-1.5 py-0.5 text-[9px] font-semibold transition ${
+                        maPeriod === period
+                          ? chartTheme.isDark
+                            ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                            : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                          : chartTheme.isDark
+                            ? "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                            : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                      }`}
+                    >
+                      {period}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={toggleMaType}
+                    className={`ml-auto rounded-md border px-1.5 py-0.5 text-[9px] font-bold transition ${
+                      maType === "ema"
+                        ? chartTheme.isDark
+                          ? "border-cyan-300/45 bg-cyan-400/16 text-cyan-100"
+                          : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                        : chartTheme.isDark
+                          ? "border-white/[0.06] bg-white/[0.03] text-tos-muted hover:text-cyan-100"
+                          : "border-black/[0.14] bg-white/[0.72] text-black/68 hover:text-cyan-900"
+                    }`}
+                  >
+                    {maType === "ema" ? "EMA" : "SMA"}
+                  </button>
+                </div>
+              ) : null}
+
+              {(() => {
+                const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
+                if (enabledPanes.length < 2) return null;
+                const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
+                return (
+                  <div className={`mt-2 border-t pt-2 ${
+                    chartTheme.isDark ? "border-white/[0.08]" : "border-black/[0.12]"
+                  }`}>
+                    <div className={`mb-1 text-[8px] font-bold uppercase tracking-widest ${chartTheme.isDark ? "text-cyan-100/60" : "text-cyan-900/70"}`}>
+                      Pane order
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      {enabledPanes.map((mode, i) => (
+                        <div key={`card-pane-${mode}`} className="flex items-center gap-1">
+                          <span className={`min-w-[2.2rem] text-[9px] font-semibold ${chartTheme.isDark ? "text-white/75" : "text-black/75"}`}>
+                            {labels[mode] ?? mode.toUpperCase()}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={i === 0}
+                            onClick={() => movePaneInOrder(mode, -1)}
+                            className={`rounded border px-1 py-0.5 text-[8px] ${
+                              i === 0
+                                ? chartTheme.isDark
+                                  ? "border-white/[0.04] text-white/25"
+                                  : "border-black/[0.08] text-black/30"
+                                : chartTheme.isDark
+                                  ? "border-white/[0.08] text-white/65 hover:text-white"
+                                  : "border-black/[0.16] text-black/65 hover:text-black"
+                            }`}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            disabled={i === enabledPanes.length - 1}
+                            onClick={() => movePaneInOrder(mode, 1)}
+                            className={`rounded border px-1 py-0.5 text-[8px] ${
+                              i === enabledPanes.length - 1
+                                ? chartTheme.isDark
+                                  ? "border-white/[0.04] text-white/25"
+                                  : "border-black/[0.08] text-black/30"
+                                : chartTheme.isDark
+                                  ? "border-white/[0.08] text-white/65 hover:text-white"
+                                  : "border-black/[0.16] text-black/65 hover:text-black"
+                            }`}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {[
+                canFullIndicators && activeToolFlags.orderBlocks
+                  ? { key: "ob", label: "OB · per side", value: orderBlockCount, onChange: updateOrderBlockCount }
+                  : null,
+                canFullIndicators && activeToolFlags.fvg
+                  ? { key: "fvg", label: "FVG · per side", value: fvgCount, onChange: updateFvgCount }
+                  : null,
+                canFullIndicators && activeToolFlags.ifvg
+                  ? { key: "ifvg", label: "iFVG · per side", value: inverseFvgCount, onChange: updateInverseFvgCount }
+                  : null,
+                futureCursorEnabled
+                  ? { key: "projection", label: "Project · per side", value: projectionCount, onChange: updateProjectionCount }
+                  : null,
+              ].filter((control): control is { key: string; label: string; value: 1 | 2 | 3; onChange: (next: 1 | 2 | 3) => void } => control != null).map((control) => (
+                <div
+                  key={`card-${control.key}`}
+                  className={`mt-2 flex items-center justify-between gap-2 rounded-xl border px-2 py-1.5 ${
+                    chartTheme.isDark ? "border-white/[0.06] bg-white/[0.035]" : "border-black/[0.14] bg-white/[0.72]"
+                  }`}
+                >
+                  <span className={`text-[9px] font-semibold uppercase tracking-[0.18em] ${chartTheme.isDark ? "text-tos-muted" : "text-black/65"}`}>
+                    {control.label}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {([1, 2, 3] as const).map((value) => {
+                      const isActive = control.value === value;
+                      return (
+                        <button
+                          key={`card-${control.key}-${value}`}
+                          type="button"
+                          onClick={() => control.onChange(value)}
+                          className={`grid h-6 w-6 place-items-center rounded-md border text-[10px] font-semibold transition ${
+                            isActive
+                              ? chartTheme.isDark
+                                ? "border-white/[0.16] bg-white/[0.10] text-white"
+                                : "border-cyan-700/45 bg-cyan-500/16 text-cyan-900"
+                              : chartTheme.isDark
+                                ? "border-white/[0.06] bg-white/[0.04] text-tos-muted hover:text-white"
+                                : "border-black/[0.14] bg-white/[0.8] text-black/68 hover:text-black"
+                          }`}
+                          aria-label={`${control.label} ${value}`}
+                          aria-pressed={isActive}
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}
@@ -4432,7 +4582,7 @@ export function ChartScreen({
         : null}
 
       {/* Live open-book risk — SL/TP scenarios for active account */}
-      {(demoBook.all.length > 0 || overlays.length > 0 || displayPendingOrders.length > 0) && !isFullscreen ? (
+      {(demoBook.all.length > 0 || overlays.length > 0 || (isDemoAccount ? demoPending.all.length : displayPendingOrders.length) > 0) && !isFullscreen ? (
         <div className="shrink-0 border-t border-white/[0.05] px-2 py-1">
           <AccountRiskBand
             compact
@@ -4446,7 +4596,7 @@ export function ChartScreen({
               takeProfit: p.takeProfit,
               livePrice,
             }))}
-            pendingOrders={displayPendingOrders.map((o) => ({
+            pendingOrders={(isDemoAccount ? demoPending.all : displayPendingOrders).map((o) => ({
               id: o.id,
               symbol: o.symbol,
               side: o.side,

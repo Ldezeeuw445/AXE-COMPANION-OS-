@@ -195,5 +195,12 @@ export function useDemoPendingOrders(
       .map(toOverlay);
   }, [activeSymbol, brokerAccountId, orders]);
 
-  return { forSymbol, place, modify, cancel };
+  const all = useMemo(() => {
+    if (!brokerAccountId) return [] as PendingOrderOverlay[];
+    return orders
+      .filter((o) => o.brokerAccountId === brokerAccountId)
+      .map(toOverlay);
+  }, [brokerAccountId, orders]);
+
+  return { all, forSymbol, place, modify, cancel };
 }

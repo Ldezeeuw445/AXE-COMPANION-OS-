@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getActiveMetaApiCloudAccount } from "@/lib/mt5/activeCloudAccount";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
-import { clientGetAccountInformation, clientGetPositions } from "@/lib/mt5/metaApiClient";
+import { clientGetAccountInformation, clientGetOrders, clientGetPositions } from "@/lib/mt5/metaApiClient";
 import {
   computeAccountRiskBand,
   pointValuePerLot,
@@ -111,9 +111,10 @@ export async function POST(req: Request) {
   const cloud = await getActiveMetaApiCloudAccount(supabase, user.id);
   if (token && cloud?.metaapi_account_id) {
     try {
-      const [accountInfo, mt5Positions] = await Promise.all([
+      const [accountInfo, mt5Positions, mt5Orders] = await Promise.all([
         clientGetAccountInformation(token, cloud.metaapi_account_id),
         clientGetPositions(token, cloud.metaapi_account_id),
+        clientGetOrders(cloud.metaapi_account_id, false, cloud.metaApiRegion ?? null),
       ]);
 
       if (accountInfo?.equity != null) equity = Number(accountInfo.equity);
@@ -132,6 +133,24 @@ export async function POST(req: Request) {
           stopLoss: row.stopLoss != null ? Number(row.stopLoss) : null,
           takeProfit: row.takeProfit != null ? Number(row.takeProfit) : null,
           unrealizedPnl: Number(row.profit ?? row.unrealizedProfit ?? 0),
+        });
+      }
+
+      for (const row of mt5Orders ?? []) {
+        const order = row as Record<string, unknown>;
+        const entry = Number(order.openPrice ?? order.currentPrice ?? 0);
+        const volume = Number(order.volume ?? 0);
+        if (!Number.isFinite(entry) || entry <= 0 || !Number.isFinite(volume) || volume <= 0) continue;
+        positions.push({
+          id: String(order.id ?? order.orderId ?? `order-${order.symbol}-${entry}`),
+          symbol: String(order.symbol ?? ""),
+          side: mapSide(order.type as string | undefined),
+          volume,
+          entryPrice: entry,
+          currentPrice: entry,
+          stopLoss: order.stopLoss != null ? Number(order.stopLoss) : null,
+          takeProfit: order.takeProfit != null ? Number(order.takeProfit) : null,
+          unrealizedPnl: 0,
         });
       }
     } catch {

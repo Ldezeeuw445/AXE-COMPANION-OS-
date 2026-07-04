@@ -470,8 +470,8 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             ? theme.cyanAccent
             : theme.entryLine;
 
-      // MT5-style: one thin solid level per entry/SL/TP. Labels are rendered
-      // separately by PositionLabelsOverlay so the line never looks doubled.
+      // MT5-style: entry is a native price line; SL/TP are rendered by the
+      // draggable overlay so they never appear as a thick + thin double line.
       if (o.entryPrice != null && o.entryPrice > 0) {
         positionLinesRef.current.push(
           series.createPriceLine({
@@ -484,34 +484,11 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
           }),
         );
       }
-      if (o.stopLoss != null && o.stopLoss > 0) {
-        positionLinesRef.current.push(
-          series.createPriceLine({
-            price: o.stopLoss,
-            color: theme.stopLine,
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: false,
-            title: "",
-          }),
-        );
-      }
-      if (o.takeProfit != null && o.takeProfit > 0) {
-        positionLinesRef.current.push(
-          series.createPriceLine({
-            price: o.takeProfit,
-            color: theme.takeLine,
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: false,
-            title: "",
-          }),
-        );
-      }
     });
   }, [overlays, symbol, theme]);
 
-  // Render pending-order overlays (limit & stop orders on chart).
+  // Pending order entry/SL/TP lines are rendered by PositionLabelsOverlay.
+  // Keeping native price lines here caused a visible thick + thin duplicate.
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
@@ -524,35 +501,6 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       }
     }
     pendingOrderLinesRef.current = [];
-
-    pendingOrders.forEach((o) => {
-      // SL
-      if (o.stopLoss != null && o.stopLoss > 0) {
-        pendingOrderLinesRef.current.push(
-          series.createPriceLine({
-            price: o.stopLoss,
-            color: theme.stopLine,
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: false,
-            title: "",
-          }),
-        );
-      }
-      // TP
-      if (o.takeProfit != null && o.takeProfit > 0) {
-        pendingOrderLinesRef.current.push(
-          series.createPriceLine({
-            price: o.takeProfit,
-            color: theme.takeLine,
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: false,
-            title: "",
-          }),
-        );
-      }
-    });
   }, [pendingOrders, symbol, theme]);
 
   // Render user annotations (trendline + horizontal levels). Fib retracement

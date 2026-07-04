@@ -231,7 +231,7 @@ export const TradePlanLine = memo(function TradePlanLine({
               ? `${labelPropRef.current.toUpperCase()}, ${info.label}`
               : labelPropRef.current.toUpperCase();
           } else if (labelTextRef.current && !dashedRef.current) {
-            labelTextRef.current.textContent = `${labelPropRef.current.toUpperCase()} ${volumeRef.current}`;
+            labelTextRef.current.textContent = labelPropRef.current.toUpperCase();
           }
         });
       };
@@ -318,6 +318,7 @@ export const TradePlanLine = memo(function TradePlanLine({
   const priceX = size.w - priceWidth - 2;
   const handleCx = (labelPixels + 4 + plotRight) / 2;
   const showDragHandle = !tapToArm || armed;
+  const showPriceBox = showDragHandle;
 
   return (
     <div
@@ -343,7 +344,7 @@ export const TradePlanLine = memo(function TradePlanLine({
           {showVisual ? (
             <>
               <line
-                x1={labelPixels + 4}
+                x1={0}
                 x2={plotRight}
                 y1={0}
                 y2={0}
@@ -355,7 +356,7 @@ export const TradePlanLine = memo(function TradePlanLine({
               <text
                 ref={labelTextRef}
                 x={4}
-                y={3}
+                y={-4}
                 fontFamily="ui-sans-serif, system-ui, -apple-system"
                 fontSize={10}
                 fontWeight={700}
@@ -380,7 +381,7 @@ export const TradePlanLine = memo(function TradePlanLine({
             />
           ) : null}
 
-          {showVisual ? (
+          {showPriceBox ? (
             <g style={{ pointerEvents: "none" }}>
               <rect x={priceX} y={-9} width={priceWidth} height={18} rx={2} fill={color} />
               <text

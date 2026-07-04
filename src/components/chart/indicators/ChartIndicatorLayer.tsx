@@ -559,7 +559,7 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={plotRight - RIGHT_RAIL_OFFSET}
+              x2={plotRight}
               y1={geometry.previousDayHigh.y}
               y2={geometry.previousDayHigh.y}
               stroke={pal.pdhStroke}
@@ -586,7 +586,7 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={plotRight - RIGHT_RAIL_OFFSET}
+              x2={plotRight}
               y1={geometry.previousDayLow.y}
               y2={geometry.previousDayLow.y}
               stroke={pal.pdlStroke}
@@ -613,7 +613,7 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={plotRight - RIGHT_RAIL_OFFSET}
+              x2={plotRight}
               y1={geometry.previousDayEq.y}
               y2={geometry.previousDayEq.y}
               stroke={pal.pdqStroke}
@@ -640,7 +640,7 @@ export function ChartIndicatorLayer({
           <g>
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={plotRight - RIGHT_RAIL_OFFSET}
+              x2={plotRight}
               y1={geometry.sessionOpen.y}
               y2={geometry.sessionOpen.y}
               stroke={pal.sessionOpenStroke}
@@ -755,7 +755,7 @@ export function ChartIndicatorLayer({
             <path d={geometry.maPath} fill="none" stroke={pal.maLine} strokeWidth={1.7} />
             {geometry.latestMaY != null ? (
               <text
-                x={plotRight - RIGHT_RAIL_OFFSET}
+                x={plotRight}
                 y={Math.max(12, Math.min(size.h - 4, geometry.latestMaY - 4))}
                 textAnchor="end"
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -790,7 +790,7 @@ export function ChartIndicatorLayer({
             <path d={geometry.vwapPath} fill="none" stroke={pal.vwapLine} strokeWidth={1.35} />
             {geometry.latestVwap != null ? (
               <text
-                x={plotRight - RIGHT_RAIL_OFFSET}
+                x={plotRight}
                 y={Math.max(12, Math.min(size.h - 4, (geometry.latestVwapY ?? 14) - 4))}
                 textAnchor="end"
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -811,7 +811,7 @@ export function ChartIndicatorLayer({
           <g pointerEvents="none">
             <line
               x1={LEFT_RAIL_OFFSET}
-              x2={plotRight - RIGHT_RAIL_OFFSET}
+              x2={plotRight}
               y1={geometry.poc.y}
               y2={geometry.poc.y}
               stroke={pal.pocStroke}
@@ -819,7 +819,7 @@ export function ChartIndicatorLayer({
               strokeDasharray="6 4"
             />
             <text
-              x={plotRight - RIGHT_RAIL_OFFSET}
+              x={plotRight}
               y={geometry.poc.y - 4}
               textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -898,7 +898,7 @@ export function ChartIndicatorLayer({
  * boolean variables.
  */
 function SupplyDemandOverlay({ sd, width, pal }: { sd: SupplyDemandGeom; width: number; pal: OverlayPalette }) {
-  const bandW = Math.max(0, width - RIGHT_RAIL_OFFSET - LEFT_RAIL_OFFSET);
+  const bandW = Math.max(0, width - LEFT_RAIL_OFFSET);
   return (
     <g pointerEvents="none">
       {sd.supplyTop && sd.supplyBottom ? (
@@ -963,7 +963,7 @@ function SupplyDemandOverlay({ sd, width, pal }: { sd: SupplyDemandGeom; width: 
         <>
           <line
             x1={LEFT_RAIL_OFFSET}
-            x2={width - RIGHT_RAIL_OFFSET}
+            x2={width}
             y1={sd.eq.y}
             y2={sd.eq.y}
             stroke={pal.eqStroke}
@@ -1309,10 +1309,10 @@ function computeFutureExtensionX(
   chartWidth: number,
   futureProjectionX: number | null,
 ): number {
-  if (candles.length === 0) return chartWidth - 4;
+  if (candles.length === 0) return chartWidth;
   const lastTime = candles[candles.length - 1].time;
   const lastX = handle.timeToCoordinate(lastTime);
-  if (lastX == null) return chartWidth - 4;
+  if (lastX == null) return chartWidth;
 
   // Estimate bar pixel width from the last few candles. Robust against
   // weekend gaps because we use the median of the sampled deltas.
@@ -1327,9 +1327,9 @@ function computeFutureExtensionX(
   }
   const median = sample.length === 0 ? 8 : sample.sort((a, b) => a - b)[Math.floor(sample.length / 2)];
   const minTarget = lastX + median * MIN_FUTURE_BARS;
-  // Cap at the right edge of the chart so we never overflow into the price
-  // axis gutter.
-  const cap = Math.max(0, chartWidth - 4);
+  // Cap exactly at the plot edge. The SVG clip then lets zones behave like
+  // candles: they run to the scale boundary and disappear under it.
+  const cap = Math.max(0, chartWidth);
   if (futureProjectionX != null && futureProjectionX > minTarget && futureProjectionX <= cap) {
     return futureProjectionX;
   }

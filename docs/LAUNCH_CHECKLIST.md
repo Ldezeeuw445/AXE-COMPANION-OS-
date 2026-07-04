@@ -16,8 +16,8 @@
 | A3 | Supabase migrations applied (broadcast feed, onboarding prefs) | [x] | Verified via MCP |
 | A4 | `KRATER_SYNC_MODE=generate` on Vercel Production | [x] | Set explicitly |
 | A5 | `CRON_SECRET` + `KRATER_API_KEY` on Vercel Production | [x] | Encrypted vars present |
-| A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [ ] | **Manual** — credits only, no app impact |
-| A7 | Railway `welcoming-spontaneity` / related Railway deploy healthy | [!] | Railway status still failing; Vercel production is healthy |
+| A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [x] | Confirmed manually by Luka — credits saved, no app impact |
+| A7 | Railway active streamer deploy healthy | [x] | `superb-benevolence` / `axe-metaapi-streamer` SUCCESS; old AXE-COMPANION-OS Railway projects are not used |
 | A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks re-run 2026-07-04 |
 
 ---
@@ -30,7 +30,7 @@
 | B2 | Per-tab unread badges | [x] | |
 | B3 | Krater cron generates + upserts `axe_broadcast_feed` | [x] | force sync tested |
 | B4 | Feed shows items for authenticated users | [~] | Prod broadcast rows + feed code verified; needs browser auth spot-check |
-| B5 | Cron window 07:00 + 20:00 Amsterdam (no double with Krater dashboard) | [ ] | After A6 |
+| B5 | Cron window 07:00 + 20:00 Amsterdam (no double with Krater dashboard) | [x] | Krater dashboard tasks paused; AXE-owned Vercel cron remains active |
 
 ---
 
@@ -53,7 +53,7 @@
 | D2 | Alpaca paper — US equities chart + orders (TSLA/AAPL) | [~] | Chart → `/api/alpaca/order` flow build-verified; needs authenticated paper order spot-check |
 | D3 | MT5 cloud — live chart + orders with live-trading flag | [ ] | |
 | D4 | No false "Connect MT5" block when demo/alpaca active | [x] | Copy + account fallback build verified |
-| D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [x] | Implemented |
+| D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [x] | Shows Open P&L, All SL, All TP; MT5-style SL/TP/pending line polish build-verified |
 | D6 | Free tier: VOL, MA, RSI only | [x] | Pro gate |
 | D7 | Pro tier: full indicators + SMC overlays | [x] | Pro gate render-hardened; Free cannot show Pro flags from stale localStorage |
 
@@ -141,8 +141,8 @@
 
 | Section | Done | Total |
 |---------|------|-------|
-| A Infra | 6 | 8 |
-| B Feed | 3 | 5 |
+| A Infra | 8 | 8 |
+| B Feed | 4 | 5 |
 | C Onboarding | 4 | 4 |
 | D Chart | 5 | 7 |
 | E Quotes | 3 | 4 |
@@ -152,6 +152,6 @@
 | I Billing | 2 | 4 |
 | J Polish | 2 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **38** | **53** |
+| **Total** | **41** | **53** |
 
-_Last updated: 2026-07-04 (cockpit gates/guards verified + build green)_
+_Last updated: 2026-07-04 (risk band labels + MT5-style chart line polish build-verified)_

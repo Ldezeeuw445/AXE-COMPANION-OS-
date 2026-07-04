@@ -75,7 +75,7 @@ export function AccountRiskBand({ demoPositions = [], pendingOrders = [], compac
   if (!band || band.positionCount === 0) {
     return (
       <div className={cn("rounded-lg border border-white/[0.06] bg-black/40 px-3 py-2 text-[10px] text-tos-dim", className)}>
-        No open trades — risk band idle
+        No open or pending trades — risk band idle
       </div>
     );
   }
@@ -90,18 +90,9 @@ export function AccountRiskBand({ demoPositions = [], pendingOrders = [], compac
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-white/45">Risk</span>
-        <Metric
-          label="Live"
-          value={formatRiskPercent(band.liveRiskPercent)}
-          tone={band.overMaxRisk ? "risk" : "neutral"}
-        />
         <Metric label="Open P&L" value={formatRiskPercent(band.openPnlPercent, true)} tone={band.openPnlPercent >= 0 ? "up" : "down"} />
-        {!compact ? (
-          <>
-            <Metric label="If all SL" value={formatRiskPercent(band.slScenarioPercent, true)} tone="down" />
-            <Metric label="If all TP" value={formatRiskPercent(band.tpScenarioPercent, true)} tone="up" />
-          </>
-        ) : null}
+        <Metric label="All SL" value={formatRiskPercent(band.slScenarioPercent, true)} tone={band.overMaxRisk ? "risk" : "down"} />
+        <Metric label="All TP" value={formatRiskPercent(band.tpScenarioPercent, true)} tone="up" />
       </div>
       {!compact ? (
         <p className="mt-1.5 text-[10px] leading-snug text-tos-muted">
