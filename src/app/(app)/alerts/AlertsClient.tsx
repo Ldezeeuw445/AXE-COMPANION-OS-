@@ -64,7 +64,7 @@ function deliveryNoteForType(type: string): string {
       return "Monitored — missing SL & book risk (cron + chart)";
     case "news":
     case "macro":
-      return "Saved — intel feed hook coming soon";
+      return "Smart templates monitor via AXE watcher; manual keywords are saved for AXE context";
     case "journal_reminder":
       return "Reminder only — no auto-fire yet";
     default:
@@ -800,7 +800,7 @@ export function AlertsClient({
             </select>
             {formType !== "price" ? (
               <p className="mt-1 text-[10px] leading-relaxed text-tos-dim">
-                Only price alerts auto-evaluate today. Other types are stored for AXE context and future push hooks.
+                Manual keywords are saved for AXE context. Smart templates above are monitored by AXE watcher in the background.
               </p>
             ) : null}
           </label>

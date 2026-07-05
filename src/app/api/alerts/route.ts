@@ -86,7 +86,9 @@ export async function POST(req: NextRequest) {
   const status: "active" | "paused" = body.status === "paused" ? "paused" : "active";
   let metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
 
-  if (type === "price") {
+  const isSmart = isSmartAlertRequest(body);
+
+  if (type === "price" && (!isSmart || symbol)) {
     if (!symbol) return NextResponse.json({ error: "Price alerts need a symbol." }, { status: 400 });
     const { data: prefs } = await supabase
       .from("user_workspace_preferences")

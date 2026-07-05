@@ -18,7 +18,7 @@
 | A5 | `CRON_SECRET` + `KRATER_API_KEY` on Vercel Production | [x] | Encrypted vars present |
 | A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [x] | Confirmed manually by Luka — credits saved, no app impact |
 | A7 | Railway active streamer deploy healthy | [x] | `superb-benevolence` / `axe-metaapi-streamer` SUCCESS; old AXE-COMPANION-OS Railway projects are not used |
-| A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks re-run 2026-07-04 |
+| A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks re-run 2026-07-05 |
 
 ---
 
@@ -53,9 +53,9 @@
 | D2 | Alpaca paper — US equities chart + orders (TSLA/AAPL) | [~] | Chart → `/api/alpaca/order` flow build-verified; needs authenticated paper order spot-check |
 | D3 | MT5 cloud — live chart + orders with live-trading flag | [ ] | |
 | D4 | No false "Connect MT5" block when demo/alpaca active | [x] | Copy + account fallback build verified |
-| D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [x] | Shows Open P&L, All SL, All TP; MT5-style SL/TP/pending line polish build-verified |
+| D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [x] | Shows Open P&L, All SL, All TP; client open-position fallback + MT5-style line polish build-verified |
 | D6 | Free tier: VOL, MA, RSI only | [x] | Pro gate |
-| D7 | Pro tier: full indicators + SMC overlays | [x] | Pro gate render-hardened; Free cannot show Pro flags from stale localStorage |
+| D7 | Pro tier: full indicators + SMC overlays | [x] | Pro gate render-hardened; top indicator card is full control surface; old left drawer removed |
 
 ---
 
@@ -66,7 +66,7 @@
 | E1 | Demo — synthetic ticks for watchlist | [x] | |
 | E2 | Alpaca — live snapshots, unsupported pairs hidden | [x] | |
 | E3 | MT5 — quote stream only for broker-supported symbols | [x] | |
-| E4 | Watchlist add/remove/reorder on prod | [ ] | E2E |
+| E4 | Watchlist add/remove/reorder on prod | [~] | Add/remove + account-persistent reorder build-verified; needs authenticated prod browser spot-check |
 
 ---
 
@@ -76,7 +76,7 @@
 |---|------|--------|-------|
 | F1 | Templates panel on `/alerts` (Pro) | [x] | |
 | F2 | Free users see UpgradeGate | [x] | |
-| F3 | Server evaluators: missing SL, sentiment, correlation, context, confluence, predictive | [x] | axe-watcher cron |
+| F3 | Server evaluators: missing SL, sentiment, correlation, context, confluence, predictive | [x] | axe-watcher cron; smart template creation + evaluator route build-verified |
 | F4 | Price alerts on chart (client evaluator) | [x] | Evaluator wired; Demo/Alpaca price-alert creation fixed; build verified |
 | F5 | End-to-end trigger + feed event on prod | [~] | Trigger route records feed event; needs authenticated prod trigger spot-check |
 
@@ -121,9 +121,9 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | J1 | Typography tokens (`.axe-label`, `.axe-body`) consistent | [x] | |
-| J2 | Adaptive UI suggestions wired | [ ] | Audit |
+| J2 | Adaptive UI suggestions wired | [x] | Chart adaptive events + Cockpit suggestion accept/dismiss UI build-verified |
 | J3 | Indicator math vs MT5 (RSI shared) | [x] | rsiSeries centralized |
-| J4 | AXE tool calling + live price in chat | [ ] | Audit |
+| J4 | AXE tool calling + live price in chat | [x] | Tool schema/execution rounds + `chart_live_snapshots` live price context build-verified |
 | J5 | Push notifications (VAPID) optional path | [ ] | |
 
 ---
@@ -150,8 +150,8 @@
 | G Chat | 5 | 5 |
 | H Cockpit | 2 | 4 |
 | I Billing | 2 | 4 |
-| J Polish | 2 | 5 |
+| J Polish | 4 | 5 |
 | K Legal | 2 | 2 |
-| **Total** | **41** | **53** |
+| **Total** | **43** | **53** |
 
-_Last updated: 2026-07-04 (risk band labels + MT5-style chart line polish build-verified)_
+_Last updated: 2026-07-05 (risk strip fallback, light chart line contrast, drawer removal, smart alert template fix build-verified)_

@@ -16,6 +16,10 @@ type DemoPositionPayload = {
   livePrice?: number | null;
 };
 
+type OpenPositionPayload = DemoPositionPayload & {
+  profit?: number | null;
+};
+
 type PendingOrderPayload = {
   id: string;
   symbol: string;
@@ -27,6 +31,7 @@ type PendingOrderPayload = {
 };
 
 type Props = {
+  openPositions?: OpenPositionPayload[];
   demoPositions?: DemoPositionPayload[];
   pendingOrders?: PendingOrderPayload[];
   compact?: boolean;
@@ -34,11 +39,14 @@ type Props = {
 };
 
 /** Live open-book risk: SL/TP scenarios + % of equity at risk. */
-export function AccountRiskBand({ demoPositions = [], pendingOrders = [], compact = false, className }: Props) {
+export function AccountRiskBand({ openPositions = [], demoPositions = [], pendingOrders = [], compact = false, className }: Props) {
   const [band, setBand] = useState<AccountRiskBandSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const payloadKey = useMemo(() => JSON.stringify({ demoPositions, pendingOrders }), [demoPositions, pendingOrders]);
+  const payloadKey = useMemo(
+    () => JSON.stringify({ openPositions, demoPositions, pendingOrders }),
+    [openPositions, demoPositions, pendingOrders],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +56,7 @@ export function AccountRiskBand({ demoPositions = [], pendingOrders = [], compac
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ demoPositions, pendingOrders }),
+          body: JSON.stringify({ openPositions, demoPositions, pendingOrders }),
         });
         if (!res.ok || cancelled) return;
         const json = (await res.json()) as { band?: AccountRiskBandSnapshot };
@@ -62,7 +70,7 @@ export function AccountRiskBand({ demoPositions = [], pendingOrders = [], compac
     return () => {
       cancelled = true;
     };
-  }, [payloadKey, demoPositions, pendingOrders]);
+  }, [payloadKey, openPositions, demoPositions, pendingOrders]);
 
   if (loading && !band) {
     return (

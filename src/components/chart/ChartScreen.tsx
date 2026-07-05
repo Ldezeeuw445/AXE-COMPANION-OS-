@@ -128,6 +128,8 @@ import { computeLivePnl, useDemoPositions } from "@/components/chart/useDemoPosi
 import { AccountRiskBand } from "@/components/risk/AccountRiskBand";
 import { useDemoPendingOrders } from "@/components/chart/useDemoPendingOrders";
 import { useDemoLivePrice } from "@/components/chart/useDemoLivePrice";
+import { chartPreferenceEvent } from "@/lib/adaptive/eventTypes";
+import { trackAdaptiveEvent } from "@/lib/adaptive/trackAdaptiveEvent";
 import { useInstantSlTpModify } from "@/lib/chart/instantSlTpModify";
 import { useLiveTradingFlag } from "@/lib/liveTrading/liveTradingFlag";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
@@ -640,6 +642,18 @@ export function ChartScreen({
   const { playSound, vibrate } = useAmbient();
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
+  const trackChartPreference = useCallback(
+    (eventType: Parameters<typeof chartPreferenceEvent>[0], payload: Record<string, unknown>) => {
+      void trackAdaptiveEvent(
+        chartPreferenceEvent(eventType, accountId, {
+          symbol: data.symbol,
+          timeframe: data.timeframeKey,
+          ...payload,
+        }),
+      );
+    },
+    [accountId, data.symbol, data.timeframeKey],
+  );
   const [isRoutePending, startRouteTransition] = useTransition();
   const [pendingTfKey, setPendingTfKey] = useState<string | null>(null);
   const [routeFallbackMessage, setRouteFallbackMessage] = useState<string | null>(null);
@@ -676,6 +690,14 @@ export function ChartScreen({
   const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
+
+  useEffect(() => {
+    trackChartPreference("chart_opened", {
+      brokerSymbol: data.brokerSymbol,
+      connectionMethod: data.account?.connectionMethod ?? null,
+    });
+  }, [data.account?.connectionMethod, data.brokerSymbol, trackChartPreference]);
+
   // ── Per-account settings: seed global localStorage from scoped keys ──
   // When accountId changes (account switch), overwrite global keys with
   // that account's stored values so all downstream reads (indicators,
@@ -2600,11 +2622,18 @@ export function ChartScreen({
           nextList = removeAnnotation(data.symbol, data.timeframeKey, ann.id);
         }
         setAnnotations(nextList);
+        trackChartPreference("chart_mode_disabled", {
+          mode: kind === "fib_retracement" ? "auto_fib" : "auto_trend",
+        });
         return;
       }
       executeActionByType(kind === "fib_retracement" ? "draw_fibonacci" : "draw_trendline", "user");
+      trackChartPreference(kind === "fib_retracement" ? "chart_fib_drawn" : "chart_quick_action_used", {
+        actionId: kind === "fib_retracement" ? "auto_fib" : "auto_trend",
+        mode: kind === "fib_retracement" ? fibMode : "auto_trend",
+      });
     },
-    [annotations, data.symbol, data.timeframeKey, executeActionByType],
+    [annotations, data.symbol, data.timeframeKey, executeActionByType, fibMode, trackChartPreference],
   );
 
   // Flip the existing fib so the 0% level switches between top and bottom.
@@ -2830,6 +2859,7 @@ export function ChartScreen({
     }
     setActiveToolFlags((prev) => {
       const next = { ...prev, [id]: !prev[id] };
+      trackChartPreference(next[id] ? "chart_mode_enabled" : "chart_mode_disabled", { mode: id });
       try {
         savePref("axe.chart.smcFlags", JSON.stringify(next));
       } catch {
@@ -2837,7 +2867,7 @@ export function ChartScreen({
       }
       return next;
     });
-  }, [canFullIndicators, savePref]);
+  }, [canFullIndicators, savePref, trackChartPreference]);
 
   const toggleIndicatorFlag = useCallback((id: string) => {
     if (!canFullIndicators && PRO_ONLY_INDICATORS.has(id)) {
@@ -2850,6 +2880,7 @@ export function ChartScreen({
     }
     setIndicatorToolFlags((prev) => {
       const next = { ...prev, [id]: !prev[id] };
+      trackChartPreference(next[id] ? "chart_indicator_enabled" : "chart_indicator_disabled", { indicator: id });
       try {
         savePref("axe.chart.indicatorFlags", JSON.stringify(next));
       } catch {
@@ -2857,7 +2888,7 @@ export function ChartScreen({
       }
       return next;
     });
-  }, [canFullIndicators, savePref]);
+  }, [canFullIndicators, savePref, trackChartPreference]);
 
   const toolbarSections: AxeToolbarSection[] = useMemo(() => {
     return [
@@ -3550,6 +3581,8 @@ export function ChartScreen({
           </div>
         </div>
 
+        {false ? (
+        <>
         <button
           type="button"
           onClick={() => setToolRailOpen((v) => !v)}
@@ -4176,6 +4209,8 @@ export function ChartScreen({
           ) : null}
           </div>
         </div>
+        </>
+        ) : null}
 
         {indicatorCardOpen ? (
           <div className="pointer-events-none absolute inset-0 z-50 flex items-start justify-center px-3 py-3">
@@ -4794,6 +4829,17 @@ export function ChartScreen({
         <div className="shrink-0 border-t border-white/[0.05] px-2 py-1">
           <AccountRiskBand
             compact
+            openPositions={overlays.map((p) => ({
+              id: p.id,
+              symbol: data.symbol,
+              side: p.side,
+              volume: p.volume,
+              entryPrice: p.entryPrice ?? livePrice ?? data.lastPrice ?? 0,
+              stopLoss: p.stopLoss,
+              takeProfit: p.takeProfit,
+              livePrice,
+              profit: p.profit,
+            }))}
             demoPositions={demoBook.all.map((p) => ({
               id: p.id,
               symbol: p.symbol,

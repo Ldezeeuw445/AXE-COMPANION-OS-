@@ -34,20 +34,50 @@ export async function listWatchlistItems(): Promise<
   if (!authed) return [];
 
   const { supabase, user } = authed;
-  const { data, error } = await supabase
-    .from("assistant_memory_entries")
-    .select("id,entry_key,content")
-    .eq("user_id", user.id)
-    .eq("scope", "watchlist")
-    .order("created_at", { ascending: true });
+  const [{ data, error }, orderRes] = await Promise.all([
+    supabase
+      .from("assistant_memory_entries")
+      .select("id,entry_key,content")
+      .eq("user_id", user.id)
+      .eq("scope", "watchlist")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("assistant_memory_entries")
+      .select("content")
+      .eq("user_id", user.id)
+      .eq("scope", "watchlist_order")
+      .eq("entry_key", "symbols")
+      .maybeSingle(),
+  ]);
 
   if (error) return [];
 
-  return (data ?? []).map((row) => ({
+  const items = (data ?? []).map((row) => ({
     id: row.id as string,
     symbol: (row.entry_key as string) ?? "",
     message: (row.content as string) !== (row.entry_key as string) ? (row.content as string) : null,
   }));
+
+  let savedOrder: string[] = [];
+  try {
+    const parsed = JSON.parse(String(orderRes.data?.content ?? "[]")) as unknown;
+    if (Array.isArray(parsed)) {
+      savedOrder = parsed.map((value) => String(value).trim().toUpperCase()).filter(Boolean);
+    }
+  } catch {
+    savedOrder = [];
+  }
+  if (savedOrder.length === 0) return items;
+
+  const bySymbol = new Map(items.map((item) => [item.symbol.toUpperCase(), item]));
+  const ordered: typeof items = [];
+  for (const symbol of savedOrder) {
+    const item = bySymbol.get(symbol);
+    if (!item) continue;
+    ordered.push(item);
+    bySymbol.delete(symbol);
+  }
+  return [...ordered, ...bySymbol.values()];
 }
 
 export async function addWatchlistItem(
@@ -161,6 +191,30 @@ export async function removeWatchlistItem(id: string): Promise<{ error?: string 
   if (error) return { error: error.message };
   revalidatePath("/settings");
   revalidatePath("/watchlist");
+  return {};
+}
+
+export async function saveWatchlistOrder(symbols: string[]): Promise<{ error?: string }> {
+  const authed = await getAuthedServiceSupabase();
+  if (!authed) return { error: "Not authenticated" };
+
+  const { supabase, user } = authed;
+  const cleanSymbols = Array.from(
+    new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)),
+  );
+  const { error } = await supabase.from("assistant_memory_entries").upsert(
+    {
+      user_id: user.id,
+      scope: "watchlist_order",
+      entry_key: "symbols",
+      content: JSON.stringify(cleanSymbols),
+    },
+    { onConflict: "user_id,scope,entry_key" },
+  );
+
+  if (error) return { error: error.message };
+  revalidatePath("/watchlist");
+  revalidatePath("/chart");
   return {};
 }
 

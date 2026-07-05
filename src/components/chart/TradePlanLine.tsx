@@ -319,6 +319,8 @@ export const TradePlanLine = memo(function TradePlanLine({
   const handleCx = (labelPixels + 4 + plotRight) / 2;
   const showDragHandle = !tapToArm || armed;
   const showPriceBox = showDragHandle;
+  const isRgba = color.trim().toLowerCase().startsWith("rgba(");
+  const lineWidth = isRgba ? 1 : 1.35;
 
   return (
     <div
@@ -349,7 +351,7 @@ export const TradePlanLine = memo(function TradePlanLine({
                 y1={0}
                 y2={0}
                 stroke={color}
-                strokeWidth={1}
+                strokeWidth={lineWidth}
                 strokeDasharray=""
               />
 

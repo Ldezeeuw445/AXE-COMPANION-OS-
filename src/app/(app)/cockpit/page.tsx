@@ -11,6 +11,7 @@ import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
 import { CockpitIntelSection } from "@/components/cockpit/CockpitIntelSection";
 import { CockpitMorningBrief } from "@/components/cockpit/CockpitMorningBrief";
 import { CockpitEngineStatus } from "@/components/cockpit/CockpitEngineStatus";
+import { CockpitAdaptiveSuggestions } from "@/components/adaptive/CockpitAdaptiveSuggestions";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -20,6 +21,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getUserAxeEntitlement } from "@/services/billingService";
 import type { UserAxeEntitlement } from "@/lib/billing/types";
 import { getCockpitDashboard } from "@/services/cockpitService";
+import { loadAdaptiveSuggestions } from "@/lib/adaptive/server";
+import type { AdaptiveSuggestionState } from "@/types/adaptive";
 
 const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
   plan: "free",
@@ -37,13 +40,30 @@ export default async function CockpitPage() {
   const supabase = await createServerSupabaseClient();
   let entitlement = EMPTY_ENTITLEMENT;
   let userId: string | undefined;
+  let adaptiveSuggestions: AdaptiveSuggestionState[] = [];
   if (supabase) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
       userId = user.id;
-      entitlement = await getUserAxeEntitlement(supabase, user.id);
+      const [nextEntitlement, suggestionRows] = await Promise.all([
+        getUserAxeEntitlement(supabase, user.id),
+        loadAdaptiveSuggestions(supabase, user.id),
+      ]);
+      entitlement = nextEntitlement;
+      adaptiveSuggestions = suggestionRows
+        .filter((row) => row.status === "pending")
+        .slice(0, 4)
+        .map((row) => ({
+          id: row.id,
+          kind: row.kind,
+          accountId: row.account_id ?? undefined,
+          status: row.status,
+          payload: row.payload,
+          createdAt: row.created_at,
+          resolvedAt: row.resolved_at,
+        }));
     }
   }
   const canLearn = hasEntitlementFeature(entitlement, "cockpit_learning", userId);
@@ -92,6 +112,7 @@ export default async function CockpitPage() {
 
       {canBriefings ? <CockpitMorningBrief /> : null}
       <CockpitEngineStatus engine={dash.engine} />
+      {canLearn ? <CockpitAdaptiveSuggestions initialSuggestions={adaptiveSuggestions} /> : null}
 
       <CockpitTodayStrip
         initial={dash.today}

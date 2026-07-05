@@ -29,6 +29,10 @@ type ClientDemoPosition = {
   livePrice?: number | null;
 };
 
+type ClientOpenPosition = ClientDemoPosition & {
+  profit?: number | null;
+};
+
 type ClientPendingOrder = {
   id: string;
   symbol: string;
@@ -54,16 +58,20 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
+  let openPositions: ClientOpenPosition[] = [];
   let demoPositions: ClientDemoPosition[] = [];
   let pendingOrders: ClientPendingOrder[] = [];
   try {
     const body = (await req.json()) as {
+      openPositions?: ClientOpenPosition[];
       demoPositions?: ClientDemoPosition[];
       pendingOrders?: ClientPendingOrder[];
     };
+    openPositions = Array.isArray(body.openPositions) ? body.openPositions : [];
     demoPositions = Array.isArray(body.demoPositions) ? body.demoPositions : [];
     pendingOrders = Array.isArray(body.pendingOrders) ? body.pendingOrders : [];
   } catch {
+    openPositions = [];
     demoPositions = [];
     pendingOrders = [];
   }
@@ -76,21 +84,50 @@ export async function POST(req: Request) {
 
   const maxRiskPercent = Number(prefs?.max_account_risk_percent ?? 5);
 
-  const positions: RiskBandPosition[] = demoPositions.map((p) => ({
-    id: p.id,
-    symbol: p.symbol,
-    side: p.side,
-    volume: p.volume,
-    entryPrice: p.entryPrice,
-    currentPrice: p.livePrice ?? p.entryPrice,
-    stopLoss: p.stopLoss,
-    takeProfit: p.takeProfit,
-    unrealizedPnl: demoUnrealized(p),
-  }));
+  const positionsByKey = new Map<string, RiskBandPosition>();
+  const putPosition = (p: RiskBandPosition, source: "client" | "broker" = "client") => {
+    if (!p.id || !p.symbol) return;
+    if (!Number.isFinite(p.entryPrice) || p.entryPrice <= 0) return;
+    if (!Number.isFinite(p.volume) || p.volume <= 0) return;
+    const key = `${p.symbol.toUpperCase()}:${p.id}`;
+    if (source === "client" && positionsByKey.has(key)) return;
+    positionsByKey.set(key, p);
+  };
+
+  for (const p of openPositions) {
+    putPosition({
+      id: p.id,
+      symbol: p.symbol,
+      side: p.side,
+      volume: p.volume,
+      entryPrice: p.entryPrice,
+      currentPrice: p.livePrice ?? p.entryPrice,
+      stopLoss: p.stopLoss,
+      takeProfit: p.takeProfit,
+      unrealizedPnl:
+        p.profit != null && Number.isFinite(Number(p.profit))
+          ? Number(p.profit)
+          : demoUnrealized(p),
+    });
+  }
+
+  for (const p of demoPositions) {
+    putPosition({
+      id: p.id,
+      symbol: p.symbol,
+      side: p.side,
+      volume: p.volume,
+      entryPrice: p.entryPrice,
+      currentPrice: p.livePrice ?? p.entryPrice,
+      stopLoss: p.stopLoss,
+      takeProfit: p.takeProfit,
+      unrealizedPnl: demoUnrealized(p),
+    });
+  }
 
   for (const order of pendingOrders) {
     if (!Number.isFinite(order.openPrice) || !Number.isFinite(order.volume)) continue;
-    positions.push({
+    putPosition({
       id: `pending:${order.id}`,
       symbol: order.symbol,
       side: order.side,
@@ -123,7 +160,7 @@ export async function POST(req: Request) {
 
       for (const row of mt5Positions ?? []) {
         const entry = Number(row.openPrice ?? row.currentPrice ?? 0);
-        positions.push({
+        putPosition({
           id: String(row.id ?? row.positionId ?? `${row.symbol}-${entry}`),
           symbol: String(row.symbol ?? ""),
           side: mapSide(row.type as string | undefined),
@@ -133,7 +170,7 @@ export async function POST(req: Request) {
           stopLoss: row.stopLoss != null ? Number(row.stopLoss) : null,
           takeProfit: row.takeProfit != null ? Number(row.takeProfit) : null,
           unrealizedPnl: Number(row.profit ?? row.unrealizedProfit ?? 0),
-        });
+        }, "broker");
       }
 
       for (const row of mt5Orders ?? []) {
@@ -141,7 +178,7 @@ export async function POST(req: Request) {
         const entry = Number(order.openPrice ?? order.currentPrice ?? 0);
         const volume = Number(order.volume ?? 0);
         if (!Number.isFinite(entry) || entry <= 0 || !Number.isFinite(volume) || volume <= 0) continue;
-        positions.push({
+        putPosition({
           id: String(order.id ?? order.orderId ?? `order-${order.symbol}-${entry}`),
           symbol: String(order.symbol ?? ""),
           side: mapSide(order.type as string | undefined),
@@ -158,6 +195,7 @@ export async function POST(req: Request) {
     }
   }
 
+  const positions = Array.from(positionsByKey.values());
   const band = computeAccountRiskBand(positions, {
     equity,
     balance,

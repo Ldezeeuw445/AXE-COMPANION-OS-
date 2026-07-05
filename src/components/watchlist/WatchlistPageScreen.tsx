@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
-import { addBrokerWatchlistSymbol, removeWatchlistItem } from "@/app/(app)/settings/actions";
+import { addBrokerWatchlistSymbol, removeWatchlistItem, saveWatchlistOrder } from "@/app/(app)/settings/actions";
 import { CANONICAL_BROKER_SYMBOLS } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { GripVertical, Plus, Search, Trash2, X } from "lucide-react";
@@ -141,6 +141,12 @@ export function WatchlistPageScreen({
   const searchRef = useRef<HTMLInputElement>(null);
   const { bidDir, askDir } = useTickColors(localItems);
 
+  const persistOrder = useCallback((rows: QuoteRow[]) => {
+    const symbols = rows.map((item) => item.symbol);
+    writeOrder(symbols);
+    void saveWatchlistOrder(symbols);
+  }, []);
+
   /* ── Live price polling — fetches latest prices every 2s ────────── */
   useEffect(() => {
     let active = true;
@@ -256,7 +262,7 @@ export function WatchlistPageScreen({
         setLocalItems((prev) => {
           const exists = prev.some((i) => i.symbol === symbol);
           if (exists) return prev;
-          return [
+          const next = [
             ...prev,
             {
               id: `temp-${symbol}`,
@@ -266,13 +272,15 @@ export function WatchlistPageScreen({
               runtimeState: "warming",
             },
           ];
+          persistOrder(next);
+          return next;
         });
         setSearchOpen(false);
         startTransition(() => router.refresh());
       }
       setAdding(false);
     },
-    [router, startTransition, symbolMap],
+    [persistOrder, router, startTransition, symbolMap],
   );
 
   const handleRemove = useCallback(
@@ -281,7 +289,7 @@ export function WatchlistPageScreen({
       await removeWatchlistItem(id);
       setLocalItems((prev) => {
         const next = prev.filter((i) => i.id !== id);
-        writeOrder(next.map((i) => i.symbol));
+        persistOrder(next);
         return next;
       });
       setRemoving((prev) => {
@@ -291,7 +299,7 @@ export function WatchlistPageScreen({
       });
       startTransition(() => router.refresh());
     },
-    [router, startTransition],
+    [persistOrder, router, startTransition],
   );
 
   /* ── Drag to reorder ───────────────────────────────────────────── */
@@ -316,8 +324,8 @@ export function WatchlistPageScreen({
 
   const handleDragEnd = useCallback(() => {
     setDragIdx(null);
-    writeOrder(localItems.map((i) => i.symbol));
-  }, [localItems]);
+    persistOrder(localItems);
+  }, [localItems, persistOrder]);
 
   /* ── Touch drag handlers (mobile-friendly) ─────────────────────── */
   const touchStartY = useRef(0);
@@ -356,8 +364,8 @@ export function WatchlistPageScreen({
 
   const handleTouchEnd = useCallback(() => {
     setDragIdx(null);
-    writeOrder(localItems.map((i) => i.symbol));
-  }, [localItems]);
+    persistOrder(localItems);
+  }, [localItems, persistOrder]);
 
   /* ── Tick color class ──────────────────────────────────────────── */
 
@@ -469,7 +477,7 @@ export function WatchlistPageScreen({
                 onClick={() => handleAdd(searchQuery.trim().toUpperCase())}
                 className="mt-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/60 transition-colors hover:bg-white/[0.06] disabled:opacity-40"
               >
-                Add "{searchQuery.trim().toUpperCase()}" anyway
+                Add &quot;{searchQuery.trim().toUpperCase()}&quot; anyway
               </button>
             </div>
           )}
