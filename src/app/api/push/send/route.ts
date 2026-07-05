@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
+import { verifyInternalPushRequest } from "@/lib/push/internalPushAuth";
 
 function getServiceSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -19,6 +20,14 @@ function configureVapid() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = verifyInternalPushRequest(req.headers);
+  if (auth === "missing_secret") {
+    return NextResponse.json({ error: "Internal push secret not configured" }, { status: 503 });
+  }
+  if (auth === "forbidden") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   if (!configureVapid()) {
     return NextResponse.json({ error: "VAPID not configured" }, { status: 500 });
   }

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 
 async function fireFeedPush(
   userId: string,
@@ -14,7 +15,7 @@ async function fireFeedPush(
 
     await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalPushHeaders(),
       body: JSON.stringify({
         userId,
         title: `AXE · ${title}`,

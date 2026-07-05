@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
+import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
 
 type Body = {
@@ -114,7 +115,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalPushHeaders(),
       body: JSON.stringify({
         userId: user.id,
         title: `Alert · ${existing.symbol ?? existing.type}`,

@@ -16,6 +16,7 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
+import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 
 type AlertRow = {
   id: string;
@@ -47,7 +48,7 @@ async function firePush(userId: string, title: string, body: string, url: string
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.VERCEL_URL ?? "localhost:3000"}`;
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalPushHeaders(),
       body: JSON.stringify({ userId, title, body, url }),
     });
     return res.ok;

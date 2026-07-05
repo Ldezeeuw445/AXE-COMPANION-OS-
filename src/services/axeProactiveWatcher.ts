@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
+import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -18,7 +19,7 @@ async function firePush(userId: string, title: string, body: string, url: string
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.VERCEL_URL ?? "localhost:3000"}`;
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: internalPushHeaders(),
       body: JSON.stringify({ userId, title, body, url }),
     });
     return res.ok;

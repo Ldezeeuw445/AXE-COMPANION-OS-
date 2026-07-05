@@ -7,6 +7,7 @@
  * Secured with PUSH_WEBHOOK_SECRET env var.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 
 export async function POST(req: NextRequest) {
   const secret = process.env.PUSH_WEBHOOK_SECRET;
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
   const result = await fetch(`${baseUrl}/api/push/send`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalPushHeaders(),
     body: JSON.stringify({ userId, title, body: msgBody, url }),
   });
 

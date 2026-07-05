@@ -124,7 +124,7 @@
 | J2 | Adaptive UI suggestions wired | [x] | Chart adaptive events + Cockpit suggestion accept/dismiss UI build-verified |
 | J3 | Indicator math vs MT5 (RSI shared) | [x] | rsiSeries centralized |
 | J4 | AXE tool calling + live price in chat | [x] | Tool schema/execution rounds + `chart_live_snapshots` live price context build-verified |
-| J5 | Push notifications (VAPID) optional path | [ ] | |
+| J5 | Push notifications (VAPID) optional path | [~] | PWA icons restored; internal push send route secured; subscribe/test/send paths build-verified; needs authenticated device/VAPID prod test |
 
 ---
 
@@ -154,4 +154,4 @@
 | K Legal | 2 | 2 |
 | **Total** | **43** | **53** |
 
-_Last updated: 2026-07-05 (risk strip fallback, light chart line contrast, drawer removal, smart alert template fix build-verified)_
+_Last updated: 2026-07-05 (push notification optional path hardened; production smoke 9/9; Supabase Preview migration-history mismatch identified)_

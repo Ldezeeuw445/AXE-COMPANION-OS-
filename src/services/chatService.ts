@@ -44,6 +44,7 @@ import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeT
 import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
 import { buildAxeEngineSystemGate, getAxeEngineProfile } from "@/services/axeEngineService";
 import { isForexPairSymbol, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
+import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -720,7 +721,7 @@ export async function streamChatMessage(
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost:5000"}`;
       await fetch(`${baseUrl}/api/push/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: internalPushHeaders(),
         body: JSON.stringify({ userId: user.id, title, body, url }),
       });
     } catch (e) {
