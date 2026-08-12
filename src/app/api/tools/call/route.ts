@@ -56,33 +56,48 @@ const TOOLS = {
 
 type ToolName = keyof typeof TOOLS;
 
+// Both apps are packaged Tauri webviews on the same Mac, each on its own
+// local origin (this server's own random port included) — a plain fetch()
+// from AXE Core's webview to this one is cross-origin, so it needs an
+// explicit CORS allow. Safe to leave open: the real gate is the bearer
+// secret above, and this server only ever binds to 127.0.0.1.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
 export async function POST(request: NextRequest) {
   const secret = process.env.AXE_CORE_TOOLS_SECRET?.trim();
   const auth = request.headers.get("authorization") ?? "";
   if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    return Response.json({ ok: false, error: "unauthorized" }, { status: 401, headers: CORS_HEADERS });
   }
 
   let body: { tool?: string; args?: Record<string, unknown> } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
-    return Response.json({ ok: false, error: "invalid_json_body" }, { status: 400 });
+    return Response.json({ ok: false, error: "invalid_json_body" }, { status: 400, headers: CORS_HEADERS });
   }
 
   const tool = body.tool as ToolName | undefined;
   if (!tool || !(tool in TOOLS)) {
     return Response.json(
       { ok: false, error: `unknown tool '${body.tool}' — available: ${Object.keys(TOOLS).join(", ")}` },
-      { status: 400 },
+      { status: 400, headers: CORS_HEADERS },
     );
   }
 
   try {
     const data = await TOOLS[tool](body.args ?? {});
-    return Response.json({ ok: true, tool, data });
+    return Response.json({ ok: true, tool, data }, { headers: CORS_HEADERS });
   } catch (e) {
     console.error(`[tools/call] ${tool} failed:`, e);
-    return Response.json({ ok: false, tool, error: e instanceof Error ? e.message : "unknown error" }, { status: 502 });
+    return Response.json({ ok: false, tool, error: e instanceof Error ? e.message : "unknown error" }, { status: 502, headers: CORS_HEADERS });
   }
 }
