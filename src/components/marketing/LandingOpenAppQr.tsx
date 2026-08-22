@@ -12,8 +12,9 @@ export function LandingOpenAppQr() {
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-6 text-center">
         <p className="text-sm font-medium text-white">Open on your phone</p>
         <p className="mt-2 text-xs text-tos-muted">
-          Set <code className="rounded bg-white/10 px-1 text-[11px]">NEXT_PUBLIC_APP_URL</code> to your public URL on
-          Vercel to show a QR here. Locally, open{" "}
+          Set <code className="rounded bg-white/10 px-1 text-[11px]">NEXT_PUBLIC_APP_URL</code> to the public URL
+          and rebuild to show a QR here — it is a NEXT_PUBLIC_ value, so it is baked in at build time and a restart
+          alone will not pick it up. Locally, open{" "}
           <code className="rounded bg-white/10 px-1 text-[11px]">{chatUrl}</code> on the same Wi‑Fi.
         </p>
       </div>
