@@ -27,6 +27,11 @@
       "purpose": "any"
     }
   ],
-  "categories": ["finance", "productivity"],
-  "lang": "en"
+  "categories": [
+    "finance",
+    "productivity"
+  ],
+  "lang": "en",
+  "id": "/",
+  "scope": "/"
 }
