@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "axe-companion",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-22",
+
+  // nodejs_compat is not optional here: 46 of the 78 API routes declare
+  // `export const runtime = "nodejs"`, and the Supabase server client pulls in
+  // Node built-ins. Without this flag they fail at request time, not at build
+  // time — which is the worst place to find out.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  // ── Crons ────────────────────────────────────────────────────────────────
+  //
+  // These are the eight schedules vercel.json carried, copied exactly. Two
+  // things about them are NOT the same as on Vercel and both matter:
+  //
+  //  1. Vercel invoked the route by URL. Cloudflare fires a `scheduled`
+  //     handler, so something has to translate one into the other — see
+  //     src/cron.ts, which OpenNext wires in as the scheduled entrypoint.
+  //  2. Cloudflare runs crons in UTC. Vercel does too, so the hour-windowed
+  //     ones (`4-11` for the briefings, `4-20` for the krater feed) keep
+  //     exactly the meaning they already had. Worth stating, because that is
+  //     precisely the kind of thing that silently shifts by an hour and gets
+  //     blamed on the migration weeks later.
+  "triggers": {
+    "crons": [
+      "*/10 * * * *",      // mt5-sync
+      "*/15 * * * *",      // axe-watcher
+      "*/30 * * * *",      // intel-warmup
+      "*/15 4-11 * * *",   // daily-briefing
+      "*/15 4-11 * * 1",   // weekly-briefing
+      "30 6 * * *",        // cockpit-snapshots
+      "0 5 * * 0",         // knowledge-sync
+      "*/10 4-20 * * *"    // krater-feed-sync
+    ]
+  }
+}
