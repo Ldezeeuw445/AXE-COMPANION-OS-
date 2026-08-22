@@ -1,0 +1,21 @@
+[Unit]
+Description=AXE Companion (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/AXE-COMPANION-OS-
+# next start reads .env.local itself; EnvironmentFile would need a different
+# format and would duplicate the one file that is already the source of truth.
+ExecStart=/usr/local/bin/npm start
+Restart=always
+RestartSec=5
+# The app is the whole point of this box after the API; give it room but not
+# so much that an OOM takes the API down with it.
+MemoryMax=3G
+StandardOutput=append:/var/log/axe-companion.log
+StandardError=append:/var/log/axe-companion.log
+
+[Install]
+WantedBy=multi-user.target
