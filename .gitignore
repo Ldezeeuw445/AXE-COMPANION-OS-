@@ -69,3 +69,12 @@ supabase/.temp/
 # Cloudflare build artifacts
 cloudflare/*/.wrangler/
 cloudflare/*/bun.lock
+
+# Tauri desktop-app
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/resources/
+src-tauri/gen/
+
+# OpenNext build output
+.open-next/

@@ -16,7 +16,11 @@
     "setup:rag": "node scripts/seed-axe-knowledge.mjs && node scripts/embed-axe-knowledge.mjs",
     "verify:legal": "node scripts/check-legal-routes.mjs",
     "setup:stripe": "node scripts/setup-stripe-billing.mjs",
-    "smoke:launch": "node scripts/smoke-launch.mjs"
+    "smoke:launch": "node scripts/smoke-launch.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:server": "node scripts/build-tauri-server.mjs"
   },
   "engines": {
     "node": "22.x"
@@ -37,7 +41,7 @@
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.7.0",
     "motion": "^12.40.0",
-    "next": "16.2.1",
+    "next": "^16.3.2",
     "openai": "^6.33.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -52,7 +56,9 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.2",
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -63,5 +69,13 @@
     "playwright": "^1.55.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "@cloudflare/workerd-darwin-arm64@1.20260820.1": true,
+    "esbuild@0.25.4": true,
+    "esbuild@0.28.1": true,
+    "sharp@0.35.2": true,
+    "sharp@0.35.3": true,
+    "workerd@1.20260820.1": true
   }
 }

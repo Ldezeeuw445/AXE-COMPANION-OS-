@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "axe-companion",
+  "main": ".open-next/worker.js",
+  // Must be >= the adapter's floor; nodejs_compat is what lets the 46 routes
+  // declaring runtime = "nodejs" keep working.
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+}
