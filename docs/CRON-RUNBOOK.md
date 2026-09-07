@@ -24,7 +24,14 @@ pg_cron (Supabase)  ──►  axe_ops.dispatch_cron(job, path)
 network call — nothing breaks, nothing runs.
 
 Insert the **same value** that `CRON_SECRET` has on the VPS. Run this in the
-Supabase SQL editor (the value never has to leave that window):
+Supabase SQL editor (the value never has to leave that window).
+
+> **Replace the whole quoted string, angle brackets included.** They are a
+> placeholder, not syntax. Pasting `'<CRON_SECRET van je VPS>'` verbatim stores
+> that text as the secret, Vault returns an id as if it worked, and every job
+> then fails with a plain `401` that looks exactly like a wrong key.
+> `dispatch_cron` now detects that shape and reports
+> `vault_secret_is_placeholder:` in `cron_health` instead of calling the app.
 
 ```sql
 select vault.create_secret(
@@ -34,7 +41,8 @@ select vault.create_secret(
 );
 ```
 
-To rotate later, replace it rather than adding a second row:
+If a secret already exists under that name — including a placeholder — do **not**
+run `create_secret` again; that adds a second row. Replace the value instead:
 
 ```sql
 select vault.update_secret(
@@ -47,9 +55,15 @@ select vault.update_secret(
 
 Fire one job by hand and read the response back:
 
+The Supabase SQL editor only renders the result of the **last** statement, so
+run these as two separate executions or the HTTP result is hidden by whatever
+follows it:
+
 ```sql
 select axe_ops.dispatch_cron('manual-check', '/api/cron/krater-feed-sync');
--- then, a second or two later:
+```
+
+```sql
 select status_code, left(content, 300)
 from net._http_response
 order by id desc
