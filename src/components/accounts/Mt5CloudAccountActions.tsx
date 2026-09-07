@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import {
   disconnectCloudMt5AccountAction,
   recoverCloudMt5AccountAction,
+  runCloudMt5DoctorAction,
   syncCloudMt5AccountAction,
   testCloudMt5ConnectionAction,
 } from "@/app/actions/mt5Cloud";
+import type { Mt5DoctorReport, Mt5DoctorStep, Mt5DoctorStepStatus } from "@/types/mt5Doctor";
 import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
 
 type Props = {
@@ -288,7 +290,7 @@ function DoctorReportCard({ report }: { report: Mt5DoctorReport }) {
         </span>
       </div>
       <div className="mt-3 grid gap-1.5">
-        {report.steps.map((step) => (
+        {report.steps.map((step: Mt5DoctorStep) => (
           <div
             key={step.id}
             className={`rounded-xl border px-2.5 py-2 text-[10px] leading-relaxed ${statusTone(step.status)}`}
