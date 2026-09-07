@@ -69,3 +69,10 @@ supabase/.temp/
 # Cloudflare build artifacts
 cloudflare/*/.wrangler/
 cloudflare/*/bun.lock
+
+# Scratch drops and vendor exports — never part of the app build.
+/AXE ADAPTIVENESS/
+/AXE Improvents/
+/OKComputer_Untitled_Chat/
+/axe-companion-super-agent/
+/Alpaca Live/

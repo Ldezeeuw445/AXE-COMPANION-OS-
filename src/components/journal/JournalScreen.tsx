@@ -556,7 +556,7 @@ export function JournalScreen({
 
         {filteredTrades.length === 0 && activeAccountId && journalTrades.length > 0 && (
           <div className="px-4 py-8 text-center text-[12px] text-white/30">
-            No trades match "{filter}" filter
+            No trades match &ldquo;{filter}&rdquo; filter
           </div>
         )}
 

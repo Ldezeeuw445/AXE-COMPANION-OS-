@@ -3,6 +3,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type {
+  Mt5DoctorReport,
+  Mt5DoctorStep,
+  Mt5DoctorStepStatus,
+} from "@/types/mt5Doctor";
 import {
   classifyMetaApiProvisioningError,
   userMessageForCode,
@@ -338,7 +343,6 @@ export async function createCloudMt5ConnectionAction(
         : region),
     passwordType,
     metaApiComplianceConfirmed: true,
-    passwordType,
     createdVia: "axe_companion_cloud_mt5",
     metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,

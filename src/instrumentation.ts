@@ -36,7 +36,7 @@ export async function register() {
         key: "cfg:companion_sidecar",
         value: JSON.stringify({
           port: Number(port),
-          pid: process.pid,
+          pid: (globalThis as { process?: { pid?: number } }).process?.pid ?? null,
           startedAt: new Date().toISOString(),
         }),
         confidence: 1,

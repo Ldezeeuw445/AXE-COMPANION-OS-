@@ -146,19 +146,23 @@ export async function POST(req: Request) {
 
   const token = getMetaApiToken();
   const cloud = await getActiveMetaApiCloudAccount(supabase, user.id);
-  if (token && cloud?.metaapi_account_id) {
+  if (token && cloud?.metaApiAccountId) {
     try {
+      // All three take (accountId, refreshTerminalState, region) — the first two
+      // were passing the MetaApi token as the account id, so they could only
+      // ever 404. clientGetOrders already had it right; match it.
       const [accountInfo, mt5Positions, mt5Orders] = await Promise.all([
-        clientGetAccountInformation(token, cloud.metaapi_account_id),
-        clientGetPositions(token, cloud.metaapi_account_id),
-        clientGetOrders(cloud.metaapi_account_id, false, cloud.metaApiRegion ?? null),
+        clientGetAccountInformation(cloud.metaApiAccountId, false, cloud.metaApiRegion ?? null),
+        clientGetPositions(cloud.metaApiAccountId, false, cloud.metaApiRegion ?? null),
+        clientGetOrders(cloud.metaApiAccountId, false, cloud.metaApiRegion ?? null),
       ]);
 
       if (accountInfo?.equity != null) equity = Number(accountInfo.equity);
       if (accountInfo?.balance != null) balance = Number(accountInfo.balance);
       currency = (accountInfo?.currency as string | undefined) ?? currency;
 
-      for (const row of mt5Positions ?? []) {
+      for (const raw of mt5Positions ?? []) {
+        const row = raw as Record<string, unknown>;
         const entry = Number(row.openPrice ?? row.currentPrice ?? 0);
         putPosition({
           id: String(row.id ?? row.positionId ?? `${row.symbol}-${entry}`),

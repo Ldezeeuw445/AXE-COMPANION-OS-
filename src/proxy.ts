@@ -24,7 +24,7 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathEarly = request.nextUrl.pathname;
 
   // Skip auth check on these paths entirely
@@ -81,13 +81,13 @@ export async function middleware(request: NextRequest) {
     try {
       // Add 5-second timeout to prevent indefinite hangs
       const userPromise = supabase.auth.getUser();
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Auth timeout")), 5000)
+      const timeoutPromise = new Promise<Awaited<ReturnType<typeof supabase.auth.getUser>>>(
+        (_, reject) => setTimeout(() => reject(new Error("Auth timeout")), 5000)
       );
 
       const {
         data: { user: u },
-      } = await Promise.race([userPromise, timeoutPromise]) as any;
+      } = await Promise.race([userPromise, timeoutPromise]);
       user = u;
     } catch (error) {
       // If auth check times out or fails, let the request through

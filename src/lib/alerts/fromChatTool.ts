@@ -42,7 +42,7 @@ export function buildUserAlertFromChatTool(input: ChatCreateAlertInput) {
   const combined = `${title} ${body}`.trim();
 
   const threshold = parseThreshold(combined);
-  let condition = parseCondition(combined);
+  const condition = parseCondition(combined);
 
   if (type === "price") {
     if (threshold == null || !condition) {
