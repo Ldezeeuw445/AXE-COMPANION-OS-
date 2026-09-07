@@ -12,13 +12,13 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | A1 | `main` branch contains launch foundation (feed, onboarding, alerts, risk) | [x] | PR #11 merged |
-| A2 | Production deploy from `main` on Vercel | [x] | Latest checked commit `84860d1` deployed successfully |
+| A2 | Production deploy on the VPS (nginx, `212.227.91.79`) | [!] | **Not Vercel.** Verified 2026-09-07. Vercel is not returning; `vercel.json` crons never fired here — see `docs/CRON-RUNBOOK.md` |
 | A3 | Supabase migrations applied (broadcast feed, onboarding prefs) | [x] | Verified via MCP |
 | A4 | `KRATER_SYNC_MODE=generate` on Vercel Production | [x] | Set explicitly |
 | A5 | `CRON_SECRET` + `KRATER_API_KEY` on Vercel Production | [x] | Encrypted vars present |
 | A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [x] | Confirmed manually by Luka — credits saved, no app impact |
 | A7 | Railway active streamer deploy healthy | [x] | `superb-benevolence` / `axe-metaapi-streamer` SUCCESS; old AXE-COMPANION-OS Railway projects are not used |
-| A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks re-run 2026-07-05 |
+| A8 | Smoke script passes from repo root | [~] | 9/9 still pass, but they are public HTTP checks only — they never covered the crons, which were dead for two months while this stayed green. Needs cron assertions |
 
 ---
 
@@ -28,9 +28,9 @@
 |---|------|--------|-------|
 | B1 | 3 tabs: Morning Brief / Daily News / Market Recap | [x] | |
 | B2 | Per-tab unread badges | [x] | |
-| B3 | Krater cron generates + upserts `axe_broadcast_feed` | [x] | force sync tested |
+| B3 | Krater cron generates + upserts `axe_broadcast_feed` | [!] | Last row 2026-07-06. Now scheduled via pg_cron; blocked on inserting `CRON_SECRET` into Supabase Vault |
 | B4 | Feed shows items for authenticated users | [~] | Prod broadcast rows + feed code verified; needs browser auth spot-check |
-| B5 | Cron window 07:00 + 20:00 Amsterdam (no double with Krater dashboard) | [x] | Krater dashboard tasks paused; AXE-owned Vercel cron remains active |
+| B5 | Cron window 07:00 + 20:00 Amsterdam | [~] | Same UTC schedule, now on pg_cron (`axe-companion-krater-feed-sync`). Krater dashboard tasks stay paused |
 
 ---
 
@@ -53,7 +53,7 @@
 | D2 | Alpaca paper — US equities chart + orders (TSLA/AAPL) | [~] | Chart → `/api/alpaca/order` flow build-verified; needs authenticated paper order spot-check |
 | D3 | MT5 cloud — live chart + orders with live-trading flag | [ ] | |
 | D4 | No false "Connect MT5" block when demo/alpaca active | [x] | Copy + account fallback build verified |
-| D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [x] | Shows Open P&L, All SL, All TP; client open-position fallback + MT5-style line polish build-verified |
+| D5 | Live Risk Band widget (open positions, SL/TP scenarios) | [~] | The MT5 branch never ran: it read `metaapi_account_id` (undefined at runtime) and passed the MetaApi token as the account id to two client calls. Both fixed 2026-09-07; needs a live MT5 spot-check |
 | D6 | Free tier: VOL, MA, RSI only | [x] | Pro gate |
 | D7 | Pro tier: full indicators + SMC overlays | [x] | Pro gate render-hardened; top indicator card is full control surface; old left drawer removed |
 
@@ -76,7 +76,7 @@
 |---|------|--------|-------|
 | F1 | Templates panel on `/alerts` (Pro) | [x] | |
 | F2 | Free users see UpgradeGate | [x] | |
-| F3 | Server evaluators: missing SL, sentiment, correlation, context, confluence, predictive | [x] | axe-watcher cron; smart template creation + evaluator route build-verified |
+| F3 | Server evaluators: missing SL, sentiment, correlation, context, confluence, predictive | [!] | `alerts` table has never held a row — the axe-watcher cron has never run in production. Scheduled now; blocked on the Vault secret |
 | F4 | Price alerts on chart (client evaluator) | [x] | Evaluator wired; Demo/Alpaca price-alert creation fixed; build verified |
 | F5 | End-to-end trigger + feed event on prod | [~] | Trigger route records feed event; needs authenticated prod trigger spot-check |
 
@@ -88,8 +88,8 @@
 |---|------|--------|-------|
 | G1 | `/chat` loads without crash | [x] | Smoke HTTP 200 |
 | G2 | `/chat?intel=1` — intelligence mode works | [x] | Prod HTTP 200 |
-| G3 | `LLM_TARGET=auto` — Ollama first, OpenAI fallback | [x] | chat-health: ok_ollama |
-| G4 | Ollama VPS reachable from Vercel | [x] | chat-health ollama=true |
+| G3 | `LLM_TARGET=auto` — Ollama first, OpenAI fallback | [x] | chat-health: ok_ollama. Both providers verified reachable 2026-09-07 (OpenAI 1012 ms, gpt-4o) |
+| G4 | Ollama reachable from the app host | [x] | Reachable in 3 ms because Ollama runs on the same VPS. One llama3.2 instance serves every user — a scaling risk, not a correctness one |
 | G5 | Chat quota: Free 20/day, Pro unlimited | [x] | Supabase RPC verified: free=20, paid/exempt `remaining=-1` |
 
 ---
@@ -100,7 +100,7 @@
 |---|------|--------|-------|
 | H1 | Cockpit loads for Pro users | [~] | `/cockpit` prod HTTP 200; needs signed-in Pro browser spot-check |
 | H2 | Morning Brief + Learning Arc gated correctly | [x] | Page + API both use entitlement gates (`briefings`, `cockpit_learning`) |
-| H3 | Daily + weekly briefing cron | [~] | Routes present and anonymous 401; needs authenticated cron/live delivery check |
+| H3 | Daily + weekly briefing cron | [!] | `axe_daily_briefings` last row 2026-07-18. Scheduled via pg_cron; blocked on the Vault secret |
 | H4 | Intel section (seismic, vessels, jets labels correct) | [x] | Intel labels/code spot-check verified |
 
 ---
@@ -124,7 +124,7 @@
 | J2 | Adaptive UI suggestions wired | [x] | Chart adaptive events + Cockpit suggestion accept/dismiss UI build-verified |
 | J3 | Indicator math vs MT5 (RSI shared) | [x] | rsiSeries centralized |
 | J4 | AXE tool calling + live price in chat | [x] | Tool schema/execution rounds + `chart_live_snapshots` live price context build-verified |
-| J5 | Push notifications (VAPID) optional path | [~] | PWA icons restored; internal push send route secured; subscribe/test/send paths build-verified; needs authenticated device/VAPID prod test |
+| J5 | Push notifications (VAPID) optional path | [~] | VAPID key served; 26 subscriptions stored, newest 2026-08-22. Still needs an authenticated device delivery test |
 
 ---
 
@@ -154,4 +154,7 @@
 | K Legal | 2 | 2 |
 | **Total** | **43** | **53** |
 
-_Last updated: 2026-07-05 (push notification optional path hardened; production smoke 9/9; Supabase Preview migration-history mismatch identified)_
+_Last updated: 2026-09-07 — full audit (`docs/AUDIT_2026-09-07.md`). Rows A2, A8,
+B3, B5, D5, F3, G4, H3 were disproved by measurement and are corrected above. The
+progress table below is stale by design until the Vault secret lands and the
+authenticated walkthrough is done; do not treat it as a score._
