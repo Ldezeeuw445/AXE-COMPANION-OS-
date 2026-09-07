@@ -31,6 +31,14 @@ export default function robots(): MetadataRoute.Robots {
         "/settings",
         "/onboarding",
         "/upgrade",
+        // Working drafts and scaffolding that are still publicly reachable.
+        // Kept live because which landing page wins is a product decision, but
+        // they must not compete with /launch in search results.
+        "/final",
+        "/finallaunch",
+        "/welcome",
+        "/marketing",
+        "/ui-premium",
       ],
     },
     sitemap: `${siteUrl()}/sitemap.xml`,

@@ -82,7 +82,9 @@ export async function POST(request: Request) {
     .order("last_message_at", { ascending: false })
     .limit(5);
 
-  const convIds: string[] = Array.isArray(convs) ? convs.map((c: any) => c.id) : [];
+  const convIds: string[] = Array.isArray(convs)
+    ? convs.map((c: { id: string }) => c.id)
+    : [];
 
   // Fetch data in parallel, scoped to the selected conversation type
   const [messagesResult, memoryResult, alertsResult, execResult] = await Promise.all([
