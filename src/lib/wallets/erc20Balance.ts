@@ -30,6 +30,6 @@ export async function fetchErc20TokenBalance(
 ): Promise<number> {
   const raw = await ethCall(chain, token.contractAddress, encodeBalanceOfCalldata(walletAddress));
   const value = BigInt(raw);
-  if (value === 0n) return 0;
+  if (value === BigInt(0)) return 0;
   return Number(value) / 10 ** token.decimals;
 }

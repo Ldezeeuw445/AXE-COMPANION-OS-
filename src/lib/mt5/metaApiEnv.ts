@@ -8,11 +8,21 @@ import {
 
 const DEFAULT_PROVISIONING = "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai";
 
+/**
+ * The MetaApi token, under any of the names it has been deployed with.
+ *
+ * METAAPI_KEY is included because it is the name used in at least one AXE
+ * environment. Every MT5 path is gated on this returning non-null, and it fails
+ * silently when it does not — a host that spells the variable differently has
+ * MT5 switched off with no error anywhere, which is consistent with
+ * mt5_positions never having held a row.
+ */
 export function getMetaApiToken(): string | null {
   const t =
     process.env.METAAPI_TOKEN ??
     process.env.AXE_METAAPI_TOKEN ??
     process.env.AXE_MT5_METAAPI_TOKEN ??
+    process.env.METAAPI_KEY ??
     "";
   return t.trim() || null;
 }

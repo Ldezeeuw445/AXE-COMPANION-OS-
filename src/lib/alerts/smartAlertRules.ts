@@ -266,5 +266,8 @@ export function evaluatePredictiveLevelBreak(candles: IndicatorMathCandle[], sym
 export function candlesFromMetaApi(
   raw: Array<{ time?: string | number; open: number; high: number; low: number; close: number; tickVolume?: number | null; volume?: number | null }>,
 ): IndicatorMathCandle[] {
-  return toMathCandles(raw);
+  const timed = raw.filter(
+    (c): c is typeof c & { time: string | number } => c.time != null,
+  );
+  return toMathCandles(timed);
 }
