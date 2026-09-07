@@ -1,0 +1,361 @@
+<title>AXE Companion Launch Audit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#060608; --panel:#0c0c0f; --panel-2:#101014;
+    --line:rgba(255,255,255,.07); --line-strong:rgba(255,255,255,.12);
+    --text:#ededef; --muted:#8a8a94; --dim:#4a4a54;
+    --slate:#94a3b8; --gold:#d4b84a; --red:#ff4757; --cyan:#22d3ee; --blue:#3d7dd6;
+    --crit:#ff4757; --warn:#d4b84a; --ok:#22d3ee;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --body:"Inter",system-ui,-apple-system,Segoe UI,sans-serif;
+    --display:"Archivo","Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--text);font-family:var(--body);
+    font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 500px at 12% -8%,rgba(61,125,214,.07),transparent 62%);
+    background-repeat:no-repeat;}
+  .wrap{max-width:1120px;margin:0 auto;padding:44px 26px 96px;}
+  .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);}
+  h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,4.6vw,46px);
+    letter-spacing:-.022em;line-height:1.05;margin:12px 0 0;text-wrap:balance;}
+  h2{font-family:var(--display);font-weight:600;font-size:20px;letter-spacing:-.012em;margin:0;}
+  h3{font-family:var(--display);font-weight:600;font-size:15.5px;letter-spacing:-.005em;margin:0;}
+  p{margin:0;max-width:70ch;}
+  a{color:var(--slate);}
+  .sub{color:var(--muted);margin-top:14px;font-size:16px;max-width:68ch;}
+  code,.mono{font-family:var(--mono);font-size:12.5px;}
+
+  /* masthead */
+  .mast{border-bottom:1px solid var(--line);padding-bottom:26px;}
+  .meta{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;}
+  .meta div{display:flex;flex-direction:column;gap:3px;}
+  .meta b{font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--text);}
+
+  /* verdict */
+  .verdict{margin-top:30px;border:1px solid rgba(255,71,87,.32);background:
+    linear-gradient(180deg,rgba(255,71,87,.07),rgba(255,71,87,.02));
+    border-radius:4px;padding:22px 24px;display:grid;gap:18px;
+    grid-template-columns:minmax(0,1fr) auto;align-items:center;}
+  @media(max-width:720px){.verdict{grid-template-columns:1fr}}
+  .verdict .stamp{font-family:var(--display);font-weight:700;font-size:26px;color:var(--red);
+    letter-spacing:-.02em;line-height:1.1;}
+  .verdict p{color:#d8c2c5;font-size:14.5px;margin-top:8px;}
+  .score{text-align:right;font-family:var(--mono);}
+  .score .n{font-size:40px;font-weight:600;color:var(--text);letter-spacing:-.03em;
+    font-variant-numeric:tabular-nums;line-height:1;}
+  .score .d{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:7px;}
+  @media(max-width:720px){.score{text-align:left}}
+
+  section{margin-top:52px;}
+  .shead{display:flex;align-items:baseline;gap:14px;padding-bottom:12px;
+    border-bottom:1px solid var(--line);margin-bottom:22px;}
+  .shead .lbl{flex:0 0 auto;}
+  .shead .rule{flex:1;}
+
+  /* blockers */
+  .blockers{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .blk{background:var(--panel);padding:20px 22px 20px 26px;position:relative;display:grid;gap:9px;}
+  .blk::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--crit);}
+  .blk .top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+  .blk .num{font-family:var(--mono);font-size:11px;color:var(--crit);letter-spacing:.1em;}
+  .blk p{color:var(--muted);font-size:14px;}
+  .ev{font-family:var(--mono);font-size:11.5px;color:var(--slate);background:#08080b;
+    border:1px solid var(--line);border-radius:3px;padding:9px 11px;overflow-x:auto;white-space:pre;}
+
+  /* truth compare */
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  @media(max-width:680px){.cmp{grid-template-columns:1fr}}
+  .cmp>div{background:var(--panel);padding:20px 22px;display:grid;gap:12px;align-content:start;}
+  .cmp .claimed .lbl{color:var(--dim);}
+  .cmp .measured .lbl{color:var(--cyan);}
+  .cmp ul{margin:0;padding-left:17px;color:var(--muted);font-size:14px;display:grid;gap:7px;}
+  .cmp .claimed li{text-decoration:line-through;text-decoration-color:rgba(255,71,87,.5);color:var(--dim);}
+
+  /* timeline */
+  .tl{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .tl .row{background:var(--panel);display:grid;grid-template-columns:minmax(150px,1.05fr) minmax(0,2.6fr) auto;
+    gap:16px;align-items:center;padding:12px 20px;}
+  @media(max-width:700px){.tl .row{grid-template-columns:1fr;gap:8px}}
+  .tl .job{font-family:var(--mono);font-size:12.5px;color:var(--text);}
+  .tl .bar{position:relative;height:7px;background:#08080b;border:1px solid var(--line);border-radius:2px;overflow:hidden;}
+  .tl .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,rgba(255,71,87,.15),var(--red));}
+  .tl .fill.warn{background:linear-gradient(90deg,rgba(212,184,74,.15),var(--gold));}
+  .tl .when{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right;
+    font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .tl .head{background:var(--panel-2);}
+  .tl .head span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);}
+  .axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;
+    color:var(--dim);margin-top:9px;padding:0 20px;}
+
+  /* key table */
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:4px;}
+  table{border-collapse:collapse;width:100%;min-width:640px;background:var(--panel);}
+  th{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim);text-align:left;padding:12px 16px;background:var(--panel-2);
+    border-bottom:1px solid var(--line);font-weight:500;white-space:nowrap;}
+  td{padding:12px 16px;border-bottom:1px solid var(--line);font-size:13.5px;color:var(--muted);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  td.k{font-family:var(--mono);font-size:12.5px;color:var(--text);white-space:nowrap;}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.09em;text-transform:uppercase;padding:3px 9px;border-radius:2px;white-space:nowrap;}
+  .pill::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;}
+  .p-ok{color:var(--ok);background:rgba(34,211,238,.09);border:1px solid rgba(34,211,238,.25);}
+  .p-bad{color:var(--red);background:rgba(255,71,87,.09);border:1px solid rgba(255,71,87,.28);}
+  .p-unk{color:var(--dim);background:rgba(255,255,255,.03);border:1px solid var(--line-strong);}
+  .p-warn{color:var(--gold);background:rgba(212,184,74,.09);border:1px solid rgba(212,184,74,.26);}
+
+  /* findings */
+  .finds{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .find{background:var(--panel);padding:16px 20px 16px 24px;position:relative;display:grid;gap:7px;}
+  .find::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;}
+  .find.c::before{background:var(--crit)} .find.w::before{background:var(--warn)} .find.i::before{background:var(--slate)}
+  .find .top{display:flex;gap:12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap;}
+  .find p{color:var(--muted);font-size:13.5px;}
+
+  /* plan */
+  .plan{display:grid;gap:26px;}
+  .phase{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;}
+  @media(max-width:640px){.phase{grid-template-columns:1fr;gap:12px}}
+  .phase .marker{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim);padding-top:4px;white-space:nowrap;width:132px;}
+  .phase .marker b{display:block;color:var(--slate);font-size:12.5px;letter-spacing:.05em;
+    text-transform:none;font-weight:500;margin-top:5px;}
+  .steps{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .step{background:var(--panel);padding:14px 18px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:baseline;}
+  .step .n{font-family:var(--mono);font-size:11.5px;color:var(--slate);font-variant-numeric:tabular-nums;}
+  .step b{font-weight:600;color:var(--text);font-size:14px;}
+  .step p{color:var(--muted);font-size:13.5px;margin-top:4px;}
+  .step.crit b{color:#ffd9dd;}
+
+  footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--line);
+    color:var(--dim);font-size:12.5px;display:grid;gap:6px;}
+  ::selection{background:rgba(61,125,214,.35);}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="lbl">Pre-launch audit · axecompanion.com</div>
+  <h1>What is broken, and what it takes to launch</h1>
+  <p class="sub">Measured against live production, Supabase <code>pqnngpcgbdwxavbatbia</code>, the Railway streamer and a clean build of <code>main</code>. Where this contradicts the launch checklist, the measurement wins.</p>
+  <div class="meta">
+    <div><span class="lbl">Audited</span><b>2026-09-07</b></div>
+    <div><span class="lbl">Host</span><b>212.227.91.79 · nginx</b></div>
+    <div><span class="lbl">Users</span><b>135</b></div>
+    <div><span class="lbl">Paid subs</span><b>0</b></div>
+    <div><span class="lbl">Build</span><b>passes</b></div>
+    <div><span class="lbl">Lint</span><b>27 errors</b></div>
+  </div>
+</header>
+
+<div class="verdict">
+  <div>
+    <div class="stamp">Not launch ready</div>
+    <p>The shell is healthy — auth, routing, gating, build and typecheck all pass. Everything running <em>behind</em> the app has been dead since mid-July, and one Supabase policy leaves 17,223 memory rows readable with the public key.</p>
+  </div>
+  <div class="score">
+    <div class="n">3</div>
+    <div class="d">Critical blockers</div>
+  </div>
+</div>
+
+<section>
+  <div class="shead"><span class="lbl">01 — Blockers</span><span class="rule"></span></div>
+  <div class="blockers">
+
+    <article class="blk">
+      <div class="top"><span class="num">CRIT-1</span><h3>The public anon key reads and writes AXE's memory</h3></div>
+      <p><code>public.memory</code> carries one policy: <code>FOR ALL TO PUBLIC USING (true) WITH CHECK (true)</code>. <code>TO PUBLIC</code> includes <code>anon</code>, and the anon key ships in every browser bundle of all three apps. Confirmed against production with nothing but that key:</p>
+      <div class="ev">GET /rest/v1/memory?select=*&amp;limit=1
+206  content-range: 0-0/17223
+[{"id":"10facedd-…","agent":"axe_trader","user_id":"acff7a12-…</div>
+      <p><code>global_memory</code> (18,281 rows) is one step behind: SELECT <em>and</em> UPDATE granted on <code>auth.role() = 'authenticated'</code> with no <code>user_id</code> predicate.</p>
+    </article>
+
+    <article class="blk">
+      <div class="top"><span class="num">CRIT-2</span><h3>Every background job has been dead since July</h3></div>
+      <p>Production runs on a VPS, not Vercel — so the eight cron jobs in <code>vercel.json</code> have never fired on this host. The Feed is the app's front door and its last row landed on 6 July.</p>
+      <div class="ev">$ curl -I https://www.axecompanion.com/
+server: nginx/1.24.0 (Ubuntu)     ← Vercel serves "server: Vercel"</div>
+    </article>
+
+    <article class="blk">
+      <div class="top"><span class="num">CRIT-3</span><h3>The demo endpoint gives the product away</h3></div>
+      <p><code>POST /api/auth/demo</code> signs in an anonymous user, then writes <code>plan:&nbsp;"founder"</code>, <code>founder_badge:&nbsp;true</code>, <code>chat_quota_exempt:&nbsp;true</code> — no rate limit, unlimited repeats. Production already holds the result:</p>
+      <div class="ev">plan=founder  n=118  founder_badge=117  chat_quota_exempt=118
+paid subscriptions = 0</div>
+    </article>
+
+  </div>
+</section>
+
+<section>
+  <div class="shead"><span class="lbl">02 — Documented truth vs. measured truth</span><span class="rule"></span></div>
+  <div class="cmp">
+    <div class="claimed">
+      <span class="lbl">What the repo says</span>
+      <ul>
+        <li>Production is live on Vercel</li>
+        <li>A8 — smoke script passes 9/9</li>
+        <li>G3/G4 — Ollama VPS reachable from Vercel</li>
+        <li>F3 — server alert evaluators running on axe-watcher cron</li>
+        <li>B3/B5 — Krater cron upserts the feed, 07:00 + 20:00</li>
+        <li><code>npm run lint</code> passes</li>
+      </ul>
+    </div>
+    <div class="measured">
+      <span class="lbl">What production returns</span>
+      <ul>
+        <li>Ubuntu VPS at 212.227.91.79 behind nginx 1.24; no Companion project exists in the Vercel team</li>
+        <li>Public HTTP checks still pass — they never covered the crons</li>
+        <li>Ollama answers on <code>localhost:11434</code> in 3&nbsp;ms because it runs on the same box; one llama3.2 serves every user</li>
+        <li><code>alerts</code> table: 0 rows, ever</li>
+        <li><code>axe_broadcast_feed</code>: 7 rows, newest 2026-07-06 05:01</li>
+        <li>27 errors, 196 warnings</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><span class="lbl">03 — How long each automation has been down</span><span class="rule"></span></div>
+  <div class="tl">
+    <div class="row head"><span>Automation → table</span><span>Silence</span><span>Last write</span></div>
+
+    <div class="row"><span class="job">mt5-sync → mt5_positions</span>
+      <div class="bar"><div class="fill" style="width:100%"></div></div>
+      <span class="when">never · 0 rows</span></div>
+
+    <div class="row"><span class="job">axe-watcher → alerts</span>
+      <div class="bar"><div class="fill" style="width:100%"></div></div>
+      <span class="when">never · 0 rows</span></div>
+
+    <div class="row"><span class="job">krater-feed-sync → axe_broadcast_feed</span>
+      <div class="bar"><div class="fill" style="width:100%"></div></div>
+      <span class="when">2026-07-06</span></div>
+
+    <div class="row"><span class="job">intel-correlate → intel_correlations</span>
+      <div class="bar"><div class="fill" style="width:89%"></div></div>
+      <span class="when">2026-07-15</span></div>
+
+    <div class="row"><span class="job">daily-briefing → axe_daily_briefings</span>
+      <div class="bar"><div class="fill" style="width:85%"></div></div>
+      <span class="when">2026-07-18</span></div>
+
+    <div class="row"><span class="job">chart live → chart_live_snapshots</span>
+      <div class="bar"><div class="fill" style="width:47%"></div></div>
+      <span class="when">2026-08-10</span></div>
+
+    <div class="row"><span class="job">cockpit-snapshots → assistant_cockpit_snapshots</span>
+      <div class="bar"><div class="fill warn" style="width:13%"></div></div>
+      <span class="when">2026-08-29</span></div>
+  </div>
+  <div class="axis"><span>6 Jul</span><span>1 Aug</span><span>7 Sep — today</span></div>
+  <p style="margin-top:16px;color:var(--muted);font-size:13.5px;"><code>/api/cron/intel-correlate</code> is not in <code>vercel.json</code> at all — it would not have run even on Vercel. Meanwhile <code>axe_engine_runs</code> and <code>rag_memories</code> are writing right now: that is AXE Core, not Companion.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="lbl">04 — API keys, tested</span><span class="rule"></span></div>
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Key</th><th>Status</th><th>Evidence from production</th></tr></thead>
+      <tbody>
+        <tr><td class="k">OPENAI_API_KEY</td><td><span class="pill p-ok">works</span></td><td><code>chat-health</code> → reachable, 1012&nbsp;ms, <code>gpt-4o</code></td></tr>
+        <tr><td class="k">Ollama (local)</td><td><span class="pill p-ok">works</span></td><td>3&nbsp;ms at <code>localhost:11434</code>, <code>llama3.2</code> — same box as the app</td></tr>
+        <tr><td class="k">FRED_API_KEY</td><td><span class="pill p-ok">works</span></td><td>live macro: DGS10 4.77%, DGS2 4.34% (2026-09-03)</td></tr>
+        <tr><td class="k">OPENSKY_USERNAME / _PASSWORD</td><td><span class="pill p-ok">works</span></td><td><code>corporateJets</code> returns live aircraft positions</td></tr>
+        <tr><td class="k">Supabase URL / anon / service role</td><td><span class="pill p-ok">works</span></td><td>app boots, auth works, protected routes 401 correctly</td></tr>
+        <tr><td class="k">VAPID keypair</td><td><span class="pill p-ok">works</span></td><td><code>/api/push/vapid</code> serves a key; 26 subscriptions stored</td></tr>
+        <tr><td class="k">MetaAPI streamer (Railway)</td><td><span class="pill p-warn">up, idle</span></td><td><code>/health</code> → <code>{"ok":true,"streams":0}</code> — nothing connected</td></tr>
+        <tr><td class="k">UNUSUAL_WHALES_TOKEN</td><td><span class="pill p-bad">dead</span></td><td>401 <em>“token … not recognized … revoked, regenerated, or belongs to a different account”</em> — kills 5 Intel feeds</td></tr>
+        <tr><td class="k">FINNHUB_API_KEY</td><td><span class="pill p-bad">dead</span></td><td><code>economicCalendar</code> → <code>finnhub_403</code>; the app's Forex Factory fallback still returns 81 events</td></tr>
+        <tr><td class="k">intel-proxy · 7 further feeds</td><td><span class="pill p-bad">401</span></td><td>vessels, conflicts, energy, cyber, chokepoints, radar, emergency all return <code>invalid_token</code></td></tr>
+        <tr><td class="k">MIGRATION_SECRET</td><td><span class="pill p-warn">unset</span></td><td><code>/migrations</code> is public and prints the secret in its example URL — harmless only while unset</td></tr>
+        <tr><td class="k">METAAPI · ALPACA · STRIPE · KRATER · COINGECKO · POLYGON · PERIGON · EODHD</td><td><span class="pill p-unk">not tested</span></td><td>behind authenticated routes or VPS-only env — needs a signed-in walkthrough</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:16px;color:var(--muted);font-size:13.5px;"><strong style="color:var(--text)">12 of 13 Intel feeds are down</strong>, and every <code>intel_*</code> table holds 0 rows with RLS on and no policy — so even seeded data would render blank. Good news: every duplicated key name in the codebase (<code>OPENAI_API_KEY</code>/<code>OPEN_AI_API_KEY</code>, four <code>ALPACA_*</code> spellings, three MetaAPI spellings) resolves through <code>??</code> fallbacks. No key is silently ignored because of a name mismatch.</p>
+</section>
+
+<section>
+  <div class="shead"><span class="lbl">05 — Everything else worth fixing</span><span class="rule"></span></div>
+  <div class="finds">
+    <div class="find c"><div class="top"><h3>24 tables have RLS on and zero policies</h3><span class="pill p-bad">critical</span></div>
+      <p>All 15 <code>intel_*</code> tables plus <code>axe_convictions</code>, <code>core_webhook_secrets</code> and <code>shared_memory</code>. The app cannot read them at all — Intel renders empty by construction, not by accident.</p></div>
+
+    <div class="find w"><div class="top"><h3>Migration history has permanently diverged</h3><span class="pill p-warn">warning</span></div>
+      <p>47 Companion migrations sit in the repo. The live history holds 38 entries and <em>every one is an AXE Core migration</em>. Companion's schema was applied by hand, so <code>supabase db push</code> would now replay all 47 from scratch.</p></div>
+
+    <div class="find w"><div class="top"><h3>Deployed Edge code is not this repo's code</h3><span class="pill p-warn">warning</span></div>
+      <p><code>intel-proxy</code> was deployed from <code>/Volumes/EagetSSD/TRADING-OS/…</code>, <code>livekit-token</code> and <code>ai-proxy</code> from an AXE-CORE path. One Supabase project backs all three apps with no ownership boundary.</p></div>
+
+    <div class="find w"><div class="top"><h3>Core features have never been used in production</h3><span class="pill p-warn">warning</span></div>
+      <p>135 users, 290 chat messages — and <code>watchlists</code>, <code>alerts</code>, <code>positions</code>, <code>vault_items</code>, <code>user_journal_entries</code>, <code>mt5_positions</code> are all at zero rows. The RAG corpus is 27 chunks, which does not make “personal AI with RAG per user” true yet.</p></div>
+
+    <div class="find i"><div class="top"><h3>Build passes, lint does not</h3><span class="pill p-unk">cleanup</span></div>
+      <p><code>tsc --noEmit</code> and <code>next build</code> are clean, so <code>ignoreBuildErrors: true</code> is now pure downside. 27 lint errors remain, six of them from <code>AXE ADAPTIVENESS/</code> — one of four scratch directories committed at the repo root.</p></div>
+
+    <div class="find i"><div class="top"><h3>Next 16 deprecations</h3><span class="pill p-unk">cleanup</span></div>
+      <p>The <code>middleware</code> convention is deprecated in favour of <code>proxy</code>, and <code>instrumentation.ts:39</code> calls <code>process.pid</code> in the Edge runtime. <code>robots.txt</code> and <code>sitemap.xml</code> both 404.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><span class="lbl">06 — The order to fix it in</span><span class="rule"></span></div>
+  <div class="plan">
+
+    <div class="phase">
+      <div class="marker">Phase 1<b>Hours · today</b></div>
+      <div class="steps">
+        <div class="step crit"><span class="n">1</span><div><b>Close <code>public.memory</code></b><p>Replace <code>memory_service_all</code> with an owner policy — <code>USING (auth.uid()::text = user_id)</code> plus a service-role bypass. Then rotate the anon key: assume all 17,223 rows are public.</p></div></div>
+        <div class="step crit"><span class="n">2</span><div><b>Close <code>global_memory</code></b><p>Add a <code>user_id</code> predicate to SELECT and UPDATE. Scope genuinely global reads to an allow-list, not <code>auth.role() = 'authenticated'</code>.</p></div></div>
+        <div class="step crit"><span class="n">3</span><div><b>Fix <code>/api/auth/demo</code></b><p>Grant <code>free</code> with the normal 20/day quota, or a time-boxed trial — never <code>founder</code> + <code>chat_quota_exempt</code>. Then downgrade the 118 existing rows.</p></div></div>
+        <div class="step"><span class="n">4</span><div><b>Remove the migration back doors</b><p>Drop the public <code>/migrations</code> page and delete <code>/api/internal/migrate</code> — its own header says “DELETE after use”.</p></div></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="marker">Phase 2<b>1–2 days</b></div>
+      <div class="steps">
+        <div class="step"><span class="n">5</span><div><b>Decide the runtime, once</b><p>Either move production back to Vercel (crons, previews — but Ollama must move to a reachable host), or keep the VPS and replace all eight crons with systemd timers or <code>pg_cron</code>. Today you have Vercel's config file and none of Vercel's behaviour. Either way, schedule <code>intel-correlate</code> — it is scheduled nowhere.</p></div></div>
+        <div class="step"><span class="n">6</span><div><b>Prove the crons fire</b><p>Confirm <code>axe_broadcast_feed</code> gets a row within 10 minutes and <code>axe_daily_briefings</code> within a day. Until then the Feed tab ships empty.</p></div></div>
+        <div class="step"><span class="n">7</span><div><b>Rotate the Unusual Whales token</b><p>Or drop the five UW feeds from the Intel UI and stop advertising 13 feeds on the page.</p></div></div>
+        <div class="step"><span class="n">8</span><div><b>Reconcile intel-proxy, then debug the 7 <code>invalid_token</code> feeds</b><p>The deployed function is not this repo's function. Fix that first or you will debug the wrong source.</p></div></div>
+        <div class="step"><span class="n">9</span><div><b>Add RLS policies to the 24 policy-less tables</b><p><code>intel_*</code> first — otherwise Intel stays blank even once the feeds come back.</p></div></div>
+        <div class="step"><span class="n">10</span><div><b>Fix Finnhub or wire the fallback</b><p>Make <code>market-proxy</code>'s <code>economicCalendar</code> degrade to the Forex Factory mirror instead of returning 503.</p></div></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="marker">Phase 3<b>1 day</b></div>
+      <div class="steps">
+        <div class="step"><span class="n">11</span><div><b>Signed-in walkthrough of every <code>[~]</code> row</b><p>Add a watchlist symbol, create an alert and fire it, place an Alpaca paper order, open the Cockpit as Pro, receive a push on a real device. Six tables at zero rows say this has never been done end to end.</p></div></div>
+        <div class="step"><span class="n">12</span><div><b>One real Stripe checkout</b><p>Payment link → <code>client_reference_id</code> → webhook → <code>axe_user_entitlements</code> → gates flip. Repeat for Founder and confirm the seat cap counts only paying seats.</p></div></div>
+        <div class="step"><span class="n">13</span><div><b>Seed the RAG corpus</b><p><code>npm run setup:rag</code> against production. 27 chunks is not a knowledge base.</p></div></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="marker">Phase 4<b>Before you invite anyone</b></div>
+      <div class="steps">
+        <div class="step"><span class="n">14</span><div><b>Lint to zero, scratch directories out</b><p>Delete the four folders at the repo root, then flip <code>ignoreBuildErrors</code> to <code>false</code> — <code>tsc</code> is already clean, so it costs nothing and catches the next regression.</p></div></div>
+        <div class="step"><span class="n">15</span><div><b>Clear the Next 16 deprecations</b><p><code>middleware.ts</code> → <code>proxy.ts</code>; guard <code>process.pid</code> behind the Node runtime check. Add <code>robots.txt</code> and <code>sitemap.xml</code>.</p></div></div>
+        <div class="step"><span class="n">16</span><div><b>Settle the Supabase boundary</b><p>Baseline the live schema with <code>supabase migration repair</code>, and decide whether Companion and AXE Core should keep sharing one project — today Core's migrations are the only ones in Companion's history.</p></div></div>
+        <div class="step"><span class="n">17</span><div><b>Correct the source of truth</b><p><code>AXE_SYSTEM_TRUTH.md</code> says production is on Vercel. Reset the checklist rows this audit disproved: A2, A8, B3, B5, F3, G3, G4, H3, J5.</p></div></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<footer>
+  <div>Audit run 2026-09-07 against <span class="mono">www.axecompanion.com</span>, Supabase <span class="mono">pqnngpcgbdwxavbatbia</span>, Railway <span class="mono">axe-metaapi-streamer</span>, and commit <span class="mono">306594b</span>.</div>
+  <div>Full write-up with every query and response: <span class="mono">docs/AUDIT_2026-09-07.md</span></div>
+</footer>
+
+</div>
