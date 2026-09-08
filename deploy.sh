@@ -32,6 +32,12 @@ echo "→ installing"
 npm ci
 
 echo "→ building"
+# From a clean slate. Turbopack's incremental cache has been observed shipping
+# a stale globals.css into a fresh chunk — the Tailwind utilities regenerate,
+# the hand-written :root block does not — which on a deploy means CSS changes
+# silently do not land. A cold build costs a couple of minutes; debugging a
+# style that "did not deploy" costs an evening.
+rm -rf .next
 # The box also runs Ollama, the API and the workers; the unit caps the app at
 # 3G, and a build on top of all of that can be killed. Standing the heaviest
 # neighbour down for the build is cheaper than a half-finished deploy.

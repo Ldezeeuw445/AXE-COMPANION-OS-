@@ -482,8 +482,11 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
         ) : (
           // AXE default composer — gradient brand + particle aura
           <div className="relative overflow-visible">
+            {/* bottom-full lands the dome's baseline on the top edge of the
+                input. The old translate-y-[54%] pushed it 85px further down —
+                under the pill and out over the bottom nav. */}
             <div
-              className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
+              className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[6%] justify-center xl:hidden"
               aria-hidden
             >
               <AxeAuraWave variant="composer" palette="axe" />

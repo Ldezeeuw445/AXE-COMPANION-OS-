@@ -521,7 +521,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         onScroll={onScroll}
         onTouchStart={clearSelection}
         onTouchMove={clearSelection}
-        className="tos-scrollbar flex min-h-0 flex-1 touch-pan-y select-none flex-col gap-5 overflow-y-auto overscroll-y-contain pb-[10rem] pr-1 md:pb-2"
+        className="tos-scrollbar tos-chat-scroll-mask flex min-h-0 flex-1 touch-pan-y select-none flex-col gap-5 overflow-y-auto overscroll-y-contain pb-[var(--tos-chat-scroll-bottom)] pr-1"
         style={{
           WebkitUserSelect: "none",
           userSelect: "none",
