@@ -1,4 +1,6 @@
 import { mockMessages } from "@/services/mock/seed";
+import { detectCorrection } from "@/lib/axe/correctionDetector";
+import { recordLearningSignal } from "@/services/learningService";
 import {
   getAuthedServiceSupabase,
   SERVICES_USE_MOCK_DATA,
@@ -661,6 +663,26 @@ export async function streamChatMessage(
   const history = ((historyResult.data ?? []) as { role: "user" | "assistant"; content: string }[])
     .reverse()
     .slice(0, -1);
+
+  // The trader telling AXE it is wrong is the single most useful thing it can
+  // learn, and until now it was thrown away: ai_correction was declared in the
+  // signal union and counted by the cockpit, but no code ever wrote one.
+  // Fire-and-forget — a learning signal must never be able to fail a reply.
+  {
+    const previousRole = history.length ? history[history.length - 1].role : null;
+    const correction = detectCorrection(trimmed, previousRole);
+    if (correction.isCorrection) {
+      void recordLearningSignal(supabase, user.id, "ai_correction", {
+        correction: trimmed.slice(0, 2000),
+        matched: correction.matched,
+        confidence: correction.confidence,
+        detector: "heuristic",
+        chat_type: type,
+        symbol: symbol ?? null,
+        corrected_reply: history[history.length - 1].content.slice(0, 1200),
+      });
+    }
+  }
 
   // 4. Inject candles_summary from pinned_context (+ intel snapshot when in intel mode)
   let knowledgeBlock = knowledgeLayer;

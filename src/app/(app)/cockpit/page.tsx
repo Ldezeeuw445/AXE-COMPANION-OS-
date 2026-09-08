@@ -5,6 +5,7 @@ import { CockpitFeedbackImpact } from "@/components/cockpit/CockpitFeedbackImpac
 import { CockpitFooterNote } from "@/components/cockpit/CockpitFooterNote";
 import { CockpitLearningProgress } from "@/components/cockpit/CockpitLearningProgress";
 import { CockpitLearningArc } from "@/components/cockpit/CockpitLearningArc";
+import { CockpitKnowledgeFiles } from "@/components/cockpit/CockpitKnowledgeFiles";
 import { CockpitGenerateButton } from "@/components/cockpit/CockpitGenerateButton";
 import { CockpitAutoRefresh } from "@/components/cockpit/CockpitAutoRefresh";
 import { CockpitTodayStrip } from "@/components/cockpit/CockpitTodayStrip";
@@ -21,6 +22,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getUserAxeEntitlement } from "@/services/billingService";
 import type { UserAxeEntitlement } from "@/lib/billing/types";
 import { getCockpitDashboard } from "@/services/cockpitService";
+import { getUserKnowledgeOverview, type UserKnowledgeOverview } from "@/services/userKnowledgeReadService";
 import { loadAdaptiveSuggestions } from "@/lib/adaptive/server";
 import type { AdaptiveSuggestionState } from "@/types/adaptive";
 
@@ -41,17 +43,20 @@ export default async function CockpitPage() {
   let entitlement = EMPTY_ENTITLEMENT;
   let userId: string | undefined;
   let adaptiveSuggestions: AdaptiveSuggestionState[] = [];
+  let knowledge: UserKnowledgeOverview = { files: [], sharedDocCount: 0 };
   if (supabase) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
       userId = user.id;
-      const [nextEntitlement, suggestionRows] = await Promise.all([
+      const [nextEntitlement, suggestionRows, knowledgeOverview] = await Promise.all([
         getUserAxeEntitlement(supabase, user.id),
         loadAdaptiveSuggestions(supabase, user.id),
+        getUserKnowledgeOverview(supabase, user.id),
       ]);
       entitlement = nextEntitlement;
+      knowledge = knowledgeOverview;
       adaptiveSuggestions = suggestionRows
         .filter((row) => row.status === "pending")
         .slice(0, 4)
@@ -137,7 +142,10 @@ export default async function CockpitPage() {
       ) : null}
 
       {canLearn ? (
-        <CockpitLearningArc data={dash.learningArc} />
+        <>
+          <CockpitLearningArc data={dash.learningArc} />
+          <CockpitKnowledgeFiles data={knowledge} />
+        </>
       ) : (
         <>
           <UpgradeGate
