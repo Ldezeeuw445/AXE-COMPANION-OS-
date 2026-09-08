@@ -1,5 +1,6 @@
 /** Server-only MetaApi configuration (never import from client components). */
 
+import { firstNonEmptyEnv } from "@/lib/envFallback";
 import {
   clientApiHostForRegion,
   marketDataHostForRegion,
@@ -18,13 +19,12 @@ const DEFAULT_PROVISIONING = "https://mt-provisioning-api-v1.agiliumtrade.agiliu
  * mt5_positions never having held a row.
  */
 export function getMetaApiToken(): string | null {
-  const t =
-    process.env.METAAPI_TOKEN ??
-    process.env.AXE_METAAPI_TOKEN ??
-    process.env.AXE_MT5_METAAPI_TOKEN ??
-    process.env.METAAPI_KEY ??
-    "";
-  return t.trim() || null;
+  return firstNonEmptyEnv(
+    "METAAPI_TOKEN",
+    "AXE_METAAPI_TOKEN",
+    "AXE_MT5_METAAPI_TOKEN",
+    "METAAPI_KEY",
+  );
 }
 
 export function getMetaApiProvisioningBaseUrl(): string {

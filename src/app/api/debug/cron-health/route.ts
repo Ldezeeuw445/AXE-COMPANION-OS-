@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { firstNonEmptyEnv } from "@/lib/envFallback";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -44,23 +46,34 @@ export async function GET() {
     // copy-paste result and would still fail the routes' exact comparison.
     had_surrounding_whitespace: raw != null && raw !== secret,
     supabase_service_role_set: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
-    metaapi_token_set: Boolean(
-      (process.env.METAAPI_TOKEN ??
-        process.env.AXE_METAAPI_TOKEN ??
-        process.env.AXE_MT5_METAAPI_TOKEN ??
-        process.env.METAAPI_KEY ??
-        "").trim(),
-    ),
+    metaapi_token_set:
+      firstNonEmptyEnv(
+        "METAAPI_TOKEN",
+        "AXE_METAAPI_TOKEN",
+        "AXE_MT5_METAAPI_TOKEN",
+        "METAAPI_KEY",
+      ) !== null,
+    // Which spelling actually won, so an empty var shadowing a populated one is
+    // visible instead of having to be deduced from a 503.
+    metaapi_token_source:
+      ["METAAPI_TOKEN", "AXE_METAAPI_TOKEN", "AXE_MT5_METAAPI_TOKEN", "METAAPI_KEY"]
+        .find((n) => (process.env[n] ?? "").trim().length > 0) ?? null,
+    metaapi_names_present_but_empty:
+      ["METAAPI_TOKEN", "AXE_METAAPI_TOKEN", "AXE_MT5_METAAPI_TOKEN", "METAAPI_KEY"]
+        .filter((n) => process.env[n] != null && process.env[n]!.trim().length === 0),
     krater_api_key_set: Boolean(process.env.KRATER_API_KEY?.trim()),
     stripe_secret_set: Boolean(process.env.STRIPE_SECRET_KEY?.trim()),
     stripe_webhook_secret_set: Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim()),
-    alpaca_configured: Boolean(
-      (process.env.ALPACA_PAPER_API_KEY_ID ??
-        process.env.ALPACA_PAPER_API_KEY ??
-        process.env.ALPACA_API_KEY_ID ??
-        process.env.ALPACA_API_KEY ??
-        "").trim(),
-    ),
+    alpaca_configured:
+      firstNonEmptyEnv(
+        "ALPACA_PAPER_API_KEY_ID",
+        "ALPACA_PAPER_API_KEY",
+        "ALPACA_API_KEY_ID",
+        "ALPACA_API_KEY",
+      ) !== null,
+    unusual_whales_set:
+      firstNonEmptyEnv("UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY") !== null,
+    openai_key_set: firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY") !== null,
     app_url: process.env.NEXT_PUBLIC_APP_URL ?? null,
   });
 }

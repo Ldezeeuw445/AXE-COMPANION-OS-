@@ -1,3 +1,4 @@
+import { firstNonEmptyEnv } from "@/lib/envFallback";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordLearningSignal } from "@/services/learningService";
 import { scheduleCockpitRefresh } from "@/services/cockpitSnapshotService";
@@ -65,7 +66,7 @@ export async function autoJournalTrades(
   accountId: string,
   tradeIds?: string[],
 ): Promise<AutoJournalOutcome> {
-  const openaiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
+  const openaiKey = firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY");
   if (!openaiKey) return { ok: false, error: "OPENAI_API_KEY not configured", status: 503 };
 
   const baseQuery = supabase

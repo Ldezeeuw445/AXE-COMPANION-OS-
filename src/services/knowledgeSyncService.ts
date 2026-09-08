@@ -1,3 +1,4 @@
+import { firstNonEmptyEnv } from "@/lib/envFallback";
 import "server-only";
 
 import fs from "fs";
@@ -159,7 +160,7 @@ async function embedMissingChunks(
 export async function runKnowledgeSync(
   supabase: SupabaseClient,
 ): Promise<KnowledgeSyncSummary> {
-  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
+  const apiKey = firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY");
   const { docsSeeded, errors } = await seedKnowledgeDocs(supabase);
 
   if (!apiKey) {
