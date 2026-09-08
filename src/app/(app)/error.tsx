@@ -19,7 +19,7 @@ export default function AppError({
         void fetch("/api/diagnostics/client-error", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: error.message, stack: (error as any).stack ?? null, url: typeof window !== 'undefined' ? window.location.href : null, userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null }),
+          body: JSON.stringify({ message: error.message, stack: error.stack ?? null, url: typeof window !== 'undefined' ? window.location.href : null, userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null }),
         });
       } catch (e) {
         // swallow

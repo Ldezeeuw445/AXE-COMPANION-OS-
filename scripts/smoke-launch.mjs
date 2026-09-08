@@ -122,8 +122,11 @@ if (cronSecret) {
     return `mode=${j.syncMode} hasKey=${j.hasKraterApiKey} probeOk=${j.generateProbe?.some((p) => p.ok) ?? false}`;
   });
 } else {
-  console.log("⚠ CRON_SECRET not in .env.smoke — skip authenticated cron tests");
-  console.log("  (Vercel CLI sometimes omits decrypted secrets; cron still runs on Vercel)\n");
+  // Not a pass. This suite reported 9/9 for two months while every cron was
+  // dead, because everything it could not verify it quietly skipped.
+  await check("Authenticated cron tests", async () => {
+    throw new Error("CRON_SECRET not in .env.smoke — cron delivery was NOT verified");
+  });
 }
 
 await check("Quotes API (anonymous)", async () => {
@@ -132,6 +135,55 @@ await check("Quotes API (anonymous)", async () => {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return `HTTP ${res.status}`;
 });
+
+// ── Data freshness ───────────────────────────────────────────────────────────
+// The checks above prove routes answer. They cannot tell whether anything is
+// actually being produced — which is exactly how a two-month outage stayed
+// invisible behind a green suite. These assert on outcomes instead: a cron is
+// working only if its table has a recent row.
+const serviceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || process.env.SUPABASE_SERVICE_ROLE?.trim();
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()?.replace(/\/$/, "");
+
+/** Newest row must be younger than maxAgeHours, or the job behind it is down. */
+const FRESHNESS_CHECKS = [
+  { label: "AXE Feed broadcast", table: "axe_broadcast_feed", column: "created_at", maxAgeHours: 24 },
+  { label: "Daily briefings", table: "axe_daily_briefings", column: "created_at", maxAgeHours: 48 },
+  { label: "Cockpit snapshots", table: "assistant_cockpit_snapshots", column: "created_at", maxAgeHours: 48 },
+];
+
+if (serviceKey && supabaseUrl) {
+  for (const { label, table, column, maxAgeHours } of FRESHNESS_CHECKS) {
+    await check(`${label} is fresh`, async () => {
+      const url =
+        `${supabaseUrl}/rest/v1/${table}` +
+        `?select=${column}&order=${column}.desc&limit=1`;
+      const res = await fetch(url, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} reading ${table}`);
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        throw new Error(`${table} is empty — the job behind it has never produced a row`);
+      }
+      const newest = new Date(rows[0][column]);
+      const ageHours = (Date.now() - newest.getTime()) / 3_600_000;
+      if (!Number.isFinite(ageHours)) throw new Error(`unparseable ${column}`);
+      if (ageHours > maxAgeHours) {
+        throw new Error(
+          `newest row is ${ageHours.toFixed(1)}h old (limit ${maxAgeHours}h) — cron is not delivering`,
+        );
+      }
+      return `${ageHours.toFixed(1)}h old`;
+    });
+  }
+} else {
+  await check("Data freshness", async () => {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_URL missing — cron output was NOT verified",
+    );
+  });
+}
 
 const failed = checks.filter((c) => !c.ok);
 console.log(`\n${checks.length - failed.length}/${checks.length} passed`);

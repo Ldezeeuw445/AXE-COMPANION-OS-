@@ -7,6 +7,20 @@ import { refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncClo
 const DEFAULT_STALE_MS = 10 * 60 * 1000;
 const PROVISIONING_STATUSES = new Set(["provisioning", "connecting", "syncing"]);
 
+/**
+ * How long an account may sit in a "busy" status before we stop believing it.
+ *
+ * These statuses are set at the start of a sync and cleared at the end, so an
+ * interrupted run — a restart, a crash, a cron that stops firing — leaves one
+ * behind with nothing to clear it. Skipping on the status alone then locks the
+ * account out permanently: production had an account stuck on "syncing" from
+ * 2026-06-25, skipped on every run for over two months.
+ *
+ * A real sync finishes in well under a minute, so anything older than this is a
+ * leftover and the account is retried rather than skipped forever.
+ */
+const BUSY_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
+
 export type BackgroundSyncSummary = {
   scanned: number;
   synced: number;
@@ -30,8 +44,19 @@ type CloudAccountRow = {
   metadata?: Record<string, unknown> | null;
 };
 
-function isProvisioning(status: string | null | undefined): boolean {
-  return PROVISIONING_STATUSES.has(String(status ?? "").toLowerCase());
+function isProvisioning(
+  status: string | null | undefined,
+  lastSyncAt?: string | null,
+): boolean {
+  if (!PROVISIONING_STATUSES.has(String(status ?? "").toLowerCase())) return false;
+
+  // A busy status with no timestamp cannot be aged out, so honour it.
+  if (!lastSyncAt) return true;
+
+  const startedAt = new Date(lastSyncAt).getTime();
+  if (!Number.isFinite(startedAt)) return true;
+
+  return Date.now() - startedAt < BUSY_STATUS_TIMEOUT_MS;
 }
 
 /**
@@ -68,7 +93,7 @@ export async function syncStaleMt5Accounts(
   };
 
   for (const row of accounts ?? []) {
-    if (isProvisioning(row.provider_status)) {
+    if (isProvisioning(row.provider_status, row.last_sync_at)) {
       summary.skipped += 1;
       continue;
     }

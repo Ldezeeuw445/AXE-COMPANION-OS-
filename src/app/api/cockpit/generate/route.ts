@@ -82,7 +82,9 @@ export async function POST(request: Request) {
     .order("last_message_at", { ascending: false })
     .limit(5);
 
-  const convIds: string[] = Array.isArray(convs) ? convs.map((c: any) => c.id) : [];
+  const convIds: string[] = Array.isArray(convs)
+    ? convs.map((c: { id: string }) => c.id)
+    : [];
 
   // Fetch data in parallel, scoped to the selected conversation type
   const [messagesResult, memoryResult, alertsResult, execResult] = await Promise.all([
@@ -145,6 +147,8 @@ export async function POST(request: Request) {
     executions: execs.map((e) => ({ symbol: e.symbol, direction: e.direction, status: e.status, at: e.created_at })),
   };
 
+  let snapshot: Record<string, unknown> = {};
+
   try {
     const result = await callLLM({
       temperature: 0.3,
@@ -161,7 +165,7 @@ export async function POST(request: Request) {
     const raw = result.content ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
-    var snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
   } catch (err) {
     console.error("[cockpit/generate] AI error:", err);
     return NextResponse.json({ error: "Failed to generate snapshot" }, { status: 500 });

@@ -3,6 +3,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type {
+  Mt5DoctorOverallStatus,
+  Mt5DoctorReport,
+  Mt5DoctorStep,
+  Mt5DoctorStepId,
+  Mt5DoctorStepStatus,
+} from "@/types/mt5Doctor";
 import {
   classifyMetaApiProvisioningError,
   userMessageForCode,
@@ -11,6 +18,7 @@ import {
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetAccountInformation,
+  clientGetHistoryDealsRange,
   clientListSymbols,
   clientGetPositions,
   clientGetSymbolPrice,
@@ -338,7 +346,6 @@ export async function createCloudMt5ConnectionAction(
         : region),
     passwordType,
     metaApiComplianceConfirmed: true,
-    passwordType,
     createdVia: "axe_companion_cloud_mt5",
     metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,
@@ -672,6 +679,144 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
     autoJournal: true,
     allowEmptyDeals: false,
   });
+}
+
+// ── MT5 Doctor helpers ───────────────────────────────────────────────────────
+// runCloudMt5DoctorAction referenced these but they were never written, so the
+// action threw a ReferenceError the moment the Accounts screen's Doctor button
+// called it. Budgets are per-probe: the doctor runs several MetaAPI round-trips
+// back to back, so each one is capped well below the action budget rather than
+// letting a single slow terminal eat the whole report.
+const DOCTOR_PROVISIONING_TIMEOUT_MS = 12_000;
+const DOCTOR_ACCOUNT_INFO_TIMEOUT_MS = 15_000;
+const DOCTOR_POSITIONS_TIMEOUT_MS = 12_000;
+const DOCTOR_HISTORY_TIMEOUT_MS = 20_000;
+const DOCTOR_PRICE_TIMEOUT_MS = 10_000;
+
+/** Non-empty trimmed string, or null — MetaAPI omits fields rather than nulling them. */
+function safeString(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length > 0 ? t : null;
+}
+
+/** Whole minutes since an ISO timestamp; null when absent or unparseable. */
+function minutesSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return null;
+  return Math.max(0, Math.round((Date.now() - then) / 60_000));
+}
+
+/**
+ * One line a trader can act on. MetaApiRequestError bodies are verbose and
+ * often carry the whole account id, so keep the status and message only.
+ */
+function compactMetaError(e: unknown): string {
+  if (e instanceof MetaApiRequestError) {
+    const detail = safeString(e.message) ?? "MetaAPI request failed";
+    return e.status ? `MetaAPI ${e.status}: ${detail}` : detail;
+  }
+  if (e instanceof Error) return safeString(e.message) ?? e.name;
+  return safeString(String(e)) ?? "Unknown error";
+}
+
+/**
+ * Turns a stored provider_status into the reason a trader would recognise.
+ * Returns null for healthy or unknown statuses so the step reads as a pass.
+ */
+function knownFailureFromStatus(providerStatus: string | null | undefined): string | null {
+  const status = safeString(providerStatus)?.toLowerCase();
+  if (!status) return null;
+  switch (status) {
+    case "invalid_credentials":
+      return "MetaAPI rejected the stored MT5 login or password.";
+    case "server_not_found":
+      return "The broker server name stored on this account was not found by MetaAPI.";
+    case "disconnected":
+      return "The MetaAPI terminal is not currently connected to the broker.";
+    case "deploying":
+    case "provisioning":
+      return "The MetaAPI terminal is still being provisioned.";
+    case "undeployed":
+      return "The MetaAPI terminal is undeployed, so no broker data can be read.";
+    case "error":
+      return "MetaAPI reported an error state for this account.";
+    default:
+      return null;
+  }
+}
+
+function doctorStep(
+  id: Mt5DoctorStepId,
+  label: string,
+  status: Mt5DoctorStepStatus,
+  detail: string,
+): Mt5DoctorStep {
+  return { id, label, status, detail };
+}
+
+function doctorHeadline(status: Mt5DoctorOverallStatus): string {
+  switch (status) {
+    case "connected":
+      return "MT5 is connected and readable.";
+    case "syncing":
+      return "MT5 is connected; some data is still catching up.";
+    case "reconnecting":
+      return "The MetaAPI terminal is reconnecting to your broker.";
+    case "provisioning_pending":
+      return "The MetaAPI terminal is still provisioning.";
+    case "credentials_issue":
+      return "MetaAPI could not accept the stored MT5 credentials.";
+    case "server_issue":
+      return "The broker server could not be reached.";
+    case "read_only":
+      return "MT5 is connected in read-only mode.";
+    case "needs_attention":
+    default:
+      return "MT5 needs attention.";
+  }
+}
+
+/**
+ * Collapses the individual probes into one status. Order matters: the hardest
+ * blockers are decided first, so a credentials failure is never reported as a
+ * generic "needs attention".
+ */
+function overallFromDoctor(input: {
+  providerStatus: string | null;
+  liveTradingEnabled: boolean;
+  deploymentStatus: Mt5DoctorStepStatus;
+  terminalStatus: Mt5DoctorStepStatus;
+  brokerStatus: Mt5DoctorStepStatus;
+  positionsStatus: Mt5DoctorStepStatus;
+  historyStatus: Mt5DoctorStepStatus;
+  priceStatus: Mt5DoctorStepStatus;
+  knownFailure: string | null;
+}): Mt5DoctorOverallStatus {
+  const status = safeString(input.providerStatus)?.toLowerCase();
+
+  if (status === "invalid_credentials") return "credentials_issue";
+  if (status === "server_not_found") return "server_issue";
+  if (status === "deploying" || status === "provisioning" || status === "undeployed") {
+    return "provisioning_pending";
+  }
+
+  if (input.deploymentStatus === "fail") return "provisioning_pending";
+  if (input.brokerStatus === "fail") {
+    return input.terminalStatus === "fail" ? "reconnecting" : "server_issue";
+  }
+  if (input.terminalStatus === "fail") return "reconnecting";
+
+  if (input.positionsStatus === "fail" || input.historyStatus === "fail") {
+    return "needs_attention";
+  }
+  if (input.knownFailure) return "needs_attention";
+
+  if (input.terminalStatus === "warn" || input.priceStatus === "fail") return "syncing";
+  if (input.brokerStatus !== "pass" || input.positionsStatus !== "pass") return "syncing";
+
+  return input.liveTradingEnabled ? "connected" : "read_only";
 }
 
 export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5CloudResult<Mt5DoctorReport>> {

@@ -687,7 +687,7 @@ export async function streamChatMessage(
       supabase,
       requestedSymbol,
       tf ?? contextWithCandles.timeframe ?? null,
-      conversation.pinnedContext ?? null,
+      conversation?.pinnedContext ?? null,
     );
     priceContextBySymbol.set(requestedSymbol, next);
     return next;

@@ -2,12 +2,13 @@
  * OpenAI client for llmRouter.
  * Thin wrapper around the openai SDK so llmRouter can import a consistent shape.
  */
+import { firstNonEmptyEnv } from "@/lib/envFallback";
 import OpenAI from "openai";
 import type { AxeResponse, AxeToolCall } from "@/services/axeService";
 
 function getClient(): OpenAI {
   const apiKey =
-    process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY ?? "";
+    firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY") ?? "";
   return new OpenAI({ apiKey });
 }
 

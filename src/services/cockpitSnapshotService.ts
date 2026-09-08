@@ -1,3 +1,4 @@
+import { firstNonEmptyEnv } from "@/lib/envFallback";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import {
@@ -584,12 +585,13 @@ export async function generateCockpitSnapshot(
     signal_count: data.signalCount,
   };
 
-  const apiKey = process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY;
+  const apiKey = firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY");
   const enriched = await maybeEnrichNarrativeWithGpt(
     data,
     snapshot.learning_progress,
     alignmentScore,
-    apiKey,
+    // firstNonEmptyEnv returns null for "absent"; this helper takes undefined.
+    apiKey ?? undefined,
   );
   snapshot.learning_progress = enriched;
 

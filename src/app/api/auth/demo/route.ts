@@ -3,6 +3,30 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { ensureDemoWorkspace } from "@/lib/broker/demoAccount";
 
+/**
+ * A demo session is a time-boxed Pro trial, not a free Founder seat.
+ *
+ * getUserAxeEntitlement() treats plan "free" with a future pro_until as Pro, and
+ * that flips back to free on its own once the timestamp passes — whereas plan
+ * "pro"/"founder" is paid forever regardless of pro_until (isPaidAxePlan reads
+ * the plan string only). So "free" + pro_until is the only grant here that
+ * actually expires.
+ *
+ * chat_quota_exempt stays false on purpose: axe_plan_is_paid() also reads the
+ * plan string, so a demo keeps the normal 20-messages-a-day cap. Pro features
+ * are unlocked; the model bill is not.
+ */
+const DEMO_TRIAL_HOURS = 24;
+
+function demoTrialEntitlement() {
+  return {
+    plan: "free" as const,
+    founder_badge: false,
+    chat_quota_exempt: false,
+    pro_until: new Date(Date.now() + DEMO_TRIAL_HOURS * 60 * 60 * 1000).toISOString(),
+  };
+}
+
 function demoCreds() {
   const email = process.env.DEMO_USER_EMAIL?.trim();
   const password = process.env.DEMO_USER_PASSWORD?.trim();
@@ -36,10 +60,7 @@ export async function POST() {
           service.from("axe_user_entitlements").upsert(
             {
               user_id: userId,
-              plan: "founder",
-              founder_badge: true,
-              chat_quota_exempt: true,
-              pro_until: null,
+              ...demoTrialEntitlement(),
               updated_at: new Date().toISOString(),
             },
             { onConflict: "user_id" },
