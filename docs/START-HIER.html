@@ -89,18 +89,18 @@
 <div class="wrap">
 
 <header>
-  <div class="lbl">AXE Companion · 8 september 2026</div>
+  <div class="lbl">AXE Companion · bijgewerkt 8 september 2026, 18:30</div>
   <h1>Start hier</h1>
-  <p class="sub">Vier dingen die jij doet, in deze volgorde. Alles daaromheen is al gedaan of wacht op stap 1.</p>
+  <p class="sub">De configuratie is rond. Wat nu nog staat is de code naar de server brengen en één keer ingelogd doorlopen.</p>
 </header>
 
 <div class="reframe">
-  <div class="big">Je app is niet half af. Hij is stilgevallen.</div>
-  <p>Dat is het belangrijkste om vast te houden. Broker-koppelingen, trade-sync en MT5-historie hebben allemaal echt gedraaid in productie — 167 gekoppelde accounts, 485 trades, 28 gesloten MT5-posities. Er is niets opnieuw te bouwen. Er moet iets weer aangezet worden.</p>
+  <div class="big">De crons draaien weer. Voor het eerst sinds juli.</div>
+  <p>De cron-sleutel matcht aan beide kanten, en de jobs antwoorden met 200: axe-watcher maakte een alert-event aan, intel-correlate genereerde een correlatie. De MetaAPI-token is geldig en staat op de server. Wat er nog ligt is geen puzzelwerk meer — het is uitvoeren.</p>
 </div>
 
 <section>
-  <div class="shead"><span class="lbl">Wat wanneer stopte</span></div>
+  <div class="shead"><span class="lbl">Wat wanneer stopte — en nu weer loopt</span></div>
   <div class="stops">
     <div class="r h"><span>Onderdeel</span><span>Laatste teken van leven</span><span>Omvang</span></div>
     <div class="r"><span class="what">MT5 sync</span><span class="when">25 juni</span><span class="n">3 accounts</span></div>
@@ -115,55 +115,64 @@
 </section>
 
 <section>
-  <div class="shead"><span class="lbl">Jouw vier stappen</span></div>
+  <div class="shead"><span class="lbl">Jouw vijf stappen</span></div>
   <div class="steps">
 
     <article class="step">
-      <div class="top"><span class="num">1</span><h3>De cron-sleutel in Vault zetten</h3><span class="mins">5 min</span></div>
+      <div class="top"><span class="num">1</span><h3>De branch naar de VPS brengen</h3><span class="mins">15 min</span></div>
       <div class="body">
-        <p class="why">Dit is de enige stap die de andere blokkeert. Alles eronder wordt makkelijker als deze staat.</p>
-        <p>Haal de waarde van je VPS:</p>
-        <pre>grep CRON_SECRET /pad/naar/app/.env.local</pre>
-        <p>Staat hij er niet? Maak er dan één met <code>openssl rand -hex 32</code> en zet hem op de VPS én hieronder.</p>
-        <p>Dan in de Supabase SQL-editor — vervang <em>alles</em> tussen de aanhalingstekens, en druk op <strong>Run</strong>, niet Save:</p>
-        <pre>select vault.update_secret(
-  (select id from vault.secrets where name = 'axe_companion_cron_secret'),
-  'DE_ECHTE_WAARDE'
-);</pre>
-        <p class="unlocks">→ Zet weer aan: Feed, dagelijkse briefings, smart alerts, MT5-sync, Intel-warmup, cockpit-snapshots</p>
+        <p class="why">Alles wat gerepareerd is staat op de branch, niet op je server. De draaiende code is van 23 augustus.</p>
+        <pre>cd /root/AXE-COMPANION-OS-
+git fetch origin
+git checkout deployed
+git reset --hard origin/claude/axe-companion-audit-launch-nz58dg
+npm ci &amp;&amp; npm run build
+systemctl restart axe-companion
+curl -s -o /dev/null -w "%{http_code}\n" https://www.axecompanion.com/robots.txt</pre>
+        <p>Die laatste regel is je bewijs: <strong>200</strong> = geland, <strong>404</strong> = de build mislukte stil en het oude proces serveert nog. Loopt de build vast op geheugen: <code>systemctl stop axe-browser-agent</code>, bouwen, weer starten.</p>
+        <p class="unlocks">→ Brengt live: twee MT5-bugfixes, de MT5 Doctor, de lege-env-fallback, robots.txt, en het verwijderen van /migrations en /shadcn-demo</p>
       </div>
     </article>
 
     <article class="step">
-      <div class="top"><span class="num">2</span><h3>Eén GitHub-secret, en Edge functions deployen voortaan vanzelf</h3><span class="mins">2 min</span></div>
+      <div class="top"><span class="num">2</span><h3>Unusual Whales naar Supabase Edge secrets</h3><span class="mins">5 min</span></div>
       <div class="body">
-        <p class="why">De workflow bestaat al en heeft negen keer "geslaagd" gemeld in twaalf seconden — dat was de overslaan-tak, omdat deze secret ontbrak.</p>
-        <p>Repo → Settings → Secrets and variables → Actions:</p>
-        <pre>SUPABASE_ACCESS_TOKEN = &lt;token van supabase.com/dashboard/account/tokens&gt;
-SUPABASE_PROJECT_REF  = pqnngpcgbdwxavbatbia   (als variable)</pre>
-        <p>Daarna Actions → "Deploy Supabase Edge Functions" → Run workflow.</p>
-        <p class="unlocks">→ Zet weer aan: 7 Intel-feeds die de gedeployde functie nu simpelweg niet kent</p>
-      </div>
-    </article>
-
-    <article class="step">
-      <div class="top"><span class="num">3</span><h3>Unusual Whales-token vervangen</h3><span class="mins">5 min</span></div>
-      <div class="body">
-        <p class="why">Twee keer bevestigd dood: <em>"token … revoked, regenerated, or belongs to a different account"</em>.</p>
-        <p>Nieuwe token op unusualwhales.com, dan in <strong>Supabase → Edge Functions → Secrets</strong> als <code>UNUSUAL_WHALES_TOKEN</code>. Niet op de VPS — Intel loopt via de Edge function.</p>
+        <p class="why">Je token staat in <code>.env.local</code> op de VPS, waar <code>intel-proxy</code> er niet bij kan. Edge functions lezen alleen Supabase-secrets.</p>
+        <p>Test eerst of de token die je hebt nog leeft:</p>
+        <pre>UW=$(grep '^UNUSUAL_WHALES_TOKEN=' /root/AXE-COMPANION-OS-/.env.local | cut -d= -f2- | tr -d '\042\047' | xargs)
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -H "Authorization: Bearer $UW" \
+  https://api.unusualwhales.com/api/market/market-tide</pre>
+        <p><strong>200</strong> → kopieer die waarde naar Supabase → Edge Functions → Secrets als <code>UNUSUAL_WHALES_TOKEN</code>. <strong>401</strong> → nieuwe halen op unusualwhales.com.</p>
         <p class="unlocks">→ Zet weer aan: insider trades, congress trades, dark pool, unusual options, market tide</p>
       </div>
     </article>
 
     <article class="step">
-      <div class="top"><span class="num">4</span><h3>Eén keer ingelogd doorlopen</h3><span class="mins">30 min</span></div>
+      <div class="top"><span class="num">3</span><h3>intel-proxy opnieuw deployen</h3><span class="mins">2 min</span></div>
       <div class="body">
-        <p class="why">Dit is het enige wat ik principieel niet voor je kan doen, en het enige wat "launch ready" echt bewijst.</p>
-        <p>Watchlist-symbool toevoegen · alert aanmaken en laten afgaan · Alpaca paper-order plaatsen · Cockpit openen als Pro · push ontvangen op je telefoon · één echte Stripe-checkout van begin tot eind.</p>
-        <p>Watchlists, alerts, posities, vault en journal staan alle vijf op nul rijen. Dat kan betekenen dat niemand zo ver kwam, of dat het schrijfpad stuk is. Eén doorloop maakt het verschil duidelijk.</p>
+        <p class="why">De gedeployde functie kent zeven acties helemaal niet — ze geven <code>unknown_action</code>. De repo heeft ze wel. De CI-workflow "slaagde" negen keer in twaalf seconden; dat was de overslaan-tak omdat een secret ontbrak.</p>
+        <pre>supabase functions deploy intel-proxy --project-ref pqnngpcgbdwxavbatbia</pre>
+        <p>Of duurzamer: zet <code>SUPABASE_ACCESS_TOKEN</code> als GitHub-secret, dan deployt de workflow voortaan vanzelf.</p>
+        <p class="unlocks">→ Zet weer aan: vessels, conflicten, energie, cyber, chokepoints, radar, noodmonitor</p>
       </div>
     </article>
 
+    <article class="step">
+      <div class="top"><span class="num">4</span><h3>Eén MT5-account opnieuw koppelen</h3><span class="mins">5 min</span></div>
+      <div class="body">
+        <p class="why">Je drie MT5-rijen wijzen naar accounts van je oude token — geen ervan bestaat nog. Ze kunnen niet synchroniseren, wat de status ook zegt.</p>
+        <p>Koppel er één van je vijf huidige accounts (MT5 100K DEMO, 50K, 5K, OANDA DEMO 50K) via de app. Daarna vult <code>mt5-sync</code> zichzelf.</p>
+      </div>
+    </article>
+
+    <article class="step">
+      <div class="top"><span class="num">5</span><h3>Eén keer ingelogd doorlopen</h3><span class="mins">30 min</span></div>
+      <div class="body">
+        <p class="why">Het enige wat ik principieel niet voor je kan doen, en het enige wat "launch ready" echt bewijst.</p>
+        <p>Watchlist-symbool toevoegen · alert aanmaken en laten afgaan · Alpaca paper-order plaatsen · Cockpit openen als Pro · push ontvangen op je telefoon · één echte Stripe-checkout van begin tot eind.</p>
+        <p>Watchlists, alerts, posities, vault en journal staan alle vijf op nul rijen. Eén doorloop maakt duidelijk of de schrijfpaden werken of dat niemand ooit zo ver kwam.</p>
+      </div>
+    </article>
   </div>
 </section>
 
@@ -187,6 +196,10 @@ SUPABASE_PROJECT_REF  = pqnngpcgbdwxavbatbia   (als variable)</pre>
 <section>
   <div class="shead"><span class="lbl">Al gedaan — hier hoef je niets mee</span></div>
   <div class="done">
+    <div class="r"><span class="tick">✓</span><span class="t"><b>Cron-sleutel geroteerd en gematcht.</b> Vault en VPS geven dezelfde fingerprint; de jobs antwoorden 200. De oude sleutel is vervangen nadat hij in een chat belandde.</span></div>
+    <div class="r"><span class="tick">✓</span><span class="t"><b>MetaAPI-token werkt.</b> Alle drie de namen stonden leeg in <code>.env.local</code> — vandaar <code>metaapi_not_configured</code>. Nu geldig geïnstalleerd (2589 tekens, HTTP 200).</span></div>
+    <div class="r"><span class="tick">✓</span><span class="t"><b>Een lege env-variabele verbergt de goede niet meer.</b> De ketens gebruikten <code>??</code>, dat alleen terugvalt bij ontbrekend — niet bij leeg. Gold ook voor OpenAI, Polygon en Unusual Whales.</span></div>
+    <div class="r"><span class="tick">✓</span><span class="t"><b>Een vastgelopen sync blokkeert geen account meer.</b> Vantage stond sinds 25 juni op <code>syncing</code> en werd élke run overgeslagen.</span></div>
     <div class="r"><span class="tick">✓</span><span class="t"><b>Datalek gedicht.</b> 17.223 geheugenrijen waren leesbaar én schrijfbaar met de publieke sleutel. Dicht, geverifieerd, geen rij verloren.</span></div>
     <div class="r"><span class="tick">✓</span><span class="t"><b>Demo geeft het product niet meer weg.</b> Was Founder met onbeperkte chat voor iedere bezoeker; nu een trial van 24 uur die echt verloopt. 116 rijen teruggezet.</span></div>
     <div class="r"><span class="tick">✓</span><span class="t"><b>Crons herbouwd op pg_cron.</b> Negen jobs staan ingepland en vuren aantoonbaar vanzelf af — ze bereikten je VPS om 20:00:00.</span></div>
