@@ -11,20 +11,28 @@ export default function AppError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Optionally log to an error reporting service
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[AXE Error]", error);
-      try {
-        // Send client-side error details to local diagnostics endpoint (dev only)
-        void fetch("/api/diagnostics/client-error", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: error.message, stack: error.stack ?? null, url: typeof window !== 'undefined' ? window.location.href : null, userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null }),
-        });
-      } catch (e) {
-        // swallow
-      }
-    }
+    // Reported in production too. This block used to be wrapped in
+    // `if (process.env.NODE_ENV !== "production")`, so the screen below
+    // promised "This has been noted" while noting nothing for real users.
+    console.error("[AXE Error]", error);
+    void fetch("/api/diagnostics/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        source: "app_error_boundary",
+        message: error.message,
+        stack: error.stack ?? null,
+        // Next replaces the message of a server-side error with a generic one
+        // and gives it a digest; the digest is what ties this row to the host
+        // log line that carries the real stack.
+        digest: error.digest ?? null,
+        url: typeof window !== "undefined" ? window.location.href : null,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+      }),
+    }).catch(() => {
+      // A failed report must never replace the error the user is already seeing.
+    });
   }, [error]);
 
   return (
