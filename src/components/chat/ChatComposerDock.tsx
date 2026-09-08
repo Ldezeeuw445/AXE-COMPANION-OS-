@@ -67,18 +67,29 @@ export function ChatComposerDock({ children }: Props) {
   const dockBottom = "var(--tos-chat-composer-bottom, var(--tos-nav-h))";
 
   const stack = (
-    <div
-      className="tos-chat-composer-dock pointer-events-none fixed inset-x-0 z-[85] block px-3"
-      style={{
-        bottom: dockBottom,
-        transform: `translate3d(0, -${keyboardInset}px, 0)`,
-        willChange: keyboardInset > 0 ? "transform" : undefined,
-      }}
-    >
-      <div className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">
-        {children}
+    <>
+      {/* Covers the thread from the composer's top edge down, so nothing is
+          seen travelling through the gap above the nav or behind the pill.
+          Deliberately outside the transform below: when the keyboard pushes
+          the composer up it is covering that band itself, and a scrim that
+          rode along would leave a bare strip behind it. */}
+      <div
+        className="tos-chat-bottom-scrim pointer-events-none fixed inset-x-0 bottom-0 z-[50]"
+        aria-hidden
+      />
+      <div
+        className="tos-chat-composer-dock pointer-events-none fixed inset-x-0 z-[85] block px-3"
+        style={{
+          bottom: dockBottom,
+          transform: `translate3d(0, -${keyboardInset}px, 0)`,
+          willChange: keyboardInset > 0 ? "transform" : undefined,
+        }}
+      >
+        <div className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">
+          {children}
+        </div>
       </div>
-    </div>
+    </>
   );
 
   if (!mounted || typeof document === "undefined") {

@@ -709,29 +709,36 @@ body.tos-tablet-landscape .tos-shell-mobile-chrome {
      the nav on some screens. Derived from the same variables the dock uses, so
      the two can no longer drift apart. */
   --tos-chat-composer-h: 4.5rem;  /* input row + quota line */
-  --tos-chat-scroll-fade: 4rem;   /* height of the dissolve above the composer */
+  --tos-chat-scroll-fade: 2.75rem; /* dissolve band above the composer */
   --tos-chat-scroll-bottom: calc(
     var(--tos-chat-composer-bottom) + var(--tos-chat-composer-h) + 1rem
   );
 }
 
-/* Padding alone only fixes where the last message comes to rest — mid-scroll,
-   bubbles still travelled visibly behind the composer pill and out over the
-   bottom nav. The mask dissolves them before they get there, so the bottom of
-   the thread stays calm. The fade is shorter than --tos-chat-scroll-bottom, so
-   at rest it only ever eats padding, never text. */
-.tos-chat-scroll-mask {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 calc(100% - var(--tos-chat-scroll-fade)),
-    transparent 100%
+/* Padding fixes where the last message comes to rest; it does nothing for the
+   ones travelling past mid-scroll. A mask on the scroll container was the first
+   attempt and was the wrong tool: the mask is measured from the container's own
+   bottom edge, and on /chat that edge does not sit where the composer does — it
+   is pulled up by --tos-nav-offset, which is 0.35rem taller than the composer's
+   own offset, and on iOS moves again with the collapsing toolbar. So the fade
+   landed below the gap it was meant to cover, and text stayed crisp between the
+   composer and the nav.
+
+   This is measured from the viewport instead, which is where the composer and
+   the nav actually live, so it cannot drift: opaque from the composer's top edge
+   all the way down, with a short dissolve above it. It sits under the nav pill
+   (z 55) and under the composer dock (z 85), so both still read normally — only
+   the thread behind them is covered. */
+.tos-chat-bottom-scrim {
+  height: calc(
+    var(--tos-chat-composer-bottom) + var(--tos-chat-composer-h) +
+    var(--tos-chat-scroll-fade)
   );
-  mask-image: linear-gradient(
+  background: linear-gradient(
     to bottom,
-    #000 0,
-    #000 calc(100% - var(--tos-chat-scroll-fade)),
-    transparent 100%
+    rgba(6, 6, 8, 0) 0,
+    rgba(6, 6, 8, 0.92) calc(var(--tos-chat-scroll-fade) - 0.75rem),
+    #060608 var(--tos-chat-scroll-fade)
   );
 }
 
