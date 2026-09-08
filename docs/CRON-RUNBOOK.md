@@ -80,6 +80,41 @@ select max(created_at) from axe_broadcast_feed;   -- should move within 10 min
 select max(created_at) from axe_daily_briefings;  -- should move within a day
 ```
 
+## Is the secret the same on both sides?
+
+Every `/api/cron/*` route answers `401` both when `CRON_SECRET` is missing on the
+host and when the caller's value is wrong. From outside those are
+indistinguishable and they need opposite fixes, so compare the two sides
+directly. Neither reveals the secret — they return the same non-reversible
+digest, and equal digests mean equal strings.
+
+Vault side:
+
+```sql
+select * from axe_ops.cron_secret_fingerprint();
+```
+
+Host side:
+
+```bash
+curl -s https://www.axecompanion.com/api/debug/cron-health
+```
+
+Read it like this:
+
+| What you see | What it means |
+|---|---|
+| `cron_secret_configured: false` | The VPS has no `CRON_SECRET`. No value in Vault will ever work — set it on the host first. |
+| Both configured, **different** fingerprints | Two different strings. Copy the host's value into Vault. |
+| Both configured, **same** fingerprint | They match. A remaining 401 is something else. |
+| `had_surrounding_whitespace: true` | The host's value has stray whitespace the routes compare literally. |
+
+The digest implementations were checked against each other: `hello` gives
+`4f9f2cab2e558763` on both sides.
+
+> `/api/debug/cron-health` only exists once the host runs a build that contains
+> it. If it 404s, production is still on older code.
+
 ## Day-to-day health
 
 ```sql
