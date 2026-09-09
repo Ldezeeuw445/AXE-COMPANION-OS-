@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
+import { siteUrl } from "@/lib/siteUrl";
 
 export async function signInAction(_prevState: unknown, formData: FormData) {
   const email = formData.get("email") as string;
@@ -74,7 +75,14 @@ export async function signUpAction(_prevState: unknown, formData: FormData) {
     }
   );
 
-  const { error } = await supabase.auth.signUp({ email, password });
+  // Without this, Supabase falls back to the project-wide Site URL — and one
+  // project serves Companion, Trading OS and AXE Core, so that URL points at
+  // AXE Core. Every Companion signup was confirming into the wrong app.
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: `${siteUrl()}/auth/confirm?next=/chat` },
+  });
 
   if (error) {
     return { error: error.message };

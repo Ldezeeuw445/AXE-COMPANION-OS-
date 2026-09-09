@@ -2,7 +2,21 @@ import Image from "next/image";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { ComplianceRiskNotice } from "@/components/legal/ComplianceRiskNotice";
 
-export default function LoginPage() {
+/**
+ * `error` arrives from /auth/confirm when an email confirmation link fails —
+ * expired, already used, or pointed at the wrong project. Without this the
+ * redirect lands on a pristine login form and the user has no idea why they
+ * are not signed in.
+ */
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
+  const rawError = params?.error;
+  const errorMessage = Array.isArray(rawError) ? rawError[0] : rawError;
+
   return (
     <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden overscroll-none bg-[#050608]">
       <div className="flex h-full w-full items-center justify-center px-6 py-10">
@@ -64,6 +78,15 @@ export default function LoginPage() {
             <span className="text-tos-dim">Not a social feed.</span>
           </p>
         </div>
+
+        {errorMessage ? (
+          <p
+            role="alert"
+            className="mb-4 rounded-xl border border-red-400/25 bg-red-500/[0.07] px-3 py-2.5 text-center text-[12px] leading-relaxed text-red-200/90"
+          >
+            {errorMessage}
+          </p>
+        ) : null}
 
         {/* Auth form */}
         <LoginForm />
