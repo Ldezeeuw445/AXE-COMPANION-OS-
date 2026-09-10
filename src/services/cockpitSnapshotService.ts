@@ -522,10 +522,19 @@ export async function upsertCockpitLearningMetrics(
     },
   ];
 
-  // FIXED: Use a single batch upsert instead of SELECT→INSERT/UPDATE per row.
-  // The old pattern caused deadlocks when multiple users hit cockpit simultaneously:
-  // each query would race through the SELECT gap and try to INSERT the same row.
-  // ON CONFLICT DO UPDATE is atomic and deadlock-safe.
+  // A single batch upsert rather than SELECT→INSERT/UPDATE per row: the old
+  // pattern deadlocked when several users hit cockpit at once, each racing
+  // through the SELECT gap to INSERT the same row. ON CONFLICT DO UPDATE is
+  // atomic and deadlock-safe.
+  //
+  // The conflict target must name every column of the unique index, and this
+  // one is (user_id, metric_key, period_start) — three columns. Naming only
+  // two got Postgres 42P10, "no unique or exclusion constraint matching the ON
+  // CONFLICT specification", on every single call. Nothing surfaced it: the
+  // error was logged and swallowed, generateCockpitSnapshot still reported
+  // success, and the cron kept answering `generated: 2` while this table sat
+  // untouched from 2026-06-25 to 2026-09-10. Verified against the live schema
+  // rather than inferred.
   const payloads = rows.map((row) => ({
     user_id: userId,
     metric_key: row.metric_key,
@@ -537,10 +546,14 @@ export async function upsertCockpitLearningMetrics(
 
   const { error } = await supabase
     .from("assistant_learning_metrics")
-    .upsert(payloads, { onConflict: "user_id,metric_key" });
+    .upsert(payloads, { onConflict: "user_id,metric_key,period_start" });
 
   if (error) {
-    console.error("[cockpitSnapshot] upsertCockpitLearningMetrics error:", error.message);
+    // Loud, because the silent version cost this table three months. A write
+    // that cannot land is a broken feature, not a log line.
+    console.error(
+      "[cockpitSnapshot] learning metrics NOT written for", userId, "—", error.message,
+    );
   }
 }
 

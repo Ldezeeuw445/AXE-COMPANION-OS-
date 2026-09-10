@@ -13,6 +13,8 @@ import type {
 import {
   classifyMetaApiProvisioningError,
   userMessageForCode,
+  isOperatorFault,
+  upstreamMessage,
   type Mt5CloudErrorCode,
 } from "@/lib/mt5/metaApiErrors";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
@@ -1442,13 +1444,23 @@ function mapMetaError(e: unknown): { ok: false; code: Mt5CloudErrorCode; message
   }
   if (e instanceof MetaApiRequestError) {
     const code = e.code;
+    // MetaApi's own words. Kept because an HTTP status does not establish a
+    // reason: a 403 was read as "your token permissions" on 2026-09-09 when the
+    // actual cause was an empty MetaApi balance, and two people spent ten
+    // minutes checking token scopes because the message asserted a cause
+    // nobody had verified. Only surfaced for operator faults — see
+    // isOperatorFault — since a trader's own errors already say what to do.
+    const upstream = upstreamMessage(e.payload);
+    if (isOperatorFault(code)) {
+      console.error("[mt5Cloud] operator fault", code, "— MetaApi said:", upstream ?? "(no message)");
+    }
     if (code === "unknown" && e.payload) {
       const alt = classifyMetaApiProvisioningError(e.payload);
       if (alt !== "unknown") {
-        return { ok: false, code: alt, message: userMessageForCode(alt) };
+        return { ok: false, code: alt, message: userMessageForCode(alt, upstream) };
       }
     }
-    return { ok: false, code, message: userMessageForCode(code) };
+    return { ok: false, code, message: userMessageForCode(code, upstream) };
   }
   if (e instanceof Error && e.name === "AbortError") {
     return { ok: false, code: "metaapi_timeout", message: userMessageForCode("metaapi_timeout") };
