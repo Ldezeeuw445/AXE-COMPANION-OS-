@@ -18,7 +18,31 @@ const PROTECTED_PREFIXES = [
   "/actions",
   "/settings",
   "/upgrade",
+  "/feed",
+  "/wallets",
+  "/onboarding",
 ];
+
+const CLOSED_PREFIXES = [
+  "/migrations",
+  "/final",
+  "/finallaunch",
+  "/launch",
+  "/shadcn-demo",
+  "/ui-premium",
+  "/demo",
+  "/marketing",
+];
+
+function isClosedPath(pathname: string): boolean {
+  return CLOSED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function closedNotFound(): NextResponse {
+  return new NextResponse(null, { status: 404 });
+}
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
@@ -26,6 +50,10 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const pathEarly = request.nextUrl.pathname;
+
+  if (isClosedPath(pathEarly)) {
+    return closedNotFound();
+  }
 
   // Skip auth check on these paths entirely
   if (
