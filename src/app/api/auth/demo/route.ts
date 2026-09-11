@@ -10,7 +10,24 @@ function demoCreds() {
   return { email, password };
 }
 
+function demoAuthAllowed() {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.ALLOW_DEMO_AUTH === "true"
+  );
+}
+
+function closedNotFound() {
+  return new NextResponse(null, { status: 404 });
+}
+
+export async function GET() {
+  return closedNotFound();
+}
+
 export async function POST() {
+  if (!demoAuthAllowed()) return closedNotFound();
+
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
     return NextResponse.json(
@@ -36,9 +53,9 @@ export async function POST() {
           service.from("axe_user_entitlements").upsert(
             {
               user_id: userId,
-              plan: "founder",
-              founder_badge: true,
-              chat_quota_exempt: true,
+              plan: "free",
+              founder_badge: false,
+              chat_quota_exempt: false,
               pro_until: null,
               updated_at: new Date().toISOString(),
             },
@@ -63,7 +80,20 @@ export async function POST() {
       const userId = seeded.data.user?.id ?? null;
       const service = createServiceRoleSupabaseClient();
       if (userId && service) {
-        await ensureDemoWorkspace(service, userId);
+        await Promise.all([
+          service.from("axe_user_entitlements").upsert(
+            {
+              user_id: userId,
+              plan: "free",
+              founder_badge: false,
+              chat_quota_exempt: false,
+              pro_until: null,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" },
+          ),
+          ensureDemoWorkspace(service, userId),
+        ]);
       }
       return NextResponse.json({
         ok: true,
@@ -74,7 +104,7 @@ export async function POST() {
     return NextResponse.json(
       {
         ok: false,
-        error: seeded.error.message,
+        error: "Demo auth failed",
       },
       { status: 403 },
     );
@@ -83,15 +113,14 @@ export async function POST() {
   return NextResponse.json(
     {
       ok: false,
-      error:
-        "Demo auth unavailable. Enable Supabase anonymous auth or set DEMO_USER_EMAIL + DEMO_USER_PASSWORD.",
-      detail: anon.error.message,
+      error: "Demo auth unavailable",
     },
     { status: 403 },
   );
 }
 
 export async function DELETE() {
+  if (!demoAuthAllowed()) return closedNotFound();
   const supabase = await createServerSupabaseClient();
   if (!supabase) return NextResponse.json({ ok: true });
   await supabase.auth.signOut();
