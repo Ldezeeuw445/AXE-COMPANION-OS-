@@ -11,6 +11,9 @@
 
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 
+/** AXE's own ink — the teal at the middle of the brand gradient. */
+export const AXE_ORB_INK = "#3FE6CF";
+
 /** Tool name → what the trader should understand is happening. */
 const TOOL_LABELS: Record<string, { state: OrbState; label: string }> = {
   get_live_price: { state: "searching", label: "Reading the broker price" },
@@ -66,7 +69,7 @@ export function AxeThinkingOrb({
   const { state, label } = orbForPhase(phase, tools);
   return (
     <div className="flex items-center gap-2.5 px-1 py-1" aria-live="polite">
-      <ThinkingOrb state={state} size={size} aria-label={`AXE: ${label}`} />
+      <ThinkingOrb state={state} size={size} color={AXE_ORB_INK} aria-label={`AXE: ${label}`} />
       <span className="text-[12px] text-white/45">{label}…</span>
     </div>
   );

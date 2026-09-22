@@ -21,6 +21,8 @@ import {
 } from "@/lib/chat/chatPrefill";
 import { Send, X, ImageIcon, Paperclip, Camera, Mic } from "lucide-react";
 import { ThinkingOrb } from "thinking-orbs";
+import { BorderBeam } from "border-beam";
+import { AXE_ORB_INK } from "@/components/chat/AxeThinkingOrb";
 import { useComposerOrb } from "@/components/chat/useComposerOrb";
 import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
@@ -490,12 +492,13 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
                 breathes at rest and switches state while AXE works, so the
                 composer itself reports what is happening. */}
             <div
-              className="pointer-events-none absolute left-1/2 bottom-full z-20 flex -translate-x-1/2 translate-y-[38%] justify-center"
+              className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 flex -translate-x-1/2 justify-center"
               aria-hidden={!composerOrb.busy}
             >
-              <ThinkingOrb state={composerOrb.state} size={64} theme="dark" />
+              <ThinkingOrb state={composerOrb.state} size={64} theme="dark" color={AXE_ORB_INK} />
             </div>
-            <AxeVoiceBeam listening={listening} processing={sending}>
+            <AxeVoiceBeam listening={listening} processing={sending} borderRadius={26}>
+              <BorderBeam size="pulse-outside" colorVariant="mono" theme="dark" borderRadius={26}>
               <div
                 className="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[26px] border border-white/[0.07] px-4 pb-2 pt-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
                 style={{
@@ -576,6 +579,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
                   </button>
                 </div>
               </div>
+              </BorderBeam>
             </AxeVoiceBeam>
           </div>
         )}

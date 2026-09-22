@@ -18,12 +18,16 @@ import { getSpeechLevel } from "@/lib/voice/speechLevel";
 export function AxeVoiceBeam({
   listening,
   processing,
+  borderRadius,
   children,
 }: {
   /** The trader is dictating. */
   listening: boolean;
   /** AXE is working on the reply. */
   processing: boolean;
+  /** Radius of the card being wrapped. Passed explicitly because the beam
+   *  auto-detects its first child, which here is another wrapper. */
+  borderRadius?: number;
   children: ReactNode;
 }) {
   const mic = useMicrophone();
@@ -42,6 +46,7 @@ export function AxeVoiceBeam({
       type="default"
       colorVariant="colorful"
       theme="dark"
+      borderRadius={borderRadius}
       stream={listening ? mic.stream : null}
       level={getSpeechLevel}
       processing={processing}
