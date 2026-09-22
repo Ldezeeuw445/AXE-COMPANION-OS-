@@ -59,7 +59,7 @@ function TypingBubble({ phase, tools }: { phase: string | null; tools: string[] 
         <span className="h-1 w-1 rounded-full bg-[color:var(--icon-intel)]/70" />
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
-      <AxeThinkingOrb phase={phase} tools={tools} size={64} />
+      <AxeThinkingOrb phase={phase} tools={tools} size={20} />
     </article>
   );
 }
@@ -127,7 +127,7 @@ function StreamingBubble({
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
       {showToolHint ? (
-        <AxeThinkingOrb phase={phase} tools={tools} size={64} />
+        <AxeThinkingOrb phase={phase} tools={tools} size={20} />
       ) : (
         <div className="max-w-[85%] px-1">
           {renderAssistantBody(visibleText)}

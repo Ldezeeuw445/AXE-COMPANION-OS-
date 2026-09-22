@@ -19,10 +19,11 @@ import {
   clearStagedChatPrefill,
   readStagedChatPrefill,
 } from "@/lib/chat/chatPrefill";
-import { Send, X, ImageIcon } from "lucide-react";
+import { Send, X, ImageIcon, Paperclip, Camera, Mic } from "lucide-react";
+import { ThinkingOrb } from "thinking-orbs";
+import { useComposerOrb } from "@/components/chat/useComposerOrb";
 import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
-import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
 import { IntelTerminalComposer } from "@/components/chat/IntelTerminalComposer";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
@@ -100,6 +101,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const [listening, setListening] = useState(false);
   const [image, setImage] = useState<{ base64: string; type: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const appliedPrefillRef = useRef<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -437,6 +439,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   }
 
   const intelMode = useChatIntelMode();
+  const composerOrb = useComposerOrb({ listening, sending });
 
   async function runQuickAction(draft: string) {
     setValue(draft);
@@ -481,67 +484,118 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
             }}
           />
         ) : (
-          // AXE default composer — gradient brand + particle aura
+          // AXE default composer — always-on orb over an AXE Core-style card
           <div className="relative overflow-visible">
-            {/* bottom-full lands the dome's baseline on the top edge of the
-                input. The old translate-y-[54%] pushed it 85px further down —
-                under the pill and out over the bottom nav. */}
+            {/* The orb sits on the card's top edge and is never absent: it
+                breathes at rest and switches state while AXE works, so the
+                composer itself reports what is happening. */}
             <div
-              className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[6%] justify-center xl:hidden"
-              aria-hidden
+              className="pointer-events-none absolute left-1/2 bottom-full z-20 flex -translate-x-1/2 translate-y-[38%] justify-center"
+              aria-hidden={!composerOrb.busy}
             >
-              <AxeAuraWave variant="composer" palette="axe" />
+              <ThinkingOrb state={composerOrb.state} size={64} theme="dark" />
             </div>
             <AxeVoiceBeam listening={listening} processing={sending}>
-            <div
-              className="relative z-10 flex items-center gap-2 overflow-hidden rounded-full border border-white/[0.08] px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
-              style={{
-                background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
-                touchAction: "pan-y",
-              }}
-              onTouchStart={(e) => e.stopPropagation()}
-              onTouchMove={(e) => e.stopPropagation()}
-            >
-              <textarea
-                ref={textareaRef}
-                id="composer-input"
-                rows={1}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                enterKeyHint="send"
-                onFocus={() => {
-                  window.dispatchEvent(new CustomEvent("axe:chat-pin"));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void submit();
-                  }
-                }}
-                placeholder={placeholder}
-                className="flex-1 resize-none border-0 bg-transparent px-2 py-1 text-sm text-white/90 placeholder:text-white/30 focus:outline-none"
-              />
-              <button
-                type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-30"
+              <div
+                className="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[26px] border border-white/[0.07] px-4 pb-2 pt-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
                 style={{
-                  background: "linear-gradient(135deg, #C9F24B 0%, #3FE6CF 52%, #7A57FF 100%)",
-                  boxShadow: "0 0 12px rgba(63,230,207,0.25), 0 2px 8px rgba(0,0,0,0.3)",
+                  background: "linear-gradient(180deg, #131317 0%, #0b0b0e 100%)",
+                  touchAction: "pan-y",
                 }}
-                disabled={(!value.trim() && !image) || sending}
-                aria-label="Send"
-                onClick={() => {
-                  vibrate("medium");
-                  void submit();
-                }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
               >
-                <Send className="h-4 w-4 text-black" />
-              </button>
-            </div>
+                <textarea
+                  ref={textareaRef}
+                  id="composer-input"
+                  rows={1}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  enterKeyHint="send"
+                  onFocus={() => {
+                    window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void submit();
+                    }
+                  }}
+                  placeholder={placeholder}
+                  className="max-h-40 min-h-[34px] w-full resize-none border-0 bg-transparent px-1 py-1 text-[15px] text-white/90 placeholder:text-white/30 focus:outline-none"
+                />
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white/80"
+                    aria-label="Attach a file"
+                  >
+                    <Paperclip className="h-[18px] w-[18px]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white/80"
+                    aria-label="Take a photo"
+                  >
+                    <Camera className="h-[18px] w-[18px]" />
+                  </button>
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      vibrate("light");
+                      toggleMic();
+                    }}
+                    aria-label={listening ? "Stop dictation" : "Dictate a message"}
+                    aria-pressed={listening}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+                      listening
+                        ? "bg-[#00d4f5]/15 text-[#00d4f5]"
+                        : "text-white/45 hover:bg-white/[0.06] hover:text-white/80"
+                    }`}
+                  >
+                    <Mic className="h-[18px] w-[18px]" />
+                  </button>
+                  <button
+                    type="button"
+                    className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-30"
+                    style={{
+                      background: "linear-gradient(135deg, #C9F24B 0%, #3FE6CF 52%, #7A57FF 100%)",
+                      boxShadow: "0 0 12px rgba(63,230,207,0.25), 0 2px 8px rgba(0,0,0,0.3)",
+                    }}
+                    disabled={(!value.trim() && !image) || sending}
+                    aria-label="Send"
+                    onClick={() => {
+                      vibrate("medium");
+                      void submit();
+                    }}
+                  >
+                    <Send className="h-4 w-4 text-black" />
+                  </button>
+                </div>
+              </div>
             </AxeVoiceBeam>
           </div>
         )}
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       {error ? (
         <p className="mt-2 text-center text-[10px] text-red-400/90">{error}</p>

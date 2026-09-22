@@ -57,7 +57,7 @@ export function orbForPhase(
 export function AxeThinkingOrb({
   phase,
   tools,
-  size = 64,
+  size = 20,
 }: {
   phase: AxeOrbPhase;
   tools?: string[] | null;
