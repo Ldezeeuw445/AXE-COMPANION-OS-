@@ -20,6 +20,7 @@ import {
   readStagedChatPrefill,
 } from "@/lib/chat/chatPrefill";
 import { Send, X, ImageIcon } from "lucide-react";
+import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
 import { IntelTerminalComposer } from "@/components/chat/IntelTerminalComposer";
@@ -491,6 +492,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
             >
               <AxeAuraWave variant="composer" palette="axe" />
             </div>
+            <AxeVoiceBeam listening={listening} processing={sending}>
             <div
               className="relative z-10 flex items-center gap-2 overflow-hidden rounded-full border border-white/[0.08] px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
               style={{
@@ -536,6 +538,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
                 <Send className="h-4 w-4 text-black" />
               </button>
             </div>
+            </AxeVoiceBeam>
           </div>
         )}
       </div>
