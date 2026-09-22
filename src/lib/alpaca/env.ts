@@ -1,3 +1,5 @@
+import { isAlpacaBrokerEnabled } from "@/lib/broker/brokerAvailability";
+
 export type AlpacaEnvConfig = {
   keyId: string;
   secretKey: string;
@@ -36,5 +38,8 @@ export function getAlpacaPaperConfig(): AlpacaEnvConfig | null {
 }
 
 export function isAlpacaConfigured(): boolean {
+  // Beta ships MT5-only: the flag switches every Alpaca path off in one place,
+  // including the routes and adapters that already gate on this.
+  if (!isAlpacaBrokerEnabled()) return false;
   return getAlpacaPaperConfig() != null;
 }
