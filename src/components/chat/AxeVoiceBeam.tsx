@@ -5,24 +5,25 @@
  * dictating, blooms while AXE speaks its reply, and gathers into a travelling
  * beam while AXE is thinking.
  *
- * Dictation itself stays on SpeechRecognition (which does its own capture);
- * this only opens a second microphone stream for the visual. If that is
- * refused or unsupported the beam falls back to the spoken-reply level, so the
- * composer never ends up in a broken state because of a decoration.
+ * The microphone is deliberately *not* opened here. getUserMedia has to be
+ * called from the click itself — an effect that fires after the render has
+ * already lost the user activation on Safari, which is the difference between
+ * a glow that moves and one that never starts. The composer's mic button owns
+ * the stream and hands it down.
  */
 
-import { useEffect, type ReactNode } from "react";
-import { VoiceBeam, useMicrophone } from "voice-glow";
+import type { ReactNode } from "react";
+import { VoiceBeam } from "voice-glow";
 import { getSpeechLevel } from "@/lib/voice/speechLevel";
 
 export function AxeVoiceBeam({
-  listening,
+  stream,
   processing,
   borderRadius,
   children,
 }: {
-  /** The trader is dictating. */
-  listening: boolean;
+  /** Live microphone while dictating, else null. */
+  stream: MediaStream | null;
   /** AXE is working on the reply. */
   processing: boolean;
   /** Radius of the card being wrapped. Passed explicitly because the beam
@@ -30,24 +31,14 @@ export function AxeVoiceBeam({
   borderRadius?: number;
   children: ReactNode;
 }) {
-  const mic = useMicrophone();
-  const { start, stop, state } = mic;
-
-  useEffect(() => {
-    if (listening) {
-      if (state === "idle") void start();
-    } else if (state === "live") {
-      stop();
-    }
-  }, [listening, state, start, stop]);
-
   return (
     <VoiceBeam
       type="default"
       colorVariant="colorful"
       theme="dark"
       borderRadius={borderRadius}
-      stream={listening ? mic.stream : null}
+      stream={stream}
+      // No stream (AXE speaking, or mic refused): follow the spoken reply.
       level={getSpeechLevel}
       processing={processing}
     >

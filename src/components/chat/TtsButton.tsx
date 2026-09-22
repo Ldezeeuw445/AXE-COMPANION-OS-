@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { Volume2, VolumeX } from "lucide-react";
-import { stopSpeechTracking, trackSpeechAudio } from "@/lib/voice/speechLevel";
+import { primeSpeechAudio, stopSpeechTracking, trackSpeechAudio } from "@/lib/voice/speechLevel";
 
 type TtsButtonProps = {
   text: string;
@@ -32,6 +32,8 @@ export function TtsButton({ text }: TtsButtonProps) {
       return;
     }
 
+    // While the click is still live — the fetch below outlives the gesture.
+    primeSpeechAudio();
     startSpeaking();
 
     try {

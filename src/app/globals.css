@@ -502,13 +502,14 @@ body {
   bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 55;
-  width: min(34rem, calc(100vw - max(1rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1.2rem;
-  background: linear-gradient(180deg, rgba(22, 22, 24, 0.82) 0%, rgba(12, 12, 14, 0.88) 100%);
-  box-shadow:
-    0 9px 24px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  /* Same width as the composer above it: the dock is inset-x-0 px-3 around a
+     max-w-2xl card, so the nav matches that box exactly rather than sitting a
+     few pixels wider. */
+  width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 26px;
+  background: linear-gradient(180deg, #131317 0%, #0b0b0e 100%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(18px) saturate(145%);
   -webkit-backdrop-filter: blur(18px) saturate(145%);
   padding: 0.2rem 0.32rem 0.24rem;
@@ -525,7 +526,7 @@ body.trade-sheet-open .tos-nav-pill {
   /* ── Landscape adaptation ──────────────────────────────────────── */
 @media (orientation: landscape) {
   .tos-nav-pill {
-    width: min(38rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+    width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
   }
 }

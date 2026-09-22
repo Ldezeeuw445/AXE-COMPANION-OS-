@@ -22,6 +22,33 @@ let buffer: Uint8Array<ArrayBuffer> | null = null;
 /** An element can only be adopted by one MediaElementSource, ever. */
 const attached = new WeakSet<HTMLAudioElement>();
 
+/**
+ * Open the AudioContext while a click is still in hand.
+ *
+ * Safari only lets a context start inside a user gesture, and the TTS request
+ * is awaited before the element exists — by then the gesture is spent and the
+ * context stays suspended, so the analyser reads silence and the glow never
+ * moves. Call this first thing in the play handler.
+ */
+export function primeSpeechAudio(): void {
+  ensureContext();
+}
+
+function ensureContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    ctx ??= new Ctor();
+    void ctx.resume();
+    return ctx;
+  } catch {
+    return null;
+  }
+}
+
 /** Sample for `<VoiceBeam level={getSpeechLevel}>`. */
 export function getSpeechLevel(): number {
   return level;
@@ -44,10 +71,7 @@ function tick() {
 export function trackSpeechAudio(audio: HTMLAudioElement): void {
   if (typeof window === "undefined") return;
   try {
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return;
-    ctx ??= new Ctor();
-    void ctx.resume();
+    if (!ensureContext() || !ctx) return;
     if (!analyser) {
       analyser = ctx.createAnalyser();
       analyser.fftSize = 512;

@@ -85,10 +85,10 @@ export function BottomNav() {
       ref={navRef}
       className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${tabletNav ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-tablet-nav-pill-hidden" : ""}`}
       style={{
-        background: "linear-gradient(180deg, rgba(22,22,24,0.86) 0%, rgba(12,12,14,0.9) 100%)",
-        borderRadius: 22,
-        boxShadow:
-          "0 14px 34px rgba(0,0,0,0.56), 0 0 0 1px rgba(255,255,255,0.08) inset, 0 1px 0 rgba(255,255,255,0.06) inset",
+        // Matches the composer card above it — same gradient, radius and shadow.
+        background: "linear-gradient(180deg, #131317 0%, #0b0b0e 100%)",
+        borderRadius: 26,
+        boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
         WebkitTextSizeAdjust: "100%",
       }}
       aria-label="Primary"

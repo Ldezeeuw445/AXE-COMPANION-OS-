@@ -25,6 +25,7 @@ import { BorderBeam } from "border-beam";
 import { AXE_ORB_INK } from "@/components/chat/AxeThinkingOrb";
 import { useComposerOrb } from "@/components/chat/useComposerOrb";
 import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
+import { useMicrophone } from "voice-glow";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import { IntelTerminalComposer } from "@/components/chat/IntelTerminalComposer";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
@@ -108,6 +109,8 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const appliedPrefillRef = useRef<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  // Opened from the mic click so the browser still sees a user gesture.
+  const beamMic = useMicrophone();
 
   const focusDraft = useCallback((draft: string) => {
     const el = textareaRef.current;
@@ -390,6 +393,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     if (listening) {
       recognitionRef.current?.stop();
+      beamMic.stop();
       setListening(false);
       window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       return;
@@ -406,10 +410,12 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       setValue((prev) => (prev ? prev + " " + transcript : transcript));
     };
     rec.onend = () => {
+      beamMic.stop();
       setListening(false);
       window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
     };
     rec.onerror = () => {
+      beamMic.stop();
       setListening(false);
       window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       setError("Mic error — check browser permissions.");
@@ -417,9 +423,12 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     recognitionRef.current = rec;
     rec.start();
+    // Same gesture: a second capture purely for the glow. If the browser
+    // refuses it, dictation is unaffected and the beam simply stays flat.
+    void beamMic.start();
     setListening(true);
     window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: true } }));
-  }, [listening]);
+  }, [listening, beamMic]);
 
   // ── File ──────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -497,7 +506,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
             >
               <ThinkingOrb state={composerOrb.state} size={64} theme="dark" color={AXE_ORB_INK} />
             </div>
-            <AxeVoiceBeam listening={listening} processing={sending} borderRadius={26}>
+            <AxeVoiceBeam stream={beamMic.stream} processing={sending} borderRadius={26}>
               <BorderBeam size="pulse-outside" colorVariant="mono" theme="dark" borderRadius={26}>
               <div
                 className="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[26px] border border-white/[0.07] px-4 pb-2 pt-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
