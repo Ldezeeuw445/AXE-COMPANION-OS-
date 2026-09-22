@@ -27,8 +27,47 @@ import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useSwipeNav } from "./SwipeNavContext";
 import { useTabletNavCollapse, useTabletNavSwipe } from "@/components/shell/TabletNavCollapse";
 import { FeedNavBadge } from "@/components/feed/FeedNavBadge";
+import { useShellStatus } from "@/components/shell/useShellStatus";
+import type { RuntimeTruthState } from "@/lib/runtime/runtimeTruth";
 
 const CYAN = "#00d4f5";
+
+/** How each live-data state paints the nav's top edge. */
+const RUNTIME_LINE: Record<RuntimeTruthState, { background: string; opacity: number }> = {
+  live: {
+    background: "linear-gradient(90deg, rgba(201,242,75,0.55) 0%, rgba(63,230,207,0.9) 50%, rgba(122,87,255,0.55) 100%)",
+    opacity: 1,
+  },
+  degraded: {
+    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%)",
+    opacity: 1,
+  },
+  warming: {
+    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%)",
+    opacity: 1,
+  },
+  unavailable: {
+    background: "linear-gradient(90deg, rgba(201,138,43,0.4) 0%, rgba(240,178,74,0.85) 50%, rgba(201,138,43,0.4) 100%)",
+    opacity: 1,
+  },
+  inactive: {
+    background:
+      "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.08) 70%, transparent 100%)",
+    opacity: 1,
+  },
+};
+
+/** Same shape as the feed badge so the three read as one family. */
+function NavBadge({ count, className, label }: { count: number; className: string; label: string }) {
+  return (
+    <span
+      className={`absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full px-0.5 text-[7px] font-bold text-black ${className}`}
+      aria-label={label}
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
 const GOLD = "#d4af37";
 
 const CORE_TABS = [
@@ -73,6 +112,7 @@ export function BottomNav() {
     expand: expandNav,
   } = useTabletNavCollapse();
   const navSwipe = useTabletNavSwipe("collapse", collapseNav);
+  const shell = useShellStatus();
   const expandSwipe = useTabletNavSwipe("expand", expandNav);
 
   // Conditional 6th tab
@@ -114,13 +154,14 @@ export function BottomNav() {
         </button>
       ) : null}
 
-      {/* Inner glow highlight along top edge */}
+      {/* Top edge doubles as the live-data readout. AXE gradient when broker
+          ticks are arriving, dimmed when the stream has fallen back to
+          candles, amber when the account is unreachable, and the old neutral
+          highlight when there is no account to report on. */}
       <div
-        className="pointer-events-none absolute inset-x-4 top-[1px] h-px"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.08) 70%, transparent 100%)",
-        }}
+        className="pointer-events-none absolute inset-x-4 top-[1px] h-px transition-opacity duration-500"
+        style={{ background: RUNTIME_LINE[shell.runtime].background, opacity: RUNTIME_LINE[shell.runtime].opacity }}
+        aria-hidden
       />
 
       {/* Glassmorphism swipe bubble */}
@@ -183,6 +224,20 @@ export function BottomNav() {
               style={{ minWidth: 0, flex: "1 1 0%" }}
             >
               {href === "/chat" ? <FeedNavBadge /> : null}
+              {href === "/chart" && shell.alertsTriggered > 0 ? (
+                <NavBadge
+                  count={shell.alertsTriggered}
+                  className="bg-[#f0b24a]"
+                  label={`${shell.alertsTriggered} alerts triggered in the last 24 hours`}
+                />
+              ) : null}
+              {href === "/positions" && shell.positions != null && shell.positions > 0 ? (
+                <NavBadge
+                  count={shell.positions}
+                  className="bg-[#C9F24B]"
+                  label={`${shell.positions} open positions`}
+                />
+              ) : null}
               {/* Icon well */}
               <div
                 className="relative flex h-[var(--tos-nav-icon-size)] w-[var(--tos-nav-icon-size)] items-center justify-center rounded-[10px] transition-all duration-150"
