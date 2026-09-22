@@ -433,12 +433,17 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     function onResize() {
       if (stickToBottomRef.current) runPinSequence(true);
     }
+    // The composer's measured height lands after first paint; without this the
+    // list keeps the space it reserved a frame earlier and the newest message
+    // sits behind the card until the trader scrolls.
+    window.addEventListener("axe:composer-resize", onPinRequest);
     window.addEventListener("axe:chat-pin", onPinRequest);
     window.addEventListener("axe:chat-scroll-top", onScrollFeedTop);
     window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("resize", onResize);
     return () => {
+      window.removeEventListener("axe:composer-resize", onPinRequest);
       window.removeEventListener("axe:chat-pin", onPinRequest);
       window.removeEventListener("axe:chat-scroll-top", onScrollFeedTop);
       window.removeEventListener("pageshow", onPageShow);

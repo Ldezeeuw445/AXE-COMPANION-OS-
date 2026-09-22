@@ -91,7 +91,7 @@
 
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
-  --tos-nav-h: 4.1rem;
+  --tos-nav-h: 4.6rem;
   --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.55rem);
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
   /* Tablet status bar clearance — thin edge before in-chart toolbar */
@@ -512,7 +512,10 @@ body {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(18px) saturate(145%);
   -webkit-backdrop-filter: blur(18px) saturate(145%);
-  padding: 0.2rem 0.32rem 0.24rem;
+  /* Taller than a strip so the bar reads as the same object as the composer
+     card above it. --tos-nav-h grows with it, so everything anchored to the
+     nav keeps its spacing. */
+  padding: 0.5rem 0.5rem 0.55rem;
   --tos-nav-icon-size: 31px;
   --tos-nav-icon-glyph-size: 15px;
   --tos-nav-label-size: 6px;
@@ -709,9 +712,9 @@ body.tos-tablet-landscape .tos-shell-mobile-chrome {
      a flat pb-[10rem] guess, which is why messages slid under the composer and
      the nav on some screens. Derived from the same variables the dock uses, so
      the two can no longer drift apart. */
-  /* Text row + icon row + padding. The old 4.5rem was the single-line pill;
-     the AXE Core-style card is taller, and reserving the old height is what
-     left the newest message hiding behind the composer on open. */
+  /* Fallback only: ChatComposerDock measures the real card and overwrites
+     this on the root element, so the list reserves the exact height rather
+     than a guess that goes stale with every composer change. */
   --tos-chat-composer-h: 6.75rem;
   /* The orb sits on top of the card and needs its own clearance, or it
      covers the last line of AXE's reply. */
@@ -847,7 +850,7 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
 
 @media (display-mode: standalone) {
   :root {
-    --tos-nav-h: 3.85rem;
+    --tos-nav-h: 4.35rem;
     --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.42rem);
   }
 
@@ -858,7 +861,7 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
     width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.28rem, env(safe-area-inset-bottom, 0px));
     border-radius: 26px;
-    padding: 0.16rem 0.28rem 0.2rem;
+    padding: 0.46rem 0.46rem 0.5rem;
     --tos-nav-icon-size: 29px;
     --tos-nav-icon-glyph-size: 14px;
     --tos-nav-label-size: 5.5px;

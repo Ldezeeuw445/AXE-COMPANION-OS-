@@ -26,10 +26,39 @@ export function ChatComposerDock({ children }: Props) {
   const [keyboardInset, setKeyboardInset] = useState(0);
   const rafRef = useRef<number | null>(null);
   const insetRef = useRef(0);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  /**
+   * Reserve exactly the height the composer actually has.
+   *
+   * --tos-chat-composer-h used to be a hand-written guess, and every change to
+   * the composer made it wrong in one direction or the other: too small hid
+   * the newest message behind the card, too large left a dead gap the trader
+   * had to scroll past. Measuring it means the list always ends right above
+   * the composer, and the thread re-pins whenever the height changes (a
+   * growing textarea, an attached image).
+   */
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const apply = () => {
+      const h = Math.round(el.getBoundingClientRect().height);
+      if (h <= 0) return;
+      document.documentElement.style.setProperty("--tos-chat-composer-h", `${h}px`);
+      window.dispatchEvent(new CustomEvent("axe:composer-resize"));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--tos-chat-composer-h");
+    };
+  }, [mounted]);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -85,7 +114,7 @@ export function ChatComposerDock({ children }: Props) {
           willChange: keyboardInset > 0 ? "transform" : undefined,
         }}
       >
-        <div className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">
+        <div ref={cardRef} className="pointer-events-auto relative mx-auto w-full max-w-2xl overflow-visible">
           {children}
         </div>
       </div>
