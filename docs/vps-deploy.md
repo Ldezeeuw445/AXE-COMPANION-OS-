@@ -70,3 +70,16 @@ Same-origin chart WS is `wss://www.axecompanion.com/ws/chart`. You do **not** ne
 ## Check on the phone
 
 Open Chart on an MT5 account. Hard-refresh / reopen the PWA. The compact badge should read **WS**, not **SSE**.
+
+## Install dependencies with npm 10
+
+The VPS runs Node 22 / npm 10 and deploys with `npm ci`, which refuses a tree
+that does not match the lock. npm 11 (Node 24) writes a lock without entries
+npm 10 expects — `@base-org/account`, `ox`, `zustand` and the rest of the wagmi
+tree — and the deploy then stops at install, before the build. If your machine
+runs npm 11, add packages with:
+
+```bash
+npx npm@10.9.8 install <pkg>
+npx npm@10.9.8 ci   # verify the lock the way the VPS will
+```
