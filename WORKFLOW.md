@@ -11,6 +11,7 @@ These rules apply to agent work in this repo.
 - Show changed files after every task.
 - Verify after every change.
 - If unsure, ask or audit; do not guess.
+- Branch from `main`. Do not use `axe-companion-runtime-foundation` as a base; that launch branch was already merged into `main` via PR #11.
 
 ## Architecture Rules
 

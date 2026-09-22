@@ -9,6 +9,16 @@ This file records the verified operational truth for AXE Companion. Treat it as 
 - Trading OS is a separate future desktop terminal app and must not be touched from this repo unless explicitly requested.
 - Later, Trading OS should connect to the same AXE / Supabase / Edge ecosystem through shared contracts, not direct coupling.
 
+## Git / Branch Truth
+
+- GitHub default branch is `main`. That is also the canonical development and production branch.
+- `axe-companion-runtime-foundation` was a long-running launch branch. It was merged into `main` via PR #11 on 2026-07-03 (merge commit `7fa1fd6`).
+- Foundation has **no unique commits** that are missing from `main`.
+- `main` has later work after that merge: launch polish, chart/alerts hardening, and AXE Core intel sidecar routes.
+- New work must branch from `main`, not from `axe-companion-runtime-foundation`.
+- Production deploys from `main` on Vercel.
+- GitHub Actions (Railway streamer, Supabase functions, migrations) deploy from `main` only.
+
 ## Current Runtime Truth
 
 - Production is live on Vercel.

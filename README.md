@@ -1,11 +1,12 @@
-# TradingOS Companion (Phase 1)
+# AXE Companion
 
 Private, mobile-first companion for **one operator and one AI assistant** — chat, alerts, vault, and **guarded** trade approvals. Not the full TradingOS terminal.
+
+The GitHub default branch is **`main`**. That is the canonical app and production branch. `axe-companion-runtime-foundation` was a launch branch that was merged into `main` (PR #11) and should not be used as a base for new work.
 
 ## Quick start
 
 ```bash
-cd tradingos-companion
 npm install
 npm run dev
 ```
