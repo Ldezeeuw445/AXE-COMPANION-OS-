@@ -53,9 +53,12 @@ async function handleSync(request: NextRequest) {
   if (debug) {
     const selected = types ?? (["daily_news", "market_recap"] as BroadcastType[]);
     const syncMode = getKraterSyncMode();
-    const generateProbe = await probeKraterGenerate(
-      (selected[0] ?? "daily_news") as KraterBroadcastType,
-    );
+    // Local mode never touches Krater, so probing it would only report a
+    // missing key that no longer matters.
+    const generateProbe =
+      syncMode === "local"
+        ? []
+        : await probeKraterGenerate((selected[0] ?? "daily_news") as KraterBroadcastType);
     const pollProbes =
       syncMode === "poll"
         ? await Promise.all(
@@ -68,9 +71,11 @@ async function handleSync(request: NextRequest) {
       hasKraterApiKey: Boolean(process.env.KRATER_API_KEY?.trim()),
       syncMode,
       note:
-        syncMode === "generate"
-          ? "Generate mode is active. Poll probes are skipped. Use ?force=1 to write feed items."
-          : "Poll mode is active. Scheduled-task/conversation endpoints may not exist on kr_live_ API.",
+        syncMode === "local"
+          ? "Local mode: the broadcast is written from AXE's own market data via Ollama. Krater is not called. Use ?force=1 to write feed items."
+          : syncMode === "generate"
+            ? "Generate mode is active. Poll probes are skipped. Use ?force=1 to write feed items."
+            : "Poll mode is active. Scheduled-task/conversation endpoints may not exist on kr_live_ API.",
       generateProbe,
       pollProbes,
       latency_ms: Date.now() - start,

@@ -13,6 +13,8 @@ Cover: major US and European indices performance, biggest tech movers, top crypt
 Format: short bullets + 1 closing line "What to watch tomorrow."
 Max 200 words. No trade advice. Factual only. Do not use personal names — this is a broadcast for all AXE users.`;
 
+import { generateBroadcastLocally } from "@/services/broadcastGenerator";
+
 export type KraterBroadcastType = "daily_news" | "market_recap";
 
 export type KraterFetchResult = {
@@ -83,11 +85,18 @@ export function conversationIdFor(broadcastType: KraterBroadcastType): string {
   );
 }
 
-function kraterSyncMode(): "generate" | "poll" {
+/**
+ * Krater is retired: the broadcast is written locally from this app's own
+ * market data (see broadcastGenerator.ts), which costs nothing per run. The
+ * Krater paths stay reachable only if someone explicitly sets KRATER_SYNC_MODE
+ * *and* still holds a key.
+ */
+function kraterSyncMode(): "generate" | "poll" | "local" {
   const mode = process.env.KRATER_SYNC_MODE?.trim().toLowerCase();
+  if (!kraterApiKey()) return "local";
   if (mode === "poll") return "poll";
-  // Developer API (kr_live_) does not expose scheduled-task/conversation endpoints.
-  return "generate";
+  if (mode === "generate") return "generate";
+  return "local";
 }
 
 function extractChatCompletionText(json: unknown): string {
@@ -448,7 +457,12 @@ export async function generateBroadcastViaKraterChat(
 
 export async function fetchKraterBroadcastOutput(
   broadcastType: KraterBroadcastType,
-): Promise<{ body: string; source: "krater_task" | "krater_conversation" | "krater_chat" }> {
+): Promise<{ body: string; source: "krater_task" | "krater_conversation" | "krater_chat" | "axe_local" }> {
+  if (kraterSyncMode() === "local") {
+    const body = await generateBroadcastLocally(broadcastType);
+    return { body, source: "axe_local" };
+  }
+
   if (kraterSyncMode() === "generate") {
     const body = await generateBroadcastViaKraterChat(broadcastType);
     return { body, source: "krater_chat" };
@@ -486,7 +500,7 @@ export async function fetchKraterBroadcastOutput(
   return { body, source: "krater_chat" };
 }
 
-export function getKraterSyncMode(): "generate" | "poll" {
+export function getKraterSyncMode(): "generate" | "poll" | "local" {
   return kraterSyncMode();
 }
 
