@@ -1,4 +1,10 @@
 {
+  "git": {
+    "deploymentEnabled": false
+  },
+  "github": {
+    "enabled": false
+  },
   "crons": [
     {
       "path": "/api/cron/mt5-sync",

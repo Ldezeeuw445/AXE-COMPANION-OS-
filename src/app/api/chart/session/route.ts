@@ -2,17 +2,25 @@ import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { signChartSessionToken } from "@/lib/chart/sessionToken";
 import { normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
+import {
+  DEFAULT_CLOUDFLARE_CHART_WS_URL,
+  getChartSessionSecret,
+  getExplicitChartWsUrl,
+} from "@/lib/chart/chartSessionSecret";
+import { sameOriginChartWsUrl } from "@/lib/chart/sameOriginWsUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Mints a short-lived signed token (HS256) the browser passes to the
- * Cloudflare ChartLiveRoom websocket. Cloudflare verifies with the same secret.
+ * Mints a short-lived signed token (HS256) the browser passes to a chart websocket.
  *
- * Body: { accountId, displaySymbol, brokerSymbol, timeframe }
- * Returns: { token, wsUrl, expiresIn } — wsUrl is `null` when no WS edge is configured;
- *           caller should fall back to /api/chart/live SSE.
+ * Preference:
+ *   1. Same-origin `/ws/chart` on this Node process (no extra env required)
+ *   2. Explicit Cloudflare URL (`CHART_WS_URL` / `NEXT_PUBLIC_CHART_WS_URL`)
+ *
+ * Returns: { token, wsUrl, fallbackWsUrl, expiresIn }
+ * wsUrl is `null` only when we cannot sign a token; caller falls back to SSE.
  */
 
 export async function POST(request: NextRequest) {
@@ -62,16 +70,14 @@ export async function POST(request: NextRequest) {
     return jsonError(404, "account_not_connected");
   }
 
-  const secret = process.env.CHART_SESSION_JWT_SECRET ?? "";
-  const wsBase = (process.env.NEXT_PUBLIC_CHART_WS_URL ?? "").trim();
-
-  if (!secret || !wsBase) {
-    // No realtime edge configured — caller will fall back to SSE.
+  const { secret, source } = getChartSessionSecret();
+  if (!secret) {
     return Response.json({
       token: null,
       wsUrl: null,
+      fallbackWsUrl: null,
       expiresIn: 0,
-      reason: !secret ? "no_secret" : "no_ws_url",
+      reason: "no_secret",
     });
   }
 
@@ -98,7 +104,23 @@ export async function POST(request: NextRequest) {
     secret,
   );
 
-  return Response.json({ token, wsUrl: wsBase, expiresIn });
+  const sameOrigin = sameOriginChartWsUrl(request);
+  const explicit = getExplicitChartWsUrl();
+  const cloudflareFallback = source === "env" ? explicit || DEFAULT_CLOUDFLARE_CHART_WS_URL : explicit;
+
+  const wsUrl = sameOrigin || cloudflareFallback || null;
+  const fallbackWsUrl =
+    cloudflareFallback && wsUrl && cloudflareFallback.replace(/\/$/, "") !== wsUrl.replace(/\/$/, "")
+      ? cloudflareFallback
+      : null;
+
+  return Response.json({
+    token,
+    wsUrl,
+    fallbackWsUrl,
+    expiresIn,
+    reason: sameOrigin ? "same_origin" : source === "env" ? "cloudflare" : "derived",
+  });
 }
 
 function jsonError(status: number, code: string) {

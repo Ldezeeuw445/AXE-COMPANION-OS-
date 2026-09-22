@@ -84,6 +84,10 @@ Core tables (all with **RLS** on `user_id` / ownership):
 - **Read path:** aggregate metrics + latest **`assistant_cockpit_snapshots`** for charts (alignment, confidence trends, behavior mapping).
 - Settings already shows a **preview strip** of mock metrics; point it at real queries when ready.
 
+## Production
+
+Live site: **https://www.axecompanion.com** on the IONOS Ubuntu/nginx host (Next on port 5000). Not Vercel. Deploy on that box with `./scripts/deploy-vps.sh` — see `docs/vps-deploy.md`.
+
 ## Scripts
 
 - `npm run dev` — development

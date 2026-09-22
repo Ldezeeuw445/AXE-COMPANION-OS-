@@ -1,7 +1,8 @@
 # Chart edge — production deploy runbook
 
-End-to-end steps to take the AXE Companion realtime chart from this commit to a
-fully deployed setup on Vercel + Cloudflare. Follow top to bottom.
+End-to-end steps for the **optional** Cloudflare chart-edge worker. Production
+Next is the IONOS host (`docs/vps-deploy.md`), not Vercel. Same-origin
+`/ws/chart` does not require this worker.
 
 > Anything in `<angle brackets>` is a placeholder you fill in.
 
@@ -13,8 +14,8 @@ Run **once**, locally:
 openssl rand -base64 48
 ```
 
-Save the value. The same string goes into Vercel **and** Cloudflare as
-`CHART_SESSION_JWT_SECRET`. Do **not** commit it.
+Save the value. The same string goes into the IONOS Next `.env.local` **and**
+Cloudflare as `CHART_SESSION_JWT_SECRET`. Do **not** commit it.
 
 ## 1. Cloudflare worker (`cloudflare/chart-edge`)
 
@@ -23,7 +24,7 @@ cd cloudflare/chart-edge
 npm install
 npx wrangler login            # one-time
 npx wrangler secret put CHART_SESSION_JWT_SECRET   # paste the openssl value
-npx wrangler secret put METAAPI_TOKEN              # same token Vercel uses
+npx wrangler secret put METAAPI_TOKEN              # same token as IONOS Next
 # Optional, only needed when wiring the Node streamer:
 # npx wrangler secret put STREAMER_SECRET
 ```
@@ -49,26 +50,21 @@ Wrangler prints the worker URL, e.g. `https://axe-chart-edge.<account>.workers.d
 **Workers & Pages → axe-chart-edge → Triggers → Custom Domains**, e.g.
 `chart.axecompanion.com`.
 
-## 2. Vercel (Next app)
+## 2. IONOS Next env (only if using this worker)
 
-Add the following project env vars (Production + Preview):
+Same-origin `/ws/chart` does not need these. For the Cloudflare hop, put them
+in `.env.local` on the VPS and redeploy with `./scripts/deploy-vps.sh`:
 
-```bash
-vercel env add CHART_SESSION_JWT_SECRET   # same value as on Cloudflare
-vercel env add NEXT_PUBLIC_CHART_WS_URL   # wss://chart.<your-domain>/ws/chart
-```
+- `CHART_SESSION_JWT_SECRET` — same value as on Cloudflare
+- `NEXT_PUBLIC_CHART_WS_URL` — `wss://chart.<your-domain>/ws/chart`
 
-Existing required env (already set in earlier steps):
+Existing required env (already on the box):
 
 - `METAAPI_TOKEN` (server-only)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - Supabase keys
 
-Redeploy:
-
-```bash
-vercel --prod
-```
+Do not use `vercel env add` or `vercel --prod`.
 
 ## 3. Smoke test
 
@@ -132,8 +128,8 @@ This step is optional — the chart works without it.
 
 If anything goes wrong:
 
-- Remove `NEXT_PUBLIC_CHART_WS_URL` on Vercel and redeploy. The chart falls
-  back to SSE automatically.
+- Remove `NEXT_PUBLIC_CHART_WS_URL` on the VPS and `./scripts/deploy-vps.sh`.
+  The chart still uses same-origin `/ws/chart`, then SSE.
 - Revert `WORKER_MODE` to `poll` to disable streamer dependency.
 
 ## 7. Production hardening checklist
