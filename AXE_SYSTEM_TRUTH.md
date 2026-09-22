@@ -19,6 +19,7 @@ This file records the verified operational truth for AXE Companion. Treat it as 
 - Ollama runs on the same VPS (`localhost:11434`), which is why chat-health
   reports it reachable in ~3 ms. One instance serves every user.
 - Website: `www.axecompanion.com`
+- Deploy by running `scripts/deploy-vps.sh` on the VPS (merge into `deployed`, never check out a branch based on stale `main`). nginx must forward WebSocket upgrades for `/ws/chart` — see `docs/vps-deploy.md`.
 - GitHub repo: `Ldezeeuw445/AXE-COMPANION-OS-`
 - Current canonical app stack: Next 16 / React 19.
 - The app is built as a Next App Router application with server actions, route handlers, server-side services, and client UI.

@@ -99,6 +99,7 @@ export function useLiveChart({
     let cleanupSse: (() => void) | null = null;
     let backoff = 1500;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let upgradeTimer: ReturnType<typeof setTimeout> | null = null;
     let staleTimer: ReturnType<typeof setTimeout> | null = null;
     let offlineTimer: ReturnType<typeof setTimeout> | null = null;
     let lastDataAt = Date.now();
@@ -114,6 +115,17 @@ export function useLiveChart({
         cleanupWs();
         cleanupWs = null;
       }
+    }
+
+    function scheduleWsUpgradeFromSse() {
+      if (cancelled || upgradeTimer) return;
+      upgradeTimer = setTimeout(() => {
+        upgradeTimer = null;
+        if (cancelled || transportRef.current !== "sse") return;
+        void connectWs().then((ok) => {
+          if (!ok && !cancelled && transportRef.current === "sse") scheduleWsUpgradeFromSse();
+        });
+      }, 15_000);
     }
 
     queueMicrotask(() => {
@@ -182,16 +194,24 @@ export function useLiveChart({
         if (cancelled) return;
         if (kind === "ws") {
           void connectWs().then((ok) => {
-            if (!ok) void connectSse();
+            if (!ok) {
+              void connectSse();
+              scheduleWsUpgradeFromSse();
+            }
           });
         } else {
           void connectSse();
+          scheduleWsUpgradeFromSse();
         }
       }, delay);
       backoff = Math.min(backoff * 2, 15_000);
     }
 
-    async function fetchSessionWithTimeout(): Promise<{ token?: string | null; wsUrl?: string | null } | null> {
+    async function fetchSessionWithTimeout(): Promise<{
+      token?: string | null;
+      wsUrl?: string | null;
+      fallbackWsUrl?: string | null;
+    } | null> {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 8_000);
       try {
@@ -208,7 +228,11 @@ export function useLiveChart({
           }),
         });
         if (!res.ok) return null;
-        return (await res.json()) as { token?: string | null; wsUrl?: string | null };
+        return (await res.json()) as {
+          token?: string | null;
+          wsUrl?: string | null;
+          fallbackWsUrl?: string | null;
+        };
       } catch {
         return null;
       } finally {
@@ -320,27 +344,36 @@ export function useLiveChart({
       });
     }
 
-    async function connectWs(): Promise<boolean> {
-      try {
-        const j = await fetchSessionWithTimeout();
-        if (!j) return false;
-        if (!j.token || !j.wsUrl) return false;
+    function buildWsUrl(base: string, token: string): string {
+      const wsBase = base.replace(/\/$/, "");
+      return `${wsBase}?account=${encodeURIComponent(accountId!)}&symbol=${encodeURIComponent(displaySymbol)}&tf=${encodeURIComponent(timeframeKey)}&token=${encodeURIComponent(token)}`;
+    }
 
-        const wsBase = j.wsUrl.replace(/\/$/, "");
-        const wsUrl = `${wsBase}?account=${encodeURIComponent(accountId!)}&symbol=${encodeURIComponent(displaySymbol)}&tf=${encodeURIComponent(timeframeKey)}&token=${encodeURIComponent(j.token)}`;
-
-        if (cancelled) return false;
-        setT("ws");
-        setUi(hasStableData ? "reconnecting" : "connecting");
-        const ws = new WebSocket(wsUrl);
-
+    function bindSocket(ws: WebSocket): Promise<boolean> {
+      return new Promise((resolve) => {
+        let settled = false;
         let opened = false;
+        const handshake = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
+          resolve(false);
+        }, 5_000);
+
         ws.onopen = () => {
+          if (cancelled || settled) return;
+          settled = true;
           opened = true;
+          clearTimeout(handshake);
           backoff = 1500;
-          // ── WS connected: kill any lingering SSE immediately.
           killOtherTransport("ws");
+          setT("ws");
           setUi(hasStableData ? "connected" : "connecting");
+          resolve(true);
         };
         ws.onmessage = (ev) => {
           if (cancelled) return;
@@ -353,27 +386,48 @@ export function useLiveChart({
           }
         };
         ws.onerror = () => {
-          // Let onclose drive recovery to avoid double scheduling.
+          /* onclose drives recovery */
         };
         ws.onclose = () => {
           cleanupWs = null;
-          if (cancelled) return;
-          if (!opened) {
-            // Token/edge unhealthy → fall back to SSE.
-            void connectSse();
+          if (!settled) {
+            settled = true;
+            clearTimeout(handshake);
+            resolve(false);
             return;
           }
+          if (cancelled || !opened) return;
           scheduleReconnect("ws");
         };
 
         cleanupWs = () => {
+          clearTimeout(handshake);
           try {
             ws.close();
           } catch {
             /* ignore */
           }
         };
-        return true;
+      });
+    }
+
+    async function connectWs(): Promise<boolean> {
+      try {
+        const j = await fetchSessionWithTimeout();
+        if (!j?.token) return false;
+        const bases = [j.wsUrl, j.fallbackWsUrl]
+          .map((u) => (u ?? "").trim())
+          .filter((u, i, all) => u.length > 0 && all.indexOf(u) === i);
+        if (bases.length === 0) return false;
+        if (cancelled) return false;
+        setUi(hasStableData ? "reconnecting" : "connecting");
+        for (const base of bases) {
+          if (cancelled) return false;
+          const ws = new WebSocket(buildWsUrl(base, j.token));
+          const ok = await bindSocket(ws);
+          if (ok) return true;
+        }
+        return false;
       } catch {
         return false;
       }
@@ -434,12 +488,17 @@ export function useLiveChart({
     }
 
     void connectWs().then((ok) => {
-      if (!ok) void connectSse();
+      if (cancelled) return;
+      if (!ok) {
+        void connectSse();
+        scheduleWsUpgradeFromSse();
+      }
     });
 
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      if (upgradeTimer) clearTimeout(upgradeTimer);
       clearHealthTimers();
       if (cleanupWs) cleanupWs();
       if (cleanupSse) cleanupSse();
