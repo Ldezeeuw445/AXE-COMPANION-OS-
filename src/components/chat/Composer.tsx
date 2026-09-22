@@ -22,7 +22,7 @@ import {
 import { Send, X, ImageIcon, Paperclip, Camera, Mic } from "lucide-react";
 import { ThinkingOrb } from "thinking-orbs";
 import { BorderBeam } from "border-beam";
-import { AXE_ORB_INK } from "@/components/chat/AxeThinkingOrb";
+import { AXE_ORB_INK, ORB_TUNING } from "@/components/chat/AxeThinkingOrb";
 import { useComposerOrb } from "@/components/chat/useComposerOrb";
 import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
 import { useMicrophone } from "voice-glow";
@@ -504,10 +504,16 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
               className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 flex -translate-x-1/2 justify-center"
               aria-hidden={!composerOrb.busy}
             >
-              <ThinkingOrb state={composerOrb.state} size={64} theme="dark" color={AXE_ORB_INK} />
+              <ThinkingOrb
+                state={composerOrb.state}
+                size={64}
+                theme="dark"
+                color={AXE_ORB_INK}
+                {...ORB_TUNING[composerOrb.state]}
+              />
             </div>
             <AxeVoiceBeam stream={beamMic.stream} processing={sending} borderRadius={26}>
-              <BorderBeam size="pulse-outside" colorVariant="mono" theme="dark" borderRadius={26}>
+              <BorderBeam size="pulse-outside" colorVariant="mono" borderRadius={26}>
               <div
                 className="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[26px] border border-white/[0.07] px-4 pb-2 pt-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
                 style={{

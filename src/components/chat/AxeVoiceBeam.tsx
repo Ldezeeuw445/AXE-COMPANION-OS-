@@ -33,9 +33,7 @@ export function AxeVoiceBeam({
 }) {
   return (
     <VoiceBeam
-      type="default"
-      colorVariant="colorful"
-      theme="dark"
+      // Defaults otherwise — only what this host actually needs is set.
       borderRadius={borderRadius}
       stream={stream}
       // No stream (AXE speaking, or mic refused): follow the spoken reply.

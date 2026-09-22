@@ -9,10 +9,33 @@
  * the chart" no longer look like the same shrug.
  */
 
-import { ThinkingOrb, type OrbState } from "thinking-orbs";
+import { ThinkingOrb, type OrbState, type ThinkingOrbProps } from "thinking-orbs";
 
 /** AXE's own ink — the teal at the middle of the brand gradient. */
 export const AXE_ORB_INK = "#3FE6CF";
+
+/**
+ * Per-state tuning, hand-picked in the library's playground.
+ *
+ * Shared by the composer orb and the one in the thread: the size preset
+ * differs (64 vs the 20px inline design), everything else is identical so the
+ * two never read as different animations of the same state.
+ */
+type OrbTuning = Pick<ThinkingOrbProps, "speed" | "dots" | "dotSize" | "opts">;
+
+const BASE: OrbTuning = { speed: 0.7, dots: 2, dotSize: 0.5 };
+
+export const ORB_TUNING: Record<OrbState, OrbTuning> = {
+  breathing: { ...BASE, opts: { wobMul: 0.55, bandMul: 6, spin: 0.1 } },
+  composing: { ...BASE, opts: { wobMul: 2.5, bandMul: 6 } },
+  weaving: { ...BASE },
+  connecting: { ...BASE, opts: { thr: 0.84, signals: 12, lineW: 1.2 } },
+  listening: { ...BASE },
+  solving: { ...BASE },
+  searching: { ...BASE, opts: { dimBase: 0.75 } },
+  working: { ...BASE, opts: { ghostA: 1, particles: 6 } },
+  shaping: { ...BASE },
+};
 
 /** Tool name → what the trader should understand is happening. */
 const TOOL_LABELS: Record<string, { state: OrbState; label: string }> = {
@@ -69,7 +92,13 @@ export function AxeThinkingOrb({
   const { state, label } = orbForPhase(phase, tools);
   return (
     <div className="flex items-center gap-2.5 px-1 py-1" aria-live="polite">
-      <ThinkingOrb state={state} size={size} color={AXE_ORB_INK} aria-label={`AXE: ${label}`} />
+      <ThinkingOrb
+        state={state}
+        size={size}
+        color={AXE_ORB_INK}
+        {...ORB_TUNING[state]}
+        aria-label={`AXE: ${label}`}
+      />
       <span className="text-[12px] text-white/45">{label}…</span>
     </div>
   );
