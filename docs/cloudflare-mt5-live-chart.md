@@ -1,8 +1,8 @@
 # Cloudflare MT5 live chart
 
 Realtime chart architecture for AXE Companion. MT5 stays the broker truth;
-Cloudflare is the realtime edge; Supabase remains auth and account truth;
-Next/Vercel renders the UI.
+the IONOS Next process serves same-origin `/ws/chart`; Cloudflare chart-edge
+is optional; Supabase remains auth and account truth.
 
 ## Layout
 
@@ -43,7 +43,7 @@ proxy_set_header Connection "upgrade";
 - Per-room state: one `ChartLiveRoom` per
   `userId | accountId | brokerSymbol | timeframe`.
 - One MetaApi REST loop per room — multiple devices/tabs share one upstream.
-- Edge-local: lower latency than Vercel functions in many regions.
+- Edge-local: optional extra hop in front of the IONOS Next process.
 
 ## Honest constraint
 
@@ -100,10 +100,10 @@ UI status pill labels:
 
 ## Required secrets
 
-Vercel (Next):
+IONOS Next (`.env.local` on the VPS):
 
-- `CHART_SESSION_JWT_SECRET` — HS256 secret, also set on Cloudflare.
-- `NEXT_PUBLIC_CHART_WS_URL` — `wss://chart.<domain>/ws/chart`.
+- `CHART_SESSION_JWT_SECRET` — HS256 secret; also set on Cloudflare if that worker is used. Same-origin `/ws/chart` works without Cloudflare.
+- `NEXT_PUBLIC_CHART_WS_URL` — only if using Cloudflare chart-edge (`wss://chart.<domain>/ws/chart`).
 - `METAAPI_TOKEN` — server-only.
 - Existing Supabase env.
 
@@ -124,8 +124,10 @@ Never store these in the repo.
 3. `npx wrangler secret put CHART_SESSION_JWT_SECRET`
 4. `npx wrangler secret put METAAPI_TOKEN`
 5. `npm run deploy`
-6. On Vercel, set `NEXT_PUBLIC_CHART_WS_URL` to the worker URL plus `/ws/chart`
-   and add the matching `CHART_SESSION_JWT_SECRET`. Redeploy.
+6. On the IONOS host, set `NEXT_PUBLIC_CHART_WS_URL` only if using the worker
+   (`wss://chart.<domain>/ws/chart`) and add the matching
+   `CHART_SESSION_JWT_SECRET`. Then `./scripts/deploy-vps.sh`. Same-origin
+   `/ws/chart` needs no Cloudflare URL.
 
 ## Testing
 

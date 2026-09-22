@@ -11,8 +11,9 @@
  * own durableConfigService.ts already uses for exactly this kind of
  * cross-window/cross-app config problem.
  *
- * No-ops on Vercel (no PORT env var set the same way) and in the edge
- * runtime (service-role Supabase access needs the Node runtime).
+ * Sidecar port registration no-ops when PORT is unset, and in the edge
+ * runtime (service-role Supabase access needs the Node runtime). Chart WS
+ * still attaches on the IONOS `next start` process.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;

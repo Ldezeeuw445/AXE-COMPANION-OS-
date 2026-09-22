@@ -6,7 +6,7 @@
  * was never set — the usual production miss.
  *
  * Attaches by intercepting `upgrade` on http.Server (next start / next dev).
- * Vercel serverless cannot hold websockets; session then falls back to SSE.
+ * nginx in front of Next must forward Upgrade; otherwise the client uses SSE.
  */
 import { Server as HttpServer } from "node:http";
 import type { IncomingMessage } from "node:http";
