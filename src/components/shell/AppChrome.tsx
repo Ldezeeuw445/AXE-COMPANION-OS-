@@ -10,7 +10,6 @@ import { ContentShell } from "@/components/shell/ContentShell";
 import { RouteBodyFlags } from "@/components/shell/RouteBodyFlags";
 import { TabletShellEffects } from "@/components/shell/TabletShellEffects";
 import { TabletNavCollapseProvider } from "@/components/shell/TabletNavCollapse";
-import { TabletNavPeekHandle } from "@/components/shell/TabletNavPeekHandle";
 import { Toaster } from "@/components/ui/sonner";
 import { AppComplianceStrip } from "@/components/legal/AppComplianceStrip";
 import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
@@ -43,7 +42,6 @@ export function AppChrome({ children }: { children: ReactNode }) {
             </div>
             <ClientBottomNav />
             <AppComplianceStrip />
-            <TabletNavPeekHandle />
           </div>
         </SwipeNavProvider>
       </AmbientProvider>

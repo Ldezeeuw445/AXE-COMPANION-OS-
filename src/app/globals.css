@@ -594,10 +594,16 @@ body.trade-sheet-open .tos-nav-pill {
 /* Collapsible bottom nav — tap the handle (or swipe down) to hide, peek
    handle to restore. Phone included: that is where the space matters most. */
 body.tos-tablet-nav-collapsed {
-  --tos-nav-offset: max(0.4rem, env(safe-area-inset-bottom, 0px));
-  /* Without this the composer keeps hovering where the nav used to be and
-     hiding the nav buys no room at all. */
-  --tos-chat-composer-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  /* The bar does not leave the screen — it becomes a rail. Everything anchored
+     to the nav (the composer, the scroll reserve) follows this height, so the
+     room the rail frees is real and nothing has to float on its own. */
+  --tos-nav-h: 1.15rem;
+  --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.4rem);
+}
+
+.tos-nav-pill-rail {
+  padding: 0 !important;
+  border-radius: 999px !important;
 }
 
 .tos-tablet-nav-pill {
@@ -606,29 +612,8 @@ body.tos-tablet-nav-collapsed {
     opacity 0.22s ease;
 }
 
-.tos-tablet-nav-pill-hidden {
-  transform: translateX(-50%) translateY(calc(100% + 1.25rem)) !important;
-  opacity: 0;
-  pointer-events: none !important;
-}
-
 body.tos-tablet-nav-collapsed.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
   padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
-}
-
-.tos-tablet-nav-peek {
-  animation: tos-tablet-nav-peek-in 0.25s ease;
-}
-
-@keyframes tos-tablet-nav-peek-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
 }
 
 /* Tablet chart header — show when JS marks landscape tablet (incl. iPad Pro) */

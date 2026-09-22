@@ -66,8 +66,14 @@ export function BottomNav() {
   }, []);
 
   const { progress, currentTabIdx } = useSwipeNav();
-  const { enabled: navCollapsible, collapsed: navCollapsed, collapse: collapseNav } = useTabletNavCollapse();
+  const {
+    enabled: navCollapsible,
+    collapsed: navCollapsed,
+    collapse: collapseNav,
+    expand: expandNav,
+  } = useTabletNavCollapse();
   const navSwipe = useTabletNavSwipe("collapse", collapseNav);
+  const expandSwipe = useTabletNavSwipe("expand", expandNav);
 
   // Conditional 6th tab
   const sixthTab = isAxeView
@@ -83,7 +89,7 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${navCollapsible ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-tablet-nav-pill-hidden" : ""}`}
+      className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${navCollapsible ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-nav-pill-rail" : ""}`}
       style={{
         // Matches the composer card above it — same gradient, radius and shadow.
         background: "linear-gradient(180deg, #131317 0%, #0b0b0e 100%)",
@@ -105,6 +111,7 @@ export function BottomNav() {
           <span className="h-1 w-10 rounded-full bg-white/20 transition-colors group-active:bg-white/40" />
         </button>
       ) : null}
+
       {/* Inner glow highlight along top edge */}
       <div
         className="pointer-events-none absolute inset-x-4 top-[1px] h-px"
@@ -134,6 +141,24 @@ export function BottomNav() {
         />
       )}
 
+      {navCollapsed ? (
+        <button
+          type="button"
+          onClick={expandNav}
+          aria-label="Show navigation"
+          aria-expanded={false}
+          className="relative z-10 flex w-full items-center justify-center py-[3px] active:scale-[0.98]"
+          {...expandSwipe}
+        >
+          <span
+            className="h-[3px] w-16 rounded-full"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(201,242,75,0.55) 0%, rgba(63,230,207,0.75) 52%, rgba(122,87,255,0.55) 100%)",
+            }}
+          />
+        </button>
+      ) : (
       <div className="relative z-10 flex items-center justify-around gap-1">
         {tabs.map(({ href, label, Icon, accent }, idx) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -212,6 +237,7 @@ export function BottomNav() {
           );
         })}
       </div>
+      )}
     </nav>
   );
 }
