@@ -1,7 +1,8 @@
 /**
  * Normalized realtime event contract shared between:
+ *  - Same-origin Next `/ws/chart` websocket
  *  - Cloudflare ChartLiveRoom Durable Object websocket
- *  - Next /api/chart/live SSE fallback
+ *  - Next `/api/chart/live` SSE fallback
  *  - Frontend useLiveChart hook
  *
  * Keep payload shapes identical across transports so the client only has one parser.

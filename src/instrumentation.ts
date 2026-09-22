@@ -17,6 +17,13 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  try {
+    const { attachChartWebSocket } = await import("@/lib/chart/attachChartWebSocket");
+    await attachChartWebSocket();
+  } catch (e) {
+    console.error("[instrumentation] chart websocket attach failed:", e);
+  }
+
   const port = process.env.PORT;
   if (!port) return;
 
