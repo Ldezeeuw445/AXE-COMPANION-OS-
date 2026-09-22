@@ -66,7 +66,7 @@ export function BottomNav() {
   }, []);
 
   const { progress, currentTabIdx } = useSwipeNav();
-  const { enabled: tabletNav, collapsed: navCollapsed, collapse: collapseNav } = useTabletNavCollapse();
+  const { enabled: navCollapsible, collapsed: navCollapsed, collapse: collapseNav } = useTabletNavCollapse();
   const navSwipe = useTabletNavSwipe("collapse", collapseNav);
 
   // Conditional 6th tab
@@ -83,7 +83,7 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${tabletNav ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-tablet-nav-pill-hidden" : ""}`}
+      className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${navCollapsible ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-tablet-nav-pill-hidden" : ""}`}
       style={{
         // Matches the composer card above it — same gradient, radius and shadow.
         background: "linear-gradient(180deg, #131317 0%, #0b0b0e 100%)",
@@ -92,12 +92,18 @@ export function BottomNav() {
         WebkitTextSizeAdjust: "100%",
       }}
       aria-label="Primary"
-      {...(tabletNav ? navSwipe : {})}
+      {...(navCollapsible ? navSwipe : {})}
     >
-      {tabletNav && !navCollapsed ? (
-        <div className="flex justify-center pb-0.5 pt-0.5" aria-hidden>
-          <span className="h-1 w-10 rounded-full bg-white/20" title="Swipe down to hide nav" />
-        </div>
+      {navCollapsible && !navCollapsed ? (
+        <button
+          type="button"
+          onClick={collapseNav}
+          aria-label="Hide navigation"
+          className="group -mt-0.5 mb-0.5 flex w-full justify-center py-1 active:scale-95"
+          {...navSwipe}
+        >
+          <span className="h-1 w-10 rounded-full bg-white/20 transition-colors group-active:bg-white/40" />
+        </button>
       ) : null}
       {/* Inner glow highlight along top edge */}
       <div

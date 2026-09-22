@@ -91,7 +91,7 @@
 
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
-  --tos-nav-h: 4.6rem;
+  --tos-nav-h: 5.25rem;
   --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.55rem);
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
   /* Tablet status bar clearance — thin edge before in-chart toolbar */
@@ -515,7 +515,7 @@ body {
   /* Taller than a strip so the bar reads as the same object as the composer
      card above it. --tos-nav-h grows with it, so everything anchored to the
      nav keeps its spacing. */
-  padding: 0.5rem 0.5rem 0.55rem;
+  padding: 0.55rem 0.6rem 0.6rem;
   --tos-nav-icon-size: 31px;
   --tos-nav-icon-glyph-size: 15px;
   --tos-nav-label-size: 6px;
@@ -591,28 +591,32 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
-/* Tablet — collapsible bottom nav (swipe down to hide, peek handle to restore) */
-body.tos-tablet-device.tos-tablet-nav-collapsed {
+/* Collapsible bottom nav — tap the handle (or swipe down) to hide, peek
+   handle to restore. Phone included: that is where the space matters most. */
+body.tos-tablet-nav-collapsed {
   --tos-nav-offset: max(0.4rem, env(safe-area-inset-bottom, 0px));
+  /* Without this the composer keeps hovering where the nav used to be and
+     hiding the nav buys no room at all. */
+  --tos-chat-composer-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
 }
 
-body.tos-tablet-device .tos-tablet-nav-pill {
+.tos-tablet-nav-pill {
   transition:
     transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
     opacity 0.22s ease;
 }
 
-body.tos-tablet-device .tos-tablet-nav-pill-hidden {
+.tos-tablet-nav-pill-hidden {
   transform: translateX(-50%) translateY(calc(100% + 1.25rem)) !important;
   opacity: 0;
   pointer-events: none !important;
 }
 
-body.tos-tablet-device.tos-tablet-nav-collapsed.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
+body.tos-tablet-nav-collapsed.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
   padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
 }
 
-body.tos-tablet-device .tos-tablet-nav-peek {
+.tos-tablet-nav-peek {
   animation: tos-tablet-nav-peek-in 0.25s ease;
 }
 
@@ -850,7 +854,7 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
 
 @media (display-mode: standalone) {
   :root {
-    --tos-nav-h: 4.35rem;
+    --tos-nav-h: 5rem;
     --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.42rem);
   }
 
@@ -861,7 +865,7 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
     width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.28rem, env(safe-area-inset-bottom, 0px));
     border-radius: 26px;
-    padding: 0.46rem 0.46rem 0.5rem;
+    padding: 0.5rem 0.56rem 0.56rem;
     --tos-nav-icon-size: 29px;
     --tos-nav-icon-glyph-size: 14px;
     --tos-nav-label-size: 5.5px;
