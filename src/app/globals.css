@@ -852,9 +852,12 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
   }
 
   .tos-nav-pill {
-    width: min(33rem, calc(100vw - max(0.8rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+    /* Installed PWA — the way this app is actually used. Keep the same box as
+       the composer here too, or the nav goes back to being narrower with
+       tighter corners exactly where it shows. */
+    width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.28rem, env(safe-area-inset-bottom, 0px));
-    border-radius: 1.05rem;
+    border-radius: 26px;
     padding: 0.16rem 0.28rem 0.2rem;
     --tos-nav-icon-size: 29px;
     --tos-nav-icon-glyph-size: 14px;
