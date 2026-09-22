@@ -91,7 +91,7 @@
 
   /* ─── Shell layout ─── */
   --tos-topbar-h: 2.75rem;
-  --tos-nav-h: 5.25rem;
+  --tos-nav-h: 4.1rem;
   --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.55rem);
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
   /* Tablet status bar clearance — thin edge before in-chart toolbar */
@@ -512,10 +512,10 @@ body {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(18px) saturate(145%);
   -webkit-backdrop-filter: blur(18px) saturate(145%);
-  /* Taller than a strip so the bar reads as the same object as the composer
-     card above it. --tos-nav-h grows with it, so everything anchored to the
-     nav keeps its spacing. */
-  padding: 0.55rem 0.6rem 0.6rem;
+  /* Slim on purpose — the bar should read as a quiet base under the composer,
+     not a second card competing with it. Width and radius carry the family
+     resemblance instead of height. */
+  padding: 0.2rem 0.4rem 0.24rem;
   --tos-nav-icon-size: 31px;
   --tos-nav-icon-glyph-size: 15px;
   --tos-nav-label-size: 6px;
@@ -839,7 +839,7 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
 
 @media (display-mode: standalone) {
   :root {
-    --tos-nav-h: 5rem;
+    --tos-nav-h: 3.85rem;
     --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.42rem);
   }
 
@@ -850,7 +850,7 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
     width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.28rem, env(safe-area-inset-bottom, 0px));
     border-radius: 26px;
-    padding: 0.5rem 0.56rem 0.56rem;
+    padding: 0.16rem 0.36rem 0.2rem;
     --tos-nav-icon-size: 29px;
     --tos-nav-icon-glyph-size: 14px;
     --tos-nav-label-size: 5.5px;

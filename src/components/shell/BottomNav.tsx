@@ -101,14 +101,16 @@ export function BottomNav() {
       {...(navCollapsible ? navSwipe : {})}
     >
       {navCollapsible && !navCollapsed ? (
+        // Absolutely placed so the affordance costs the bar no height: a
+        // hairline on the top edge with a finger-sized hit area behind it.
         <button
           type="button"
           onClick={collapseNav}
           aria-label="Hide navigation"
-          className="group -mt-0.5 mb-0.5 flex w-full justify-center py-1 active:scale-95"
+          className="group absolute inset-x-0 top-0 z-20 flex h-4 -translate-y-1 justify-center pt-1"
           {...navSwipe}
         >
-          <span className="h-1 w-10 rounded-full bg-white/20 transition-colors group-active:bg-white/40" />
+          <span className="h-[3px] w-9 rounded-full bg-white/15 transition-colors group-active:bg-white/35" />
         </button>
       ) : null}
 
