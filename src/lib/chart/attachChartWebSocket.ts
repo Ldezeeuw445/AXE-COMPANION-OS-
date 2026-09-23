@@ -44,6 +44,50 @@ type Room = {
 const rooms = new Map<string, Room>();
 let attached = false;
 
+/**
+ * When a room last received a pushed event, by room key.
+ *
+ * The streamer and the REST poller feed the same rooms. While real ticks are
+ * arriving the poller stands down — otherwise every chart would pay for
+ * MetaApi REST calls it does not need, and the two sources would fight over
+ * the same candle.
+ */
+const lastPushAt = new Map<string, number>();
+const PUSH_FRESH_MS = 20_000;
+
+export function hasRecentPush(key: string): boolean {
+  const at = lastPushAt.get(key);
+  return at != null && Date.now() - at < PUSH_FRESH_MS;
+}
+
+/**
+ * Fan a streamer event into the live rooms on this server.
+ *
+ * Same contract as the Cloudflare worker's /internal/publish, including the
+ * `userId|accountId|brokerSymbol|timeframe` key, so the existing streamer can
+ * point here without changes. A `*` timeframe reaches every timeframe open on
+ * that symbol, which is how position and order updates are addressed.
+ *
+ * Returns how many sockets the event reached.
+ */
+export function publishChartEvent(key: string, event: ChartLiveEvent): number {
+  const wildcard = key.endsWith("|*");
+  const prefix = wildcard ? key.slice(0, -1) : null;
+  let reached = 0;
+
+  for (const [roomId, room] of rooms) {
+    const match = wildcard ? roomId.startsWith(prefix!) : roomId === key;
+    if (!match) continue;
+    lastPushAt.set(roomId, Date.now());
+    for (const client of room.clients) {
+      emitTo(client, event);
+      reached += 1;
+    }
+  }
+  if (!wildcard) lastPushAt.set(key, Date.now());
+  return reached;
+}
+
 function pathnameOf(req: IncomingMessage): string {
   try {
     return new URL(req.url ?? "/", "http://localhost").pathname;
@@ -86,6 +130,8 @@ function joinRoom(
         for (const client of clients) emitTo(client, event);
       },
       isStopped: () => stopped || clients.size === 0,
+      // Real ticks are arriving from the streamer: leave the REST API alone.
+      pushActive: () => hasRecentPush(key),
     }).finally(() => {
       if (rooms.get(key) === room) rooms.delete(key);
     });
