@@ -2,6 +2,16 @@ import "server-only";
 
 import { getSupabaseKey } from "@/lib/env";
 
+/**
+ * Actions the deployed intel-proxy actually serves.
+ *
+ * This list had drifted: it still named `vesselTracking`, `conflictEvents`,
+ * `energyFlows`, `cyberThreats`, `militaryRadar` and `emergencyMonitor`, none of
+ * which exist upstream any more. Because the proxy only skips its auth check for
+ * names on its own whitelist, each of those came back 401 — so the cron reported
+ * "warmed: 1, failed: 11" every run and the 401s were read as dead keys. Keep
+ * this in step with PROXY_ACTION_MAP in src/lib/intel/intelClient.ts.
+ */
 const WARMUP_ACTIONS = [
   "insiderTrades",
   "senateTrades",
@@ -9,12 +19,9 @@ const WARMUP_ACTIONS = [
   "unusualOptions",
   "marketTide",
   "corporateJets",
-  "vesselTracking",
-  "conflictEvents",
-  "energyFlows",
-  "cyberThreats",
-  "militaryRadar",
-  "emergencyMonitor",
+  "vesselStream",
+  "gdeltEvents",
+  "openSourcesBrief",
 ] as const;
 
 const PROXY_TIMEOUT_MS = 25_000;

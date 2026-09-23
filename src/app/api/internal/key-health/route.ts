@@ -28,7 +28,7 @@ export const maxDuration = 60;
 
 const TIMEOUT_MS = 8_000;
 
-type CheckState = "ok" | "missing" | "invalid" | "error" | "needs_session";
+type CheckState = "ok" | "missing" | "invalid" | "error" | "retired";
 type Check = {
   name: string;
   area: string;
@@ -222,17 +222,21 @@ function vercelChecks(): Array<Promise<Check>> {
  * action raw (no DB fallback) so a dead key shows as a failing feed.
  */
 /**
- * intel-proxy splits its actions in two: a public set it will answer for any
- * caller, and the rest, which it only answers for a signed-in user. Probing a
- * session-only action from here answers `invalid_token`, which reads like a
- * dead provider key and is nothing of the sort — it is this checker having no
- * session. Those are reported as such instead of as failures.
+ * Every action the deployed intel-proxy serves is public, so every one of them
+ * is probed here for real.
  *
- * Where a public alias exists for the same data (vesselStream for vessels,
- * gdeltEvents for conflict) the public one is probed, because that does test
- * the key.
+ * An earlier version of this file read `invalid_token` as "needs a signed-in
+ * user". It is not that. The proxy skips its auth check only for names on its own
+ * whitelist and sends everything else through `getUser(<the anon key>)`, which
+ * cannot succeed — so a name the proxy has never heard of answers exactly like a
+ * session problem. The four feeds below are in that position: they were dropped
+ * from the Edge function and no EIA, GreyNoise or RapidAPI path remains in it.
+ * Probing them proves nothing about their keys, so they are reported as retired.
+ *
+ * Where a public name exists for the same data (vesselStream for vessels,
+ * gdeltEvents for conflict) that one is probed, because it does test the key.
  */
-const SESSION_ONLY = new Set(["militaryRadar", "emergencyMonitor", "energyFlows", "cyberThreats"]);
+const RETIRED_ACTIONS = new Set(["militaryRadar", "emergencyMonitor", "energyFlows", "cyberThreats"]);
 
 const INTEL_FEEDS: Array<{ action: string; name: string; env: string[] }> = [
   { action: "marketTide", name: "Market tide", env: ["UNUSUAL_WHALES_TOKEN", "FINNHUB_API_KEY"] },
@@ -255,11 +259,11 @@ function intelChecks(): Array<Promise<Check>> {
   return INTEL_FEEDS.map(async (feed): Promise<Check> => {
     const base = { name: `Intel: ${feed.name}`, area: "intel-edge", env: feed.env };
     if (!url || !anon) return { ...base, state: "missing", detail: "Supabase URL/anon key missing" };
-    if (SESSION_ONLY.has(feed.action)) {
+    if (RETIRED_ACTIONS.has(feed.action)) {
       return {
         ...base,
-        state: "needs_session",
-        detail: "intel-proxy answers this one only for a signed-in user — check it in the app",
+        state: "retired",
+        detail: "the deployed intel-proxy has no handler for this feed — its key is untestable, and unused",
       };
     }
     const start = Date.now();
@@ -296,7 +300,7 @@ export async function GET(request: NextRequest) {
   const includeIntel = request.nextUrl.searchParams.get("intel") !== "0";
   const checks = await Promise.all([...vercelChecks(), ...(includeIntel ? intelChecks() : [])]);
 
-  const summary = { ok: 0, missing: 0, invalid: 0, error: 0, needs_session: 0 } satisfies Record<CheckState, number>;
+  const summary = { ok: 0, missing: 0, invalid: 0, error: 0, retired: 0 } satisfies Record<CheckState, number>;
   for (const c of checks) summary[c.state] += 1;
 
   return NextResponse.json(
