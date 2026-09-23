@@ -14,6 +14,9 @@ import { ThinkingOrb, type OrbState, type ThinkingOrbProps } from "thinking-orbs
 /** AXE's own ink — the teal at the middle of the brand gradient. */
 export const AXE_ORB_INK = "#3FE6CF";
 
+/** Intel's accent. Not a second orb: a handful of its dots, in gold. */
+export const INTEL_ORB_ACCENT = "#d4af37";
+
 /**
  * Per-state tuning, hand-picked in the library's playground.
  *
@@ -80,25 +83,69 @@ export function orbForPhase(
  * beside it. `size` is a tuned preset in this library, not a scale factor —
  * 64 for the thread, 20 inline.
  */
+/**
+ * One orb, optionally with a few gold dots mixed in for Intel.
+ *
+ * The library takes a single ink colour, so the accent is a second instance
+ * with a fraction of the dot count layered on top. Both clocks start when the
+ * pair mounts, so they trace the same geometry — the gold reads as a handful
+ * of particles inside the same orb rather than a second animation.
+ */
+export function AxeOrb({
+  state,
+  size,
+  accent,
+  label,
+}: {
+  state: OrbState;
+  size: 64 | 32 | 20;
+  accent?: "intel";
+  label?: string;
+}) {
+  const tuning = ORB_TUNING[state];
+  const base = (
+    <ThinkingOrb
+      state={state}
+      size={size}
+      theme="dark"
+      color={AXE_ORB_INK}
+      {...tuning}
+      aria-label={label}
+    />
+  );
+  if (!accent) return base;
+  return (
+    <span className="relative inline-flex" style={{ width: size, height: size }}>
+      {base}
+      <ThinkingOrb
+        state={state}
+        size={size}
+        theme="dark"
+        color={INTEL_ORB_ACCENT}
+        {...tuning}
+        dots={(tuning.dots ?? 1) * 0.22}
+        style={{ position: "absolute", inset: 0, opacity: 0.85 }}
+        aria-hidden
+      />
+    </span>
+  );
+}
+
 export function AxeThinkingOrb({
   phase,
   tools,
   size = 20,
+  accent,
 }: {
   phase: AxeOrbPhase;
   tools?: string[] | null;
   size?: 64 | 32 | 20;
+  accent?: "intel";
 }) {
   const { state, label } = orbForPhase(phase, tools);
   return (
     <div className="flex items-center gap-2.5 px-1 py-1" aria-live="polite">
-      <ThinkingOrb
-        state={state}
-        size={size}
-        color={AXE_ORB_INK}
-        {...ORB_TUNING[state]}
-        aria-label={`AXE: ${label}`}
-      />
+      <AxeOrb state={state} size={size} accent={accent} label={`AXE: ${label}`} />
       <span className="text-[12px] text-white/45">{label}…</span>
     </div>
   );

@@ -20,14 +20,12 @@ import {
   readStagedChatPrefill,
 } from "@/lib/chat/chatPrefill";
 import { Send, X, ImageIcon, Paperclip, Camera, Mic } from "lucide-react";
-import { ThinkingOrb } from "thinking-orbs";
 import { BorderBeam } from "border-beam";
-import { AXE_ORB_INK, ORB_TUNING } from "@/components/chat/AxeThinkingOrb";
+import { AxeOrb } from "@/components/chat/AxeThinkingOrb";
 import { useComposerOrb } from "@/components/chat/useComposerOrb";
 import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
 import { useMicrophone } from "voice-glow";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
-import { IntelTerminalComposer } from "@/components/chat/IntelTerminalComposer";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
@@ -40,6 +38,19 @@ declare global {
     webkitSpeechRecognition: any;
   }
 }
+
+/** Intel's two standing questions — the reason its composer differs at all. */
+const INTEL_QUICK_ACTIONS = [
+  {
+    label: "Energy vs Gold",
+    prompt:
+      "How do energy flows correlate with XAUUSD right now? Signal, confidence and feeds.",
+  },
+  {
+    label: "Market Tide",
+    prompt: "What's the market tide signal across my watchlist? Net premium and bias.",
+  },
+] as const;
 
 const LS_SYMBOL = "axe_active_symbol";
 const LS_TF = "axe_active_tf";
@@ -478,23 +489,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
       {/* ── Unified composer bar: quick actions + typing in one row (intel only) ─── */}
       <div className="relative overflow-visible">
-        {intelMode ? (
-          <IntelTerminalComposer
-            value={value}
-            onChange={setValue}
-            onSubmit={() => {
-              vibrate("medium");
-              void submit();
-            }}
-            onQuickAction={(draft) => void runQuickAction(draft)}
-            sending={sending}
-            inputId="composer-input"
-            textareaRef={textareaRef}
-            onFocus={() => {
-              window.dispatchEvent(new CustomEvent("axe:chat-pin"));
-            }}
-          />
-        ) : (
+        {(
           // AXE default composer — always-on orb over an AXE Core-style card
           <div className="relative overflow-visible">
             {/* The orb sits on the card's top edge and is never absent: it
@@ -504,12 +499,10 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
               className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 flex -translate-x-1/2 justify-center"
               aria-hidden={!composerOrb.busy}
             >
-              <ThinkingOrb
+              <AxeOrb
                 state={composerOrb.state}
                 size={64}
-                theme="dark"
-                color={AXE_ORB_INK}
-                {...ORB_TUNING[composerOrb.state]}
+                accent={intelMode ? "intel" : undefined}
               />
             </div>
             <AxeVoiceBeam stream={beamMic.stream} processing={sending} borderRadius={26}>
@@ -542,6 +535,21 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
                   placeholder={placeholder}
                   className="max-h-40 min-h-[34px] w-full resize-none border-0 bg-transparent px-1 py-1 text-[15px] text-white/90 placeholder:text-white/30 focus:outline-none"
                 />
+                {intelMode ? (
+                  <div className="-mx-1 mb-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {INTEL_QUICK_ACTIONS.map((q) => (
+                      <button
+                        key={q.label}
+                        type="button"
+                        disabled={sending}
+                        onClick={() => void runQuickAction(q.prompt)}
+                        className="shrink-0 rounded-full border border-[#d4af37]/25 bg-[#d4af37]/[0.07] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#d4af37]/90 transition-colors hover:bg-[#d4af37]/15 disabled:opacity-40"
+                      >
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="flex items-center gap-1">
                   <button
                     type="button"

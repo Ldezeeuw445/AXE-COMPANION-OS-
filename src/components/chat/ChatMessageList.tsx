@@ -52,14 +52,22 @@ const INTEL_STARTER_PROMPTS: Array<{ q: string; label: string; hint: string }> =
   },
 ];
 
-function TypingBubble({ phase, tools }: { phase: string | null; tools: string[] | null }) {
+function TypingBubble({
+  phase,
+  tools,
+  intelMode,
+}: {
+  phase: string | null;
+  tools: string[] | null;
+  intelMode: boolean;
+}) {
   return (
     <article className="group flex flex-col items-start">
       <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
         <span className="h-1 w-1 rounded-full bg-[color:var(--icon-intel)]/70" />
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
-      <AxeThinkingOrb phase={phase} tools={tools} size={20} />
+      <AxeThinkingOrb phase={phase} tools={tools} size={20} accent={intelMode ? "intel" : undefined} />
     </article>
   );
 }
@@ -79,10 +87,12 @@ function StreamingBubble({
   text,
   phase,
   tools,
+  intelMode,
 }: {
   text: string;
   phase: string | null;
   tools: string[] | null;
+  intelMode: boolean;
 }) {
   const showToolHint = phase === "tools" && !text;
   const [revealed, setRevealed] = useState(0);
@@ -127,7 +137,7 @@ function StreamingBubble({
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
       {showToolHint ? (
-        <AxeThinkingOrb phase={phase} tools={tools} size={20} />
+        <AxeThinkingOrb phase={phase} tools={tools} size={20} accent={intelMode ? "intel" : undefined} />
       ) : (
         <div className="max-w-[85%] px-1">
           {renderAssistantBody(visibleText)}
@@ -615,9 +625,9 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
           </article>
         ))}
         {thinking && streamText ? (
-          <StreamingBubble text={streamText} phase={streamPhase} tools={streamTools} />
+          <StreamingBubble text={streamText} phase={streamPhase} tools={streamTools} intelMode={intelMode} />
         ) : thinking ? (
-          <TypingBubble phase={streamPhase} tools={streamTools} />
+          <TypingBubble phase={streamPhase} tools={streamTools} intelMode={intelMode} />
         ) : null}
         <div ref={bottomAnchorRef} aria-hidden className="h-px w-full shrink-0 scroll-mt-0" />
       </div>

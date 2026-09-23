@@ -34,21 +34,25 @@ const CYAN = "#00d4f5";
 
 /** How each live-data state paints the nav's top edge. */
 const RUNTIME_LINE: Record<RuntimeTruthState, { background: string; opacity: number }> = {
+  // Edge to edge, and faint: a readout you notice when you look for it, not a
+  // stripe competing with the tabs.
   live: {
-    background: "linear-gradient(90deg, rgba(201,242,75,0.55) 0%, rgba(63,230,207,0.9) 50%, rgba(122,87,255,0.55) 100%)",
-    opacity: 1,
+    background:
+      "linear-gradient(90deg, transparent 0%, rgba(201,242,75,0.5) 14%, rgba(63,230,207,0.6) 50%, rgba(122,87,255,0.5) 86%, transparent 100%)",
+    opacity: 0.5,
   },
   degraded: {
-    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.28) 50%, transparent 100%)",
-    opacity: 1,
+    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.22) 50%, transparent 100%)",
+    opacity: 0.6,
   },
   warming: {
-    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%)",
-    opacity: 1,
+    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.16) 50%, transparent 100%)",
+    opacity: 0.5,
   },
   unavailable: {
-    background: "linear-gradient(90deg, rgba(201,138,43,0.4) 0%, rgba(240,178,74,0.85) 50%, rgba(201,138,43,0.4) 100%)",
-    opacity: 1,
+    background:
+      "linear-gradient(90deg, transparent 0%, rgba(240,178,74,0.55) 20%, rgba(240,178,74,0.7) 50%, rgba(240,178,74,0.55) 80%, transparent 100%)",
+    opacity: 0.75,
   },
   inactive: {
     background:
@@ -159,7 +163,7 @@ export function BottomNav() {
           candles, amber when the account is unreachable, and the old neutral
           highlight when there is no account to report on. */}
       <div
-        className="pointer-events-none absolute inset-x-4 top-[1px] h-px transition-opacity duration-500"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px rounded-t-[26px] transition-opacity duration-500"
         style={{ background: RUNTIME_LINE[shell.runtime].background, opacity: RUNTIME_LINE[shell.runtime].opacity }}
         aria-hidden
       />
