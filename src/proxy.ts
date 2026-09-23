@@ -30,6 +30,10 @@ export async function proxy(request: NextRequest) {
   // Skip auth check on these paths entirely
   if (
     pathEarly.startsWith("/api/") ||
+    // The MetaApi streamer posts ticks here; it carries a shared secret, not a
+    // session, and this path has no /api prefix because it mirrors the
+    // Cloudflare worker's route.
+    pathEarly === "/internal/publish" ||
     pathEarly.startsWith("/_next/") ||
     pathEarly === "/login" ||
     pathEarly === "/welcome" ||
