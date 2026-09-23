@@ -594,11 +594,18 @@ body.trade-sheet-open .tos-nav-pill {
 /* Collapsible bottom nav — tap the handle (or swipe down) to hide, peek
    handle to restore. Phone included: that is where the space matters most. */
 body.tos-tablet-nav-collapsed {
-  /* The bar does not leave the screen — it becomes a rail. Everything anchored
-     to the nav (the composer, the scroll reserve) follows this height, so the
-     room the rail frees is real and nothing has to float on its own. */
+  /* The bar does not leave the screen — it becomes a rail.
+     Every value here is written out rather than derived from --tos-nav-h:
+     the derived ones live on :root, where var() is substituted before this
+     override on <body> exists, so they would keep the expanded nav's height
+     and leave a dead gap above the rail. */
   --tos-nav-h: 1.15rem;
-  --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.4rem);
+  --tos-nav-offset: calc(1.15rem + env(safe-area-inset-bottom, 0px) + 0.4rem);
+  --tos-chat-composer-bottom: calc(1.15rem + env(safe-area-inset-bottom, 0px) + 0.35rem);
+  --tos-chat-scroll-bottom: calc(
+    1.15rem + env(safe-area-inset-bottom, 0px) + 0.35rem + var(--tos-chat-composer-h) +
+      var(--tos-chat-orb-h) + 1rem
+  );
 }
 
 .tos-nav-pill-rail {
