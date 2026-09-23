@@ -35,6 +35,7 @@ import { brokerPricingState, isFreshIso } from "@/lib/runtime/runtimeTruth";
 import { getMetaApiCloudAccountById } from "@/lib/mt5/activeCloudAccount";
 import { clientGetSymbolPrice } from "@/lib/mt5/metaApiClient";
 import { getMetadataSymbolMap, getMetadataSymbolReport } from "@/lib/broker/brokerSymbolRuntime";
+import { isAccountOffered } from "@/lib/broker/brokerAvailability";
 import {
   AXE_CAPABILITY_ROADMAP,
   AXE_CAPABILITY_ROADMAP_KEY,
@@ -434,7 +435,11 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
   ]);
 
   const activeAccountId = (prefsRes.data?.active_account_id as string | null | undefined) ?? null;
-  const accounts = ((accountsRes.data ?? []) as Array<Record<string, unknown>>).map((r) => {
+  // Wat AXE zelf mag zien: een uitgezette broker bestaat voor hem niet, anders
+  // praat hij over een demo-account dat de trader nergens meer kan openen.
+  const accounts = ((accountsRes.data ?? []) as Array<Record<string, unknown>>)
+    .filter((r) => isAccountOffered({ connection_method: r.connection_method as string | null }))
+    .map((r) => {
     const metadata = (r.metadata ?? {}) as Record<string, unknown>;
     return {
       id: String(r.id),

@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { ensureActiveDemoWhenEmpty } from "@/lib/broker/demoAccount";
-import { isDemoBrokerEnabled } from "@/lib/broker/brokerAvailability";
+import { isAccountOffered, isDemoBrokerEnabled } from "@/lib/broker/brokerAvailability";
 import { ensureAlpacaPaperAccount } from "@/lib/alpaca/provision";
 import { isAlpacaConfigured } from "@/lib/alpaca/env";
 
@@ -72,7 +72,7 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
   }
 
   const prefsErr = prefsRes.error?.message;
-  let accounts = (accsRes.data ?? []) as BrokerAccountRow[];
+  let accounts = ((accsRes.data ?? []) as BrokerAccountRow[]).filter(isAccountOffered);
   const seeded = isDemoBrokerEnabled()
     ? await ensureActiveDemoWhenEmpty(
         supabase,
