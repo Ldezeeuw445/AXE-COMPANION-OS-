@@ -17,20 +17,34 @@ pg_cron (*/2)  →  axe_ops.uptime_check()
               axe_ops.uptime_alert() → webhook (Discord / Slack / other)
 ```
 
-## The one manual step: where the alert goes
+## Targets
 
-Until a webhook exists the outage is still recorded, but nothing shouts. Add
-one in the Supabase SQL editor — a Discord channel webhook is the quickest:
+Both are checked every two minutes by the `axe-uptime-watch` job:
+
+| Target | Why |
+|---|---|
+| `https://www.axecompanion.com/robots.txt` | the app itself, served by nginx → Next |
+| `https://api.axecompanion.com/health` | AXE Core's API, on the same box |
+
+`ollama.axecompanion.com` is deliberately not watched: it answers nothing, and
+chat reaches Ollama over localhost on the same VPS. `chart.axecompanion.com`
+is not watched either — the Cloudflare worker is out of free allowance (1027)
+and the streamer now pushes straight into the VPS.
+
+## Where the alert goes
+
+An ntfy topic is stored in Vault under `axe_uptime_webhook`: no account to
+create, and the phone app turns it into a push. Read the topic with
 
 ```sql
-select vault.create_secret(
-  'https://discord.com/api/webhooks/…',
-  'axe_uptime_webhook',
-  'Where uptime alerts go'
-);
+select decrypted_secret from vault.decrypted_secrets where name = 'axe_uptime_webhook';
 ```
 
-Already there? Replace the value instead of adding a second row:
+and subscribe to it in the ntfy app. pg_net only sends `application/json`, so
+ntfy is addressed through its JSON publish endpoint (topic in the body) rather
+than the plain-text URL form.
+
+To send somewhere else instead — a Discord channel, say:
 
 ```sql
 select vault.update_secret(
@@ -39,8 +53,8 @@ select vault.update_secret(
 );
 ```
 
-A URL containing `discord` is posted as `{"content": …}`, one containing
-`slack` as `{"text": …}`, anything else gets both keys.
+A URL containing `ntfy` is published as an ntfy message, `discord` as
+`{"content": …}`, `slack` as `{"text": …}`, anything else gets both keys.
 
 ## Behaviour
 
