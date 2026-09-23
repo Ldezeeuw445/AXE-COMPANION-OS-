@@ -28,7 +28,7 @@ export const maxDuration = 60;
 
 const TIMEOUT_MS = 8_000;
 
-type CheckState = "ok" | "missing" | "invalid" | "error";
+type CheckState = "ok" | "missing" | "invalid" | "error" | "needs_session";
 type Check = {
   name: string;
   area: string;
@@ -221,6 +221,19 @@ function vercelChecks(): Array<Promise<Check>> {
  * intel-proxy feeds run on Supabase Edge with their own secrets. Probe each
  * action raw (no DB fallback) so a dead key shows as a failing feed.
  */
+/**
+ * intel-proxy splits its actions in two: a public set it will answer for any
+ * caller, and the rest, which it only answers for a signed-in user. Probing a
+ * session-only action from here answers `invalid_token`, which reads like a
+ * dead provider key and is nothing of the sort — it is this checker having no
+ * session. Those are reported as such instead of as failures.
+ *
+ * Where a public alias exists for the same data (vesselStream for vessels,
+ * gdeltEvents for conflict) the public one is probed, because that does test
+ * the key.
+ */
+const SESSION_ONLY = new Set(["militaryRadar", "emergencyMonitor", "energyFlows", "cyberThreats"]);
+
 const INTEL_FEEDS: Array<{ action: string; name: string; env: string[] }> = [
   { action: "marketTide", name: "Market tide", env: ["UNUSUAL_WHALES_TOKEN", "FINNHUB_API_KEY"] },
   { action: "darkPoolPrints", name: "Dark pool", env: ["UNUSUAL_WHALES_TOKEN", "FINNHUB_API_KEY"] },
@@ -230,8 +243,8 @@ const INTEL_FEEDS: Array<{ action: string; name: string; env: string[] }> = [
   { action: "corporateJets", name: "Corporate jets", env: ["OPENSKY_USERNAME", "OPENSKY_PASSWORD", "RAPIDAPI_KEY"] },
   { action: "militaryRadar", name: "Military radar", env: ["RAPIDAPI_KEY"] },
   { action: "emergencyMonitor", name: "Emergency squawks", env: ["RAPIDAPI_KEY"] },
-  { action: "vesselTracking", name: "Vessels", env: ["AISSTREAM_API_KEY"] },
-  { action: "conflictEvents", name: "Conflict events", env: ["ACLED_MAIL", "ACLED_PASSWORD"] },
+  { action: "vesselStream", name: "Vessels", env: ["AISSTREAM_API_KEY"] },
+  { action: "gdeltEvents", name: "Conflict events", env: ["ACLED_MAIL", "ACLED_PASSWORD"] },
   { action: "energyFlows", name: "Energy flows", env: ["EIA_API_KEY"] },
   { action: "cyberThreats", name: "Cyber threats", env: ["GREYNOISE_API_KEY"] },
 ];
@@ -242,6 +255,13 @@ function intelChecks(): Array<Promise<Check>> {
   return INTEL_FEEDS.map(async (feed): Promise<Check> => {
     const base = { name: `Intel: ${feed.name}`, area: "intel-edge", env: feed.env };
     if (!url || !anon) return { ...base, state: "missing", detail: "Supabase URL/anon key missing" };
+    if (SESSION_ONLY.has(feed.action)) {
+      return {
+        ...base,
+        state: "needs_session",
+        detail: "intel-proxy answers this one only for a signed-in user — check it in the app",
+      };
+    }
     const start = Date.now();
     try {
       const res = await fetch(`${url}/functions/v1/intel-proxy`, {
@@ -276,7 +296,7 @@ export async function GET(request: NextRequest) {
   const includeIntel = request.nextUrl.searchParams.get("intel") !== "0";
   const checks = await Promise.all([...vercelChecks(), ...(includeIntel ? intelChecks() : [])]);
 
-  const summary = { ok: 0, missing: 0, invalid: 0, error: 0 } satisfies Record<CheckState, number>;
+  const summary = { ok: 0, missing: 0, invalid: 0, error: 0, needs_session: 0 } satisfies Record<CheckState, number>;
   for (const c of checks) summary[c.state] += 1;
 
   return NextResponse.json(
