@@ -18,6 +18,20 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // Keystore first: everything below (and every request after) reads the keys
+  // it puts into process.env.
+  try {
+    const { loadKeystoreIntoEnv } = await import("@/lib/secrets/keystore");
+    const result = await loadKeystoreIntoEnv();
+    if (result.error) {
+      console.warn("[instrumentation] keystore load failed:", result.error);
+    } else if (result.applied.length > 0) {
+      console.log(`[instrumentation] keystore applied ${result.applied.length} key(s): ${result.applied.join(", ")}`);
+    }
+  } catch (e) {
+    console.error("[instrumentation] keystore load threw:", e);
+  }
+
   try {
     const { attachChartWebSocket } = await import("@/lib/chart/attachChartWebSocket");
     await attachChartWebSocket();
