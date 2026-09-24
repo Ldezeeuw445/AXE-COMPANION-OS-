@@ -31,7 +31,9 @@ import type {
 import type { TerminalAlert, TerminalExecution, WatchlistEntry } from "@/services/axeService";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
-import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
+import { brokerPricingState, isFreshIso } from "@/lib/runtime/runtimeTruth";
+import { getMetaApiCloudAccountById } from "@/lib/mt5/activeCloudAccount";
+import { clientGetSymbolPrice } from "@/lib/mt5/metaApiClient";
 import { getMetadataSymbolMap, getMetadataSymbolReport } from "@/lib/broker/brokerSymbolRuntime";
 import {
   AXE_CAPABILITY_ROADMAP,
@@ -490,12 +492,65 @@ async function buildAccounts(supabase: SupabaseClient, userId: string): Promise<
   };
 }
 
+const LIVE_TICK_MAX_AGE_MS = 45_000;
+const DIRECT_PRICE_TIMEOUT_MS = 3_500;
+
+type DirectBrokerPrice = { brokerSymbol: string; bid: number | null; ask: number | null; tickAt: string };
+
+function rowPriceTime(r: Record<string, unknown>): number {
+  const iso = (r.last_tick_at as string | null | undefined) ?? (r.updated_at as string | null | undefined) ?? null;
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Row with the most recent tick that actually carries a price. */
+function freshestPriceRow(rows: Array<Record<string, unknown>>): Record<string, unknown> | null {
+  let best: Record<string, unknown> | null = null;
+  for (const r of rows) {
+    if (r.last_price == null && r.last_bid == null && r.last_ask == null) continue;
+    if (!best || rowPriceTime(r) > rowPriceTime(best)) best = r;
+  }
+  return best;
+}
+
+/** Best-effort MetaApi current-price for MT5 cloud accounts; null on any failure or timeout. */
+async function fetchDirectBrokerPrice(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+  brokerSymbol: string,
+): Promise<DirectBrokerPrice | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const cloud = await getMetaApiCloudAccountById(supabase, userId, accountId);
+    if (!cloud) return null;
+    const price = await Promise.race([
+      clientGetSymbolPrice(cloud.metaApiAccountId, brokerSymbol, cloud.metaApiRegion),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), DIRECT_PRICE_TIMEOUT_MS);
+      }),
+    ]);
+    if (!price || (price.bid == null && price.ask == null)) return null;
+    return {
+      brokerSymbol,
+      bid: price.bid,
+      ask: price.ask,
+      tickAt: price.time ?? new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function buildChart(
   supabase: SupabaseClient,
   userId: string,
   symbol: string | null,
   tf: string | null,
   activeAccountId: string | null,
+  activeSymbolMap: Record<string, string> = {},
 ): Promise<ChartContext> {
   if (!activeAccountId) return { ...EMPTY_CHART, symbol, timeframe: tf };
   let query = supabase
@@ -504,14 +559,53 @@ async function buildChart(
     .eq("user_id", userId)
     .eq("account_id", activeAccountId)
     .order("updated_at", { ascending: false })
-    .limit(1);
+    .limit(symbol ? 12 : 1);
 
+  // Price is timeframe-independent: for a named symbol read every timeframe row
+  // (incl. the streamer's "quote" row) instead of only the chart's last timeframe.
   if (symbol) query = query.eq("display_symbol", symbol);
-  if (tf) query = query.eq("timeframe", tf);
+  else if (tf) query = query.eq("timeframe", tf);
 
   const { data } = await query;
-  const row = (data?.[0] ?? null) as Record<string, unknown> | null;
-  if (!row) return { ...EMPTY_CHART, symbol, timeframe: tf, accountId: activeAccountId };
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const row =
+    rows.find((r) => tf && r.timeframe === tf) ??
+    rows.find((r) => r.timeframe !== "quote") ??
+    rows[0] ??
+    null;
+  const priceRow = freshestPriceRow(rows) ?? row;
+  const priceTickAt = (priceRow?.last_tick_at as string | null | undefined) ?? null;
+
+  // Snapshots only refresh while the Chart screen (or the streamer) is running.
+  // When the tick is stale, ask MetaApi directly so chat never quotes an old price.
+  let direct: DirectBrokerPrice | null = null;
+  if (!isFreshIso(priceTickAt, LIVE_TICK_MAX_AGE_MS)) {
+    const brokerSymbol =
+      (row?.broker_symbol as string | null | undefined) ??
+      (symbol ? activeSymbolMap[symbol] ?? null : null);
+    if (brokerSymbol) {
+      direct = await fetchDirectBrokerPrice(supabase, userId, activeAccountId, brokerSymbol);
+    }
+  }
+
+  if (!row) {
+    if (!direct || !symbol) return { ...EMPTY_CHART, symbol, timeframe: tf, accountId: activeAccountId };
+    return {
+      ...EMPTY_CHART,
+      symbol,
+      timeframe: tf,
+      accountId: activeAccountId,
+      brokerSymbol: direct.brokerSymbol,
+      lastPrice: direct.bid,
+      lastBid: direct.bid,
+      lastAsk: direct.ask,
+      lastTickAt: direct.tickAt,
+      liveStatus: "live",
+      source: "metaapi_rest",
+      updatedAt: direct.tickAt,
+      staleState: staleState(direct.tickAt, "live"),
+    };
+  }
   const displaySymbol = (row.display_symbol as string | null | undefined) ?? symbol;
   const positions = Array.isArray(row.open_positions)
     ? (row.open_positions as Array<Record<string, unknown>>).map((p) => normalizePosition(p, displaySymbol))
@@ -525,21 +619,22 @@ async function buildChart(
     (lastCandle?.time as string | null | undefined) ??
     (lastCandle?.brokerTime as string | null | undefined) ??
     null;
-  const status = (row.status as string | null | undefined) ?? null;
-  const updatedAt = (row.updated_at as string | null | undefined) ?? null;
+  const src = priceRow ?? row;
+  const status = direct ? "live" : ((src.status as string | null | undefined) ?? (row.status as string | null | undefined) ?? null);
+  const updatedAt = direct?.tickAt ?? (src.updated_at as string | null | undefined) ?? null;
 
   return {
     symbol: displaySymbol,
     timeframe: (row.timeframe as string | null | undefined) ?? tf,
-    brokerSymbol: (row.broker_symbol as string | null | undefined) ?? null,
+    brokerSymbol: direct?.brokerSymbol ?? (row.broker_symbol as string | null | undefined) ?? null,
     accountId: (row.account_id as string | null | undefined) ?? activeAccountId,
-    lastPrice: row.last_price != null ? Number(row.last_price) : null,
-    lastBid: row.last_bid != null ? Number(row.last_bid) : null,
-    lastAsk: row.last_ask != null ? Number(row.last_ask) : null,
-    lastTickAt: (row.last_tick_at as string | null | undefined) ?? null,
+    lastPrice: direct ? direct.bid : src.last_price != null ? Number(src.last_price) : null,
+    lastBid: direct ? direct.bid : src.last_bid != null ? Number(src.last_bid) : null,
+    lastAsk: direct ? direct.ask : src.last_ask != null ? Number(src.last_ask) : null,
+    lastTickAt: direct?.tickAt ?? (src.last_tick_at as string | null | undefined) ?? null,
     lastCandleAt: (row.last_candle_at as string | null | undefined) ?? null,
     liveStatus: status,
-    source: (row.source as string | null | undefined) ?? null,
+    source: direct ? "metaapi_rest" : ((src.source as string | null | undefined) ?? null),
     updatedAt,
     openPositionsCount: row.open_positions_count != null ? Number(row.open_positions_count) : null,
     staleState: staleState(updatedAt, status),
@@ -1191,7 +1286,7 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
 
   const [chartRes, tradesRes, intelRes, alertsRes, marketRes] = await Promise.all([
     withAdapter("chart", { ...EMPTY_CHART, symbol, timeframe }, () =>
-      buildChart(args.supabase, args.userId, symbol, timeframe, activeAccountId),
+      buildChart(args.supabase, args.userId, symbol, timeframe, activeAccountId, accountsRes.value.activeSymbolMap),
     ),
     withAdapter("trades", EMPTY_TRADES, () => buildTrades(args.supabase, args.userId, activeAccountId)),
     withAdapter("intel", { ...EMPTY_INTEL, symbol }, () => buildIntel(symbol), INTEL_TIMEOUT_MS),

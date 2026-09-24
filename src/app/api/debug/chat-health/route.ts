@@ -1,4 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { hasCronSecret } from "@/lib/auth/cronSecret";
+
+/**
+ * GET /api/debug/chat-health
+ *
+ * Public: overall status + reachable booleans only (used by the smoke scripts).
+ * With `Authorization: Bearer <CRON_SECRET>`: also model names, Ollama URL and
+ * upstream error text — never exposed anonymously.
+ */
+
+const CHECK_TIMEOUT_MS = 6_000;
 
 type ProviderCheck = {
   configured: boolean;
@@ -7,90 +18,65 @@ type ProviderCheck = {
   responseTimeMs?: number;
 };
 
-type HealthResults = {
-  status: string;
-  env: {
-    ollama_base_url: string | null;
-    ollama_model: string;
-    openai_key_set: boolean;
-    openai_model: string;
-  };
-  ollama: ProviderCheck;
-  openai: ProviderCheck;
-};
+async function probe(url: string, init?: RequestInit): Promise<ProviderCheck> {
+  const start = Date.now();
+  try {
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) });
+    if (res.ok) return { configured: true, reachable: true, error: null, responseTimeMs: Date.now() - start };
+    const text = await res.text().catch(() => "");
+    return { configured: true, reachable: false, error: `HTTP ${res.status}: ${text.slice(0, 300)}` };
+  } catch (err) {
+    return { configured: true, reachable: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
 
-export async function GET() {
+const NOT_CONFIGURED: ProviderCheck = { configured: false, reachable: false, error: null };
+
+export async function GET(request: NextRequest) {
   const ollamaUrl = process.env.OLLAMA_BASE_URL;
   const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
   const openaiKey = process.env.OPENAI_API_KEY;
   const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
 
-  const results: HealthResults = {
-    status: "checking",
-    env: {
-      ollama_base_url: ollamaUrl || null,
-      ollama_model: ollamaModel,
-      openai_key_set: !!openaiKey,
-      openai_model: openaiModel,
+  const [ollama, openai] = await Promise.all([
+    ollamaUrl ? probe(`${ollamaUrl}/api/tags`) : Promise.resolve(NOT_CONFIGURED),
+    openaiKey
+      ? probe("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${openaiKey}` } })
+      : Promise.resolve(NOT_CONFIGURED),
+  ]);
+
+  const status = ollama.reachable
+    ? "ok_ollama"
+    : openai.reachable
+      ? "ok_openai"
+      : ollamaUrl || openaiKey
+        ? "partial"
+        : "no_provider";
+  const httpStatus = status === "no_provider" ? 503 : 200;
+
+  if (!hasCronSecret(request.headers)) {
+    return NextResponse.json(
+      {
+        status,
+        ollama: { configured: ollama.configured, reachable: ollama.reachable },
+        openai: { configured: openai.configured, reachable: openai.reachable },
+      },
+      { status: httpStatus, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  return NextResponse.json(
+    {
+      status,
+      env: {
+        ollama_base_url: ollamaUrl || null,
+        ollama_model: ollamaModel,
+        openai_key_set: !!openaiKey,
+        openai_model: openaiModel,
+      },
+      ollama,
+      openai,
     },
-    ollama: { configured: false, reachable: false, error: null },
-    openai: { configured: false, reachable: false, error: null },
-  };
-
-  // Check Ollama with a simple fetch
-  if (ollamaUrl) {
-    results.ollama.configured = true;
-    try {
-      const start = Date.now();
-      const res = await fetch(`${ollamaUrl}/api/tags`, { method: "GET" });
-      if (res.ok) {
-        results.ollama.reachable = true;
-        results.ollama.error = null;
-        results.ollama.responseTimeMs = Date.now() - start;
-      } else {
-        results.ollama.reachable = false;
-        results.ollama.error = `HTTP ${res.status}: ${await res.text()}`;
-      }
-    } catch (err) {
-      results.ollama.reachable = false;
-      results.ollama.error = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  // Check OpenAI with a simple fetch
-  if (openaiKey) {
-    results.openai.configured = true;
-    try {
-      const start = Date.now();
-      const res = await fetch("https://api.openai.com/v1/models", {
-        method: "GET",
-        headers: { Authorization: `Bearer ${openaiKey}` },
-      });
-      if (res.ok) {
-        results.openai.reachable = true;
-        results.openai.error = null;
-        results.openai.responseTimeMs = Date.now() - start;
-      } else {
-        results.openai.reachable = false;
-        results.openai.error = `HTTP ${res.status}: ${await res.text()}`;
-      }
-    } catch (err) {
-      results.openai.reachable = false;
-      results.openai.error = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  // Determine overall status
-  if (results.ollama.reachable) {
-    results.status = "ok_ollama";
-  } else if (results.openai.reachable) {
-    results.status = "ok_openai";
-  } else if (ollamaUrl || openaiKey) {
-    results.status = "partial";
-  } else {
-    results.status = "no_provider";
-    return NextResponse.json(results, { status: 503 });
-  }
-
-  return NextResponse.json(results);
+    { status: httpStatus, headers: { "Cache-Control": "no-store" } },
+  );
 }
