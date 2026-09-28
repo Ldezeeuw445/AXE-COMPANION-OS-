@@ -50,6 +50,8 @@ import { ChartDismissibleNotice, useChartDismissedNotices } from "@/components/c
 import { SquawkBar } from "@/components/market/SquawkBar";
 import { ChartBottomDock } from "@/components/chart/ChartBottomDock";
 import { ChartQuoteStrip } from "@/components/chart/ChartQuoteStrip";
+import { ChartPnlBar } from "@/components/chart/ChartPnlBar";
+import { prijsOpAfstand } from "@/lib/chart/positieTotaal";
 import { dagVeranderingPct, dagVeranderingTekst } from "@/lib/chart/dayChange";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
@@ -3145,6 +3147,43 @@ export function ChartScreen({
     routeFallbackMessage,
   ]);
 
+  /**
+   * SL of TP op ALLE open posities van dit symbool.
+   *
+   * Zet per positie een CONCEPT en laat de bestaande bevestigingsbalk het
+   * afmaken -- dezelfde weg als wanneer je één lijn versleept. Een knop die
+   * drie stops ineens verzet zonder te vragen is één misklik van een
+   * onbedoelde uitstap af, en dat mag een balk die je met je duim raakt nooit
+   * kunnen.
+   *
+   * Posities zonder instapprijs slaan we over: daar valt niets vanaf te
+   * rekenen, en een verzonnen prijs is erger dan geen knop.
+   */
+  const zetOpAlles = useCallback((procent: number, soort: "sl" | "tp") => {
+    let gezet = 0;
+    for (const o of overlays) {
+      const entry = o.entryPrice;
+      if (entry == null || !Number.isFinite(entry)) continue;
+      const prijs = prijsOpAfstand(entry, procent, o.side, soort);
+      if (prijs == null) continue;
+      const key = slTpDraftKeyForPosition(o.id);
+      setSlTpDrafts((prev) => ({
+        ...prev,
+        [key]: {
+          stopLoss: soort === "sl" ? prijs : (prev[key]?.stopLoss ?? o.stopLoss ?? null),
+          takeProfit: soort === "tp" ? prijs : (prev[key]?.takeProfit ?? o.takeProfit ?? null),
+          openPrice: prev[key]?.openPrice ?? null,
+        },
+      }));
+      gezet += 1;
+    }
+    if (gezet === 0) return;
+    // De bevestiging hoort in beeld te komen, anders staat er een concept dat
+    // niemand ziet en denk je dat er niets gebeurd is.
+    setOneClickVisible(true);
+    vibrate("light");
+  }, [overlays, setSlTpDrafts, setOneClickVisible]);
+
   return (
     <div
       ref={chartFrameRef}
@@ -3534,7 +3573,7 @@ export function ChartScreen({
                 <select
                   value={data.symbol}
                   onChange={(e) => goSymbol(e.target.value)}
-                  className="min-w-0 max-w-[7.5rem] appearance-none rounded-lg border border-white/[0.10] bg-white/[0.05] px-2 py-0.5 pr-5 font-mono text-[12px] font-bold uppercase tracking-tight text-cyan-400 outline-none transition-colors hover:bg-white/[0.08]"
+                  className="min-w-0 max-w-[5.5rem] appearance-none rounded-lg border border-white/[0.10] bg-white/[0.05] px-2 py-0.5 pr-5 font-mono text-[12px] font-bold uppercase tracking-tight text-cyan-400 outline-none transition-colors hover:bg-white/[0.08] sm:max-w-[7.5rem]"
                   aria-label="Symbol"
                 >
                   {data.symbolOptions.map((s) => (
@@ -3575,7 +3614,7 @@ export function ChartScreen({
                 askText={askText}
                 dayPct={dayPct}
                 dayText={dayText}
-                className="ml-0.5 overflow-hidden"
+                className="ml-auto shrink-0 sm:ml-0.5"
               />
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
@@ -3584,7 +3623,7 @@ export function ChartScreen({
                   als eerste zodra het krap wordt, want hij verandert per uur
                   en de koers per tik. */}
               <span
-                className="hidden shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em] min-[400px]:inline"
+                className="hidden shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em] sm:inline"
                 style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}
               >
                 {sessionCopy()}
@@ -5240,6 +5279,13 @@ export function ChartScreen({
       <ChartBottomDock
         inFlow={isFullscreen}
         squawk={!isFullscreen && !isTabletLayout ? <SquawkBar /> : null}
+        pnl={
+          <ChartPnlBar
+            posities={overlays}
+            onSlAlles={(p) => zetOpAlles(p, "sl")}
+            onTpAlles={(p) => zetOpAlles(p, "tp")}
+          />
+        }
         execution={
           <>
           {/* ─── MT5-style execution bar (market) + landscape pending inline ─── */}

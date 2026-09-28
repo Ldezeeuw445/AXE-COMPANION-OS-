@@ -37,11 +37,24 @@ import { useEffect, useLayoutEffect, useRef } from "react";
  * positie, en de handelsbalk is de knop waar je op drukt. Die hoort het
  * dichtst bij je duim, zoals in MT5.
  *
+ * ## Boven de nav, niet eroverheen
+ *
+ * De eerste versie zweefde op `bottom: 0` met z-70 en legde zich dus over de
+ * bottom nav (z-55). Dat won ruimte, maar kostte de navigatie: met de
+ * handelsbalk aan was de nav weg en kon je niet meer van tab wisselen zonder
+ * hem eerst weg te tikken. Luka, 28 september, met screenshots.
+ *
+ * Nu staat de dock op `bottom: var(--tos-nav-offset)`: precies bovenop de
+ * ruimte die de nav al voor zichzelf reserveert. Alles is tegelijk zichtbaar
+ * en niets ligt over iets anders heen. De chart reserveert navhoogte PLUS
+ * dockhoogte -- een som, geen max, want ze overlappen niet meer.
+ *
  * ## De veilige zone zit hier, en nergens anders
  *
- * `env(safe-area-inset-bottom)` staat op de dock en niet op de losse balken.
- * Stond het op elke balk, dan telde het dubbel zodra er twee tegelijk staan
- * -- en dan zweeft de onderste balk boven de rand in plaats van erop.
+ * Sinds de dock boven de nav staat draagt de NAV de veilige zone, want die
+ * raakt de onderrand. De dock hoeft hem dus niet meer zelf toe te passen --
+ * deed hij dat wel, dan telde dezelfde ruimte twee keer en zweefde de
+ * onderste balk los boven de nav.
  */
 
 /** Waar de gemeten hoogte terechtkomt. Eén naam, zodat CSS hem kan lezen. */
@@ -114,12 +127,13 @@ export function ChartBottomDock({
       className={
         inFlow
           ? `shrink-0 ${className}`
-          : `pointer-events-none fixed inset-x-0 bottom-0 z-[70] ${className}`
+          : `pointer-events-none fixed inset-x-0 z-[70] ${className}`
       }
       style={
         inFlow
           ? undefined
-          : { paddingBottom: "env(safe-area-inset-bottom, 0px)" }
+          // Bovenop de ruimte die de nav al voor zichzelf houdt. Zie de kop.
+          : { bottom: "var(--tos-nav-offset, 0px)" }
       }
     >
       {squawk ? <div className="pointer-events-auto">{squawk}</div> : null}

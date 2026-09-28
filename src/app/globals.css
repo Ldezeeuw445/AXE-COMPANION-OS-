@@ -99,11 +99,13 @@
      en niet met de hand ingevuld. */
   --tos-chart-dock: 0px;
   /* Wat de chart onderaan vrij moet houden.
-     MAX en niet een som: de stapel LIGT over de nav heen (z-70 tegen z-55),
-     dus optellen zou de ruimte van de nav twee keer reserveren en een strook
-     leegte onder de chart geven. Zo klopt elke combinatie vanzelf -- nav
-     ingeklapt of niet, met of zonder handelsbalk, met of zonder squawk. */
-  --tos-chart-bottom: max(calc(var(--tos-nav-offset) - 0.24rem), var(--tos-chart-dock, 0px));
+     Een SOM en geen max: de stapel staat sinds 28 september BOVEN de nav in
+     plaats van eroverheen, want met de handelsbalk aan was de navigatie weg
+     en kon je niet meer van tab wisselen. Ze overlappen dus niet meer, en dan
+     is optellen precies goed: navhoogte plus wat er aan balken boven staat.
+     Elke combinatie klopt vanzelf -- nav ingeklapt of niet (dan krimpt
+     --tos-nav-offset mee), met of zonder handelsbalk, met of zonder squawk. */
+  --tos-chart-bottom: calc(var(--tos-nav-offset) - 0.24rem + var(--tos-chart-dock, 0px));
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
   /* Tablet status bar clearance — thin edge before in-chart toolbar */
   --tos-tablet-safe-top: max(env(safe-area-inset-top, 0px), 0.65rem);

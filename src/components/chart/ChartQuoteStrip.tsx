@@ -63,7 +63,14 @@ function Koers({ label, waarde, tekst }: { label: string; waarde: number | null;
   const richting = useTikRichting(waarde);
   return (
     <span className="inline-flex shrink-0 items-baseline gap-1">
-      <span className="font-mono text-[8px] font-bold uppercase tracking-[0.14em] text-white/35">
+      {/* Het woordje BID/ASK verdwijnt op een telefoon.
+       *
+       * Gemeten op een 393px-scherm: met beide labels erbij liep de regel over
+       * en sneuvelde precies wat hij moest tonen -- er stond `BID 4124.85` en
+       * dan een afgekapte `A`, en de dagverandering viel er helemaal af. Twee
+       * getallen naast elkaar LEZEN als bid en ask; het label is het eerste wat
+       * je kunt missen. Vanaf sm staat het er gewoon weer bij. */}
+      <span className="hidden font-mono text-[8px] font-bold uppercase tracking-[0.14em] text-white/35 sm:inline">
         {label}
       </span>
       <span
@@ -93,8 +100,11 @@ export function ChartQuoteStrip({
   className?: string;
 }) {
   return (
-    <div className={`flex min-w-0 items-baseline gap-2.5 ${className}`} aria-live="off">
+    <div className={`flex min-w-0 items-baseline gap-1.5 sm:gap-2.5 ${className}`} aria-live="off">
       <Koers label="bid" waarde={bid} tekst={bidText} />
+      {/* Zonder de labels staan er twee getallen naast elkaar; een streepje
+          houdt ze uit elkaar zoals in elke koersnotering. */}
+      <span aria-hidden className="shrink-0 text-[10px] text-white/20 sm:hidden">/</span>
       <Koers label="ask" waarde={ask} tekst={askText} />
       <span
         className={`shrink-0 font-mono text-[10px] font-bold tabular-nums ${
