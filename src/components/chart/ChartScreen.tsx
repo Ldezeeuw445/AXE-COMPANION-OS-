@@ -48,6 +48,9 @@ import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
 import { ChartWorkflowFavorites } from "@/components/chart/ChartWorkflowFavorites";
 import { ChartDismissibleNotice, useChartDismissedNotices } from "@/components/chart/ChartDismissibleNotice";
 import { SquawkBar } from "@/components/market/SquawkBar";
+import { ChartBottomDock } from "@/components/chart/ChartBottomDock";
+import { ChartQuoteStrip } from "@/components/chart/ChartQuoteStrip";
+import { dagVeranderingPct, dagVeranderingTekst } from "@/lib/chart/dayChange";
 import { useAppTopBar } from "@/components/shell/AppTopBarContext";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import {
@@ -2184,6 +2187,24 @@ export function ChartScreen({
     () => formatBrokerPrice(data.brokerSymbol, livePrice),
     [data.brokerSymbol, livePrice],
   );
+  // Bid en ask vallen terug op de middenprijs zolang de stroom alleen die
+  // levert. Een leeg veld zou lezen als "geen verbinding", terwijl er wel
+  // degelijk een koers is -- alleen niet per kant.
+  const bidText = useMemo(
+    () => formatBrokerPrice(data.brokerSymbol, liveBid ?? livePrice),
+    [data.brokerSymbol, liveBid, livePrice],
+  );
+  const askText = useMemo(
+    () => formatBrokerPrice(data.brokerSymbol, liveAsk ?? livePrice),
+    [data.brokerSymbol, liveAsk, livePrice],
+  );
+  // Tegen de slotkoers van de vorige handelsdag, zoals MT5. Null zodra die
+  // dag niet in de candles zit; zie lib/chart/dayChange.ts.
+  const dayPct = useMemo(
+    () => dagVeranderingPct(data.candles, livePrice),
+    [data.candles, livePrice],
+  );
+  const dayText = useMemo(() => dagVeranderingTekst(dayPct), [dayPct]);
   const failureCopy = failureCardCopy(data.failure, {
     hasDemo: data.accountChoices.some((a) => a.connectionMethod === "demo_paper"),
     hasAlpaca: data.accountChoices.some((a) => a.connectionMethod === "cloud_alpaca"),
@@ -3074,13 +3095,16 @@ export function ChartScreen({
   ]);
 
   const landscapeLayoutInsetBottom = isFullscreen ? 40 : 0;
-  const execBarOverNav = !isFullscreen;
+  // Gemeten in plaats van geraden. Hier stond 3.35rem plus de veilige zone --
+  // een hoogte die niet meebeweegt zodra de handelsbalk uitklapt of er een
+  // balk bij komt. De dock weet wat er werkelijk staat.
   const tabletExecPad =
     oneClickVisible && isTabletLayout && !isFullscreen
-      ? "calc(3.35rem + max(env(safe-area-inset-bottom, 0px), 0.35rem))"
+      ? "var(--tos-chart-dock, 0px)"
       : undefined;
   const { dismiss: dismissChartNotice, isDismissed: isChartNoticeDismissed } = useChartDismissedNotices();
-  const chartNoticeBottom = oneClickVisible ? "3.35rem" : "0.75rem";
+  // Meldingen zweven net boven de stapel, wat die ook is.
+  const chartNoticeBottom = "calc(var(--tos-chart-dock, 0px) + 0.75rem)";
 
   const chartNotices = useMemo(() => {
     const items: { key: string; tone: "muted" | "amber"; content: React.ReactNode }[] = [];
@@ -3540,8 +3564,31 @@ export function ChartScreen({
                   {transportBadge.label}
                 </span>
               ) : null}
+              {/* Naast de badge, op dezelfde regel als het paar en de
+                  tijdsframe. Hieronder stond een tweede regel met het symbool
+                  nóg een keer plus de middenprijs; die is weg, en dat scheelt
+                  een hele regel chartruimte. */}
+              <ChartQuoteStrip
+                bid={liveBid ?? livePrice}
+                ask={liveAsk ?? livePrice}
+                bidText={bidText}
+                askText={askText}
+                dayPct={dayPct}
+                dayText={dayText}
+                className="ml-0.5 overflow-hidden"
+              />
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              {/* De sessie stond op de weggehaalde tweede regel. Hij hoort bij
+                  de koers, dus schuift hij mee naar deze regel -- en verdwijnt
+                  als eerste zodra het krap wordt, want hij verandert per uur
+                  en de koers per tik. */}
+              <span
+                className="hidden shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em] min-[400px]:inline"
+                style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}
+              >
+                {sessionCopy()}
+              </span>
               {data.accountChoices.length > 1 ? (
                 <div className="relative shrink-0">
                   <select
@@ -3567,18 +3614,7 @@ export function ChartScreen({
               </button>
             </div>
           </div>
-          <div className="mt-1 flex w-full items-center gap-2 overflow-hidden">
-            <span className="shrink-0 font-mono text-[9.5px] font-semibold uppercase tracking-[0.11em] text-cyan-300/80">
-              {data.symbol}
-            </span>
-            <span className="shrink-0 font-mono text-[11px] font-medium text-white/80">{lastPriceText}</span>
-            <span
-              className="ml-auto shrink-0 text-right text-[9px] font-semibold uppercase tracking-[0.14em]"
-              style={{ color: chartTheme.isDark ? "rgba(104,108,120,0.86)" : "rgba(120,118,114,0.75)" }}
-            >
-              {sessionCopy()}
-            </span>
-          </div>
+
         </div>
 
         {false ? (
@@ -4863,200 +4899,6 @@ export function ChartScreen({
         </div>
       ) : null}
 
-      {/* ─── MT5-style execution bar (market) + landscape pending inline ─── */}
-      {oneClickVisible && (executionMode === "market" || (executionMode === "pending" && isFullscreen)) ? (
-      <div
-        className={
-          execBarOverNav
-            ? "tos-chart-exec-overlay pointer-events-auto fixed inset-x-0 bottom-0 z-[70] border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
-            : `shrink-0 ${isFullscreen ? "chart-immersive-exec" : ""}`
-        }
-        style={{
-          background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)",
-          borderTop: execBarOverNav ? undefined : "1px solid rgba(255,255,255,0.05)",
-          boxShadow: execBarOverNav ? undefined : "inset 0 1px 0 rgba(255,255,255,0.04)",
-          paddingBottom: execBarOverNav ? "max(env(safe-area-inset-bottom, 0px), 0.35rem)" : undefined,
-        }}
-      >
-        <div className="flex justify-center pt-1 pb-0.5">
-          <button
-            type="button"
-            className="h-1.5 w-12 rounded-full bg-white/20 active:bg-white/35"
-            aria-label="Swipe down to close execution bar"
-            onPointerDown={(e) => {
-              executionSwipeStartYRef.current = e.clientY;
-            }}
-            onPointerUp={(e) => {
-              const startY = executionSwipeStartYRef.current;
-              executionSwipeStartYRef.current = null;
-              if (startY == null) return;
-              if (e.clientY - startY > 44) {
-                dismissExecutionBar();
-              }
-            }}
-            onPointerCancel={() => {
-              executionSwipeStartYRef.current = null;
-            }}
-          />
-        </div>
-        {hasSlTpDrafts && !slTpModifyPref.enabled ? (
-          <div className="px-2 pb-1.5">
-            <button
-              type="button"
-              onClick={triggerSlTpConfirm}
-              className="flex h-8 w-full items-center justify-center gap-1.5 rounded-full border border-cyan-400/35 bg-cyan-400/12 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-200 active:scale-[0.995]"
-              aria-label="Confirm SL and TP changes"
-              title="Confirm SL/TP changes"
-            >
-              <ArrowRight className="h-4 w-4" />
-              Confirm active SL/TP {slTpDraftCount > 1 ? `(${slTpDraftCount} drafts)` : ""}
-            </button>
-          </div>
-        ) : null}
-        {executionMode === "pending" && isFullscreen ? (
-          /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
-          <div className="flex h-[2.75rem] items-center gap-0 px-0">
-            {/* Submit arrow — rounded pill */}
-            <button
-              type="button"
-              onClick={() => { vibrate("medium"); playSound("chime"); handleSendCurrentPlan(); }}
-              className="ml-2 flex h-8 w-8 items-center justify-center rounded-full text-white active:scale-95"
-              style={{
-                background: pendingOrderSide === "buy"
-                  ? "linear-gradient(180deg, #14a0b5 0%, #0a5e6c 100%)"
-                  : "linear-gradient(180deg, #d42a36 0%, #8a1522 100%)",
-                boxShadow: pendingOrderSide === "buy"
-                  ? "0 0 14px rgba(20,160,181,0.3), inset 0 1px 0 rgba(255,255,255,0.18)"
-                  : "0 0 14px rgba(212,42,54,0.3), inset 0 1px 0 rgba(255,255,255,0.18)",
-              }}
-              aria-label={`Place ${orderTypeLabel(pendingOrderType)}`}
-            >
-              <ArrowRight className="h-5 w-5" />
-            </button>
-            {/* Order label + volume — center (volume tappable → opens lot picker) */}
-            <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold">
-              <span className={pendingOrderSide === "buy" ? "text-[#1A729E]" : "text-[#E13947]"}>{orderTypeLabel(pendingOrderType)}</span>
-              <button
-                type="button"
-                onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
-                className="flex items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-white/90 active:bg-white/[0.08]"
-              >
-                {tradeVolume}
-                <ChevronDown className="ml-0.5 h-2.5 w-2.5 text-white/40" />
-              </button>
-            </div>
-            {/* SL toggle */}
-            <button
-              type="button"
-              onClick={() => {
-                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-                if (entry == null || !Number.isFinite(entry)) return;
-                const distance = draggablePlanDistance(data.candles, entry);
-                setPendingStopLossPrice((prev) =>
-                  prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
-                );
-                setPendingOrderVisible(true);
-                vibrate("light"); playSound("tap");
-              }}
-              className="flex h-full w-12 items-center justify-center"
-              aria-label="Toggle stop loss"
-            >
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
-                pendingStopLossPrice != null
-                  ? "border-[#E13947] bg-[#E13947]/15 text-[#E13947]"
-                  : "border-white/15 text-white/25"
-              }`}>SL</span>
-            </button>
-            {/* TP toggle */}
-            <button
-              type="button"
-              onClick={() => {
-                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-                if (entry == null || !Number.isFinite(entry)) return;
-                const distance = draggablePlanDistance(data.candles, entry);
-                setPendingTakeProfitPrice((prev) =>
-                  prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
-                );
-                setPendingOrderVisible(true);
-                vibrate("light"); playSound("tap");
-              }}
-              className="flex h-full w-12 items-center justify-center"
-              aria-label="Toggle take profit"
-            >
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
-                pendingTakeProfitPrice != null
-                  ? "border-[#4ECBA0] bg-[#4ECBA0]/15 text-[#4ECBA0]"
-                  : "border-white/15 text-white/25"
-              }`}>TP</span>
-            </button>
-            {/* Order-type picker */}
-            <button
-              type="button"
-              onClick={() => { setOrderTypeMenuOpen((v) => !v); vibrate("light"); }}
-              className="flex h-full w-11 items-center justify-center"
-              aria-label="Change order type"
-            >
-              <ChevronUp className="h-4 w-4 text-white/40" />
-            </button>
-          </div>
-        ) : (
-          /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
-          <div className="flex h-[2.75rem] items-stretch gap-px" style={{ background: "#000" }}>
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
-              style={{
-                background: "linear-gradient(180deg, #d42a36 0%, #a01d28 50%, #6e1018 100%)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(212,42,54,0.2)",
-              }}
-              onClick={() => {
-                setPendingOrderSide("sell");
-                setExecutionMode("market");
-                setPendingOrderType("market");
-                setPendingOrderVisible(false);
-                vibrate("heavy"); playSound("chime");
-                handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
-              }}
-              aria-label="Sell market"
-            >
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Sell</span>
-              <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(212,42,54,0.35)" }}>{lastPriceText}</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-14 flex-col items-center justify-center text-white active:bg-white/[0.06]"
-              style={{ background: "linear-gradient(180deg, #0c0e14 0%, #060608 100%)" }}
-              onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
-              aria-label="Choose lot size"
-            >
-              <ChevronDown className="h-2.5 w-2.5 text-white/40" />
-              <span className="font-mono text-[13px] font-bold">{tradeVolume}</span>
-              <ChevronUp className="h-2.5 w-2.5 text-white/40" />
-            </button>
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
-              style={{
-                background: "linear-gradient(180deg, #14a0b5 0%, #0d7080 50%, #084d5c 100%)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(20,160,181,0.2)",
-              }}
-              onClick={() => {
-                setPendingOrderSide("buy");
-                setExecutionMode("market");
-                setPendingOrderType("market");
-                setPendingOrderVisible(false);
-                vibrate("heavy"); playSound("chime");
-                handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
-              }}
-              aria-label="Buy market"
-            >
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Buy</span>
-              <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(20,160,181,0.35)" }}>{lastPriceText}</span>
-            </button>
-          </div>
-        )}
-      </div>
-      ) : null}
 
       {/* Order-type chooser popover — MT5-style vertical list */}
       {orderTypeMenuOpen ? (
@@ -5390,65 +5232,272 @@ export function ChartScreen({
         </>
       ) : null}
 
-      {oneClickVisible && executionMode === "pending" && pendingOrderVisible && !isFullscreen ? (
-        <ChartPendingOrderSheet
-          symbol={data.brokerSymbol}
-          orderLabel={orderTypeLabel(pendingOrderType)}
-          side={pendingOrderSide}
-          volume={tradeVolume}
-          price={pendingOrderPrice}
-          stopLoss={pendingStopLossPrice}
-          takeProfit={pendingTakeProfitPrice}
-          expanded={pendingSheetExpanded}
-          onToggleExpand={() => {
-            setPendingSheetExpanded((v) => !v);
-            vibrate("light");
-          }}
-          onDismiss={() => {
-            dismissExecutionBar();
-          }}
-          onSubmit={() => {
-            vibrate("medium");
-            playSound("chime");
-            handleSendCurrentPlan();
-          }}
-          onOpenLot={() => {
-            setLotMenuOpen((v) => !v);
-            vibrate("light");
-          }}
-          onOpenType={() => {
-            setOrderTypeMenuOpen((v) => !v);
-            vibrate("light");
-          }}
-          onToggleSl={() => {
-            const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-            if (entry == null || !Number.isFinite(entry)) return;
-            const distance = draggablePlanDistance(data.candles, entry);
-            setPendingStopLossPrice((prev) =>
-              prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
-            );
-            vibrate("light");
-            playSound("tap");
-          }}
-          onToggleTp={() => {
-            const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
-            if (entry == null || !Number.isFinite(entry)) return;
-            const distance = draggablePlanDistance(data.candles, entry);
-            setPendingTakeProfitPrice((prev) =>
-              prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
-            );
-            vibrate("light");
-            playSound("tap");
-          }}
-          onPriceChange={(next) => {
-            handlePendingEntryPriceChange(next);
-          }}
-          onSlChange={setPendingStopLossPrice}
-          onTpChange={setPendingTakeProfitPrice}
-        />
-      ) : null}
 
-      {!isFullscreen && !isTabletLayout ? <SquawkBar /> : null}
+
+      {/* ── Alles wat onder de chart hangt, als één stapel ──────────────
+          Volgorde en ruimtereservering staan in ChartBottomDock. Hier
+          staan alleen nog de balken zelf, niet meer waar ze landen. */}
+      <ChartBottomDock
+        inFlow={isFullscreen}
+        squawk={!isFullscreen && !isTabletLayout ? <SquawkBar /> : null}
+        execution={
+          <>
+          {/* ─── MT5-style execution bar (market) + landscape pending inline ─── */}
+          {oneClickVisible && (executionMode === "market" || (executionMode === "pending" && isFullscreen)) ? (
+          <div
+            className={
+              // Altijd in de flow van de dock. De keuze tussen zweven en
+              // meelopen zat hier, terwijl alleen de dock weet wat er nog
+              // meer onder de chart hangt -- die beslist het nu voor de
+              // hele stapel tegelijk.
+              `shrink-0 tos-chart-exec-overlay border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl ${
+                isFullscreen ? "chart-immersive-exec" : ""
+              }`
+            }
+            style={{
+              background: "linear-gradient(180deg, #0e1014 0%, #060608 100%)",
+              paddingBottom: "0.35rem",
+            }}
+          >
+            <div className="flex justify-center pt-1 pb-0.5">
+              <button
+                type="button"
+                className="h-1.5 w-12 rounded-full bg-white/20 active:bg-white/35"
+                aria-label="Swipe down to close execution bar"
+                onPointerDown={(e) => {
+                  executionSwipeStartYRef.current = e.clientY;
+                }}
+                onPointerUp={(e) => {
+                  const startY = executionSwipeStartYRef.current;
+                  executionSwipeStartYRef.current = null;
+                  if (startY == null) return;
+                  if (e.clientY - startY > 44) {
+                    dismissExecutionBar();
+                  }
+                }}
+                onPointerCancel={() => {
+                  executionSwipeStartYRef.current = null;
+                }}
+              />
+            </div>
+            {hasSlTpDrafts && !slTpModifyPref.enabled ? (
+              <div className="px-2 pb-1.5">
+                <button
+                  type="button"
+                  onClick={triggerSlTpConfirm}
+                  className="flex h-8 w-full items-center justify-center gap-1.5 rounded-full border border-cyan-400/35 bg-cyan-400/12 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-200 active:scale-[0.995]"
+                  aria-label="Confirm SL and TP changes"
+                  title="Confirm SL/TP changes"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                  Confirm active SL/TP {slTpDraftCount > 1 ? `(${slTpDraftCount} drafts)` : ""}
+                </button>
+              </div>
+            ) : null}
+            {executionMode === "pending" && isFullscreen ? (
+              /* ── Pending-order bar: → submit | "Buy Limit 0.01" | SL | TP | ↕ type ── */
+              <div className="flex h-[2.75rem] items-center gap-0 px-0">
+                {/* Submit arrow — rounded pill */}
+                <button
+                  type="button"
+                  onClick={() => { vibrate("medium"); playSound("chime"); handleSendCurrentPlan(); }}
+                  className="ml-2 flex h-8 w-8 items-center justify-center rounded-full text-white active:scale-95"
+                  style={{
+                    background: pendingOrderSide === "buy"
+                      ? "linear-gradient(180deg, #14a0b5 0%, #0a5e6c 100%)"
+                      : "linear-gradient(180deg, #d42a36 0%, #8a1522 100%)",
+                    boxShadow: pendingOrderSide === "buy"
+                      ? "0 0 14px rgba(20,160,181,0.3), inset 0 1px 0 rgba(255,255,255,0.18)"
+                      : "0 0 14px rgba(212,42,54,0.3), inset 0 1px 0 rgba(255,255,255,0.18)",
+                  }}
+                  aria-label={`Place ${orderTypeLabel(pendingOrderType)}`}
+                >
+                  <ArrowRight className="h-5 w-5" />
+                </button>
+                {/* Order label + volume — center (volume tappable → opens lot picker) */}
+                <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[13px] font-bold">
+                  <span className={pendingOrderSide === "buy" ? "text-[#1A729E]" : "text-[#E13947]"}>{orderTypeLabel(pendingOrderType)}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
+                    className="flex items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-white/90 active:bg-white/[0.08]"
+                  >
+                    {tradeVolume}
+                    <ChevronDown className="ml-0.5 h-2.5 w-2.5 text-white/40" />
+                  </button>
+                </div>
+                {/* SL toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                    if (entry == null || !Number.isFinite(entry)) return;
+                    const distance = draggablePlanDistance(data.candles, entry);
+                    setPendingStopLossPrice((prev) =>
+                      prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
+                    );
+                    setPendingOrderVisible(true);
+                    vibrate("light"); playSound("tap");
+                  }}
+                  className="flex h-full w-12 items-center justify-center"
+                  aria-label="Toggle stop loss"
+                >
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
+                    pendingStopLossPrice != null
+                      ? "border-[#E13947] bg-[#E13947]/15 text-[#E13947]"
+                      : "border-white/15 text-white/25"
+                  }`}>SL</span>
+                </button>
+                {/* TP toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                    if (entry == null || !Number.isFinite(entry)) return;
+                    const distance = draggablePlanDistance(data.candles, entry);
+                    setPendingTakeProfitPrice((prev) =>
+                      prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
+                    );
+                    setPendingOrderVisible(true);
+                    vibrate("light"); playSound("tap");
+                  }}
+                  className="flex h-full w-12 items-center justify-center"
+                  aria-label="Toggle take profit"
+                >
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[9px] font-black transition-colors ${
+                    pendingTakeProfitPrice != null
+                      ? "border-[#4ECBA0] bg-[#4ECBA0]/15 text-[#4ECBA0]"
+                      : "border-white/15 text-white/25"
+                  }`}>TP</span>
+                </button>
+                {/* Order-type picker */}
+                <button
+                  type="button"
+                  onClick={() => { setOrderTypeMenuOpen((v) => !v); vibrate("light"); }}
+                  className="flex h-full w-11 items-center justify-center"
+                  aria-label="Change order type"
+                >
+                  <ChevronUp className="h-4 w-4 text-white/40" />
+                </button>
+              </div>
+            ) : (
+              /* ── Market one-click bar: SELL [price] | [lots] | BUY [price] ── */
+              <div className="flex h-[2.75rem] items-stretch gap-px" style={{ background: "#000" }}>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
+                  style={{
+                    background: "linear-gradient(180deg, #d42a36 0%, #a01d28 50%, #6e1018 100%)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(212,42,54,0.2)",
+                  }}
+                  onClick={() => {
+                    setPendingOrderSide("sell");
+                    setExecutionMode("market");
+                    setPendingOrderType("market");
+                    setPendingOrderVisible(false);
+                    vibrate("heavy"); playSound("chime");
+                    handleSendCurrentPlan({ side: "sell", orderType: "market", entryPrice: null });
+                  }}
+                  aria-label="Sell market"
+                >
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Sell</span>
+                  <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(212,42,54,0.35)" }}>{lastPriceText}</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex w-14 flex-col items-center justify-center text-white active:bg-white/[0.06]"
+                  style={{ background: "linear-gradient(180deg, #0c0e14 0%, #060608 100%)" }}
+                  onClick={() => { setLotMenuOpen((v) => !v); vibrate("light"); }}
+                  aria-label="Choose lot size"
+                >
+                  <ChevronDown className="h-2.5 w-2.5 text-white/40" />
+                  <span className="font-mono text-[13px] font-bold">{tradeVolume}</span>
+                  <ChevronUp className="h-2.5 w-2.5 text-white/40" />
+                </button>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center justify-between px-3 active:brightness-110"
+                  style={{
+                    background: "linear-gradient(180deg, #14a0b5 0%, #0d7080 50%, #084d5c 100%)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.5), 0 0 20px rgba(20,160,181,0.2)",
+                  }}
+                  onClick={() => {
+                    setPendingOrderSide("buy");
+                    setExecutionMode("market");
+                    setPendingOrderType("market");
+                    setPendingOrderVisible(false);
+                    vibrate("heavy"); playSound("chime");
+                    handleSendCurrentPlan({ side: "buy", orderType: "market", entryPrice: null });
+                  }}
+                  aria-label="Buy market"
+                >
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/90">Buy</span>
+                  <span className="font-mono text-[16px] font-bold text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 10px rgba(20,160,181,0.35)" }}>{lastPriceText}</span>
+                </button>
+              </div>
+            )}
+          </div>
+          ) : null}
+          {oneClickVisible && executionMode === "pending" && pendingOrderVisible && !isFullscreen ? (
+            <ChartPendingOrderSheet
+              symbol={data.brokerSymbol}
+              orderLabel={orderTypeLabel(pendingOrderType)}
+              side={pendingOrderSide}
+              volume={tradeVolume}
+              price={pendingOrderPrice}
+              stopLoss={pendingStopLossPrice}
+              takeProfit={pendingTakeProfitPrice}
+              expanded={pendingSheetExpanded}
+              onToggleExpand={() => {
+                setPendingSheetExpanded((v) => !v);
+                vibrate("light");
+              }}
+              onDismiss={() => {
+                dismissExecutionBar();
+              }}
+              onSubmit={() => {
+                vibrate("medium");
+                playSound("chime");
+                handleSendCurrentPlan();
+              }}
+              onOpenLot={() => {
+                setLotMenuOpen((v) => !v);
+                vibrate("light");
+              }}
+              onOpenType={() => {
+                setOrderTypeMenuOpen((v) => !v);
+                vibrate("light");
+              }}
+              onToggleSl={() => {
+                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                if (entry == null || !Number.isFinite(entry)) return;
+                const distance = draggablePlanDistance(data.candles, entry);
+                setPendingStopLossPrice((prev) =>
+                  prev == null ? (pendingOrderSide === "buy" ? entry - distance : entry + distance) : null,
+                );
+                vibrate("light");
+                playSound("tap");
+              }}
+              onToggleTp={() => {
+                const entry = pendingOrderPrice ?? livePrice ?? data.lastPrice;
+                if (entry == null || !Number.isFinite(entry)) return;
+                const distance = draggablePlanDistance(data.candles, entry);
+                setPendingTakeProfitPrice((prev) =>
+                  prev == null ? (pendingOrderSide === "buy" ? entry + distance * 1.6 : entry - distance * 1.6) : null,
+                );
+                vibrate("light");
+                playSound("tap");
+              }}
+              onPriceChange={(next) => {
+                handlePendingEntryPriceChange(next);
+              }}
+              onSlChange={setPendingStopLossPrice}
+              onTpChange={setPendingTakeProfitPrice}
+            />
+          ) : null}
+          </>
+        }
+      />
 
     </div>
   );

@@ -93,6 +93,17 @@
   --tos-topbar-h: 2.75rem;
   --tos-nav-h: 4.1rem;
   --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.55rem);
+  /* Hoogte van de balkenstapel onder de chart (squawk, PnL, handelsbalk).
+     ChartBottomDock meet zichzelf en schrijft hem op <body>; 0 zodra er geen
+     chart in beeld is. Zie ChartBottomDock.tsx voor waarom dit gemeten wordt
+     en niet met de hand ingevuld. */
+  --tos-chart-dock: 0px;
+  /* Wat de chart onderaan vrij moet houden.
+     MAX en niet een som: de stapel LIGT over de nav heen (z-70 tegen z-55),
+     dus optellen zou de ruimte van de nav twee keer reserveren en een strook
+     leegte onder de chart geven. Zo klopt elke combinatie vanzelf -- nav
+     ingeklapt of niet, met of zonder handelsbalk, met of zonder squawk. */
+  --tos-chart-bottom: max(calc(var(--tos-nav-offset) - 0.24rem), var(--tos-chart-dock, 0px));
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
   /* Tablet status bar clearance — thin edge before in-chart toolbar */
   --tos-tablet-safe-top: max(env(safe-area-inset-top, 0px), 0.65rem);
@@ -574,7 +585,7 @@ body.trade-sheet-open .tos-nav-pill {
     padding-left: 0;
     padding-right: 0;
     /* Match phone chart — keep canvas above fixed bottom nav + exec overlay */
-    padding-bottom: calc(var(--tos-nav-offset) - 0.24rem);
+    padding-bottom: var(--tos-chart-bottom);
   }
   body.tos-route-chart .tos-shell-desktop-only {
     display: none !important;
@@ -2170,7 +2181,7 @@ body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-content 
 body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
   padding-left: 0;
   padding-right: 0;
-  padding-bottom: calc(var(--tos-nav-offset) - 0.24rem);
+  padding-bottom: var(--tos-chart-bottom);
 }
 
 body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-only {
