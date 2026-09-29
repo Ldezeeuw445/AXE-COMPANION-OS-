@@ -4,9 +4,7 @@
  *
  * Run from repo root:
  *   cd "/Volumes/Coded USB/AXE-COMPANION-OS-"
- *   npx vercel env pull .env.smoke --environment=production --yes
- *   npm run smoke:launch
- *   rm .env.smoke
+ *   SMOKE_BASE_URL=https://www.axecompanion.com npm run smoke:launch
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";

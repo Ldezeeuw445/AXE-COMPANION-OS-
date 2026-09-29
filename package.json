@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start -p 5000 -H 0.0.0.0",
     "lint": "eslint",
+    "test": "tsx --test src/lib/chart/chartLive.test.ts",
     "capture:marketing": "node scripts/capture-marketing.mjs",
     "copy-logo": "node scripts/copy-logo.mjs",
     "seed:axe-knowledge": "node scripts/seed-axe-knowledge.mjs",
@@ -49,7 +50,8 @@
     "three": "^0.184.0",
     "viem": "^2.53.1",
     "wagmi": "^3.6.21",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -58,10 +60,12 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.184.1",
     "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "playwright": "^1.55.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

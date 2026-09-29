@@ -11,11 +11,14 @@ This file records the verified operational truth for AXE Companion. Treat it as 
 
 ## Current Runtime Truth
 
-- Production is live on Vercel.
-- Website: `www.axecompanion.com`
+- Production is the IONOS Ubuntu host only. Do not deploy this app to Vercel.
+- Production website: `www.axecompanion.com` (nginx reverse-proxy → Next `next start` on port 5000).
+- Deploy by running `scripts/deploy-vps.sh` **on that box**. See `docs/vps-deploy.md`.
 - GitHub repo: `Ldezeeuw445/AXE-COMPANION-OS-`
 - Current canonical app stack: Next 16 / React 19.
 - The app is built as a Next App Router application with server actions, route handlers, server-side services, and client UI.
+- Chart live: same-origin `wss://www.axecompanion.com/ws/chart` first, optional Cloudflare `axe-chart-edge`, SSE last.
+- Ollama runs on the same host (`http://localhost:11434`). Host cron (`scripts/vps.crontab`) replaces Vercel Cron.
 
 ## Supabase Truth
 
@@ -44,10 +47,10 @@ These functions already exist and must be treated as live infrastructure:
 
 ## Chart Live Truth
 
-- Cloudflare worker `axe-chart-edge` exists.
-- `axe-chart-edge` powers the chart live flow.
-- Current chart live system uses Cloudflare WebSocket / poll mode with SSE fallback.
-- The live chart path should be stabilized, not replaced without a dedicated audit.
+- Same-origin Next gateway `/ws/chart` is the default live path on the IONOS host.
+- Cloudflare worker `axe-chart-edge` is optional (Mode A poll / Mode B streamer push).
+- SSE `/api/chart/live` is the safety net only.
+- nginx must forward HTTP Upgrade or the phone chart stays on SSE.
 
 ## AXE Core Truth
 

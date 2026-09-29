@@ -1,39 +1,49 @@
 # Cloudflare MT5 live chart
 
 Realtime chart architecture for AXE Companion. MT5 stays the broker truth;
-Cloudflare is the realtime edge; Supabase remains auth and account truth;
-Next/Vercel renders the UI.
+the IONOS Next process serves same-origin `/ws/chart`; Cloudflare chart-edge
+is optional; Supabase remains auth and account truth.
 
 ## Layout
 
 ```
 AXE Companion (Next)
   → POST /api/chart/session     (mints HS256 chart token)
-  → wss://chart.<domain>/ws/chart?token=…&account=…&symbol=…&tf=…
+  → 1) wss://<this-host>/ws/chart   (same-origin Node gateway — default)
+  → 2) wss://chart.<domain>/ws/chart (optional Cloudflare ChartLiveRoom)
        │
-       │  Cloudflare Worker
+       │  Cloudflare Worker (optional)
        │   → ChartLiveRoom (Durable Object)
        │       │
-       │       ├──  Mode A (current default):
-       │       │     DO polls MetaApi REST
-       │       │       (current-price, candle, positions)
-       │       │
-       │       └──  Mode B (production hardening):
-       │             Node MetaApi streamer
-       │               connects to MetaApi socket.io
-       │               POST /internal/publish (HMAC X-Streamer-Secret)
+       │       ├──  Mode A (poll): DO polls MetaApi REST
+       │       └──  Mode B (push): Node MetaApi streamer → /internal/publish
        │
-       └──  Browser (useLiveChart hook)
-             tries WS first, falls back to /api/chart/live SSE
+       └──  Browser (useLiveChart)
+             tries WS first (same-origin, then Cloudflare), then /api/chart/live SSE
 ```
 
-## Why a separate Worker?
+The chart should show **WS**, not **SSE**. SSE is only the safety net.
+
+## Why a same-origin socket?
+
+Production often never set `NEXT_PUBLIC_CHART_WS_URL`, so `/api/chart/session`
+returned `wsUrl: null` and the chart stayed on SSE forever. `next start`
+now serves `/ws/chart` on the same host. Nginx (or Cloudflare in front of
+Next) must forward the HTTP Upgrade:
+
+```
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+```
+
+## Why a separate Cloudflare Worker?
 
 - WebSocket-first: durable, browser-friendly, push-based.
 - Per-room state: one `ChartLiveRoom` per
   `userId | accountId | brokerSymbol | timeframe`.
 - One MetaApi REST loop per room — multiple devices/tabs share one upstream.
-- Edge-local: lower latency than Vercel functions in many regions.
+- Edge-local: optional extra hop in front of the IONOS Next process.
 
 ## Honest constraint
 
@@ -60,22 +70,24 @@ emit the same shape. The browser parses one set of events:
 `POST /api/chart/session` returns:
 
 ```json
-{ "token": "<HS256 JWT>", "wsUrl": "wss://chart.example.com/ws/chart", "expiresIn": 120 }
+{ "token": "<HS256 JWT>", "wsUrl": "wss://www.axecompanion.com/ws/chart", "fallbackWsUrl": "wss://chart.axecompanion.com/ws/chart", "expiresIn": 120 }
 ```
 
 The token's payload includes `userId`, `accountId`, `metaApiAccountId`,
 `displaySymbol`, `brokerSymbol`, `timeframe`, `iat`, `exp`. The Worker
 verifies signature and rejects when URL params don't match the token.
 
-When `CHART_SESSION_JWT_SECRET` or `NEXT_PUBLIC_CHART_WS_URL` is unset, the
-Next API returns `wsUrl: null`. The frontend falls back to SSE automatically.
+When a token cannot be signed, the Next API returns `wsUrl: null` and the
+frontend falls back to SSE. Same-origin `/ws/chart` does not require
+`NEXT_PUBLIC_CHART_WS_URL`.
 
 ## Frontend transport selection
 
 `useLiveChart` does:
 
-1. Try WS using the session token if `wsUrl` is set.
-2. On failure or close → fall back to `/api/chart/live` SSE.
+1. Try same-origin `/ws/chart`, then an explicit Cloudflare URL if configured.
+2. On failure → `/api/chart/live` SSE, and keep retrying WS so the badge can
+   upgrade from SSE to WS.
 3. If both unavailable → `offline`. Static REST candles stay visible.
 
 UI status pill labels:
@@ -88,10 +100,10 @@ UI status pill labels:
 
 ## Required secrets
 
-Vercel (Next):
+IONOS Next (`.env.local` on the VPS):
 
-- `CHART_SESSION_JWT_SECRET` — HS256 secret, also set on Cloudflare.
-- `NEXT_PUBLIC_CHART_WS_URL` — `wss://chart.<domain>/ws/chart`.
+- `CHART_SESSION_JWT_SECRET` — HS256 secret; also set on Cloudflare if that worker is used. Same-origin `/ws/chart` works without Cloudflare.
+- `NEXT_PUBLIC_CHART_WS_URL` — only if using Cloudflare chart-edge (`wss://chart.<domain>/ws/chart`).
 - `METAAPI_TOKEN` — server-only.
 - Existing Supabase env.
 
@@ -112,8 +124,10 @@ Never store these in the repo.
 3. `npx wrangler secret put CHART_SESSION_JWT_SECRET`
 4. `npx wrangler secret put METAAPI_TOKEN`
 5. `npm run deploy`
-6. On Vercel, set `NEXT_PUBLIC_CHART_WS_URL` to the worker URL plus `/ws/chart`
-   and add the matching `CHART_SESSION_JWT_SECRET`. Redeploy.
+6. On the IONOS host, set `NEXT_PUBLIC_CHART_WS_URL` only if using the worker
+   (`wss://chart.<domain>/ws/chart`) and add the matching
+   `CHART_SESSION_JWT_SECRET`. Then `./scripts/deploy-vps.sh`. Same-origin
+   `/ws/chart` needs no Cloudflare URL.
 
 ## Testing
 

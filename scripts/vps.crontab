@@ -1,0 +1,30 @@
+# Install on the IONOS host (replace APP_ROOT with the real repo path):
+#   crontab -e
+# These replace the old Vercel Cron schedules. Do not run them through Vercel.
+
+SHELL=/bin/bash
+PATH=/usr/bin:/bin
+
+# */10 MT5 background sync
+*/10 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/mt5-sync >> /tmp/axe-cron-mt5-sync.log 2>&1
+
+# */15 AXE watcher
+*/15 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/axe-watcher >> /tmp/axe-cron-axe-watcher.log 2>&1
+
+# */30 intel warmup
+*/30 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/intel-warmup >> /tmp/axe-cron-intel-warmup.log 2>&1
+
+# */15 04:00–11:00 UTC daily briefing
+*/15 4-11 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/daily-briefing >> /tmp/axe-cron-daily-briefing.log 2>&1
+
+# */15 04:00–11:00 UTC Mondays weekly briefing
+*/15 4-11 * * 1 APP_ROOT/scripts/run-vps-cron.sh /api/cron/weekly-briefing >> /tmp/axe-cron-weekly-briefing.log 2>&1
+
+# 06:30 UTC cockpit snapshots
+30 6 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/cockpit-snapshots >> /tmp/axe-cron-cockpit-snapshots.log 2>&1
+
+# Sundays 05:00 UTC knowledge sync
+0 5 * * 0 APP_ROOT/scripts/run-vps-cron.sh /api/cron/knowledge-sync >> /tmp/axe-cron-knowledge-sync.log 2>&1
+
+# */10 04:00–20:00 UTC Krater feed
+*/10 4-20 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/krater-feed-sync >> /tmp/axe-cron-krater-feed-sync.log 2>&1
