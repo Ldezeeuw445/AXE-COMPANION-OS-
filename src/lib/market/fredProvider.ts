@@ -1,6 +1,6 @@
 import "server-only";
 import { getFredKey } from "@/lib/market/providerStatus";
-import { getSupabaseKey, getSupabaseServiceRoleKey } from "@/lib/env";
+import { getMarketProxyRequest } from "@/lib/market/marketProxyClient";
 import type { MacroSnapshot, MacroSnapshotPoint } from "@/lib/market/marketTypes";
 import { briefingForSymbol } from "@/lib/market/symbolContext";
 
@@ -42,23 +42,16 @@ function parseValue(raw: string): number | null {
 }
 
 // ── Edge Function fallback ──────────────────────────────────────────────
-// When FRED_API_KEY is missing from the Vercel env, route through the
+// When FRED_API_KEY is missing from the IONOS env, route through the
 // market-proxy Supabase Edge Function which holds the key in its own
-// secrets.  This keeps all third-party credentials in one place and
-// avoids duplicating them across Vercel + Supabase.
+// secrets.  Requires EDGE_SECRET / CRON_SECRET (or service-role fallback).
 async function loadMacroViaEdgeFunction(): Promise<MacroSnapshot | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
-  const anonKey = getSupabaseKey();
-  if (!url || !anonKey) return null;
-  const bearerKey = getSupabaseServiceRoleKey() ?? anonKey;
+  const proxy = getMarketProxyRequest();
+  if (!proxy) return null;
   try {
-    const res = await fetch(`${url}/functions/v1/market-proxy`, {
+    const res = await fetch(proxy.url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${bearerKey}`,
-        apikey: anonKey,
-      },
+      headers: proxy.headers,
       body: JSON.stringify({ action: "macroSnapshot" }),
       next: { revalidate: REVALIDATE_SECONDS, tags: ["fred:edge-proxy"] },
     });
@@ -84,7 +77,7 @@ async function loadMacroViaEdgeFunction(): Promise<MacroSnapshot | null> {
  * Returns null when FRED is not configured anywhere.
  *
  * Strategy:
- *   1. If FRED_API_KEY is in the Vercel env → call FRED directly (fast).
+ *   1. If FRED_API_KEY is in the IONOS env → call FRED directly (fast).
  *   2. Otherwise → proxy through the market-proxy Edge Function that
  *      holds the key in Supabase secrets (max 1 call per revalidate window).
  */
