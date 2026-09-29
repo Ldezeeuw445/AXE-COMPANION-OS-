@@ -41,10 +41,10 @@ export function SubprocessorsPageContent() {
               <td>IE / US (global)</td>
             </tr>
             <tr>
-              <td>Vercel</td>
+              <td>IONOS</td>
               <td>Hosting frontend/backend</td>
               <td>logs, request data, deployment data</td>
-              <td>Global (edge / region-pinned)</td>
+              <td>EU (www.axecompanion.com)</td>
             </tr>
             <tr>
               <td>Cloudflare</td>

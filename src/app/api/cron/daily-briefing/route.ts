@@ -1,7 +1,8 @@
 /**
  * GET/POST /api/cron/daily-briefing
  *
- * Vercel Cron invokes this path every 15 min (04:00–11:00 UTC); pre-generates at 06:00 local.
+ * Host crontab (`scripts/vps.crontab`) invokes this path every 15 min
+ * (04:00–11:00 UTC); pre-generates at 06:00 local.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -48,7 +49,7 @@ async function handleDailyBriefingCron() {
   }
 }
 
-/** Vercel Cron uses GET — this is the production entry point. */
+/** Host cron uses GET — this is the production entry point. */
 export async function GET(request: NextRequest) {
   if (isCronAuthorized(request)) {
     return handleDailyBriefingCron();

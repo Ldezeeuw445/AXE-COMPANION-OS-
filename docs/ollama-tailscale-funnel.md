@@ -1,6 +1,6 @@
 # Ollama via Tailscale Funnel (makkelijkste optie)
 
-Als je Tailscale al gebruikt, is **Tailscale Funnel** de makkelijkste manier om Ollama bereikbaar te maken vanaf Vercel.
+Als je Tailscale al gebruikt, is **Tailscale Funnel** de makkelijkste manier om Ollama bereikbaar te maken vanaf de IONOS-host. Productie-Ollama op dezelfde IONOS-box is `http://localhost:11434` — deze funnel is alleen nodig als Ollama op een andere machine draait.
 
 ## Wat is Tailscale Funnel?
 
@@ -35,7 +35,9 @@ Je zou je modellen moeten zien:
 {"models": [{"name": "deepseek-r1:8b"}, {"name": "qwen2.5-coder:7b"}]}
 ```
 
-## Stap 3: Zet env vars op Vercel
+## Stap 3: Zet env vars op IONOS
+
+Op de IONOS-host, in `.env.local`, daarna Next herstarten:
 
 ```
 OLLAMA_URL=https://mac-mini-van-luka.tail03735e.ts.net

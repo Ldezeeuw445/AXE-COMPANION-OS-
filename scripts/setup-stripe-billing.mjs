@@ -5,7 +5,7 @@
  *   Pro €20/mo · Founder €40/mo · Elite €50/mo
  *
  * Optionally registers the production webhook endpoint and prints env vars
- * for Vercel / .env.local.
+ * for IONOS `.env.local`.
  *
  * Requires:
  *   STRIPE_SECRET_KEY=sk_live_... or sk_test_...
@@ -225,7 +225,7 @@ async function main() {
     console.log("\n(Webhook not created — set STRIPE_SETUP_CREATE_WEBHOOK=true to register automatically.)");
   }
 
-  console.log("\n--- Copy into Vercel → Settings → Environment Variables ---\n");
+  console.log("\n--- Copy into IONOS `.env.local` (www.axecompanion.com) ---\n");
   console.log("# Stripe secret (you already have this)");
   console.log("# STRIPE_SECRET_KEY=sk_...");
   console.log("");
@@ -238,7 +238,7 @@ async function main() {
   }
   console.log(`NEXT_PUBLIC_APP_URL=${base}`);
   console.log("");
-  console.log("Redeploy after saving env vars. Test with a Stripe test card on /upgrade.");
+  console.log("Restart Next after saving env vars (`./scripts/deploy-vps.sh` or restart the process). Test with a Stripe test card on /upgrade.");
 }
 
 main().catch((err) => {

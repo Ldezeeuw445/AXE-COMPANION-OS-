@@ -33,7 +33,7 @@ export const maxDuration = 30;
  *
  * Auth: shared secret, same pattern as the CRON_SECRET-gated cron routes
  * (see src/app/api/cron/intel-warmup/route.ts) but its own env var so this
- * surface can be rotated/revoked independently of Vercel Cron.
+ * surface can be rotated/revoked independently of host crontab.
  */
 
 const TOOLS = {

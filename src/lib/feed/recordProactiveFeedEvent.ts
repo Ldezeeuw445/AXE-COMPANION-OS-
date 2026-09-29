@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { getPublicAppBaseUrl } from "@/lib/env";
 
 async function fireFeedPush(
   userId: string,
@@ -8,10 +9,7 @@ async function fireFeedPush(
   url: string,
 ): Promise<void> {
   try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
-    if (!baseUrl) return;
+    const baseUrl = getPublicAppBaseUrl();
 
     await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",

@@ -102,8 +102,8 @@ export function listRegions(): RegionInfo[] {
 }
 
 /**
- * Pick the best default region from an ISO country code (e.g. Vercel's
- * x-vercel-ip-country header). Falls back to london when unknown.
+ * Pick the best default region from an ISO country code (reverse-proxy
+ * geo headers such as CF-IPCountry). Falls back to london when unknown.
  */
 export function defaultRegionForCountry(country: string | null | undefined): MetaApiRegion {
   if (!country) return "london";

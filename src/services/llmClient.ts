@@ -599,7 +599,7 @@ function truncateForOllama(text: string, max = 2800): string {
 
 /**
  * Format chat messages for Ollama (which expects a prompt string).
- * Truncates large AXE system blocks so VPS inference stays within Vercel limits.
+ * Truncates large AXE system blocks so VPS inference stays within context limits.
  */
 function formatMessagesForOllama(messages: LLMMessage[]): string {
   const usable = messages.filter((msg) => msg.role !== 'tool' && msg.content != null);

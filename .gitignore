@@ -36,7 +36,7 @@
 Icon?
 skills-lock.json
 
-# Replit / agent / design dumps — not needed for Vercel production
+# Replit / agent / design dumps — not needed for production
 .replit
 replit.md
 .agents/
@@ -57,7 +57,7 @@ yarn-error.log*
 .env*
 !.env*.example
 
-# vercel
+# leftover local CLI cache — do not commit
 .vercel
 
 # typescript

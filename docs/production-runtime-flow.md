@@ -1,6 +1,6 @@
 # AXE Companion Production Runtime Flow
 
-Launch posture: AXE Companion is the mobile/operator app. The Next.js app runs on the IONOS Ubuntu host behind nginx (`www.axecompanion.com`). Not Vercel. Supabase is account truth. Supabase Edge Functions handle provider/runtime proxy work. Chart live prefers same-origin `/ws/chart`, with SSE as fallback.
+Launch posture: AXE Companion is the mobile/operator app. The Next.js app runs on the IONOS Ubuntu host behind nginx (`www.axecompanion.com`). Supabase is account truth. Supabase Edge Functions handle provider/runtime proxy work. Chart live prefers same-origin `/ws/chart`, with SSE as fallback.
 
 ## Runtime Flow
 

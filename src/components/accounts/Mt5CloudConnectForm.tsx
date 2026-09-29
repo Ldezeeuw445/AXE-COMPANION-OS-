@@ -48,7 +48,7 @@ function SubmitButton() {
 }
 
 type Props = {
-  /** Server-detected best default (Vercel geo header). User can override. */
+  /** Server-detected best default (reverse-proxy geo header). User can override. */
   defaultRegion: string;
 };
 

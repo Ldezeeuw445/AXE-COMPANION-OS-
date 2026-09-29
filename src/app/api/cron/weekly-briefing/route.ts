@@ -1,7 +1,8 @@
 /**
  * GET/POST /api/cron/weekly-briefing
  *
- * Vercel Cron invokes GET hourly on Mondays; processes users at 07:00 local.
+ * Host crontab (`scripts/vps.crontab`) invokes GET every 15 min on Mondays
+ * (04:00–11:00 UTC); processes users at 07:00 local.
  */
 
 import { NextRequest, NextResponse } from "next/server";

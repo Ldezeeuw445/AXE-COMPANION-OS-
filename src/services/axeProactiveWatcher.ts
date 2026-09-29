@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { getPublicAppBaseUrl } from "@/lib/env";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -16,7 +17,7 @@ type WatcherUser = {
 
 async function firePush(userId: string, title: string, body: string, url: string): Promise<boolean> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.VERCEL_URL ?? "localhost:3000"}`;
+    const baseUrl = getPublicAppBaseUrl();
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
       headers: internalPushHeaders(),

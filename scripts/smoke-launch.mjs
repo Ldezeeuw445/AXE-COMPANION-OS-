@@ -121,7 +121,7 @@ if (cronSecret) {
   });
 } else {
   console.log("⚠ CRON_SECRET not in .env.smoke — skip authenticated cron tests");
-  console.log("  (Vercel CLI sometimes omits decrypted secrets; cron still runs on Vercel)\n");
+  console.log("  Put CRON_SECRET in `.env.smoke` or the IONOS `.env.local` used by host crontab.\n");
 }
 
 await check("Quotes API (anonymous)", async () => {

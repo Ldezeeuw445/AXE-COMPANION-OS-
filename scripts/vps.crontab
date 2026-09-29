@@ -1,6 +1,6 @@
 # Install on the IONOS host (replace APP_ROOT with the real repo path):
 #   crontab -e
-# These replace the old Vercel Cron schedules. Do not run them through Vercel.
+# Host cron for /api/cron/* via scripts/run-vps-cron.sh.
 
 SHELL=/bin/bash
 PATH=/usr/bin:/bin

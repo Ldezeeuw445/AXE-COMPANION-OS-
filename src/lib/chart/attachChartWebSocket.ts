@@ -105,7 +105,6 @@ function joinRoom(
 export async function attachChartWebSocket(): Promise<void> {
   if (attached) return;
   if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
-  if (process.env.VERCEL === "1") return;
 
   attached = true;
 

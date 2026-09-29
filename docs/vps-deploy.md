@@ -1,9 +1,7 @@
 # Deploy AXE Companion on the IONOS VPS
 
 Production is `www.axecompanion.com` — Ubuntu + nginx → Next on port 5000.
-**Do not use Vercel.** There is no Vercel production, and there will not be one.
-
-Vercel GitHub checks ("Account is blocked") are leftover from an old project link. Disconnect the Vercel GitHub App at **GitHub → repo Settings → Integrations → Vercel** so PRs are not blocked. That cannot be done from this repo.
+This script is the only ship path.
 
 ## Ship a branch (run on the server)
 
@@ -65,9 +63,9 @@ Then `sudo nginx -t && sudo systemctl reload nginx`.
 
 Same-origin chart WS is `wss://www.axecompanion.com/ws/chart`. You do **not** need `NEXT_PUBLIC_CHART_WS_URL` unless you also run Cloudflare `axe-chart-edge`.
 
-## Host cron (replaces Vercel Cron)
+## Host cron
 
-Install `scripts/vps.crontab` on the box (replace `APP_ROOT`) and keep `CRON_SECRET` in `.env.local`. Vercel Cron does not run.
+Install `scripts/vps.crontab` on the box (replace `APP_ROOT`) and keep `CRON_SECRET` in `.env.local`.
 
 ## Check on the phone
 
@@ -86,3 +84,11 @@ On the VPS:
 ```
 
 (or the previous known-good commit). SSE `/api/chart/live` stays as the safety net if the socket cannot upgrade.
+
+## Leftover dashboard steps (Luka only)
+
+These cannot be changed from this repo:
+
+1. **GitHub repo homepage.** Settings → General → Website is still `https://axe-companion-os.vercel.app`. Set it to `https://www.axecompanion.com`.
+2. **Vercel GitHub App.** Disconnect it at GitHub → repo Settings → Integrations → Vercel. Leftover checks ("Account is blocked") come from that old link and can block PRs.
+3. **Vercel dashboard.** Archive or delete the old Companion project if it still exists. Only Luka can do that in the Vercel account.

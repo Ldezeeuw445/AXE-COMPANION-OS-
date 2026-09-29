@@ -5,7 +5,7 @@ export function skipChatQuota(): boolean {
   return process.env.AXE_SKIP_CHAT_QUOTA === "true";
 }
 
-/** Comma-separated auth user UUIDs (Vercel env) — unlimited chat without DB row. */
+/** Comma-separated auth user UUIDs (server env) — unlimited chat without DB row. */
 export function isUnlimitedChatUserId(userId: string): boolean {
   const raw =
     process.env.AXE_FULL_ACCESS_USER_IDS ??

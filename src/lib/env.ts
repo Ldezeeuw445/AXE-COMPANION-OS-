@@ -18,7 +18,7 @@ export function hasSupabaseConfig(): boolean {
  *   3. Auto-detect: if Supabase URL + anon key are both present → live
  *   4. Otherwise → mock (dev fallback)
  *
- * This means you do NOT need to set NEXT_PUBLIC_DATA_SOURCE in Vercel as long
+ * This means you do NOT need to set NEXT_PUBLIC_DATA_SOURCE on IONOS as long
  * as NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set.
  */
 export function isMockDataSource(): boolean {

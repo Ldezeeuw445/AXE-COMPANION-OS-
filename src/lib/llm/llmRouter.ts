@@ -34,7 +34,7 @@ import type { AxeResponse, AxeToolCall } from "@/services/axeService";
  * because Ollama vision support is model-dependent and unreliable.
  */
 
-// Accept both naming conventions — FALLBACK_TO_OPENAI (Vercel) and LLM_FALLBACK_ENABLED (code default)
+// Accept both naming conventions — FALLBACK_TO_OPENAI and LLM_FALLBACK_ENABLED
 const FALLBACK_ENABLED =
   (process.env.LLM_FALLBACK_ENABLED ?? process.env.FALLBACK_TO_OPENAI ?? "true").toLowerCase() !== "false";
 
