@@ -5,7 +5,7 @@ economic calendar with the user's active pair, watchlist and open positions.
 Each provider is independent and gracefully degrades when its key is missing
 — no fake data is ever returned.
 
-Production is **IONOS** (`www.axecompanion.com`), not Vercel.
+Production is **IONOS** (`www.axecompanion.com`).
 
 ## Provider matrix
 

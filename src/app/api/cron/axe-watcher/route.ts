@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 /**
- * Vercel Cron — AXE proactive watcher (trade closes, pending approvals, news risk).
- * Secured with CRON_SECRET.
+ * Host cron — AXE proactive watcher (trade closes, pending approvals, news risk).
+ * Secured with CRON_SECRET. See scripts/vps.crontab.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();

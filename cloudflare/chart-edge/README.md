@@ -33,7 +33,7 @@ npm run deploy
 
 Then in the Next app set `NEXT_PUBLIC_CHART_WS_URL` to the deployed worker URL,
 e.g. `wss://chart.axecompanion.com/ws/chart`. The same
-`CHART_SESSION_JWT_SECRET` must be set on Vercel.
+`CHART_SESSION_JWT_SECRET` must be set on the IONOS host.
 
 ## Honest scope today
 

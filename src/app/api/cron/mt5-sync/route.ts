@@ -8,10 +8,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * Vercel Cron — background MT5 sync for stale cloud accounts.
+ * Host cron — background MT5 sync for stale cloud accounts.
  *
- * Secured with CRON_SECRET (Vercel sends Authorization: Bearer <CRON_SECRET>).
- * Set CRON_SECRET + SUPABASE_SERVICE_ROLE_KEY + METAAPI_TOKEN on the deployment.
+ * Secured with CRON_SECRET (`scripts/run-vps-cron.sh` sends Authorization: Bearer <CRON_SECRET>).
+ * Set CRON_SECRET + SUPABASE_SERVICE_ROLE_KEY + METAAPI_TOKEN on the IONOS host.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();

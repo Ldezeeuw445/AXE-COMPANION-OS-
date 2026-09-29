@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run this ON the IONOS Ubuntu host (www.axecompanion.com), from the app repo.
-# This is the production deploy path. Do not use Vercel.
+# This is the only production deploy path.
 #
 # Usage:
 #   ./scripts/deploy-vps.sh cursor/chart-websocket-live-c844

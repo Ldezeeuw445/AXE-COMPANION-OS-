@@ -1,6 +1,6 @@
 # Ollama Cloudflare Tunnel Setup for AXE Companion
 
-This guide explains how to expose your local Ollama instance to AXE Companion running on Vercel, using a **named Cloudflare Tunnel** (stable, permanent URL).
+This guide explains how to expose a remote Ollama instance to AXE Companion on IONOS (`www.axecompanion.com`), using a **named Cloudflare Tunnel** (stable, permanent URL). Production Ollama on the IONOS box itself is `http://localhost:11434` — skip this guide unless Ollama runs on a different machine.
 
 > ⚠️ **Important**: Ephemeral `trycloudflare.com` tunnels do NOT work for server-to-server requests because Cloudflare returns a browser challenge page. You must use a **named tunnel** with a domain you control.
 
@@ -78,9 +78,9 @@ sudo cloudflared service install
 sudo systemctl start cloudflared
 ```
 
-## Step 7: Set Environment Variables on Vercel
+## Step 7: Set Environment Variables on IONOS
 
-In your Vercel project settings, add:
+On the IONOS host, add to `.env.local` and restart Next:
 
 ```
 OLLAMA_URL=https://ollama.yourdomain.com
@@ -135,13 +135,13 @@ Start with `llama3.1` (8B) for everything. If quality is insufficient for a spec
 
 To disable Ollama and revert to OpenAI-only:
 
-1. Unset `OLLAMA_URL` on Vercel, OR
+1. Unset `OLLAMA_URL` on the IONOS host, OR
 2. Set `LLM_FALLBACK_ENABLED=false` (forces Ollama-only, will error if Ollama down)
 
 ## Architecture
 
 ```
-AXE Companion (Vercel)
+AXE Companion (IONOS)
   → POST /api/intel-chat, /api/intel-conviction, etc.
     → llmRouter.ts
       → Try Ollama first (via Cloudflare tunnel)

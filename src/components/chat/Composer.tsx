@@ -266,7 +266,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     try {
       // Get Supabase session token so server-side auth works even if cookies
-      // aren't forwarded (common on Vercel deployments).
+      // aren't forwarded.
       let authHeader: Record<string, string> = {};
       try {
         const sb = createClient();

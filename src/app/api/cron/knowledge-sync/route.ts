@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Vercel Cron — re-seed knowledge/*.md and embed missing vectors for RAG. */
+/** Host cron — re-seed knowledge/*.md and embed missing vectors for RAG. See scripts/vps.crontab. */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();
   const auth = request.headers.get("authorization") ?? "";

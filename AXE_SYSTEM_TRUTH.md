@@ -11,14 +11,14 @@ This file records the verified operational truth for AXE Companion. Treat it as 
 
 ## Current Runtime Truth
 
-- Production is the IONOS Ubuntu host only. Do not deploy this app to Vercel.
+- Production is the IONOS Ubuntu host only (`www.axecompanion.com`).
 - Production website: `www.axecompanion.com` (nginx reverse-proxy → Next `next start` on port 5000).
 - Deploy by running `scripts/deploy-vps.sh` **on that box**. See `docs/vps-deploy.md`.
 - GitHub repo: `Ldezeeuw445/AXE-COMPANION-OS-`
 - Current canonical app stack: Next 16 / React 19.
 - The app is built as a Next App Router application with server actions, route handlers, server-side services, and client UI.
 - Chart live: same-origin `wss://www.axecompanion.com/ws/chart` first, optional Cloudflare `axe-chart-edge`, SSE last.
-- Ollama runs on the same host (`http://localhost:11434`). Host cron (`scripts/vps.crontab`) replaces Vercel Cron.
+- Ollama runs on the same host (`http://localhost:11434`). Host cron is `scripts/vps.crontab`.
 
 ## Supabase Truth
 

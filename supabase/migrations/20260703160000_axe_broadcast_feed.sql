@@ -1,5 +1,5 @@
 -- Global broadcast feed items (Daily News, Market Recap) — same content for all users.
--- Ingested via Vercel cron (/api/cron/krater-feed-sync) or manual webhook.
+-- Ingested via host cron (/api/cron/krater-feed-sync) or manual webhook.
 
 create table if not exists public.axe_broadcast_feed (
   id uuid primary key default gen_random_uuid(),

@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Vercel Cron — warm intel-proxy feeds so /intel loads fast. */
+/** Host cron — warm intel-proxy feeds so /intel loads fast. See scripts/vps.crontab. */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();
   const auth = request.headers.get("authorization") ?? "";

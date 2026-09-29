@@ -1,5 +1,7 @@
 # TradingOS Companion (Phase 1)
 
+**Live:** [https://www.axecompanion.com](https://www.axecompanion.com) (IONOS)
+
 Private, mobile-first companion for **one operator and one AI assistant** — chat, alerts, vault, and **guarded** trade approvals. Not the full TradingOS terminal.
 
 ## Quick start
@@ -86,7 +88,7 @@ Core tables (all with **RLS** on `user_id` / ownership):
 
 ## Production
 
-Live site: **https://www.axecompanion.com** on the IONOS Ubuntu/nginx host (Next on port 5000). Not Vercel. Deploy on that box with `./scripts/deploy-vps.sh` — see `docs/vps-deploy.md`.
+Live site: **https://www.axecompanion.com** on the IONOS Ubuntu/nginx host (Next on port 5000). Deploy on that box with `./scripts/deploy-vps.sh` — see `docs/vps-deploy.md`.
 
 ## Scripts
 

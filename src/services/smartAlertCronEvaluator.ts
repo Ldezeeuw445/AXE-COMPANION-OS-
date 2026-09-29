@@ -17,6 +17,7 @@ import { buildMarketContext } from "@/lib/market/marketContextService";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { getPublicAppBaseUrl } from "@/lib/env";
 
 type AlertRow = {
   id: string;
@@ -45,7 +46,7 @@ function isSmartAlert(alert: AlertRow): boolean {
 
 async function firePush(userId: string, title: string, body: string, url: string): Promise<boolean> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.VERCEL_URL ?? "localhost:3000"}`;
+    const baseUrl = getPublicAppBaseUrl();
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
       headers: internalPushHeaders(),

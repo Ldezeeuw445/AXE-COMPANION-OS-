@@ -56,7 +56,7 @@ export async function ensureDemoAccount(
     .maybeSingle();
 
   if (existingErr) {
-    // Surface DB issues to Vercel logs — silent failure is what masked the
+    // Surface DB issues to server logs — silent failure is what masked the
     // CHECK-constraint regression that hid demo accounts from every user.
     console.warn("[demoAccount] lookup failed", existingErr.message ?? existingErr);
     return null;

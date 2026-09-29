@@ -36,7 +36,7 @@ function isProvisioning(status: string | null | undefined): boolean {
 
 /**
  * Sync cloud MT5 accounts whose last_sync_at is older than minAgeMs.
- * Intended for Vercel Cron — processes at most maxAccounts per invocation.
+ * Intended for host cron — processes at most maxAccounts per invocation.
  */
 export async function syncStaleMt5Accounts(
   supabase: SupabaseClient,

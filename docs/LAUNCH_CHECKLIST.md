@@ -12,10 +12,10 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | A1 | `main` branch contains launch foundation (feed, onboarding, alerts, risk) | [x] | PR #11 merged |
-| A2 | Production deploy from `main` on the IONOS VPS | [~] | `www.axecompanion.com` nginx → Next `:5000`. Chart WS ships via `scripts/deploy-vps.sh` — not Vercel |
+| A2 | Production deploy from `main` on the IONOS VPS | [~] | `www.axecompanion.com` nginx → Next `:5000`. Chart WS ships via `scripts/deploy-vps.sh` |
 | A3 | Supabase migrations applied (broadcast feed, onboarding prefs) | [x] | Verified via MCP |
-| A4 | `KRATER_SYNC_MODE=generate` on IONOS `.env.local` | [~] | Confirm on the VPS; not a Vercel env |
-| A5 | `CRON_SECRET` + `KRATER_API_KEY` on IONOS + host crontab | [~] | Install `scripts/vps.crontab` — Vercel Cron is unused |
+| A4 | `KRATER_SYNC_MODE=generate` on IONOS `.env.local` | [~] | Confirm on the VPS |
+| A5 | `CRON_SECRET` + `KRATER_API_KEY` on IONOS + host crontab | [~] | Install `scripts/vps.crontab` |
 | A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [x] | Confirmed manually by Luka — credits saved, no app impact |
 | A7 | Railway active streamer deploy healthy | [x] | `superb-benevolence` / `axe-metaapi-streamer` SUCCESS; old AXE-COMPANION-OS Railway projects are not used |
 | A8 | Smoke script passes from repo root | [x] | `npm run smoke:launch` — 9/9 public checks re-run 2026-07-05 |
@@ -30,7 +30,7 @@
 | B2 | Per-tab unread badges | [x] | |
 | B3 | Krater cron generates + upserts `axe_broadcast_feed` | [x] | force sync tested |
 | B4 | Feed shows items for authenticated users | [~] | Prod broadcast rows + feed code verified; needs browser auth spot-check |
-| B5 | Cron window 07:00 + 20:00 Amsterdam (no double with Krater dashboard) | [~] | Host crontab on IONOS (`scripts/vps.crontab`); Vercel Cron is unused |
+| B5 | Cron window 07:00 + 20:00 Amsterdam (no double with Krater dashboard) | [~] | Host crontab on IONOS (`scripts/vps.crontab`) |
 
 ---
 
