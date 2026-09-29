@@ -3,7 +3,7 @@
 Production is `www.axecompanion.com` — Ubuntu + nginx → Next on port 5000.
 **Do not use Vercel.** There is no Vercel production, and there will not be one.
 
-Vercel GitHub checks ("Account is blocked") are leftover from an old project link. Disconnect the Vercel GitHub App at **GitHub → repo Settings → Integrations** so future PRs do not get that status. CI overwrites it when it can; disconnecting is the permanent fix.
+Vercel GitHub checks ("Account is blocked") are leftover from an old project link. Disconnect the Vercel GitHub App at **GitHub → repo Settings → Integrations → Vercel** so PRs are not blocked. That cannot be done from this repo.
 
 ## Ship a branch (run on the server)
 
