@@ -51,9 +51,9 @@ type Args = LiveChartHandlers & {
  * Subscribe to a live MT5 stream for the given account/symbol/timeframe.
  *
  * Transport selection:
- *   1. WS to Cloudflare ChartLiveRoom (preferred) — when /api/chart/session
- *      returns a token + wsUrl.
- *   2. SSE fallback to /api/chart/live with the same event contract.
+ *   1. WS to same-origin `/ws/chart` (then optional Cloudflare) when
+ *      `/api/chart/session` returns a token + wsUrl.
+ *   2. SSE fallback to `/api/chart/live` with the same event contract.
  *
  * Both transports forward to caller-supplied handlers (kept in refs).
  */

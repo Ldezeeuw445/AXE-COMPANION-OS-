@@ -3,9 +3,11 @@
 Production is `www.axecompanion.com` — Ubuntu + nginx → Next on port 5000.
 **Do not use Vercel.** There is no Vercel production, and there will not be one.
 
+Vercel GitHub checks ("Account is blocked") are leftover from an old project link. Disconnect the Vercel GitHub App at **GitHub → repo Settings → Integrations** so future PRs do not get that status. CI overwrites it when it can; disconnecting is the permanent fix.
+
 ## Ship a branch (run on the server)
 
-SSH into the IONOS box, then:
+SSH into `212.227.91.79`, then:
 
 ```bash
 cd /path/to/AXE-COMPANION-OS-
@@ -20,7 +22,7 @@ After this branch is on `main`:
 
 That fetches the ref, `npm ci`, `npm run build`, and restarts via pm2/systemd when those names exist.
 
-This agent cannot SSH into `212.227.91.79` (no key). The live site only updates when someone runs the script on that machine.
+Deploy does **not** happen from GitHub. The live site only updates when someone runs the script on that machine.
 
 ## nginx must upgrade WebSockets
 
@@ -65,8 +67,22 @@ Same-origin chart WS is `wss://www.axecompanion.com/ws/chart`. You do **not** ne
 
 ## Host cron (replaces Vercel Cron)
 
-`vercel.json` schedules are leftover documentation only — they do not run. Install `scripts/vps.crontab` on the box (replace `APP_ROOT`) and keep `CRON_SECRET` in `.env.local`.
+Install `scripts/vps.crontab` on the box (replace `APP_ROOT`) and keep `CRON_SECRET` in `.env.local`. Vercel Cron does not run.
 
 ## Check on the phone
 
-Open Chart on an MT5 account. Hard-refresh / reopen the PWA. The compact badge should read **WS**, not **SSE**.
+1. Hard-refresh or close and reopen the PWA.
+2. Open Chart on an MT5 cloud account.
+3. The compact overlay badge should read **WS**, not **SSE**.
+
+If it still says SSE: confirm nginx Upgrade headers, then `ss -tlnp | grep 5000` and that the running Next process is this branch (`git log -1 --oneline`).
+
+## Rollback
+
+On the VPS:
+
+```bash
+./scripts/deploy-vps.sh main
+```
+
+(or the previous known-good commit). SSE `/api/chart/live` stays as the safety net if the socket cannot upgrade.
