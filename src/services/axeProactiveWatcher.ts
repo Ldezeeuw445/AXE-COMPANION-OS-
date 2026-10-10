@@ -3,6 +3,9 @@ import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
+import { detectConcentration, weekendExposureWarning } from "@/lib/risk/positionRisk";
+import { detectWeakSpots } from "@/lib/journal/weakSpots";
+import { loadWeakSpotTrades } from "@/services/weakSpotService";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -191,6 +194,89 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     } catch {
       /* calendar optional */
     }
+  }
+
+  /* ── Concentration: several tickets, one bet ────────────────────── */
+  if (positions.length >= 2) {
+    const clusters = detectConcentration(
+      positions.map((p) => ({
+        symbol: String(p.symbol ?? ""),
+        side: (p.type ?? "") as string,
+        volume: Number(p.volume ?? 0),
+      })),
+    );
+    const top = clusters[0];
+    if (top && top.severity >= 0.4) {
+      // Keyed on the cluster, not the clock: re-opening the same stack
+      // tomorrow is worth saying again, nagging every 15 minutes is not.
+      const eventKey = `concentration:${top.id}:${top.symbols.join("+")}:${new Date().toISOString().slice(0, 10)}`;
+      const inserted = await recordProactiveEvent(
+        supabase,
+        userId,
+        eventKey,
+        top.title,
+        top.body,
+        "/positions",
+      );
+      if (inserted) {
+        created += 1;
+        if (hasPush && (await firePush(userId, `AXE · ${top.title}`, top.body, "/positions"))) pushed += 1;
+      }
+    }
+  }
+
+  /* ── Friday: the clock, not the chart ───────────────────────────── */
+  const weekend = weekendExposureWarning(
+    new Date(),
+    positions.length,
+    accountProfile.weekendHoldingAllowed,
+  );
+  if (weekend) {
+    const eventKey = `weekend:${new Date().toISOString().slice(0, 10)}`;
+    const inserted = await recordProactiveEvent(
+      supabase,
+      userId,
+      eventKey,
+      weekend.title,
+      weekend.body,
+      "/positions",
+    );
+    if (inserted) {
+      created += 1;
+      if (hasPush && (await firePush(userId, `AXE · ${weekend.title}`, weekend.body, "/positions"))) pushed += 1;
+    }
+  }
+
+  /* ── Your own most expensive habit, once a week ─────────────────── */
+  try {
+    const spots = detectWeakSpots(await loadWeakSpotTrades(supabase, userId, accountId));
+    const top = spots[0];
+    if (top && top.severity >= 0.5) {
+      // One key per ISO week: this is a pattern, not news. Saying it daily
+      // turns a useful observation into noise people learn to ignore.
+      const weekStamp = (() => {
+        const d = new Date();
+        const monday = new Date(d);
+        monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+        return monday.toISOString().slice(0, 10);
+      })();
+      const eventKey = `weakspot:${top.id}:${weekStamp}`;
+      const body = `${top.evidence} ${top.proposal}`;
+      const inserted = await recordProactiveEvent(
+        supabase,
+        userId,
+        eventKey,
+        top.title,
+        body,
+        "/journal",
+      );
+      if (inserted) {
+        created += 1;
+        if (hasPush && (await firePush(userId, `AXE · ${top.title}`, body, "/journal"))) pushed += 1;
+      }
+    }
+  } catch {
+    /* weak spots are an extra, never a reason the watcher fails */
   }
 
   try {

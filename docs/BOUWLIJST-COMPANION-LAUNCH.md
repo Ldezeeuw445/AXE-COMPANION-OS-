@@ -69,7 +69,10 @@ Wat eraan mist t.o.v. jouw voorbeeld:
 - [x] **2.1** `src/lib/risk/accountProfile.ts` onderscheidt live / demo / prop-evaluation / prop-funded. De app had alleen `isDemoAccount()`: één regex die demo, FTMO, funded, challenge en prop op één hoop gooide, terwijl die juist tegenovergesteld behandeld moeten worden. De nieuwsregel vuurt nu óók zonder open posities als de regels van het account nieuws verbieden — precies jouw voorbeeld
 - [x] **2.2** Beperkingen per account: `newsTradingAllowed`, `maxDailyLossPct`, `maxLot`, `weekendHoldingAllowed`. Afgeleid uit de accountnaam als *vermoeden*, maar alles wat jij expliciet zet in `metadata.tradingRules` wint, en dan zegt AXE er niet meer "assumed" bij
 - [x] **2.3** Push was de **eerste** bron voor de kandidatenlijst, dus wie push weigerde werd nooit gecontroleerd — ook geen feed-item. Nu: iedereen met een actief broker-account valt binnen scope, push bepaalt alleen nog of er een melding uitgaat
-- [ ] **2.4** Meer regels: correlatie-waarschuwing (3 posities die hetzelfde risico zijn), sessie-overgang, swap-nacht, je eigen meest-gemaakte fout uit 1.4
+- [x] **2.4** Drie regels erbij in `src/lib/risk/positionRisk.ts` + de watcher:
+  - **Concentratie** — drie tickets die één weddenschap zijn. Long EURUSD + long GBPUSD + short USDJPY is niet drie trades maar één view op USD, drie keer gehouden. Ook: hetzelfde paar dubbel, twee metalen, twee indices. Rapporteert lots, niet posities, want "2,4 lot dezelfde kant op" is een feit en "drie posities" een mening
+  - **Weekend** — vrijdagavond vóór de close, met de accountregel erbij: mag dit account niet overhouden, dan is het een regel-waarschuwing; mag het wel, dan een gap-waarschuwing
+  - **Je eigen duurste gewoonte** — de zwaarste bevinding uit 1.4 als proactief bericht, één keer per week gesleuteld. Dagelijks herhalen maakt van een inzicht ruis
 
 ---
 
