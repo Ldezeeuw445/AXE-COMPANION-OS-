@@ -27,7 +27,7 @@ import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
 import { useMicrophone } from "voice-glow";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
-import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
+import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartIntent";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 
 declare global {
@@ -240,13 +240,18 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     const symbol = getSymbol();
     const tf = getTf();
 
-    const chartAction = detectFallbackChartActionIntent(text);
-    if (chartAction && !image) {
-      setValue("");
-      const layers = chartAction === "add_indicator" ? inferIndicatorLayers(text) : undefined;
-      router.push(chartActionHref(chartAction, symbol || "XAUUSD", tf || "h1", layers));
-      return;
-    }
+    // Chart intent is remembered, NOT acted on yet. It used to short-circuit
+    // here — navigate to the chart and `return` — which meant a message that
+    // happened to match one of sixteen literal phrases never reached AXE at
+    // all: no reply, no reasoning, nothing in the conversation or the feed.
+    // The drawing appeared and AXE had no idea you had asked for it.
+    //
+    // AXE has a real tool for this (route_chart_action) and should normally
+    // handle it. This stays only as a safety net for the turn that cannot
+    // happen — no credits, dead provider, no network — so a trader asking for
+    // a fib gets a fib instead of silence. See the note in chartActionBus.
+    const chartIntent = image ? null : detectFallbackChartActionIntent(text);
+    let turnProduced = false;
 
     setSending(true);
     setError(null);
@@ -373,6 +378,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       if (sseError) {
         setError(sseError);
       } else if (tokensReceived) {
+        turnProduced = true;
         void loadQuota();
         router.refresh();
       }
@@ -385,6 +391,16 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           : "Connection lost — AXE may still be thinking. Refresh in a moment.",
       );
     } finally {
+      // Now, and only now, the safety net. The turn produced nothing, so
+      // whatever the trader asked for is not coming from the model.
+      if (chartIntent && !turnProduced) {
+        const layers = chartIntent === "add_indicator" ? inferIndicatorLayers(text) : undefined;
+        setValue("");
+        setError(
+          "AXE could not answer, so the drawing was routed to the chart directly.",
+        );
+        router.push(chartActionHref(chartIntent, symbol || "XAUUSD", tf || "h1", layers));
+      }
       setSending(false);
       if (typeof window !== "undefined") {
         window.dispatchEvent(

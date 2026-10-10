@@ -113,11 +113,22 @@ Indicatoren, annotaties, SL/TP-lijnen, trade-plan-lijnen ✅ bestaan allemaal.
 Gemeten: `src/lib/axeChartActions/` ✅ compleet — bus, queue, guards, memory, swing-analyse,
 indicator-mapping. `draw_fibonacci` ✅ werkt.
 
-**Maar**: de herkenning is een **hardgecodeerde zinnenlijst** (`chartActionBus.ts:51-67`) —
-"draw fib", "zet fib", "fib op de chart", 16 varianten. Zeg je het net anders, dan gebeurt er niets.
+**Correctie op mijn eigen audit:** ik schreef dat de herkenning een hardgecodeerde
+zinnenlijst was en dat tool-calling moest worden gebouwd. Tool-calling **bestond al** —
+`route_chart_action` in `axeService.ts`, met alle vijf de actietypes. De zinnenlijst was
+een *fallback*. Het echte probleem was erger en anders:
 
-- [ ] **5.1** Van zinnenlijst naar **tool-calling**: het model kiest de actie, niet een `includes()`
-- [ ] **5.2** Alle indicatoren uit de app beschikbaar als AXE-actie, niet alleen fib (jouw "alles wat de app kan moet AXE ook kunnen")
+- [x] **5.1** De "fallback" draaide als **eerste** (`Composer.tsx:243`) en deed `return`.
+  Matchte je bericht één van die zestien letterlijke zinnen, dan navigeerde de app naar de
+  chart en **bereikte je bericht AXE nooit**: geen antwoord, geen redenering, niets in het
+  gesprek, niets in de feed. De tekening verscheen en AXE wist van niets. Zei je het nét
+  anders, dan ging het wél naar AXE — die het correct afhandelde. De slechte weg kaapte
+  dus de goede. Nu: altijd naar AXE, en de lokale herkenning is een echt vangnet dat
+  alleen afgaat als de beurt niets opleverde (geen credits, dode provider, geen netwerk)
+- [x] **5.2** De herkenning is woordgebaseerd in plaats van zestien letterlijke zinnen.
+  "kun je even een fib zetten" werkte niet en nu wel — Nederlandse infinitieven (`zetten`,
+  `tekenen`) zaten niet in het patroon. Vijf actietypes: fib, trendlijn, key level,
+  indicator, wissen
 - [ ] **5.3** Terugkoppeling: AXE zegt wát hij tekende en waarom, als feed-item met `chart_action`-kleur
 
 ---
