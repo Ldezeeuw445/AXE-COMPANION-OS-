@@ -153,16 +153,26 @@ unjournaled forever — nothing ever looked back. The sweep is that backward
 glance: every hour it finds closed trades from the last seven days with no AXE
 label and scores them, whatever happened to the sync.
 
-Register it **after** a build containing `/api/cron/journal-sweep` is live,
-otherwise every run dispatches into a 404:
+Registered 2026-10-10, after the build containing `/api/cron/journal-sweep`
+went live. Registering it before that would have dispatched into a 404 every
+hour. Two steps, because the table and pg_cron are separate:
 
 ```sql
-insert into axe_ops.cron_job (name, path, schedule, owner, enabled)
-values ('axe-companion-journal-sweep', '/api/cron/journal-sweep', '25 * * * *', 'pg_cron', true)
-on conflict (name) do update
-  set path = excluded.path,
-      schedule = excluded.schedule,
-      enabled = excluded.enabled;
+-- 1. The job definition. `app` is NOT NULL and the unique key is (app, name) —
+--    an insert without `app`, or an `on conflict (name)`, fails.
+insert into axe_ops.cron_job (app, name, path, schedule, owner, enabled, description)
+values ('companion', 'journal-sweep', '/api/cron/journal-sweep', '25 * * * *', 'pg_cron', true,
+        'Catch-up: closed trades from the last 7 days with no axe_label, independent of MT5 sync')
+on conflict (app, name) do update
+  set path = excluded.path, schedule = excluded.schedule, enabled = excluded.enabled;
+
+-- 2. The schedule itself. The dispatch name carries the `axe-companion-` prefix,
+--    matching the other ten jobs.
+select cron.schedule(
+  'axe-companion-journal-sweep',
+  '25 * * * *',
+  $$SELECT axe_ops.dispatch_cron('axe-companion-journal-sweep', '/api/cron/journal-sweep');$$
+);
 ```
 
 Minute 25 on purpose: it keeps the sweep away from `mt5-sync` (:00, :10, …) and
