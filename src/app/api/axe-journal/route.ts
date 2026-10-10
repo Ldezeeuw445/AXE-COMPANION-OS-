@@ -103,6 +103,13 @@ export async function POST(req: Request) {
   if (!accountId) return jsonResponse({ ok: false, error: "missing accountId" }, 400);
 
   const result = await autoJournalTrades(supabase, user.id, accountId, body?.tradeIds);
-  if (!result.ok) return jsonResponse({ ok: false, error: result.error }, result.status);
+  if (!result.ok) {
+    // `advice` is the sentence the journal screen shows the user. Dropping it
+    // here is how "AXE is quiet" became indistinguishable from "AXE is fine".
+    return jsonResponse(
+      { ok: false, error: result.error, reason: result.reason, advice: result.advice },
+      result.status,
+    );
+  }
   return jsonResponse(result);
 }

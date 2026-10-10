@@ -3,6 +3,7 @@ import { hasCronSecret } from "@/lib/auth/cronSecret";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { autoJournalTrades } from "@/services/journalingService";
 import { llmFailureAdvice } from "@/lib/ops/llmFailure";
+import { refreshWeakSpots } from "@/services/weakSpotService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
 
   let journaled = 0;
   let failedAccounts = 0;
+  let weakSpotsWritten = 0;
   const blockers: Array<{ reason: string; advice: string }> = [];
 
   for (const target of targets) {
@@ -87,6 +89,15 @@ export async function GET(request: NextRequest) {
 
     if (result.ok) {
       journaled += result.journaled;
+      // Re-read the account's behaviour now the labels are current. This runs
+      // on arithmetic, not on a model, so it keeps producing insight even when
+      // the journaling above could not score a single trade.
+      try {
+        const refresh = await refreshWeakSpots(supabase, target.userId, target.accountId);
+        weakSpotsWritten += refresh.written;
+      } catch (err) {
+        console.error("[journal-sweep] weak-spot refresh failed:", err);
+      }
       continue;
     }
 
@@ -107,6 +118,7 @@ export async function GET(request: NextRequest) {
     accountsPending: pending.size,
     accountsProcessed: targets.length,
     journaled,
+    weakSpotsWritten,
     failedAccounts,
     blockers,
     latency_ms: Date.now() - startedAt,

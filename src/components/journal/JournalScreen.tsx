@@ -29,6 +29,8 @@ import {
   Zap,
   Filter,
 } from "lucide-react";
+import { WeakSpotsPanel } from "@/components/journal/WeakSpotsPanel";
+import type { WeakSpot } from "@/lib/journal/weakSpots";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 
@@ -37,6 +39,7 @@ type Props = {
   tradeHighlight: TradeHighlight | null;
   journalTrades: TradeHighlight[];
   analytics: JournalAnalytics | null;
+  weakSpots: WeakSpot[];
   activeAccountId: string | null;
   loadError: string | null;
 };
@@ -352,6 +355,7 @@ export function JournalScreen({
   tradeHighlight,
   journalTrades,
   analytics,
+  weakSpots,
   activeAccountId,
   loadError,
 }: Props) {
@@ -359,6 +363,16 @@ export function JournalScreen({
   const [filter, setFilter] = useState<FilterMode>("all");
   const autoJournalAttemptedRef = useRef(false);
   const router = useRouter();
+  const [journalStatus, setJournalStatus] = useState<
+    { tone: "working" | "done" | "blocked"; text: string } | null
+  >(null);
+
+  // Derived during render rather than set from the effect: the "working" line
+  // is a fact about the data we already have, not a state transition.
+  const pendingJournalStatus =
+    journalTrades.some((t) => !t.axe_label)
+      ? ({ tone: "working", text: "AXE is scoring your closed trades…" } as const)
+      : null;
 
   // Catch up trades that closed before background auto-journal ran.
   useEffect(() => {
@@ -366,13 +380,38 @@ export function JournalScreen({
     const needsAxeJournal = journalTrades.some((t) => !t.axe_label);
     if (!needsAxeJournal) return;
     autoJournalAttemptedRef.current = true;
+
     void fetch("/api/axe-journal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ accountId: activeAccountId }),
     })
-      .then((res) => (res.ok ? router.refresh() : undefined))
-      .catch(() => undefined);
+      .then(async (res) => {
+        const payload = (await res.json().catch(() => null)) as
+          | { ok?: boolean; journaled?: number; advice?: string; error?: string }
+          | null;
+
+        // Saying nothing was the old behaviour, and it is how a dead model
+        // provider stayed invisible for weeks. Every outcome says something.
+        if (!res.ok || payload?.ok === false) {
+          setJournalStatus({
+            tone: "blocked",
+            text: payload?.advice ?? "AXE could not score these trades right now.",
+          });
+          return;
+        }
+
+        const count = payload?.journaled ?? 0;
+        setJournalStatus(
+          count > 0
+            ? { tone: "done", text: `AXE journaled ${count} trade${count === 1 ? "" : "s"}.` }
+            : { tone: "done", text: "Every closed trade already carries an AXE score." },
+        );
+        if (count > 0) router.refresh();
+      })
+      .catch(() => {
+        setJournalStatus({ tone: "blocked", text: "AXE could not reach the journal service." });
+      });
   }, [activeAccountId, journalTrades, router]);
 
   const focusSymbol = tradeHighlight?.symbol ?? journalTrades[0]?.symbol ?? null;
@@ -499,6 +538,29 @@ export function JournalScreen({
       {analytics && activeAccountId && (
         <div className="px-4 pt-3">
           <AnalyticsMini analytics={analytics} />
+        </div>
+      )}
+
+      {activeAccountId && (journalStatus ?? pendingJournalStatus) && (
+        <div className="px-4 pt-3">
+          <p
+            className={`text-[11px] font-medium ${
+              (journalStatus ?? pendingJournalStatus)!.tone === "blocked"
+                ? "text-amber-300/90"
+                : (journalStatus ?? pendingJournalStatus)!.tone === "working"
+                  ? "text-tos-dim"
+                  : "text-emerald-300/90"
+            }`}
+          >
+            {(journalStatus ?? pendingJournalStatus)!.text}
+          </p>
+        </div>
+      )}
+
+      {/* What AXE spotted by itself — renders nothing when there is nothing to say. */}
+      {activeAccountId && weakSpots.length > 0 && (
+        <div className="px-4 pt-3">
+          <WeakSpotsPanel weakSpots={weakSpots} />
         </div>
       )}
 

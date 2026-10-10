@@ -49,9 +49,10 @@ Het is dus wél gebouwd. Waarom je het niet ziet:
 
 - [x] **1.1** De `dealsUpserted > 0`-gate is weg, én de trigger staat nu vóór de `sync_no_deals` early return — een sync die niets nieuws vond haalt de achterstand alsnog in. Bewijs: structurele guard in `scripts/verify-journal-wiring.mjs` die beide volgordes afdwingt
 - [x] **1.2** `/api/cron/journal-sweep` — elk uur, pakt gesloten trades van de laatste 7 dagen zonder `axe_label`, los van de sync. Stopt uit zichzelf bij een fout die alleen jij kan fixen i.p.v. 40x hetzelfde te loggen. SQL-registratie staat in `docs/CRON-RUNBOOK.md` en moet ná de deploy draaien
-- [ ] **1.3** Zichtbaar in de UI: "AXE heeft 3 trades gejournald" i.p.v. stilte
-- [ ] **1.4** **Per-user patroonherkenning** — jouw "wat gaat er het meest fout". `computeJournalAnalytics.ts` telt labels al; wat mist is de stap *van telling naar uitspraak*: "je laatste 9 verliezers waren allemaal binnen 4 min na een entry — je knijpt te vroeg. Voorstel: minimum-hold-regel." ❌ bestaat niet
-- [ ] **1.5** Die uitspraak terug de RAG in, zodat de volgende journal hem meeweegt → dit ís de learning loop
+- [x] **1.3** De journal-pagina zegt nu wat er gebeurt: "AXE is scoring your closed trades…", daarna "AXE journaled 3 trades" óf de reden waarom niet, in gewone taal. Nooit meer stilte
+- [x] **1.4** `src/lib/journal/weakSpots.ts` — zeven detectoren die uit je eigen trades een **uitspraak met cijfers** halen: verliezers langer vasthouden dan winnaars, je snelste trades zijn je slechtste, revenge-trades binnen 15 min na een verlies, groter inzetten na verlies, één symbool dat bloedt, je drukste dagen zijn je slechtste, een sessie waarin je geld verliest. Elke bevinding draagt bewijs mét getal en één concreet voorstel. Rekent puur, dus werkt dóór als het model eruit ligt. Bewijs: 9 checks, waaronder "een schone historie zegt niets" — een detector die altijd iets vindt is niets waard
+- [x] **1.5** `weakSpotService` schrijft die bevindingen als `axe_memory`-rijen weg; `journalingService.loadMemories` leest ze in bij élke volgende trade die AXE scoort. Een patroon dat stopt wordt opgelost i.p.v. voor altijd in de prompt te blijven hangen. Dát is de loop
+- [x] **1.6** Zichtbaar in de app: `WeakSpotsPanel` op de journal-pagina — rendert niets als er niets te zeggen valt
 
 ---
 
