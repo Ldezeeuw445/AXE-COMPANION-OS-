@@ -29,9 +29,9 @@ wilt halen. Zonder 0.1 en 0.2 is alles hieronder bouwen aan een auto zonder benz
 vrolijk `ok: true, journaled: 0` als het model faalt — precies de stilte die ons twee
 maanden heeft gekost volgens `docs/AUDIT_2026-09-07.md`.
 
-- [ ] **0.5** Elke LLM-fout in journal/intel/briefing schrijft naar `axe_ops` én naar een zichtbare healthregel, niet alleen `console.error`
-- [ ] **0.6** `/api/debug/cron-health` uitbreiden met: openai_credits_ok, metaapi_account_resolvable, laatste auto-journal-run
-- [ ] **0.7** Fallback: journaling via `llmRouter` (ollama) i.p.v. hard OpenAI-only, zodat één lege rekening niet het hele brein uitzet
+- [x] **0.5** Elke modelfout wordt geclassificeerd (`src/lib/ops/llmFailure.ts`), weggeschreven naar `axe_engine_runs` met advies, en luid gelogd — nooit meer stil. Bewijs: `npm run verify`, 12 checks, waaronder de échte productiefout van 10-10 (`429` + "no credits") die als `rate_limited` werd gelezen. Zonder de credits-tak faalt die check aantoonbaar
+- [x] **0.6** `/api/debug/cron-health` meldt nu `llm_blocking` (wat een mens moet fixen, of null), `llm_sources` per engine en `ollama_configured`. Een gezette sleutel zei niets over een lege rekening; dit wel
+- [x] **0.7** Journaling loopt via `llmRouter` — Ollama eerst, OpenAI als fallback. De harde `OPENAI_API_KEY`-eis is weg; één lege rekening zet AXE's brein niet meer uit
 
 ---
 
@@ -47,8 +47,8 @@ Het is dus wél gebouwd. Waarom je het niet ziet:
 2. De aanroep staat achter `if (shouldJournal && dealsUpserted > 0)` — geen nieuwe deals, geen journal
 3. En als hij wél draait, faalt het model op geen credits (0.1) en wordt dat stil weggeslikt
 
-- [ ] **1.1** Journal-trigger loskoppelen van `dealsUpserted > 0` — draai op *elke* gesloten trade zonder `axe_label`, ook als de sync niets nieuws vond
-- [ ] **1.2** Een eigen cron `axe-journal-sweep` (elk uur) die achterstallige trades inhaalt, los van de sync
+- [x] **1.1** De `dealsUpserted > 0`-gate is weg, én de trigger staat nu vóór de `sync_no_deals` early return — een sync die niets nieuws vond haalt de achterstand alsnog in. Bewijs: structurele guard in `scripts/verify-journal-wiring.mjs` die beide volgordes afdwingt
+- [x] **1.2** `/api/cron/journal-sweep` — elk uur, pakt gesloten trades van de laatste 7 dagen zonder `axe_label`, los van de sync. Stopt uit zichzelf bij een fout die alleen jij kan fixen i.p.v. 40x hetzelfde te loggen. SQL-registratie staat in `docs/CRON-RUNBOOK.md` en moet ná de deploy draaien
 - [ ] **1.3** Zichtbaar in de UI: "AXE heeft 3 trades gejournald" i.p.v. stilte
 - [ ] **1.4** **Per-user patroonherkenning** — jouw "wat gaat er het meest fout". `computeJournalAnalytics.ts` telt labels al; wat mist is de stap *van telling naar uitspraak*: "je laatste 9 verliezers waren allemaal binnen 4 min na een entry — je knijpt te vroeg. Voorstel: minimum-hold-regel." ❌ bestaat niet
 - [ ] **1.5** Die uitspraak terug de RAG in, zodat de volgende journal hem meeweegt → dit ís de learning loop
@@ -154,10 +154,11 @@ is één grijze muur waarin "MARKET OUTLOOK" en "NEWS" gewoon in de lopende zin 
 `briefBodyFormat.ts` pàrst die secties al correct (`SECTION_MARKERS`) — de renderer
 gebruikt het resultaat niet.
 
-- [ ] **8.1** Feed-kaart rendert `BriefSection[]` i.p.v. platte tekst: elke sectie een eigen kop, witruimte, alinea's
-- [ ] **8.2** Sectiekoppen in de kleur van het item, body in leesbaar grijs met echte regelafstand
-- [ ] **8.3** Zelfde renderer voor alle drie de briefs — nu wijken daily news en market recap af
-- [ ] **8.4** Weerzin wegknippen uit MARKET OUTLOOK: "Good morning Luka, partly cloudy" en "MARKET OUTLOOK" horen niet in dezelfde alinea
+- [x] **8.1** De feed gebruikt nu `BriefBodyContent` — dezelfde renderer als de briefing-pagina. Bewijs: jouw échte brief van 8 oktober staat als fixture in de repo en pareert in 6 secties met koppen
+- [x] **8.2** Sectiekoppen krijgen de kleur van het item mee (`headingClassName`), body houdt leesbaar grijs met regelafstand
+- [x] **8.3** Eén renderer voor alle drie de lanes, met drie aantoonbaar verschillende kleuren (goud / blauw / emerald)
+- [x] **8.4** Opgelost door 8.1: de parser zette de begroeting al in een eigen `greeting`-sectie — het was de platte `<p>` die alles aan elkaar plakte. Guard dwingt af dat "MARKET OUTLOOK" nooit in de begroetingsalinea belandt
+- [x] **8.5 (niet voorzien, wel gevonden)** `axeFeedService` kapte elke brief af op 480 tekens. Op een brief van 1038 tekens betekende dat: ALIGNMENT SCORE, ACTION ITEMS en WATCH THIS SESSION kwamen **nooit** in beeld, zonder enig teken dat er meer was. Slice verwijderd
 
 ---
 

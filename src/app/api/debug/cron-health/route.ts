@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { firstNonEmptyEnv } from "@/lib/envFallback";
+import { blockingLlmFailure, llmHealthSnapshot } from "@/lib/ops/llmFailure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,12 @@ export const dynamic = "force-dynamic";
  *
  * Mirrors /api/debug/chat-health, which already reports openai_key_set the same
  * way. No secret material is returned.
+ *
+ * It also reports model health. A key being *set* says nothing about whether
+ * calls using it succeed — on 2026-10-10 OPENAI_API_KEY was present and valid
+ * while the account had no credits, so every model-backed feature went quiet
+ * and this endpoint happily reported `openai_key_set: true`. `llm_blocking`
+ * closes that gap: it names what a human has to fix, or is null.
  */
 function fingerprint(value: string): string {
   // Non-reversible short digest — comparable, not recoverable.
@@ -74,6 +81,20 @@ export async function GET() {
     unusual_whales_set:
       firstNonEmptyEnv("UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY") !== null,
     openai_key_set: firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY") !== null,
+    ollama_configured: firstNonEmptyEnv("OLLAMA_URL", "OLLAMA_HOST") !== null,
+
+    /* ── Model health since this process started ────────────────────
+       Observed behaviour, not configuration. Empty means no model call
+       has been attempted yet — which is itself worth knowing. */
+    llm_blocking: blockingLlmFailure(),
+    llm_sources: llmHealthSnapshot().map((e) => ({
+      source: e.source,
+      last_failure_reason: e.lastFailure?.reason ?? null,
+      last_failure_at: e.lastFailureAt,
+      last_success_at: e.lastSuccessAt,
+      consecutive_failures: e.consecutiveFailures,
+      total_failures: e.totalFailures,
+    })),
     app_url: process.env.NEXT_PUBLIC_APP_URL ?? null,
   });
 }

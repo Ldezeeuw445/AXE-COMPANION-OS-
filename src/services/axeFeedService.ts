@@ -104,7 +104,12 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
       id: `briefing:${row.id}`,
       kind: "briefing" as const,
       title: String(row.title ?? (type === "weekly" ? "Weekly Outlook" : "Morning Brief")),
-      body: String(row.body ?? "").slice(0, 480),
+      // No character slice. A blind 480-char cut landed mid-sentence and, on a
+      // ~1000-char brief, dropped ALIGNMENT SCORE / ACTION ITEMS / WATCH THIS
+      // SESSION entirely — the feed card showed less than half the brief and
+      // gave no sign that the rest existed. The card renders sections, so it
+      // gets the whole body.
+      body: String(row.body ?? ""),
       url: prefill ? `/chat?q=${encodeURIComponent(prefill)}` : "/chat",
       createdAt: String(row.created_at ?? row.briefing_date),
       briefingType: type,

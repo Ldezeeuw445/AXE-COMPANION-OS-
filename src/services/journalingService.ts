@@ -2,6 +2,9 @@ import { firstNonEmptyEnv } from "@/lib/envFallback";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordLearningSignal } from "@/services/learningService";
 import { scheduleCockpitRefresh } from "@/services/cockpitSnapshotService";
+import { llmSimpleChat } from "@/lib/llm/llmRouter";
+import { llmFailureAdvice, type LlmFailure } from "@/lib/ops/llmFailure";
+import { recordLlmFailure, recordLlmSuccess, type EngineSource } from "@/lib/ops/recordEngineRun";
 
 /**
  * AXE auto-journaling — shared logic used by both the `/api/axe-journal`
@@ -50,11 +53,27 @@ export type AutoJournalOutcome =
       journaled: number;
       results: Array<{ tradeId: string; symbol: string; alignment_score: number; axe_label: string }>;
       message?: string;
+      /** Trades we tried and could not score, with the reason. Never hidden. */
+      failed?: number;
+      failureReason?: LlmFailure["reason"];
+      advice?: string;
     }
-  | { ok: false; error: string; status: number };
+  | { ok: false; error: string; status: number; reason?: LlmFailure["reason"]; advice?: string };
 
 const TRADE_COLUMNS =
   "id,symbol,side,volume,open_time,close_time,open_price,close_price,pnl,fees";
+
+/**
+ * Journaling used to hard-require OPENAI_API_KEY. It now goes through
+ * `llmRouter`, so a reachable Ollama is just as valid a provider — one empty
+ * OpenAI wallet should not switch AXE's brain off.
+ */
+function hasLlmProvider(): boolean {
+  return (
+    firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY") !== null ||
+    firstNonEmptyEnv("OLLAMA_URL", "OLLAMA_HOST") !== null
+  );
+}
 
 /**
  * Journal un-journaled (or explicitly listed) closed trades for an account.
@@ -65,9 +84,17 @@ export async function autoJournalTrades(
   userId: string,
   accountId: string,
   tradeIds?: string[],
+  source: EngineSource = "journal",
 ): Promise<AutoJournalOutcome> {
-  const openaiKey = firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY");
-  if (!openaiKey) return { ok: false, error: "OPENAI_API_KEY not configured", status: 503 };
+  if (!hasLlmProvider()) {
+    return {
+      ok: false,
+      error: "no model provider configured",
+      status: 503,
+      reason: "not_configured",
+      advice: llmFailureAdvice("not_configured"),
+    };
+  }
 
   const baseQuery = supabase
     .from("broker_trades")
@@ -82,7 +109,7 @@ export async function autoJournalTrades(
     const { data: trades, error } = await baseQuery.in("id", tradeIds);
     if (error) return { ok: false, error: error.message, status: 500 };
     if (!trades?.length) return { ok: true, journaled: 0, results: [] };
-    return journalTrades(supabase, userId, accountId, trades as BrokerTrade[], openaiKey);
+    return journalTrades(supabase, userId, accountId, trades as BrokerTrade[], source);
   }
 
   // Otherwise: journal recent trades that don't yet have an AXE label.
@@ -102,7 +129,7 @@ export async function autoJournalTrades(
     return { ok: true, journaled: 0, results: [], message: "All recent trades already journaled" };
   }
 
-  return journalTrades(supabase, userId, accountId, trades, openaiKey);
+  return journalTrades(supabase, userId, accountId, trades, source);
 }
 
 /* ── Core journaling logic ───────────────────────────────────────── */
@@ -112,7 +139,7 @@ async function journalTrades(
   userId: string,
   accountId: string,
   trades: BrokerTrade[],
-  openaiKey: string,
+  source: EngineSource,
 ): Promise<AutoJournalOutcome> {
   const [playbooks, rules, memories] = await Promise.all([
     loadPlaybooks(supabase, userId),
@@ -121,6 +148,8 @@ async function journalTrades(
   ]);
 
   let journaled = 0;
+  let failed = 0;
+  const operatorBlockers: LlmFailure[] = [];
   const results: Array<{ tradeId: string; symbol: string; alignment_score: number; axe_label: string }> = [];
 
   // Process in batches of 5 for efficiency.
@@ -128,14 +157,29 @@ async function journalTrades(
   for (let i = 0; i < trades.length; i += batchSize) {
     const batch = trades.slice(i, i + batchSize);
 
+    const startedAt = Date.now();
     const batchResults = await Promise.all(
       batch.map((trade) =>
-        analyzeTradeAlignment(openaiKey, trade, playbooks, rules, memories).catch((e) => {
-          console.error(`[axe-journal] Failed to analyze trade ${trade.id}:`, e);
+        analyzeTradeAlignment(trade, playbooks, rules, memories).catch(async (e: unknown) => {
+          failed += 1;
+          const failure = await recordLlmFailure(supabase, userId, source, e, {
+            trade_id: trade.id,
+            symbol: trade.symbol,
+          });
+          // An empty wallet or a dead key will not fix itself in the next
+          // 50ms. Stop the run rather than burn the whole backlog on it.
+          if (failure.needsOperator) operatorBlockers.push(failure);
           return null;
         }),
       ),
     );
+
+    if (batchResults.some((r) => r !== null)) {
+      await recordLlmSuccess(supabase, userId, source, Date.now() - startedAt, {
+        batch_size: batch.length,
+        scored: batchResults.filter((r) => r !== null).length,
+      });
+    }
 
     for (let j = 0; j < batch.length; j++) {
       const trade = batch[j];
@@ -188,13 +232,44 @@ async function journalTrades(
         axe_label: result.axe_label,
       });
     }
+
+    if (operatorBlockers.length > 0) break;
   }
 
   if (journaled > 0) {
     scheduleCockpitRefresh(supabase, userId);
   }
 
-  return { ok: true, journaled, results };
+  // Nothing scored and a human has to act — that is a failure, not a quiet
+  // success. Callers (chat, the journal screen, the sweep cron) say so.
+  const blockingFailure: LlmFailure | null = operatorBlockers[0] ?? null;
+  if (journaled === 0 && blockingFailure) {
+    return {
+      ok: false,
+      error: blockingFailure.message,
+      status: 503,
+      reason: blockingFailure.reason,
+      advice: llmFailureAdvice(blockingFailure.reason),
+    };
+  }
+
+  return {
+    ok: true,
+    journaled,
+    results,
+    ...(failed > 0
+      ? {
+          failed,
+          ...(blockingFailure
+            ? {
+                failureReason: blockingFailure.reason,
+                advice: llmFailureAdvice(blockingFailure.reason),
+              }
+            : {}),
+          message: `Journaled ${journaled} trade(s); ${failed} could not be scored.`,
+        }
+      : {}),
+  };
 }
 
 /* ── Load trader context ─────────────────────────────────────────── */
@@ -253,10 +328,9 @@ async function loadMemories(supabase: SupabaseClient, userId: string): Promise<s
     .join("\n");
 }
 
-/* ── GPT-4o-mini trade alignment analysis ────────────────────────── */
+/* ── Trade alignment analysis (router: Ollama first, OpenAI fallback) ── */
 
 async function analyzeTradeAlignment(
-  apiKey: string,
   trade: BrokerTrade,
   playbooks: string,
   rules: string,
@@ -316,31 +390,22 @@ Label mapping:
 - Poor: 30-59 with rule violations
 - Emotional: any score with clear emotional triggers`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
+  const content = (
+    await llmSimpleChat(
+      [
         { role: "system", content: systemPrompt },
         {
           role: "user",
           content: `TRADE:\n${tradeText}\n\nPLAYBOOKS:\n${playbooks}\n\nRULES:\n${rules}\n\nMEMORIES:\n${memories}`,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 600,
-    }),
-  });
+      { temperature: 0.3, maxTokens: 600 },
+    )
+  )?.trim();
 
-  if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error("No response");
+  // The router returns null when every provider is exhausted. Throwing keeps
+  // the reason classifiable upstream instead of writing a neutral score.
+  if (!content) throw new Error("Empty response from every configured model provider");
 
   const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed = JSON.parse(cleaned) as JournalResult;

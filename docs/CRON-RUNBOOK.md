@@ -126,7 +126,7 @@ HTTP status the VPS returned. The two-month outage was invisible precisely
 because nothing reported it — this is the thing to check first when a feed looks
 stale.
 
-## The nine jobs
+## The jobs
 
 | Job | Schedule (UTC) | Route |
 |---|---|---|
@@ -139,10 +139,46 @@ stale.
 | `axe-companion-knowledge-sync` | `0 5 * * 0` | `/api/cron/knowledge-sync` |
 | `axe-companion-krater-feed-sync` | `*/10 4-20 * * *` | `/api/cron/krater-feed-sync` |
 | `axe-companion-intel-correlate` | `5 * * * *` | `/api/cron/intel-correlate` |
+| `axe-companion-journal-sweep` | `25 * * * *` | `/api/cron/journal-sweep` |
 
 The first eight carry the exact schedules `vercel.json` used, already written in
 UTC. `intel-correlate` is new here: its route has always existed but was never
 in `vercel.json`, so it would not have run even on Vercel.
+
+### journal-sweep
+
+Added 2026-10-10. AXE's auto-journaling used to run only as a side effect of a
+successful MT5 sync, so anything that closed while sync was broken stayed
+unjournaled forever — nothing ever looked back. The sweep is that backward
+glance: every hour it finds closed trades from the last seven days with no AXE
+label and scores them, whatever happened to the sync.
+
+Register it **after** a build containing `/api/cron/journal-sweep` is live,
+otherwise every run dispatches into a 404:
+
+```sql
+insert into axe_ops.cron_job (name, path, schedule, owner, enabled)
+values ('axe-companion-journal-sweep', '/api/cron/journal-sweep', '25 * * * *', 'pg_cron', true)
+on conflict (name) do update
+  set path = excluded.path,
+      schedule = excluded.schedule,
+      enabled = excluded.enabled;
+```
+
+Minute 25 on purpose: it keeps the sweep away from `mt5-sync` (:00, :10, …) and
+`intel-correlate` (:05), so a slow sweep cannot delay the sync that feeds it.
+
+Verify by hand before trusting the schedule:
+
+```sql
+select axe_ops.dispatch_cron('manual-check', '/api/cron/journal-sweep');
+```
+
+A healthy answer names what it did: `accountsPending`, `journaled`, and
+`blockers`. A non-empty `blockers` array is the point of the route — it says
+which model failure is stopping AXE from journaling, and whether a human has to
+fix it (`no_credits`, `auth_failed`, `not_configured`) or it should clear on its
+own.
 
 ## Moving hosts
 

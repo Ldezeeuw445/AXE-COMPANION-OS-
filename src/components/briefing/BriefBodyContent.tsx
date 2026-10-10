@@ -23,6 +23,13 @@ type BriefBodyContentProps = {
   body: string;
   highlights?: BriefHighlight[];
   compact?: boolean;
+  /**
+   * Colour for the section headings. The feed passes the item kind's accent
+   * (gold for a morning brief, blue for daily news, emerald for a recap) so a
+   * reader can tell the three lanes apart at a glance without reading a word.
+   * Defaults to the neutral heading used on the briefing page itself.
+   */
+  headingClassName?: string;
 };
 
 function RichBriefLine({
@@ -112,7 +119,12 @@ function NewsCardBlock({ card, compact }: { card: BriefNewsCard; compact?: boole
   );
 }
 
-export function BriefBodyContent({ body, highlights, compact }: BriefBodyContentProps) {
+export function BriefBodyContent({
+  body,
+  highlights,
+  compact,
+  headingClassName,
+}: BriefBodyContentProps) {
   const pairs = pairHighlights(highlights);
   const newsCards = newsCardsFromHighlights(highlights);
   const eventChips = eventsFromHighlights(highlights);
@@ -154,8 +166,9 @@ export function BriefBodyContent({ body, highlights, compact }: BriefBodyContent
                 <h4
                   className={cn(
                     italicLabel
-                      ? "text-[12px] font-medium italic tracking-[0.02em] text-white/82"
-                      : "text-[10px] font-bold uppercase tracking-[0.18em] text-white/88",
+                      ? "text-[12px] font-medium italic tracking-[0.02em]"
+                      : "text-[10px] font-bold uppercase tracking-[0.18em]",
+                    headingClassName ?? (italicLabel ? "text-white/82" : "text-white/88"),
                   )}
                 >
                   {label}

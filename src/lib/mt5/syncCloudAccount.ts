@@ -384,21 +384,31 @@ export async function runCloudMt5Sync(
     revalidatePath("/chat");
   }
 
+  const shouldJournal = opts.autoJournal !== false;
+  if (shouldJournal) {
+    // Deliberately NOT gated on `dealsUpserted > 0`. A sync that found nothing
+    // new is the normal case once a trade has already been imported — gating on
+    // it meant AXE only ever journaled in the same ten-minute window a deal
+    // first landed, and never caught up afterwards. `autoJournalTrades` already
+    // skips trades that carry an axe_label, so running it every time is cheap
+    // and is what makes "AXE journals by itself" true.
+    autoJournalTrades(supabase, userId, accountId)
+      .then((r) => {
+        if (!r.ok) {
+          console.error(`[mt5Sync] auto-journal failed (${r.reason ?? "unknown"}): ${r.error}`);
+        } else if (r.journaled > 0) {
+          console.log(`[mt5Sync] auto-journaled ${r.journaled} trade(s)`);
+        }
+      })
+      .catch((e) => console.error("[mt5Sync] auto-journal trigger failed:", e));
+  }
+
   if (dealsFetched === 0 && !opts.allowEmptyDeals) {
     return {
       ok: false,
       code: "sync_no_deals",
       message: userMessageForCode("sync_no_deals"),
     };
-  }
-
-  const shouldJournal = opts.autoJournal !== false;
-  if (shouldJournal && dealsUpserted > 0) {
-    autoJournalTrades(supabase, userId, accountId)
-      .then((r) => {
-        if (!r.ok) console.error("[mt5Sync] auto-journal failed:", r.error);
-      })
-      .catch((e) => console.error("[mt5Sync] auto-journal trigger failed:", e));
   }
 
   return { ok: true, data: { dealsFetched, dealsUpserted, tradesNormalized } };
