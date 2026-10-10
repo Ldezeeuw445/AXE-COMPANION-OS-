@@ -16,8 +16,8 @@ aan, en krijgt een foutmelding terug die nergens zichtbaar wordt.
 
 | # | Wat | Gemeten bewijs | Gevolg |
 |---|-----|----------------|--------|
-| 0.1 | **OpenAI heeft geen credits** | `intel-correlate` laatste run: `429 — "You have no credits remaining"`, 17 fouten/24u. `user-knowledge-sync`: zelfde fout op `distil:lessons` en `distil:preferences` | Geen auto-journal, geen correlaties, geen lessen-distillatie, geen learning loop. De hele "2e brein"-laag is dark |
-| 0.2 | **MetaApi-account bestaat niet meer** | `mt5-sync`: `"The MetaApi account was not found. It may have been deleted in MetaApi."` — account `0364372e…`, elke 10 min | Geen nieuwe deals → geen trades → niets om te journalen, niets om van te leren |
+| 0.1 | ~~**OpenAI heeft geen credits**~~ **OPGELOST 10-10 13:05** | `intel-correlate`: `ok: true` met een echte correlatie ("Bullish Sentiment on Semiconductor Stocks") | De modellaag leeft weer |
+| 0.2 | ~~**MetaApi-account bestaat niet meer**~~ **OPGELOST 10-10 14:00** | `mt5-sync`: `synced: 1, failures: []`, account `provider_status: connected` | Correctie: het account was **niet** verwijderd. MetaApi meldt een wegens credits opgeschort account als "not found. It may have been deleted" — een misleidende fout die ik voor waar aannam. Credits bijvullen was genoeg; opnieuw koppelen was niet nodig |
 | 0.3 | **Unusual Whales niet geconfigureerd** | `/api/debug/cron-health`: `unusual_whales_set: false`. `intel-warmup`: 6 van 9 acties `http_500` (insiderTrades, senateTrades, darkPool, unusualOptions, marketTide, gdelt) | AXE Intel mist tweederde van zijn bronnen |
 | 0.4 | **Krater-key niet gezet** | `krater_api_key_set: false` | Daily news / market recap-bron |
 
@@ -66,9 +66,9 @@ Gemeten: `src/services/axeProactiveWatcher.ts` bestaat, draait elke 15 min, en d
 
 Wat eraan mist t.o.v. jouw voorbeeld:
 
-- [ ] **2.1** Account-type bewustzijn: funded/prop vs eigen geld. De regel vuurt nu alleen bij *open posities*; bij een funded account moet hij ook waarschuwen als je nog **geen** positie hebt — dat is juist het moment
-- [ ] **2.2** Prop-firm regels als profielveld (news-ban, daily drawdown, max lot) en die meewegen in élke proactieve regel
-- [ ] **2.3** De watcher pakt nu alleen users die een **push-subscription** hebben (`runAxeProactiveWatcher`, eerste bron). Wie push weigert krijgt nooit een proactief item. Dat moet los: feed-item altijd, push alleen bij toestemming
+- [x] **2.1** `src/lib/risk/accountProfile.ts` onderscheidt live / demo / prop-evaluation / prop-funded. De app had alleen `isDemoAccount()`: één regex die demo, FTMO, funded, challenge en prop op één hoop gooide, terwijl die juist tegenovergesteld behandeld moeten worden. De nieuwsregel vuurt nu óók zonder open posities als de regels van het account nieuws verbieden — precies jouw voorbeeld
+- [x] **2.2** Beperkingen per account: `newsTradingAllowed`, `maxDailyLossPct`, `maxLot`, `weekendHoldingAllowed`. Afgeleid uit de accountnaam als *vermoeden*, maar alles wat jij expliciet zet in `metadata.tradingRules` wint, en dan zegt AXE er niet meer "assumed" bij
+- [x] **2.3** Push was de **eerste** bron voor de kandidatenlijst, dus wie push weigerde werd nooit gecontroleerd — ook geen feed-item. Nu: iedereen met een actief broker-account valt binnen scope, push bepaalt alleen nog of er een melding uitgaat
 - [ ] **2.4** Meer regels: correlatie-waarschuwing (3 posities die hetzelfde risico zijn), sessie-overgang, swap-nacht, je eigen meest-gemaakte fout uit 1.4
 
 ---

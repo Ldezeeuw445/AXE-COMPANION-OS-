@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -61,6 +62,25 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     .maybeSingle();
 
   const accountId = prefs?.active_account_id as string | undefined;
+
+  // What kind of account this is decides whether a news warning is worth
+  // sending at all. A demo account shrugs at NFP; a funded one can be closed
+  // for trading through it.
+  const { data: accountRow } = accountId
+    ? await supabase
+        .from("user_broker_accounts")
+        .select("label,mt5_server,metadata,connection_method")
+        .eq("user_id", userId)
+        .eq("id", accountId)
+        .maybeSingle()
+    : { data: null };
+
+  const accountProfile = buildAccountProfile({
+    label: (accountRow?.label as string | null) ?? null,
+    mt5Server: (accountRow?.mt5_server as string | null) ?? null,
+    metadata: (accountRow?.metadata as Record<string, unknown> | null) ?? null,
+    connectionMethod: (accountRow?.connection_method as string | null) ?? null,
+  });
 
   const since = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
@@ -129,7 +149,11 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     }
   }
 
-  if (positions.length > 0) {
+  // News risk. Deliberately NOT gated on having open positions: on an account
+  // whose rules forbid trading through news, the useful moment is *before* the
+  // trade, while staying flat is still a choice.
+  const watchesNews = positions.length > 0 || !accountProfile.newsTradingAllowed;
+  if (watchesNews) {
     const symbols = [...new Set(positions.map((p) => String(p.symbol ?? "").toUpperCase()).filter(Boolean))];
     const focus = symbols[0] ?? "XAUUSD";
     try {
@@ -141,14 +165,27 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       });
       if (highEvents.length > 0) {
         const ev = highEvents[0];
-        const eventKey = `news_risk:${ev.title.slice(0, 40)}:${ev.startsAt}`;
-        const title = `News risk: ${ev.currency ?? ""} ${ev.title}`.trim();
-        const mins = Math.round((new Date(ev.startsAt).getTime() - Date.now()) / 60000);
-        const body = `High-impact event in ~${mins}m — you have ${positions.length} open position(s)`;
-        const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/positions");
-        if (inserted) {
-          created += 1;
-          if (hasPush && (await firePush(userId, `AXE · ${title}`, body, "/positions"))) pushed += 1;
+        const warning = newsWarningFor(accountProfile, {
+          openPositions: positions.length,
+          minutesUntil: (new Date(ev.startsAt).getTime() - Date.now()) / 60000,
+          eventTitle: ev.title,
+          currency: ev.currency ?? null,
+        });
+        if (warning) {
+          const eventKey = `news_risk:${ev.title.slice(0, 40)}:${ev.startsAt}`;
+          const url = positions.length > 0 ? "/positions" : "/feed";
+          const inserted = await recordProactiveEvent(
+            supabase,
+            userId,
+            eventKey,
+            warning.title,
+            warning.body,
+            url,
+          );
+          if (inserted) {
+            created += 1;
+            if (hasPush && (await firePush(userId, `AXE · ${warning.title}`, warning.body, url))) pushed += 1;
+          }
         }
       }
     } catch {
@@ -179,24 +216,36 @@ export async function runAxeProactiveWatcher(
   let eventsCreated = 0;
   let pushesSent = 0;
 
-  const { data: users, error } = await supabase
-    .from("push_subscriptions")
+  // Candidate users. Push subscriptions used to be the FIRST source and the
+  // cap was filled from it, so anyone who had declined push notifications was
+  // never checked at all — they got no feed items either, which is not what
+  // declining a notification means. Push is now one source among several, and
+  // only decides whether a push is *sent* (see `hasPush` in checkUser).
+  const uniqueUsers: WatcherUser[] = [];
+  const seen = new Set<string>();
+
+  const addUsers = (rows: Array<Record<string, unknown>> | null | undefined) => {
+    for (const row of rows ?? []) {
+      if (uniqueUsers.length >= maxUsers) return;
+      const id = row.user_id as string;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      uniqueUsers.push({ id });
+    }
+  };
+
+  // Anyone with a connected broker account is in scope: they have positions
+  // and rules worth watching whether or not they traded today.
+  const { data: accountUsers, error } = await supabase
+    .from("user_broker_accounts")
     .select("user_id")
-    .limit(maxUsers * 3);
+    .eq("status", "active")
+    .limit(maxUsers * 4);
 
   if (error) {
     return { usersChecked: 0, eventsCreated: 0, pushesSent: 0, errors: [error.message] };
   }
-
-  const uniqueUsers: WatcherUser[] = [];
-  const seen = new Set<string>();
-  for (const row of users ?? []) {
-    const id = row.user_id as string;
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    uniqueUsers.push({ id });
-    if (uniqueUsers.length >= maxUsers) break;
-  }
+  addUsers(accountUsers as Array<Record<string, unknown>> | null);
 
   if (uniqueUsers.length < maxUsers) {
     const { data: tradeUsers } = await supabase
@@ -204,13 +253,16 @@ export async function runAxeProactiveWatcher(
       .select("user_id")
       .gte("close_time", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
       .limit(maxUsers);
-    for (const row of tradeUsers ?? []) {
-      const id = row.user_id as string;
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      uniqueUsers.push({ id });
-      if (uniqueUsers.length >= maxUsers) break;
-    }
+    addUsers(tradeUsers as Array<Record<string, unknown>> | null);
+  }
+
+  if (uniqueUsers.length < maxUsers) {
+    const { data: execUsers } = await supabase
+      .from("execution_requests")
+      .select("user_id")
+      .eq("status", "pending")
+      .limit(maxUsers);
+    addUsers(execUsers as Array<Record<string, unknown>> | null);
   }
 
   if (uniqueUsers.length < maxUsers) {
@@ -220,20 +272,24 @@ export async function runAxeProactiveWatcher(
       .eq("status", "active")
       .in("type", ["position_risk", "news", "price"])
       .limit(maxUsers * 4);
-    for (const row of alertUsers ?? []) {
-      const id = row.user_id as string;
-      if (!id || seen.has(id)) continue;
+    const smartOnly = (alertUsers ?? []).filter((row) => {
       const meta = (row.metadata ?? {}) as Record<string, unknown>;
-      const isSmart =
+      return (
         Boolean(meta.smartKind) ||
         Boolean(meta.smartTitle) ||
         meta.evaluator === "smart" ||
-        meta.evaluator === "position_risk";
-      if (!isSmart) continue;
-      seen.add(id);
-      uniqueUsers.push({ id });
-      if (uniqueUsers.length >= maxUsers) break;
-    }
+        meta.evaluator === "position_risk"
+      );
+    });
+    addUsers(smartOnly as Array<Record<string, unknown>>);
+  }
+
+  if (uniqueUsers.length < maxUsers) {
+    const { data: pushUsers } = await supabase
+      .from("push_subscriptions")
+      .select("user_id")
+      .limit(maxUsers);
+    addUsers(pushUsers as Array<Record<string, unknown>> | null);
   }
 
   for (const user of uniqueUsers) {
