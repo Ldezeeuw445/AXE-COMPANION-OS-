@@ -1,120 +1,43 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
-import { ensureDemoWorkspace } from "@/lib/broker/demoAccount";
 
 /**
- * A demo session is a time-boxed Pro trial, not a free Founder seat.
+ * Anonymous demo sessions are gone, on purpose.
  *
- * getUserAxeEntitlement() treats plan "free" with a future pro_until as Pro, and
- * that flips back to free on its own once the timestamp passes — whereas plan
- * "pro"/"founder" is paid forever regardless of pro_until (isPaidAxePlan reads
- * the plan string only). So "free" + pro_until is the only grant here that
- * actually expires.
+ * Measured 2026-10-11: 182 of 192 accounts on this project were anonymous, and
+ * 175 users had a broker account attached. An anonymous account has no email,
+ * so the moment someone clears their browser or picks up another phone, their
+ * journal, their RAG files and their learning arc are unreachable — by them and
+ * by us. There is no password reset for an account with nothing to reset. You
+ * cannot charge twenty euros a month for data that lives in one browser
+ * session.
  *
- * chat_quota_exempt stays false on purpose: axe_plan_is_paid() also reads the
- * plan string, so a demo keeps the normal 20-messages-a-day cap. Pro features
- * are unlocked; the model bill is not.
+ * The old shared-credentials fallback is gone with it, and that one was worse:
+ * every visitor signed into the SAME user, so each demo visitor could read the
+ * previous visitor's chats and trades. A privacy incident waiting for a busy
+ * day.
+ *
+ * The product intent — let someone try AXE before paying — is good and should
+ * come back as a real sign-up with a time-boxed Pro trial. The entitlement
+ * shape for that already exists (plan "free" with a future `pro_until`, which
+ * expires on its own). What it needs is an account with an email on it.
  */
-const DEMO_TRIAL_HOURS = 24;
 
-function demoTrialEntitlement() {
-  return {
-    plan: "free" as const,
-    founder_badge: false,
-    chat_quota_exempt: false,
-    pro_until: new Date(Date.now() + DEMO_TRIAL_HOURS * 60 * 60 * 1000).toISOString(),
-  };
-}
-
-function demoCreds() {
-  const email = process.env.DEMO_USER_EMAIL?.trim();
-  const password = process.env.DEMO_USER_PASSWORD?.trim();
-  if (!email || !password) return null;
-  return { email, password };
-}
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) {
-    return NextResponse.json(
-      { ok: false, error: "Supabase not configured" },
-      { status: 503 },
-    );
-  }
-
-  // Preferred path: anonymous demo session (no shared credentials needed).
-  const anon = await supabase.auth.signInAnonymously({
-    options: {
-      data: {
-        app_mode: "public_demo",
-      },
-    },
-  });
-  if (!anon.error) {
-    const userId = anon.data.user?.id ?? null;
-    if (userId) {
-      const service = createServiceRoleSupabaseClient();
-      if (service) {
-        await Promise.all([
-          service.from("axe_user_entitlements").upsert(
-            {
-              user_id: userId,
-              ...demoTrialEntitlement(),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id" },
-          ),
-          ensureDemoWorkspace(service, userId),
-        ]);
-      }
-    }
-    return NextResponse.json({
-      ok: true,
-      mode: "anonymous",
-      userId,
-    });
-  }
-
-  // Fallback path: shared demo account from env.
-  const creds = demoCreds();
-  if (creds) {
-    const seeded = await supabase.auth.signInWithPassword(creds);
-    if (!seeded.error) {
-      const userId = seeded.data.user?.id ?? null;
-      const service = createServiceRoleSupabaseClient();
-      if (userId && service) {
-        await ensureDemoWorkspace(service, userId);
-      }
-      return NextResponse.json({
-        ok: true,
-        mode: "shared_demo_user",
-        userId,
-      });
-    }
-    return NextResponse.json(
-      {
-        ok: false,
-        error: seeded.error.message,
-      },
-      { status: 403 },
-    );
-  }
-
   return NextResponse.json(
     {
       ok: false,
       error:
-        "Demo auth unavailable. Enable Supabase anonymous auth or set DEMO_USER_EMAIL + DEMO_USER_PASSWORD.",
-      detail: anon.error.message,
+        "Demo sessions now need a real account. Sign up with an email — your journal, memory and settings stay yours across devices.",
+      signupUrl: "/login",
     },
-    { status: 403 },
+    { status: 410 },
   );
 }
 
 export async function DELETE() {
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) return NextResponse.json({ ok: true });
-  await supabase.auth.signOut();
+  // Kept so an old client that still calls this on sign-out does not error.
   return NextResponse.json({ ok: true });
 }

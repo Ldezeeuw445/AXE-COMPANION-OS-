@@ -248,12 +248,28 @@ onhoudbaar: je kunt niet iemand €20 per maand laten betalen voor data die aan
 één browsersessie hangt.
 
 Te beslissen vóór launch, niet erna:
-- [ ] **L1.1** Anonieme sign-in uit, óf behouden als "probeer eerst" met een
-  verplichte upgrade naar een echt account zodra iemand een broker koppelt of
-  betaalt (Supabase `linkIdentity` maakt van de anonieme user dezelfde user
-  mét e-mail, dus zonder dataverlies)
-- [ ] **L1.2** Wat gebeurt er met de 182 bestaande? Opruimen of laten staan —
-  maar bewust, niet per ongeluk
+**Besloten 11 oktober: anonieme accounts gaan eruit.**
+
+- [x] **L1.1** `/api/auth/demo` riep `signInAnonymously` aan als *voorkeurspad* —
+  daar komen die 182 vandaan. Weg. De endpoint geeft nu `410` met een verwijzing
+  naar een echte aanmelding, en `/demo` stuurt door naar `/login`
+- [x] **L1.2** De fallback is óók weg, en die was erger: bij ontbrekende
+  anonieme auth logde hij iedereen in op **hetzelfde** gedeelde account uit
+  `DEMO_USER_EMAIL`. Elke demo-bezoeker kon de chats en trades van de vorige
+  lezen. Dat is geen tekortkoming maar een datalek dat op een drukke dag wachtte
+- [x] **L1.3** De embed op de landingspagina's toonde bij een mislukte sessie
+  een zwart vlak zonder uitleg. Nu zegt hij wat er aan de hand is en wijst naar
+  inloggen
+- [x] **L1.4** `scripts/verify-no-anonymous-auth.mjs` laat `npm run verify`
+  falen als `signInAnonymously` of de gedeelde demo-login ooit terugkomt
+- [ ] **L1.5 — alleen jij kan dit:** zet **Anonymous sign-ins uit** in Supabase
+  → Authentication → Sign In / Providers. Mijn wijziging zorgt dat *onze code*
+  er niet meer om vraagt; zolang de projectinstelling aan staat kan iemand met
+  de publieke sleutel nog steeds rechtstreeks een anoniem account aanmaken. Pas
+  met die schakelaar om is het dicht
+- [ ] **L1.6** De 182 bestaande anonieme accounts: opruimen of laten staan. Ik
+  raak ze niet aan zonder dat je het zegt — het is onomkeerbaar, en er hangen
+  175 broker-accountrijen aan
 
 ## L2 — 54 users hebben `founder`, 1 heeft een Stripe-abonnement
 

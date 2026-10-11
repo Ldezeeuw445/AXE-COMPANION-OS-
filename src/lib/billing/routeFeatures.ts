@@ -90,7 +90,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "preferences/trade-execution": "A user preference",
 
   // Account lifecycle and plumbing.
-  "auth/demo": "Demo access has its own entitlement logic inside",
+  "auth/demo": "Returns 410 — anonymous demo sessions were removed on 2026-10-11",
   "onboarding": "You cannot pay before you have onboarded",
   "push/status": "Reading whether push is on",
   "push/vapid": "The public VAPID key",
