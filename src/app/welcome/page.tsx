@@ -7,6 +7,11 @@ export const metadata = {
   title: "AXE Companion — welcome",
   description:
     "AXE with knowledge layer, accounts, and chat. Add to your home screen or sign in.",
+  // robots.txt asks crawlers to stay away; this tells them. A page linked
+  // from anywhere else can still be indexed despite a Disallow, because
+  // robots.txt governs crawling and not indexing. A draft landing page must
+  // never turn up in a search result for the product.
+  robots: { index: false, follow: false },
 };
 
 export default function WelcomePage() {

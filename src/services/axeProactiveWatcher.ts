@@ -6,6 +6,7 @@ import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
 import { detectConcentration, weekendExposureWarning } from "@/lib/risk/positionRisk";
 import { detectWeakSpots } from "@/lib/journal/weakSpots";
 import { loadWeakSpotTrades } from "@/services/weakSpotService";
+import { brokerHealthWarning } from "@/lib/risk/brokerHealth";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -72,7 +73,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
   const { data: accountRow } = accountId
     ? await supabase
         .from("user_broker_accounts")
-        .select("label,mt5_server,metadata,connection_method")
+        .select("label,mt5_server,metadata,connection_method,provider_status,last_sync_at")
         .eq("user_id", userId)
         .eq("id", accountId)
         .maybeSingle()
@@ -193,6 +194,36 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       }
     } catch {
       /* calendar optional */
+    }
+  }
+
+  /* ── Is the broker connection still delivering? ─────────────────── */
+  if (accountRow) {
+    const health = brokerHealthWarning({
+      label: (accountRow.label as string | null) ?? null,
+      providerStatus: (accountRow.provider_status as string | null) ?? null,
+      lastSyncAt: (accountRow.last_sync_at as string | null) ?? null,
+      connectionMethod: (accountRow.connection_method as string | null) ?? null,
+    });
+    if (health) {
+      // One per account per day: a broken connection stays broken, and
+      // repeating it every fifteen minutes would train the trader to swipe
+      // it away — which is how this went unnoticed for eight days.
+      const eventKey = `broker_health:${accountId ?? "none"}:${health.kind}:${new Date().toISOString().slice(0, 10)}`;
+      const inserted = await recordProactiveEvent(
+        supabase,
+        userId,
+        eventKey,
+        health.title,
+        health.body,
+        "/accounts",
+      );
+      if (inserted) {
+        created += 1;
+        if (hasPush && (await firePush(userId, `AXE · ${health.title}`, health.body, "/accounts"))) {
+          pushed += 1;
+        }
+      }
     }
   }
 

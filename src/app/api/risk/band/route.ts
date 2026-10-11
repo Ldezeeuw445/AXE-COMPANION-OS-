@@ -7,6 +7,7 @@ import {
   pointValuePerLot,
   type RiskBandPosition,
 } from "@/lib/risk/accountRiskBand";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,10 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const gate = await requireEntitlementFeature(supabase, user.id, "account_health");
+  if (!gate.ok) {
+    return Response.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
+  }
 
   let openPositions: ClientOpenPosition[] = [];
   let demoPositions: ClientDemoPosition[] = [];

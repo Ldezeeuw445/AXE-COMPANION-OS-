@@ -39,6 +39,9 @@ export default function robots(): MetadataRoute.Robots {
         "/welcome",
         "/marketing",
         "/ui-premium",
+        // Public demo entry: useful to hand out by link, pointless in search
+        // results, and it signs a visitor straight into a shared account.
+        "/demo",
       ],
     },
     sitemap: `${siteUrl()}/sitemap.xml`,

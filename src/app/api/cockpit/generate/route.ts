@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { callLLM } from "@/services/llmClient";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 const COCKPIT_PROMPT = `You are analyzing a trader's private session history with their AI trading companion (AXE).
 Your job is to generate a structured cockpit snapshot that reflects the trader's actual behavior, patterns, and how well the AI has learned their style.
@@ -65,6 +66,11 @@ export async function POST(request: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  const gate = await requireEntitlementFeature(supabase, user.id, "cockpit_learning");
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
   }
 
   // AI provider check is handled by aiProvider service

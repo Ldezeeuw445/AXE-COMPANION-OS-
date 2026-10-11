@@ -261,9 +261,18 @@ geweest.
 `requireFeature`. De tiers (free / pro €20 / founder €40 / elite €50) bestaan
 dus als prijslijst, niet als grens.
 
-- [ ] **L3.1** Per feature beslissen in welke tier hij hoort, en die check in
-  de route zetten — niet in de UI. Een knop verbergen is geen slot
-- [ ] **L3.2** Een test die faalt als een free-user een pro-route haalt
+- [x] **L3.1** `src/lib/billing/routeFeatures.ts` classificeert **alle 84 routes**:
+  18 achter een betaalde feature, 44 expliciet gratis *met de reden erbij*, en de
+  rest niet gebruikersgericht (cron, internal, webhooks). De gate zit nu in de
+  route en geeft `403` met de naam van het benodigde plan — niet in de UI, want
+  een knop verbergen is geen slot. 16 routes aangesloten, 24 gate-aanroepen in
+  totaal (meerdere methodes per route)
+- [x] **L3.2** `scripts/verify-tier-gates.mjs` faalt als een route in géén van de
+  twee lijsten staat. Een **nieuwe** route kan dus niet meer stilletjes gratis
+  worden: iemand moet beslissen, en de reden opschrijven. Ook geborgd: geen route
+  in beide lijsten, geen verwijzing naar een route die niet bestaat, elke betaalde
+  route roept de gate aan mét zijn eigen feature, en de gate geeft 403 en noemt
+  het plan
 
 ## L4 — Vijf landingspagina's staan tegelijk live
 
@@ -271,8 +280,20 @@ dus als prijslijst, niet als grens.
 plus `/demo`. Google indexeert ze alle vijf en een bezoeker kan op een verlaten
 versie belanden.
 
-- [ ] **L4.1** Kiezen welke de echte is, de rest weg of laten redirecten —
-  vóór de nieuwe landingspagina gebouwd wordt, anders bouw je de zesde
+**Correctie op mijn eigen bevinding:** `robots.ts` sloot `/final`, `/finallaunch`,
+`/welcome`, `/marketing` en `/ui-premium` **al** uit, en de sitemap noemt alleen
+`/` en `/launch`. Dat was al opgelost; ik had alleen naar de HTTP-statussen
+gekeken. Wat er wél aan mankeerde:
+
+- [x] **L4.1** `/demo` stond niet in robots.txt en was volledig crawlbaar — en
+  die route logt een bezoeker meteen in op een gedeeld demo-account. Toegevoegd
+- [x] **L4.2** De conceptpagina's hadden geen `noindex`. robots.txt *vraagt* een
+  crawler weg te blijven; het regelt indexering niet, dus een pagina waar elders
+  naar gelinkt wordt kan alsnog in de zoekresultaten staan. Nu dragen `/final`,
+  `/finallaunch`, `/welcome` en `/demo` `robots: { index: false, follow: false }`
+- [ ] **L4.3** Blijft aan jou: kiezen welke de echte wordt. Ik raak geen pagina
+  weg zonder dat je dat zegt, want een ervan is waarschijnlijk de basis voor de
+  nieuwe landingspagina
 
 ## L5 — AXE mag trades voorbereiden, maar er zijn geen grenzen
 
@@ -291,9 +312,18 @@ Vandaag bewezen op mijn eigen account: MetaApi gaf acht dagen lang
 `"account was not found"`, elke tien minuten, en in de app was daar niets van
 te zien. Eén gebruiker overkomt dat ook, en die denkt dat de app stuk is.
 
-- [ ] **L6.1** `provider_status: sync_failed` zichtbaar maken in de app, met
-  wat eraan te doen is
-- [ ] **L6.2** Na X mislukte syncs een feed-item en een push
+**Correctie:** de status *was* zichtbaar — `/accounts` toont een rode stip
+"Needs attention" bij `sync_failed`. Wat ontbrak was dat het nooit naar je toe
+kwam, en dat de rest van de app doorging alsof de cijfers actueel waren.
+
+- [x] **L6.1** `src/lib/risk/brokerHealth.ts` + de watcher: na zes uur stilte of
+  bij een weigerende provider komt er een feed-item en een push, met **hoe oud de
+  data is** erin ("last successful sync was 8 days ago — until then every number
+  AXE shows you is out of date"). Eén per account per dag, want een kapotte
+  koppeling blijft kapot en elke vijftien minuten herhalen leert je het wegtikken
+- [x] **L6.2** Ook de moeilijkste variant: géén foutmelding, maar ook geen data.
+  Dat is precies wat acht dagen onopgemerkt bleef. Een demo/paper-account wordt
+  nooit gemeld — dat kost niemand iets
 
 ## L7 — Twee databronnen zijn niet geconfigureerd
 

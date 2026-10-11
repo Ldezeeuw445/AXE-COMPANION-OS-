@@ -1,5 +1,6 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { callLLM } from "@/services/llmClient";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,10 @@ export async function GET(request: Request) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(supabase, user.id, "advanced_memory");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
 
   const url = new URL(request.url);
   const type = url.searchParams.get("type") as MemoryType | null;
@@ -82,6 +87,10 @@ export async function POST(request: Request) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(supabase, user.id, "advanced_memory");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
 
   const body = (await request.json().catch(() => ({}))) as {
     messages?: Array<{ role: string; content: string }>;
@@ -137,6 +146,10 @@ export async function DELETE(request: Request) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(supabase, user.id, "advanced_memory");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
 
   const body = (await request.json().catch(() => ({}))) as { id?: string };
   const id = body.id;

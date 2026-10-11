@@ -3,6 +3,11 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "AXE Demo Login",
   description: "One-tap public demo entry for AXE Companion.",
+  // robots.txt asks crawlers to stay away; this tells them. A page linked
+  // from anywhere else can still be indexed despite a Disallow, because
+  // robots.txt governs crawling and not indexing. A draft landing page must
+  // never turn up in a search result for the product.
+  robots: { index: false, follow: false },
 };
 
 export default async function DemoEntryPage({
