@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { ArrowRight } from "lucide-react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import type { ChartOverlayRow, PendingOrderOverlay } from "@/lib/broker/loadChartPageData";
-import { CHART_THEME, CHART_ORDER_BUY_COLOR, getChartTheme } from "@/components/chart/chartTheme";
+import { CHART_THEME, getChartTheme, type ChartThemeConfig } from "@/components/chart/chartTheme";
 import { TradePlanLine } from "@/components/chart/TradePlanLine";
 import { priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 
@@ -88,17 +88,21 @@ function formatPnl(profit: number | null | undefined): string {
   return `${sign}${profit.toFixed(2)} USD`;
 }
 
-function entryColor(side: string | null): string {
-  if (side === "sell") return CHART_THEME.negativeText;
-  if (side === "buy") return CHART_ORDER_BUY_COLOR;
-  return CHART_THEME.entryLine;
+function entryColor(side: string | null, theme: ChartThemeConfig): string {
+  if (side === "sell") return theme.orderSell;
+  if (side === "buy") return theme.orderBuy;
+  return theme.entryLine;
 }
 
-function pnlAwareColor(side: string | null, profit: number | null | undefined): string {
+function pnlAwareColor(
+  side: string | null,
+  profit: number | null | undefined,
+  theme: ChartThemeConfig,
+): string {
   if (profit != null) {
-    return profit >= 0 ? CHART_THEME.cyanAccent : CHART_THEME.negativeText;
+    return profit >= 0 ? theme.cyanAccent : theme.negativeText;
   }
-  return entryColor(side);
+  return entryColor(side, theme);
 }
 
 type EntryLabel = {
@@ -319,7 +323,7 @@ export function PositionLabelsOverlay({
             key: `entry-${o.id}`,
             y,
             text: `${sideLabel} ${o.volume}${pnl}`,
-            color: pnlAwareColor(side, o.profit),
+            color: pnlAwareColor(side, o.profit, theme),
             showConfirm: hasDraft && canModify,
             confirmTargetKey: targetKey,
             positionId: o.id,
@@ -343,7 +347,7 @@ export function PositionLabelsOverlay({
         key: `entry-ord-${o.id}`,
         y,
         text: `${typeLabel} ${o.volume}`,
-        color: entryColor(side),
+        color: entryColor(side, theme),
         showConfirm: hasDraft && canModify,
         confirmTargetKey: targetKey,
         orderId: o.id,
@@ -351,7 +355,7 @@ export function PositionLabelsOverlay({
     }
 
     setEntryLabels(next);
-  }, [canvasRef, canModify, overlays, pendingOrders, useExecutionBarConfirm]);
+  }, [canvasRef, canModify, overlays, pendingOrders, useExecutionBarConfirm, theme]);
 
   useEffect(() => {
     computeEntryLabels();
@@ -507,7 +511,7 @@ export function PositionLabelsOverlay({
         key: `pend-entry-${o.id}`,
         price: entryPrice,
         label: `${typeLabel} ${o.volume}`,
-        color: entryColor(side),
+        color: entryColor(side, theme),
         targetKey,
         orderId: o.id,
         currentSl: sl,

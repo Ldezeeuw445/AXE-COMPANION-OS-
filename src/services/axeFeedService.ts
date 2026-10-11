@@ -2,6 +2,7 @@ import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import type { AxeFeedItem } from "@/types/feed";
+import { chartActionSummary } from "@/lib/feed/chartActionSummary";
 
 export { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 
@@ -36,9 +37,8 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
       .limit(15),
     authed.supabase
       .from("axe_pending_chart_actions")
-      .select("id,action_type,symbol,timeframe,created_at")
+      .select("id,action_type,symbol,timeframe,created_at,payload,status")
       .eq("user_id", authed.user.id)
-      .eq("status", "pending")
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(15),
@@ -84,14 +84,22 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
   });
 
   const chartActions: AxeFeedItem[] = (chartRes.data ?? []).map((row) => {
-    const tf = String(row.timeframe ?? "h1").toUpperCase();
     const sym = String(row.symbol ?? "");
-    const action = String(row.action_type ?? "draw").replace(/_/g, " ");
+    // Applied actions stay in the feed. Filtering on status: "pending" meant
+    // the record of what AXE drew erased itself the moment the chart opened —
+    // the one item you would want to look back at was the one that vanished.
+    const summary = chartActionSummary({
+      actionType: String(row.action_type ?? "draw"),
+      symbol: sym,
+      timeframe: String(row.timeframe ?? "h1"),
+      payload: (row.payload ?? {}) as Record<string, unknown>,
+      status: (row.status as string | null) ?? null,
+    });
     return {
       id: `chart:${row.id}`,
       kind: "chart_action" as const,
-      title: `Chart queued: ${sym} ${tf}`,
-      body: action.charAt(0).toUpperCase() + action.slice(1),
+      title: summary.title,
+      body: summary.body,
       url: chartDeepLink(sym, String(row.timeframe ?? "h1")),
       createdAt: String(row.created_at),
     };

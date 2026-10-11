@@ -100,9 +100,20 @@ Gemeten: `src/components/chart/chartTheme.ts` ✅ met 4 thema's, waarvan er 2 in
 toggler zitten (`midnight`, `paper`). `ChartThemeTogglerButton` ✅.
 Indicatoren, annotaties, SL/TP-lijnen, trade-plan-lijnen ✅ bestaan allemaal.
 
-- [ ] **4.1** `CHART_ORDER_BUY_COLOR` / `CHART_ORDER_SELL_COLOR` zijn **thema-onafhankelijke constanten** (`chartTheme.ts:193-194`) — die zijn op `paper` niet gegarandeerd leesbaar. Per thema maken
+- [x] **4.1 + 4.3 — gemeten, niet gekeken.** Negen kleuren zakten onder de
+  WCAG-norm van 3:1 voor grafische objecten. De twee die er het meest toe doen:
+  je **stop-loss-lijn op dark** stond op 2.81:1 en je **sell-orderlijn op light**
+  op 2.96:1 — precies de twee lijnen die je in een haast moet kunnen vinden.
+  Alles zit nu boven 3:1 op beide thema's, en `orderBuy`/`orderSell` zijn per
+  thema in plaats van één gedeeld paar dat op geen van beide canvassen klopte
+- [x] **4.4** `scripts/verify-chart-contrast.mjs` meet het bij elke
+  `npm run verify`. Bewezen dat hij werkt: met de oude stop-loss-kleur
+  teruggezet faalt hij met `stopLine → 2.81:1`. Hij houdt ook rekening met
+  holle kaarsen (het kader draagt daar het contrast, niet de vulling) en
+  controleert of koop en verkoop nog uit elkaar te houden zijn **door de ogen
+  van een kleurenblinde trader** — een luminantietest zou blauw versus rood
+  goedkeuren terwijl rood/groen-verwarring het echte risico is
 - [ ] **4.2** 3 hardgecodeerde hexen in `ChartIndicatorLayer.tsx` + `IndicatorPane.tsx` naar tokens
-- [ ] **4.3** Contrast-check op beide thema's voor: prijslijn, SL, TP, entry, fib, elke indicator. Meten, niet kijken
 - [ ] **4.4** Rechter prijsbalk — al verkleind naar 10px vorige ronde ✅
 - [ ] **4.5** Bottom dock in elke combinatie — gebouwd vorige ronde ✅, nog door jou te bevestigen op de PWA
 
@@ -129,7 +140,15 @@ een *fallback*. Het echte probleem was erger en anders:
   "kun je even een fib zetten" werkte niet en nu wel — Nederlandse infinitieven (`zetten`,
   `tekenen`) zaten niet in het patroon. Vijf actietypes: fib, trendlijn, key level,
   indicator, wissen
-- [ ] **5.3** Terugkoppeling: AXE zegt wát hij tekende en waarom, als feed-item met `chart_action`-kleur
+- [x] **5.3** `src/lib/feed/chartActionSummary.ts`. Twee dingen waren stuk:
+  de feed drukte de ruwe actienaam af ("Draw_fibonacci") zonder wát of waarom,
+  én hij filterde op `status: "pending"` — dus zodra de chart de actie toepaste
+  **wiste het item zichzelf**. Juist het item waar je op wilt terugkijken
+  verdween. Nu blijft het staan, met de reden die AXE gaf:
+  *"Fibonacci on XAUUSD H1 — the last impulse low to the high is the swing
+  everything is reacting to. Applied to your chart — still adjustable."*
+  `route_chart_action` heeft daarvoor een `reason`-parameter gekregen, en de
+  systeemprompt eist hem
 
 ---
 

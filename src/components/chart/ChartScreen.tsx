@@ -92,8 +92,6 @@ import {
   getChartTheme,
   readChartThemeKey,
   readGridStyle,
-  CHART_ORDER_BUY_COLOR,
-  CHART_ORDER_SELL_COLOR,
   type ChartThemeKey,
   type ChartGridStyle,
 } from "@/components/chart/chartTheme";
@@ -3399,7 +3397,7 @@ export function ChartScreen({
               canvasRef={canvasRef}
               price={pendingOrderPrice}
               label={`${orderTypeLabel(pendingOrderType)} ${tradeVolume}`}
-              color={pendingOrderSide === "buy" ? CHART_ORDER_BUY_COLOR : CHART_ORDER_SELL_COLOR}
+              color={pendingOrderSide === "buy" ? chartTheme.orderBuy : chartTheme.orderSell}
               digits={priceDigitsForSymbol(data.brokerSymbol)}
               symbol={data.brokerSymbol}
               onChange={handlePendingEntryPriceChange}
@@ -5486,6 +5484,7 @@ export function ChartScreen({
           ) : null}
           {oneClickVisible && executionMode === "pending" && pendingOrderVisible && !isFullscreen ? (
             <ChartPendingOrderSheet
+              themeKey={chartThemeKey}
               symbol={data.brokerSymbol}
               orderLabel={orderTypeLabel(pendingOrderType)}
               side={pendingOrderSide}

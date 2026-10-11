@@ -3,9 +3,11 @@
 import { useRef } from "react";
 import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
-import { CHART_ORDER_BUY_COLOR, CHART_ORDER_SELL_COLOR } from "@/components/chart/chartTheme";
+import { getChartTheme } from "@/components/chart/chartTheme";
 
 type Props = {
+  /** Active chart theme key, so the accent matches the canvas it sits under. */
+  themeKey?: string | null;
   symbol: string;
   orderLabel: string;
   side: "buy" | "sell";
@@ -45,9 +47,13 @@ export function ChartPendingOrderSheet({
   onPriceChange,
   onSlChange,
   onTpChange,
+  themeKey,
 }: Props) {
   const swipeStartY = useRef<number | null>(null);
-  const accent = side === "buy" ? CHART_ORDER_BUY_COLOR : CHART_ORDER_SELL_COLOR;
+  // Per theme: a single shared pair scored 2.1:1 and 3.0:1 on the paper
+  // canvas — a buy accent you had to look for on a light chart.
+  const sheetTheme = getChartTheme(themeKey ?? null);
+  const accent = side === "buy" ? sheetTheme.orderBuy : sheetTheme.orderSell;
   const priceText = price != null ? formatBrokerPrice(symbol, price) : "—";
 
   /* Geen eigen positionering meer: deze balk hangt in ChartBottomDock, die de
