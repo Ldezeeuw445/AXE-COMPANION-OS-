@@ -3,6 +3,8 @@ import { computeJournalAnalytics, type JournalAnalytics } from "@/lib/journal/co
 import { syncAccountIfStale } from "@/lib/mt5/backgroundSync";
 import { detectWeakSpots, type WeakSpot } from "@/lib/journal/weakSpots";
 import { loadWeakSpotTrades } from "@/services/weakSpotService";
+import { getLearningGrowth } from "@/services/learningGrowthService";
+import type { LearningStage } from "@/lib/axe/learningStage";
 
 export type JournalEntryRow = {
   id: string;
@@ -46,6 +48,8 @@ export type JournalPageData = {
   analytics: JournalAnalytics | null;
   /** Patterns AXE spotted by itself — what most often goes wrong, with a fix. */
   weakSpots: WeakSpot[];
+  /** How much AXE knows about this trader, and whether that is still growing. */
+  learningArc: LearningStage | null;
   activeAccountId: string | null;
   loadError: string | null;
 };
@@ -62,6 +66,7 @@ export async function loadJournalPageData(opts: {
     journalTrades: [],
     analytics: null,
     weakSpots: [],
+    learningArc: null,
     activeAccountId: null,
     loadError: null,
   });
@@ -102,6 +107,9 @@ export async function loadJournalPageData(opts: {
   const entries = (jRes.data ?? []) as JournalEntryRow[];
   const activeAccountId = (prefsRes.data?.active_account_id as string | null | undefined) ?? null;
   let weakSpots: WeakSpot[] = [];
+  // Outside the activeAccountId branch on purpose: the arc counts rules,
+  // playbooks and memories, which exist whether or not a broker is linked.
+  const learningArc = await getLearningGrowth(sb, userId, "axe");
 
   if (activeAccountId) {
     void syncAccountIfStale(sb, userId, activeAccountId).catch(() => undefined);
@@ -169,6 +177,7 @@ export async function loadJournalPageData(opts: {
         journalTrades: [],
         analytics: null,
         weakSpots: [],
+        learningArc: null,
         activeAccountId,
         loadError: trErr.message,
       };
@@ -248,6 +257,7 @@ export async function loadJournalPageData(opts: {
     journalTrades,
     analytics,
     weakSpots,
+    learningArc,
     activeAccountId,
     loadError: null,
   };

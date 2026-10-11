@@ -87,9 +87,26 @@ Te verifiëren zodra 0.1 is opgelost: of de arc daadwerkelijk groeit of op nul b
 (`user-knowledge-sync` schreef vanmorgen `docsWritten: 0, chunksEmbedded: 0` —
 "only 0 records (need 3)" voor trading-profile, omdat er geen trades binnenkomen).
 
-- [ ] **3.1** Arc valideren met echte data zodra MT5 weer synct
-- [ ] **3.2** Arc ook in Companion zelf tonen, niet alleen in cockpit — jij wilt *zien* dat hij meegroeit
-- [ ] **3.3** AXE Intel een eigen arc geven (nu alleen Companion)
+**Wat er was:** `learningArcService` toont een *momentopname* — top pairs, top
+timeframes, een alignment score. Nuttig, maar daar zit geen richting in. Jouw
+vraag was "zodat je echt kan zien dat ze met je mee groeien", en een foto groeit
+niet.
+
+- [x] **3.2** `src/lib/axe/learningStage.ts` telt wat AXE écht van je weet —
+  dingen die hij onthoudt, trades die hij zelf scoorde, jouw regels, jouw
+  playbooks, keren dat hij uit zichzelf iets zei — en zet dat af tegen een maand
+  geleden. Vijf fases met een naam die zegt wát AXE op dat punt kan, en steeds
+  één concrete volgende stap. Zichtbaar op de journal-pagina, niet alleen in de
+  cockpit
+- [x] **3.3** AXE Intel heeft een eigen arc met een eigen telling. Intel journalt
+  geen trades en kent je playbook niet, dus die meetellen zou zijn balk laten
+  bewegen om redenen die niets met Intel te maken hebben
+- [x] **3.4 — eerlijkheid als ontwerpregel.** Een balk die vanzelf omhoog kruipt
+  is erger dan geen balk: dan vertrouw je de echte ook niet meer. Daarom: elk
+  punt is een rij die je kunt opzoeken, een maand waarin niets gebeurde **zegt
+  dat ook**, een telling die mislukt wordt nul en geen schatting, en negatieve
+  of onzinnige invoer kan de balk niet opblazen. Die vier staan als checks
+- [ ] **3.1** Arc valideren met echte data zodra er trades binnenkomen
 - [ ] **3.4** Vooruitdenken op strategie: de profileEngine kent gebruik, nog niet *strategie*. Playbook-herkenning uit trades → "jij traadt London open breakouts; vandaag is de range te smal"
 
 ---

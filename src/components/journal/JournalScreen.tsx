@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { WeakSpotsPanel } from "@/components/journal/WeakSpotsPanel";
 import type { WeakSpot } from "@/lib/journal/weakSpots";
+import { LearningArcPanel } from "@/components/axe/LearningArcPanel";
+import type { LearningStage } from "@/lib/axe/learningStage";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 
@@ -40,6 +42,7 @@ type Props = {
   journalTrades: TradeHighlight[];
   analytics: JournalAnalytics | null;
   weakSpots: WeakSpot[];
+  learningArc: LearningStage | null;
   activeAccountId: string | null;
   loadError: string | null;
 };
@@ -356,6 +359,7 @@ export function JournalScreen({
   journalTrades,
   analytics,
   weakSpots,
+  learningArc,
   activeAccountId,
   loadError,
 }: Props) {
@@ -554,6 +558,12 @@ export function JournalScreen({
           >
             {(journalStatus ?? pendingJournalStatus)!.text}
           </p>
+        </div>
+      )}
+
+      {learningArc && (
+        <div className="px-4 pt-3">
+          <LearningArcPanel arc={learningArc} />
         </div>
       )}
 
