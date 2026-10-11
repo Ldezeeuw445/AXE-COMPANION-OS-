@@ -297,14 +297,34 @@ gekeken. Wat er wél aan mankeerde:
 
 ## L5 — AXE mag trades voorbereiden, maar er zijn geen grenzen
 
-`execution_requests` werkt en de watcher duwt pending orders naar je toe. De
-drie veiligheidsvinkjes uit fase 6 bestaan niet. Zolang AXE alleen *voorstelt*
-is dat te verdedigen; zodra één gebruiker denkt dat hij zelfstandig plaatst,
-niet meer.
+**Correctie, en de ernstigste van vandaag:** AXE plaatst *wél* zelfstandig
+trades. `alertAutoTradeService` zet een echte MT5 market order zodra een
+prijsalert afgaat. Dat was al gebouwd en staat live.
 
-- [ ] **L5.1** Fase 6.1 t/m 6.3 afmaken vóór launch, óf in de UI en de
-  voorwaarden ondubbelzinnig maken dat AXE nooit zelf plaatst. Een van de twee,
-  niet het midden
+Er zaten al drie instemmingslagen op — een globale voorkeur, een vlag per
+alert, en een "armed"-venster van 30 minuten dat je opnieuw moet aantikken.
+Dat zijn je drie vinkjes, en die werken. Maar ze beantwoorden alle drie
+dezelfde vraag: *heeft de trader ingestemd?* Niemand vroeg: **mag deze trade
+op dit moment?**
+
+Het gat dat daardoor bestond: `accountProfile` weet dat een funded account niet
+door rood nieuws mag traden, en de watcher wáárschuwt daar sinds vandaag voor —
+en dan plaatste auto-trade alsnog een market order in datzelfde event. AXE die
+je waarschuwt en het vervolgens voor je doet is erger dan elk van de twee apart.
+
+- [x] **L5.1** `src/lib/trading/autoTradeGuard.ts` zit nu vóór élke
+  geautomatiseerde order en weigert bij: rood nieuws op een account dat dat niet
+  mag (ook de 30 min erná), vrijdagavond op een account dat niet mag
+  overhouden, een lot boven jouw eigen limiet, je dagverlieslimiet bereikt, en
+  zes automatische trades op één dag
+- [x] **L5.2** Elke weigering wordt **geblokkeerd en uitgelegd**, niet stil
+  aangepast. Een positie stilletjes verkleinen is zijn eigen soort leugen:
+  *"1.2 lots is above your 0.5-lot limit — AXE will not quietly place something
+  smaller than you asked for"*
+- [x] **L5.3** Kan AXE de regels van het account niet lezen, dan plaatst hij
+  niets. Geen default-allow
+- [ ] **L5.4** Nog open: dezelfde guard vóór `execution_requests` die AXE zelf
+  voorstelt, zodra die zelfstandig uitgevoerd kunnen worden
 
 ## L6 — Een kapotte brokerkoppeling is onzichtbaar voor de gebruiker
 
