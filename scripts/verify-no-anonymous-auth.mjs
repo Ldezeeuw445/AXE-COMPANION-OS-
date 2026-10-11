@@ -92,4 +92,22 @@ check("the embed explains itself instead of rendering a black box", () => {
   assert.ok(/Sign in to see the live app/.test(src), "an unexplained blank is the same old failure");
 });
 
+check("an anonymous JWT is treated as signed out, wherever it arrives", () => {
+  // Removing the app's own call is only half: the Supabase project setting is
+  // a dashboard switch this code cannot flip, so a token could still be minted
+  // elsewhere. Checked in the proxy and in both server auth helpers, so one of
+  // them failing open is not enough to let one in.
+  const proxy = readFileSync("src/lib/supabase/middleware.ts", "utf8");
+  assert.ok(/isAnonymousUser\(u\) \? null : u/.test(proxy), "the proxy still accepts anonymous sessions");
+
+  const helpers = readFileSync("src/services/serviceSupabase.ts", "utf8");
+  const hits = helpers.match(/isAnonymousUser\(/g) ?? [];
+  assert.ok(hits.length >= 2, `both auth helpers must check; found ${hits.length}`);
+});
+
+check("the check survives a session minted before the is_anonymous claim", () => {
+  const src = readFileSync("src/lib/auth/anonymousSessions.ts", "utf8");
+  assert.ok(/app_metadata\?\.provider/.test(src), "older anonymous sessions carry the provider instead");
+});
+
 console.log(`\n${passed} checks passed`);

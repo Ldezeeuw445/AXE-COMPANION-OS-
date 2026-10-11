@@ -95,8 +95,6 @@ function vercelChecks(): Array<Promise<Check>> {
   const eleven = env("ELEVENLABS_API_KEY");
   const stripe = env("STRIPE_SECRET_KEY");
   const metaapi = getMetaApiToken();
-  const krater = env("KRATER_API_KEY");
-  const kraterBase = (env("KRATER_API_BASE") || "https://api.krater.ai").replace(/\/$/, "");
   const coingecko = firstNonEmptyEnv("COINGECKO_API_KEY", "COINGECKO_DEMO_API_KEY");
   const cgPro = env("COINGECKO_API_PLAN")?.toLowerCase() === "pro";
   const alpacaId = firstNonEmptyEnv("ALPACA_PAPER_API_KEY_ID", "ALPACA_PAPER_API_KEY", "ALPACA_API_KEY_ID", "ALPACA_API_KEY");
@@ -144,12 +142,6 @@ function vercelChecks(): Array<Promise<Check>> {
       { headers: { "xi-api-key": eleven ?? "" } },
       // Restricted keys may lack user_read but still speak — that is fine for TTS.
       (res, body) => res.ok || (res.status === 401 && body.includes("missing_permissions")),
-    ),
-    httpCheck(
-      { name: "Krater (broadcast feed)", area: "feed", env: ["KRATER_API_KEY"] },
-      krater,
-      `${kraterBase}/v1/models`,
-      { headers: { Authorization: `Bearer ${krater}` } },
     ),
     httpCheck(
       { name: "MetaApi (MT5)", area: "broker", env: ["METAAPI_TOKEN"] },

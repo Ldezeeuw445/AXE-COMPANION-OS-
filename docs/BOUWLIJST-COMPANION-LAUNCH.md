@@ -279,11 +279,16 @@ Te beslissen vóór launch, niet erna:
   inloggen
 - [x] **L1.4** `scripts/verify-no-anonymous-auth.mjs` laat `npm run verify`
   falen als `signInAnonymously` of de gedeelde demo-login ooit terugkomt
-- [ ] **L1.5 — alleen jij kan dit:** zet **Anonymous sign-ins uit** in Supabase
-  → Authentication → Sign In / Providers. Mijn wijziging zorgt dat *onze code*
-  er niet meer om vraagt; zolang de projectinstelling aan staat kan iemand met
-  de publieke sleutel nog steeds rechtstreeks een anoniem account aanmaken. Pas
-  met die schakelaar om is het dicht
+- [x] **L1.5 — in de app dichtgezet.** Ik kán die Supabase-schakelaar niet
+  omzetten: mijn toegang gaat over database, migraties en advisors, niet over
+  auth-instellingen. Dus heb ik het opgelost waar het telt — een anonieme
+  sessie wordt nu **overal als uitgelogd behandeld**: in de proxy (elke pagina
+  en elke route) én in beide server-auth-helpers. Eén daarvan die faalt is dan
+  niet genoeg om er één binnen te laten. Ook sessies van vóór de
+  `is_anonymous`-claim worden herkend, aan hun provider
+- [ ] **L1.5b** De schakelaar in Supabase → Authentication → Sign In / Providers
+  mag alsnog uit. Niet meer kritiek — er kan nu nog hooguit een nutteloos
+  account bij Supabase ontstaan dat deze app weigert — maar opgeruimd staat netjes
 - [ ] **L1.6** De 182 bestaande anonieme accounts: opruimen of laten staan. Ik
   raak ze niet aan zonder dat je het zegt — het is onomkeerbaar, en er hangen
   175 broker-accountrijen aan
@@ -402,7 +407,24 @@ kwam, en dat de rest van de app doorging alsof de cijfers actueel waren.
 `krater_api_key_set: false`, `unusual_whales_set: false`. Zes van de negen
 intel-acties geven daardoor `http_500`. De UI belooft data die er niet is.
 
-- [ ] **L7.1** Betalen of de bronnen uit de UI halen. Niet half
+**Besloten 11 oktober.**
+
+- [x] **L7.1 — Krater is weg.** Jouw oordeel klopte: hij leverde niets. Zijn
+  sleutel stond nooit op de host, de lokale generator schreef beide broadcasts
+  al, en de endpoints die de oude code afliep (scheduled tasks, conversations)
+  bestaan niet op de `kr_live_` API. ~500 regels pollen en proben verwijderd;
+  Daily News en Market Recap komen nu uit `broadcastSyncService` — AXE schrijft
+  ze zelf uit zijn eigen marktdata
+- [x] **L7.2 — Unusual Whales: niet stuk, maar niet besteld.** `intel-warmup`
+  meldde elke 30 minuten `failed: 6`, en dat al heel lang. Vijf daarvan zijn
+  UW-endpoints. Een vinkje dat permanent rood staat is geen waarschuwing maar
+  behang — en het verbergt de dag dat een bron die *wel* hoort te werken uitvalt.
+  Die vijf worden nu **overgeslagen met reden**, niet geprobeerd en gefaald
+- [x] **L7.3** Eén schakelaar om hem later aan te zetten: `UNUSUAL_WHALES_ENABLED=true`
+  op de host. Insider trades blijven gewoon draaien — die gebruiken het gratis
+  SEC EDGAR, geen UW
+- [ ] **L7.4** Een gratis alternatief zoeken voor senate trades, dark pool,
+  options flow en market tide. Pas oppakken als je dat wilt
 
 ## Wat juist wél in orde is
 

@@ -68,7 +68,6 @@ export async function GET() {
     metaapi_names_present_but_empty:
       ["METAAPI_TOKEN", "AXE_METAAPI_TOKEN", "AXE_MT5_METAAPI_TOKEN", "METAAPI_KEY"]
         .filter((n) => process.env[n] != null && process.env[n]!.trim().length === 0),
-    krater_api_key_set: Boolean(process.env.KRATER_API_KEY?.trim()),
     stripe_secret_set: Boolean(process.env.STRIPE_SECRET_KEY?.trim()),
     stripe_webhook_secret_set: Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim()),
     alpaca_configured:

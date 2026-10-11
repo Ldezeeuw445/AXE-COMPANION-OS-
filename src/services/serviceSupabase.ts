@@ -1,6 +1,7 @@
 import { isMockDataSource } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
+import { isAnonymousUser } from "@/lib/auth/anonymousSessions";
 
 export const SERVICES_USE_MOCK_DATA = isMockDataSource();
 
@@ -26,6 +27,11 @@ async function getUserWithTimeout(
     }
     if (!data?.user) {
       console.warn("[serviceSupabase] getUser returned no user");
+      return null;
+    }
+
+    if (isAnonymousUser(data.user)) {
+      console.warn("[serviceSupabase] anonymous session rejected");
       return null;
     }
 
@@ -72,6 +78,10 @@ export async function getEdgeAuthedServiceSupabase(request: Request) {
   } = await supabase.auth.getUser();
   if (error || !user) {
     console.warn("[edge-auth] getUser failed or returned no user");
+    return null;
+  }
+  if (isAnonymousUser(user)) {
+    console.warn("[edge-auth] anonymous session rejected");
     return null;
   }
   return { supabase, user };
