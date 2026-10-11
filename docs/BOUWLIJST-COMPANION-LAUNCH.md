@@ -205,3 +205,118 @@ MetaApi ✅ gebouwd, maar het account is weg (0.2).
 Fase 8 staat zo vroeg omdat het puur frontend is, geen credits nodig heeft, en het
 ding is dat je elke ochtend ziet. Fase 9 staat laatst omdat een landingspagina voor
 een app die nog niet perfect werkt, de verkeerde volgorde is — jouw eigen conclusie.
+
+---
+
+# Launch-blokkers — gemeten 11 oktober 2026
+
+Alles hieronder komt uit de live database of een live call, niet uit de code
+alleen. Dit zijn de dingen die écht niet mee kunnen naar launch, los van de
+landingspagina.
+
+## L1 — 182 van de 192 accounts zijn anoniem
+
+```
+is_anonymous = false :  10 users, allemaal met e-mail, sinds 30 maart
+is_anonymous = true  : 182 users, nul met e-mail, 20 juni t/m 29 september
+```
+
+175 users hebben een broker-account gekoppeld. Anonieme sign-ins staan dus aan
+en zijn volop gebruikt. Het probleem: zo'n account heeft **geen e-mail**, dus
+wie zijn browser leegt of van telefoon wisselt is alles kwijt — journal, RAG,
+learning arc — en er is geen enkele weg terug. Bij een betaalde app is dat
+onhoudbaar: je kunt niet iemand €20 per maand laten betalen voor data die aan
+één browsersessie hangt.
+
+Te beslissen vóór launch, niet erna:
+- [ ] **L1.1** Anonieme sign-in uit, óf behouden als "probeer eerst" met een
+  verplichte upgrade naar een echt account zodra iemand een broker koppelt of
+  betaalt (Supabase `linkIdentity` maakt van de anonieme user dezelfde user
+  mét e-mail, dus zonder dataverlies)
+- [ ] **L1.2** Wat gebeurt er met de 182 bestaande? Opruimen of laten staan —
+  maar bewust, niet per ongeluk
+
+## L2 — 54 users hebben `founder`, 1 heeft een Stripe-abonnement
+
+```
+plan=free    : 116 users,  0 met stripe_subscription_id
+plan=founder :  54 users,  1 met stripe_subscription_id,  0 met pro_until actief
+```
+
+53 mensen hebben de duurste tier gratis. Belangrijker nog: **het betaalpad is
+nooit end-to-end gelopen**. Nul users met een actieve `pro_until`. De Stripe-
+sleutels staan live op de host, de webhook-code bestaat, maar er is geen bewijs
+dat de keten checkout → webhook → entitlement → toegang ooit compleet is
+geweest.
+
+- [ ] **L2.1** Eén echte testaankoop met een live kaart, en narekenen dat
+  `axe_user_entitlements` meebeweegt — ook bij opzeggen en bij een mislukte
+  betaling
+- [ ] **L2.2** Beslissen wie `founder` mag houden. Nu is het de standaard voor
+  iedereen die vroeg binnenkwam, en dat is bij launch gratis geld weggeven
+
+## L3 — De tiers worden nauwelijks afgedwongen
+
+84 API-routes. Tien noemen een plan, quota of abonnement. **Twee** gebruiken
+`requireFeature`. De tiers (free / pro €20 / founder €40 / elite €50) bestaan
+dus als prijslijst, niet als grens.
+
+- [ ] **L3.1** Per feature beslissen in welke tier hij hoort, en die check in
+  de route zetten — niet in de UI. Een knop verbergen is geen slot
+- [ ] **L3.2** Een test die faalt als een free-user een pro-route haalt
+
+## L4 — Vijf landingspagina's staan tegelijk live
+
+`/`, `/welcome`, `/launch`, `/final`, `/finallaunch` geven allemaal HTTP 200,
+plus `/demo`. Google indexeert ze alle vijf en een bezoeker kan op een verlaten
+versie belanden.
+
+- [ ] **L4.1** Kiezen welke de echte is, de rest weg of laten redirecten —
+  vóór de nieuwe landingspagina gebouwd wordt, anders bouw je de zesde
+
+## L5 — AXE mag trades voorbereiden, maar er zijn geen grenzen
+
+`execution_requests` werkt en de watcher duwt pending orders naar je toe. De
+drie veiligheidsvinkjes uit fase 6 bestaan niet. Zolang AXE alleen *voorstelt*
+is dat te verdedigen; zodra één gebruiker denkt dat hij zelfstandig plaatst,
+niet meer.
+
+- [ ] **L5.1** Fase 6.1 t/m 6.3 afmaken vóór launch, óf in de UI en de
+  voorwaarden ondubbelzinnig maken dat AXE nooit zelf plaatst. Een van de twee,
+  niet het midden
+
+## L6 — Een kapotte brokerkoppeling is onzichtbaar voor de gebruiker
+
+Vandaag bewezen op mijn eigen account: MetaApi gaf acht dagen lang
+`"account was not found"`, elke tien minuten, en in de app was daar niets van
+te zien. Eén gebruiker overkomt dat ook, en die denkt dat de app stuk is.
+
+- [ ] **L6.1** `provider_status: sync_failed` zichtbaar maken in de app, met
+  wat eraan te doen is
+- [ ] **L6.2** Na X mislukte syncs een feed-item en een push
+
+## L7 — Twee databronnen zijn niet geconfigureerd
+
+`krater_api_key_set: false`, `unusual_whales_set: false`. Zes van de negen
+intel-acties geven daardoor `http_500`. De UI belooft data die er niet is.
+
+- [ ] **L7.1** Betalen of de bronnen uit de UI halen. Niet half
+
+## Wat juist wél in orde is
+
+Dit hoort er ook bij, want het scheelt werk:
+
+- **RLS**: geen enkele ERROR-bevinding bij de Supabase security advisor, geen
+  tabel zonder RLS. Voor een multi-tenant app met handelsdata is dat de
+  belangrijkste uitkomst van vandaag
+- **Juridisch**: negen pagina's live — terms, privacy, cookies, risk
+  disclaimer, AI disclaimer, refunds, subprocessors, contact, legal index
+- **Crons**: elf jobs, allemaal actief, met `axe_ops.cron_health` eroverheen
+
+## Kleine dingen die nog openstaan
+
+- [ ] `auth_leaked_password_protection` staat uit in Supabase (één schakelaar)
+- [ ] De snelactie "Companion: live check" test op `tos-chart-dock`, van de
+  chart-dock-ronde. Die geeft ook `1` op een oude build — moet meebewegen met
+  de nieuwste deploy
+- [ ] Fase 5.3: AXE vertelt in de feed wát hij tekende en waarom
