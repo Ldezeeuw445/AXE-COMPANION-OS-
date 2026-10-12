@@ -40,11 +40,11 @@ export default function WelcomePage() {
         <Image
           src="/axe-companion-wordmark.png"
           alt="AXE Companion"
-          width={420}
-          height={80}
+          width={1172}
+          height={111}
           priority
           unoptimized
-          className="mx-auto h-auto w-[280px] object-contain"
+          className="mx-auto h-auto w-[250px] object-contain"
           style={{ mixBlendMode: "screen" }}
         />
         <p className="mt-4 text-sm leading-relaxed text-tos-muted">

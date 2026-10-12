@@ -5,7 +5,6 @@ import { siteUrl } from "@/lib/siteUrl";
 /** Public, crawlable routes only — the signed-in app is disallowed in robots.ts. */
 const PUBLIC_ROUTES = [
   { path: "", priority: 1.0, changeFrequency: "weekly" as const },
-  { path: "/launch", priority: 0.9, changeFrequency: "weekly" as const },
   { path: "/login", priority: 0.5, changeFrequency: "yearly" as const },
   { path: "/terms", priority: 0.3, changeFrequency: "yearly" as const },
   { path: "/privacy", priority: 0.3, changeFrequency: "yearly" as const },

@@ -348,9 +348,62 @@ gekeken. Wat er wél aan mankeerde:
   crawler weg te blijven; het regelt indexering niet, dus een pagina waar elders
   naar gelinkt wordt kan alsnog in de zoekresultaten staan. Nu dragen `/final`,
   `/finallaunch`, `/welcome` en `/demo` `robots: { index: false, follow: false }`
-- [ ] **L4.3** Blijft aan jou: kiezen welke de echte wordt. Ik raak geen pagina
-  weg zonder dat je dat zegt, want een ervan is waarschijnlijk de basis voor de
-  nieuwe landingspagina
+- [x] **L4.3 — Beslist: `/` is de landingspagina.** `/launch`, `/final`,
+  `/finallaunch` en `/ui-premium` geven nu een 308 naar `/` (gemeten:
+  `308 -> /` op alle vier). Niemand belandt meer op een verlaten versie, en
+  oude bookmarks komen ergens echt uit. `/launch` is uit de sitemap en staat
+  samen met de andere drie in robots.txt. De drie conceptcomponenten die
+  alleen die pagina's gebruikten (`LaunchHeroExperience`,
+  `FinalHeroExperience`, `FinalTerminalShowcase`) zijn weg
+
+## L8 — De landingspagina beloofde dingen die niet meer waar waren
+
+Jij vroeg om de landingspagina die je vanaf tradingosapp.com links boven kunt
+aanklikken. Ik heb de repo van Trading OS gevonden (`Ldezeeuw445/the-one`, de
+app staat genest onder `Desktop/Trading OS Final APP/`) en die pagina gelezen:
+`src/pages/AxeHomeLanding.tsx` plus `src/content/axeLanding.ts`.
+
+**Hij overzetten zou een stap terug zijn geweest.** Die pagina is ouder dan wat
+Companion nu al heeft: groen in plaats van cyaan, "Coming Soon" waar prijzen
+staan, en als eerste vraag in de FAQ: *"Does AXE place trades? No."* Dat is
+precies de claim die niet meer klopt. Dus niet geporteerd — de bestaande `/`
+blijft, maar hij vertelt nu de waarheid:
+
+- [x] **L8.1 — Unusual Whales stond in de hero.** In de vertrouwensregel onder
+  de knoppen én in een feature-tegel, voor een abonnement dat nooit gekocht is.
+  Dat is de enige marketingleugen die een trader daadwerkelijk natrekt. Nu
+  staan er de bronnen die wél werken (SEC EDGAR, GDELT), en Unusual Whales komt
+  één keer voor: in de FAQ, als iets dat we **niet** hebben
+- [x] **L8.2 — De prijzen waren verzonnen.** De pagina toonde twee kaarten,
+  "Free" en "~€19/mo", terwijl het product vier tiers verkoopt: €0 / €20 / €40 /
+  €50, met live Stripe-keys. De prijsblokken komen nu uit `AXE_BILLING_TIERS`,
+  het Founder-plafond uit `FOUNDER_SEAT_CAP`. Een prijswijziging kan de pagina
+  niet meer missen
+- [x] **L8.3 — Het hele verhaal over uitvoeren ontbrak.** De FAQ zei dat live
+  execution achter een masterwachtwoord zit en hield daar op. Nu staat er ook
+  wat er daarna gebeurt: welke vijf grenzen AXE controleert vóór een
+  automatische order, dat hij blokkeert en de regel noemt, en dat hij nooit
+  stil een kleinere trade plaatst. Dat is een sterker verhaal dan "hij doet het
+  niet" — en het is waar
+- [x] **L8.4 — Er was geen weg naar Trading OS.** In de hele codebase stond geen
+  enkele link naar tradingosapp.com. Twee apps op één Supabase-project die
+  elkaar niet kunnen bereiken zijn geen ecosysteem. Nu: `AppSwitcher` links
+  boven in de header, met AXE Companion aangevinkt en Trading OS als "Private
+  beta". AXE Core staat in dezelfde lijst maar is `private` — een bezoeker ziet
+  hem nooit, en de verify bewijst dat
+- [x] **L8.5 — Het woordmerk was onleesbaar.** `axe-companion-wordmark.png` was
+  1376×768 waarvan het merk 1172×111 besloeg; op 28px hoog bleef er een vlekje
+  van drie pixels over. `/login` en `/welcome` verborgen dat met
+  `marginTop: -70px`. Het bestand is nu getrimd (13.854 → 9.889 bytes) en alle
+  drie de plekken gebruiken de echte afmetingen zonder truc
+- [x] **L8.6 — Het menu paste niet op een telefoon.** De knop staat midden in de
+  header, dus een paneel van 19rem liep rechts het scherm uit — en de pagina
+  klipt horizontale overflow, dus die helft was niet bereikbaar, alleen
+  onzichtbaar. Onder `sm` spant het paneel nu de viewport met marge
+- [ ] **L8.7 — Nog open: waar Trading OS gaat draaien.** Het domein blijft
+  `tradingosapp.com`, dus de link in de switcher klopt ongeacht de hosting.
+  Maar de site geeft nu `HTTP 402 DEPLOYMENT_DISABLED` op Vercel, en jij wil
+  Vercel eruit. Zolang dat zo is, leidt de switcher naar een dode pagina
 
 ## L5 — AXE mag trades voorbereiden, maar er zijn geen grenzen
 

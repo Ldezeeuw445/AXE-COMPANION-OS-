@@ -31,14 +31,17 @@ export default function robots(): MetadataRoute.Robots {
         "/settings",
         "/onboarding",
         "/upgrade",
-        // Working drafts and scaffolding that are still publicly reachable.
-        // Kept live because which landing page wins is a product decision, but
-        // they must not compete with /launch in search results.
+        // Retired draft landings. They 308 to "/" now, but a crawler should
+        // not spend budget discovering that, and an indexed redirect is still
+        // a second URL competing for the same page.
+        "/launch",
         "/final",
         "/finallaunch",
-        "/welcome",
-        "/marketing",
         "/ui-premium",
+        // Internal screenshot/poster tooling and the PWA install helper:
+        // useful by link, pointless in search results.
+        "/marketing",
+        "/welcome",
         // Public demo entry: useful to hand out by link, pointless in search
         // results, and it signs a visitor straight into a shared account.
         "/demo",

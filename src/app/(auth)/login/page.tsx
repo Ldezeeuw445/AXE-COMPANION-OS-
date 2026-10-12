@@ -54,12 +54,12 @@ export default async function LoginPage({
             <Image
               src="/axe-companion-wordmark.png"
               alt="AXE Companion OS"
-              width={420}
-              height={80}
+              width={1172}
+              height={111}
               priority
               unoptimized
-              className="h-auto w-[300px] object-contain"
-              style={{ mixBlendMode: "screen", marginTop: "-70px", marginBottom: "-70px" }}
+              className="h-auto w-[270px] object-contain"
+              style={{ mixBlendMode: "screen" }}
             />
           </div>
 
