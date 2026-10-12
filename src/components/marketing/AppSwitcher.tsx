@@ -7,6 +7,7 @@ import { Check, ChevronDown, Monitor, Smartphone } from "lucide-react";
 import {
   PUBLIC_ECOSYSTEM_APPS,
   availabilityLabel,
+  isReachable,
   type EcosystemAppId,
 } from "@/lib/ecosystem/apps";
 
@@ -124,6 +125,20 @@ export function AppSwitcher({ current, className }: Props) {
                   role="menuitem"
                   aria-current="true"
                   className="flex gap-2.5 rounded-xl bg-cyan-300/[0.05] px-2.5 py-2.5"
+                >
+                  {inner}
+                </span>
+              );
+            }
+
+            // Listing a surface is useful; handing someone a dead page is not.
+            if (!isReachable(app.availability)) {
+              return (
+                <span
+                  key={app.id}
+                  role="menuitem"
+                  aria-disabled="true"
+                  className="flex gap-2.5 rounded-xl px-2.5 py-2.5 opacity-55"
                 >
                   {inner}
                 </span>

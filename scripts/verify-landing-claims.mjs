@@ -26,6 +26,7 @@ import {
   PUBLIC_ECOSYSTEM_APPS,
   availabilityLabel,
   ecosystemApp,
+  isReachable,
 } from "../src/lib/ecosystem/apps.ts";
 
 let passed = 0;
@@ -216,10 +217,40 @@ check("the public switcher offers exactly Companion and Trading OS", () => {
 
 check("a surface that is not open yet says so", () => {
   assert.equal(availabilityLabel("beta"), "Private beta");
+  assert.equal(availabilityLabel("offline"), "Moving hosts");
   assert.equal(availabilityLabel("live"), null, "live needs no badge");
-  const tos = ecosystemApp("trading-os");
-  assert.equal(tos.availability, "beta", "Trading OS is not open to everyone yet");
   assert.equal(ecosystemApp("companion").availability, "live");
+  assert.ok(isReachable("live") && isReachable("beta"));
+  assert.ok(!isReachable("offline") && !isReachable("private"));
+});
+
+check("nothing links out to a surface that is down", () => {
+  // tradingosapp.com answers 402 (DEPLOYMENT_DISABLED) on both the apex and
+  // www while it moves off Vercel. A switcher that hands a visitor that page
+  // is worse than one that says the terminal is between hosts.
+  assert.ok(
+    switcher.includes("if (!isReachable(app.availability))"),
+    "the switcher must render an unreachable surface as text, not a link",
+  );
+  assert.ok(
+    switcher.includes('aria-disabled="true"'),
+    "an unreachable row must be announced as unavailable",
+  );
+  assert.ok(
+    /tradingOs && isReachable\(tradingOs\.availability\)/.test(landing),
+    "the page's own Trading OS button must be gated the same way",
+  );
+  assert.ok(
+    !/>\s*Private beta\s*</.test(landing),
+    "the Trading OS badge must come from availabilityLabel, not be retyped — " +
+      "a hardcoded one left the page saying 'Private beta' while the switcher " +
+      "said 'Moving hosts'",
+  );
+  // And the gate has to actually bite for the one surface that is down today.
+  assert.ok(
+    !isReachable(ecosystemApp("trading-os").availability),
+    "Trading OS is 402 right now; flip it back to beta when the new host answers 200",
+  );
 });
 
 check("every ecosystem entry is complete", () => {

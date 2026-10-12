@@ -20,9 +20,16 @@ export type EcosystemAppId = "companion" | "trading-os" | "axe-core";
 /**
  * - `live`     reachable right now, link it like a normal link
  * - `beta`     exists but not open to everyone; say so instead of implying it is
+ * - `offline`  listed so the visitor knows it exists, but NOT linked — the
+ *              switcher must never hand someone a dead page
  * - `private`  never shown to a visitor
  */
-export type AppAvailability = "live" | "beta" | "private";
+export type AppAvailability = "live" | "beta" | "offline" | "private";
+
+/** Whether a visitor may click through to this surface. */
+export function isReachable(availability: AppAvailability): boolean {
+  return availability === "live" || availability === "beta";
+}
 
 export type EcosystemApp = {
   id: EcosystemAppId;
@@ -52,7 +59,12 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     tagline: "Desktop terminal on the same account — multi-chart, intel, quant",
     url: "https://www.tradingosapp.com",
     form: "desktop",
-    availability: "beta",
+    // Measured 2026-10-12: both www (Vercel direct) and the apex (via
+    // Cloudflare) answer HTTP 402 with x-vercel-error: DEPLOYMENT_DISABLED.
+    // The domain is ours and stays, so this URL survives the move off Vercel —
+    // set this back to "beta" the day the new host answers 200 and the
+    // switcher links out again with no other change.
+    availability: "offline",
   },
   {
     id: "axe-core",
@@ -79,6 +91,7 @@ export function ecosystemApp(id: EcosystemAppId): EcosystemApp | undefined {
  */
 export function availabilityLabel(availability: AppAvailability): string | null {
   if (availability === "beta") return "Private beta";
+  if (availability === "offline") return "Moving hosts";
   if (availability === "private") return "Private";
   return null;
 }

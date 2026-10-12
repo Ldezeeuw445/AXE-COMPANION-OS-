@@ -400,10 +400,25 @@ blijft, maar hij vertelt nu de waarheid:
   header, dus een paneel van 19rem liep rechts het scherm uit — en de pagina
   klipt horizontale overflow, dus die helft was niet bereikbaar, alleen
   onzichtbaar. Onder `sm` spant het paneel nu de viewport met marge
-- [ ] **L8.7 — Nog open: waar Trading OS gaat draaien.** Het domein blijft
-  `tradingosapp.com`, dus de link in de switcher klopt ongeacht de hosting.
-  Maar de site geeft nu `HTTP 402 DEPLOYMENT_DISABLED` op Vercel, en jij wil
-  Vercel eruit. Zolang dat zo is, leidt de switcher naar een dode pagina
+- [x] **L8.7 — De switcher geeft niemand een dode pagina.** Gemeten op
+  2026-10-12: `www.tradingosapp.com` → 402 (`server: Vercel`), de apex → 402
+  (`server: cloudflare`), `www.axecompanion.com` → 200 (nginx). Trading OS
+  staat nu als `offline` in de lijst: hij wordt wél getoond — je moet weten dat
+  hij bestaat — maar gedimd, met het label "Moving hosts", `aria-disabled`, en
+  zonder link. De knop "Go to Trading OS" op de pagina is om dezelfde reden
+  vervangen door één regel tekst. Eén woord terug naar `"beta"` in
+  `src/lib/ecosystem/apps.ts` zet beide weer aan zodra de nieuwe host 200 geeft
+- [ ] **L8.8 — Nog open, en alleen jij kunt dit: de bron van Trading OS.** De
+  repo op GitHub (`Ldezeeuw445/the-one`) staat op **2026-06-22** — vier maanden
+  oud, op alle drie de branches (`feature/ibkr-alpaca-adapters`,
+  `feature/ibkr-alpaca-adapters-on-foundation`,
+  `axe-companion-runtime-foundation`). Jij zei dat de Tauri-build op je Mac de
+  goeie is. Dan is dát de bron van waarheid en staat die nergens anders.
+  Deployen vanaf deze repo zou een Trading OS van juni opleveren — dat doe ik
+  niet zonder dat je het zegt. Push eerst je Mac-versie naar een branch, dan
+  bouw ik hem en zet ik hem naast Companion op de IONOS-VPS (of Railway, die
+  staat ook open). De DNS-knop bij Cloudflare blijft van jou: ik heb daar geen
+  toegang
 
 ## L5 — AXE mag trades voorbereiden, maar er zijn geen grenzen
 

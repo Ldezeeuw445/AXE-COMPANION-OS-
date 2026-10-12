@@ -27,7 +27,7 @@ import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
 import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP, type AxePlanId } from "@/lib/billing/tiers";
-import { ecosystemApp } from "@/lib/ecosystem/apps";
+import { availabilityLabel, ecosystemApp, isReachable } from "@/lib/ecosystem/apps";
 
 export const metadata: Metadata = {
   title: "AXE Companion — chart, intel and execution in one tap",
@@ -210,6 +210,8 @@ const FAQ = [
 
 export default function HomeLandingPage() {
   const tickerRow = [...TICKER, ...TICKER];
+  const tradingOs = ecosystemApp("trading-os");
+  const tradingOsBadge = tradingOs ? availabilityLabel(tradingOs.availability) : null;
 
   return (
     <div className="axe-landing-matte-bg relative min-h-dvh overflow-hidden text-tos-text">
@@ -470,9 +472,11 @@ export default function HomeLandingPage() {
                 <Layout className="h-3 w-3 text-cyan-300" aria-hidden />
                 Trading OS — desktop terminal
               </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/55">
-                Private beta
-              </span>
+              {tradingOsBadge ? (
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/55">
+                  {tradingOsBadge}
+                </span>
+              ) : null}
             </div>
             <h3 className="mt-4 text-xl font-bold text-white md:text-2xl">
               The same brain on the desk you trade from.{" "}
@@ -487,13 +491,20 @@ export default function HomeLandingPage() {
             <p className="mt-4 text-sm font-semibold text-cyan-100/95">
               AXE Companion is the brain in your pocket. Trading OS is the desk it plugs into.
             </p>
-            <Link
-              href={ecosystemApp("trading-os")?.url ?? "https://www.tradingosapp.com"}
-              className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-300/[0.06] px-4 py-2 text-xs font-medium text-cyan-100/95 transition hover:border-cyan-300/45 hover:bg-cyan-300/[0.10]"
-            >
-              Go to Trading OS
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            </Link>
+            {tradingOs && isReachable(tradingOs.availability) ? (
+              <Link
+                href={tradingOs.url}
+                className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-300/[0.06] px-4 py-2 text-xs font-medium text-cyan-100/95 transition hover:border-cyan-300/45 hover:bg-cyan-300/[0.10]"
+              >
+                Go to Trading OS
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </Link>
+            ) : (
+              <p className="mt-5 text-xs text-white/45">
+                Trading OS is between hosts right now, so there is nothing to click yet — the
+                terminal is coming back on the same login.
+              </p>
+            )}
           </div>
 
           <div className="relative mt-8 overflow-hidden rounded-2xl border border-cyan-400/15 bg-gradient-to-r from-cyan-400/[0.04] via-cyan-400/[0.015] to-transparent p-6 md:p-8">
