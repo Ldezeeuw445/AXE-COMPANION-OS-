@@ -408,7 +408,15 @@ blijft, maar hij vertelt nu de waarheid:
   zonder link. De knop "Go to Trading OS" op de pagina is om dezelfde reden
   vervangen door één regel tekst. Eén woord terug naar `"beta"` in
   `src/lib/ecosystem/apps.ts` zet beide weer aan zodra de nieuwe host 200 geeft
-- [ ] **L8.8 — Nog open, en alleen jij kunt dit: de bron van Trading OS.** De
+- [x] **L8.8 — De switcher staat nu aan béide kanten.** Ik heb de Trading
+  OS-repo lokaal gedraaid (Vite, beide modi) en dezelfde switcher daar
+  ingebouwd: `src/lib/ecosystem.ts` + `src/components/landing/AppSwitcher.tsx`,
+  plus de knop in `Navbar.tsx` (terminal-modus, `/home`) en
+  `AxeLandingNavbar.tsx` (axe-modus, `/`). Gemeten in een echte browser: op de
+  Trading OS-landing is AXE Companion een `<a href="https://www.axecompanion.com">`
+  en Trading OS `aria-current`; op de AXE-landing precies andersom. Staat op
+  branch `claude/landing-app-switcher` in `Ldezeeuw445/the-one`
+- [ ] **L8.9 — Nog open, en alleen jij kunt dit: de bron van Trading OS.** De
   repo op GitHub (`Ldezeeuw445/the-one`) staat op **2026-06-22** — vier maanden
   oud, op alle drie de branches (`feature/ibkr-alpaca-adapters`,
   `feature/ibkr-alpaca-adapters-on-foundation`,
@@ -512,3 +520,44 @@ Dit hoort er ook bij, want het scheelt werk:
   chart-dock-ronde. Die geeft ook `1` op een oude build — moet meebewegen met
   de nieuwste deploy
 - [ ] Fase 5.3: AXE vertelt in de feed wát hij tekende en waarom
+
+## L9 — DNS: wat er moet gebeuren en wie het kan
+
+Ik heb **geen Cloudflare-toegang** in deze sessie — geen token in de omgeving,
+geen Cloudflare-tool. De enige DNS-tools die ik heb zijn die van Vercel, en die
+werken alleen voor domeinen op Vercel-nameservers. Beide domeinen staan op
+Cloudflare (`jocelyn.ns.cloudflare.com`, `sean.ns.cloudflare.com`), dus die
+tools raken ze niet.
+
+Gemeten op 2026-10-13:
+
+| Naam | Nu | Betekenis |
+|---|---|---|
+| `axecompanion.com` A | `212.227.91.79` | IONOS-VPS, nginx, DNS-only (grijs wolkje) |
+| `www.axecompanion.com` A | `212.227.91.79` | idem |
+| `tradingosapp.com` A | `104.21.5.151`, `172.67.154.186` | Cloudflare-proxy (oranje wolkje) → origin Vercel → 402 |
+| `www.tradingosapp.com` CNAME | `cc384ed6d38922b8.vercel-dns-016.com` | rechtstreeks naar Vercel → 402 |
+
+Twee records moeten dus weg van Vercel. Maar **DNS alleen lost het niet op**:
+er moet eerst iets zijn om naar te wijzen. Trading OS draait nergens anders.
+De volgorde is:
+
+1. Jij pusht je Mac-versie naar een branch (zie L8.9)
+2. Ik bouw hem en zet hem naast Companion op `212.227.91.79`, met een eigen
+   nginx server-block voor `tradingosapp.com` en een certificaat
+3. Pas dán in Cloudflare: `www` CNAME weg, `www` A → `212.227.91.79`, en de
+   apex A-records → `212.227.91.79` (grijs wolkje, net als axecompanion.com)
+4. In `src/lib/ecosystem/apps.ts` gaat `availability` van `"offline"` terug
+   naar `"beta"` en linken de switcher en de knop weer
+
+De Vercel-kant kan ik overigens niet eens zien: het team dat ik mag lezen
+(`axecompanionos`) heeft maar één project, `axe-core`. `tradingosapp.com`
+hangt aan een ander Vercel-account waar ik niet bij kan.
+
+## L10 — De nieuwe landingspagina staat nog niet live
+
+Gemeten op `https://www.axecompanion.com`: de live site serveert nog de oude
+pagina — "Unusual Whales" komt er vier keer in voor, "€19" twee keer, er is
+geen "Switch app", en `/launch` geeft nog 200 in plaats van 308. Al het werk
+hierboven staat op `claude/axe-companion-audit-launch-nz58dg` en moet naar
+`deployed` voordat je het ziet. Dat is jouw knop, niet die van mij.

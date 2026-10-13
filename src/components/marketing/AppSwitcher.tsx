@@ -89,8 +89,10 @@ export function AppSwitcher({ current, className }: Props) {
 
           {PUBLIC_ECOSYSTEM_APPS.map((app) => {
             const Icon = FORM_ICON[app.form];
-            const badge = availabilityLabel(app.availability);
             const isCurrent = app.id === current;
+            // The surface you are looking at is self-evidently up, so its own
+            // availability badge would only ever confuse.
+            const badge = isCurrent ? null : availabilityLabel(app.availability);
 
             const inner = (
               <>

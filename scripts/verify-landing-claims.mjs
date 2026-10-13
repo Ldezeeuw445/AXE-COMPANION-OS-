@@ -287,6 +287,21 @@ check("the menu fits a phone screen", () => {
 check("the current surface is marked, not linked", () => {
   assert.ok(switcher.includes('aria-current="true"'), "mark where the visitor already is");
   assert.ok(switcher.includes("if (isCurrent)"), "the current app must not be a link to itself");
+  assert.ok(
+    /const badge = isCurrent \? null :/.test(switcher),
+    "the page you are on needs no availability badge — it is visibly up",
+  );
+});
+
+check("the Trading OS repo keeps the same list", () => {
+  // The two landings only connect if both sides agree on the addresses, so the
+  // mirrored file in Ldezeeuw445/the-one (src/lib/ecosystem.ts) must stay in
+  // step with this one. Nothing here can read that repo, so this check pins
+  // the contract its copy is written against.
+  const companion = ecosystemApp("companion");
+  assert.equal(companion.url, "https://www.axecompanion.com");
+  assert.equal(ecosystemApp("trading-os").url, "https://www.tradingosapp.com");
+  assert.equal(ecosystemApp("axe-core").url, "https://www.axeheadquarters.com");
 });
 
 check("it is reachable by keyboard and announced", () => {
