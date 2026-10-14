@@ -561,3 +561,41 @@ pagina — "Unusual Whales" komt er vier keer in voor, "€19" twee keer, er is
 geen "Switch app", en `/launch` geeft nog 200 in plaats van 308. Al het werk
 hierboven staat op `claude/axe-companion-audit-launch-nz58dg` en moet naar
 `deployed` voordat je het ziet. Dat is jouw knop, niet die van mij.
+
+## L11 — De hero: iPhone + iPad op één blok, met de app erin
+
+Jij beschreef de hero die je wilt: een iPhone én een iPad op een center block,
+en als je dat blok met je muis raakt lichten de grid-dots eromheen op. Die
+bestond — maar verdeeld over **twee** conceptpagina's die ik had opgeruimd:
+
+- het blok met iPhone + iPad kwam uit `public/finallaunch/index.html`
+- de dot-grid die oplicht bij hover kwam uit de React-hero van `/final`
+  (`FinalHeroExperience`, die had maar één telefoon)
+
+Ik had `FinalHeroExperience.tsx` drie commits terug weggegooid. Teruggehaald
+uit git, de twee helften samengevoegd, en als nieuwe hero op `/` gezet.
+
+- [x] **L11.1** `LandingHeroDevices.tsx` + `axe-hero-*` CSS: één blok met beide
+  toestellen, dot-grid eromheen die oplicht bij `pointerenter` (dus ook bij
+  aanraken) en bij focus, en die stil blijft onder `prefers-reduced-motion`
+- [x] **L11.2 — De app ín de mock, zonder account.** De toestellen draaiden een
+  iframe naar `/demo/embed`, en dat maakte een **anonieme sessie** aan — precies
+  wat jij had laten weghalen. Gemeten: in die hero staat nu een inlogformulier
+  ín de telefoon. Nu draait er `/hero-demo/app.html`: een losstaande mock, nul
+  auth, nul Supabase, nul netwerkverkeer, met Chart/Intel/Cockpit/Trade/History/
+  AXE die echt schakelen. Gemeten met een browser: op de AXE-tab springt het
+  scherm naar `chat`. De mock zegt zelf "NO LOGIN · DEMO" en eronder staat
+  "no account needed", zodat niemand denkt dat het zijn eigen data is
+- [x] **L11.3 — De mock stond op ~250px breed.** Het iframe kreeg de breedte van
+  de bezel, smaller dan welke telefoon dan ook, en de header en tabbalk liepen
+  in elkaar. Nu rendert elk frame op een echte logische maat (390×844 en
+  1024×768) en schaalt het geheel naar de bezel
+- [x] **L11.4 — Er stond een toestel ín een toestel.** De mock tekent zijn eigen
+  rand én notch. Met `?chrome=off` laat hij die weg en vult hij de bezel, en
+  zijn topbalk begint onder de notch van de hero
+- [x] **L11.5** `LandingHeroPhone` (de oude enkele telefoon) is weg. Gemeten:
+  0px horizontale overflow op 390px en op 1440px
+- [ ] **L11.6 — Nog een keuze voor jou.** Op telefoonbreedte staat de iPad boven
+  de telefoon en is hij klein. Hij is herkenbaar als tablet maar de tekst erin
+  is niet te lezen. Ik laat hem staan omdat jij beide toestellen wilde; zeg het
+  als hij op mobiel weg mag

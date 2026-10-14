@@ -2216,3 +2216,182 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Landing hero devices — iPhone + iPad on one lit block.
+
+   Recovered from two retired drafts and merged: the device stage came from
+   `public/finallaunch/index.html`, the dot grid that lights up on hover from
+   the `/final` React hero. Namespaced `axe-hero-*` so nothing here collides
+   with the draft's own inline styles, which are still served statically.
+
+   The screens run `/hero-demo/app.html`, a self-contained mock: no account,
+   no Supabase, no network. The devices used to iframe `/demo/embed`, which
+   minted an anonymous session — and anonymous accounts are gone, so a visitor
+   who was not signed in saw a sign-in form inside the phone instead of an app.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.axe-hero-stage {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(14px, 2vw, 30px);
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid rgba(34, 211, 238, 0.16);
+  border-radius: 30px;
+  background:
+    radial-gradient(780px circle at 50% -16%, rgba(34, 211, 238, 0.1), transparent 52%),
+    linear-gradient(180deg, rgba(10, 14, 21, 0.96), rgba(6, 8, 12, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 24px 48px rgba(0, 0, 0, 0.34);
+  transition:
+    border-color 320ms ease,
+    box-shadow 320ms ease;
+}
+
+.axe-hero-stage-active {
+  border-color: rgba(34, 211, 238, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 28px 60px rgba(0, 0, 0, 0.42),
+    0 0 44px -12px rgba(34, 211, 238, 0.3);
+}
+
+/* The dots sit behind the block and brighten when the pointer is on it. */
+.axe-hero-dots {
+  pointer-events: none;
+  position: absolute;
+  inset: -2.2rem;
+  z-index: 0;
+  border-radius: 3.6rem;
+  opacity: 0.3;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.14), transparent 48%),
+    radial-gradient(rgba(119, 236, 255, 0.2) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    18px 18px;
+  transition:
+    opacity 320ms ease,
+    background 320ms ease;
+}
+
+.axe-hero-dots-active {
+  opacity: 0.72;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.26), transparent 52%),
+    radial-gradient(rgba(119, 236, 255, 0.34) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    18px 18px;
+}
+
+.axe-hero-device {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.axe-hero-device--phone {
+  width: min(268px, 24vw);
+  z-index: 2;
+}
+
+.axe-hero-device--ipad {
+  width: min(740px, 62vw);
+  z-index: 1;
+}
+
+.axe-hero-bezel {
+  position: relative;
+  padding: 9px;
+  border: 1px solid #000;
+  border-radius: 40px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03) 38%, rgba(0, 0, 0, 0.44)),
+    linear-gradient(180deg, #24272d, #0f1116);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 26px 54px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.axe-hero-device--ipad .axe-hero-bezel {
+  padding: 13px;
+  border-radius: 30px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 42%, rgba(0, 0, 0, 0.42)),
+    linear-gradient(180deg, #30333b, #0d0f14);
+}
+
+.axe-hero-notch {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 4;
+  width: 84px;
+  height: 21px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 13px;
+  background: #000;
+  pointer-events: none;
+}
+
+.axe-hero-screen {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.88);
+  border-radius: 31px;
+  background: #020304;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.axe-hero-device--phone .axe-hero-screen {
+  aspect-ratio: 9 / 19.5;
+}
+
+.axe-hero-device--ipad .axe-hero-screen {
+  aspect-ratio: 4 / 3;
+  border-radius: 15px;
+}
+
+/* The iframe keeps the device's own logical size and is scaled to fit, so
+   the mock inside lays out as it would on the real thing. */
+.axe-hero-screen iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  border: 0;
+  background: #040508;
+  transform-origin: top left;
+}
+
+/* Under ~1100px the iPad leads and the phone sits beneath it, so neither
+   shrinks past the point where the mock inside stops being readable. */
+@media (max-width: 1100px) {
+  .axe-hero-stage {
+    flex-direction: column-reverse;
+    align-items: center;
+    border-radius: 22px;
+  }
+
+  .axe-hero-device--phone,
+  .axe-hero-device--ipad {
+    width: min(390px, 86vw);
+  }
+
+  .axe-hero-dots {
+    inset: -1.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axe-hero-stage,
+  .axe-hero-dots {
+    transition: none;
+  }
+}

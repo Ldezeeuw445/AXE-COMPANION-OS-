@@ -40,6 +40,9 @@ const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const landing = read("src/app/page.tsx");
 const switcher = read("src/components/marketing/AppSwitcher.tsx");
 const robots = read("src/app/robots.ts");
+const hero = read("src/components/marketing/LandingHeroDevices.tsx");
+const heroCss = read("src/app/globals.css");
+const heroMock = read("public/hero-demo/app.html");
 const sitemap = read("src/app/sitemap.ts");
 
 console.log("landing claims");
@@ -318,6 +321,76 @@ check("it is reachable by keyboard and announced", () => {
   assert.ok(
     /hidden whitespace-nowrap sm:inline">Switch app</.test(switcher),
     "the trigger needs a visible label from sm up",
+  );
+});
+
+// ── the hero works for someone who is not signed in ──────────────────────
+check("the hero mock needs no account and makes no network call", () => {
+  // The hero used to iframe /demo/embed, which minted an anonymous session.
+  // Anonymous accounts are gone, so that hero shows a sign-in form inside the
+  // phone to every visitor who is not already logged in.
+  // Only real usage counts: the comment above the component explains why
+  // /demo/embed is gone, and naming it there is the point.
+  const heroCode = hero.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(
+    !/\/demo\/embed/.test(heroCode),
+    "the hero must not depend on /demo/embed — it needs a session we no longer mint",
+  );
+  assert.ok(
+    hero.includes("/hero-demo/app.html"),
+    "the hero runs the self-contained mock",
+  );
+  for (const forbidden of [/supabase/i, /\bfetch\s*\(/, /\/api\//]) {
+    assert.ok(
+      !forbidden.test(heroMock),
+      `the mock must stay self-contained; found ${forbidden}`,
+    );
+  }
+});
+
+check("the mock says it is a demo rather than passing for an account", () => {
+  assert.ok(/NO LOGIN/i.test(heroMock), "the mock labels itself");
+  assert.ok(
+    /no account needed/i.test(hero),
+    "and the hero says so underneath, so nobody thinks this is their data",
+  );
+});
+
+check("both devices are there, at real logical sizes", () => {
+  assert.ok(/phone: \{ w: 390, h: 844/.test(hero), "iPhone logical size");
+  assert.ok(/ipad: \{ w: 1024, h: 768/.test(hero), "iPad logical size");
+  // Letting the iframe take the bezel's width gives the mock a ~250px
+  // viewport and its header and tab bar collapse into each other.
+  assert.ok(hero.includes("width / w"), "the frame scales the iframe to fit");
+  assert.ok(
+    heroCss.includes("transform-origin: top left"),
+    "a scaled iframe needs its origin pinned or it drifts out of the bezel",
+  );
+});
+
+check("the mock draws no second device inside the bezel", () => {
+  assert.ok(hero.includes("chrome=off"), "the hero asks for the chrome-less mode");
+  assert.ok(
+    /\.device\.bare::before \{ display: none; \}/.test(heroMock),
+    "chrome=off must hide the mock's own notch",
+  );
+  assert.ok(
+    /\.device\.bare\.mobile \.topbar/.test(heroMock),
+    "and leave room under the bezel's notch for the mock's top bar",
+  );
+});
+
+check("the block lights its dot grid on hover, touch and focus", () => {
+  for (const cls of ["axe-hero-dots", "axe-hero-dots-active", "axe-hero-stage-active"]) {
+    assert.ok(heroCss.includes(`.${cls}`), `${cls} is missing from globals.css`);
+    assert.ok(hero.includes(cls), `${cls} is never applied`);
+  }
+  // Pointer events rather than mouse events, so a touch lights it too.
+  assert.ok(hero.includes("onPointerEnter"), "touch must light the block as well");
+  assert.ok(hero.includes("onFocusCapture"), "a keyboard user needs the same signal");
+  assert.ok(
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]{0,220}axe-hero-dots/.test(heroCss),
+    "respect reduced motion",
   );
 });
 

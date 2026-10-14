@@ -21,7 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AppSwitcher } from "@/components/marketing/AppSwitcher";
-import { LandingHeroPhone } from "@/components/marketing/LandingHeroPhone";
+import { LandingHeroDevices } from "@/components/marketing/LandingHeroDevices";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
 import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
@@ -298,8 +298,8 @@ export default function HomeLandingPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-12 md:pt-16 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
-          <div>
+        <div className="relative z-10 mx-auto max-w-6xl px-5 pb-20 pt-12 md:pt-16">
+          <div className="mx-auto max-w-3xl text-center">
             <div
               className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium"
               style={{
@@ -316,7 +316,7 @@ export default function HomeLandingPage() {
               <span className="text-cyan-200/95">AXE Companion · live on MT5</span>
             </div>
 
-            <h1 className="mt-7 max-w-[600px] text-[2.6rem] font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.35rem]">
+            <h1 className="mx-auto mt-7 max-w-[640px] text-[2.6rem] font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.35rem]">
               The trader&apos;s phone.
               <br />
               <span className="axe-landing-heading-shimmer">
@@ -324,14 +324,14 @@ export default function HomeLandingPage() {
               </span>
             </h1>
 
-            <p className="mt-5 max-w-[560px] text-[15px] leading-relaxed text-white/60 sm:text-base">
+            <p className="mx-auto mt-5 max-w-[620px] text-[15px] leading-relaxed text-white/60 sm:text-base">
               AXE Companion is what an MT5 native phone app should feel like — calm dark canvas, auto-Fib /
               structure / OB / FVG that actually extend, a real depth ladder anchored on your broker&apos;s
               bid / ask, multi-source news cached to save credits, and a one-tap execution dock that talks
               straight to your account.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
               <Link
                 href="/login"
                 className="axe-landing-cta inline-flex h-12 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-7 text-sm font-semibold text-[#04161B] shadow-[0_18px_44px_-14px_rgba(34,211,238,0.65)] transition hover:from-cyan-300 hover:to-teal-300"
@@ -348,13 +348,13 @@ export default function HomeLandingPage() {
               </Link>
               <Link
                 href="/chat"
-                className="text-center text-xs text-white/40 transition hover:text-white/65 sm:text-left"
+                className="text-center text-xs text-white/40 transition hover:text-white/65"
               >
                 Already signed in? → Open AXE
               </Link>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.18em] text-white/45">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.18em] text-white/45">
               <span className="flex items-center gap-1.5">
                 <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
                 MT5 ticks
@@ -373,7 +373,7 @@ export default function HomeLandingPage() {
               </span>
             </div>
 
-            <div className="mt-7 flex flex-wrap gap-1.5">
+            <div className="mt-7 flex flex-wrap justify-center gap-1.5">
               {[
                 "XAU/USD",
                 "EUR/USD",
@@ -395,9 +395,9 @@ export default function HomeLandingPage() {
             </div>
           </div>
 
-          {/* Interactive phone */}
-          <div className="relative flex w-full justify-center lg:justify-end">
-            <LandingHeroPhone />
+          {/* iPhone + iPad on one lit block, both running the demo mock. */}
+          <div className="mt-14">
+            <LandingHeroDevices />
           </div>
         </div>
       </section>
