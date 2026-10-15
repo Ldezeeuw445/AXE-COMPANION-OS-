@@ -35,6 +35,15 @@ export type AutoTradeGuardInput = {
   /** Minutes until the next high-impact event, or null when none is near. */
   minutesToHighImpact: number | null;
   now: Date;
+  /**
+   * True when a human pressed the button for this specific order.
+   *
+   * It changes exactly one thing: the daily cap is a brake on automation
+   * running unattended, so it does not apply to a trader placing a draft by
+   * hand. Every account rule above it still does — those are the ones that
+   * cost you the account, and they do not care who clicked.
+   */
+  attended?: boolean;
 };
 
 export type AutoTradeDecision =
@@ -114,8 +123,8 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
     };
   }
 
-  // 4. The brake.
-  if (autoTradesToday >= MAX_AUTO_TRADES_PER_DAY) {
+  // 4. The brake. Only for orders nobody is watching — see `attended`.
+  if (!input.attended && autoTradesToday >= MAX_AUTO_TRADES_PER_DAY) {
     return {
       allowed: false,
       reason: "daily_trade_cap",

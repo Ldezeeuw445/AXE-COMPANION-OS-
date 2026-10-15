@@ -3,6 +3,7 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
 import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import { placeMt5QuickOrder } from "@/services/mt5QuickOrderService";
+import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
 
 export type ExecuteExecutionRequestResult =
   | { ok: true; message: string; orderId?: string | null; positionId?: string | null }
@@ -68,6 +69,25 @@ export async function executeExecutionRequestOnMt5(
   const volumeLots = normalizeTradeVolume(
     exec.volume_lots != null ? Number(exec.volume_lots) : prefsVolume.defaultVolume,
   );
+
+  /* ── Do this account's rules permit this order right now? ──────────
+     The trader tapping "place" answers "did you agree?". It does not
+     answer "is this allowed?" — and a draft AXE proposed an hour ago can
+     land inside a news window, over a lot cap, or past the day's loss
+     limit by the time it is tapped. `attended` drops only the daily cap
+     on unattended automation; every account rule still applies. */
+  const guard = await decideAutoTradeAllowed(supabase, userId, displaySymbol, volumeLots, true);
+  if (!guard.allowed) {
+    await recordProactiveFeedEvent(
+      supabase,
+      userId,
+      `exec_blocked:${executionRequestId}:${guard.reason}`,
+      `Draft not placed: ${displaySymbol}`,
+      guard.detail,
+      "/actions",
+    );
+    return { ok: false, message: guard.detail, code: guard.reason };
+  }
 
   const placed = await placeMt5QuickOrder(supabase, userId, {
     symbol: displaySymbol,

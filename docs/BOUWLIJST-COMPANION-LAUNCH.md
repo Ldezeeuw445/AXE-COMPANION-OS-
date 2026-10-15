@@ -130,7 +130,17 @@ Indicatoren, annotaties, SL/TP-lijnen, trade-plan-lijnen ✅ bestaan allemaal.
   controleert of koop en verkoop nog uit elkaar te houden zijn **door de ogen
   van een kleurenblinde trader** — een luminantietest zou blauw versus rood
   goedkeuren terwijl rood/groen-verwarring het echte risico is
-- [ ] **4.2** 3 hardgecodeerde hexen in `ChartIndicatorLayer.tsx` + `IndicatorPane.tsx` naar tokens
+- [x] **4.2 — Klopte niet meer.** De drie hexen staan in *commentaar*
+  (`#d7d6d0`, `#2a2e39`, `#131722` als toelichting bij rgba-waarden), niet in
+  code. `IndicatorPane` is al theme-aware: `ChartScreen` geeft
+  `chartTheme.isDark` en `chartTheme.chartCanvasBackground` door en de pane
+  heeft twee volledige paletten. Wat er wél aan mankeert is subtieler: de pane
+  houdt een eigen palet in plaats van de gedeelde `chartTheme` te lezen, dus
+  een kleurwijziging daar bereikt de indicatorbalken niet. Dat is een echte
+  refactor met zichtbaar regressierisico op een werkende chart; ik heb hem niet
+  gedaan voor een vinkje. Staat als 4.6 hieronder
+- [ ] **4.6** `IndicatorPane` het gedeelde `chartTheme` laten lezen in plaats
+  van een eigen palet, zodat de paletten niet uit elkaar lopen
 - [ ] **4.4** Rechter prijsbalk — al verkleind naar 10px vorige ronde ✅
 - [ ] **4.5** Bottom dock in elke combinatie — gebouwd vorige ronde ✅, nog door jou te bevestigen op de PWA
 
@@ -456,8 +466,20 @@ je waarschuwt en het vervolgens voor je doet is erger dan elk van de twee apart.
   smaller than you asked for"*
 - [x] **L5.3** Kan AXE de regels van het account niet lezen, dan plaatst hij
   niets. Geen default-allow
-- [ ] **L5.4** Nog open: dezelfde guard vóór `execution_requests` die AXE zelf
-  voorstelt, zodra die zelfstandig uitgevoerd kunnen worden
+- [x] **L5.4 — De tweede deur zat open.** `executeExecutionRequestOnMt5` (de
+  server action achter "plaats dit concept") ging rechtstreeks naar
+  `placeMt5QuickOrder`, zonder énige controle. Dus AXE weigerde een funded
+  account door rood nieuws te traden als een *alert* het vroeg, en plaatste
+  exact dezelfde order als jij op een concept tikte dat hij zelf had
+  voorgesteld. Eén deur op slot, die ernaast open. De guard stond privé in
+  `alertAutoTradeService`; hij staat nu in `src/services/tradeGuardService.ts`
+  en beide deuren gaan erdoorheen
+- [x] **L5.5 — `attended`: wie kijkt er mee.** De dagcap van zes is een rem op
+  automatisering die niemand ziet, niet op jou die op "plaats" tikt. Die ene
+  regel vervalt als een mens drukt; élke accountregel blijft gelden. Gemeten:
+  op de cap wordt onbeheerd geblokkeerd en beheerd toegelaten, maar met nieuws
+  binnen 5 min, een lot boven de limiet of de dagverlieslimiet bereikt blijft
+  ook beheerd geblokkeerd
 
 ## L6 — Een kapotte brokerkoppeling is onzichtbaar voor de gebruiker
 
