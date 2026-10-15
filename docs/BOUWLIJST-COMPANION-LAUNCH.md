@@ -521,7 +521,26 @@ intel-acties geven daardoor `http_500`. De UI belooft data die er niet is.
 - [x] **L7.3** Eén schakelaar om hem later aan te zetten: `UNUSUAL_WHALES_ENABLED=true`
   op de host. Insider trades blijven gewoon draaien — die gebruiken het gratis
   SEC EDGAR, geen UW
-- [ ] **L7.4** Een gratis alternatief zoeken voor senate trades, dark pool,
+- [x] **L7.4 — Gezocht én gemeten. Drie van de vier hebben een gratis pad.**
+  Alpha Vantage hangt al aan dit account. Ik heb de endpoints niet opgezocht
+  maar aangeroepen, vandaag:
+
+  | Feed | Gratis alternatief | Gemeten |
+  |---|---|---|
+  | `senateTrades` | Alpha Vantage `CONGRESS_TRADES` | **Volledig.** 439 NVDA-trades, House én Senate, met `politician`, `chamber`, `party`, `transaction_type`, `amount_min/max`, `transaction_date`. Nieuwste filing 2026-10-14 |
+  | `unusualOptions` | `REALTIME_OPTIONS` / `HISTORICAL_OPTIONS` + put-call ratio | **Gedeeltelijk.** Je krijgt de keten en de skew, niet UW's eigen "unusual flow"-detectie — die zul je zelf moeten afleiden |
+  | `marketTide` | `REALTIME_PUT_CALL_RATIO` | **Gedeeltelijk.** SPY gaf 1.17 over de hele keten met 4.78 op 30 okt — precies het soort scheefstand dat een tide-signaal moet vangen |
+  | `darkPoolPrints` | — | **Niets gratis.** FINRA publiceert ATS-volume, maar wekelijks en vertraagd; dat zijn geen prints |
+
+- [ ] **L7.5 — Aansluiten kan ik nog niet.** `intel_congress_trades` bestaat
+  als tabel met unieke index, maar **niets in deze repo schrijft erin** — dat
+  deed de Unusual Whales edge function. En er staat nergens een Alpha
+  Vantage-sleutel in de app. Wat er moet komen: een cron-route die
+  `CONGRESS_TRADES` ophaalt en upsert op `(politician, ticker, trade_date,
+  trade_type, amount_range)`, plus `ALPHAVANTAGE_API_KEY` op de host. Ik bouw
+  geen feed die stil leeg blijft omdat de sleutel ontbreekt — zeg het als de
+  sleutel er is, dan is dit een half uur werk
+- [ ] **L7.6** Een gratis alternatief blijft open voor dark pool,
   options flow en market tide. Pas oppakken als je dat wilt
 
 ## Wat juist wél in orde is
@@ -621,3 +640,30 @@ uit git, de twee helften samengevoegd, en als nieuwe hero op `/` gezet.
   de telefoon en is hij klein. Hij is herkenbaar als tablet maar de tekst erin
   is niet te lezen. Ik laat hem staan omdat jij beide toestellen wilde; zeg het
   als hij op mobiel weg mag
+
+## L12 — Wat ik vandaag niet kon, en waarom
+
+Drie dingen hebben een knop nodig die ik niet heb. Alles eromheen is af.
+
+**1. Cloudflare DNS.** De Cloudflare MCP die aan dit account hangt is de
+*Developer Platform*: Workers, KV, R2, D1, Hyperdrive. Geverifieerd — hij
+geeft jouw vier workers terug (`axe-ai-proxy`, `axe-ai-os`, `axe-chart-edge`,
+`trading-os-live-engine`). Daar zitten **geen DNS- of zone-tools** in, en de
+Vercel DNS-tools werken alleen op Vercel-nameservers terwijl beide domeinen
+op Cloudflare staan. Als je de Cloudflare-connector met zone/DNS-rechten
+toevoegt, kan ik het wel.
+
+**2. De VPS.** Geen SSH-sleutels in deze omgeving en poort 22 van
+`212.227.91.79` is onbereikbaar vanaf hier. Het deploy-script staat klaar in
+`the-one` op `claude/landing-app-switcher`.
+
+**3. Companion naar productie.** `git push origin HEAD:deployed` is geweigerd
+door de permissie-classifier met reden *"Production Deploy"*. Dat omzeil ik
+niet. De branch is een schone fast-forward op `deployed` — 22 commits vooruit,
+niets dat verloren gaat — en de poort is groen.
+
+**Computer use** is in dit gesprek niet beschikbaar: er zijn geen
+computer-use-tools en ook geen schakelaar om ze aan te zetten. In het algemeen
+kan ik apps bedienen op een computer waar de Claude-desktopapp draait met
+Computer use aan, of via het +-menu → Devices op claude.ai vóór je een nieuw
+bericht stuurt.
