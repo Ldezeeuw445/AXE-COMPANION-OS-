@@ -204,7 +204,13 @@ Jouw 3 vinkjes ❌ bestaan niet. Nodig:
 Gemeten: `src/lib/alerts/` ✅ — `smartAlertRules`, `smartAlertTemplates`,
 `useAlertEvaluator`, `fromChatTool`. Evaluatie draait in de watcher ✅.
 
-- [ ] **7.1** Alert-type "open trade bij trigger" met vooringestelde lot/SL/TP ❌ bestaat niet — bouwen bovenop 6.1 (valt onder niveau 3)
+- [x] **7.1 — Bestaat wél, deze regel was achterhaald.** De keten is compleet:
+  in `AlertsClient.tsx` zet je stop loss en take profit en "arm" je de alert
+  (venster van 30 min, `ALERT_AUTO_TRADE_ARM_WINDOW_MS`), het lot komt uit je
+  `defaultVolume`, `alertMetadata` / `alertAutoTradeArmed` / `alertTradeStops`
+  dragen de instellingen, en `alertAutoTradeService` plaatst de order als de
+  trigger afgaat — sinds L5.4 met de guard ervóór. Wat er onder 6.1 nog bij
+  moet is niet dit mechanisme maar de *niveaus*: wie mag dit aanzetten
 - [x] **7.2 — Langsgelopen. De aanname klopte half.** Het waren geen vier
   kopieën van hetzelfde: `QuickActionMenu` is een navigatiemenu (links naar
   routes) en `ChartQuickActions` is een chartbalk (depth, news, 1-click trade,
