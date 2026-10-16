@@ -202,3 +202,47 @@ update axe_ops.cron_target set base_url = 'https://new-host.example', updated_at
 
 `vercel.json` is kept only so the crons are documented in one more place. It has
 no effect on the VPS. Delete it once you are sure you will not return to Vercel.
+
+## congress-trades-sync — de congresfeed terug, gratis
+
+`intel_congress_trades` had sinds het vertrek van Unusual Whales niets meer
+dat erin schreef, dus de intel-pagina zei tegen iedereen "No congressional
+feed yet." Alpha Vantage serveert dezelfde STOCK Act-aangiftes gratis, House
+én Senate.
+
+Eerst de sleutel op de host, anders geeft de route 503 en blijft de tabel
+leeg (met zoveel woorden in het antwoord — geen stille 200 over niets):
+
+```
+ALPHAVANTAGE_API_KEY=<je sleutel>
+```
+
+Dan inplannen. Eén keer per dag is ruim: dit zijn aangiftes, geen ticks — de
+wet geeft leden 45 dagen om te melden.
+
+```sql
+-- 1. de job registreren (app is NOT NULL, unieke sleutel is (app, name))
+insert into axe_ops.cron_job (app, name, path, schedule)
+values ('companion', 'congress-trades-sync', '/api/cron/congress-trades-sync', '20 6 * * *')
+on conflict (app, name) do update
+  set path = excluded.path, schedule = excluded.schedule;
+
+-- 2. en pg_cron hem laten draaien (aparte stap — de tabel plant niks in)
+select cron.schedule(
+  'companion-congress-trades-sync',
+  '20 6 * * *',
+  $$select axe_ops.dispatch_cron('congress-trades-sync', '/api/cron/congress-trades-sync')$$
+);
+```
+
+Controleren:
+
+```
+curl -s -H "Authorization: Bearer $CRON_SECRET" \
+  https://www.axecompanion.com/api/cron/congress-trades-sync | jq
+```
+
+Wat je terugkrijgt zegt per symbool hoeveel er opgehaald en gemapt is, en
+`skipped` telt wat er is weggegooid en waarom. Loopt `skipped` op terwijl
+`upserted` daalt, dan is het formaat van de API veranderd — dat is het signaal,
+niet een stille lege tabel.

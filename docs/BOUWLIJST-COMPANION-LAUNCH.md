@@ -532,7 +532,26 @@ intel-acties geven daardoor `http_500`. De UI belooft data die er niet is.
   | `marketTide` | `REALTIME_PUT_CALL_RATIO` | **Gedeeltelijk.** SPY gaf 1.17 over de hele keten met 4.78 op 30 okt — precies het soort scheefstand dat een tide-signaal moet vangen |
   | `darkPoolPrints` | — | **Niets gratis.** FINRA publiceert ATS-volume, maar wekelijks en vertraagd; dat zijn geen prints |
 
-- [ ] **L7.5 — Aansluiten kan ik nog niet.** `intel_congress_trades` bestaat
+- [x] **L7.5 — Aangesloten.** `src/lib/intel/congressTrades.ts` mapt de
+  Alpha Vantage-respons naar `intel_congress_trades`, en
+  `/api/cron/congress-trades-sync` haalt hem op en upsert op precies de unieke
+  index `(politician, ticker, trade_date, trade_type, coalesce(amount_range,''))`.
+  Getest tegen de **echte** respons (fixture `congress-trades-nvda-2026-10-15.json`,
+  uit de live API gehaald), niet tegen een verzonnen vorm. 11 checks dekken de
+  randen die de database zou weigeren: `trade_type` mag alleen BUY/SELL dus
+  EXCHANGE wordt weggegooid en geteld, een datum die geen YYYY-MM-DD is komt
+  nooit in een `date`-kolom, een onbekende chamber erft niet stil de default
+  'Senate', en duplicaten vallen samen vóór de upsert. Live aangeroepen: 401
+  zonder auth, 503 met een leesbare reden als de sleutel ontbreekt
+- [x] **L7.5b** `senateTrades` staat niet meer onder Unusual Whales in
+  `intelSources.ts` maar onder `alphavantage`, met een eigen
+  beschikbaarheidscheck. De UW-schakelaar koopt hem niet meer terug — dat is
+  apart getest
+- [ ] **L7.5c — Twee handelingen van jou.** `ALPHAVANTAGE_API_KEY` op de host
+  (gratis sleutel volstaat), en de cron inplannen. De SQL staat kant-en-klaar
+  in `docs/CRON-RUNBOOK.md`. Zonder de sleutel blijft de route 503 geven en de
+  tabel leeg — met zoveel woorden, geen stille 200
+- [ ] **L7.5d (was L7.5) — Oude tekst, voor de volledigheid:** `intel_congress_trades` bestaat
   als tabel met unieke index, maar **niets in deze repo schrijft erin** — dat
   deed de Unusual Whales edge function. En er staat nergens een Alpha
   Vantage-sleutel in de app. Wat er moet komen: een cron-route die

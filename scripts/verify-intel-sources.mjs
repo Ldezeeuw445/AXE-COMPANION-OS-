@@ -31,11 +31,16 @@ function check(name, fn) {
 
 const OFF = {};
 const ON = { UNUSUAL_WHALES_ENABLED: "true" };
+// Everything configured: the UW subscription *and* the Alpha Vantage key that
+// senateTrades moved onto.
+const ALL_ON = { UNUSUAL_WHALES_ENABLED: "true", ALPHAVANTAGE_API_KEY: "k" };
 
 console.log("intel sources");
 
-check("the five Unusual Whales actions are skipped while unsubscribed", () => {
-  for (const action of ["senateTrades", "darkPoolPrints", "unusualOptions", "marketTide"]) {
+check("the remaining Unusual Whales actions are skipped while unsubscribed", () => {
+  // senateTrades used to be on this list. It moved to Alpha Vantage, which
+  // serves the same STOCK Act disclosures for free — see the check below.
+  for (const action of ["darkPoolPrints", "unusualOptions", "marketTide"]) {
     const a = actionAvailability(action, OFF);
     assert.equal(a.available, false, `${action} should be skipped`);
     assert.match(a.reason, /Unusual Whales is not subscribed/);
@@ -72,8 +77,12 @@ check("an unknown action is treated as free, not silently dropped", () => {
 
 check("the warmup only calls what it can reach", () => {
   const all = Object.keys(INTEL_ACTION_SOURCE);
+  // Four unconfigured: three Unusual Whales feeds plus senateTrades, which
+  // now waits on an Alpha Vantage key instead.
   assert.equal(availableIntelActions(all, OFF).length, all.length - 4);
-  assert.equal(availableIntelActions(all, ON).length, all.length);
+  // The UW switch alone no longer buys senateTrades back.
+  assert.equal(availableIntelActions(all, ON).length, all.length - 1);
+  assert.equal(availableIntelActions(all, ALL_ON).length, all.length);
 });
 
 check("skipped is reported apart from failed", () => {
@@ -110,6 +119,23 @@ check("no health endpoint still asks for a Krater key", () => {
   for (const f of ["src/app/api/debug/cron-health/route.ts", "src/app/api/internal/key-health/route.ts"]) {
     assert.ok(!/KRATER_API_KEY/.test(readFileSync(f, "utf8")), `${f} still chases a dead key`);
   }
+});
+
+check("senateTrades is off Unusual Whales and onto a free source", () => {
+  assert.equal(INTEL_ACTION_SOURCE.senateTrades, "alphavantage");
+
+  const off = actionAvailability("senateTrades", OFF);
+  assert.equal(off.available, false, "no key means not configured");
+  assert.match(off.reason, /ALPHAVANTAGE_API_KEY/, "say which key, and which cron fills it");
+  assert.doesNotMatch(off.reason, /Unusual Whales/, "this feed no longer waits on that subscription");
+
+  assert.equal(
+    actionAvailability("senateTrades", { ALPHAVANTAGE_API_KEY: "k" }).available,
+    true,
+    "with the key it is available — this key is read by this process, so presence is a real answer",
+  );
+  // And the UW switch must not accidentally gate it any more.
+  assert.equal(actionAvailability("senateTrades", { UNUSUAL_WHALES_ENABLED: "true" }).available, false);
 });
 
 console.log(`\n${passed} checks passed`);

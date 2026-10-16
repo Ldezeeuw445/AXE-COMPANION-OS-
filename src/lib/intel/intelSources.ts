@@ -17,12 +17,15 @@
  * Dependency-free so it can be exercised with `node --experimental-strip-types`.
  */
 
-export type IntelSource = "unusual_whales" | "free";
+export type IntelSource = "unusual_whales" | "alphavantage" | "free";
 
 /** Actions the intel proxy serves, and what each one needs. */
 export const INTEL_ACTION_SOURCE: Record<string, IntelSource> = {
   insiderTrades: "free", // SEC EDGAR fallback works without a UW key
-  senateTrades: "unusual_whales",
+  // Moved off Unusual Whales: Alpha Vantage serves the same STOCK Act
+  // disclosures for free, House and Senate both. Filled by
+  // /api/cron/congress-trades-sync.
+  senateTrades: "alphavantage",
   darkPoolPrints: "unusual_whales",
   unusualOptions: "unusual_whales",
   marketTide: "unusual_whales",
@@ -47,6 +50,11 @@ export function isSourceAvailable(source: IntelSource, env: Record<string, strin
     // guessing from local env would be wrong in both directions.
     return envFlag(env.UNUSUAL_WHALES_ENABLED);
   }
+  if (source === "alphavantage") {
+    // This key *is* read by this process — the sync cron runs here — so its
+    // presence is a real answer rather than a guess.
+    return (env.ALPHAVANTAGE_API_KEY ?? "").trim().length > 0;
+  }
   return false;
 }
 
@@ -66,7 +74,9 @@ export function actionAvailability(
     reason:
       source === "unusual_whales"
         ? "Unusual Whales is not subscribed — set UNUSUAL_WHALES_ENABLED=true once it is"
-        : `source ${source} is not configured`,
+        : source === "alphavantage"
+          ? "Alpha Vantage has the data for free — set ALPHAVANTAGE_API_KEY and schedule /api/cron/congress-trades-sync"
+          : `source ${source} is not configured`,
   };
 }
 
