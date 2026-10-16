@@ -141,7 +141,7 @@ Indicatoren, annotaties, SL/TP-lijnen, trade-plan-lijnen ✅ bestaan allemaal.
   gedaan voor een vinkje. Staat als 4.6 hieronder
 - [ ] **4.6** `IndicatorPane` het gedeelde `chartTheme` laten lezen in plaats
   van een eigen palet, zodat de paletten niet uit elkaar lopen
-- [ ] **4.4** Rechter prijsbalk — al verkleind naar 10px vorige ronde ✅
+- [x] **4.4** Rechter prijsbalk — verkleind naar 10px ✅
 - [ ] **4.5** Bottom dock in elke combinatie — gebouwd vorige ronde ✅, nog door jou te bevestigen op de PWA
 
 ---
@@ -189,7 +189,13 @@ Jouw 3 vinkjes ❌ bestaan niet. Nodig:
 
 - [ ] **6.1** Veiligheidsniveau per user: (1) alleen voorstellen · (2) voorbereiden, ik keur goed · (3) zelfstandig plaatsen binnen limieten
 - [ ] **6.2** Drie expliciete vinkjes vóór niveau 3, met harde grenzen: max lot, max risico per trade, max trades per dag
-- [ ] **6.3** Elke zelfstandige plaatsing schrijft een onuitwisbare regel in de feed + journal
+- [x] **6.3 — De feed-helft staat.** Beide paden naar MT5 schrijven een
+  feed-regel: bij plaatsen én bij blokkeren, met de regel die stopte erbij
+  (`alert_trade:`, `alert_trade_blocked:`, `exec_placed:`, `exec_blocked:`).
+  De **journal**-helft loopt anders dan dit punt aannam: journaling gebeurt bij
+  het *sluiten* van een trade, niet bij het plaatsen — en dat is ook de juiste
+  plek, want je journaalt een afgeronde trade. Een geplaatste order verschijnt
+  dus in de feed en komt in het journaal zodra hij dicht is
 
 ---
 
@@ -244,8 +250,12 @@ gebruikt het resultaat niet.
 Gemeten: er staan **zeven** kandidaat-routes naast elkaar — `marketing/`, `launch/`,
 `final/`, `finallaunch/`, `welcome/`, `demo/`, `ui-premium/`, plus `page.tsx`.
 
-- [ ] **9.1** Eerst beslissen welke de echte is, de rest weg. Nu is onduidelijk wat een bezoeker ziet
-- [ ] **9.2** Dán pas mooi maken
+- [x] **9.1 — Beslist: `/` is de landingspagina.** `/launch`, `/final`,
+  `/finallaunch` en `/ui-premium` geven 308 naar `/` (gemeten op alle vier).
+  Zie L4.3 en L8
+- [x] **9.2 — Gedaan.** Nieuwe hero met iPhone + iPad op één verlicht blok en
+  de app klikbaar zonder account (L11), eerlijke prijzen uit
+  `AXE_BILLING_TIERS`, en de switcher naar Trading OS linksboven
 
 ---
 
@@ -256,7 +266,12 @@ Gemeten: `src/lib/billing/tiers.ts` + `features.ts` ✅, Stripe live-sleutels ge
 MetaApi ✅ gebouwd, maar het account is weg (0.2).
 
 - [ ] **10.1** Onboarding: tier kiezen → eigen MT5 koppelen, in één flow
-- [ ] **10.2** Wat gebeurt er als iemands MetaApi-account verdwijnt? Nu: stille fout elke 10 min. Moet: de user ziet het en kan opnieuw koppelen
+- [x] **10.2 — Opgelost in L6, deze regel was blijven staan.**
+  `src/lib/risk/brokerHealth.ts` plus de watcher: na zes uur stilte of bij een
+  `sync_failed` krijgt de trader een bericht met de léeftijd van de data
+  ("de laatste geslaagde sync was 8 dagen geleden — tot die tijd is elk getal
+  dat AXE je laat zien verouderd"). Ook de moeilijkste variant is gedekt: geen
+  foutmelding, maar ook geen data. Papieraccounts worden niet lastiggevallen
 
 ---
 
@@ -567,7 +582,7 @@ intel-acties geven daardoor `http_500`. De UI belooft data die er niet is.
   (gratis sleutel volstaat), en de cron inplannen. De SQL staat kant-en-klaar
   in `docs/CRON-RUNBOOK.md`. Zonder de sleutel blijft de route 503 geven en de
   tabel leeg — met zoveel woorden, geen stille 200
-- [ ] **L7.5d (was L7.5) — Oude tekst, voor de volledigheid:** `intel_congress_trades` bestaat
+- [x] **L7.5d — Achtergrond (was de oude L7.5-tekst):** `intel_congress_trades` bestaat
   als tabel met unieke index, maar **niets in deze repo schrijft erin** — dat
   deed de Unusual Whales edge function. En er staat nergens een Alpha
   Vantage-sleutel in de app. Wat er moet komen: een cron-route die
@@ -595,7 +610,14 @@ Dit hoort er ook bij, want het scheelt werk:
 - [ ] De snelactie "Companion: live check" test op `tos-chart-dock`, van de
   chart-dock-ronde. Die geeft ook `1` op een oude build — moet meebewegen met
   de nieuwste deploy
-- [ ] Fase 5.3: AXE vertelt in de feed wát hij tekende en waarom
+- [x] **Fase 5.3 — stond al, deze regel was blijven staan.**
+  `chartActionSummary` zet een chart-actie om in iets dat je een week later
+  nog kunt lezen: *"Key level on EURUSD M15 — At 1.0842. Prior day high,
+  untested. Applied to your chart — still adjustable."* Wát, waarop, en de
+  reden die AXE zelf gaf. Ik dacht eerst dat de reden genegeerd werd; dat was
+  mijn eigen afgekapte testoutput, niet de code. Wél echt mis: de reden begon
+  met een kleine letter midden in een zin ("At 1.0842. prior day high"), wat
+  als een typefout leest. Gerepareerd, met een check erop
 
 ## L9 — DNS: wat er moet gebeuren en wie het kan
 

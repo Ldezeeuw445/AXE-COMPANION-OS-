@@ -117,4 +117,27 @@ check("the reason survives from the tool call to the stored action", () => {
   );
 });
 
+check("the reason reads as a sentence, wherever it lands", () => {
+  // "At 1.0842. prior day high" reads like a typo rather than a thought.
+  const after = chartActionSummary({
+    actionType: "mark_key_level",
+    symbol: "EURUSD",
+    timeframe: "M15",
+    payload: { level: "1.0842", reason: "prior day high, untested" },
+    status: "applied",
+  });
+  assert.match(after.body, /At 1\.0842\. Prior day high, untested\./);
+
+  // First in the line it keeps the author's own casing — AXE may have started
+  // with a symbol or a number, and forcing a capital there would mangle it.
+  const first = chartActionSummary({
+    actionType: "draw_fibonacci",
+    symbol: "XAUUSD",
+    timeframe: "H1",
+    payload: { reason: "retracement into the 61.8" },
+    status: "applied",
+  });
+  assert.ok(first.body.startsWith("retracement into the 61.8."), first.body);
+});
+
 console.log(`\n${passed} checks passed`);

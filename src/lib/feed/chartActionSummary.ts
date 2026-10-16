@@ -71,7 +71,12 @@ export function chartActionSummary(input: ChartActionSummaryInput): ChartActionS
 
   // The reason AXE gave. This is the part that makes the item worth keeping.
   const reason = readString(input.payload, "reason");
-  if (reason) parts.push(reason.endsWith(".") ? reason : `${reason}.`);
+  if (reason) {
+    // It follows a sentence, so it starts one: "At 1.0842. prior day high"
+    // reads like a typo rather than a thought.
+    const sentence = parts.length > 0 ? reason.charAt(0).toUpperCase() + reason.slice(1) : reason;
+    parts.push(sentence.endsWith(".") ? sentence : `${sentence}.`);
+  }
 
   parts.push(applied ? "Applied to your chart — still adjustable." : "Opens with your chart.");
 
