@@ -1,21 +1,11 @@
 "use client";
 
 import { Send } from "lucide-react";
+import { INTEL_QUICK_ACTIONS } from "@/lib/intel/intelQuickActions";
 import { BorderBeam } from "border-beam";
 import { AxeOrb } from "@/components/chat/AxeThinkingOrb";
 
 /** Intel's two standing questions — the reason its composer differs at all. */
-const INTEL_QUICK_ACTIONS = [
-  {
-    label: "Energy vs Gold",
-    prompt:
-      "How do energy flows correlate with XAUUSD right now? Signal, confidence and feeds.",
-  },
-  {
-    label: "Market Tide",
-    prompt: "What's the market tide signal across my watchlist? Net premium and bias.",
-  },
-] as const;
 
 type IntelTerminalComposerProps = {
   value: string;

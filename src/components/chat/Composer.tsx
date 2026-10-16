@@ -12,6 +12,7 @@
  */
 
 import { Suspense, useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { INTEL_QUICK_ACTIONS } from "@/lib/intel/intelQuickActions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -40,17 +41,6 @@ declare global {
 }
 
 /** Intel's two standing questions — the reason its composer differs at all. */
-const INTEL_QUICK_ACTIONS = [
-  {
-    label: "Energy vs Gold",
-    prompt:
-      "How do energy flows correlate with XAUUSD right now? Signal, confidence and feeds.",
-  },
-  {
-    label: "Market Tide",
-    prompt: "What's the market tide signal across my watchlist? Net premium and bias.",
-  },
-] as const;
 
 const LS_SYMBOL = "axe_active_symbol";
 const LS_TF = "axe_active_tf";

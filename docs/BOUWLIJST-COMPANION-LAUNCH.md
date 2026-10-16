@@ -199,7 +199,23 @@ Gemeten: `src/lib/alerts/` ✅ — `smartAlertRules`, `smartAlertTemplates`,
 `useAlertEvaluator`, `fromChatTool`. Evaluatie draait in de watcher ✅.
 
 - [ ] **7.1** Alert-type "open trade bij trigger" met vooringestelde lot/SL/TP ❌ bestaat niet — bouwen bovenop 6.1 (valt onder niveau 3)
-- [ ] **7.2** Alle quick actions langslopen en per stuk bewijzen dat ze werken (`QuickActionMenu`, `ChartQuickActions`, `Composer`, `IntelTerminalComposer`) — vier aparte plekken, waarschijnlijk niet allemaal in sync
+- [x] **7.2 — Langsgelopen. De aanname klopte half.** Het waren geen vier
+  kopieën van hetzelfde: `QuickActionMenu` is een navigatiemenu (links naar
+  routes) en `ChartQuickActions` is een chartbalk (depth, news, 1-click trade,
+  limit order). Die hebben niets met elkaar te maken en liepen dus ook niet uit
+  de pas. **Maar tussen de twee composers zat het wel:** `INTEL_QUICK_ACTIONS`
+  stond letterlijk twee keer gedefinieerd, in `Composer.tsx` én in
+  `IntelTerminalComposer.tsx`. Identiek vandaag — en zo begint drift, want de
+  kopie die niemand bijwerkt is degene die een gebruiker aantikt. Nu één lijst
+  in `src/lib/intel/intelQuickActions.ts`, door beide geïmporteerd, met per
+  actie een `requires` die de intel-feed noemt waarop hij leunt. Twee checks
+  weigeren een tweede kopie en een `requires` die naar een niet-bestaande feed
+  wijst
+- [ ] **7.3** De knop "Market Tide" leunt op een Unusual Whales-feed die we
+  niet hebben. AXE antwoordt eerlijk "niet geconfigureerd", dus hij liegt niet,
+  maar het is wel een doodlopende knop. De koppeling staat nu vastgelegd
+  (`requires: "marketTide"`), dus wegfilteren is één filter — zodra
+  beschikbaarheid de client bereikt
 
 ---
 

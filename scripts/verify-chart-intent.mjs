@@ -12,6 +12,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectFallbackChartActionIntent } from "../src/lib/axeChartActions/chartIntent.ts";
 
+import { INTEL_ACTION_SOURCE } from "../src/lib/intel/intelSources.ts";
+
 let passed = 0;
 function check(name, fn) {
   fn();
@@ -94,6 +96,45 @@ check("the intent is remembered and used only after a failed turn", () => {
 
 check("a successful turn marks itself, so the net stays out of the way", () => {
   assert.ok(/turnProduced = true;/.test(composer));
+});
+
+check("the intel quick actions exist once, not once per composer", () => {
+  // This list was written out twice, identically, in Composer.tsx and
+  // IntelTerminalComposer.tsx. Identical today — two literal copies in two
+  // files is how a list starts to drift, and the copy nobody edits is the one
+  // a user ends up tapping.
+  const shared = readFileSync("src/lib/intel/intelQuickActions.ts", "utf8");
+  assert.match(shared, /export const INTEL_QUICK_ACTIONS/, "one place defines it");
+
+  for (const file of [
+    "src/components/chat/Composer.tsx",
+    "src/components/chat/IntelTerminalComposer.tsx",
+  ]) {
+    const src = readFileSync(file, "utf8");
+    assert.doesNotMatch(
+      src,
+      /const INTEL_QUICK_ACTIONS\s*=/,
+      `${file} defines its own copy again`,
+    );
+    assert.match(
+      src,
+      /import \{ INTEL_QUICK_ACTIONS \} from "@\/lib\/intel\/intelQuickActions"/,
+      `${file} must import the shared list`,
+    );
+  }
+});
+
+check("every quick action names the feed it leans on", () => {
+  // So intelSources can say whether the data exists before we promise it.
+  const shared = readFileSync("src/lib/intel/intelQuickActions.ts", "utf8");
+  const requires = [...shared.matchAll(/requires: "(\w+)"/g)].map((m) => m[1]);
+  assert.ok(requires.length >= 2, "each action needs a `requires`");
+  for (const key of requires) {
+    assert.ok(
+      key in INTEL_ACTION_SOURCE,
+      `"${key}" is not an intel action — a quick action pointing at nothing is a dead button`,
+    );
+  }
 });
 
 console.log(`\n${passed} checks passed`);
