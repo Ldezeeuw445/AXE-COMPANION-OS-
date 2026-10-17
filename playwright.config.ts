@@ -23,8 +23,11 @@ export default defineConfig({
     {
       name: "phone",
       use: {
-        ...devices["iPhone 13"],
+        ...devices["Pixel 7"],
+        browserName: "chromium",
         viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
       },
     },
   ],
