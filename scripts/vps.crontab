@@ -28,3 +28,12 @@ PATH=/usr/bin:/bin
 
 # */10 04:00–20:00 UTC Krater feed
 */10 4-20 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/krater-feed-sync >> /tmp/axe-cron-krater-feed-sync.log 2>&1
+
+# :25 hourly journal sweep (Claude launch: catch unlabelled closed trades)
+25 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/journal-sweep >> /tmp/axe-cron-journal-sweep.log 2>&1
+
+# :05 hourly intel correlate
+5 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/intel-correlate >> /tmp/axe-cron-intel-correlate.log 2>&1
+
+# 06:20 UTC congress trades (Alpha Vantage STOCK Act feed)
+20 6 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/congress-trades-sync >> /tmp/axe-cron-congress-trades-sync.log 2>&1

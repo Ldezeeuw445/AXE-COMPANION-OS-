@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export async function POST(req: NextRequest) {
   const authed = await getAuthedServiceSupabase();
@@ -7,6 +8,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user } = authed;
+  const gate = await requireEntitlementFeature(supabase, user.id, "push_notifications");
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
+  }
 
   let body: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
   try {
@@ -47,6 +52,10 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user } = authed;
+  const gate = await requireEntitlementFeature(supabase, user.id, "push_notifications");
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
+  }
 
   let body: { endpoint?: string };
   try {

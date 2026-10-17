@@ -47,6 +47,10 @@ export interface ChartThemeConfig {
   neutralText: string;
   cyanAccent: string;
   frameGlow: string;
+  /** Solid order lines (TradePlanLine, pending entry). Per theme: a single
+   *  shared pair could not clear 3:1 on both a black and a paper canvas. */
+  orderBuy: string;
+  orderSell: string;
   /** Dark theme? Used by overlays to pick text/bg colors. */
   isDark: boolean;
 }
@@ -60,7 +64,7 @@ const MIDNIGHT: ChartThemeConfig = {
   chartCanvasBackground: "#000000",
   textColor: "rgba(220,230,245,0.90)",
   grid: "rgba(255,255,255,0.03)",
-  crosshair: "rgba(0,224,255,0.35)",
+  crosshair: "rgba(0,224,255,0.58)",
   axisSeparator: "rgba(255,255,255,0.08)",
   borderColor: "rgba(255,255,255,0.06)",
   bull: "#1F9C7B",
@@ -72,15 +76,17 @@ const MIDNIGHT: ChartThemeConfig = {
   borderVisible: false,
   crosshairLabelBg: "#0a0a0a",
   entryLine: "rgba(110,178,252,0.7)",
-  stopLine: "rgba(201,84,80,0.7)",
+  stopLine: "rgba(226,96,92,0.92)",
   takeLine: "rgba(31,156,123,0.7)",
-  pendingLine: "rgba(110,178,252,0.45)",
+  pendingLine: "rgba(110,178,252,0.68)",
   alertLine: "rgba(244,191,99,0.6)",
   positiveText: "rgba(31,156,123,0.95)",
   negativeText: "rgba(201,84,80,0.95)",
   neutralText: "rgba(139,149,168,0.95)",
   cyanAccent: "rgba(0,224,255,0.80)",
   frameGlow: "0 0 0 1px rgba(255,255,255,0.04) inset",
+  orderBuy: "#2E9BD6",
+  orderSell: "#E13947",
   isDark: true,
 };
 
@@ -91,7 +97,7 @@ const CHARCOAL: ChartThemeConfig = {
   chartCanvasBackground: "#1a1a1a",
   textColor: "rgba(220,225,235,0.88)",
   grid: "rgba(255,255,255,0.05)",
-  crosshair: "rgba(0,224,255,0.35)",
+  crosshair: "rgba(0,224,255,0.58)",
   axisSeparator: "rgba(255,255,255,0.10)",
   borderColor: "rgba(255,255,255,0.07)",
   bull: "#26a69a",
@@ -105,13 +111,15 @@ const CHARCOAL: ChartThemeConfig = {
   entryLine: "rgba(110,178,252,0.7)",
   stopLine: "rgba(239,83,80,0.7)",
   takeLine: "rgba(38,166,154,0.7)",
-  pendingLine: "rgba(110,178,252,0.45)",
+  pendingLine: "rgba(110,178,252,0.68)",
   alertLine: "rgba(244,191,99,0.6)",
   positiveText: "rgba(38,166,154,0.95)",
   negativeText: "rgba(239,83,80,0.95)",
   neutralText: "rgba(139,149,168,0.95)",
   cyanAccent: "rgba(0,224,255,0.80)",
   frameGlow: "0 0 0 1px rgba(255,255,255,0.05) inset",
+  orderBuy: "#2E9BD6",
+  orderSell: "#E13947",
   isDark: true,
 };
 
@@ -122,7 +130,7 @@ const SLATE: ChartThemeConfig = {
   chartCanvasBackground: "#2a2e39",
   textColor: "rgba(210,215,225,0.88)",
   grid: "rgba(255,255,255,0.06)",
-  crosshair: "rgba(0,224,255,0.35)",
+  crosshair: "rgba(0,224,255,0.58)",
   axisSeparator: "rgba(255,255,255,0.12)",
   borderColor: "rgba(255,255,255,0.08)",
   bull: "#26a69a",
@@ -136,13 +144,15 @@ const SLATE: ChartThemeConfig = {
   entryLine: "rgba(110,178,252,0.7)",
   stopLine: "rgba(239,83,80,0.7)",
   takeLine: "rgba(38,166,154,0.7)",
-  pendingLine: "rgba(110,178,252,0.45)",
+  pendingLine: "rgba(110,178,252,0.68)",
   alertLine: "rgba(244,191,99,0.6)",
   positiveText: "rgba(38,166,154,0.95)",
   negativeText: "rgba(239,83,80,0.95)",
   neutralText: "rgba(150,158,175,0.95)",
   cyanAccent: "rgba(0,224,255,0.80)",
   frameGlow: "0 0 0 1px rgba(255,255,255,0.06) inset",
+  orderBuy: "#2E9BD6",
+  orderSell: "#E13947",
   isDark: true,
 };
 
@@ -153,7 +163,7 @@ const PAPER: ChartThemeConfig = {
   chartCanvasBackground: "#d7d6d0",
   textColor: "rgba(30,35,45,0.88)",
   grid: "rgba(0,0,0,0.06)",
-  crosshair: "rgba(0,140,200,0.40)",
+  crosshair: "rgba(0,88,135,0.78)",
   axisSeparator: "rgba(0,0,0,0.14)",
   borderColor: "rgba(0,0,0,0.08)",
   /* TradingView-style candles: hollow white bullish, solid dark bearish */
@@ -169,12 +179,14 @@ const PAPER: ChartThemeConfig = {
   stopLine: "#A70F2A",
   takeLine: "#006B5B",
   pendingLine: "#0B4F8F",
-  alertLine: "rgba(200,150,50,0.6)",
-  positiveText: "rgba(8,153,129,0.95)",
-  negativeText: "rgba(242,54,69,0.95)",
+  alertLine: "rgba(140,95,0,0.92)",
+  positiveText: "rgba(4,105,87,0.98)",
+  negativeText: "rgba(179,18,30,0.98)",
   neutralText: "rgba(80,85,95,0.95)",
   cyanAccent: "rgba(0,160,200,0.80)",
   frameGlow: "none",
+  orderBuy: "#0B4F8F",
+  orderSell: "#A3101C",
   isDark: false,
 };
 
@@ -189,8 +201,15 @@ export const CHART_THEMES: Record<ChartThemeKey, ChartThemeConfig> = {
 
 export const CHART_THEME_KEYS: ChartThemeKey[] = ["midnight", "paper"];
 
-/** Solid order lines on chart canvas (TradePlanLine, pending entry). */
-export const CHART_ORDER_BUY_COLOR = "#1A729E";
+/**
+ * Legacy shared order colours — the midnight values.
+ *
+ * Kept only for components that have not been made theme-aware yet. Measured
+ * on 2026-10-11, the old pair scored 3.66:1 and 2.96:1 on the paper canvas:
+ * a sell order line you could barely find on a light chart. Prefer
+ * `getChartTheme(key).orderBuy / .orderSell`.
+ */
+export const CHART_ORDER_BUY_COLOR = "#2E9BD6";
 export const CHART_ORDER_SELL_COLOR = "#E13947";
 
 /** Get a theme config by key. Falls back to midnight. */

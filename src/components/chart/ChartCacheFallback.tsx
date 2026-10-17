@@ -25,6 +25,7 @@ type Props = {
 export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf }: Props) {
   const [cache, setCache] = useState<CachedChartSnapshot | null>(null);
   const [checked, setChecked] = useState(false);
+  const [cacheAgeMinutes, setCacheAgeMinutes] = useState(0);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const displaySymbol = (symbol ?? "XAUUSD").toUpperCase();
   const tfKey = tf ?? "h1";
@@ -32,7 +33,10 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
 
   useEffect(() => {
     const cached = readCachedChart(displaySymbol, tfKey);
-    if (cached) setCache(cached);
+    if (cached) {
+      setCache(cached);
+      setCacheAgeMinutes(Math.round((Date.now() - cached.savedAt) / 60_000));
+    }
     setChecked(true);
   }, [displaySymbol, tfKey]);
 
@@ -42,7 +46,7 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
   if (cache && cache.candles.length > 0) {
 
     const lastPrice = cache.lastPrice ?? cache.candles.at(-1)?.close ?? null;
-    const age = Math.round((Date.now() - cache.savedAt) / 60_000);
+    const age = cacheAgeMinutes;
 
     return (
       <div className="flex min-h-0 flex-1 flex-col">

@@ -536,6 +536,11 @@ export const AXE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
             type: "string",
             description: "Optional link label override (default: Open chart).",
           },
+          reason: {
+            type: "string",
+            description:
+              "One sentence: why this drawing helps right now. It is stored with the action and shown in the trader's feed, so it must read as an observation ('the last impulse low to the high is the swing everything is reacting to'), not as 'drew a fib'.",
+          },
           payload: {
             type: "object",
             description: "Optional custom payload for advanced chart actions.",
@@ -673,6 +678,7 @@ export type RouteChartActionArgs = {
   indicators?: string[];
   enable?: boolean;
   label?: string;
+  reason?: string;
   payload?: Record<string, unknown>;
 };
 export type AutoJournalTradesArgs = { account_id?: string; trade_ids?: string[] };
@@ -904,6 +910,7 @@ function buildSessionLockFromContext(context: TradingOSContext): string {
     "Never reuse levels from old turns/pairs. Keep levels in this symbol's current price regime.",
     "If exact levels are requested and live price is missing/stale, call get_live_price first.",
     "If you claim a chart drawing was added, you must call route_chart_action and include its [[link:...]] result.",
+    "Always pass `reason` to route_chart_action. The trader reads it in the feed days later, so write what the drawing shows, not what you did.",
   ].join("\n");
 }
 

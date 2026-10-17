@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { autoJournalTrades } from "@/services/journalingService";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,10 @@ export async function GET(req: Request) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(supabase, user.id, "full_auto_journal");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
 
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId");
@@ -93,6 +98,10 @@ export async function POST(req: Request) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(supabase, user.id, "full_auto_journal");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
 
   const body = (await req.json().catch(() => null)) as {
     accountId?: string;
@@ -103,6 +112,13 @@ export async function POST(req: Request) {
   if (!accountId) return jsonResponse({ ok: false, error: "missing accountId" }, 400);
 
   const result = await autoJournalTrades(supabase, user.id, accountId, body?.tradeIds);
-  if (!result.ok) return jsonResponse({ ok: false, error: result.error }, result.status);
+  if (!result.ok) {
+    // `advice` is the sentence the journal screen shows the user. Dropping it
+    // here is how "AXE is quiet" became indistinguishable from "AXE is fine".
+    return jsonResponse(
+      { ok: false, error: result.error, reason: result.reason, advice: result.advice },
+      result.status,
+    );
+  }
   return jsonResponse(result);
 }

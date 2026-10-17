@@ -93,6 +93,19 @@
   --tos-topbar-h: 2.75rem;
   --tos-nav-h: 4.1rem;
   --tos-nav-offset: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.55rem);
+  /* Hoogte van de balkenstapel onder de chart (squawk, PnL, handelsbalk).
+     ChartBottomDock meet zichzelf en schrijft hem op <body>; 0 zodra er geen
+     chart in beeld is. Zie ChartBottomDock.tsx voor waarom dit gemeten wordt
+     en niet met de hand ingevuld. */
+  --tos-chart-dock: 0px;
+  /* Wat de chart onderaan vrij moet houden.
+     Een SOM en geen max: de stapel staat sinds 28 september BOVEN de nav in
+     plaats van eroverheen, want met de handelsbalk aan was de navigatie weg
+     en kon je niet meer van tab wisselen. Ze overlappen dus niet meer, en dan
+     is optellen precies goed: navhoogte plus wat er aan balken boven staat.
+     Elke combinatie klopt vanzelf -- nav ingeklapt of niet (dan krimpt
+     --tos-nav-offset mee), met of zonder handelsbalk, met of zonder squawk. */
+  --tos-chart-bottom: calc(var(--tos-nav-offset) - 0.24rem + var(--tos-chart-dock, 0px));
   --tos-topbar-offset: calc(var(--tos-topbar-h) + env(safe-area-inset-top));
   /* Tablet status bar clearance — thin edge before in-chart toolbar */
   --tos-tablet-safe-top: max(env(safe-area-inset-top, 0px), 0.65rem);
@@ -502,16 +515,20 @@ body {
   bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 55;
-  width: min(34rem, calc(100vw - max(1rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1.2rem;
-  background: linear-gradient(180deg, rgba(22, 22, 24, 0.82) 0%, rgba(12, 12, 14, 0.88) 100%);
-  box-shadow:
-    0 9px 24px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  /* Same width as the composer above it: the dock is inset-x-0 px-3 around a
+     max-w-2xl card, so the nav matches that box exactly rather than sitting a
+     few pixels wider. */
+  width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 26px;
+  background: linear-gradient(180deg, #131317 0%, #0b0b0e 100%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(18px) saturate(145%);
   -webkit-backdrop-filter: blur(18px) saturate(145%);
-  padding: 0.2rem 0.32rem 0.24rem;
+  /* Slim on purpose — the bar should read as a quiet base under the composer,
+     not a second card competing with it. Width and radius carry the family
+     resemblance instead of height. */
+  padding: 0.2rem 0.4rem 0.24rem;
   --tos-nav-icon-size: 31px;
   --tos-nav-icon-glyph-size: 15px;
   --tos-nav-label-size: 6px;
@@ -525,7 +542,7 @@ body.trade-sheet-open .tos-nav-pill {
   /* ── Landscape adaptation ──────────────────────────────────────── */
 @media (orientation: landscape) {
   .tos-nav-pill {
-    width: min(38rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+    width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
   }
 }
@@ -570,7 +587,7 @@ body.trade-sheet-open .tos-nav-pill {
     padding-left: 0;
     padding-right: 0;
     /* Match phone chart — keep canvas above fixed bottom nav + exec overlay */
-    padding-bottom: calc(var(--tos-nav-offset) - 0.24rem);
+    padding-bottom: var(--tos-chart-bottom);
   }
   body.tos-route-chart .tos-shell-desktop-only {
     display: none !important;
@@ -587,40 +604,36 @@ body.trade-sheet-open .tos-nav-pill {
   }
 }
 
-/* Tablet — collapsible bottom nav (swipe down to hide, peek handle to restore) */
-body.tos-tablet-device.tos-tablet-nav-collapsed {
-  --tos-nav-offset: max(0.4rem, env(safe-area-inset-bottom, 0px));
+/* Collapsible bottom nav — tap the handle (or swipe down) to hide, peek
+   handle to restore. Phone included: that is where the space matters most. */
+body.tos-tablet-nav-collapsed {
+  /* The bar does not leave the screen — it becomes a rail.
+     Every value here is written out rather than derived from --tos-nav-h:
+     the derived ones live on :root, where var() is substituted before this
+     override on <body> exists, so they would keep the expanded nav's height
+     and leave a dead gap above the rail. */
+  --tos-nav-h: 1.15rem;
+  --tos-nav-offset: calc(1.15rem + env(safe-area-inset-bottom, 0px) + 0.4rem);
+  --tos-chat-composer-bottom: calc(1.15rem + env(safe-area-inset-bottom, 0px) + 0.35rem);
+  --tos-chat-scroll-bottom: calc(
+    1.15rem + env(safe-area-inset-bottom, 0px) + 0.35rem + var(--tos-chat-composer-h) +
+      var(--tos-chat-orb-h) + 1rem
+  );
 }
 
-body.tos-tablet-device .tos-tablet-nav-pill {
+.tos-nav-pill-rail {
+  padding: 0 !important;
+  border-radius: 999px !important;
+}
+
+.tos-tablet-nav-pill {
   transition:
     transform 0.28s cubic-bezier(0.32, 0.72, 0, 1),
     opacity 0.22s ease;
 }
 
-body.tos-tablet-device .tos-tablet-nav-pill-hidden {
-  transform: translateX(-50%) translateY(calc(100% + 1.25rem)) !important;
-  opacity: 0;
-  pointer-events: none !important;
-}
-
-body.tos-tablet-device.tos-tablet-nav-collapsed.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
+body.tos-tablet-nav-collapsed.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
   padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
-}
-
-body.tos-tablet-device .tos-tablet-nav-peek {
-  animation: tos-tablet-nav-peek-in 0.25s ease;
-}
-
-@keyframes tos-tablet-nav-peek-in {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
 }
 
 /* Tablet chart header — show when JS marks landscape tablet (incl. iPad Pro) */
@@ -702,6 +715,51 @@ body.tos-tablet-landscape .tos-shell-mobile-chrome {
 /* Chat composer dock — pinned above bottom nav (or safe-area on mouse desktop) */
 :root {
   --tos-chat-composer-bottom: calc(var(--tos-nav-h) + env(safe-area-inset-bottom, 0px) + 0.2rem);
+
+  /* The composer stack is fixed and portaled to <body>, so the message list
+     cannot see it in flow and has to reserve the space itself. This used to be
+     a flat pb-[10rem] guess, which is why messages slid under the composer and
+     the nav on some screens. Derived from the same variables the dock uses, so
+     the two can no longer drift apart. */
+  /* Fallback only: ChatComposerDock measures the real card and overwrites
+     this on the root element, so the list reserves the exact height rather
+     than a guess that goes stale with every composer change. */
+  --tos-chat-composer-h: 6.75rem;
+  /* The orb sits on top of the card and needs its own clearance, or it
+     covers the last line of AXE's reply. */
+  --tos-chat-orb-h: 2.5rem;
+  --tos-chat-scroll-fade: 2.75rem; /* dissolve band above the composer */
+  --tos-chat-scroll-bottom: calc(
+    var(--tos-chat-composer-bottom) + var(--tos-chat-composer-h) +
+      var(--tos-chat-orb-h) + 1rem
+  );
+}
+
+/* Padding fixes where the last message comes to rest; it does nothing for the
+   ones travelling past mid-scroll. A mask on the scroll container was the first
+   attempt and was the wrong tool: the mask is measured from the container's own
+   bottom edge, and on /chat that edge does not sit where the composer does — it
+   is pulled up by --tos-nav-offset, which is 0.35rem taller than the composer's
+   own offset, and on iOS moves again with the collapsing toolbar. So the fade
+   landed below the gap it was meant to cover, and text stayed crisp between the
+   composer and the nav.
+
+   This is measured from the viewport instead, which is where the composer and
+   the nav actually live, so it cannot drift: opaque from the composer's top edge
+   all the way down, with a short dissolve above it. It sits under the nav pill
+   (z 55) and under the composer dock (z 85), so both still read normally — only
+   the thread behind them is covered. */
+.tos-chat-bottom-scrim {
+  height: calc(
+    var(--tos-chat-composer-bottom) + var(--tos-chat-composer-h) +
+    var(--tos-chat-scroll-fade)
+  );
+  background: linear-gradient(
+    to bottom,
+    rgba(6, 6, 8, 0) 0,
+    rgba(6, 6, 8, 0.92) calc(var(--tos-chat-scroll-fade) - 0.75rem),
+    #060608 var(--tos-chat-scroll-fade)
+  );
 }
 
 @media (min-width: 1280px) and (min-height: 720px) and (pointer: fine) and (not (pointer: coarse)) {
@@ -806,10 +864,13 @@ body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route 
   }
 
   .tos-nav-pill {
-    width: min(33rem, calc(100vw - max(0.8rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
+    /* Installed PWA — the way this app is actually used. Keep the same box as
+       the composer here too, or the nav goes back to being narrower with
+       tighter corners exactly where it shows. */
+    width: min(42rem, calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px))));
     bottom: max(0.28rem, env(safe-area-inset-bottom, 0px));
-    border-radius: 1.05rem;
-    padding: 0.16rem 0.28rem 0.2rem;
+    border-radius: 26px;
+    padding: 0.16rem 0.36rem 0.2rem;
     --tos-nav-icon-size: 29px;
     --tos-nav-icon-glyph-size: 14px;
     --tos-nav-label-size: 5.5px;
@@ -2122,7 +2183,7 @@ body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-content 
 body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-content.tos-flush-route.tos-chart-route {
   padding-left: 0;
   padding-right: 0;
-  padding-bottom: calc(var(--tos-nav-offset) - 0.24rem);
+  padding-bottom: var(--tos-chart-bottom);
 }
 
 body.axe-embed-demo.axe-embed-tablet.tos-route-chart .tos-shell-desktop-only {
@@ -2154,4 +2215,183 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Landing hero devices — iPhone + iPad on one lit block.
+
+   Recovered from two retired drafts and merged: the device stage came from
+   `public/finallaunch/index.html`, the dot grid that lights up on hover from
+   the `/final` React hero. Namespaced `axe-hero-*` so nothing here collides
+   with the draft's own inline styles, which are still served statically.
+
+   The screens run `/hero-demo/app.html`, a self-contained mock: no account,
+   no Supabase, no network. The devices used to iframe `/demo/embed`, which
+   minted an anonymous session — and anonymous accounts are gone, so a visitor
+   who was not signed in saw a sign-in form inside the phone instead of an app.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.axe-hero-stage {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(14px, 2vw, 30px);
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid rgba(34, 211, 238, 0.16);
+  border-radius: 30px;
+  background:
+    radial-gradient(780px circle at 50% -16%, rgba(34, 211, 238, 0.1), transparent 52%),
+    linear-gradient(180deg, rgba(10, 14, 21, 0.96), rgba(6, 8, 12, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 24px 48px rgba(0, 0, 0, 0.34);
+  transition:
+    border-color 320ms ease,
+    box-shadow 320ms ease;
+}
+
+.axe-hero-stage-active {
+  border-color: rgba(34, 211, 238, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 28px 60px rgba(0, 0, 0, 0.42),
+    0 0 44px -12px rgba(34, 211, 238, 0.3);
+}
+
+/* The dots sit behind the block and brighten when the pointer is on it. */
+.axe-hero-dots {
+  pointer-events: none;
+  position: absolute;
+  inset: -2.2rem;
+  z-index: 0;
+  border-radius: 3.6rem;
+  opacity: 0.3;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.14), transparent 48%),
+    radial-gradient(rgba(119, 236, 255, 0.2) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    18px 18px;
+  transition:
+    opacity 320ms ease,
+    background 320ms ease;
+}
+
+.axe-hero-dots-active {
+  opacity: 0.72;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.26), transparent 52%),
+    radial-gradient(rgba(119, 236, 255, 0.34) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    18px 18px;
+}
+
+.axe-hero-device {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.axe-hero-device--phone {
+  width: min(268px, 24vw);
+  z-index: 2;
+}
+
+.axe-hero-device--ipad {
+  width: min(740px, 62vw);
+  z-index: 1;
+}
+
+.axe-hero-bezel {
+  position: relative;
+  padding: 9px;
+  border: 1px solid #000;
+  border-radius: 40px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03) 38%, rgba(0, 0, 0, 0.44)),
+    linear-gradient(180deg, #24272d, #0f1116);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 26px 54px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.axe-hero-device--ipad .axe-hero-bezel {
+  padding: 13px;
+  border-radius: 30px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 42%, rgba(0, 0, 0, 0.42)),
+    linear-gradient(180deg, #30333b, #0d0f14);
+}
+
+.axe-hero-notch {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 4;
+  width: 84px;
+  height: 21px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 13px;
+  background: #000;
+  pointer-events: none;
+}
+
+.axe-hero-screen {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.88);
+  border-radius: 31px;
+  background: #020304;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.axe-hero-device--phone .axe-hero-screen {
+  aspect-ratio: 9 / 19.5;
+}
+
+.axe-hero-device--ipad .axe-hero-screen {
+  aspect-ratio: 4 / 3;
+  border-radius: 15px;
+}
+
+/* The iframe keeps the device's own logical size and is scaled to fit, so
+   the mock inside lays out as it would on the real thing. */
+.axe-hero-screen iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  border: 0;
+  background: #040508;
+  transform-origin: top left;
+}
+
+/* Under ~1100px the iPad leads and the phone sits beneath it, so neither
+   shrinks past the point where the mock inside stops being readable. */
+@media (max-width: 1100px) {
+  .axe-hero-stage {
+    flex-direction: column-reverse;
+    align-items: center;
+    border-radius: 22px;
+  }
+
+  .axe-hero-device--phone,
+  .axe-hero-device--ipad {
+    width: min(390px, 86vw);
+  }
+
+  .axe-hero-dots {
+    inset: -1.2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axe-hero-stage,
+  .axe-hero-dots {
+    transition: none;
+  }
 }

@@ -6,8 +6,17 @@ import type {
 } from "@/types/adaptive";
 import { buildAdaptiveDecisionSet, preferredChartDefaults } from "@/lib/adaptive/profileEngine";
 
+/**
+ * Structural stand-in for whichever Supabase client the caller passes — the
+ * cookie client, the service-role client, or a test double. Typing the full
+ * PostgREST builder chain here does not pay off: every stricter shape we tried
+ * failed to accept the real PostgrestFilterBuilder at the call sites, pushing
+ * the error into the routes instead of removing it. The awaited result is cast
+ * explicitly by each loader below, which is where the real typing lives.
+ */
 type SupabaseLike = {
   from: (table: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     select: (query: string) => any;
   };
 };

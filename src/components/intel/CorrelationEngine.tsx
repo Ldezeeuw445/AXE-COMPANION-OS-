@@ -98,11 +98,14 @@ export function CorrelationEngine() {
     }
     const run = () => void fetch_(hasFreshCache);
     if (hasFreshCache) {
-      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-        const w = window as Window & {
-          requestIdleCallback: (cb: IdleRequestCallback) => number;
-          cancelIdleCallback?: (id: number) => void;
-        };
+      const w =
+        typeof window !== "undefined"
+          ? (window as Window & {
+              requestIdleCallback?: (cb: IdleRequestCallback) => number;
+              cancelIdleCallback?: (id: number) => void;
+            })
+          : null;
+      if (w && typeof w.requestIdleCallback === "function") {
         const idleId = w.requestIdleCallback(() => run());
         return () => w.cancelIdleCallback?.(idleId);
       }

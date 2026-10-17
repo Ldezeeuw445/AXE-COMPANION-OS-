@@ -28,7 +28,7 @@ export function ContentShell({ children }: { children: ReactNode }) {
       } ${isChartRoute ? "tos-chart-route" : ""} ${
         flush
           ? isChartRoute
-            ? "overflow-hidden pb-[calc(var(--tos-nav-offset)-0.24rem)]"
+            ? "overflow-hidden pb-[var(--tos-chart-bottom)]"
             : "overflow-hidden pb-[var(--tos-nav-offset)]"
           : "tos-app-content overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]"
       }`}

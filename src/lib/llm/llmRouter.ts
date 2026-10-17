@@ -1,3 +1,4 @@
+import { firstNonEmptyEnv } from "@/lib/envFallback";
 import type OpenAI from "openai";
 import {
   ollamaChat,
@@ -207,6 +208,6 @@ export async function llmSimpleChatStreaming(
 
 export async function llmHealth(): Promise<{ ollama: boolean; openai: boolean }> {
   const ollama = await ollamaHealth();
-  const openai = !!(process.env.OPENAI_API_KEY ?? process.env.OPEN_AI_API_KEY);
+  const openai = firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY") !== null;
   return { ollama, openai };
 }

@@ -13,7 +13,7 @@ import {
   itemBelongsToFeedTab,
   parseFeedTabParam,
 } from "@/lib/feed/feedTabs";
-import { stripBriefMarkdown } from "@/lib/briefing/briefBodyFormat";
+import { BriefBodyContent } from "@/components/briefing/BriefBodyContent";
 import {
   getFeedTabLastSeenAt,
   markFeedTabItemsRead,
@@ -315,7 +315,18 @@ export function AxeFeedClient({ initialTab = "morning_brief" }: AxeFeedClientPro
                         <p className={cn("axe-section-label", style.text)}>{kindLabel(item)}</p>
                         <p className="axe-heading-sm mt-1 text-tos-text">{item.title}</p>
                         {item.body ? (
-                          <p className="axe-body mt-1.5 text-tos-muted">{stripBriefMarkdown(item.body)}</p>
+                          <div className="mt-2">
+                            {/* The body arrives with real section markers
+                                (MARKET OUTLOOK, NEWS, ACTION ITEMS…) on their
+                                own lines. Rendering it as one <p> collapsed
+                                every newline into a space and turned a
+                                structured brief into a grey wall. */}
+                            <BriefBodyContent
+                              body={item.body}
+                              compact
+                              headingClassName={style.text}
+                            />
+                          </div>
                         ) : null}
                       </div>
                       <span className="axe-label shrink-0 text-tos-dim">{formatWhen(item.createdAt)}</span>

@@ -6,11 +6,12 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors. This is a temporary measure to get Ollama
-    // support working. Type errors should be fixed properly later.
-    ignoreBuildErrors: true,
+    // Was `ignoreBuildErrors: true` as "a temporary measure", and it stayed on
+    // long enough to hide 89 type errors — two of which were live runtime bugs
+    // in /api/risk/band, and 43 of which were a Doctor action whose helpers had
+    // never been written. All are fixed; the build now fails on a type error
+    // again, which is the point.
+    ignoreBuildErrors: false,
   },
   webpack: (config) => {
     config.externals.push("pino-pretty", "lokijs", "encoding");

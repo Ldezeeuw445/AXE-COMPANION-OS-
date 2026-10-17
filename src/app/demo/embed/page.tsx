@@ -26,14 +26,15 @@ function DemoEmbedInner() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/auth/demo", { method: "POST", credentials: "include" });
-        const body = (await res.json()) as { ok?: boolean; error?: string };
+        // This used to mint an anonymous session so the mock could show the
+        // real app to a stranger. Anonymous accounts are gone (see
+        // /api/auth/demo), so the embed now only renders for someone who is
+        // already signed in — and says so plainly when they are not, rather
+        // than showing an unexplained black rectangle.
+        const res = await fetch("/api/shell/status", { credentials: "include" });
         if (cancelled) return;
-        if (!res.ok || !body.ok) {
-          setError(true);
-          return;
-        }
-        setReady(true);
+        setReady(res.ok);
+        setError(!res.ok);
       } catch {
         if (!cancelled) setError(true);
       }
@@ -56,6 +57,22 @@ function DemoEmbedInner() {
           className="h-full w-full border-0 bg-[#040508]"
           allow="clipboard-write"
         />
+      ) : error ? (
+        <div className="grid h-full place-items-center px-6 text-center">
+          <div>
+            <p className="text-[13px] font-medium text-white/85">Sign in to see the live app</p>
+            <p className="mt-2 text-[12px] leading-relaxed text-white/55">
+              The preview runs the real AXE interface on your own account, so it needs you
+              signed in.
+            </p>
+            <a
+              href="/login"
+              className="mt-4 inline-flex rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-cyan-300/90"
+            >
+              Sign in
+            </a>
+          </div>
+        </div>
       ) : null}
     </main>
   );

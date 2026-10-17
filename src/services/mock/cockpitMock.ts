@@ -152,6 +152,21 @@ export const mockCockpitDashboard: CockpitDashboard = {
     lastCalculatedAt: "2026-03-29T06:30:00.000Z",
     message: "Mock dashboard only: real cockpit scores stay conservative until live user signals exist.",
   },
+  engine: {
+    name: "AXE Profile Engine",
+    version: "2026.03",
+    confidenceScore: 0.68,
+    confidenceTier: "medium",
+    gateMode: "guided",
+    signalCount: 14,
+    tradeLabelCount: 32,
+    memoryCount: 118,
+    updatedAt: "2026-03-29T06:30:00.000Z",
+    rationale: {
+      driver: "CPI week confidence dip",
+      note: "Sweep-reclaim edge holding on ES; NY size still gated pending two clean sessions.",
+    },
+  },
   today: {
     chatMessages: 4,
     tradesClosed: 1,

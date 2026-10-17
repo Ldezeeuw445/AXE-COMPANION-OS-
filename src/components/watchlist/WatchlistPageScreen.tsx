@@ -269,8 +269,10 @@ export function WatchlistPageScreen({
               symbol,
               message: null,
               brokerSymbol: brokerSymbol || symbolMap[symbol] || null,
+              // Widened to string without the annotation, which does not fit
+              // QuoteRow's runtimeState union.
               runtimeState: "warming",
-            },
+            } satisfies QuoteRow,
           ];
           persistOrder(next);
           return next;

@@ -41,6 +41,11 @@ export type ChartLivePollerArgs = {
   accountRegion: string | null;
   emit: (event: ChartLiveEvent) => void;
   isStopped: () => boolean;
+  /**
+   * True while a streamer is pushing real ticks into this room. The REST loops
+   * then idle instead of duplicating (and paying for) what already arrives.
+   */
+  pushActive?: () => boolean;
   /** Cap stream lifetime. Omit (or 0) to run until isStopped(). */
   maxDurationMs?: number;
 };
@@ -89,6 +94,7 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
     emit,
     isStopped,
     maxDurationMs = 0,
+    pushActive,
   } = args;
   const tf = metaApiTimeframeFromKey(timeframeKey);
   const startedAt = Date.now();
@@ -120,6 +126,11 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
 
   async function tickLoop() {
     while (!timedOut()) {
+      if (pushActive?.()) {
+        setStatus("live");
+        await sleep(TICK_INTERVAL_MS, timedOut);
+        continue;
+      }
       try {
         const price = await clientGetSymbolPrice(metaAccountId, brokerSymbol, accountRegion);
         const mid =
@@ -157,6 +168,10 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
   async function candleLoop() {
     await sleep(2_000, timedOut);
     while (!timedOut()) {
+      if (pushActive?.()) {
+        await sleep(CANDLE_INTERVAL_MS, timedOut);
+        continue;
+      }
       try {
         const candles = await clientGetHistoricalCandles(
           metaAccountId,

@@ -89,6 +89,20 @@ const PRESET_RIGHT_OFFSET = [3, 5, 8];
  *   "SL, -1 123.69 USD"  /  "TP, 5 711.01 USD"
  * Space as thousands separator, always 2 decimals, no "+" on positive.
  */
+/**
+ * De lettergrootte van de assen -- en daarmee de BREEDTE van de prijsbalk.
+ *
+ * De rechter as schaalt mee met zijn breedste label, dus één punt kleiner
+ * maakt de balk smaller en de chart breder. Dat is de hele reden: op een
+ * telefoon is elke pixel naast de candles er een die je niet aan de koers
+ * besteedt.
+ *
+ * Tien en niet minder. Bij negen wordt een prijs als 4143.02 lastig te lezen
+ * op een scherm dat je op armlengte houdt, en een as die je moet ontcijferen
+ * kost meer dan de paar pixels die hij oplevert.
+ */
+const AS_LETTERGROOTTE = 10;
+
 function toUtcTimestamp(iso: string): UTCTimestamp | null {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return null;
@@ -219,7 +233,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       layout: {
         background: { type: ColorType.Solid, color: theme.chartCanvasBackground },
         textColor: theme.textColor,
-        fontSize: 11,
+        fontSize: AS_LETTERGROOTTE,
         fontFamily:
           "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue'",
         attributionLogo: false,

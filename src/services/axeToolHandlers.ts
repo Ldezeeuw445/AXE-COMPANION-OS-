@@ -14,6 +14,8 @@ export type RouteChartActionArgs = {
   indicators?: string[];
   enable?: boolean;
   label?: string;
+  /** Why AXE drew this. Goes into the feed item, so it has to be a sentence. */
+  reason?: string;
   payload?: Record<string, unknown>;
 };
 
@@ -28,6 +30,8 @@ export async function handleRouteChartAction(
   }
 
   const payload: Record<string, unknown> = { ...(args.payload ?? {}) };
+  // Stored on the action itself, so the feed can say why a week from now.
+  if (args.reason?.trim()) payload.reason = args.reason.trim().slice(0, 240);
   if (args.indicators?.length) {
     payload.indicators = args.indicators;
     payload.enable = args.enable !== false;

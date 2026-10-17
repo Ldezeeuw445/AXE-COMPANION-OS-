@@ -12,6 +12,7 @@
  */
 
 import { Suspense, useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import { INTEL_QUICK_ACTIONS } from "@/lib/intel/intelQuickActions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -19,12 +20,15 @@ import {
   clearStagedChatPrefill,
   readStagedChatPrefill,
 } from "@/lib/chat/chatPrefill";
-import { Send, X, ImageIcon } from "lucide-react";
+import { Send, X, ImageIcon, Paperclip, Camera, Mic } from "lucide-react";
+import { BorderBeam } from "border-beam";
+import { AxeOrb } from "@/components/chat/AxeThinkingOrb";
+import { useComposerOrb } from "@/components/chat/useComposerOrb";
+import { AxeVoiceBeam } from "@/components/chat/AxeVoiceBeam";
+import { useMicrophone } from "voice-glow";
 import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
-import { AxeAuraWave } from "@/components/ui/AxeAuraWave";
-import { IntelTerminalComposer } from "@/components/chat/IntelTerminalComposer";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
-import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartActionBus";
+import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartIntent";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 
 declare global {
@@ -35,6 +39,8 @@ declare global {
     webkitSpeechRecognition: any;
   }
 }
+
+/** Intel's two standing questions — the reason its composer differs at all. */
 
 const LS_SYMBOL = "axe_active_symbol";
 const LS_TF = "axe_active_tf";
@@ -99,10 +105,13 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const [listening, setListening] = useState(false);
   const [image, setImage] = useState<{ base64: string; type: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const appliedPrefillRef = useRef<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  // Opened from the mic click so the browser still sees a user gesture.
+  const beamMic = useMicrophone();
 
   const focusDraft = useCallback((draft: string) => {
     const el = textareaRef.current;
@@ -221,13 +230,18 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     const symbol = getSymbol();
     const tf = getTf();
 
-    const chartAction = detectFallbackChartActionIntent(text);
-    if (chartAction && !image) {
-      setValue("");
-      const layers = chartAction === "add_indicator" ? inferIndicatorLayers(text) : undefined;
-      router.push(chartActionHref(chartAction, symbol || "XAUUSD", tf || "h1", layers));
-      return;
-    }
+    // Chart intent is remembered, NOT acted on yet. It used to short-circuit
+    // here — navigate to the chart and `return` — which meant a message that
+    // happened to match one of sixteen literal phrases never reached AXE at
+    // all: no reply, no reasoning, nothing in the conversation or the feed.
+    // The drawing appeared and AXE had no idea you had asked for it.
+    //
+    // AXE has a real tool for this (route_chart_action) and should normally
+    // handle it. This stays only as a safety net for the turn that cannot
+    // happen — no credits, dead provider, no network — so a trader asking for
+    // a fib gets a fib instead of silence. See the note in chartActionBus.
+    const chartIntent = image ? null : detectFallbackChartActionIntent(text);
+    let turnProduced = false;
 
     setSending(true);
     setError(null);
@@ -354,6 +368,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       if (sseError) {
         setError(sseError);
       } else if (tokensReceived) {
+        turnProduced = true;
         void loadQuota();
         router.refresh();
       }
@@ -366,6 +381,16 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           : "Connection lost — AXE may still be thinking. Refresh in a moment.",
       );
     } finally {
+      // Now, and only now, the safety net. The turn produced nothing, so
+      // whatever the trader asked for is not coming from the model.
+      if (chartIntent && !turnProduced) {
+        const layers = chartIntent === "add_indicator" ? inferIndicatorLayers(text) : undefined;
+        setValue("");
+        setError(
+          "AXE could not answer, so the drawing was routed to the chart directly.",
+        );
+        router.push(chartActionHref(chartIntent, symbol || "XAUUSD", tf || "h1", layers));
+      }
       setSending(false);
       if (typeof window !== "undefined") {
         window.dispatchEvent(
@@ -385,6 +410,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     if (listening) {
       recognitionRef.current?.stop();
+      beamMic.stop();
       setListening(false);
       window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       return;
@@ -401,10 +427,12 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       setValue((prev) => (prev ? prev + " " + transcript : transcript));
     };
     rec.onend = () => {
+      beamMic.stop();
       setListening(false);
       window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
     };
     rec.onerror = () => {
+      beamMic.stop();
       setListening(false);
       window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: false } }));
       setError("Mic error — check browser permissions.");
@@ -412,9 +440,12 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     recognitionRef.current = rec;
     rec.start();
+    // Same gesture: a second capture purely for the glow. If the browser
+    // refuses it, dictation is unaffected and the beam simply stays flat.
+    void beamMic.start();
     setListening(true);
     window.dispatchEvent(new CustomEvent("axe:recording", { detail: { recording: true } }));
-  }, [listening]);
+  }, [listening, beamMic]);
 
   // ── File ──────────────────────────────────────────────────────────────
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -436,6 +467,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   }
 
   const intelMode = useChatIntelMode();
+  const composerOrb = useComposerOrb({ listening, sending });
 
   async function runQuickAction(draft: string) {
     setValue(draft);
@@ -444,7 +476,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   }
 
   return (
-    <div className="mt-auto shrink-0 overflow-visible px-1 pb-1 pt-0">
+    <div className="mt-auto shrink-0 overflow-visible pb-1 pt-0">
       {/* ── Image preview ────────────────────────────────────────────── */}
       {image ? (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">
@@ -463,79 +495,140 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
       {/* ── Unified composer bar: quick actions + typing in one row (intel only) ─── */}
       <div className="relative overflow-visible">
-        {intelMode ? (
-          <IntelTerminalComposer
-            value={value}
-            onChange={setValue}
-            onSubmit={() => {
-              vibrate("medium");
-              void submit();
-            }}
-            onQuickAction={(draft) => void runQuickAction(draft)}
-            sending={sending}
-            inputId="composer-input"
-            textareaRef={textareaRef}
-            onFocus={() => {
-              window.dispatchEvent(new CustomEvent("axe:chat-pin"));
-            }}
-          />
-        ) : (
-          // AXE default composer — gradient brand + particle aura
+        {(
+          // AXE default composer — always-on orb over an AXE Core-style card
           <div className="relative overflow-visible">
+            {/* The orb sits on the card's top edge and is never absent: it
+                breathes at rest and switches state while AXE works, so the
+                composer itself reports what is happening. */}
             <div
-              className="pointer-events-none absolute left-1/2 bottom-full z-0 flex -translate-x-1/2 translate-y-[54%] justify-center xl:hidden"
-              aria-hidden
+              className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 flex -translate-x-1/2 justify-center"
+              aria-hidden={!composerOrb.busy}
             >
-              <AxeAuraWave variant="composer" palette="axe" />
-            </div>
-            <div
-              className="relative z-10 flex items-center gap-2 overflow-hidden rounded-full border border-white/[0.08] px-3 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
-              style={{
-                background: "linear-gradient(180deg, #121216 0%, #0a0a0c 100%)",
-                touchAction: "pan-y",
-              }}
-              onTouchStart={(e) => e.stopPropagation()}
-              onTouchMove={(e) => e.stopPropagation()}
-            >
-              <textarea
-                ref={textareaRef}
-                id="composer-input"
-                rows={1}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                enterKeyHint="send"
-                onFocus={() => {
-                  window.dispatchEvent(new CustomEvent("axe:chat-pin"));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void submit();
-                  }
-                }}
-                placeholder={placeholder}
-                className="flex-1 resize-none border-0 bg-transparent px-2 py-1 text-sm text-white/90 placeholder:text-white/30 focus:outline-none"
+              <AxeOrb
+                state={composerOrb.state}
+                size={64}
+                accent={intelMode ? "intel" : undefined}
               />
-              <button
-                type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-30"
-                style={{
-                  background: "linear-gradient(135deg, #C9F24B 0%, #3FE6CF 52%, #7A57FF 100%)",
-                  boxShadow: "0 0 12px rgba(63,230,207,0.25), 0 2px 8px rgba(0,0,0,0.3)",
-                }}
-                disabled={(!value.trim() && !image) || sending}
-                aria-label="Send"
-                onClick={() => {
-                  vibrate("medium");
-                  void submit();
-                }}
-              >
-                <Send className="h-4 w-4 text-black" />
-              </button>
             </div>
+            <AxeVoiceBeam stream={beamMic.stream} processing={sending} borderRadius={26}>
+              <BorderBeam size="pulse-outside" colorVariant="mono" borderRadius={26}>
+              <div
+                className="relative z-10 flex flex-col gap-1 overflow-hidden rounded-[26px] border border-white/[0.07] px-4 pb-2 pt-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]"
+                style={{
+                  background: "linear-gradient(180deg, #131317 0%, #0b0b0e 100%)",
+                  touchAction: "pan-y",
+                }}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchMove={(e) => e.stopPropagation()}
+              >
+                <textarea
+                  ref={textareaRef}
+                  id="composer-input"
+                  rows={1}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  enterKeyHint="send"
+                  onFocus={() => {
+                    window.dispatchEvent(new CustomEvent("axe:chat-pin"));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void submit();
+                    }
+                  }}
+                  placeholder={placeholder}
+                  className="max-h-40 min-h-[34px] w-full resize-none border-0 bg-transparent px-1 py-1 text-[15px] text-white/90 placeholder:text-white/30 focus:outline-none"
+                />
+                {intelMode ? (
+                  <div className="-mx-1 mb-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {INTEL_QUICK_ACTIONS.map((q) => (
+                      <button
+                        key={q.label}
+                        type="button"
+                        disabled={sending}
+                        onClick={() => void runQuickAction(q.prompt)}
+                        className="shrink-0 rounded-full border border-[#d4af37]/25 bg-[#d4af37]/[0.07] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-wider text-[#d4af37]/90 transition-colors hover:bg-[#d4af37]/15 disabled:opacity-40"
+                      >
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white/80"
+                    aria-label="Attach a file"
+                  >
+                    <Paperclip className="h-[18px] w-[18px]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/[0.06] hover:text-white/80"
+                    aria-label="Take a photo"
+                  >
+                    <Camera className="h-[18px] w-[18px]" />
+                  </button>
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      vibrate("light");
+                      toggleMic();
+                    }}
+                    aria-label={listening ? "Stop dictation" : "Dictate a message"}
+                    aria-pressed={listening}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+                      listening
+                        ? "bg-[#00d4f5]/15 text-[#00d4f5]"
+                        : "text-white/45 hover:bg-white/[0.06] hover:text-white/80"
+                    }`}
+                  >
+                    <Mic className="h-[18px] w-[18px]" />
+                  </button>
+                  <button
+                    type="button"
+                    className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-opacity disabled:opacity-30"
+                    style={{
+                      background: "linear-gradient(135deg, #C9F24B 0%, #3FE6CF 52%, #7A57FF 100%)",
+                      boxShadow: "0 0 12px rgba(63,230,207,0.25), 0 2px 8px rgba(0,0,0,0.3)",
+                    }}
+                    disabled={(!value.trim() && !image) || sending}
+                    aria-label="Send"
+                    onClick={() => {
+                      vibrate("medium");
+                      void submit();
+                    }}
+                  >
+                    <Send className="h-4 w-4 text-black" />
+                  </button>
+                </div>
+              </div>
+              </BorderBeam>
+            </AxeVoiceBeam>
           </div>
         )}
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       {error ? (
         <p className="mt-2 text-center text-[10px] text-red-400/90">{error}</p>

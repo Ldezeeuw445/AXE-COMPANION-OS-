@@ -3,9 +3,11 @@
 import { useRef } from "react";
 import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
-import { CHART_ORDER_BUY_COLOR, CHART_ORDER_SELL_COLOR } from "@/components/chart/chartTheme";
+import { getChartTheme } from "@/components/chart/chartTheme";
 
 type Props = {
+  /** Active chart theme key, so the accent matches the canvas it sits under. */
+  themeKey?: string | null;
   symbol: string;
   orderLabel: string;
   side: "buy" | "sell";
@@ -45,18 +47,25 @@ export function ChartPendingOrderSheet({
   onPriceChange,
   onSlChange,
   onTpChange,
+  themeKey,
 }: Props) {
   const swipeStartY = useRef<number | null>(null);
-  const accent = side === "buy" ? CHART_ORDER_BUY_COLOR : CHART_ORDER_SELL_COLOR;
+  // Per theme: a single shared pair scored 2.1:1 and 3.0:1 on the paper
+  // canvas — a buy accent you had to look for on a light chart.
+  const sheetTheme = getChartTheme(themeKey ?? null);
+  const accent = side === "buy" ? sheetTheme.orderBuy : sheetTheme.orderSell;
   const priceText = price != null ? formatBrokerPrice(symbol, price) : "—";
 
+  /* Geen eigen positionering meer: deze balk hangt in ChartBottomDock, die de
+     hele stapel plaatst en de veilige zone één keer toepast. Hier stond
+     `fixed bottom: var(--tos-nav-offset)`, en dat was precies het probleem --
+     de limit-balk ging boven de nav hangen terwijl de markt-balk eroverheen
+     ging, dus de volgorde wisselde per soort order. */
   return (
     <div
-      className="tos-chart-exec-overlay pointer-events-auto fixed inset-x-0 bottom-0 z-[70] border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+      className="tos-chart-exec-overlay border-t border-white/[0.08] shadow-[0_-18px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl"
       style={{
         background: "linear-gradient(180deg, rgba(14,16,20,0.97) 0%, rgba(6,6,8,0.99) 100%)",
-        bottom: "var(--tos-nav-offset, calc(3.9rem + env(safe-area-inset-bottom, 0px)))",
-        paddingBottom: "0.35rem",
         maxHeight: expanded ? "min(52vh, 420px)" : undefined,
       }}
     >

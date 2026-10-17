@@ -1,0 +1,52 @@
+{
+  "symbol": "NVDA",
+  "bioguide_id": "",
+  "trades": [
+    {
+      "chamber": "HOUSE",
+      "politician": "Hon. Daniel Meuser",
+      "bioguide_id": "M001204",
+      "politician_canonical": "Daniel Meuser",
+      "party": "R",
+      "state": "PA",
+      "state_district": "PA09",
+      "symbol": "NVDA",
+      "ticker_reported": "NVDA",
+      "ticker_source": "reported",
+      "asset_name": "NVIDIA Corporation - Common Stock (NVDA) [ST]",
+      "asset_type_code": "ST",
+      "transaction_type": "SELL",
+      "transaction_date": "2026-08-31",
+      "notification_date": "2026-09-14",
+      "amount_min": "1001.00",
+      "amount_max": "15000.00",
+      "owner_code": "SPOUSE",
+      "filing_status": "NEW",
+      "filed_date": "2026-10-14"
+    },
+    {
+      "chamber": "HOUSE",
+      "politician": "Hon. Gilbert Cisneros",
+      "bioguide_id": "C001123",
+      "politician_canonical": "Gilbert Ray Cisneros, Jr.",
+      "party": "D",
+      "state": "CA",
+      "state_district": "CA31",
+      "symbol": "NVDA",
+      "ticker_reported": "NVDA",
+      "ticker_source": "reported",
+      "asset_name": "NVIDIA Corporation - Common Stock (NVDA) [ST]",
+      "asset_type_code": "ST",
+      "transaction_type": "SELL",
+      "transaction_date": "2026-08-18",
+      "notification_date": "2026-09-04",
+      "amount_min": "1001.00",
+      "amount_max": "15000.00",
+      "owner_code": "SELF",
+      "filing_status": "NEW",
+      "filed_date": "2026-09-10"
+    }
+  ],
+  "trades_total_count": 439,
+  "trades_truncated": true
+}

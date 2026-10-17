@@ -17,6 +17,7 @@ import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildIntelContext } from "@/lib/intel/buildIntelContext";
 import { streamLLM } from "@/services/llmClient";
 import type { LLMRequest } from "@/services/llmClient";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,10 @@ export async function POST(request: NextRequest) {
     );
   }
   const { supabase, user } = auth;
+  const gate = await requireEntitlementFeature(supabase, user.id, "advanced_intel");
+  if (!gate.ok) {
+    return Response.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
+  }
 
   // ── Parse body ────────────────────────────────────────────────────
   let body: { message?: unknown; history?: unknown; symbol?: unknown };

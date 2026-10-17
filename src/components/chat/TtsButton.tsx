@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { Volume2, VolumeX } from "lucide-react";
+import { primeSpeechAudio, stopSpeechTracking, trackSpeechAudio } from "@/lib/voice/speechLevel";
 
 type TtsButtonProps = {
   text: string;
@@ -13,6 +14,7 @@ export function TtsButton({ text }: TtsButtonProps) {
 
   const stopSpeaking = useCallback(() => {
     setSpeaking(false);
+    stopSpeechTracking();
     window.dispatchEvent(new CustomEvent("axe:speaking", { detail: { speaking: false } }));
   }, []);
 
@@ -30,6 +32,8 @@ export function TtsButton({ text }: TtsButtonProps) {
       return;
     }
 
+    // While the click is still live — the fetch below outlives the gesture.
+    primeSpeechAudio();
     startSpeaking();
 
     try {
@@ -55,6 +59,8 @@ export function TtsButton({ text }: TtsButtonProps) {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
+      // Route through the analyser so the composer beam moves with the voice.
+      trackSpeechAudio(audio);
 
       audio.onended = () => {
         stopSpeaking();

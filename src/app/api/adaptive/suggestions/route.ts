@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AdaptiveSuggestionKind, AdaptiveUiSuggestionRow } from "@/types/adaptive";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 const CHART_KINDS: AdaptiveSuggestionKind[] = [
   "fib_style_default",
@@ -23,6 +24,10 @@ export async function GET(request: Request) {
 
   if (authError || !user) {
     return NextResponse.json({ ok: false, message: "Not authenticated." }, { status: 401 });
+  }
+  const gate = await requireEntitlementFeature(supabase, user.id, "advanced_memory");
+  if (!gate.ok) {
+    return NextResponse.json({ ok: false, message: gate.error, upgradeRequired: true }, { status: gate.status });
   }
 
   const url = new URL(request.url);

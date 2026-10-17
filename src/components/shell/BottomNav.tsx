@@ -27,8 +27,51 @@ import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useSwipeNav } from "./SwipeNavContext";
 import { useTabletNavCollapse, useTabletNavSwipe } from "@/components/shell/TabletNavCollapse";
 import { FeedNavBadge } from "@/components/feed/FeedNavBadge";
+import { useShellStatus } from "@/components/shell/useShellStatus";
+import type { RuntimeTruthState } from "@/lib/runtime/runtimeTruth";
 
 const CYAN = "#00d4f5";
+
+/** How each live-data state paints the nav's top edge. */
+const RUNTIME_LINE: Record<RuntimeTruthState, { background: string; opacity: number }> = {
+  // Edge to edge, and faint: a readout you notice when you look for it, not a
+  // stripe competing with the tabs.
+  live: {
+    background:
+      "linear-gradient(90deg, transparent 0%, rgba(201,242,75,0.5) 14%, rgba(63,230,207,0.6) 50%, rgba(122,87,255,0.5) 86%, transparent 100%)",
+    opacity: 0.5,
+  },
+  degraded: {
+    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.22) 50%, transparent 100%)",
+    opacity: 0.6,
+  },
+  warming: {
+    background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.16) 50%, transparent 100%)",
+    opacity: 0.5,
+  },
+  unavailable: {
+    background:
+      "linear-gradient(90deg, transparent 0%, rgba(240,178,74,0.55) 20%, rgba(240,178,74,0.7) 50%, rgba(240,178,74,0.55) 80%, transparent 100%)",
+    opacity: 0.75,
+  },
+  inactive: {
+    background:
+      "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.08) 70%, transparent 100%)",
+    opacity: 1,
+  },
+};
+
+/** Same shape as the feed badge so the three read as one family. */
+function NavBadge({ count, className, label }: { count: number; className: string; label: string }) {
+  return (
+    <span
+      className={`absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full px-0.5 text-[7px] font-bold text-black ${className}`}
+      aria-label={label}
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
 const GOLD = "#d4af37";
 
 const CORE_TABS = [
@@ -66,8 +109,15 @@ export function BottomNav() {
   }, []);
 
   const { progress, currentTabIdx } = useSwipeNav();
-  const { enabled: tabletNav, collapsed: navCollapsed, collapse: collapseNav } = useTabletNavCollapse();
+  const {
+    enabled: navCollapsible,
+    collapsed: navCollapsed,
+    collapse: collapseNav,
+    expand: expandNav,
+  } = useTabletNavCollapse();
   const navSwipe = useTabletNavSwipe("collapse", collapseNav);
+  const shell = useShellStatus();
+  const expandSwipe = useTabletNavSwipe("expand", expandNav);
 
   // Conditional 6th tab
   const sixthTab = isAxeView
@@ -83,29 +133,39 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
-      className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${tabletNav ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-tablet-nav-pill-hidden" : ""}`}
+      className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${navCollapsible ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-nav-pill-rail" : ""}`}
       style={{
-        background: "linear-gradient(180deg, rgba(22,22,24,0.86) 0%, rgba(12,12,14,0.9) 100%)",
-        borderRadius: 22,
-        boxShadow:
-          "0 14px 34px rgba(0,0,0,0.56), 0 0 0 1px rgba(255,255,255,0.08) inset, 0 1px 0 rgba(255,255,255,0.06) inset",
+        // Matches the composer card above it — same gradient, radius and shadow.
+        background: "linear-gradient(180deg, #131317 0%, #0b0b0e 100%)",
+        borderRadius: 26,
+        boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
         WebkitTextSizeAdjust: "100%",
       }}
       aria-label="Primary"
-      {...(tabletNav ? navSwipe : {})}
+      {...(navCollapsible ? navSwipe : {})}
     >
-      {tabletNav && !navCollapsed ? (
-        <div className="flex justify-center pb-0.5 pt-0.5" aria-hidden>
-          <span className="h-1 w-10 rounded-full bg-white/20" title="Swipe down to hide nav" />
-        </div>
+      {navCollapsible && !navCollapsed ? (
+        // Absolutely placed so the affordance costs the bar no height: a
+        // hairline on the top edge with a finger-sized hit area behind it.
+        <button
+          type="button"
+          onClick={collapseNav}
+          aria-label="Hide navigation"
+          className="group absolute inset-x-0 top-0 z-20 flex h-4 -translate-y-1 justify-center pt-1"
+          {...navSwipe}
+        >
+          <span className="h-[3px] w-9 rounded-full bg-white/15 transition-colors group-active:bg-white/35" />
+        </button>
       ) : null}
-      {/* Inner glow highlight along top edge */}
+
+      {/* Top edge doubles as the live-data readout. AXE gradient when broker
+          ticks are arriving, dimmed when the stream has fallen back to
+          candles, amber when the account is unreachable, and the old neutral
+          highlight when there is no account to report on. */}
       <div
-        className="pointer-events-none absolute inset-x-4 top-[1px] h-px"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.08) 70%, transparent 100%)",
-        }}
+        className="pointer-events-none absolute inset-x-0 top-0 h-px rounded-t-[26px] transition-opacity duration-500"
+        style={{ background: RUNTIME_LINE[shell.runtime].background, opacity: RUNTIME_LINE[shell.runtime].opacity }}
+        aria-hidden
       />
 
       {/* Glassmorphism swipe bubble */}
@@ -128,6 +188,24 @@ export function BottomNav() {
         />
       )}
 
+      {navCollapsed ? (
+        <button
+          type="button"
+          onClick={expandNav}
+          aria-label="Show navigation"
+          aria-expanded={false}
+          className="relative z-10 flex w-full items-center justify-center py-[3px] active:scale-[0.98]"
+          {...expandSwipe}
+        >
+          <span
+            className="h-[3px] w-16 rounded-full"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(201,242,75,0.55) 0%, rgba(63,230,207,0.75) 52%, rgba(122,87,255,0.55) 100%)",
+            }}
+          />
+        </button>
+      ) : (
       <div className="relative z-10 flex items-center justify-around gap-1">
         {tabs.map(({ href, label, Icon, accent }, idx) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -150,6 +228,20 @@ export function BottomNav() {
               style={{ minWidth: 0, flex: "1 1 0%" }}
             >
               {href === "/chat" ? <FeedNavBadge /> : null}
+              {href === "/chart" && shell.alertsTriggered > 0 ? (
+                <NavBadge
+                  count={shell.alertsTriggered}
+                  className="bg-[#f0b24a]"
+                  label={`${shell.alertsTriggered} alerts triggered in the last 24 hours`}
+                />
+              ) : null}
+              {href === "/positions" && shell.positions != null && shell.positions > 0 ? (
+                <NavBadge
+                  count={shell.positions}
+                  className="bg-[#C9F24B]"
+                  label={`${shell.positions} open positions`}
+                />
+              ) : null}
               {/* Icon well */}
               <div
                 className="relative flex h-[var(--tos-nav-icon-size)] w-[var(--tos-nav-icon-size)] items-center justify-center rounded-[10px] transition-all duration-150"
@@ -206,6 +298,7 @@ export function BottomNav() {
           );
         })}
       </div>
+      )}
     </nav>
   );
 }

@@ -2,6 +2,7 @@ import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { createClient } from "@supabase/supabase-js";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { callLLM, type LLMMessage, type LLMRequest } from "@/services/llmClient";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,10 @@ async function resolveSupabaseAuth(request: Request) {
 export async function POST(request: Request) {
   const auth = await resolveSupabaseAuth(request);
   if (!auth) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(auth.supabase, auth.user.id, "advanced_intel");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
   const { supabase, user } = auth;
 
   // Return cached if fresh (supabase + user from resolveSupabaseAuth above)
@@ -136,6 +141,10 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const auth = await resolveSupabaseAuth(request);
   if (!auth) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(auth.supabase, auth.user.id, "advanced_intel");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
   const { supabase, user } = auth;
 
   const { data } = await supabase

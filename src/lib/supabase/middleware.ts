@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
+import { isAnonymousUser } from "@/lib/auth/anonymousSessions";
 
 const PROTECTED_PREFIXES = [
   "/chart",
@@ -83,7 +84,9 @@ export async function updateSession(request: NextRequest) {
     const {
       data: { user: u },
     } = await supabase.auth.getUser();
-    user = u;
+    // An anonymous session is treated as signed out everywhere. See
+    // lib/auth/anonymousSessions for why, and for the other half of the check.
+    user = isAnonymousUser(u) ? null : u;
   }
 
   const path = request.nextUrl.pathname;

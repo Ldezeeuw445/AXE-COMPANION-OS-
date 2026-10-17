@@ -1,6 +1,7 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildIntelContext, runCorrelationAnalysis, getFeedCounts } from "@/lib/intel/correlationEngine";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  const gate = await requireEntitlementFeature(supabase, user.id, "advanced_intel");
+  if (!gate.ok) {
+    return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
+  }
 
   let body: { symbol?: string } = {};
   try {
