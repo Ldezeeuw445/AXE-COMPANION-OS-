@@ -1,24 +1,27 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 
 /**
- * Sets body classes for route-specific CSS (e.g. chart landscape chrome hide).
+ * Mirrors route classes onto <body> for CSS that still keys off body.
+ * useLayoutEffect (not useEffect) so the class is applied before paint
+ * on client navigations — first load is covered by the boot script and
+ * by .tos-route-* on the shell wrapper.
  */
 export function RouteBodyFlags() {
   const pathname = usePathname();
   const isChart = pathname === "/chart" || pathname.startsWith("/chart/");
+  const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.body.classList.toggle("tos-route-chart", isChart);
-    const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
     document.body.classList.toggle("tos-route-chat", isChat);
     return () => {
       document.body.classList.remove("tos-route-chart");
       document.body.classList.remove("tos-route-chat");
     };
-  }, [isChart, pathname]);
+  }, [isChart, isChat]);
 
   return null;
 }

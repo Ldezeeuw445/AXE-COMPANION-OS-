@@ -836,10 +836,13 @@ body.chart-landscape-active .tos-shell-desktop-layout {
 /* Phone landscape on chart route — same immersive shell even before JS hydrates */
 @media (orientation: landscape) and (max-height: 520px) {
   body.tos-route-chart .tos-shell-mobile-nav,
-  body.tos-route-chart .tos-shell-mobile-chrome {
+  body.tos-route-chart .tos-shell-mobile-chrome,
+  .tos-shell-desktop-layout.tos-route-chart .tos-shell-mobile-nav,
+  .tos-shell-desktop-layout.tos-route-chart .tos-shell-mobile-chrome {
     display: none !important;
   }
-  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
+  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route,
+  .tos-shell-desktop-layout.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
     padding: 0 !important;
   }
 }
@@ -852,7 +855,8 @@ body.chart-landscape-active .tos-shell-desktop-layout {
 }
 
 /* Chart route — edge-to-edge canvas on phone portrait (no side gutters) */
-body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route {
+body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route,
+.tos-shell-desktop-layout.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route {
   padding-left: 0 !important;
   padding-right: 0 !important;
 }

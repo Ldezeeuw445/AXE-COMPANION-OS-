@@ -14,7 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useSwipeNav } from "./SwipeNavContext";
 
-const TAB_ORDER = ["/chat", "/watchlist", "/chart", "/positions", "/history", "/settings"];
+const TAB_ORDER = ["/cockpit", "/watchlist", "/chart", "/chat", "/accounts"];
 const CHART_PATH = "/chart";
 const SWIPE_THRESHOLD = 60;   // px to commit navigation
 const DEAD_ZONE = 12;         // px before recognising direction

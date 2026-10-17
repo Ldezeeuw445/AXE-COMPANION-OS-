@@ -42,6 +42,9 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { TosNotice, type TosNoticeAccent } from "@/components/ui/TosNotice";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } from "@/lib/viewport/tablet";
+import { accountTypeFromBroker } from "@/lib/session/accountType";
+import { patchActiveSession } from "@/lib/session/activeSessionStore";
+import { useShellViewport } from "@/lib/viewport/shellViewport";
 import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
@@ -750,7 +753,8 @@ export function ChartScreen({
 
   /* ── Landscape fullscreen mode ───────────────────────────────── */
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isTabletLayout, setIsTabletLayout] = useState(false);
+  const shellViewport = useShellViewport();
+  const [isTabletLayout, setIsTabletLayout] = useState(shellViewport === "tablet");
   const { enabled: tabletNavCollapse, collapsed: tabletNavCollapsed, collapse: collapseTabletNav } =
     useTabletNavCollapse();
   const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
@@ -1690,9 +1694,19 @@ export function ChartScreen({
   }, [data.symbol, data.timeframeKey]);
 
   useEffect(() => {
-    window.localStorage.setItem("axe_active_symbol", data.symbol);
-    window.localStorage.setItem("axe_active_tf", data.timeframeKey);
-  }, [data.symbol, data.timeframeKey]);
+    patchActiveSession({
+      accountId: data.account?.brokerAccountId ?? null,
+      accountLabel: data.account?.label ?? null,
+      accountType: accountTypeFromBroker({
+        label: data.account?.label,
+        mt5Server: data.account?.mt5Server,
+        connectionMethod: data.account?.connectionMethod,
+      }),
+      symbol: data.symbol,
+      timeframe: data.timeframeKey,
+      lastTab: "chart",
+    });
+  }, [data.account?.brokerAccountId, data.account?.connectionMethod, data.account?.label, data.account?.mt5Server, data.symbol, data.timeframeKey]);
 
   useEffect(() => {
     setPendingOrderPrice((prev) => prev ?? data.lastPrice);
@@ -2153,6 +2167,7 @@ export function ChartScreen({
   const goSymbol = useCallback(
     (sym: string) => {
       setRouteFallbackMessage(null);
+      patchActiveSession({ symbol: sym, lastTab: "chart" });
       startRouteTransition(() => {
         router.push(buildHref(accountId, sym, data.timeframeKey));
       });
@@ -2163,6 +2178,7 @@ export function ChartScreen({
     (key: string) => {
       setPendingTfKey(key);
       setRouteFallbackMessage(null);
+      patchActiveSession({ timeframe: key, lastTab: "chart" });
       startRouteTransition(() => {
         router.push(buildHref(accountId, data.symbol, key));
       });
@@ -2174,13 +2190,23 @@ export function ChartScreen({
     (newAccountId: string) => {
       if (newAccountId === accountId) return;
       setRouteFallbackMessage(null);
-      // Persist choice so other pages pick it up
+      const choice = data.accountChoices.find((a) => a.brokerAccountId === newAccountId);
+      patchActiveSession({
+        accountId: newAccountId,
+        accountLabel: choice?.label ?? null,
+        accountType: accountTypeFromBroker({
+          label: choice?.label,
+          mt5Server: choice?.mt5Server,
+          connectionMethod: choice?.connectionMethod,
+        }),
+        lastTab: "chart",
+      });
       void setActiveAccountAction(newAccountId);
       startRouteTransition(() => {
         router.push(buildHref(newAccountId, data.symbol, data.timeframeKey));
       });
     },
-    [router, accountId, data.symbol, data.timeframeKey, startRouteTransition],
+    [router, accountId, data.accountChoices, data.symbol, data.timeframeKey, startRouteTransition],
   );
 
   const lastPriceText = useMemo(

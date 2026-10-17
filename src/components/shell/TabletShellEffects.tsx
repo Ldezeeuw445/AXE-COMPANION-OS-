@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  isTabletLandscape,
-  isTabletViewport,
-  lockTabletLandscape,
-  unlockTabletLandscape,
-} from "@/lib/viewport/tablet";
+import { lockTabletLandscape, unlockTabletLandscape } from "@/lib/viewport/tablet";
+import { useShellViewport } from "@/lib/viewport/shellViewport";
 
 function isEmbedTabletMock(): boolean {
   if (typeof document === "undefined") return false;
@@ -20,15 +16,22 @@ function isEmbedTabletMock(): boolean {
 /**
  * Touch tablets (iPad) run landscape-only: lock orientation and block
  * portrait with a rotate prompt so the shell layout stays stable.
+ *
+ * Viewport comes from the shared store (cookie + phone default). The
+ * rotate overlay is gated until after mount so SSR/phone first paint
+ * never flashes it.
  */
 export function TabletShellEffects() {
+  const viewport = useShellViewport();
   const [portraitBlock, setPortraitBlock] = useState(false);
 
   useEffect(() => {
     function sync() {
       const embedTablet = isEmbedTabletMock();
-      const tablet = embedTablet || isTabletViewport();
-      const landscape = embedTablet || isTabletLandscape();
+      const tablet = embedTablet || viewport === "tablet";
+      const landscape =
+        embedTablet ||
+        (typeof window !== "undefined" && window.matchMedia("(orientation: landscape)").matches);
       document.body.classList.toggle("tos-tablet-device", tablet);
       document.body.classList.toggle("tos-tablet-landscape", tablet && landscape);
       document.body.classList.toggle("tos-tablet-portrait", tablet && !landscape);
@@ -40,9 +43,6 @@ export function TabletShellEffects() {
     window.addEventListener("resize", sync);
     window.addEventListener("orientationchange", sync);
     window.visualViewport?.addEventListener("resize", sync);
-
-    if (isTabletViewport() || isEmbedTabletMock()) lockTabletLandscape();
-
     return () => {
       window.removeEventListener("resize", sync);
       window.removeEventListener("orientationchange", sync);
@@ -52,7 +52,7 @@ export function TabletShellEffects() {
       }
       unlockTabletLandscape();
     };
-  }, []);
+  }, [viewport]);
 
   if (!portraitBlock) return null;
 

@@ -20,6 +20,8 @@ import { addBrokerWatchlistSymbol, removeWatchlistItem, saveWatchlistOrder } fro
 import { CANONICAL_BROKER_SYMBOLS } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { GripVertical, Plus, Search, Trash2, X } from "lucide-react";
+import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
+import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 
@@ -382,12 +384,13 @@ export function WatchlistPageScreen({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageTitleInjector title="Quotes" />
+      <ActiveSessionSeed lastTab="markets" accountLabel={accountLabel} />
+      <PageTitleInjector title="Markets" />
 
       {/* ── Header bar ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
         <span className="text-[13px] font-bold text-white/90">
-          Quotes
+          Markets
           <span className="ml-2 text-[11px] font-medium text-white/30">
             {localItems.length}
           </span>
@@ -554,7 +557,14 @@ export function WatchlistPageScreen({
                 type="button"
                 onClick={() => {
                   if (!editing) {
-                    router.push(`/chart?symbol=${encodeURIComponent(sym)}`);
+                    const session = getActiveSession();
+                    patchActiveSession({ symbol: sym, lastTab: "chart" });
+                    const params = new URLSearchParams({
+                      symbol: sym,
+                      tf: session.timeframe,
+                    });
+                    if (session.accountId) params.set("account", session.accountId);
+                    router.push(`/chart?${params.toString()}`);
                   }
                 }}
                 className={`flex flex-1 items-center px-4 py-3 text-left transition-colors ${
