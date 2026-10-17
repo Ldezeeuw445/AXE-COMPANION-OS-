@@ -15,6 +15,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
+import { getPublicAppBaseUrl } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
@@ -111,8 +112,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   // and we still consider the trigger successful (in-app already shows it).
   let pushed = false;
   try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+    const baseUrl = getPublicAppBaseUrl();
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
       headers: internalPushHeaders(),

@@ -137,8 +137,16 @@ async function main() {
       bearer = getBearerFromCookies(setCookies);
     }
     const json = await res.json().catch(() => null);
+    if (res.status === 410) {
+      pass("demo auth retired", "410 — anonymous demo sessions removed");
+      console.log("\nAuthenticated tests skipped — demo login is gone; use a real account.\n");
+      printSummary();
+      process.exit(results.some((r) => r.status === "FAIL") ? 1 : 0);
+    }
     if (res.ok && json?.ok) {
-      pass("demo auth", `${json.mode} user=${json.userId?.slice(0, 8)}…`);
+      fail("demo auth", "POST /api/auth/demo minted a session — anonymous login must stay 410");
+      printSummary();
+      process.exit(1);
     } else {
       fail("demo auth", json?.error ?? String(res.status));
       console.log("\n⚠️  Authenticated tests skipped — no demo session\n");

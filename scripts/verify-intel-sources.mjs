@@ -121,6 +121,14 @@ check("no health endpoint still asks for a Krater key", () => {
   }
 });
 
+check("cron smoke and crontab listings no longer probe Krater", () => {
+  const smoke = readFileSync("scripts/smoke-launch.mjs", "utf8");
+  assert.ok(!/krater-feed-sync/.test(smoke), "smoke still hits the retired Krater path");
+  assert.ok(!/hasKraterApiKey|generateProbe/.test(smoke), "smoke still reports the Krater probe");
+  const crontab = readFileSync("scripts/vps.crontab", "utf8");
+  assert.ok(!/axe-companion-krater-feed-sync/.test(crontab), "host crontab still lists the paused Krater job");
+});
+
 check("senateTrades is off Unusual Whales and onto a free source", () => {
   assert.equal(INTEL_ACTION_SOURCE.senateTrades, "alphavantage");
 

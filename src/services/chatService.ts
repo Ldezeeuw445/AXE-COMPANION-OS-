@@ -46,6 +46,7 @@ import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeT
 import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
 import { buildAxeEngineSystemGate, getAxeEngineProfile } from "@/services/axeEngineService";
 import { isForexPairSymbol, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
+import { getPublicAppBaseUrl } from "@/lib/env";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
@@ -740,7 +741,7 @@ export async function streamChatMessage(
   // Fire-and-forget push notification to user's subscribed devices
   async function firePush(title: string, body: string, url = "/chat") {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost:5000"}`;
+      const baseUrl = getPublicAppBaseUrl();
       await fetch(`${baseUrl}/api/push/send`, {
         method: "POST",
         headers: internalPushHeaders(),

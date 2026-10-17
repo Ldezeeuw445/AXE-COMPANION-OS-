@@ -7,6 +7,7 @@
  * Secured with PUSH_WEBHOOK_SECRET env var.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { getPublicAppBaseUrl } from "@/lib/env";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
 
 export async function POST(req: NextRequest) {
@@ -30,8 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Delegate to internal send route
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-    ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost:5000"}`;
+  const baseUrl = getPublicAppBaseUrl();
 
   const result = await fetch(`${baseUrl}/api/push/send`, {
     method: "POST",

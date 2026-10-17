@@ -1,3 +1,4 @@
+import { rejectAnonymous } from "@/lib/auth/anonymousSessions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { DEMO_WATCHLIST_SYMBOLS } from "@/lib/broker/demoAccount";
 import { SQUAWK_STATION_IDS } from "@/lib/squawk/prefs";
@@ -8,17 +9,22 @@ export const dynamic = "force-dynamic";
 const VALID_THEMES = new Set(["midnight", "charcoal", "slate", "paper"]);
 const VALID_TIMEFRAMES = new Set(["m15", "m30", "h1", "h4", "d1"]);
 
+function unauthorized() {
+  return Response.json({ error: "unauthorized" }, { status: 401 });
+}
+
 export async function GET() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
-    return Response.json({ completed: true, reason: "no_supabase" });
+    return Response.json({ error: "supabase_not_configured" }, { status: 503 });
   }
 
   const {
-    data: { user },
+    data: { user: rawUser },
   } = await supabase.auth.getUser();
+  const user = rejectAnonymous(rawUser);
   if (!user) {
-    return Response.json({ completed: true, reason: "anonymous" });
+    return unauthorized();
   }
 
   const { data } = await supabase
@@ -57,9 +63,10 @@ export async function POST(req: Request) {
   if (!supabase) return Response.json({ error: "supabase_not_configured" }, { status: 503 });
 
   const {
-    data: { user },
+    data: { user: rawUser },
   } = await supabase.auth.getUser();
-  if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const user = rejectAnonymous(rawUser);
+  if (!user) return unauthorized();
 
   let body: OnboardingBody;
   try {

@@ -79,7 +79,6 @@ are not registered there.
 | `weekly-briefing` | `/api/cron/weekly-briefing` | **pg_cron** | Live, active |
 | `cockpit-snapshots` | `/api/cron/cockpit-snapshots` | **pg_cron** | Live, active |
 | `knowledge-sync` | `/api/cron/knowledge-sync` | **pg_cron** | Live, active |
-| `krater-feed-sync` | `/api/cron/krater-feed-sync` | **pg_cron** | Live, active |
 | `intel-correlate` | `/api/cron/intel-correlate` | **pg_cron** | Live, active (Claude launch) |
 | `journal-sweep` | `/api/cron/journal-sweep` | **pg_cron** | Live, active (Claude launch) |
 | `user-knowledge-sync` | `/api/cron/user-knowledge-sync` | **pg_cron** | Live, active; never was in the host crontab |

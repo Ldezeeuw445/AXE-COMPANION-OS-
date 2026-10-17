@@ -87,6 +87,26 @@ function presence(name: string, area: string, names: string[], note?: string): C
   };
 }
 
+function vapidPresence(): Check {
+  const publicKey = firstNonEmptyEnv("NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PUBLIC_KEY");
+  const names = ["NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"];
+  const missing = [
+    !publicKey ? "NEXT_PUBLIC_VAPID_PUBLIC_KEY|VAPID_PUBLIC_KEY" : null,
+    !env("VAPID_PRIVATE_KEY") ? "VAPID_PRIVATE_KEY" : null,
+    !env("VAPID_SUBJECT") ? "VAPID_SUBJECT" : null,
+  ].filter((n): n is string => Boolean(n));
+  return {
+    name: "Push (VAPID)",
+    area: "push",
+    env: names,
+    state: missing.length === 0 ? "ok" : "missing",
+    detail:
+      missing.length === 0
+        ? "present (not verifiable without a live call)"
+        : `missing: ${missing.join(", ")}`,
+  };
+}
+
 function vercelChecks(): Array<Promise<Check>> {
   const supabaseUrl = env("NEXT_PUBLIC_SUPABASE_URL")?.replace(/\/$/, "") ?? "";
   const serviceKey = firstNonEmptyEnv("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE");
@@ -201,7 +221,7 @@ function vercelChecks(): Array<Promise<Check>> {
     ),
     Promise.resolve(presence("Cron secret", "core", ["CRON_SECRET"])),
     Promise.resolve(presence("Stripe webhook secret", "billing", ["STRIPE_WEBHOOK_SECRET"])),
-    Promise.resolve(presence("Push (VAPID)", "push", ["NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"])),
+    Promise.resolve(vapidPresence()),
     Promise.resolve(presence("Chart live WS", "chart", ["NEXT_PUBLIC_CHART_WS_URL", "CHART_SESSION_JWT_SECRET"])),
     Promise.resolve(presence("WalletConnect", "wallets", ["NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID"])),
     Promise.resolve(presence("AXE Core tools secret", "axe-core", ["AXE_CORE_TOOLS_SECRET"])),
