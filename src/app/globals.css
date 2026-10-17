@@ -1317,6 +1317,43 @@ select {
   animation: axe-cyan-pulse 2.6s ease-in-out infinite;
 }
 
+.axe-landing-cube {
+  position: relative;
+  margin: 1.75rem auto 0;
+  display: grid;
+  height: 7.5rem;
+  width: 7.5rem;
+  place-items: center;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  background:
+    linear-gradient(160deg, rgba(0, 224, 255, 0.12), rgba(5, 8, 12, 0.92)),
+    repeating-linear-gradient(
+      135deg,
+      rgba(34, 211, 238, 0.05) 0 8px,
+      transparent 8px 16px
+    );
+  box-shadow:
+    0 18px 40px -18px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 32px -10px rgba(34, 211, 238, 0.35);
+  transform: rotateX(12deg) rotateZ(-8deg);
+}
+
+.axe-landing-cube-face {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(165, 243, 252, 0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axe-landing-cube {
+    transform: none;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    Phase 8 — Orb loader + page entrance animations
    ═══════════════════════════════════════════════════════════ */

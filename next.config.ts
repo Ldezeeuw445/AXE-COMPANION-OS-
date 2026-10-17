@@ -50,6 +50,8 @@ const nextConfig: NextConfig = {
       { source: "/legal/refunds", destination: "/refunds", permanent: true },
       { source: "/legal/subprocessors", destination: "/subprocessors", permanent: true },
       { source: "/legal/contact", destination: "/contact", permanent: true },
+      { source: "/landing", destination: "/", permanent: true },
+      { source: "/landing/", destination: "/", permanent: true },
     ];
   },
 };
