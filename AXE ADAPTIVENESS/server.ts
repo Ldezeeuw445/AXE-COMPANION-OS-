@@ -6,9 +6,16 @@ import type {
 } from "@/types/adaptive";
 import { buildAdaptiveDecisionSet, preferredChartDefaults } from "@/lib/adaptive/profileEngine";
 
+type SupabaseQuery = {
+  eq: (column: string, value: string) => SupabaseQuery;
+  order: (column: string, opts: { ascending: boolean }) => SupabaseQuery;
+  limit: (n: number) => PromiseLike<unknown>;
+  maybeSingle: () => PromiseLike<unknown>;
+};
+
 type SupabaseLike = {
   from: (table: string) => {
-    select: (query: string) => any;
+    select: (query: string) => SupabaseQuery;
   };
 };
 
