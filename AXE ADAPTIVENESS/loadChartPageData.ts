@@ -823,8 +823,8 @@ export async function loadChartPageData(
   );
 
   const [posResult, discoveredSymbols, ordResult] = await Promise.all([positionsPromise, symbolsPromise, ordersPromise]);
-  let allPositions = posResult.positions;
-  let positionsTimedOut = posResult.timedOut;
+  const allPositions = posResult.positions;
+  const positionsTimedOut = posResult.timedOut;
   const allPendingOrders = ordResult.orders;
 
   const fromPositions = allPositions.map((p) => p.symbol).filter(Boolean);

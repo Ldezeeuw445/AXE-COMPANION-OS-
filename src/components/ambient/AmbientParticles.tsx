@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * AmbientParticles — full-screen canvas rendered behind all app content.
@@ -49,66 +49,6 @@ function createParticle(w: number, h: number): Particle {
 
 export function AmbientParticles() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rafRef = useRef<number>(0);
-  const particlesRef = useRef<Particle[]>([]);
-
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const w = canvas.width;
-    const h = canvas.height;
-    const particles = particlesRef.current;
-
-    ctx.clearRect(0, 0, w, h);
-
-    // Move particles
-    for (const p of particles) {
-      p.x += p.vx;
-      p.y += p.vy;
-
-      // Wrap around edges
-      if (p.x < -10) p.x = w + 10;
-      if (p.x > w + 10) p.x = -10;
-      if (p.y < -10) p.y = h + 10;
-      if (p.y > h + 10) p.y = -10;
-    }
-
-    // Draw connecting lines (neural-network feel)
-    const maxDistSq = CONNECT_DISTANCE * CONNECT_DISTANCE;
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        const dx = particles[i].x - particles[j].x;
-        const dy = particles[i].y - particles[j].y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < maxDistSq) {
-          const opacity = (1 - distSq / maxDistSq) * 0.06;
-          ctx.strokeStyle = `rgba(148, 163, 184, ${opacity})`;
-          ctx.lineWidth = 0.3;
-          ctx.beginPath();
-          ctx.moveTo(particles[i].x, particles[i].y);
-          ctx.lineTo(particles[j].x, particles[j].y);
-          ctx.stroke();
-        }
-      }
-    }
-
-    // Draw particles
-    for (const p of particles) {
-      const color =
-        p.hue === "cyan"
-          ? `rgba(0, 212, 245, ${p.alpha})`
-          : `rgba(200, 210, 220, ${p.alpha})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-    }
-
-    rafRef.current = requestAnimationFrame(draw);
-  }, []);
 
   useEffect(() => {
     // Respect reduced-motion
@@ -116,6 +56,9 @@ export function AmbientParticles() {
 
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    let raf = 0;
+    let particles: Particle[] = [];
 
     const resize = () => {
       const w = window.innerWidth;
@@ -127,32 +70,82 @@ export function AmbientParticles() {
       canvas.style.height = `${h}px`;
 
       // Particles live in the scaled coordinate space
-      particlesRef.current = Array.from({ length: PARTICLE_COUNT }, () =>
-        createParticle(canvas.width, canvas.height)
+      particles = Array.from({ length: PARTICLE_COUNT }, () =>
+        createParticle(canvas.width, canvas.height),
       );
     };
 
+    const tick = () => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < -10) p.x = w + 10;
+        if (p.x > w + 10) p.x = -10;
+        if (p.y < -10) p.y = h + 10;
+        if (p.y > h + 10) p.y = -10;
+      }
+
+      const maxDistSq = CONNECT_DISTANCE * CONNECT_DISTANCE;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq < maxDistSq) {
+            const opacity = (1 - distSq / maxDistSq) * 0.06;
+            ctx.strokeStyle = `rgba(148, 163, 184, ${opacity})`;
+            ctx.lineWidth = 0.3;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      for (const p of particles) {
+        const color =
+          p.hue === "cyan"
+            ? `rgba(0, 212, 245, ${p.alpha})`
+            : `rgba(200, 210, 220, ${p.alpha})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+
     resize();
-    rafRef.current = requestAnimationFrame(draw);
+    raf = requestAnimationFrame(tick);
 
     window.addEventListener("resize", resize);
 
-    // Pause when tab hidden
     const onVisibility = () => {
       if (document.hidden) {
-        cancelAnimationFrame(rafRef.current);
+        cancelAnimationFrame(raf);
       } else {
-        rafRef.current = requestAnimationFrame(draw);
+        raf = requestAnimationFrame(tick);
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [draw]);
+  }, []);
 
   return (
     <canvas

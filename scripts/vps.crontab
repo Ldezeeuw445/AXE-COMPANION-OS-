@@ -1,39 +1,31 @@
 # Install on the IONOS host (replace APP_ROOT with the real repo path):
 #   crontab -e
 # Host cron for /api/cron/* via scripts/run-vps-cron.sh.
+#
+# ONE SCHEDULER PER JOB (inspected 2026-10-17, project pqnngpcgbdwxavbatbia).
+# Every Companion job below is already live in Supabase pg_cron — do NOT also
+# schedule it here. See docs/vps-deploy.md "Who owns cron".
+#
+#   pg_cron (leave on Supabase; remove from this file if you ever add them):
+#     axe-companion-mt5-sync            */10 * * * *
+#     axe-companion-axe-watcher         */15 * * * *
+#     axe-companion-intel-warmup        */30 * * * *
+#     axe-companion-daily-briefing      */15 4-11 * * *
+#     axe-companion-weekly-briefing     */15 4-11 * * 1
+#     axe-companion-cockpit-snapshots   30 6 * * *
+#     axe-companion-knowledge-sync      0 5 * * 0
+#     axe-companion-krater-feed-sync    */10 4-20 * * *
+#     axe-companion-intel-correlate     5 * * * *
+#     axe-companion-journal-sweep       25 * * * *
+#     axe-companion-user-knowledge-sync 40 5 * * *
+#
+#   host cron (this file) — only jobs that are NOT in cron.job:
+#     congress-trades-sync              20 6 * * *
 
 SHELL=/bin/bash
 PATH=/usr/bin:/bin
 
-# */10 MT5 background sync
-*/10 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/mt5-sync >> /tmp/axe-cron-mt5-sync.log 2>&1
-
-# */15 AXE watcher
-*/15 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/axe-watcher >> /tmp/axe-cron-axe-watcher.log 2>&1
-
-# */30 intel warmup
-*/30 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/intel-warmup >> /tmp/axe-cron-intel-warmup.log 2>&1
-
-# */15 04:00–11:00 UTC daily briefing
-*/15 4-11 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/daily-briefing >> /tmp/axe-cron-daily-briefing.log 2>&1
-
-# */15 04:00–11:00 UTC Mondays weekly briefing
-*/15 4-11 * * 1 APP_ROOT/scripts/run-vps-cron.sh /api/cron/weekly-briefing >> /tmp/axe-cron-weekly-briefing.log 2>&1
-
-# 06:30 UTC cockpit snapshots
-30 6 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/cockpit-snapshots >> /tmp/axe-cron-cockpit-snapshots.log 2>&1
-
-# Sundays 05:00 UTC knowledge sync
-0 5 * * 0 APP_ROOT/scripts/run-vps-cron.sh /api/cron/knowledge-sync >> /tmp/axe-cron-knowledge-sync.log 2>&1
-
-# */10 04:00–20:00 UTC Krater feed
-*/10 4-20 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/krater-feed-sync >> /tmp/axe-cron-krater-feed-sync.log 2>&1
-
-# :25 hourly journal sweep (Claude launch: catch unlabelled closed trades)
-25 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/journal-sweep >> /tmp/axe-cron-journal-sweep.log 2>&1
-
-# :05 hourly intel correlate
-5 * * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/intel-correlate >> /tmp/axe-cron-intel-correlate.log 2>&1
-
-# 06:20 UTC congress trades (Alpha Vantage STOCK Act feed)
+# 06:20 UTC congress trades (Alpha Vantage STOCK Act feed).
+# Not registered in live pg_cron / axe_ops.cron_job as of 2026-10-17.
+# If you later schedule it via cron.schedule, delete this line the same day.
 20 6 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/congress-trades-sync >> /tmp/axe-cron-congress-trades-sync.log 2>&1

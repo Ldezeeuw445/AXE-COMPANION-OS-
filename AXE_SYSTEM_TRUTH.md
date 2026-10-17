@@ -15,7 +15,7 @@ This file records the verified operational truth for AXE Companion. Treat it as 
 - Production website: `www.axecompanion.com` (nginx reverse-proxy → Next `next start` on port 5000).
 - Deploy by running `scripts/deploy-vps.sh` **on that box**. Canonical branch is `main`. See `docs/vps-deploy.md`.
 - nginx must forward WebSocket upgrades for `/ws/chart`.
-- Host cron is `scripts/vps.crontab`. Scheduling also lives in Supabase `pg_cron` + `pg_net` via `axe_ops.dispatch_cron` — see `docs/CRON-RUNBOOK.md`.
+- One scheduler per job: live Companion crons are `pg_cron` (`axe_ops.dispatch_cron`); `scripts/vps.crontab` only keeps jobs that are not in `cron.job` (today: `congress-trades-sync`). See `docs/vps-deploy.md`.
 - Ollama runs on the same host (`localhost:11434`), which is why chat-health reports it reachable in ~3 ms. One instance serves every user.
 - GitHub repo: `Ldezeeuw445/AXE-COMPANION-OS-`
 - Current canonical app stack: Next 16 / React 19.

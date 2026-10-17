@@ -4,35 +4,267 @@
  * Handles:
  *  • Web push delivery — sound, vibration, lock-screen banner, action buttons
  *  • Tap-to-focus deep linking back into the PWA
- *  • Offline shell fallback for the chat page
+ *  • Offline fallback page (`/offline`) plus last-viewed shell + safe GET data
+ *  • Update handshake — a new worker waits until the page posts SKIP_WAITING
  *
- * Versioning: bump CACHE_NAME whenever the SW shape changes — clients pick up
- * the new worker on next page load and we discard old caches in `activate`.
+ * Versioning: bump CACHE_NAME whenever the SW shape changes.
+ * Keep prefixes in sync with src/lib/pwa/cachePolicy.ts (enforced by tests).
  */
 
-const CACHE_NAME = "axe-v4";
-const OFFLINE_URL = "/chat";
+const CACHE_NAME = "axe-v5";
+const DATA_CACHE = "axe-data-v5";
+const OFFLINE_URL = "/offline";
+const LAST_VIEWED_KEY = "axe-last-viewed";
 const FALLBACK_ICON = "/axe-icon-512.png";
 const FALLBACK_BADGE = "/axe-icon.png";
 
-// ── Install: cache offline shell ─────────────────────────────────────────────
+const PRECACHE_URLS = [
+  OFFLINE_URL,
+  "/manifest.json",
+  "/chat",
+  "/axe-icon-192.png",
+  "/axe-icon-512.png",
+  "/axe-icon-maskable-192.png",
+  "/axe-icon-maskable-512.png",
+  "/apple-touch-icon.png",
+];
+
+const SAFE_NAV_PREFIXES = [
+  "/chat",
+  "/feed",
+  "/intel",
+  "/journal",
+  "/chart",
+  "/alerts",
+  "/settings",
+  "/cockpit",
+  "/watchlist",
+  "/positions",
+  "/accounts",
+  "/history",
+  "/market",
+  "/vault",
+  "/actions",
+  "/offline",
+  "/onboarding",
+];
+
+const SAFE_API_PREFIXES = [
+  "/api/feed",
+  "/api/quotes",
+  "/api/onboarding",
+  "/api/intel",
+  "/api/push/vapid",
+  "/api/push/status",
+];
+
+const NEVER_CACHE_PREFIXES = [
+  "/api/cron",
+  "/api/billing",
+  "/api/internal",
+  "/api/stripe",
+  "/api/checkout",
+  "/api/tools",
+  "/api/push/subscribe",
+  "/api/push/send",
+  "/auth",
+];
+
+function pathnameOf(url) {
+  try {
+    return new URL(url, self.location.origin).pathname;
+  } catch {
+    return "/";
+  }
+}
+
+function matchesPrefix(pathname, prefixes) {
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function shouldNeverCache(url) {
+  return matchesPrefix(pathnameOf(url), NEVER_CACHE_PREFIXES);
+}
+
+function isSafeNavigation(url) {
+  const pathname = pathnameOf(url);
+  if (pathname === "/") return false;
+  return matchesPrefix(pathname, SAFE_NAV_PREFIXES);
+}
+
+function isSafeApiGet(url) {
+  const pathname = pathnameOf(url);
+  if (matchesPrefix(pathname, NEVER_CACHE_PREFIXES)) return false;
+  return matchesPrefix(pathname, SAFE_API_PREFIXES);
+}
+
+function isStaticAsset(url) {
+  const pathname = pathnameOf(url);
+  return (
+    pathname.startsWith("/_next/static/") ||
+    pathname.startsWith("/axe-icon") ||
+    pathname.startsWith("/apple-touch-icon") ||
+    pathname === "/manifest.json"
+  );
+}
+
+function sameOrigin(url) {
+  try {
+    return new URL(url, self.location.origin).origin === self.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+// ── Install: cache offline page + icons. Do NOT skipWaiting — the page
+// prompts so a deploy cannot leave the tab on a mixed old/new bundle.
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.add(OFFLINE_URL))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        PRECACHE_URLS.map((url) => cache.add(url).catch(() => undefined)),
+      ),
+    ),
   );
-  self.skipWaiting();
 });
 
-// ── Activate: clean old caches ───────────────────────────────────────────────
+// ── Activate: drop previous caches, then take control of open clients.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+        Promise.all(
+          keys
+            .filter((k) => k !== CACHE_NAME && k !== DATA_CACHE)
+            .map((k) => caches.delete(k)),
+        ),
       )
-      .then(() => self.clients.claim())
+      .then(() => self.clients.claim()),
   );
+});
+
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+  if (data.type === "CACHE_LAST_VIEWED" && typeof data.url === "string") {
+    event.waitUntil(rememberLastViewed(data.url));
+  }
+});
+
+async function rememberLastViewed(url) {
+  if (!sameOrigin(url) || shouldNeverCache(url)) return;
+  const path = pathnameOf(url);
+  const target = path.startsWith("/") ? path : `/${path}`;
+  if (!isSafeNavigation(target) && target !== OFFLINE_URL) return;
+
+  const absolute = new URL(target, self.location.origin).toString();
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const res = await fetch(absolute, { credentials: "same-origin" });
+    if (res.ok) {
+      await cache.put(absolute, res.clone());
+      await cache.put(
+        LAST_VIEWED_KEY,
+        new Response(JSON.stringify({ url: target, cachedAt: Date.now() }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    }
+  } catch {
+    /* offline — keep whatever was already cached */
+  }
+}
+
+async function networkFirst(request, cacheName, fallback) {
+  const cache = await caches.open(cacheName);
+  try {
+    const res = await fetch(request);
+    if (res && res.ok) {
+      await cache.put(request, res.clone());
+    }
+    return res;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    if (fallback) {
+      const page = await caches.match(fallback);
+      if (page) return page;
+    }
+    throw err;
+  }
+}
+
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const fetching = fetch(request)
+    .then((res) => {
+      if (res && res.ok) cache.put(request, res.clone());
+      return res;
+    })
+    .catch(() => cached);
+  return cached || fetching;
+}
+
+async function navigationFallback(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cachedPage = await cache.match(request);
+  if (cachedPage) return cachedPage;
+
+  const marker = await cache.match(LAST_VIEWED_KEY);
+  if (marker) {
+    try {
+      const { url } = await marker.json();
+      if (typeof url === "string") {
+        const last = await cache.match(new URL(url, self.location.origin).toString());
+        if (last) return last;
+      }
+    } catch {
+      /* ignore corrupt marker */
+    }
+  }
+
+  const offline = await cache.match(OFFLINE_URL);
+  if (offline) return offline;
+  return new Response("AXE is offline.", {
+    status: 503,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+  if (!sameOrigin(request.url)) return;
+  if (shouldNeverCache(request.url)) return;
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res && res.ok && isSafeNavigation(request.url)) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return res;
+        })
+        .catch(() => navigationFallback(request)),
+    );
+    return;
+  }
+
+  if (isStaticAsset(request.url)) {
+    event.respondWith(staleWhileRevalidate(request, CACHE_NAME));
+    return;
+  }
+
+  if (isSafeApiGet(request.url)) {
+    event.respondWith(networkFirst(request, DATA_CACHE, null));
+  }
 });
 
 // Vibration patterns — chosen to feel right on the wrist + lock screen.
@@ -137,7 +369,7 @@ self.addEventListener("notificationclick", (event) => {
           return self.clients.openWindow(targetUrl);
         }
         return undefined;
-      })
+      }),
   );
 });
 
@@ -172,6 +404,6 @@ self.addEventListener("pushsubscriptionchange", (event) => {
       } catch (_err) {
         // Best-effort — next page load will retry via PushPermission.
       }
-    })()
+    })(),
   );
 });

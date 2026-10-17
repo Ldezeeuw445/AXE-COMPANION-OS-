@@ -1,13 +1,16 @@
 {
+  "id": "/",
   "name": "AXE Companion",
   "short_name": "AXE",
   "description": "Private AI trading companion — alerts, chat, and market intelligence.",
   "start_url": "/chat",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "portrait",
   "theme_color": "#06070a",
   "background_color": "#06070a",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/axe-icon-192.png",
@@ -19,18 +22,44 @@
       "src": "/axe-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/axe-icon.png",
-      "sizes": "1024x1024",
+      "src": "/axe-icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/axe-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
     }
   ],
-  "categories": [
-    "finance",
-    "productivity"
+  "screenshots": [
+    {
+      "src": "/launch/app-real/axe-chat.png",
+      "sizes": "1206x2622",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "AXE chat"
+    },
+    {
+      "src": "/launch/app-real/chart.png",
+      "sizes": "1206x2622",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Live chart"
+    }
   ],
-  "lang": "en"
+  "categories": ["finance", "productivity"],
+  "lang": "en",
+  "dir": "ltr"
 }

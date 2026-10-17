@@ -140,6 +140,8 @@ stale.
 | `axe-companion-krater-feed-sync` | `*/10 4-20 * * *` | `/api/cron/krater-feed-sync` |
 | `axe-companion-intel-correlate` | `5 * * * *` | `/api/cron/intel-correlate` |
 | `axe-companion-journal-sweep` | `25 * * * *` | `/api/cron/journal-sweep` |
+| `axe-companion-user-knowledge-sync` | `40 5 * * *` | `/api/cron/user-knowledge-sync` |
+| `congress-trades-sync` (IONOS crontab only) | `20 6 * * *` | `/api/cron/congress-trades-sync` |
 
 The first eight carry the exact schedules `vercel.json` used, already written in
 UTC. `intel-correlate` is new here: its route has always existed but was never
@@ -198,10 +200,13 @@ The base URL is one row, not nine job definitions:
 update axe_ops.cron_target set base_url = 'https://new-host.example', updated_at = now();
 ```
 
-## vercel.json
+## vercel.json / dual scheduling
 
-`vercel.json` was deleted in PR #108. Cron schedules live in `scripts/vps.crontab`
-(IONOS host cron) and in Supabase `pg_cron` as documented above.
+`vercel.json` was deleted in PR #108. **Do not schedule the same route from
+both the IONOS crontab and `pg_cron`.** Ownership as of 2026-10-17 is in
+`docs/vps-deploy.md` (Who owns cron). `scripts/vps.crontab` is only the
+fallback for jobs that are not live in `cron.job` — today that is
+`congress-trades-sync` alone.
 
 ## congress-trades-sync — de congresfeed terug, gratis
 

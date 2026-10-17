@@ -4203,7 +4203,7 @@ export function ChartScreen({ data, initialAction, liveTradingEnabled = false, i
                       setPendingOrderType(opt.id === "buy_limit" ? (pendingOrderSide === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (pendingOrderSide === "sell" ? "sell_stop" : "buy_stop") : opt.id);
                       const sideForType = pendingOrderSide;
                       const typeId = opt.id === "buy_limit" ? (sideForType === "sell" ? "sell_limit" : "buy_limit") : opt.id === "buy_stop" ? (sideForType === "sell" ? "sell_stop" : "buy_stop") : opt.id;
-                      showPendingTradePlan(sideForType, typeId as any);
+                      showPendingTradePlan(sideForType, typeId as PendingOrderTicketType);
                     }
                     setOrderTypeMenuOpen(false);
                     vibrate("light"); playSound("tap");
