@@ -51,6 +51,10 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "chat/thread": "Reading your own conversation",
   "chat/tts": "Accessibility — reading aloud is not a premium feature",
 
+  // The landing page's own form, posted by visitors who have no account at
+  // all. Gating it behind a plan would mean nobody could ever reach one.
+  waitlist: "Public landing-page signup; there is no user to charge yet",
+
   // Your own broker account and your own orders. Gating these would mean
   // charging a trader to reach their own money.
   "broker/hub": "The trader's own broker connection",
