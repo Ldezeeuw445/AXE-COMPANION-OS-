@@ -841,7 +841,31 @@ twee is waarschijnlijk niet wat je bedoelde.
 Ompunten in plaats van verwijderen-en-opnieuw-aanmaken is met opzet: er is dan
 geen moment waarop het record ontbreekt.
 
-- [ ] **L14.1** Permissieregel voor `mcp__Cloudflare__execute`, óf de zes
-  handelingen hierboven met de hand
+- [x] **L14.1 — Gedaan, 2026-10-17.** Luka gaf toestemming, de regel staat in
+  `.claude/settings.local.json` (gitignored — deze rechten liften niet mee met
+  de repo). Daarna alle vijf handelingen uitgevoerd en nagemeten:
+
+  1. Tunnel-routes toegevoegd: `tradingosapp.com` en `www` →
+     `http://localhost:8080`, met de catch-all netjes als laatste regel
+  2. CNAME `tradingosapp.com` **omgepunt** (niet verwijderd-en-opnieuw, dus
+     geen moment zonder record): `cname.vercel-dns.com` →
+     `a5641aa1-...cfargotunnel.com`, Proxied
+  3. CNAME `www` idem, van `cc384ed6d38922b8.vercel-dns-016.com`
+  4. TXT `_vercel` verwijderd
+  5. TXT `www` `replit-verify` verwijderd
+
+  **Nagemeten:** 11 records over (was 13), **nul** Vercel-verwijzingen, en de
+  mail volledig intact — vijf MX naar Google, SPF, google-site-verification en
+  openai-domain-verification staan er allemaal nog. `ollama` onaangeroerd.
+
+  **Live:** `https://tradingosapp.com` gaf vóór dit werk `402` met
+  `server: Vercel`; nu `502` met `server: cloudflare`. Dat is de bedoeling:
+  Cloudflare bereikt de tunnel, de tunnel herkent de hostname, en probeert
+  `localhost:8080` op de Mac Mini — waar nog niets luistert
+
+- [ ] **L14.3 — De laatste stap, op je Mac.** In de Trading OS-map:
+  `npm run build && npx serve -s dist -l 8080`. De `-s` is niet optioneel:
+  zonder die vlag geeft elke route behalve `/` een 404 — hier gemeten toen ik
+  de bundel door nginx serveerde
 - [ ] **L14.2** Daarna `availability` in `src/lib/ecosystem/apps.ts` en in
   `the-one` van `"offline"` naar `"beta"`
