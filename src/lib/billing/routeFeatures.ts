@@ -73,6 +73,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "chart/live": "Live price data — the chart must work for everyone",
   "chart/session": "Chart session state",
   "chart/snapshot": "Saving a chart image",
+  "chart/drawings": "Manual chart drawings are basic charting on Free; chart_actions gates AI-routed overlays only",
   "context": "Context the client needs to render anything at all",
   "feed": "The feed itself; its paid items are gated where they are produced",
   "market/context": "Market context for the chart",
