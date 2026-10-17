@@ -68,10 +68,17 @@ check("the new homepage keeps the companion layout Luka asked for", () => {
   assert.match(landing, /AXE ONE/);
   assert.match(landing, /Adaptive Intelligence/);
   assert.match(landing, /LandingCockpitExample/);
+  assert.match(landing, /LandingDeskChat/);
+  assert.match(landing, /LandingCube/);
   assert.match(landing, /LandingFeatureGrid/);
   assert.match(landing, /LandingPricing/);
   assert.match(landing, /LandingFaq/);
   assert.match(landing, /LandingFinalCta/);
+  assert.match(LANDING_HERO.body, /synced with Trading OS on your desktop/);
+  const copy = read("src/lib/marketing/landingCopy.ts");
+  assert.ok(!/same Supabase account/i.test(copy), "marketing copy must not mention a Supabase account");
+  assert.ok(!/Supabase/i.test(copy), "marketing copy must not name Supabase");
+  assert.ok(!/Row-Level Security/i.test(copy), "marketing copy must not use database jargon");
 });
 
 check("Unusual Whales is only ever disclosed, never advertised", () => {
@@ -234,6 +241,26 @@ check("no fabricated testimonials ship", () => {
 check("the cockpit mock is labelled as an example", () => {
   assert.ok(/Example — sample cockpit, not live data/.test(landing));
   assert.ok(landing.includes('data-landing-cockpit-example="true"'));
+});
+
+check("desk chat is demo chrome with a snap slot, not a fake live session", () => {
+  const desk = read("src/components/marketing/landing/LandingDeskChat.tsx");
+  assert.ok(desk.includes('data-landing-desk-chat="true"'));
+  assert.ok(desk.includes('id="desk-chat-slot"'));
+  assert.ok(/snap back|Minimize with/.test(desk));
+  assert.ok(desk.includes('href="/login"'));
+  assert.ok(!/BTC|NASDAQ|buy now|live reply from AXE/i.test(desk));
+  assert.match(desk, /not a live session/i);
+});
+
+check("ENGINE / ONE / Adaptive use CSS 3D cubes, not a flat tile", () => {
+  const cubes = read("src/components/marketing/landing/LandingCubes.tsx");
+  const css = read("src/app/globals.css");
+  assert.ok(cubes.includes("axe-landing-cube3d-face--front"));
+  assert.ok(cubes.includes("axe-landing-cube3d-face--back"));
+  assert.ok(cubes.includes("LandingPyramid"));
+  assert.ok(css.includes("transform-style: preserve-3d"));
+  assert.ok(css.includes("axe-cube-spin"));
 });
 
 check("no href='#' and no bare social domains", () => {

@@ -11,14 +11,14 @@ export const LANDING_HERO = {
   titleLead: "Your trades, your journal,",
   titleAccent: "your intelligence.",
   body:
-    "AXE Companion is the phone OS: live chart, depth, news, one-tap execution, quick journal, and AXE chat — on the same Supabase account Trading OS uses for the desktop terminal.",
+    "AXE Companion is the phone OS: live chart, depth, news, one-tap execution, quick journal, and AXE chat — synced with Trading OS on your desktop.",
 } as const;
 
 export const LANDING_SURFACES = {
   kicker: "Same stack · two surfaces",
   title: "Everything you need. Nothing you don't.",
   body:
-    "AXE Companion is your mobile command center today. Trading OS is the desktop terminal on the same login — same memory, same broker accounts, when you want the desk.",
+    "AXE Companion is your mobile command center today. Trading OS adds the full terminal desk — same account, same memory, seamlessly connected.",
   quote:
     "Built for traders who want clarity without another noisy dashboard. AXE focuses on what happened in your account, why it mattered, and what to watch next. Trading OS is the desk that same memory plugs into — Companion is the brain you use first.",
 } as const;
@@ -46,13 +46,13 @@ export const LANDING_ENGINE = {
 export const LANDING_ONE = {
   kicker: "AXE ONE",
   title: "One Source of Truth.",
-  body: "One Supabase project, one memory, one set of broker rows — phone and desk stay aligned.",
+  body: "One account, one memory, one set of broker rows — phone and desk stay aligned.",
   items: [
     { label: "Trading Data", body: "Trades, positions, orders and fills from the linked broker." },
     { label: "Market Data", body: "Live ticks and a depth drawer anchored on your broker bid / ask." },
     { label: "News & Intel", body: "Cached news plus free intel: SEC EDGAR, congressional STOCK Act trades, GDELT, flights and vessels." },
     { label: "Unified View", body: "Chart, depth, news, execute, journal and AXE — one phone OS." },
-    { label: "Consistent Data", body: "The same rows Trading OS reads. Row-Level Security scopes every workspace." },
+    { label: "Consistent Data", body: "The same rows Trading OS reads. Each workspace stays private to your login." },
     { label: "Smarter Insights", body: "Context from what you actually traded, not a generic feed." },
   ],
 } as const;
@@ -93,7 +93,7 @@ export const COMPANION_FEATURES: ReadonlyArray<{
 }> = [
   {
     title: "Live chart, premium toolset",
-    desc: "MT5 ticks, Lightweight Charts, Auto-Fib (Auto / Swing / Day), Auto-Trend, swing points, BOS/CHoCH and an MA stack — a calm dark canvas, not a noisy widget.",
+    desc: "Live ticks, Auto-Fib (Auto / Swing / Day), Auto-Trend, swing points, BOS/CHoCH and an MA stack — a calm dark canvas, not a noisy widget.",
     icon: "chart",
   },
   {
@@ -147,8 +147,8 @@ export const COMPANION_FEATURES: ReadonlyArray<{
     icon: "arc",
   },
   {
-    title: "Multi-account, RLS-safe",
-    desc: "Funded, demo, live — one active account at a time, analytics scoped per account. Supabase Row-Level Security keeps every workspace isolated. Optional crypto wallets live under the same login.",
+    title: "Multi-account, private workspaces",
+    desc: "Funded, demo, live — one active account at a time, analytics scoped per account. Each workspace stays private to your login. Optional crypto wallets live under the same login.",
     icon: "accounts",
   },
 ];
@@ -189,23 +189,23 @@ export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: "How does MT5 connect?",
-    a: "Recommended path: in-app cloud MT5 from Accounts after you sign in. Advanced: create a per-account link token and paste it into your MT5 Expert Advisor or bridge that POSTs trades and snapshots to the Supabase Edge function. After the first successful post, trades, equity and live stats flow automatically. Only a hash of the token is stored; you can revoke it any time.",
+    a: "Recommended path: in-app cloud MT5 from Accounts after you sign in. Advanced: create a per-account link token and paste it into your MT5 Expert Advisor or bridge. After the first successful post, trades, equity and live stats flow automatically. Only a hash of the token is stored; you can revoke it any time.",
   },
   {
     q: "Where do I paste the MT5 link token?",
-    a: "Not inside this app. Put it in your MT5 Expert Advisor or bridge that POSTs trades and snapshots to the Supabase Edge function. After the first successful post, trades, equity and live stats flow automatically — see Accounts right after you create a token.",
+    a: "Not inside this app. Put it in your MT5 Expert Advisor or bridge. After the first successful post, trades, equity and live stats flow automatically — see Accounts right after you create a token.",
   },
   {
     q: "Is my data private?",
-    a: "Your workspace is scoped by Supabase Row-Level Security. Broker rows, journal attachments, chat and waitlist writes do not leak across accounts. The waitlist stores only the address, the surface and the source — no IP, no user-agent.",
+    a: "Your workspace stays private to your login. Broker rows, journal attachments, chat and waitlist writes do not leak across accounts. The waitlist stores only the address, the surface and the source — no IP, no user-agent.",
   },
   {
     q: "What is Trading OS, and how does it relate to AXE?",
-    a: "AXE Companion is the phone-first OS — chart, depth, news, intel, alerts, journal, accounts and AXE all work standalone. Trading OS is the desktop terminal on the same Supabase login, currently in private beta: multi-chart layouts, QuantLab, Intel Center, macro terminal. One account, one memory, one trading brain across both. The switcher in the top-left corner moves you between them.",
+    a: "AXE Companion is the phone-first OS — chart, depth, news, intel, alerts, journal, accounts and AXE all work standalone. Trading OS is the desktop terminal on the same login, currently in private beta: multi-chart layouts, QuantLab, Intel Center, macro terminal. One account, one memory, one trading brain across both. The switcher in the top-left corner moves you between them.",
   },
   {
     q: "Do I need Trading OS on desktop?",
-    a: "No. Chart, depth, news, intel, alerts, journal, accounts and AXE all work standalone in the phone OS — Companion is not a companion to anything, it is the product. Trading OS is the desktop terminal on the same Supabase login, currently in private beta: multi-chart layouts, QuantLab, Intel Center, macro terminal. One account, one memory, one trading brain across both. The switcher in the top-left corner moves you between them.",
+    a: "No. Chart, depth, news, intel, alerts, journal, accounts and AXE all work standalone in the phone OS — Companion is not a companion to anything, it is the product. Trading OS is the desktop terminal on the same login, currently in private beta: multi-chart layouts, QuantLab, Intel Center, macro terminal. One account, one memory, one trading brain across both. The switcher in the top-left corner moves you between them.",
   },
   {
     q: "How does news caching keep my provider bills sane?",

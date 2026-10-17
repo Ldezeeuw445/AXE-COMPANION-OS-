@@ -34,7 +34,7 @@ const ICONS: Record<LandingFeatureIcon, LucideIcon> = {
 
 export function LandingFeatureGrid() {
   return (
-    <section className="relative z-10 border-t border-white/[0.04] px-5 py-14 md:py-20">
+    <section className="relative z-10 border-t border-white/[0.04] px-5 py-16 md:py-24">
       <div className="mx-auto max-w-6xl">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/80">
           Companion features
@@ -46,7 +46,7 @@ export function LandingFeatureGrid() {
           Each tile is something AXE Companion does today — not a Trading OS desk widget, not a roadmap.
         </p>
 
-        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {COMPANION_FEATURES.map(({ title, desc, icon }) => {
             const Icon = ICONS[icon];
             return (

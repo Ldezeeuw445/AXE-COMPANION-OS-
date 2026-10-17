@@ -12,9 +12,9 @@ const NAV = [
 export function LandingHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020406]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Link href="/" className="flex items-center gap-2">
+      <div className="mx-auto flex max-w-6xl flex-nowrap items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-5 sm:py-3.5">
+        <div className="flex min-w-0 items-center gap-1">
+          <Link href="/" className="flex min-w-0 items-center gap-2">
             <Image
               src="/axe-companion-wordmark.png"
               alt="AXE Companion OS"
@@ -22,7 +22,7 @@ export function LandingHeader() {
               height={111}
               priority
               unoptimized
-              className="h-[18px] w-auto object-contain opacity-95 sm:h-5"
+              className="h-3.5 w-auto max-w-[42vw] object-contain opacity-95 sm:h-5 sm:max-w-none"
               style={{ mixBlendMode: "screen" }}
             />
           </Link>
@@ -37,19 +37,20 @@ export function LandingHeader() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap">
           <Link
             href="/login"
-            className="rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-tos-muted hover:bg-white/[0.08] hover:text-tos-text"
+            className="inline-flex h-8 items-center whitespace-nowrap rounded-full border border-white/12 bg-white/[0.04] px-2.5 text-[11px] font-medium leading-none text-tos-muted hover:bg-white/[0.08] hover:text-tos-text sm:h-auto sm:px-3 sm:py-1.5 sm:text-xs"
           >
             Log in
           </Link>
           <Link
             href="/signup"
-            className="axe-landing-cta inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-3.5 py-1.5 text-xs font-semibold text-[#04161B] shadow-[0_8px_22px_-8px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"
+            className="axe-landing-cta inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-2.5 text-[11px] font-semibold leading-none text-[#04161B] shadow-[0_8px_22px_-8px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300 sm:h-auto sm:px-3.5 sm:py-1.5 sm:text-xs"
           >
-            Get started
-            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            <span className="sm:hidden">Start</span>
+            <span className="hidden sm:inline">Get started</span>
+            <ChevronRight className="hidden h-3.5 w-3.5 sm:inline" aria-hidden />
           </Link>
         </div>
       </div>

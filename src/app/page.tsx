@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { LandingCockpitExample } from "@/components/marketing/landing/LandingCockpitExample";
+import { LandingDeskChat } from "@/components/marketing/landing/LandingDeskChat";
 import { LandingEngine } from "@/components/marketing/landing/LandingEngine";
 import { LandingFaq } from "@/components/marketing/landing/LandingFaq";
 import { LandingFeatureGrid } from "@/components/marketing/landing/LandingFeatureGrid";
@@ -17,7 +18,7 @@ import { loadLandingCatalog } from "@/lib/marketing/loadLandingCatalog";
 export const metadata: Metadata = {
   title: "AXE Companion — your trades, your journal, your intelligence",
   description:
-    "AXE Companion is the trader phone OS: live chart, market depth, news, one-tap execution, quick journal, push alerts and AXE chat — on the same Supabase brain Trading OS uses.",
+    "AXE Companion is the trader phone OS: live chart, market depth, news, one-tap execution, quick journal, push alerts and AXE chat — synced with Trading OS on your desktop.",
 };
 
 /** Founder seats are read from the database on each request — do not bake 0. */
@@ -41,6 +42,7 @@ export default async function HomeLandingPage() {
       <LandingHero />
       <LandingSurfaces />
       <LandingEngine />
+      <LandingDeskChat />
       <LandingCockpitExample />
       <LandingFeatureGrid />
       <LandingTosBridge />

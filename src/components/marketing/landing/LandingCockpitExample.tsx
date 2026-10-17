@@ -11,7 +11,7 @@ export function LandingCockpitExample() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/80">
           AXE Companion Cockpit
         </p>
-        <h2 className="mt-3 text-3xl font-bold text-white md:text-4xl">
+        <h2 className="mt-3 text-3xl font-bold tracking-[-0.03em] text-white md:text-4xl">
           Your AI. Your Edge. Your System.
         </h2>
         <p className="mt-3 max-w-2xl text-sm text-tos-muted">
@@ -29,13 +29,18 @@ export function LandingCockpitExample() {
           <div className="grid gap-3 lg:grid-cols-3">
             <div className="space-y-3">
               <ExampleCard title="AXE Intelligence">
-                <p className="text-[12px] text-white/70">Context-aware briefings and intel snapshots for the active pair.</p>
+                <p className="text-[12px] text-white/70">
+                  Context-aware briefings and intel snapshots for the active pair.
+                </p>
                 <p className="mt-3 text-[11px] text-white/45">Messages · sample · 12</p>
               </ExampleCard>
               <ExampleCard title="Instruments">
                 <Row symbol="XAUUSD" note="London breakout bias" change="+1.2%" up />
                 <Row symbol="SPXUSD" note="Risk-off into CPI" change="−0.4%" up={false} />
                 <Row symbol="BTCUSD" note="Momentum continuation" change="+2.8%" up />
+              </ExampleCard>
+              <ExampleCard title="Behavior Map">
+                <p className="text-[11px] text-white/55">London 42% · New York 38% · Asia 20%</p>
               </ExampleCard>
             </div>
 
@@ -53,24 +58,42 @@ export function LandingCockpitExample() {
               </ExampleCard>
               <ExampleCard title="Learning Arc · Live">
                 <p className="text-[12px] text-white/70">
-                  Last 30 days: 24 helpful vs 0 off-target AXE replies — the arc follows real teaching moments.
+                  Last 30 days: 24 helpful vs 0 off-target AXE replies — the arc follows real teaching
+                  moments.
+                </p>
+                <p className="mt-2 text-[11px] text-white/40">
+                  Trade alignment 362 · Chat quality 24 · Journal 14 — sample counts.
                 </p>
               </ExampleCard>
-              <ExampleCard title="Behavior Map">
-                <p className="text-[11px] text-white/55">London 42% · New York 38% · Asia 20%</p>
+              <ExampleCard title="Four-week rhythm">
+                <div className="mt-1 flex h-12 items-end gap-1.5">
+                  {[28, 42, 36, 54, 48, 61, 44, 58].map((h, i) => (
+                    <span
+                      key={i}
+                      className="flex-1 rounded-sm bg-cyan-300/25"
+                      style={{ height: `${h}%` }}
+                    />
+                  ))}
+                </div>
               </ExampleCard>
             </div>
 
             <div className="space-y-3">
               <ExampleCard title="AXE Alignment">
-                <p className="text-2xl font-semibold text-white">48<span className="text-sm text-white/40">/100</span></p>
-                <p className="mt-1 text-[11px] text-white/45">100 = fully aligned with how you trade — sample score.</p>
+                <p className="text-2xl font-semibold text-white">
+                  48<span className="text-sm text-white/40">/100</span>
+                </p>
+                <p className="mt-1 text-[11px] text-white/45">
+                  100 = fully aligned with how you trade — sample score.
+                </p>
               </ExampleCard>
               <ExampleCard title="What You Taught It">
                 <p className="text-[12px] text-white/70">Kept 5 setups · Passed 2 · 3 reasoning fixes</p>
               </ExampleCard>
               <ExampleCard title="Edge Patterns">
-                <p className="text-[11px] text-white/55">Breakout + Retest · Liquidity Sweep · Session Open Fade</p>
+                <p className="text-[11px] text-white/55">Breakout + Retest 78%</p>
+                <p className="text-[11px] text-white/55">Liquidity Sweep 64%</p>
+                <p className="text-[11px] text-white/55">Session Open Fade 52%</p>
               </ExampleCard>
             </div>
           </div>
