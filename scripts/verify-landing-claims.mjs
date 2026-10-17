@@ -256,9 +256,10 @@ check("desk chat is demo chrome with a snap slot, not a fake live session", () =
 check("ENGINE / ONE / Adaptive use CSS 3D cubes, not a flat tile", () => {
   const cubes = read("src/components/marketing/landing/LandingCubes.tsx");
   const css = read("src/app/globals.css");
-  assert.ok(cubes.includes("axe-landing-cube3d-face--front"));
-  assert.ok(cubes.includes("axe-landing-cube3d-face--back"));
+  assert.ok(cubes.includes("axe-landing-cube3d-face"));
   assert.ok(cubes.includes("LandingPyramid"));
+  assert.ok(css.includes("axe-landing-cube3d-face--front"));
+  assert.ok(css.includes("axe-landing-cube3d-face--back"));
   assert.ok(css.includes("transform-style: preserve-3d"));
   assert.ok(css.includes("axe-cube-spin"));
 });
