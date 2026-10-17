@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
-import { internalPushHeaders } from "@/lib/push/internalPushAuth";
-import { getPublicAppBaseUrl } from "@/lib/env";
+import { type PushCategory } from "@/lib/push/categories";
+import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
 import { detectConcentration, weekendExposureWarning } from "@/lib/risk/positionRisk";
 import { detectWeakSpots } from "@/lib/journal/weakSpots";
@@ -20,18 +20,29 @@ type WatcherUser = {
   id: string;
 };
 
-async function firePush(userId: string, title: string, body: string, url: string): Promise<boolean> {
-  try {
-    const baseUrl = getPublicAppBaseUrl();
-    const res = await fetch(`${baseUrl}/api/push/send`, {
-      method: "POST",
-      headers: internalPushHeaders(),
-      body: JSON.stringify({ userId, title, body, url }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+async function firePush(
+  supabase: SupabaseClient,
+  userId: string,
+  title: string,
+  body: string,
+  url: string,
+  category: PushCategory,
+  eventKey: string,
+  extra?: { symbol?: string; timeframe?: string; threadId?: string },
+): Promise<boolean> {
+  const result = await dispatchPushEvent({
+    userId,
+    category,
+    eventKey,
+    title,
+    body,
+    url,
+    symbol: extra?.symbol,
+    timeframe: extra?.timeframe,
+    threadId: extra?.threadId,
+    supabase,
+  });
+  return result.ok && result.sent > 0;
 }
 
 async function recordProactiveEvent(
@@ -137,7 +148,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/cockpit");
     if (inserted) {
       created += 1;
-      if (hasPush && (await firePush(userId, `AXE · ${title}`, body, "/cockpit"))) pushed += 1;
+      if (hasPush && (await firePush(supabase, userId, `AXE · ${title}`, body, "/cockpit", "axe_finding", eventKey, { symbol: String(trade.symbol ?? "") }))) pushed += 1;
     }
   }
 
@@ -150,7 +161,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/actions");
     if (inserted) {
       created += 1;
-      if (hasPush && (await firePush(userId, `AXE · ${title}`, body, "/actions"))) pushed += 1;
+      if (hasPush && (await firePush(supabase, userId, `AXE · ${title}`, body, "/actions", "axe_finding", eventKey))) pushed += 1;
     }
   }
 
@@ -189,7 +200,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
           );
           if (inserted) {
             created += 1;
-            if (hasPush && (await firePush(userId, `AXE · ${warning.title}`, warning.body, url))) pushed += 1;
+            if (hasPush && (await firePush(supabase, userId, `AXE · ${warning.title}`, warning.body, url, "economic_event", eventKey, { symbol: focus, timeframe: "m15" }))) pushed += 1;
           }
         }
       }
@@ -221,7 +232,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       );
       if (inserted) {
         created += 1;
-        if (hasPush && (await firePush(userId, `AXE · ${health.title}`, health.body, "/accounts"))) {
+        if (hasPush && (await firePush(supabase, userId, `AXE · ${health.title}`, health.body, "/accounts", "broker_disconnect", eventKey))) {
           pushed += 1;
         }
       }
@@ -252,7 +263,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       );
       if (inserted) {
         created += 1;
-        if (hasPush && (await firePush(userId, `AXE · ${top.title}`, top.body, "/positions"))) pushed += 1;
+        if (hasPush && (await firePush(supabase, userId, `AXE · ${top.title}`, top.body, "/positions", "risk_alert", eventKey, { symbol: top.symbols[0] }))) pushed += 1;
       }
     }
   }
@@ -275,7 +286,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     );
     if (inserted) {
       created += 1;
-      if (hasPush && (await firePush(userId, `AXE · ${weekend.title}`, weekend.body, "/positions"))) pushed += 1;
+      if (hasPush && (await firePush(supabase, userId, `AXE · ${weekend.title}`, weekend.body, "/positions", "risk_alert", eventKey))) pushed += 1;
     }
   }
 
@@ -304,7 +315,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       );
       if (inserted) {
         created += 1;
-        if (hasPush && (await firePush(userId, `AXE · ${top.title}`, body, "/journal"))) pushed += 1;
+        if (hasPush && (await firePush(supabase, userId, `AXE · ${top.title}`, body, "/journal", "axe_finding", eventKey))) pushed += 1;
       }
     }
   } catch {

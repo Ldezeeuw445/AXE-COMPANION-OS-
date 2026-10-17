@@ -48,6 +48,7 @@ export const NEVER_CACHE_PREFIXES = [
   "/api/tools",
   "/api/push/subscribe",
   "/api/push/send",
+  "/api/push/test",
   "/auth",
 ] as const;
 
@@ -98,4 +99,5 @@ export function isStaticAsset(url: string): boolean {
 
 export const SW_SKIP_WAITING_MESSAGE = "SKIP_WAITING";
 export const SW_CACHE_LAST_VIEWED_MESSAGE = "CACHE_LAST_VIEWED";
+export const SW_PUSH_OPEN_MESSAGE = "AXE_PUSH_OPEN";
 export const SW_LAST_VIEWED_KEY = "axe-last-viewed";

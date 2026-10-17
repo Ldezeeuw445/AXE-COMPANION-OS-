@@ -18,7 +18,9 @@ export default async function ChatPage({
 }) {
   const params = await searchParams;
   const chatType = params?.intel === "1" ? "intel" : "axe";
-  const { conversation, messages } = await getChatThread(chatType);
+  const threadParam = params?.thread;
+  const threadId = Array.isArray(threadParam) ? threadParam[0] : threadParam;
+  const { conversation, messages } = await getChatThread(chatType, threadId);
   const supabase = await createServerSupabaseClient();
   let operatorName: string | null = null;
   let initialQuota: ChatQuotaPayload | null = null;

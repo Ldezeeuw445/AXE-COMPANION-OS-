@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sendPushTestSuiteAction } from "@/app/(app)/settings/actions";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -165,18 +166,13 @@ export function PushPermission() {
     setTestState("sending");
     setTestMessage(null);
     try {
-      const res = await fetch("/api/push/test", {
-        method: "POST",
-        credentials: "include",
-      });
-      const data: { ok?: boolean; sent?: number; total?: number; error?: string } = await res
-        .json()
-        .catch(() => ({}));
+      const data = await sendPushTestSuiteAction();
       if (!mounted.current) return;
-      if (res.ok && (data.sent ?? 0) > 0) {
+      if (data.ok && (data.sent ?? 0) > 0) {
         setTestState("ok");
-        setTestMessage(`Sent to ${data.sent}/${data.total ?? data.sent} device${data.total === 1 ? "" : "s"}.`);
-      } else if (res.ok) {
+        const count = data.results?.length ?? 5;
+        setTestMessage(`Sent ${count} types · ${data.sent}/${data.total ?? data.sent} deliveries.`);
+      } else if (data.ok) {
         setTestState("fail");
         setTestMessage("No active subscription found on this device. Try Subscribe again.");
       } else {
@@ -196,10 +192,13 @@ export function PushPermission() {
   // the user at the install step before showing the enable button.
   if (platform?.isIos && !platform.isStandalone) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 rounded-lg border border-amber-300/25 bg-amber-300/[0.07] p-3">
+        <p className="text-xs font-semibold text-amber-100">
+          iOS push only works from the installed app (Safari 16.4+)
+        </p>
         <p className="text-xs text-tos-muted">
-          iOS only sends push notifications to AXE when it&apos;s installed on
-          your home screen. One-time setup:
+          Safari in a tab cannot receive AXE lock-screen alerts. Add the PWA to
+          your home screen once, then open it from the icon — not from Safari.
         </p>
         <ol className="ml-4 list-decimal space-y-1 text-[11px] text-tos-muted">
           <li>
@@ -210,10 +209,10 @@ export function PushPermission() {
             in Safari.
           </li>
           <li>Choose &quot;Add to Home Screen&quot;.</li>
-          <li>Open AXE from the home screen, then come back to Settings.</li>
+          <li>Open AXE from the home-screen icon, then come back to Settings.</li>
         </ol>
         <p className="text-[10px] text-tos-dim">
-          Once installed, you can enable lock-screen alerts with sound and vibration here.
+          iOS 16.3 and older cannot receive web push at all. Update iOS, then install.
         </p>
       </div>
     );
@@ -268,7 +267,7 @@ export function PushPermission() {
             disabled={testState === "sending"}
             className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08] disabled:opacity-60"
           >
-            {testState === "sending" ? "Sending…" : "Send test notification"}
+            {testState === "sending" ? "Sending…" : "Send test of each type"}
           </button>
           {testMessage ? (
             <p

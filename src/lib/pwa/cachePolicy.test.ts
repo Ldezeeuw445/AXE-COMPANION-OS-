@@ -59,6 +59,7 @@ describe("public/sw.js stays aligned with cachePolicy", () => {
     assert.match(swSource, /addEventListener\(\s*"fetch"/);
     assert.match(swSource, new RegExp(SW_CACHE_LAST_VIEWED_MESSAGE));
     assert.match(swSource, new RegExp(SW_SKIP_WAITING_MESSAGE));
+    assert.match(swSource, /AXE_PUSH_OPEN/);
     assert.match(swSource, /skipWaiting/);
     assert.doesNotMatch(
       swSource,
