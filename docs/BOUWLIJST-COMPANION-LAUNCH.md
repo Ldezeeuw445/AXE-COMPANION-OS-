@@ -869,3 +869,89 @@ geen moment waarop het record ontbreekt.
   de bundel door nginx serveerde
 - [ ] **L14.2** Daarna `availability` in `src/lib/ecosystem/apps.ts` en in
   `the-one` van `"offline"` naar `"beta"`
+
+## L15 — Ollama: het gratis vangnet was aanwezig en kapot
+
+Jouw vraag was of alle drie de apps Ollama kunnen gebruiken als gratis
+fallback. Het antwoord was ja — maar drie dingen eronder waren stuk, en alle
+drie op dezelfde manier: een groen vinkje dat niets betekende.
+
+### Wat er mis was, gemeten op 2026-10-17
+
+**1. De twee hostnames waren gekruist.** `ollama.axecompanion.com` stond in de
+tunnel-ingress maar zijn DNS wees naar server `217.160.135.111`, dus die regel
+werd nooit gebruikt. `ollama.tradingosapp.com` wees mét DNS naar de tunnel
+maar stond *niet* in de ingress, dus viel in de catch-all: **404**.
+
+**2. Het geconfigureerde model bestond niet.** `ollama.axecompanion.com`
+antwoordt op `/api/tags` met twaalf modellen — `qwen3:4b`, het default van de
+router, zit er niet bij. `ollamaHealth()` keek alleen of `/api/tags` 200 gaf.
+Dus `chat-health` meldde `ok_ollama` terwijl élke chat terugkwam met
+`{"error":"model 'qwen3:4b' not found"}` en stil naar OpenAI viel. En dat is
+precies het pad dat eerder dit onderzoek doodliep toen OpenAI geen credits
+meer had: het vangnet hing er, maar met een gat erin.
+
+**3. De healthcheck las een ándere variabele.** De route las
+`OLLAMA_BASE_URL` met default `llama3.2`; de router leest `OLLAMA_URL` /
+`OLLAMA_HOST` met default `qwen3:4b`. Twee variabelen, twee modellen: groen
+over een endpoint waar niets ooit heen ging.
+
+### Wat er nu staat
+
+- `ollama.tradingosapp.com` toegevoegd aan de tunnel-ingress. Gaf daarna 403
+  — Ollama weigert een `Host` die niet localhost is — opgelost met
+  `httpHostHeader` in cloudflared, dus er hoefde niets op de Mac te wijzigen.
+  **Nu 200 met tien modellen**, waaronder `gemma4:latest` (9,6 GB),
+  `deepseek-r1:8b`, `llama3.1:8b` en de embedders `bge-m3` en
+  `nomic-embed-text`
+- `src/lib/llm/ollamaEndpoints.ts`: `OLLAMA_URL` mag nu een **lijst** zijn, op
+  volgorde. Het model is een *voorkeur*: staat hij er niet, dan pakt hij er
+  een die er wél is in plaats van te falen. Embedding-modellen worden nooit
+  gekozen om mee te chatten — een endpoint met alleen embedders is bereikbaar
+  en nutteloos, en dat moet doorschuiven naar het volgende
+- `ollamaHealth()` betekent nu "een chat zou lukken", niet "de server gaf 200"
+- `chat-health` gebruikt dezelfde resolver en rapporteert wat er écht gekozen
+  wordt
+
+### Drie dingen die ik onderweg tegenkwam en ook heb opgelost
+
+- **`qwen3:4b` is een denkmodel.** Hij stopte zijn hele tokenbudget in
+  `thinking` en gaf `content: ""` terug met `done_reason: "length"`. AXE zou
+  een leeg bericht hebben getoond. Nu gaat `think: false` mee op elke call
+- **Een leeg antwoord is een fout, geen antwoord.** Het werd teruggegeven als
+  geldige tekst; nu gooit hij, zodat de router doorvalt naar een provider die
+  wél werkt
+- **Cloudflare 524.** Een koude `llama3.1:8b` (4,9 GB) duurde 125 seconden en
+  de proxy kapte hem af met HTML in plaats van JSON. De niet-streamende call
+  geeft nu op bij 90 s, onder de ~100 s van de proxy, zodat er nog tijd is om
+  terug te vallen. Let op: `ollama.axecompanion.com` staat op **grijs wolkje**
+  en heeft die limiet niet; `ollama.tradingosapp.com` is proxied en wel
+
+### Eind-tot-eind gemeten
+
+| Endpoint | Gekozen model | Antwoord |
+|---|---|---|
+| `ollama.axecompanion.com` | `llama3.1:8b` (zelf gekozen, `qwen3:4b` bestaat daar niet) | "Effortlessly" |
+| `ollama.tradingosapp.com` | `qwen3:4b` met `think:false` | gevulde `content` |
+
+### ⚠️ Eén ding dat je moet weten
+
+**Beide endpoints staan volledig open op het internet, zonder enige
+authenticatie.** Ik heb vanaf een cloudcontainer anoniem `/api/tags` kunnen
+opvragen en chats kunnen draaien op jouw hardware. Dezelfde API kent ook
+`/api/pull` en `/api/delete` — iedereen die het adres kent kan je modellen
+wissen. Ik heb daar bewust niets aan veranderd, want AXE Core gebruikt dit
+endpoint actief en ik wil dat niet stilletjes breken.
+
+- [ ] **L15.1** Beide Ollama-endpoints afschermen. Cloudflare Access met een
+  service token is hier de passende vorm: de apps sturen
+  `CF-Access-Client-Id` en `CF-Access-Client-Secret` mee, een vreemde komt er
+  niet in. Zeg het en ik zet het op, inclusief de headers in de drie apps
+- [ ] **L15.2** `OLLAMA_URL` op de Companion-host naar beide endpoints zetten,
+  komma-gescheiden: eerst `https://ollama.axecompanion.com` (altijd aan, geen
+  proxy-limiet), dan `https://ollama.tradingosapp.com` (de Mac Mini, grotere
+  modellen). `OLLAMA_MODEL` mag je leeg laten — dan kiest hij zelf
+  `llama3.1:8b`, wat op beide staat. Zet hem **niet** op `qwen3:4b`: dat is
+  een denkmodel en antwoordt rommelig
+- [ ] **L15.3** Trading OS en AXE Core naar dezelfde twee hostnames laten
+  wijzen, dan heeft elke app hetzelfde vangnet

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { hasCronSecret } from "@/lib/auth/cronSecret";
+import { ollamaTarget } from "@/lib/llm/ollamaClient";
+import { parseOllamaEndpoints } from "@/lib/llm/ollamaEndpoints";
 
 /**
  * GET /api/debug/chat-health
@@ -33,13 +35,25 @@ async function probe(url: string, init?: RequestInit): Promise<ProviderCheck> {
 const NOT_CONFIGURED: ProviderCheck = { configured: false, reachable: false, error: null };
 
 export async function GET(request: NextRequest) {
-  const ollamaUrl = process.env.OLLAMA_BASE_URL;
-  const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
+  /* This route used to read OLLAMA_BASE_URL and default the model to
+     "llama3.2", while the router reads OLLAMA_URL / OLLAMA_HOST and defaulted
+     to "qwen3:4b". Two different variables and two different models: the
+     health check could be green about an endpoint nothing ever called. It now
+     asks the router's own resolver, so "reachable" means a chat would work. */
+  const endpoints = parseOllamaEndpoints(process.env);
+  const target = await ollamaTarget(true);
   const openaiKey = process.env.OPENAI_API_KEY;
   const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
 
-  const [ollama, openai] = await Promise.all([
-    ollamaUrl ? probe(`${ollamaUrl}/api/tags`) : Promise.resolve(NOT_CONFIGURED),
+  const ollama: ProviderCheck = {
+    configured: endpoints.length > 0,
+    reachable: target !== null,
+    error: target ? null : endpoints.length === 0
+      ? "OLLAMA_URL is not set"
+      : "no configured endpoint has a model that can chat",
+  };
+
+  const [openai] = await Promise.all([
     openaiKey
       ? probe("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${openaiKey}` } })
       : Promise.resolve(NOT_CONFIGURED),
@@ -49,7 +63,7 @@ export async function GET(request: NextRequest) {
     ? "ok_ollama"
     : openai.reachable
       ? "ok_openai"
-      : ollamaUrl || openaiKey
+      : ollama.configured || openaiKey
         ? "partial"
         : "no_provider";
   const httpStatus = status === "no_provider" ? 503 : 200;
@@ -69,8 +83,11 @@ export async function GET(request: NextRequest) {
     {
       status,
       env: {
-        ollama_base_url: ollamaUrl || null,
-        ollama_model: ollamaModel,
+        ollama_endpoints: endpoints,
+        ollama_preferred_model: process.env.OLLAMA_MODEL ?? null,
+        // What a chat would *actually* use right now, which is the only
+        // number worth reporting.
+        ollama_resolved: target,
         openai_key_set: !!openaiKey,
         openai_model: openaiModel,
       },
