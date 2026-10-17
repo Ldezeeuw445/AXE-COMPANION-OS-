@@ -16,6 +16,7 @@ export type AdaptiveEventType =
   | "journal_entry_tagged"
   | "alignment_feedback_viewed"
   | "behavior_map_viewed"
+  | "morning_brief_delivered"
   | "morning_briefing_opened"
   | "morning_briefing_pair_clicked"
   | "morning_briefing_suggestion_accepted"

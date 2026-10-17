@@ -6,23 +6,32 @@
 // only when cached data is stale (>15 min).
 //
 // Providers:
-//   • Insider trades   → SEC EDGAR (free, no API key)
-//   • Congress trades  → Unusual Whales → Quiver → FMP
-//   • Dark pool prints → Unusual Whales → Finnhub volume anomaly
-//   • Unusual options  → Unusual Whales → Finnhub recommendations
+//   • Insider trades   → SEC EDGAR → FMP insider (UW not required)
+//   • Congress trades  → FMP senate+house → free public → Quiver → UW (opt-in)
+//   • Short volume     → FINRA daily CNMS Reg SHO (free CDN)
+//   • Dark pool prints → Unusual Whales (opt-in) → Finnhub volume anomaly
+//   • Unusual options  → Unusual Whales (opt-in) → Finnhub recommendations
 //   • Market tide      → Finnhub aggregate sentiment (free)
 //
 // Deploy:  supabase functions deploy intel-proxy --no-verify-jwt
-// Secrets: FINNHUB_API_KEY        (required)
-//          AISSTREAM_API_KEY       (optional — live vessel AIS positions)
-//          UNUSUAL_WHALES_TOKEN   (optional — congress, dark pool, options)
-//          QUIVER_API_KEY         (optional — paid Quiver Hobbyist+ for congress)
-//          FMP_API_KEY            (optional — congress fallback)
+// Secrets: FINNHUB_API_KEY          (required)
+//          AISSTREAM_API_KEY         (optional — live vessel AIS positions)
+//          UNUSUAL_WHALES_ENABLED    (optional — "true" to allow UW calls)
+//          UNUSUAL_WHALES_TOKEN      (optional — only used when ENABLED)
+//          QUIVER_API_KEY            (optional — paid Quiver Hobbyist+ for congress)
+//          FMP_API_KEY               (optional — insider + senate/house congress)
 // ─────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getMergedEdgeEnv } from "../_shared/mergeEdgeEnv.ts";
+import { unusualWhalesHeaders } from "./freeSources/uwGate.ts";
+import { fetchInsiderTradesFromFmp } from "./freeSources/fmpInsider.ts";
+import { fetchCongressFromFmpSenateAndHouse } from "./freeSources/fmpCongress.ts";
+import {
+  fetchFinraShortVolume,
+  type FreeShortVolume,
+} from "./freeSources/finraShortVolume.ts";
 
 /** Per-request env (merged JSON blob + individual Supabase secrets). */
 let edgeEnv: Record<string, string> = {};
@@ -116,14 +125,9 @@ const SEC_HEADERS = {
   Accept: "application/json",
 };
 
-// ── Unusual Whales helper ──────────────────────────────────────────
+// ── Unusual Whales helper (opt-in via UNUSUAL_WHALES_ENABLED) ──────
 function uwHeaders(): Record<string, string> | null {
-  const token = env("UNUSUAL_WHALES_TOKEN");
-  if (!token) return null;
-  return {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/json",
-  };
+  return unusualWhalesHeaders(env);
 }
 
 // ── XML helper ─────────────────────────────────────────────────────
@@ -165,9 +169,9 @@ async function handleInsiderTrades(symbol?: string): Promise<Response> {
     }
   }
 
-  // Fetch from SEC EDGAR
+  // Free sources first: SEC EDGAR Form 4, then FMP insider (no Unusual Whales).
+  const sourceErrors: string[] = [];
   try {
-    // Try symbol-specific first, fall back to broad search if empty
     let trades = await fetchInsiderTradesFromEdgar(symbol);
     if (trades.length === 0 && symbol) {
       trades = await fetchInsiderTradesFromEdgar(undefined);
@@ -175,15 +179,44 @@ async function handleInsiderTrades(symbol?: string): Promise<Response> {
     if (trades.length > 0) {
       await persistInsiderTrades(trades);
       await markSynced("insiderTrades", trades.length, "sec_edgar");
+      setCache(cacheKey, trades);
+      return json({ ok: true, data: trades, source: "sec_edgar" });
     }
-    setCache(cacheKey, trades);
-    return json({ ok: true, data: trades });
+    sourceErrors.push("sec_edgar_empty");
   } catch (e) {
-    // Fallback to DB even if stale
-    const fallback = await readInsidersFromDb(symbol);
-    if (fallback.length > 0) return json({ ok: true, data: fallback });
-    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
+    sourceErrors.push(e instanceof Error ? e.message : String(e));
   }
+
+  const fmpKey = env("FMP_API_KEY");
+  if (fmpKey) {
+    try {
+      const trades = await fetchInsiderTradesFromFmp(fmpKey, fetchWithTimeout, symbol);
+      if (trades.length > 0) {
+        await persistInsiderTrades(trades);
+        await markSynced("insiderTrades", trades.length, "fmp");
+        setCache(cacheKey, trades);
+        return json({ ok: true, data: trades, source: "fmp" });
+      }
+      sourceErrors.push("fmp_insider_empty");
+    } catch (e) {
+      sourceErrors.push(e instanceof Error ? e.message : String(e));
+    }
+  } else {
+    sourceErrors.push("fmp_api_key_missing");
+  }
+
+  const fallback = await readInsidersFromDb(symbol);
+  if (fallback.length > 0) {
+    setCache(cacheKey, fallback);
+    return json({ ok: true, data: fallback, source: "db_stale", unavailable: sourceErrors });
+  }
+
+  return json({
+    ok: false,
+    error: "insider_unavailable",
+    message: "Insider trades unavailable from SEC EDGAR and FMP.",
+    unavailable: sourceErrors,
+  }, 503);
 }
 
 async function readInsidersFromDb(symbol?: string): Promise<InsiderTrade[]> {
@@ -352,21 +385,40 @@ async function handleSenateTrades(): Promise<Response> {
     }
   }
 
-  // 1. Try Unusual Whales first (token already in Supabase secrets)
-  const uw = uwHeaders();
-  if (uw) {
+  // Free-first: FMP senate+house → public watchers → Quiver → Unusual Whales (opt-in).
+  const sourceErrors: string[] = [];
+
+  const fmpKey = env("FMP_API_KEY");
+  if (fmpKey) {
     try {
-      const trades = await fetchCongressFromUW(uw);
+      const trades = await fetchCongressFromFmpSenateAndHouse(fmpKey, fetchWithTimeout);
       if (trades.length > 0) {
-        await persistCongressTrades(trades, "unusual_whales");
-        await markSynced("congressTrades", trades.length, "unusual_whales");
+        await persistCongressTrades(trades, "fmp");
+        await markSynced("congressTrades", trades.length, "fmp");
         setCache(cacheKey, trades);
-        return json({ ok: true, data: trades });
+        return json({ ok: true, data: trades, source: "fmp" });
       }
-    } catch { /* fall through */ }
+      sourceErrors.push("fmp_congress_empty");
+    } catch (e) {
+      sourceErrors.push(e instanceof Error ? e.message : String(e));
+    }
+  } else {
+    sourceErrors.push("fmp_api_key_missing");
   }
 
-  // 2. Try Quiver Quantitative (paid subscription — Hobbyist+ includes Congress Trading)
+  try {
+    const trades = await fetchCongressFromFreeSources();
+    if (trades.length > 0) {
+      await persistCongressTrades(trades, "free_public");
+      await markSynced("congressTrades", trades.length, "free_public");
+      setCache(cacheKey, trades);
+      return json({ ok: true, data: trades, source: "free_public" });
+    }
+    sourceErrors.push("free_public_empty");
+  } catch (e) {
+    sourceErrors.push(e instanceof Error ? e.message : String(e));
+  }
+
   const quiverKey = env("QUIVER_API_KEY");
   if (quiverKey) {
     try {
@@ -375,47 +427,43 @@ async function handleSenateTrades(): Promise<Response> {
         await persistCongressTrades(trades, "quiver");
         await markSynced("congressTrades", trades.length, "quiver");
         setCache(cacheKey, trades);
-        return json({ ok: true, data: trades });
+        return json({ ok: true, data: trades, source: "quiver" });
       }
-    } catch { /* fall through to FMP */ }
-  }
-
-  // 3. Try FMP fallback (paid)
-  const fmpKey = env("FMP_API_KEY");
-  if (fmpKey) {
-    try {
-      const trades = await fetchCongressFromFmp(fmpKey);
-      if (trades.length > 0) {
-        await persistCongressTrades(trades, "fmp");
-        await markSynced("congressTrades", trades.length, "fmp");
-        setCache(cacheKey, trades);
-        return json({ ok: true, data: trades });
-      }
-    } catch { /* fall through */ }
-  }
-
-  // 4. Free public sources (no API key)
-  try {
-    const trades = await fetchCongressFromFreeSources();
-    if (trades.length > 0) {
-      await persistCongressTrades(trades, "free_public");
-      await markSynced("congressTrades", trades.length, "free_public");
-      setCache(cacheKey, trades);
-      return json({ ok: true, data: trades });
+      sourceErrors.push("quiver_empty");
+    } catch (e) {
+      sourceErrors.push(e instanceof Error ? e.message : String(e));
     }
-  } catch { /* fall through */ }
+  }
 
-  // Fallback to DB even if stale
+  const uw = uwHeaders();
+  if (uw) {
+    try {
+      const trades = await fetchCongressFromUW(uw);
+      if (trades.length > 0) {
+        await persistCongressTrades(trades, "unusual_whales");
+        await markSynced("congressTrades", trades.length, "unusual_whales");
+        setCache(cacheKey, trades);
+        return json({ ok: true, data: trades, source: "unusual_whales" });
+      }
+      sourceErrors.push("unusual_whales_empty");
+    } catch (e) {
+      sourceErrors.push(e instanceof Error ? e.message : String(e));
+    }
+  } else {
+    sourceErrors.push("unusual_whales_disabled_or_unconfigured");
+  }
+
   const fallback = await readCongressFromDb();
   if (fallback.length > 0) {
     setCache(cacheKey, fallback);
-    return json({ ok: true, data: fallback });
+    return json({ ok: true, data: fallback, source: "db_stale", unavailable: sourceErrors });
   }
 
   return json({
     ok: false,
-    error: "congress_no_provider",
-    message: "Congress trades require UNUSUAL_WHALES_TOKEN, QUIVER_API_KEY, FMP_API_KEY, or working free public source. No cached data available.",
+    error: "congress_unavailable",
+    message: "Congress trades unavailable from FMP senate/house, free public sources, Quiver, and Unusual Whales.",
+    unavailable: sourceErrors,
   }, 503);
 }
 
@@ -559,35 +607,6 @@ async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
   }
 
   throw new Error("quiver_no_data");
-}
-
-async function fetchCongressFromFmp(fmpKey: string): Promise<SenateTrade[]> {
-  // Try both v3 and stable endpoints
-  for (const base of [
-    `https://financialmodelingprep.com/api/v3/senate-trading?apikey=${fmpKey}`,
-    `https://financialmodelingprep.com/stable/senate-trading?page=0&apikey=${fmpKey}`,
-  ]) {
-    try {
-      const res = await fetchWithTimeout(base, 8000);
-      if (!res.ok) continue;
-      const raw = (await res.json()) as Array<Record<string, unknown>>;
-      if (!Array.isArray(raw) || raw.length === 0) continue;
-
-      return raw.slice(0, 25).map((r) => {
-        const type = String(r.type ?? "").toLowerCase();
-        const isPurchase = type.includes("purchase") || type.includes("buy");
-        return {
-          politician: `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() || String(r.representative ?? "Unknown"),
-          chamber: String(r.office ?? "Senate"),
-          ticker: String(r.symbol ?? r.assetDescription ?? ""),
-          direction: isPurchase ? "BUY" as const : "SELL" as const,
-          size: String(r.amount ?? "N/A"),
-          date: String(r.transactionDate ?? r.dateRecieved ?? ""),
-        };
-      }).filter((t) => t.ticker);
-    } catch { continue; }
-  }
-  throw new Error("fmp_congress_all_endpoints_failed");
 }
 
 async function fetchCongressFromFreeSources(): Promise<SenateTrade[]> {
@@ -2648,6 +2667,104 @@ async function persistEmergency(emergencies: EmergencySquawk[]) {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════
+// SHORT VOLUME — FINRA daily CNMS Reg SHO (free CDN, no API key)
+// ═══════════════════════════════════════════════════════════════════
+async function handleShortVolume(symbol?: string): Promise<Response> {
+  const cacheKey = `shortVolume:${symbol ?? "top"}`;
+  const hit = cached<FreeShortVolume[]>(cacheKey);
+  if (hit) return json({ ok: true, data: hit, source: "cache" });
+
+  if (await isFeedFresh("shortVolume")) {
+    const fromDb = await readShortVolumeFromDb(symbol);
+    if (fromDb.length > 0) {
+      setCache(cacheKey, fromDb);
+      return json({ ok: true, data: fromDb, source: "db" });
+    }
+  }
+
+  try {
+    const rows = await fetchFinraShortVolume(fetchWithTimeout, symbol);
+    if (rows.length > 0) {
+      await persistShortVolume(rows);
+      await markSynced("shortVolume", rows.length, "finra_cnms");
+    }
+    setCache(cacheKey, rows);
+    return json({ ok: true, data: rows, source: "finra_cnms" });
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    const fallback = await readShortVolumeFromDb(symbol);
+    if (fallback.length > 0) {
+      setCache(cacheKey, fallback);
+      return json({
+        ok: true,
+        data: fallback,
+        source: "db_stale",
+        unavailable: [reason],
+      });
+    }
+    return json({
+      ok: false,
+      error: "short_volume_unavailable",
+      message: "FINRA daily short sale volume unavailable.",
+      unavailable: [reason],
+    }, 503);
+  }
+}
+
+async function readShortVolumeFromDb(symbol?: string): Promise<FreeShortVolume[]> {
+  try {
+    const sb = getSupabase();
+    let query = sb
+      .from("intel_short_volume")
+      .select("*")
+      .order("trade_date", { ascending: false })
+      .limit(40);
+    if (symbol) query = query.eq("symbol", symbol);
+    const { data } = await query;
+    if (!data) return [];
+    return data.map((r: Record<string, unknown>) => {
+      const shortVolume = Number(r.short_volume ?? 0);
+      const totalVolume = Number(r.total_volume ?? 0);
+      return {
+        symbol: String(r.symbol),
+        date: String(r.trade_date),
+        shortVolume,
+        shortExemptVolume: Number(r.short_exempt_volume ?? 0),
+        totalVolume,
+        shortRatio:
+          r.short_ratio != null
+            ? Number(r.short_ratio)
+            : totalVolume > 0
+              ? shortVolume / totalVolume
+              : 0,
+        market: String(r.market ?? "CNMS"),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function persistShortVolume(rows: FreeShortVolume[]) {
+  try {
+    const sb = getSupabase();
+    const payload = rows.map((r) => ({
+      symbol: r.symbol,
+      trade_date: r.date,
+      short_volume: Math.round(r.shortVolume),
+      short_exempt_volume: Math.round(r.shortExemptVolume),
+      total_volume: Math.round(r.totalVolume),
+      short_ratio: r.shortRatio,
+      market: r.market,
+    }));
+    await sb.from("intel_short_volume").upsert(payload, {
+      onConflict: "symbol,trade_date,market",
+      ignoreDuplicates: false,
+    });
+  } catch { /* best effort */ }
+}
+
 // ── Handler ────────────────────────────────────────────────────────
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -2667,6 +2784,8 @@ serve(async (req: Request) => {
         return await handleInsiderTrades(symbol);
       case "senateTrades":
         return await handleSenateTrades();
+      case "shortVolume":
+        return await handleShortVolume(symbol);
       case "darkPoolPrints":
         return await handleDarkPoolPrints(symbol);
       case "unusualOptions":

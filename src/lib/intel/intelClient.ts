@@ -13,6 +13,7 @@ export type IntelProviderStatus = {
   id:
     | "insiderTrades"
     | "senateTrades"
+    | "shortVolume"
     | "darkPoolPrints"
     | "unusualOptions"
     | "marketTide"
@@ -27,6 +28,8 @@ export type IntelProviderStatus = {
   label: string;
   state: IntelProviderState;
   description?: string;
+  /** Human-readable reason when state is error/off (source unavailable). */
+  reason?: string;
 };
 
 export type InsiderTrade = {
@@ -46,6 +49,17 @@ export type SenateTrade = {
   direction: "BUY" | "SELL";
   size: string;
   date: string;
+};
+
+/** FINRA daily short sale volume row (CNMS Reg SHO). */
+export type ShortVolumeRow = {
+  symbol: string;
+  date: string;
+  shortVolume: number;
+  shortExemptVolume: number;
+  totalVolume: number;
+  shortRatio: number;
+  market: string;
 };
 
 export type DarkPoolPrint = {
@@ -204,6 +218,7 @@ export type IntelSnapshot = {
   generatedAt: string;
   insiders: InsiderTrade[];
   senate: SenateTrade[];
+  shortVolume: ShortVolumeRow[];
   darkPool: DarkPoolPrint[];
   options: UnusualOption[];
   tide: MarketTide | null;
@@ -228,6 +243,7 @@ export type IntelSnapshot = {
 type IntelAction =
   | "insiderTrades"
   | "senateTrades"
+  | "shortVolume"
   | "darkPoolPrints"
   | "unusualOptions"
   | "marketTide"
@@ -572,6 +588,39 @@ async function loadIntelFromDb<T>(
         }));
         return { ok: true, data: rows as T };
       }
+      case "shortVolume": {
+        let q = sb
+          .from("intel_short_volume")
+          .select(
+            "symbol,trade_date,short_volume,short_exempt_volume,total_volume,short_ratio,market",
+          )
+          .order("trade_date", { ascending: false })
+          .limit(40);
+        if (typeof args.symbol === "string" && args.symbol.trim()) {
+          q = q.eq("symbol", String(args.symbol).toUpperCase());
+        }
+        const { data, error } = await q;
+        if (error) return { ok: false, error: error.message };
+        const rows = (data ?? []).map((r) => {
+          const shortVolume = Number(r.short_volume ?? 0);
+          const totalVolume = Number(r.total_volume ?? 0);
+          return {
+            symbol: r.symbol,
+            date: String(r.trade_date),
+            shortVolume,
+            shortExemptVolume: Number(r.short_exempt_volume ?? 0),
+            totalVolume,
+            shortRatio:
+              r.short_ratio != null
+                ? Number(r.short_ratio)
+                : totalVolume > 0
+                  ? shortVolume / totalVolume
+                  : 0,
+            market: String(r.market ?? "CNMS"),
+          };
+        });
+        return { ok: true, data: rows as T };
+      }
       case "darkPoolPrints": {
         let q = sb
           .from("intel_dark_pool")
@@ -825,11 +874,24 @@ async function callIntelProxy<T>(
       const body = await res.text().catch(() => "");
       return { ok: false, error: `intel_proxy_${res.status}:${body.slice(0, 120)}` };
     }
-    const json = (await res.json()) as { ok?: boolean; data?: unknown; error?: string };
+    const json = (await res.json()) as {
+      ok?: boolean;
+      data?: unknown;
+      error?: string;
+      message?: string;
+      unavailable?: string[];
+    };
     if (!json.ok) {
       const db = await loadIntelFromDb<T>(action, args);
       if (db.ok) return db;
-      return { ok: false, error: json.error ?? "intel_proxy_unknown_error" };
+      const unavailable =
+        Array.isArray(json.unavailable) && json.unavailable.length > 0
+          ? ` (${json.unavailable.slice(0, 3).join("; ")})`
+          : "";
+      return {
+        ok: false,
+        error: `${json.message ?? json.error ?? "intel_proxy_unknown_error"}${unavailable}`,
+      };
     }
     const normalized = normalizeProxyPayload<T>(action, json.data);
     if (action === "marketTide" && (normalized == null || normalized === undefined)) {
@@ -870,7 +932,8 @@ function toStatus(
       id,
       label,
       state: "error",
-      description: `${description} — feed syncing…`,
+      description: `${description} — unavailable: ${err}`,
+      reason: err,
     };
   }
   return {
@@ -878,6 +941,7 @@ function toStatus(
     label,
     state: "off",
     description: `${description} — waiting for new signals…`,
+    reason: "no_data",
   };
 }
 
@@ -915,6 +979,7 @@ async function fetchIntelSnapshot(
   // concurrency burst that takes the whole intel page down.
   const insiderRes = await callIntelProxy<InsiderTrade[]>("insiderTrades", args);
   const senateRes = await callIntelProxy<SenateTrade[]>("senateTrades", {});
+  const shortVolumeRes = await callIntelProxy<ShortVolumeRow[]>("shortVolume", args);
   const darkPoolRes = await callIntelProxy<DarkPoolPrint[]>("darkPoolPrints", args);
   const optionsRes = await callIntelProxy<UnusualOption[]>("unusualOptions", args);
   const tideRes = await callIntelProxy<MarketTide | null>("marketTide", {});
@@ -934,6 +999,8 @@ async function fetchIntelSnapshot(
 
   const insiders = insiderRes.ok && Array.isArray(insiderRes.data) ? insiderRes.data : [];
   const senate = senateRes.ok && Array.isArray(senateRes.data) ? senateRes.data : [];
+  const shortVolume =
+    shortVolumeRes.ok && Array.isArray(shortVolumeRes.data) ? shortVolumeRes.data : [];
   const darkPool = darkPoolRes.ok && Array.isArray(darkPoolRes.data) ? darkPoolRes.data : [];
   const options = optionsRes.ok && Array.isArray(optionsRes.data) ? optionsRes.data : [];
   const tide = tideRes.ok && tideRes.data ? tideRes.data : null;
@@ -947,9 +1014,39 @@ async function fetchIntelSnapshot(
   const military = militaryRes.ok && Array.isArray(militaryRes.data) ? militaryRes.data : [];
   const emergency = emergencyRes.ok && Array.isArray(emergencyRes.data) ? emergencyRes.data : [];
 
-  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes, energyRes, cyberRes, militaryRes, emergencyRes];
+  // Per-source failures must not fail the whole intel view — only affect that provider badge.
+  const allResults = [
+    insiderRes,
+    senateRes,
+    shortVolumeRes,
+    darkPoolRes,
+    optionsRes,
+    tideRes,
+    jetsRes,
+    vesselRes,
+    chokepointRes,
+    conflictRes,
+    energyRes,
+    cyberRes,
+    militaryRes,
+    emergencyRes,
+  ];
   const hadError = allResults.some((r) => !r.ok);
-  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energy.length || cyber.length || military.length);
+  const hasLiveData = Boolean(
+    insiders.length ||
+      senate.length ||
+      shortVolume.length ||
+      darkPool.length ||
+      options.length ||
+      tide ||
+      jets.length ||
+      vessels.length ||
+      chokepoints.length ||
+      conflicts.length ||
+      energy.length ||
+      cyber.length ||
+      military.length,
+  );
 
   if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
     return markCache(
@@ -974,6 +1071,13 @@ async function fetchIntelSnapshot(
       "AXE Intel congressional disclosure feed",
       senateRes.ok && senate.length > 0,
       senateRes.ok ? undefined : senateRes.error,
+    ),
+    toStatus(
+      "shortVolume",
+      "Short volume",
+      "FINRA daily short sale volume",
+      shortVolumeRes.ok && shortVolume.length > 0,
+      shortVolumeRes.ok ? undefined : shortVolumeRes.error,
     ),
     toStatus(
       "darkPoolPrints",
@@ -1059,6 +1163,7 @@ async function fetchIntelSnapshot(
     generatedAt: new Date().toISOString(),
     insiders,
     senate,
+    shortVolume,
     darkPool,
     options,
     tide,

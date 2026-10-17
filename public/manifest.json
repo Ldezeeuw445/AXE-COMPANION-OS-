@@ -4,6 +4,7 @@
   "description": "Private AI trading companion — alerts, chat, and market intelligence.",
   "start_url": "/chat",
   "scope": "/",
+  "id": "/chat",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#06070a",

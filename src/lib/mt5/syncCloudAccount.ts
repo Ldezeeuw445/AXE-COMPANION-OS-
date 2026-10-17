@@ -27,6 +27,7 @@ import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { withActionBudget } from "@/lib/mt5/mt5ActionBudget";
 import { mapMetaApiActionError } from "@/lib/mt5/mapMetaApiActionError";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 
 export type CloudMt5SyncResult =
   | { ok: true; data: { dealsFetched: number; dealsUpserted: number; tradesNormalized: number } }
@@ -114,6 +115,7 @@ export async function runCloudMt5Sync(
     return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
   }
 
+  // Ownership read stays on the caller client (user session or cron service).
   const { data: row, error } = await supabase
     .from("user_broker_accounts")
     .select("id,external_connection_id,connection_method,metadata,user_id,mt5_login,mt5_server")
@@ -126,12 +128,15 @@ export async function runCloudMt5Sync(
     return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
   }
 
+  // TOS-SEC-2: ledger + account status writes go through service role.
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+
   let extId = row.external_connection_id as string;
   const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
   let accountRegion =
     typeof prevMeta.metaapiRegion === "string" ? prevMeta.metaapiRegion : null;
 
-  await supabase
+  await writeSb
     .from("user_broker_accounts")
     .update({ provider_status: "syncing" })
     .eq("id", accountId)
@@ -206,7 +211,7 @@ export async function runCloudMt5Sync(
       SYNC_HISTORY_TIMEOUT_MS,
     );
   } catch (e) {
-    await supabase
+    await writeSb
       .from("user_broker_accounts")
       .update({
         provider_status: "sync_failed",
@@ -243,7 +248,7 @@ export async function runCloudMt5Sync(
       raw: t.raw,
     };
 
-    const { data: existing, error: exErr } = await supabase
+    const { data: existing, error: exErr } = await writeSb
       .from("broker_trades")
       .select("id")
       .eq("account_id", accountId)
@@ -251,7 +256,7 @@ export async function runCloudMt5Sync(
       .maybeSingle();
 
     if (exErr) {
-      await supabase
+      await writeSb
         .from("user_broker_accounts")
         .update({ provider_status: "sync_failed" })
         .eq("id", accountId)
@@ -260,7 +265,7 @@ export async function runCloudMt5Sync(
     }
 
     if (existing?.id) {
-      const { error: upErr } = await supabase
+      const { error: upErr } = await writeSb
         .from("broker_trades")
         .update({
           symbol: payload.symbol,
@@ -277,20 +282,27 @@ export async function runCloudMt5Sync(
         .eq("id", existing.id)
         .eq("user_id", userId);
       if (upErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
+        await writeSb
+          .from("user_broker_accounts")
+          .update({ provider_status: "sync_failed" })
+          .eq("id", accountId)
+          .eq("user_id", userId);
         return { ok: false, code: "sync_failed", message: upErr.message };
       }
     } else {
-      const { error: inErr } = await supabase.from("broker_trades").insert(payload);
+      const { error: inErr } = await writeSb.from("broker_trades").insert(payload);
       if (inErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
+        await writeSb
+          .from("user_broker_accounts")
+          .update({ provider_status: "sync_failed" })
+          .eq("id", accountId)
+          .eq("user_id", userId);
         return { ok: false, code: "sync_failed", message: inErr.message };
       }
       if (payload.close_time) {
         const pnl = Number(payload.pnl ?? 0);
-        const symbol = cleanDisplaySymbol(String(payload.symbol ?? ""));
         void recordProactiveFeedEvent(
-          supabase,
+          writeSb,
           userId,
           `trade_close:${t.external_trade_id}`,
           `Trade closed: ${payload.symbol}`,
@@ -360,7 +372,7 @@ export async function runCloudMt5Sync(
       : {}),
   };
 
-  await supabase
+  await writeSb
     .from("user_broker_accounts")
     .update({
       connection_method: "cloud_mt5",
@@ -394,7 +406,7 @@ export async function runCloudMt5Sync(
 
   const shouldJournal = opts.autoJournal !== false;
   if (shouldJournal && dealsUpserted > 0) {
-    autoJournalTrades(supabase, userId, accountId)
+    autoJournalTrades(writeSb, userId, accountId)
       .then((r) => {
         if (!r.ok) console.error("[mt5Sync] auto-journal failed:", r.error);
       })
@@ -430,6 +442,8 @@ export async function refreshCloudAccountSymbolMap(
   if (!row?.external_connection_id || row.connection_method !== "cloud_mt5") {
     return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
   }
+
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
 
   let extId = row.external_connection_id as string;
   const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
@@ -543,7 +557,7 @@ export async function refreshCloudAccountSymbolMap(
 
   const providerStatus = String(row.provider_status ?? "connected");
 
-  await supabase
+  await writeSb
     .from("user_broker_accounts")
     .update({
       connection_method: "cloud_mt5",

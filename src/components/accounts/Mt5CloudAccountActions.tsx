@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import {
   disconnectCloudMt5AccountAction,
   recoverCloudMt5AccountAction,
+  runCloudMt5DoctorAction,
   syncCloudMt5AccountAction,
   testCloudMt5ConnectionAction,
 } from "@/app/actions/mt5Cloud";
 import { AxeBreatheLoader } from "@/components/ui/AxeBreatheLoader";
+import type { Mt5DoctorReport, Mt5DoctorStepStatus } from "@/types/mt5Doctor";
 
 type Props = {
   accountId: string;
@@ -17,6 +19,7 @@ type Props = {
 const ACTION_TIMEOUT_MS: Record<string, number> = {
   Test: 25_000,
   Sync: 75_000,
+  Doctor: 60_000,
   Redeploy: 75_000,
   Disconnect: 25_000,
 };
@@ -78,6 +81,7 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
     runIdRef.current = runId;
     setBusyLabel(label);
     setMsg(null);
+    if (label === "Doctor") setDoctorReport(null);
     const actionPromise = fn(accountId);
 
     void (async () => {
@@ -87,7 +91,12 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
       if (timedOut) {
         setMsg(
           JSON.stringify({
-            headline: label === "Sync" ? "Still syncing." : "Still working.",
+            headline:
+              label === "Sync"
+                ? "Still syncing."
+                : label === "Doctor"
+                  ? "Still diagnosing."
+                  : "Still working.",
             detail: r.message,
           }),
         );
@@ -100,7 +109,16 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
         return;
       }
 
-      if (r.ok && label === "Sync") {
+      if (r.ok && label === "Doctor") {
+        const report = r.data && typeof r.data === "object" ? (r.data as Mt5DoctorReport) : null;
+        setDoctorReport(report);
+        setMsg(
+          JSON.stringify({
+            headline: report?.headline ?? "Doctor completed.",
+            detail: report?.summary,
+          }),
+        );
+      } else if (r.ok && label === "Sync") {
         const d =
           r.data && typeof r.data === "object"
             ? (r.data as { dealsFetched?: number; dealsUpserted?: number; tradesNormalized?: number })
@@ -200,6 +218,8 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
           <p className="text-[10px] leading-relaxed text-tos-dim">
           {busyLabel === "Sync"
             ? "AXE is syncing broker history. If the broker is slow, this panel will release and keep the account usable."
+            : busyLabel === "Doctor"
+              ? "AXE is probing MetaAPI, credentials, positions, history, and live prices for this account."
             : busyLabel === "Redeploy"
               ? "AXE is redeploying the cloud terminal, then checking whether the broker terminal comes back online."
             : "AXE is checking the account. This will release automatically if the runtime stalls."}

@@ -28,6 +28,8 @@ export function getEodhdKey(): string | null {
   return trimOrNull(process.env.EODHD_API_KEY);
 }
 export function getUnusualWhalesKey(): string | null {
+  const enabled = (process.env.UNUSUAL_WHALES_ENABLED ?? "").trim().toLowerCase();
+  if (!["1", "true", "yes", "on"].includes(enabled)) return null;
   return trimOrNull(process.env.UNUSUAL_WHALES_TOKEN ?? process.env.UNUSUAL_WHALES_API_KEY);
 }
 
@@ -79,8 +81,9 @@ export function detectProviders(): ProviderStatus[] {
       id: "unusualWhales",
       label: "AXE Intel",
       state: getUnusualWhalesKey() ? "live" : "missing_config",
-      description: "Premium smart-money flow (UW). Insider trades use free SEC EDGAR without this key.",
-      env: ["UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY"],
+      description:
+        "Optional Unusual Whales (requires UNUSUAL_WHALES_ENABLED=true). Insiders/congress/short volume use free SEC/FMP/FINRA without it.",
+      env: ["UNUSUAL_WHALES_ENABLED", "UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY"],
     },
   ];
 }

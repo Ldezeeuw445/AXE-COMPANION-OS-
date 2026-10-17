@@ -11,7 +11,7 @@ import {
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetAccountInformation,
-  clientListSymbols,
+  clientGetHistoryDealsRange,
   clientGetPositions,
   clientGetSymbolPrice,
   defaultRegionForProvisioning,
@@ -31,6 +31,13 @@ import {
   metaApiComplianceConfirmed,
   META_API_COMPLIANCE_ERROR,
 } from "@/lib/legal/metaApiCompliance";
+import type {
+  Mt5DoctorOverallStatus,
+  Mt5DoctorReport,
+  Mt5DoctorStep,
+  Mt5DoctorStepId,
+  Mt5DoctorStepStatus,
+} from "@/types/mt5Doctor";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -151,6 +158,11 @@ const TEST_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
 const RECOVERY_OPERATION_TIMEOUT_MS = 70_000;
 const RECOVERY_POLL_BUDGET_MS = 60_000;
 const RECOVERY_POLL_INTERVAL_MS = 2_500;
+const DOCTOR_PROVISIONING_TIMEOUT_MS = 15_000;
+const DOCTOR_ACCOUNT_INFO_TIMEOUT_MS = 25_000;
+const DOCTOR_POSITIONS_TIMEOUT_MS = 20_000;
+const DOCTOR_HISTORY_TIMEOUT_MS = 30_000;
+const DOCTOR_PRICE_TIMEOUT_MS = 12_000;
 
 class Mt5ActionTimeoutError extends Error {
   constructor(readonly operation: string) {
@@ -174,6 +186,97 @@ async function withActionBudget<T>(
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+function minutesSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.round(ms / 60_000));
+}
+
+function doctorStep(
+  id: Mt5DoctorStepId,
+  label: string,
+  status: Mt5DoctorStepStatus,
+  detail: string,
+): Mt5DoctorStep {
+  return { id, label, status, detail };
+}
+
+function safeString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function compactMetaError(error: unknown): string {
+  const mapped = mapMetaError(error);
+  return `${mapped.code}: ${mapped.message}`;
+}
+
+function knownFailureFromStatus(status: string | null | undefined): string | null {
+  const s = (status ?? "").toLowerCase();
+  if (!s || s === "connected" || s === "provisioned" || s === "syncing") return null;
+  if (s === "invalid_credentials" || s === "mt5_invalid_credentials") return "Credentials issue";
+  if (s === "provider_not_configured") return "MetaAPI token is not configured on the server";
+  if (s === "not_found") return "MetaAPI account was not found";
+  if (s === "metaapi_region_error") return "MetaAPI region or client host mismatch";
+  if (s === "metaapi_timeout") return "MetaAPI or broker terminal timed out";
+  if (s.includes("fail") || s.includes("error")) return "Previous MT5 operation failed";
+  if (s === "disconnected") return "MetaAPI connection is disconnected";
+  return null;
+}
+
+function overallFromDoctor(args: {
+  providerStatus: string | null;
+  liveTradingEnabled: boolean;
+  deploymentStatus: Mt5DoctorStepStatus;
+  terminalStatus: Mt5DoctorStepStatus;
+  brokerStatus: Mt5DoctorStepStatus;
+  positionsStatus: Mt5DoctorStepStatus;
+  historyStatus: Mt5DoctorStepStatus;
+  priceStatus: Mt5DoctorStepStatus;
+  knownFailure: string | null;
+}): Mt5DoctorOverallStatus {
+  const provider = (args.providerStatus ?? "").toLowerCase();
+  if (provider.includes("credential") || args.knownFailure?.toLowerCase().includes("credential")) {
+    return "credentials_issue";
+  }
+  if (provider === "provisioning" || provider === "created" || provider === "deploying") {
+    return "provisioning_pending";
+  }
+  if (provider === "syncing" || provider === "connecting") return "syncing";
+  if (args.deploymentStatus === "fail" || args.terminalStatus === "fail") return "server_issue";
+  if (args.brokerStatus === "fail" || args.priceStatus === "fail") return "reconnecting";
+  if (args.positionsStatus === "fail" || args.historyStatus === "fail" || args.knownFailure) {
+    return "needs_attention";
+  }
+  if (!args.liveTradingEnabled && args.terminalStatus === "pass" && args.brokerStatus === "pass") {
+    return "read_only";
+  }
+  if (args.terminalStatus === "pass" && args.brokerStatus === "pass") return "connected";
+  return "needs_attention";
+}
+
+function doctorHeadline(status: Mt5DoctorOverallStatus): string {
+  switch (status) {
+    case "connected":
+      return "MT5 connection is live.";
+    case "syncing":
+      return "MT5 is syncing.";
+    case "reconnecting":
+      return "MT5 is reachable but live data needs attention.";
+    case "read_only":
+      return "MT5 is live in read-only mode.";
+    case "server_issue":
+      return "MetaAPI deployment or server state needs attention.";
+    case "credentials_issue":
+      return "MT5 credentials need attention.";
+    case "provisioning_pending":
+      return "MT5 cloud terminal is still provisioning.";
+    case "needs_attention":
+    default:
+      return "MT5 connection needs attention.";
   }
 }
 
@@ -338,7 +441,6 @@ export async function createCloudMt5ConnectionAction(
         : region),
     passwordType,
     metaApiComplianceConfirmed: true,
-    passwordType,
     createdVia: "axe_companion_cloud_mt5",
     metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,

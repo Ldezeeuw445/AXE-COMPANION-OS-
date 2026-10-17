@@ -17,6 +17,8 @@
     "verify:legal": "node scripts/check-legal-routes.mjs",
     "setup:stripe": "node scripts/setup-stripe-billing.mjs",
     "smoke:launch": "node scripts/smoke-launch.mjs",
+    "test:push-delivery": "node scripts/test-push-delivery.mjs",
+    "test:finra-short-volume": "node scripts/test-finra-short-volume.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

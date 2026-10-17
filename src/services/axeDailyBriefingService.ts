@@ -599,22 +599,28 @@ export async function generateMorningBrief(
     console.log(`[Briefing] Saved ${isWeekly ? "weekly" : "daily"} brief to axe_daily_briefings for ${traderId}`);
   }
 
-  // Track event (best-effort)
-  try {
-    await trackAdaptiveEvent({
-      accountId: null,
-      eventType: "morning_brief_delivered",
-      route: "/cockpit",
-      payload: {
-        traderId,
-        alignment: context.alignment,
-        topPairs: context.preferredPairs,
-        engineConfidence: context.engineConfidence,
-      },
-      occurredAt: new Date().toISOString(),
-    });
-  } catch {
-    // Non-blocking
+  // Track only when the brief was actually persisted (not dry-run / preview).
+  if (shouldSave) {
+    try {
+      await trackAdaptiveEvent(
+        {
+          userId: traderId,
+          accountId: null,
+          eventType: "morning_brief_delivered",
+          route: "/cockpit",
+          payload: {
+            weekly: isWeekly,
+            alignment: context.alignment,
+            topPairs: context.preferredPairs,
+            engineConfidence: context.engineConfidence,
+          },
+          occurredAt: new Date().toISOString(),
+        },
+        writeSb,
+      );
+    } catch {
+      // Non-blocking
+    }
   }
 
   return {

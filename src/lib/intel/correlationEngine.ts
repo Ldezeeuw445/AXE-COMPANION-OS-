@@ -22,6 +22,7 @@ export function getFeedCounts(intel: Awaited<ReturnType<typeof loadIntelSnapshot
   return {
     insiders: intel.insiders.length,
     senate: intel.senate.length,
+    shortVolume: intel.shortVolume.length,
     darkPool: intel.darkPool.length,
     options: intel.options.length,
     jets: intel.jets.length,
@@ -61,6 +62,15 @@ export function buildIntelContext(
     parts.push(`\n## CONGRESSIONAL TRADES (${intel.senate.length} disclosures)`);
     for (const t of intel.senate.slice(0, 10)) {
       parts.push(`- ${t.ticker}: ${t.politician} (${t.chamber}) ${t.direction} ${t.size} on ${t.date}`);
+    }
+  }
+
+  if (intel.shortVolume.length > 0) {
+    parts.push(`\n## SHORT VOLUME — FINRA (${intel.shortVolume.length} symbols)`);
+    for (const s of intel.shortVolume.slice(0, 10)) {
+      parts.push(
+        `- ${s.symbol}: short ${formatCompact(s.shortVolume)} / total ${formatCompact(s.totalVolume)} (${(s.shortRatio * 100).toFixed(1)}%) on ${s.date}`,
+      );
     }
   }
 

@@ -5,6 +5,7 @@ import { getSupabaseKey } from "@/lib/env";
 const WARMUP_ACTIONS = [
   "insiderTrades",
   "senateTrades",
+  "shortVolume",
   "darkPoolPrints",
   "unusualOptions",
   "marketTide",

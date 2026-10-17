@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 import { verifyInternalPushRequest } from "@/lib/push/internalPushAuth";
+import {
+  buildPushNotificationPayload,
+  summarizePushDelivery,
+  type PushDeliveryRequest,
+  type PushSendResult,
+} from "@/lib/push/deliverPushPayload";
 
 function getServiceSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -32,25 +38,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "VAPID not configured" }, { status: 500 });
   }
 
-  let body: {
-    userId?: string;
-    title?: string;
-    body?: string;
-    url?: string;
-    tag?: string;
-    severity?: "info" | "alert" | "risk" | "high" | "low";
-    requireInteraction?: boolean;
-    silent?: boolean;
-    image?: string;
-    actions?: { action: string; title: string; icon?: string }[];
-  };
+  let body: PushDeliveryRequest;
   try {
-    body = await req.json();
+    body = (await req.json()) as PushDeliveryRequest;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { userId, title, body: msgBody, url, tag, severity, requireInteraction, silent, image, actions } = body;
+  const { userId, title } = body;
   if (!userId || !title) {
     return NextResponse.json({ error: "Missing userId or title" }, { status: 400 });
   }
@@ -70,48 +65,38 @@ export async function POST(req: NextRequest) {
   }
 
   if (!subs || subs.length === 0) {
-    return NextResponse.json({ ok: true, sent: 0 });
+    return NextResponse.json({ ok: true, sent: 0, total: 0 });
   }
 
-  const payload = JSON.stringify({
-    title,
-    body: msgBody ?? "",
-    url: url ?? "/chat",
-    tag: tag ?? "axe-notification",
-    severity: severity ?? "alert",
-    requireInteraction: requireInteraction ?? severity === "risk",
-    silent: silent ?? false,
-    image,
-    actions,
-  });
+  const payload = buildPushNotificationPayload(body);
 
-  const results = await Promise.allSettled(
+  const settled = await Promise.allSettled(
     subs.map((sub) =>
       webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        payload
-      )
-    )
+        payload,
+      ),
+    ),
   );
 
-  // Clean up expired subscriptions (410 Gone)
-  const expired: string[] = [];
-  results.forEach((r, i) => {
-    if (r.status === "rejected") {
-      const err = r.reason as { statusCode?: number };
-      if (err?.statusCode === 410 || err?.statusCode === 404) {
-        expired.push(subs[i].endpoint);
-      }
-    }
+  const results: PushSendResult[] = settled.map((r) => {
+    if (r.status === "fulfilled") return { status: "fulfilled" };
+    const err = r.reason as { statusCode?: number };
+    return { status: "rejected", statusCode: err?.statusCode };
   });
-  if (expired.length > 0) {
+
+  const summary = summarizePushDelivery({ subscriptions: subs, results });
+  if (summary.expiredEndpoints.length > 0) {
     await supabase
       .from("push_subscriptions")
       .delete()
-      .in("endpoint", expired)
+      .in("endpoint", summary.expiredEndpoints)
       .eq("user_id", userId);
   }
 
-  const sent = results.filter((r) => r.status === "fulfilled").length;
-  return NextResponse.json({ ok: true, sent, total: subs.length });
+  return NextResponse.json({
+    ok: true,
+    sent: summary.sent,
+    total: summary.total,
+  });
 }

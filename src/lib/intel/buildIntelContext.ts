@@ -34,6 +34,15 @@ export function buildIntelContext(intel: IntelSnapshot, symbol?: string): string
     }
   }
 
+  if (intel.shortVolume.length > 0) {
+    parts.push(`\n## SHORT VOLUME — FINRA (${intel.shortVolume.length} symbols)`);
+    for (const s of intel.shortVolume.slice(0, 10)) {
+      parts.push(
+        `- ${s.symbol}: short ${formatCompact(s.shortVolume)} / total ${formatCompact(s.totalVolume)} (${(s.shortRatio * 100).toFixed(1)}%) on ${s.date}`,
+      );
+    }
+  }
+
   if (intel.darkPool.length > 0) {
     parts.push(`\n## DARK POOL PRINTS (${intel.darkPool.length} prints)`);
     for (const p of intel.darkPool.slice(0, 10)) {
