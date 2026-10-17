@@ -3,6 +3,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAccountProfile } from "@/lib/risk/accountProfile";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { buildMarketContext } from "@/lib/market/marketContextService";
+import {
+  AUTONOMY_MAX_LOT_CEILING,
+  AUTONOMY_MAX_RISK_PCT_CEILING,
+  AUTONOMY_MAX_TRADES_CEILING,
+  DEFAULT_AUTONOMY,
+  autonomyAllows,
+  isAutonomyLevel,
+  normalizeLimit,
+  type AutonomySettings,
+} from "@/lib/trading/autonomy";
+import { tradeRiskPct } from "@/lib/trading/autonomyRisk";
+import { pointValuePerLot } from "@/lib/risk/accountRiskBand";
 
 /**
  * "Do this account's rules permit this order right now?"
@@ -38,17 +50,44 @@ export async function decideAutoTradeAllowed(
   volumeLots: number,
   /**
    * True when a human pressed the button for this specific order. Passed
-   * straight through to the guard, where it drops the daily cap on unattended
-   * automation and nothing else.
+   * straight through to the guard, where it lifts the autonomy requirement
+   * and the daily cap on unattended automation, and nothing else.
    */
   attended = false,
+  /**
+   * Entry and stop, when the caller knows them. Without both, risk per trade
+   * cannot be worked out — and a trader who set a risk cap gets a refusal
+   * rather than a guess. See autonomyRisk.ts.
+   */
+  priceContext: { entryPrice?: number | null; stopLoss?: number | null } = {},
 ): Promise<TradeGuardDecision> {
   const { data: prefsRow } = await supabase
     .from("user_workspace_preferences")
-    .select("active_account_id")
+    .select(
+      "active_account_id,autonomy_level,autonomy_max_lot,autonomy_max_risk_pct,autonomy_max_trades_per_day,autonomy_ack_unattended,autonomy_ack_limits,autonomy_ack_loss,autonomy_granted_at",
+    )
     .eq("user_id", userId)
     .maybeSingle();
   const accountId = (prefsRow?.active_account_id as string | null) ?? null;
+
+  const rawLevel = Number(prefsRow?.autonomy_level);
+  const autonomy: AutonomySettings = prefsRow
+    ? {
+        level: isAutonomyLevel(rawLevel) ? rawLevel : DEFAULT_AUTONOMY.level,
+        maxLot: normalizeLimit(prefsRow.autonomy_max_lot, AUTONOMY_MAX_LOT_CEILING),
+        maxRiskPct: normalizeLimit(prefsRow.autonomy_max_risk_pct, AUTONOMY_MAX_RISK_PCT_CEILING),
+        maxTradesPerDay: normalizeLimit(
+          prefsRow.autonomy_max_trades_per_day,
+          AUTONOMY_MAX_TRADES_CEILING,
+        ),
+        acks: {
+          unattended: Boolean(prefsRow.autonomy_ack_unattended),
+          limits: Boolean(prefsRow.autonomy_ack_limits),
+          loss: Boolean(prefsRow.autonomy_ack_loss),
+        },
+        grantedAt: (prefsRow.autonomy_granted_at as string | null) ?? null,
+      }
+    : DEFAULT_AUTONOMY;
 
   const { data: account } = accountId
     ? await supabase
@@ -126,6 +165,25 @@ export async function decideAutoTradeAllowed(
     // and a news rule cannot be enforced on data we do not have.
   }
 
+  // Equity is the balance snapshot: the same number the risk band in the UI
+  // measures against, so the cap enforced here is the one the trader was shown.
+  const riskPct = tradeRiskPct({
+    entryPrice: priceContext.entryPrice ?? null,
+    stopLoss: priceContext.stopLoss ?? null,
+    volumeLots,
+    equity: Number.isFinite(balance) ? balance : null,
+    pointValuePerLot: pointValuePerLot(symbol),
+  });
+
+  /* ── Did the trader grant AXE this at all? ────────────────────────
+     Decided here rather than inside the pure guard, which deliberately has
+     no runtime imports. Every path to MT5 goes through this function, and
+     `verify-autonomy` holds that true. */
+  const permitted = autonomyAllows("place", autonomy, attended);
+  if (!permitted.allowed) {
+    return { allowed: false, reason: permitted.reason, detail: permitted.detail };
+  }
+
   return evaluateAutoTrade({
     profile,
     volumeLots,
@@ -135,5 +193,9 @@ export async function decideAutoTradeAllowed(
     minutesToHighImpact,
     now: new Date(),
     attended,
+    userMaxLot: autonomy.maxLot,
+    userMaxRiskPct: autonomy.maxRiskPct,
+    userMaxTradesPerDay: autonomy.maxTradesPerDay,
+    riskPct,
   });
 }

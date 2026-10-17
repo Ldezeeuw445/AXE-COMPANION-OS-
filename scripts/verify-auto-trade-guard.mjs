@@ -264,7 +264,9 @@ check("a human tapping drops the daily cap and nothing else", () => {
   }
 
   assert.ok(
-    /decideAutoTradeAllowed\(supabase, userId, displaySymbol, volumeLots, true\)/.test(execService),
+    // The call gained a price context argument for the risk cap, so match the
+    // part that matters: the `true` that says a human is looking at it.
+    /decideAutoTradeAllowed\(supabase, userId, displaySymbol, volumeLots, true[,)]/.test(execService),
     "the draft path is attended — a human is looking at it",
   );
 });

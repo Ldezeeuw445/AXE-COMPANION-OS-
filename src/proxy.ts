@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
+import { isAnonymousUser } from "@/lib/auth/anonymousSessions";
 
 const PROTECTED_PREFIXES = [
   "/chart",
@@ -20,8 +21,23 @@ const PROTECTED_PREFIXES = [
   "/upgrade",
 ];
 
+/**
+ * A prefix has to end at a path boundary.
+ *
+ * Measured 2026-10-17: a bare `startsWith` meant `/market` also matched
+ * `/marketing/...`, so every dev screenshot route redirected to /login — and
+ * `npm run capture:marketing`, which is in package.json and documented at the
+ * top of scripts/capture-marketing.mjs, had been quietly photographing the
+ * login page. Nothing said so, because a redirect to login looks exactly like
+ * "you are not signed in".
+ *
+ * `/market` and `/market/anything` stay protected; `/marketing/anything` is a
+ * different route and is not.
+ */
 function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 export async function proxy(request: NextRequest) {
@@ -92,7 +108,17 @@ export async function proxy(request: NextRequest) {
       const {
         data: { user: u },
       } = await Promise.race([userPromise, timeoutPromise]);
-      user = u;
+      // An anonymous session is signed out, everywhere.
+      //
+      // Measured 2026-10-17: this line was `user = u`. The check that was
+      // supposed to hold it — verify-no-anonymous-auth — was reading
+      // src/lib/supabase/middleware.ts, a file nothing has imported since the
+      // move to proxy.ts. It asserted against dead code and passed, while the
+      // live middleware let an anonymous JWT straight through to every
+      // protected page. The app's own call to mint one is gone, but the
+      // Supabase project switch is a dashboard setting this code cannot flip,
+      // so a token minted elsewhere has to die here too.
+      user = isAnonymousUser(u) ? null : u;
     } catch (error) {
       // If auth check times out or fails, let the request through
       // (protected pages will redirect to login via client-side checks)

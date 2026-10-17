@@ -4,6 +4,15 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isAlertAutoTradeArmed } from "@/lib/trading/alertAutoTradeArmed";
 import { DEFAULT_TRADE_VOLUME_LOTS, normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import type { TradeExecutionPrefs } from "@/lib/trading/tradeExecutionPrefs";
+import {
+  AUTONOMY_MAX_LOT_CEILING,
+  AUTONOMY_MAX_RISK_PCT_CEILING,
+  AUTONOMY_MAX_TRADES_CEILING,
+  DEFAULT_AUTONOMY,
+  isAutonomyLevel,
+  normalizeLimit,
+  type AutonomySettings,
+} from "@/lib/trading/autonomy";
 
 export type { TradeExecutionPrefs };
 
@@ -11,6 +20,25 @@ function parseOffset(value: unknown): number | null {
   if (value == null) return null;
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function mapAutonomy(data: Record<string, unknown> | null | undefined): AutonomySettings {
+  if (!data) return DEFAULT_AUTONOMY;
+  const rawLevel = Number(data.autonomy_level);
+  return {
+    // An unreadable level is level 2, never level 3. The safe direction for a
+    // missing value is the one that asks a human first.
+    level: isAutonomyLevel(rawLevel) ? rawLevel : DEFAULT_AUTONOMY.level,
+    maxLot: normalizeLimit(data.autonomy_max_lot, AUTONOMY_MAX_LOT_CEILING),
+    maxRiskPct: normalizeLimit(data.autonomy_max_risk_pct, AUTONOMY_MAX_RISK_PCT_CEILING),
+    maxTradesPerDay: normalizeLimit(data.autonomy_max_trades_per_day, AUTONOMY_MAX_TRADES_CEILING),
+    acks: {
+      unattended: Boolean(data.autonomy_ack_unattended),
+      limits: Boolean(data.autonomy_ack_limits),
+      loss: Boolean(data.autonomy_ack_loss),
+    },
+    grantedAt: (data.autonomy_granted_at as string | null) ?? null,
+  };
 }
 
 function mapPrefsRow(data: Record<string, unknown> | null | undefined): TradeExecutionPrefs {
@@ -22,6 +50,7 @@ function mapPrefsRow(data: Record<string, unknown> | null | undefined): TradeExe
     alertAutoTradeArmedAt: armedAt,
     alertSlOffset: parseOffset(data?.alert_sl_offset),
     alertTpOffset: parseOffset(data?.alert_tp_offset),
+    autonomy: mapAutonomy(data),
   };
 }
 
@@ -32,6 +61,7 @@ const EMPTY_PREFS: TradeExecutionPrefs = {
   alertAutoTradeArmedAt: null,
   alertSlOffset: null,
   alertTpOffset: null,
+  autonomy: DEFAULT_AUTONOMY,
 };
 
 export async function getTradeExecutionPrefsForUser(userId: string): Promise<TradeExecutionPrefs> {
@@ -40,8 +70,11 @@ export async function getTradeExecutionPrefsForUser(userId: string): Promise<Tra
 
   const { data } = await supabase
     .from("user_workspace_preferences")
+    // One string literal, not a concatenation: postgrest-js reads this at the
+    // type level to shape the result, and `"a," + "b"` is not a literal it can
+    // parse — it degrades the row to an error type.
     .select(
-      "default_trade_volume,alert_auto_trade_enabled,alert_auto_trade_armed_at,alert_sl_offset,alert_tp_offset",
+      "default_trade_volume,alert_auto_trade_enabled,alert_auto_trade_armed_at,alert_sl_offset,alert_tp_offset,autonomy_level,autonomy_max_lot,autonomy_max_risk_pct,autonomy_max_trades_per_day,autonomy_ack_unattended,autonomy_ack_limits,autonomy_ack_loss,autonomy_granted_at",
     )
     .eq("user_id", userId)
     .maybeSingle();

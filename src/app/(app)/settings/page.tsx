@@ -25,6 +25,7 @@ import { SquawkStationPicker } from "@/components/settings/SquawkStationPicker";
 import { getSquawkStationIdsServerState } from "@/lib/squawk/serverPrefs";
 import { FavoriteWorkflowsPicker } from "@/components/settings/FavoriteWorkflowsPicker";
 import { TradeExecutionPrefsPanel } from "@/components/settings/TradeExecutionPrefsPanel";
+import { AutonomyPanel } from "@/components/settings/AutonomyPanel";
 import { getFavoriteWorkflowIdsServerState } from "@/lib/workflows/serverFavorites";
 import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -237,6 +238,12 @@ export default async function SettingsPage() {
           initialAlertTpOffset={tradeExecutionPrefs.alertTpOffset}
           liveTradingEnabled={liveTrading.enabled}
         />
+      </div>
+
+      {/* The ceiling on everything automated. Sits directly under the trade
+          settings because that is where the auto-trade switch lives. */}
+      <div className="mb-4">
+        <AutonomyPanel initial={tradeExecutionPrefs.autonomy} />
       </div>
 
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}

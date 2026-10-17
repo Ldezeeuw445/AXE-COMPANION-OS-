@@ -94,7 +94,16 @@ export async function maybeAutoTradeOnAlert(
      question, and the one that was never asked. Until this guard
      existed, AXE could warn a funded trader off red news and then
      place a market order into the same event. */
-  const guardDecision = await decideAutoTradeAllowed(supabase, userId, symbol, prefs.defaultVolume);
+  const guardDecision = await decideAutoTradeAllowed(
+    supabase,
+    userId,
+    symbol,
+    prefs.defaultVolume,
+    false,
+    // Entry and stop are both known here, so a risk-per-trade cap is
+    // enforceable on this path rather than only refusable.
+    { entryPrice: entry, stopLoss: stops.stopLoss },
+  );
   if (!guardDecision.allowed) {
     await recordProactiveFeedEvent(
       supabase,

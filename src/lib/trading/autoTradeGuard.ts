@@ -44,6 +44,29 @@ export type AutoTradeGuardInput = {
    * cost you the account, and they do not care who clicked.
    */
   attended?: boolean;
+  /* ── the trader's own ceilings ────────────────────────────────────────
+     Plain numbers, not the settings object, so this file keeps no runtime
+     imports and `node --experimental-strip-types` can still exercise it.
+     Whether the trader granted unattended trading at all is decided one layer
+     up, in `decideAutoTradeAllowed` — see autonomy.ts.
+
+     Optional, so every existing caller keeps working: without them the guard
+     runs on the account's rules alone, exactly as it did. With them, the
+     tighter of the two sides wins. A prop firm's 2-lot cap does not become 5
+     because the trader typed 5, and 0.5 does not become 2 because the broker
+     allows it. ─────────────────────────────────────────────────────────── */
+  userMaxLot?: number | null;
+  userMaxRiskPct?: number | null;
+  userMaxTradesPerDay?: number | null;
+  /**
+   * What this order risks from entry to stop, as a percent of equity.
+   *
+   * `null` means it could not be worked out — no stop, or no equity to
+   * measure against. When the trader set a risk ceiling, an unattended order
+   * whose risk is unknown is refused rather than guessed at: a limit you
+   * enforce only when the numbers happen to be there is not a limit.
+   */
+  riskPct?: number | null;
 };
 
 export type AutoTradeDecision =
@@ -55,6 +78,8 @@ export type AutoTradeDecision =
         | "news_restricted"
         | "weekend_restricted"
         | "lot_above_limit"
+        | "risk_above_limit"
+        | "risk_unknown"
         | "daily_loss_reached"
         | "daily_trade_cap";
       /** One sentence the trader reads in the feed. Names the rule and the number. */
@@ -73,7 +98,6 @@ const NEWS_WINDOW_MINUTES = 30;
 
 export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision {
   const { profile, volumeLots, autoTradesToday, dayResultPct, minutesToHighImpact, now } = input;
-
   // 1. The account's own rules come first. These are the ones that cost you the
   //    account rather than a trade.
   if (
@@ -102,12 +126,41 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
   }
 
   // 2. Size. A cap the trader stated is a cap, not a suggestion.
-  if (profile.maxLot !== null && volumeLots > profile.maxLot) {
+  const userMaxLot = input.userMaxLot ?? null;
+  const lotCeiling = tighter(profile.maxLot, userMaxLot);
+  if (lotCeiling !== null && volumeLots > lotCeiling) {
+    // Name whose cap it was: "raise the limit" means two different screens
+    // depending on the answer.
+    const whose =
+      userMaxLot !== null && userMaxLot === lotCeiling && lotCeiling !== profile.maxLot
+        ? `your own ${lotCeiling}-lot limit`
+        : `your ${lotCeiling}-lot limit for this account`;
     return {
       allowed: false,
       reason: "lot_above_limit",
-      detail: `Not placed: ${volumeLots} lots is above your ${profile.maxLot}-lot limit for this account. Lower your default size or raise the limit — AXE will not quietly place something smaller than you asked for.`,
+      detail: `Not placed: ${volumeLots} lots is above ${whose}. Lower your default size or raise the limit — AXE will not quietly place something smaller than you asked for.`,
     };
+  }
+
+  // 2b. Risk per trade, which is the number a trader actually feels. Only the
+  //     trader sets this one; the broker has no opinion about it.
+  const userMaxRiskPct = input.userMaxRiskPct ?? null;
+  if (userMaxRiskPct !== null) {
+    const riskPct = input.riskPct ?? null;
+    if (riskPct === null) {
+      return {
+        allowed: false,
+        reason: "risk_unknown",
+        detail: `Not placed: you capped risk at ${userMaxRiskPct}% per trade and AXE cannot work out what this one risks — it needs a stop loss and a known account balance. A limit that only applies when the numbers happen to be there is not a limit.`,
+      };
+    }
+    if (riskPct > userMaxRiskPct) {
+      return {
+        allowed: false,
+        reason: "risk_above_limit",
+        detail: `Not placed: this trade risks ${riskPct.toFixed(2)}% of the account and your cap is ${userMaxRiskPct}%. Move the stop or lower the size yourself — AXE will not resize a trade you specified.`,
+      };
+    }
   }
 
   // 3. The day's damage. Trading on past a loss cap is how a funded account ends.
@@ -124,15 +177,31 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
   }
 
   // 4. The brake. Only for orders nobody is watching — see `attended`.
-  if (!input.attended && autoTradesToday >= MAX_AUTO_TRADES_PER_DAY) {
+  const tradeCap =
+    tighter(MAX_AUTO_TRADES_PER_DAY, input.userMaxTradesPerDay ?? null) ?? MAX_AUTO_TRADES_PER_DAY;
+  if (!input.attended && autoTradesToday >= tradeCap) {
     return {
       allowed: false,
       reason: "daily_trade_cap",
-      detail: `Not placed: AXE has already placed ${autoTradesToday} automated trades today, which is the daily cap. Anything further is yours to place by hand.`,
+      detail: `Not placed: AXE has already placed ${autoTradesToday} automated trades today, which is the daily cap of ${tradeCap}. Anything further is yours to place by hand.`,
     };
   }
 
   return { allowed: true };
+}
+
+/**
+ * The tighter of two ceilings, where null means "no ceiling from this side".
+ *
+ * Both the account and the trader get to say no. Taking the smaller one is the
+ * only answer that respects both. Duplicated from autonomy.ts on purpose: this
+ * file deliberately has no runtime imports, and three lines of arithmetic are
+ * cheaper to keep honest than the alternative.
+ */
+function tighter(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.min(a, b);
 }
 
 /** Friday, within three hours of the 21:00 UTC close. */
