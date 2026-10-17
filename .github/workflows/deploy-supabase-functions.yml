@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - axe-companion-runtime-foundation
     paths:
       - "supabase/functions/**"
       - ".github/workflows/deploy-supabase-functions.yml"
