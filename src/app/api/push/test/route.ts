@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 /**
  * POST /api/push/test
@@ -27,6 +28,10 @@ export async function POST(_req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user } = authed;
+  const gate = await requireEntitlementFeature(supabase, user.id, "push_notifications");
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
+  }
 
   const { data: subs, error } = await supabase
     .from("push_subscriptions")

@@ -1,3 +1,4 @@
+import { firstNonEmptyEnv } from "@/lib/envFallback";
 import type { ProviderId, ProviderStatus } from "@/lib/market/marketTypes";
 
 /**
@@ -19,7 +20,7 @@ export function getPerigonKey(): string | null {
 export function getPolygonKey(): string | null {
   // Accept either name — the user already has POLYGON_API_KEY in some envs
   // and POLYGON_KEY in others (matches Polygon SDK conventions).
-  return trimOrNull(process.env.POLYGON_API_KEY ?? process.env.POLYGON_KEY);
+  return firstNonEmptyEnv("POLYGON_API_KEY", "POLYGON_KEY");
 }
 export function getFinnhubKey(): string | null {
   return trimOrNull(process.env.FINNHUB_API_KEY);
@@ -28,7 +29,7 @@ export function getEodhdKey(): string | null {
   return trimOrNull(process.env.EODHD_API_KEY);
 }
 export function getUnusualWhalesKey(): string | null {
-  return trimOrNull(process.env.UNUSUAL_WHALES_TOKEN ?? process.env.UNUSUAL_WHALES_API_KEY);
+  return firstNonEmptyEnv("UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY");
 }
 
 export function detectProviders(): ProviderStatus[] {

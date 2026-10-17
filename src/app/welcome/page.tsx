@@ -7,6 +7,11 @@ export const metadata = {
   title: "AXE Companion — welcome",
   description:
     "AXE with knowledge layer, accounts, and chat. Add to your home screen or sign in.",
+  // robots.txt asks crawlers to stay away; this tells them. A page linked
+  // from anywhere else can still be indexed despite a Disallow, because
+  // robots.txt governs crawling and not indexing. A draft landing page must
+  // never turn up in a search result for the product.
+  robots: { index: false, follow: false },
 };
 
 export default function WelcomePage() {
@@ -35,11 +40,11 @@ export default function WelcomePage() {
         <Image
           src="/axe-companion-wordmark.png"
           alt="AXE Companion"
-          width={420}
-          height={80}
+          width={1172}
+          height={111}
           priority
           unoptimized
-          className="mx-auto h-auto w-[280px] object-contain"
+          className="mx-auto h-auto w-[250px] object-contain"
           style={{ mixBlendMode: "screen" }}
         />
         <p className="mt-4 text-sm leading-relaxed text-tos-muted">

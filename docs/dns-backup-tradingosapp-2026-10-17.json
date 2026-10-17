@@ -1,0 +1,25 @@
+{
+  "zone_id": "50d7377be7ec6077f6e52ef2296351e0",
+  "zone": "tradingosapp.com",
+  "captured": "2026-10-17",
+  "note": "Volledige stand VOOR de Vercel-opruiming. Terugzetten = deze records opnieuw aanmaken.",
+  "records": [
+    {"id":"618cfb82533407286d7d19e3e7855b92","type":"CNAME","name":"ollama.tradingosapp.com","content":"a5641aa1-d18d-4ed6-a5bb-24bbccb5625f.cfargotunnel.com","proxied":true,"ttl":1},
+    {"id":"c34b3737d503892c5eb980ebfe0f185b","type":"CNAME","name":"tradingosapp.com","content":"cname.vercel-dns.com","proxied":true,"ttl":1},
+    {"id":"ce64a3606e50ec07a358fa3f5cd1c70a","type":"CNAME","name":"www.tradingosapp.com","content":"cc384ed6d38922b8.vercel-dns-016.com","proxied":false,"ttl":600},
+    {"id":"17ebbbde5391267eb6f16d5b082ff9fb","type":"MX","name":"tradingosapp.com","content":"alt4.aspmx.l.google.com","proxied":false,"ttl":3600,"priority":10},
+    {"id":"5674e410084ecb8858c6610b8149d90b","type":"MX","name":"tradingosapp.com","content":"aspmx.l.google.com","proxied":false,"ttl":3600,"priority":1},
+    {"id":"3b26598a5dfcd80239976e1ce4274ea8","type":"MX","name":"tradingosapp.com","content":"alt1.aspmx.l.google.com","proxied":false,"ttl":3600,"priority":5},
+    {"id":"b62f63d44b8da0da38875660a6845385","type":"MX","name":"tradingosapp.com","content":"alt2.aspmx.l.google.com","proxied":false,"ttl":3600,"priority":5},
+    {"id":"4ed1b852c1694c0dd9f1c377e4cb761a","type":"MX","name":"tradingosapp.com","content":"alt3.aspmx.l.google.com","proxied":false,"ttl":3600,"priority":10},
+    {"id":"905bf59a528f5b466a079152013112d5","type":"TXT","name":"tradingosapp.com","content":"\"v=spf1 include:_spf.google.com ~all\"","proxied":false,"ttl":3600},
+    {"id":"1e4dab53fdff431f3e8338682593e040","type":"TXT","name":"tradingosapp.com","content":"\"google-site-verification=Z-jL6j_6WOK1PgfaSqFXdgWs_RVcLfKYpE6UG9uxPew\"","proxied":false,"ttl":3600},
+    {"id":"d86d94462985f3ea19be35a2623f2ac0","type":"TXT","name":"_vercel.tradingosapp.com","content":"\"vc-domain-verify=www.tradingosapp.com,1bdc5ca6ac272e5e6b13,dc\"","proxied":false,"ttl":600},
+    {"id":"48147898ee51712f16f63a8b5249735b","type":"TXT","name":"www.tradingosapp.com","content":"\"openai-domain-verification=dv-Ji7EUB7QnsOLkZLv4LoxEpll\"","proxied":false,"ttl":1},
+    {"id":"6fbe2ba6518e2b50e4dc7c6f583dc0be","type":"TXT","name":"www.tradingosapp.com","content":"\"replit-verify=b83dfc9f-b9a5-4f33-a2c4-f81208bbd32b\"","proxied":false,"ttl":1}
+  ],
+  "tunnel_ingress_before": [
+    {"hostname":"ollama.axecompanion.com","service":"http://localhost:11434"},
+    {"service":"http_status:404"}
+  ]
+}

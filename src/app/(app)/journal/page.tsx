@@ -18,6 +18,8 @@ export default async function JournalPage({ searchParams }: PageProps) {
       tradeHighlight={data.tradeHighlight}
       journalTrades={data.journalTrades}
       analytics={data.analytics}
+      weakSpots={data.weakSpots}
+      learningArc={data.learningArc}
       activeAccountId={data.activeAccountId}
       loadError={data.loadError}
     />

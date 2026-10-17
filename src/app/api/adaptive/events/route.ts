@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AdaptiveUiClientEvent } from "@/types/adaptive";
 import { buildAdaptiveSuggestions, deriveAdaptiveTradingProfile } from "@/lib/adaptive/profileEngine";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export async function POST(request: Request) {
   try {
@@ -17,6 +18,10 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return NextResponse.json({ ok: false, message: "Not authenticated." }, { status: 401 });
+    }
+    const gate = await requireEntitlementFeature(supabase, user.id, "advanced_memory");
+    if (!gate.ok) {
+      return NextResponse.json({ ok: false, message: gate.error, upgradeRequired: true }, { status: gate.status });
     }
 
     const body = (await request.json()) as AdaptiveUiClientEvent;

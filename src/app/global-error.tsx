@@ -10,9 +10,24 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[AXE Global Error]", error);
-    }
+    // Same fix as (app)/error.tsx: this only logged outside production, so a
+    // root-layout crash left no trace anywhere a person could reach.
+    console.error("[AXE Global Error]", error);
+    void fetch("/api/diagnostics/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        source: "global_error_boundary",
+        message: error.message,
+        stack: error.stack ?? null,
+        digest: error.digest ?? null,
+        url: typeof window !== "undefined" ? window.location.href : null,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+      }),
+    }).catch(() => {
+      /* never let a failed report mask the crash */
+    });
   }, [error]);
 
   return (

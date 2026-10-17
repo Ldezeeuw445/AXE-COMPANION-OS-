@@ -7,6 +7,15 @@ type AuraState = "idle" | "thinking" | "tools" | "responding" | "recording" | "s
 
 const TAU = Math.PI * 2;
 
+/**
+ * Composer dome size. It used to be 340x158, which on a phone reached wider
+ * than the input and — with the 54% downward nudge it was mounted with — put
+ * its baseline below the composer pill, so particles drifted over the bottom
+ * nav. A smaller box keeps the whole dome above the input; the canvas clips
+ * anything that would otherwise escape.
+ */
+const COMPOSER_DIM = { w: 220, h: 96 } as const;
+
 interface SphereParticle {
   phi: number;
   theta: number;
@@ -311,7 +320,7 @@ export function AxeAuraWave({
     if (!ctx) return;
 
     const isComposer = variant === "composer";
-    const dim = isComposer ? { w: 340, h: 158 } : { w: 104, h: 104 };
+    const dim = isComposer ? COMPOSER_DIM : { w: 104, h: 104 };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = dim.w * dpr;
     canvas.height = dim.h * dpr;
@@ -414,7 +423,7 @@ export function AxeAuraWave({
 
           const persp = 1 / (1 - z3d * 0.3);
           const radius = R * p.r * breathe * surfaceNoise * persp * profile.scale;
-          let px = cx + x3d * radius;
+          const px = cx + x3d * radius;
           let py = cy - y3d * radius;
           if (isComposer && y3d > 0.45) {
             py +=
@@ -500,7 +509,7 @@ export function AxeAuraWave({
   }, [variant, palette]);
 
   const breatheSec = STATE_BREATHE_SEC[state];
-  const displaySize = variant === "composer" ? { w: 340, h: 158 } : { w: 104, h: 104 };
+  const displaySize = variant === "composer" ? COMPOSER_DIM : { w: 104, h: 104 };
 
   if (variant === "composer") {
     return (

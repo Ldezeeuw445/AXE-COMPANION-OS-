@@ -8,6 +8,7 @@ import { readAlertAutoTradeEnabled } from "@/lib/trading/alertMetadata";
 import { isAlertAutoTradeArmed } from "@/lib/trading/alertAutoTradeArmed";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
 import { placeMt5QuickOrder } from "@/services/mt5QuickOrderService";
+import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
 
 export async function maybeAutoTradeOnAlert(
   supabase: SupabaseClient,
@@ -87,6 +88,25 @@ export async function maybeAutoTradeOnAlert(
 
   const symbol = alert.symbol.trim().toUpperCase();
 
+  /* ── Is this trade allowed right now? ─────────────────────────────
+     The three consent layers above answer "did the trader agree?".
+     This answers "do this account's rules permit it?" — a different
+     question, and the one that was never asked. Until this guard
+     existed, AXE could warn a funded trader off red news and then
+     place a market order into the same event. */
+  const guardDecision = await decideAutoTradeAllowed(supabase, userId, symbol, prefs.defaultVolume);
+  if (!guardDecision.allowed) {
+    await recordProactiveFeedEvent(
+      supabase,
+      userId,
+      `alert_trade_blocked:${alert.id}:${guardDecision.reason}:${new Date().toISOString().slice(0, 10)}`,
+      `Alert auto-trade blocked: ${symbol}`,
+      guardDecision.detail,
+      "/alerts",
+    );
+    return { traded: false, message: guardDecision.detail };
+  }
+
   const placed = await placeMt5QuickOrder(supabase, userId, {
     symbol,
     side,
@@ -123,3 +143,4 @@ export async function maybeAutoTradeOnAlert(
 
   return { traded: false, message: placed.message };
 }
+

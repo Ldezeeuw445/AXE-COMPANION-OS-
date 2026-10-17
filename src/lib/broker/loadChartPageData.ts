@@ -21,6 +21,7 @@ import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
 import { fetchAlpacaCandles } from "@/lib/alpaca/bars";
 import { listAlpacaOrders, listAlpacaPositions } from "@/lib/alpaca/client";
 import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
+import { isAccountOffered, isDemoBrokerEnabled } from "@/lib/broker/brokerAvailability";
 import { isAlpacaAccount } from "@/lib/alpaca/provision";
 import { axeSymbolFromAlpaca, isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
 import type { AlpacaOrder, AlpacaPosition } from "@/lib/alpaca/types";
@@ -550,13 +551,15 @@ export async function loadChartPageData(
     metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
   }
 
-  const rawAccountsFromDb = (accountsRows ?? []) as BrokerAccountRow[];
-  const seeded = await ensureActiveDemoWhenEmpty(
-    supabase,
-    user.id,
-    prefs?.active_account_id ?? null,
-    rawAccountsFromDb,
-  );
+  const rawAccountsFromDb = ((accountsRows ?? []) as BrokerAccountRow[]).filter(isAccountOffered);
+  const seeded = isDemoBrokerEnabled()
+    ? await ensureActiveDemoWhenEmpty(
+        supabase,
+        user.id,
+        prefs?.active_account_id ?? null,
+        rawAccountsFromDb,
+      )
+    : { accounts: rawAccountsFromDb, activeAccountId: prefs?.active_account_id ?? null };
   const resolvedActiveId = seeded.activeAccountId;
 
   const rawAccounts: Array<{

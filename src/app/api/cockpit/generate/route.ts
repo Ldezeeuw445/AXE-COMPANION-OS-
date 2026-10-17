@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { callLLM } from "@/services/llmClient";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 const COCKPIT_PROMPT = `You are analyzing a trader's private session history with their AI trading companion (AXE).
 Your job is to generate a structured cockpit snapshot that reflects the trader's actual behavior, patterns, and how well the AI has learned their style.
@@ -67,6 +68,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  const gate = await requireEntitlementFeature(supabase, user.id, "cockpit_learning");
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
+  }
+
   // AI provider check is handled by aiProvider service
 
   // Allow generating cockpit for a specific assistant type (axe|intel)
@@ -82,7 +88,9 @@ export async function POST(request: Request) {
     .order("last_message_at", { ascending: false })
     .limit(5);
 
-  const convIds: string[] = Array.isArray(convs) ? convs.map((c: any) => c.id) : [];
+  const convIds: string[] = Array.isArray(convs)
+    ? convs.map((c: { id: string }) => c.id)
+    : [];
 
   // Fetch data in parallel, scoped to the selected conversation type
   const [messagesResult, memoryResult, alertsResult, execResult] = await Promise.all([
@@ -145,6 +153,8 @@ export async function POST(request: Request) {
     executions: execs.map((e) => ({ symbol: e.symbol, direction: e.direction, status: e.status, at: e.created_at })),
   };
 
+  let snapshot: Record<string, unknown> = {};
+
   try {
     const result = await callLLM({
       temperature: 0.3,
@@ -161,7 +171,7 @@ export async function POST(request: Request) {
     const raw = result.content ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
-    var snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    snapshot = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
   } catch (err) {
     console.error("[cockpit/generate] AI error:", err);
     return NextResponse.json({ error: "Failed to generate snapshot" }, { status: 500 });

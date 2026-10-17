@@ -1,7 +1,18 @@
 import "server-only";
 
 import { getSupabaseKey } from "@/lib/env";
+import { actionAvailability } from "@/lib/intel/intelSources";
 
+/**
+ * Actions the deployed intel-proxy actually serves.
+ *
+ * This list had drifted: it still named `vesselTracking`, `conflictEvents`,
+ * `energyFlows`, `cyberThreats`, `militaryRadar` and `emergencyMonitor`, none of
+ * which exist upstream any more. Because the proxy only skips its auth check for
+ * names on its own whitelist, each of those came back 401 — so the cron reported
+ * "warmed: 1, failed: 11" every run and the 401s were read as dead keys. Keep
+ * this in step with PROXY_ACTION_MAP in src/lib/intel/intelClient.ts.
+ */
 const WARMUP_ACTIONS = [
   "insiderTrades",
   "senateTrades",
@@ -9,12 +20,9 @@ const WARMUP_ACTIONS = [
   "unusualOptions",
   "marketTide",
   "corporateJets",
-  "vesselTracking",
-  "conflictEvents",
-  "energyFlows",
-  "cyberThreats",
-  "militaryRadar",
-  "emergencyMonitor",
+  "vesselStream",
+  "gdeltEvents",
+  "openSourcesBrief",
 ] as const;
 
 const PROXY_TIMEOUT_MS = 25_000;
@@ -22,21 +30,33 @@ const PROXY_TIMEOUT_MS = 25_000;
 export type IntelWarmupSummary = {
   warmed: number;
   failed: number;
-  results: Array<{ action: string; ok: boolean; error?: string }>;
+  /** Actions whose source is not subscribed. Not a failure — a decision. */
+  skipped: number;
+  results: Array<{ action: string; ok: boolean; error?: string; skipped?: boolean }>;
 };
 
 export async function runIntelWarmupBatch(): Promise<IntelWarmupSummary> {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
   const anonKey = getSupabaseKey();
   if (!base || !anonKey) {
-    return { warmed: 0, failed: WARMUP_ACTIONS.length, results: [{ action: "env", ok: false, error: "missing_supabase_env" }] };
+    return { warmed: 0, failed: WARMUP_ACTIONS.length, skipped: 0, results: [{ action: "env", ok: false, error: "missing_supabase_env" }] };
   }
 
   const results: IntelWarmupSummary["results"] = [];
   let warmed = 0;
   let failed = 0;
+  let skipped = 0;
 
   for (const action of WARMUP_ACTIONS) {
+    // An unsubscribed source is not a broken one. Calling it anyway produced
+    // six red lines every half hour, which is how a genuinely broken feed
+    // would have gone unnoticed.
+    const availability = actionAvailability(action, process.env);
+    if (!availability.available) {
+      skipped += 1;
+      results.push({ action, ok: true, skipped: true, error: availability.reason });
+      continue;
+    }
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), PROXY_TIMEOUT_MS);
     try {
@@ -75,5 +95,5 @@ export async function runIntelWarmupBatch(): Promise<IntelWarmupSummary> {
     }
   }
 
-  return { warmed, failed, results };
+  return { warmed, failed, skipped, results };
 }

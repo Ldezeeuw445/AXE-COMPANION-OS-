@@ -13,17 +13,21 @@ import {
   Newspaper,
   Radio,
   Shield,
+  ShieldCheck,
   Smartphone,
   Sparkles,
   Target,
   Wand2,
   Zap,
 } from "lucide-react";
-import { LandingHeroPhone } from "@/components/marketing/LandingHeroPhone";
+import { AppSwitcher } from "@/components/marketing/AppSwitcher";
+import { LandingHeroDevices } from "@/components/marketing/LandingHeroDevices";
 import { LandingOpenAppQr } from "@/components/marketing/LandingOpenAppQr";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
 import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { LEGAL_COPY } from "@/lib/legal/constants";
+import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP, type AxePlanId } from "@/lib/billing/tiers";
+import { availabilityLabel, ecosystemApp, isReachable } from "@/lib/ecosystem/apps";
 
 export const metadata: Metadata = {
   title: "AXE Companion — chart, intel and execution in one tap",
@@ -64,7 +68,7 @@ const LANDING_FEATURES = [
   },
   {
     title: "News & intel, cached to save credits",
-    desc: "Polygon, Perigon, Finnhub, EODHD, FRED — with smart 5-minute caching so a quiet hour doesn't burn your provider quota. Smart-money intel via Unusual Whales sits one tap away.",
+    desc: "Polygon, Perigon, Finnhub, EODHD, FRED — with smart 5-minute caching so a quiet hour doesn't burn your provider quota. Intel adds free public sources: SEC EDGAR insider filings, GDELT events, flight and vessel tracking.",
     Icon: Newspaper,
     color: "text-cyan-300",
   },
@@ -79,6 +83,12 @@ const LANDING_FEATURES = [
     desc: "Virtual paper account inside AXE, free and instant. Same fills, slippage and PnL math against live prices — perfect for trying setups before pointing it at a funded account.",
     Icon: Activity,
     color: "text-emerald-300",
+  },
+  {
+    title: "Hard limits before any auto-trade",
+    desc: "When an alert fires an order, AXE checks the account first: inside a news window, over the weekend, lot above your cap, daily loss already hit, too many auto-trades today — it blocks and tells you which rule stopped it. It never quietly shrinks the trade instead.",
+    Icon: ShieldCheck,
+    color: "text-teal-300",
   },
   {
     title: "AXE — AI-powered market analytics",
@@ -99,6 +109,36 @@ const LANDING_FEATURES = [
     color: "text-cyan-200",
   },
 ];
+
+const LANDING_TIER_BULLETS: Record<AxePlanId, string[]> = {
+  free: [
+    "Full chart, depth, news and execution UI",
+    "1 live account + unlimited demo accounts",
+    "Manual journal and basic indicators",
+    "No Cockpit, chart actions or proactive notices",
+  ],
+  pro: [
+    "Everything in Free, chat uncapped",
+    "Cockpit, Learning Arc, trade prep",
+    "Full auto-journal and chart actions",
+    "Proactive notices and account health",
+    "Persistent + vector memory, multi-account",
+  ],
+  founder: [
+    "Everything in Pro",
+    "Permanent Founder badge and status",
+    "Priority support and early access",
+    "Founder Discord and roadmap voting",
+    "Trading OS at €69/mo instead of €79",
+  ],
+  elite: [
+    "Everything in Pro",
+    "Priority support, early and beta access",
+    "Advanced models as they land",
+    "No Founder badge or Trading OS discount",
+    "Opens once all Founder seats are taken",
+  ],
+};
 
 const SCREEN_TABS = [
   {
@@ -140,7 +180,15 @@ const FAQ = [
   },
   {
     q: "Can I really execute trades from AXE, or is it analytics only?",
-    a: "Both. By default new accounts get a free virtual demo wired to live prices for paper trading. Activating live execution requires the master-password account and a one-time disclaimer banner — after that, the BUY / SELL dock sends real orders to MT5 (market, buy / sell limit, SL, TP, deviation).",
+    a: "Both. New accounts get a free virtual demo wired to live prices, so you can paper-trade immediately. Live execution is off until you turn it on: it needs the master-password account and a one-time disclaimer, and only then does the BUY / SELL dock send real orders to MT5 (market, buy / sell limit, SL, TP, deviation).",
+  },
+  {
+    q: "Can AXE place a trade without me pressing anything?",
+    a: "Only if you build an alert that says so, and only inside limits you set. Before any automatic order AXE checks the account: is this a news window the account forbids, is it the weekend, is the lot above your cap, has the daily loss limit already been hit, have we already fired the day's maximum of automatic trades. If any of those is true it blocks the order and names the rule that stopped it. It will not quietly place a smaller trade instead. Prop and evaluation accounts keep their own rules — those win over anything AXE would otherwise do.",
+  },
+  {
+    q: "Which market intelligence is actually live?",
+    a: "Charting, depth, and the news chain (Polygon → Perigon → Finnhub → EODHD, plus FRED macro) are live, as are the free intel sources: SEC EDGAR insider filings, GDELT event data, flight and vessel tracking. Senate trades, dark-pool prints, options flow and market tide need a paid Unusual Whales subscription we have not bought — the app says \"not configured\" for those rather than pretending they failed.",
   },
   {
     q: "Where do I paste the MT5 link token?",
@@ -148,7 +196,7 @@ const FAQ = [
   },
   {
     q: "Do I need Trading OS on desktop?",
-    a: "No to get started — chart, depth, news, intel, alerts, journal, accounts, and AXE all work standalone in the phone OS. Trading OS is the upcoming desktop terminal and shares the same Supabase login. One account, one memory, one trading brain across both.",
+    a: "No. Chart, depth, news, intel, alerts, journal, accounts and AXE all work standalone in the phone OS — Companion is not a companion to anything, it is the product. Trading OS is the desktop terminal on the same Supabase login, currently in private beta: multi-chart layouts, QuantLab, Intel Center, macro terminal. One account, one memory, one trading brain across both. The switcher in the top-left corner moves you between them.",
   },
   {
     q: "How does news caching keep my provider bills sane?",
@@ -162,6 +210,8 @@ const FAQ = [
 
 export default function HomeLandingPage() {
   const tickerRow = [...TICKER, ...TICKER];
+  const tradingOs = ecosystemApp("trading-os");
+  const tradingOsBadge = tradingOs ? availabilityLabel(tradingOs.availability) : null;
 
   return (
     <div className="axe-landing-matte-bg relative min-h-dvh overflow-hidden text-tos-text">
@@ -178,25 +228,23 @@ export default function HomeLandingPage() {
       {/* ─── header ─── */}
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020406]/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
-          <Link href="/" className="flex items-center gap-2">
-            <Image
-              src="/axe-companion-wordmark.png"
-              alt="AXE Companion OS"
-              width={200}
-              height={36}
-              priority
-              unoptimized
-              className="h-7 w-auto object-contain opacity-95"
-              style={{ mixBlendMode: "screen" }}
-            />
-          </Link>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link href="/" className="flex items-center gap-2">
+              <Image
+                src="/axe-companion-wordmark.png"
+                alt="AXE Companion OS"
+                width={1172}
+                height={111}
+                priority
+                unoptimized
+                className="h-[18px] w-auto object-contain opacity-95 sm:h-5"
+                style={{ mixBlendMode: "screen" }}
+              />
+            </Link>
+            {/* The cross-app move lives here, top-left, on both surfaces. */}
+            <AppSwitcher current="companion" />
+          </div>
           <div className="flex items-center gap-2">
-            <a
-              href="#waitlist"
-              className="hidden rounded-full border border-cyan-400/15 bg-cyan-400/[0.03] px-3 py-1.5 text-xs font-medium text-cyan-200/80 transition hover:border-cyan-400/30 hover:text-cyan-100 md:inline"
-            >
-              Trading OS — terminal in private beta
-            </a>
             <Link
               href="/login"
               className="rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-tos-muted hover:bg-white/[0.08] hover:text-tos-text"
@@ -250,8 +298,8 @@ export default function HomeLandingPage() {
           }}
         />
 
-        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-12 md:pt-16 lg:grid-cols-[1.05fr_1fr] lg:gap-14">
-          <div>
+        <div className="relative z-10 mx-auto max-w-6xl px-5 pb-20 pt-12 md:pt-16">
+          <div className="mx-auto max-w-3xl text-center">
             <div
               className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium"
               style={{
@@ -268,7 +316,7 @@ export default function HomeLandingPage() {
               <span className="text-cyan-200/95">AXE Companion · live on MT5</span>
             </div>
 
-            <h1 className="mt-7 max-w-[600px] text-[2.6rem] font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.35rem]">
+            <h1 className="mx-auto mt-7 max-w-[640px] text-[2.6rem] font-bold leading-[0.98] tracking-[-0.04em] text-white sm:text-5xl md:text-[3.35rem]">
               The trader&apos;s phone.
               <br />
               <span className="axe-landing-heading-shimmer">
@@ -276,14 +324,14 @@ export default function HomeLandingPage() {
               </span>
             </h1>
 
-            <p className="mt-5 max-w-[560px] text-[15px] leading-relaxed text-white/60 sm:text-base">
+            <p className="mx-auto mt-5 max-w-[620px] text-[15px] leading-relaxed text-white/60 sm:text-base">
               AXE Companion is what an MT5 native phone app should feel like — calm dark canvas, auto-Fib /
               structure / OB / FVG that actually extend, a real depth ladder anchored on your broker&apos;s
               bid / ask, multi-source news cached to save credits, and a one-tap execution dock that talks
               straight to your account.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
               <Link
                 href="/login"
                 className="axe-landing-cta inline-flex h-12 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-7 text-sm font-semibold text-[#04161B] shadow-[0_18px_44px_-14px_rgba(34,211,238,0.65)] transition hover:from-cyan-300 hover:to-teal-300"
@@ -300,13 +348,13 @@ export default function HomeLandingPage() {
               </Link>
               <Link
                 href="/chat"
-                className="text-center text-xs text-white/40 transition hover:text-white/65 sm:text-left"
+                className="text-center text-xs text-white/40 transition hover:text-white/65"
               >
                 Already signed in? → Open AXE
               </Link>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.18em] text-white/45">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10.5px] uppercase tracking-[0.18em] text-white/45">
               <span className="flex items-center gap-1.5">
                 <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
                 MT5 ticks
@@ -317,7 +365,7 @@ export default function HomeLandingPage() {
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
-                Unusual Whales
+                SEC EDGAR · GDELT
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-1 w-1 rounded-full bg-cyan-300" aria-hidden />
@@ -325,7 +373,7 @@ export default function HomeLandingPage() {
               </span>
             </div>
 
-            <div className="mt-7 flex flex-wrap gap-1.5">
+            <div className="mt-7 flex flex-wrap justify-center gap-1.5">
               {[
                 "XAU/USD",
                 "EUR/USD",
@@ -347,9 +395,9 @@ export default function HomeLandingPage() {
             </div>
           </div>
 
-          {/* Interactive phone */}
-          <div className="relative flex w-full justify-center lg:justify-end">
-            <LandingHeroPhone />
+          {/* iPhone + iPad on one lit block, both running the demo mock. */}
+          <div className="mt-14">
+            <LandingHeroDevices />
           </div>
         </div>
       </section>
@@ -424,9 +472,11 @@ export default function HomeLandingPage() {
                 <Layout className="h-3 w-3 text-cyan-300" aria-hidden />
                 Trading OS — desktop terminal
               </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/55">
-                Private beta
-              </span>
+              {tradingOsBadge ? (
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-white/55">
+                  {tradingOsBadge}
+                </span>
+              ) : null}
             </div>
             <h3 className="mt-4 text-xl font-bold text-white md:text-2xl">
               The same brain on the desk you trade from.{" "}
@@ -441,6 +491,20 @@ export default function HomeLandingPage() {
             <p className="mt-4 text-sm font-semibold text-cyan-100/95">
               AXE Companion is the brain in your pocket. Trading OS is the desk it plugs into.
             </p>
+            {tradingOs && isReachable(tradingOs.availability) ? (
+              <Link
+                href={tradingOs.url}
+                className="mt-5 inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-300/[0.06] px-4 py-2 text-xs font-medium text-cyan-100/95 transition hover:border-cyan-300/45 hover:bg-cyan-300/[0.10]"
+              >
+                Go to Trading OS
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </Link>
+            ) : (
+              <p className="mt-5 text-xs text-white/45">
+                Trading OS is between hosts right now, so there is nothing to click yet — the
+                terminal is coming back on the same login.
+              </p>
+            )}
           </div>
 
           <div className="relative mt-8 overflow-hidden rounded-2xl border border-cyan-400/15 bg-gradient-to-r from-cyan-400/[0.04] via-cyan-400/[0.015] to-transparent p-6 md:p-8">
@@ -474,53 +538,81 @@ export default function HomeLandingPage() {
         <div className="mx-auto max-w-5xl">
           <h2 className="mb-3 text-center text-3xl font-bold text-white md:text-4xl">Simple pricing</h2>
           <p className="mx-auto mb-10 max-w-2xl text-center text-sm text-tos-muted">
-            AXE launches with early access. The free tier is the full UX — Pro just lifts the chat ceiling
-            and unlocks the higher-end provider mix when we wire billing in-app.
+            Free is the whole mobile OS with a capped chat. Everything above it lifts the cap and turns on
+            the parts that need to remember you — Cockpit, auto-journal, chart actions, proactive notices.
+            Prices are billed monthly in euro and you can leave at the end of any period.
           </p>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="axe-landing-card-glow p-8">
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs font-medium uppercase tracking-widest text-tos-dim">Free</h3>
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white/65">
-                  Always
-                </span>
-              </div>
-              <p className="mt-2 text-3xl font-semibold text-white">€0</p>
-              <ul className="mt-4 space-y-2 text-sm text-tos-muted">
-                <li>Full chart, depth, news, intel, execution UX</li>
-                <li>Demo account on live ticks — paper-trade instantly</li>
-                <li>20 AXE chat sends per day (UTC midnight reset)</li>
-                <li>Same Supabase spine as Trading OS when you use both</li>
-              </ul>
-              <Link
-                href="/login"
-                className="mt-6 inline-flex h-10 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] px-5 text-xs font-medium text-white transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.06] hover:text-cyan-100"
-              >
-                Start free
-              </Link>
-            </div>
-            <div className="axe-landing-card-glow p-8 ring-1 ring-cyan-400/25">
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs font-medium uppercase tracking-widest text-cyan-200/90">Pro</h3>
-                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-cyan-200/95">
-                  Recommended
-                </span>
-              </div>
-              <p className="mt-2 text-3xl font-semibold text-white">~€19/mo</p>
-              <ul className="mt-4 space-y-2 text-sm text-tos-muted">
-                <li>Unlimited AXE sends (reasonable fair use)</li>
-                <li>Higher-priority Polygon news refresh</li>
-                <li>Live execution unlocked behind master-password</li>
-                <li>Billed via Stripe when in-app checkout lights up</li>
-              </ul>
-              <Link
-                href="/login"
-                className="axe-landing-cta mt-6 inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-5 text-xs font-semibold text-[#04161B] shadow-[0_10px_30px_-10px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"
-              >
-                Get started
-              </Link>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {AXE_BILLING_TIERS.map((tier) => {
+              const highlight = tier.badge === "Recommended";
+              const bullets = LANDING_TIER_BULLETS[tier.id];
+              return (
+                <div
+                  key={tier.id}
+                  className={`axe-landing-card-glow flex flex-col p-6 ${
+                    highlight ? "ring-1 ring-cyan-400/25" : ""
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h3
+                      className={`text-xs font-medium uppercase tracking-widest ${
+                        highlight ? "text-cyan-200/90" : "text-tos-dim"
+                      }`}
+                    >
+                      {tier.label}
+                    </h3>
+                    {tier.badge ? (
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                          highlight
+                            ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-200/95"
+                            : "border border-white/10 bg-white/[0.04] text-white/65"
+                        }`}
+                      >
+                        {tier.badge}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-2 text-3xl font-semibold text-white">
+                    €{tier.priceEurMonthly ?? 0}
+                    {tier.priceEurMonthly ? (
+                      <span className="text-sm font-normal text-tos-dim">/mo</span>
+                    ) : null}
+                  </p>
+                  <p className="mt-1.5 text-[11.5px] leading-snug text-tos-dim">
+                    {tier.dailyChatCap === null
+                      ? "Unlimited AXE chat (fair use)"
+                      : `${tier.dailyChatCap} AXE sends per day`}
+                  </p>
+
+                  <ul className="mt-4 flex-1 space-y-1.5 text-[12.5px] leading-snug text-tos-muted">
+                    {bullets.map((b) => (
+                      <li key={b}>{b}</li>
+                    ))}
+                  </ul>
+
+                  <Link
+                    href="/login"
+                    className={
+                      highlight
+                        ? "axe-landing-cta mt-5 inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-5 text-xs font-semibold text-[#04161B] shadow-[0_10px_30px_-10px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"
+                        : "mt-5 inline-flex h-10 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] px-5 text-xs font-medium text-white transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.06] hover:text-cyan-100"
+                    }
+                  >
+                    {tier.priceEurMonthly ? `Choose ${tier.label}` : "Start free"}
+                  </Link>
+                </div>
+              );
+            })}
           </div>
+
+          <p className="mx-auto mt-5 max-w-2xl text-center text-[11.5px] leading-relaxed text-tos-dim">
+            Founder is capped at {FOUNDER_SEAT_CAP} seats. When they are gone Founder closes permanently and
+            Elite takes its place for new upgrades — Founder members keep their badge and their price.
+            You pick a plan inside the app after signing in; checkout runs on Stripe.
+          </p>
+
 
           <p className="mx-auto mt-6 max-w-2xl px-2 text-center text-[10px] leading-relaxed text-tos-dim">
             {LEGAL_COPY.tradingShort} {LEGAL_COPY.pricing}

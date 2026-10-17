@@ -257,8 +257,42 @@ const snapshotInflight = intelSnapshotCache.__axeIntelSnapshotInflight ?? new Ma
 intelSnapshotCache.__axeIntelSnapshotCache = snapshotCache;
 intelSnapshotCache.__axeIntelSnapshotInflight = snapshotInflight;
 
-/** Deployed intel-proxy action aliases (legacy names only). */
-const PROXY_ACTION_MAP: Partial<Record<IntelAction, string>> = {};
+/**
+ * What this app calls a feed, versus what the deployed intel-proxy calls it.
+ *
+ * The proxy's own whitelist is the authority (`PUBLIC_INTEL_ACTIONS` in the Edge
+ * function). It was renamed at some point and this map was left empty, so two
+ * live feeds were being asked for under names the proxy no longer knows. An
+ * unknown action does not come back as "unknown action": the proxy only skips
+ * its auth check for names on that whitelist, so anything else is sent through
+ * `getUser(<anon key>)` and answers `invalid_token`. That 401 read like a
+ * credential problem for months while the keys behind it were fine.
+ */
+const PROXY_ACTION_MAP: Partial<Record<IntelAction, string>> = {
+  vesselTracking: "vesselStream",
+  conflictEvents: "gdeltEvents",
+};
+
+/**
+ * Feeds the deployed proxy has no handler for at all.
+ *
+ * These four were dropped from the Edge function (there is no EIA, GreyNoise or
+ * RapidAPI path left in it). Asking anyway costs a round-trip that can only
+ * return 401, so they are served from their Postgres tables directly.
+ *
+ * Their tables still hold rows, but nothing has written to them since July —
+ * so the rows are served, and the tile is told the truth about them rather than
+ * being allowed to present months-old rows as a live feed. See RETIRED_MAX_AGE.
+ */
+const PROXY_UNSUPPORTED_ACTIONS = new Set<IntelAction>([
+  "energyFlows",
+  "cyberThreats",
+  "militaryRadar",
+  "emergencyMonitor",
+]);
+
+/** How old a retired feed's newest row may be before the tile stops claiming it. */
+const RETIRED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function mapProxyVesselRow(row: Record<string, unknown>): VesselTrack {
   const ownerType = String(row.ownerType ?? "unknown");
@@ -797,6 +831,11 @@ async function callIntelProxy<T>(
     if (db.ok) return db;
   }
 
+  // No handler upstream: the only thing a request can earn here is a 401.
+  if (PROXY_UNSUPPORTED_ACTIONS.has(action)) {
+    return loadIntelFromDb<T>(action, args);
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
   const anonKey = getSupabaseKey();
   if (!url || !anonKey) {
@@ -855,6 +894,66 @@ async function callIntelProxy<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Table behind each retired feed, for the one freshness question we ask of it. */
+const RETIRED_FEED_TABLE: Record<string, string> = {
+  energyFlows: "intel_energy_flows",
+  cyberThreats: "intel_cyber_threats",
+  militaryRadar: "intel_military_radar",
+  emergencyMonitor: "intel_emergency_monitor",
+};
+
+/**
+ * When a retired feed last received a row, or null if we cannot tell.
+ *
+ * Row count is not evidence of a working feed. These tables are full and idle,
+ * and without this check the tiles read "live" off rows from July.
+ */
+async function newestRetiredSnapshot(action: IntelAction): Promise<number | null> {
+  const table = RETIRED_FEED_TABLE[action];
+  if (!table) return null;
+  const sb = createServiceRoleSupabaseClient();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from(table)
+      .select("snapshot_time")
+      .order("snapshot_time", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data?.snapshot_time) return null;
+    const t = Date.parse(String(data.snapshot_time));
+    return Number.isFinite(t) ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A tile for a feed with no live source behind it.
+ *
+ * Deliberately not "error" and not "feed syncing…": nothing is syncing and
+ * nothing is broken in this app. The feed is gone from the proxy, and saying so
+ * is better than a spinner that will never resolve.
+ */
+function retiredStatus(
+  id: IntelProviderStatus["id"],
+  label: string,
+  description: string,
+  newestAt: number | null,
+): IntelProviderStatus {
+  const age = newestAt == null ? null : Date.now() - newestAt;
+  if (age != null && age < RETIRED_MAX_AGE_MS) {
+    return { id, label, state: "live", description };
+  }
+  const last = newestAt == null ? "never" : new Date(newestAt).toISOString().slice(0, 10);
+  return {
+    id,
+    label,
+    state: "off",
+    description: `${description} — no live source (last data ${last})`,
+  };
 }
 
 function toStatus(
@@ -947,9 +1046,25 @@ async function fetchIntelSnapshot(
   const military = militaryRes.ok && Array.isArray(militaryRes.data) ? militaryRes.data : [];
   const emergency = emergencyRes.ok && Array.isArray(emergencyRes.data) ? emergencyRes.data : [];
 
-  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes, energyRes, cyberRes, militaryRes, emergencyRes];
+  // The retired feeds keep their rows but must not be presented as live once
+  // those rows go cold, so ask each table once when it last grew.
+  const [energyAt, cyberAt, militaryAt, emergencyAt] = await Promise.all([
+    newestRetiredSnapshot("energyFlows"),
+    newestRetiredSnapshot("cyberThreats"),
+    newestRetiredSnapshot("militaryRadar"),
+    newestRetiredSnapshot("emergencyMonitor"),
+  ]);
+  const retiredFresh = (at: number | null) => at != null && Date.now() - at < RETIRED_MAX_AGE_MS;
+  const energyLive = retiredFresh(energyAt) ? energy : [];
+  const cyberLive = retiredFresh(cyberAt) ? cyber : [];
+  const militaryLive = retiredFresh(militaryAt) ? military : [];
+  const emergencyLive = retiredFresh(emergencyAt) ? emergency : [];
+
+  // The retired feeds are excluded: a feed with no upstream is a known state,
+  // not an outage, and letting it count here pinned the page to a stale snapshot.
+  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes];
   const hadError = allResults.some((r) => !r.ok);
-  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energy.length || cyber.length || military.length);
+  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energyLive.length || cyberLive.length || militaryLive.length);
 
   if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
     return markCache(
@@ -1024,34 +1139,14 @@ async function fetchIntelSnapshot(
       conflictRes.ok && conflicts.length > 0,
       conflictRes.ok ? undefined : conflictRes.error,
     ),
-    toStatus(
-      "energyFlows",
-      "Energy flows",
-      "AXE Intel energy inventory & pricing",
-      energyRes.ok && energy.length > 0,
-      energyRes.ok ? undefined : energyRes.error,
-    ),
-    toStatus(
-      "cyberThreats",
-      "Cyber threats",
-      "AXE Intel cyber threat detection",
-      cyberRes.ok && cyber.length > 0,
-      cyberRes.ok ? undefined : cyberRes.error,
-    ),
-    toStatus(
-      "militaryRadar",
-      "Military radar",
-      "AXE Intel global military aircraft tracking",
-      militaryRes.ok && military.length > 0,
-      militaryRes.ok ? undefined : militaryRes.error,
-    ),
-    toStatus(
+    retiredStatus("energyFlows", "Energy flows", "AXE Intel energy inventory & pricing", energyAt),
+    retiredStatus("cyberThreats", "Cyber threats", "AXE Intel cyber threat detection", cyberAt),
+    retiredStatus("militaryRadar", "Military radar", "AXE Intel global military aircraft tracking", militaryAt),
+    retiredStatus(
       "emergencyMonitor",
       "Emergency monitor",
       "AXE Intel aviation emergency squawk tracking",
-      // 0 emergencies is normal — only mark error if the call itself failed
-      emergencyRes.ok,
-      emergencyRes.ok ? undefined : emergencyRes.error,
+      emergencyAt,
     ),
   ];
 
@@ -1066,10 +1161,10 @@ async function fetchIntelSnapshot(
     vessels,
     chokepoints,
     conflicts,
-    energy,
-    cyber,
-    military,
-    emergency,
+    energy: energyLive,
+    cyber: cyberLive,
+    military: militaryLive,
+    emergency: emergencyLive,
     providers,
     hasLiveData,
     cache: {

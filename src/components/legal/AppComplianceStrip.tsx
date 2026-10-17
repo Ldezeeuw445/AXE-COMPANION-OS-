@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ComplianceRiskNotice } from "@/components/legal/ComplianceRiskNotice";
 
-/** Routes where a bottom strip would crowd trading UI. */
-const HIDE_ON = ["/chart"];
+/** Routes where a bottom strip would crowd the working surface. */
+const HIDE_ON = ["/chart", "/chat"];
 
 /** Compact in-app risk notice — visible on authenticated surfaces. */
 export function AppComplianceStrip() {

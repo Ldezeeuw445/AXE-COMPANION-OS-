@@ -7,11 +7,9 @@ import {
 } from "@/services/broadcastFeedService";
 import {
   defaultBroadcastTitle,
-  fetchKraterBroadcastOutput,
+  fetchBroadcastOutput,
   normalizeBroadcastBody,
-  probeKraterBroadcastSource,
-  type KraterBroadcastType,
-} from "@/services/kraterFeedSyncService";
+} from "@/services/broadcastSyncService";
 
 export type KraterFeedSyncResult = {
   broadcastType: BroadcastType;
@@ -44,7 +42,7 @@ async function syncOne(
   }
 
   try {
-    const { body, source } = await fetchKraterBroadcastOutput(broadcastType);
+    const { body, source } = await fetchBroadcastOutput(broadcastType);
     const row = await upsertBroadcastFeedItem({
       broadcastType,
       title: defaultBroadcastTitle(broadcastType),
@@ -62,7 +60,7 @@ async function syncOne(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[krater-feed-sync] ${broadcastType} failed`, message);
+    console.error(`[broadcast-sync] ${broadcastType} failed`, message);
     return {
       broadcastType,
       status: "failed",

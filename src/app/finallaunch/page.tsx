@@ -1,20 +1,14 @@
-import type { Metadata } from "next";
+import { permanentRedirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "AXE Companion Final Launch",
-  description:
-    "Private interactive final launch preview with iPhone and iPad mock demos.",
-};
-
-export default function FinalLaunchPage() {
-  return (
-    <main className="min-h-dvh bg-[#07080a]">
-      <iframe
-        title="AXE Companion Final Launch Preview"
-        src="/finallaunch/index.html"
-        className="h-dvh w-full border-0"
-        loading="eager"
-      />
-    </main>
-  );
+/**
+ * Retired draft landing page.
+ *
+ * Four landing pages were publicly reachable at once (/, /launch, /final,
+ * /finallaunch, /ui-premium) and robots.ts admitted in a comment that "which
+ * landing page wins is a product decision". It is decided: `/` is the landing
+ * page. These paths 308 to it so any bookmark or stale search result still
+ * arrives somewhere real instead of a second, slightly different pitch.
+ */
+export default function RetiredDraftLanding(): never {
+  permanentRedirect("/");
 }

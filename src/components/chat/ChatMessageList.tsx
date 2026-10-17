@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { AxeThinkingOrb } from "@/components/chat/AxeThinkingOrb";
 import { ArrowDown, ArrowUpRight, Bookmark, Check, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { ChatMessage } from "@/types/domain";
 import { ActionCard } from "@/components/chat/ActionCard";
@@ -51,25 +52,22 @@ const INTEL_STARTER_PROMPTS: Array<{ q: string; label: string; hint: string }> =
   },
 ];
 
-function TypingBubble() {
+function TypingBubble({
+  phase,
+  tools,
+  intelMode,
+}: {
+  phase: string | null;
+  tools: string[] | null;
+  intelMode: boolean;
+}) {
   return (
     <article className="group flex flex-col items-start">
       <div className="mb-1.5 flex items-center gap-1.5 px-1.5">
         <span className="h-1 w-1 rounded-full bg-[color:var(--icon-intel)]/70" />
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
-      <div className="flex items-center gap-[5px] px-3 py-2">
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <span
-            key={i}
-            className="inline-block h-[6px] w-[6px] rounded-full bg-[color:var(--icon-intel)]"
-            style={{
-              animation: "axe-dot-breathe 1.6s ease-in-out infinite",
-              animationDelay: `${i * 0.15}s`,
-            }}
-          />
-        ))}
-      </div>
+      <AxeThinkingOrb phase={phase} tools={tools} size={20} accent={intelMode ? "intel" : undefined} />
     </article>
   );
 }
@@ -85,7 +83,17 @@ function TypingBubble() {
  */
 const CHAR_INTERVAL = 12; // ms between revealed characters
 
-function StreamingBubble({ text, phase }: { text: string; phase: string | null }) {
+function StreamingBubble({
+  text,
+  phase,
+  tools,
+  intelMode,
+}: {
+  text: string;
+  phase: string | null;
+  tools: string[] | null;
+  intelMode: boolean;
+}) {
   const showToolHint = phase === "tools" && !text;
   const [revealed, setRevealed] = useState(0);
   const rafRef = useRef<number | null>(null);
@@ -129,19 +137,7 @@ function StreamingBubble({ text, phase }: { text: string; phase: string | null }
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/50">AXE</p>
       </div>
       {showToolHint ? (
-        <div className="flex items-center gap-[5px] px-3 py-2">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <span
-              key={i}
-              className="inline-block h-[6px] w-[6px] rounded-full bg-[color:var(--icon-intel)]"
-              style={{
-                animation: "axe-dot-breathe 1.6s ease-in-out infinite",
-                animationDelay: `${i * 0.15}s`,
-              }}
-            />
-          ))}
-          <span className="ml-2 text-[10px] text-white/30">fetching data…</span>
-        </div>
+        <AxeThinkingOrb phase={phase} tools={tools} size={20} accent={intelMode ? "intel" : undefined} />
       ) : (
         <div className="max-w-[85%] px-1">
           {renderAssistantBody(visibleText)}
@@ -277,6 +273,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   const [pending, setPending] = useState<OptimisticUserMessage[]>([]);
   const [streamText, setStreamText] = useState("");
   const [streamPhase, setStreamPhase] = useState<string | null>(null);
+  const [streamTools, setStreamTools] = useState<string[] | null>(null);
   const lastServerCountRef = useRef(messages.length);
 
   // Composer dispatches events for optimistic bubbles, thinking state,
@@ -290,10 +287,12 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         // Starting a new message — reset stream state
         setStreamText("");
         setStreamPhase("thinking");
+        setStreamTools(null);
       } else {
         // Done — clear stream phase (router.refresh will bring persisted msg)
         setStreamPhase(null);
         setStreamText("");
+        setStreamTools(null);
       }
     }
     function onUserMessage(e: Event) {
@@ -311,6 +310,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
       const ce = e as CustomEvent<{ phase: string; tools?: string[] }>;
       const phase = ce.detail?.phase ?? null;
       setStreamPhase(phase);
+      setStreamTools(phase === "tools" ? (ce.detail?.tools ?? null) : null);
       // When switching to tools or starting a new response, clear partial text
       if (phase === "tools" || phase === "responding") {
         setStreamText("");
@@ -443,12 +443,17 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
     function onResize() {
       if (stickToBottomRef.current) runPinSequence(true);
     }
+    // The composer's measured height lands after first paint; without this the
+    // list keeps the space it reserved a frame earlier and the newest message
+    // sits behind the card until the trader scrolls.
+    window.addEventListener("axe:composer-resize", onPinRequest);
     window.addEventListener("axe:chat-pin", onPinRequest);
     window.addEventListener("axe:chat-scroll-top", onScrollFeedTop);
     window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("resize", onResize);
     return () => {
+      window.removeEventListener("axe:composer-resize", onPinRequest);
       window.removeEventListener("axe:chat-pin", onPinRequest);
       window.removeEventListener("axe:chat-scroll-top", onScrollFeedTop);
       window.removeEventListener("pageshow", onPageShow);
@@ -521,7 +526,7 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
         onScroll={onScroll}
         onTouchStart={clearSelection}
         onTouchMove={clearSelection}
-        className="tos-scrollbar flex min-h-0 flex-1 touch-pan-y select-none flex-col gap-5 overflow-y-auto overscroll-y-contain pb-[10rem] pr-1 md:pb-2"
+        className="tos-scrollbar flex min-h-0 flex-1 touch-pan-y select-none flex-col gap-5 overflow-y-auto overscroll-y-contain pb-[var(--tos-chat-scroll-bottom)] pr-1"
         style={{
           WebkitUserSelect: "none",
           userSelect: "none",
@@ -620,9 +625,9 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
           </article>
         ))}
         {thinking && streamText ? (
-          <StreamingBubble text={streamText} phase={streamPhase} />
+          <StreamingBubble text={streamText} phase={streamPhase} tools={streamTools} intelMode={intelMode} />
         ) : thinking ? (
-          <TypingBubble />
+          <TypingBubble phase={streamPhase} tools={streamTools} intelMode={intelMode} />
         ) : null}
         <div ref={bottomAnchorRef} aria-hidden className="h-px w-full shrink-0 scroll-mt-0" />
       </div>

@@ -20,7 +20,7 @@ After this branch is on `main`:
 
 That fetches the ref, `npm ci`, `npm run build`, and restarts via pm2/systemd when those names exist.
 
-Deploy does **not** happen from GitHub. The live site only updates when someone runs the script on that machine.
+Deploy does **not** happen from GitHub. This agent cannot SSH into `212.227.91.79` (no key). The live site only updates when someone runs the script on that machine.
 
 ## nginx must upgrade WebSockets
 
@@ -66,6 +66,7 @@ Same-origin chart WS is `wss://www.axecompanion.com/ws/chart`. You do **not** ne
 ## Host cron
 
 Install `scripts/vps.crontab` on the box (replace `APP_ROOT`) and keep `CRON_SECRET` in `.env.local`.
+Scheduling also lives in Supabase `pg_cron` + `pg_net` via `axe_ops.dispatch_cron` — see `docs/CRON-RUNBOOK.md`.
 
 ## Check on the phone
 
@@ -84,6 +85,19 @@ On the VPS:
 ```
 
 (or the previous known-good commit). SSE `/api/chart/live` stays as the safety net if the socket cannot upgrade.
+
+## Install dependencies with npm 10
+
+The VPS runs Node 22 / npm 10 and deploys with `npm ci`, which refuses a tree
+that does not match the lock. npm 11 (Node 24) writes a lock without entries
+npm 10 expects — `@base-org/account`, `ox`, `zustand` and the rest of the wagmi
+tree — and the deploy then stops at install, before the build. If your machine
+runs npm 11, add packages with:
+
+```bash
+npx npm@10.9.8 install <pkg>
+npx npm@10.9.8 ci   # verify the lock the way the VPS will
+```
 
 ## Leftover dashboard steps (Luka only)
 

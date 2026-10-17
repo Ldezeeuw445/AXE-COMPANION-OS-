@@ -14,7 +14,8 @@ export function LandingOpenAppQr() {
         <p className="mt-2 text-xs text-tos-muted">
           Set <code className="rounded bg-white/10 px-1 text-[11px]">NEXT_PUBLIC_APP_URL</code> to{" "}
           <code className="rounded bg-white/10 px-1 text-[11px]">https://www.axecompanion.com</code>{" "}
-          to show a QR here. Locally, open{" "}
+          and rebuild to show a QR here — it is a NEXT_PUBLIC_ value, so it is baked in at build time and a restart
+          alone will not pick it up. Locally, open{" "}
           <code className="rounded bg-white/10 px-1 text-[11px]">{chatUrl}</code> on the same Wi‑Fi.
         </p>
       </div>

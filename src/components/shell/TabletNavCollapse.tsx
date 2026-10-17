@@ -11,7 +11,7 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { isTabletViewport } from "@/lib/viewport/tablet";
+import { isMouseDesktopLayout } from "@/lib/viewport/tablet";
 
 type TabletNavCollapseContextValue = {
   enabled: boolean;
@@ -23,7 +23,7 @@ type TabletNavCollapseContextValue = {
 
 const TabletNavCollapseContext = createContext<TabletNavCollapseContextValue | null>(null);
 
-const STORAGE_KEY = "axe.tablet.navCollapsed";
+const STORAGE_KEY = "axe.navCollapsed";
 
 export function TabletNavCollapseProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState(false);
@@ -31,7 +31,10 @@ export function TabletNavCollapseProvider({ children }: { children: ReactNode })
 
   useEffect(() => {
     function syncEnabled() {
-      setEnabled(isTabletViewport());
+      // Collapsing started as a tablet-only affordance, but a phone is where
+      // screen space is scarcest. Enabled everywhere except the mouse desktop
+      // layout, which has no bottom nav to hide.
+      setEnabled(!isMouseDesktopLayout());
     }
     syncEnabled();
     window.addEventListener("resize", syncEnabled);

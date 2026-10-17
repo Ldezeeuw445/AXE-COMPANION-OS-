@@ -31,13 +31,59 @@ const USER_MESSAGES: Record<Mt5CloudErrorCode, string> = {
   sync_failed: "Sync could not finish. Check account status with Test, then try again.",
   disconnected: "This MetaApi connection was removed or is no longer available.",
   validation: "Some fields are missing or invalid. Check the form and try again.",
-  forbidden: "MetaApi denied this operation for your token permissions.",
+  forbidden: "Connecting an account is temporarily unavailable. This is on our side, not yours — we can see it and are on it.",
   not_found: "The MetaApi account was not found. It may have been deleted in MetaApi.",
   unknown: "Something went wrong talking to MetaApi. Try again or check server logs.",
 };
 
-export function userMessageForCode(code: Mt5CloudErrorCode): string {
-  return USER_MESSAGES[code] ?? USER_MESSAGES.unknown;
+/**
+ * Codes that describe the platform's problem, not the trader's.
+ *
+ * A message must not hand someone a task they cannot do. `forbidden` used to
+ * read "MetaApi denied this operation for your token permissions" — but there
+ * is one MetaApi token for the whole app and a subscriber has no access to it.
+ * They would read "your token", go looking for a setting that does not exist,
+ * and write in. Worse, on 2026-09-09 the real cause turned out to be an empty
+ * MetaApi balance, and the wording sent two people hunting token scopes for ten
+ * minutes: HTTP 403 alone does not establish a reason, and the message asserted
+ * one anyway.
+ */
+const OPERATOR_FAULT: ReadonlySet<Mt5CloudErrorCode> = new Set([
+  "provider_not_configured",
+  "metaapi_auth_failed",
+  "metaapi_region_error",
+  "metaapi_resource_slots",
+  "forbidden",
+]);
+
+export function isOperatorFault(code: Mt5CloudErrorCode): boolean {
+  return OPERATOR_FAULT.has(code);
+}
+
+/**
+ * @param upstream MetaApi's own words, when the caller has them. Appended for
+ *        operator-fault codes so the real reason — "insufficient balance",
+ *        "token has no provisioning access" — reaches the logs and the
+ *        operator instead of being replaced by our guess. Never shown for
+ *        codes the trader can act on: their message is already the action.
+ */
+export function userMessageForCode(code: Mt5CloudErrorCode, upstream?: string | null): string {
+  const base = USER_MESSAGES[code] ?? USER_MESSAGES.unknown;
+  if (!upstream || !isOperatorFault(code)) return base;
+  const trimmed = upstream.replace(/\s+/g, " ").trim().slice(0, 200);
+  return trimmed ? `${base} (MetaApi: ${trimmed})` : base;
+}
+
+/** MetaApi's own message out of whatever shape the payload arrived in. */
+export function upstreamMessage(payload: unknown): string | null {
+  if (typeof payload === "string") return payload.slice(0, 300) || null;
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  for (const key of ["message", "error", "detail", "details"]) {
+    const v = p[key];
+    if (typeof v === "string" && v.trim()) return v.slice(0, 300);
+  }
+  return null;
 }
 
 export function classifyMetaApiProvisioningError(payload: unknown): Mt5CloudErrorCode {
