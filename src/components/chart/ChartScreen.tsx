@@ -104,6 +104,7 @@ import {
 } from "@/components/axe/AxeContextToolbar";
 import {
   appendAnnotation,
+  hydrateAnnotations,
   loadAnnotations,
   removeAnnotation,
   saveAnnotations,
@@ -1675,11 +1676,13 @@ export function ChartScreen({
     }
   }, [data.account?.brokerAccountId, isAlpacaAccount, orderConfirmInput]);
 
-  // Load saved annotations when symbol/tf changes
+  // Load saved annotations when symbol/tf changes (local-first, then sync)
   useEffect(() => {
+    const symbol = data.symbol;
+    const timeframe = data.timeframeKey;
     queueMicrotask(() => {
-      setAnnotations(loadAnnotations(data.symbol, data.timeframeKey));
-      setAnnotationsLoadedKey(`${data.symbol}|${data.timeframeKey}`);
+      setAnnotations(loadAnnotations(symbol, timeframe));
+      setAnnotationsLoadedKey(`${symbol}|${timeframe}`);
       setDrawingMode(null);
       drawingPointsRef.current = [];
       setDrawingHint(null);
@@ -1687,6 +1690,14 @@ export function ChartScreen({
       setPendingStopLossPrice(null);
       setPendingTakeProfitPrice(null);
     });
+    let cancelled = false;
+    void hydrateAnnotations(symbol, timeframe).then((list) => {
+      if (cancelled) return;
+      setAnnotations(list);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [data.symbol, data.timeframeKey]);
 
   useEffect(() => {
