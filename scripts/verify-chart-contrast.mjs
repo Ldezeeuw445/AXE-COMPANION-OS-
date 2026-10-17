@@ -12,6 +12,7 @@
  * Run: node scripts/verify-chart-contrast.mjs
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { CHART_THEMES, CHART_THEME_KEYS } from "../src/components/chart/chartTheme.ts";
 
 let passed = 0;
@@ -131,5 +132,119 @@ for (const key of CHART_THEME_KEYS) {
     );
   });
 }
+
+/* ── the indicator panes ──────────────────────────────────────────────────
+   These were never measured: they lived inside IndicatorPane as two private
+   palettes behind an `isDark` boolean, out of this guard's reach. The first
+   run after the move found the paper theme's bullish volume bar at 2.03:1 —
+   a bar a trader is meant to compare against the bearish one.
+
+   Gridline-ish fields are excluded for the same reason `grid` is: WCAG 1.4.11
+   is about objects you read, and these are faint structure behind them. */
+const INDICATOR_MEASURED = [
+  "bullBar",
+  "bearBar",
+  "rsiLine",
+  "macdLine",
+  "macdSignal",
+  "macdHistBull",
+  "macdHistBear",
+  "labelEmphasis",
+  "labelNormal",
+];
+const INDICATOR_STRUCTURE = ["levelLine", "levelLineDim", "separator"];
+
+for (const key of CHART_THEME_KEYS) {
+  const theme = CHART_THEMES[key];
+  const bg = parseColor(theme.chartCanvasBackground);
+
+  check(`${theme.label}: every indicator a trader reads clears ${MIN_RATIO}:1`, () => {
+    const failures = [];
+    for (const field of INDICATOR_MEASURED) {
+      const value = theme.indicator[field];
+      const fg = parseColor(value);
+      assert.ok(fg, `${theme.label}.indicator.${field} is not a readable colour: ${value}`);
+      const ratio = contrast(fg, bg);
+      if (ratio < MIN_RATIO) failures.push(`${field} ${value} → ${ratio.toFixed(2)}:1`);
+    }
+    assert.deepEqual(failures, [], `invisible on ${theme.label}:\n  ${failures.join("\n  ")}`);
+  });
+
+  check(`${theme.label}: the volume bars are two different colours, not two darknesses`, () => {
+    // On paper they were both near-black greys at different opacities, which
+    // is not a distinction you can make at a glance on a volume histogram.
+    const bull = flatten(parseColor(theme.indicator.bullBar), bg);
+    const bear = flatten(parseColor(theme.indicator.bearBar), bg);
+    const apart = contrast(simulateDeuteranopia(bull), simulateDeuteranopia(bear));
+    const hueGap = Math.max(
+      Math.abs(bull[0] - bear[0]),
+      Math.abs(bull[1] - bear[1]),
+      Math.abs(bull[2] - bear[2]),
+    );
+    assert.ok(
+      apart >= 1.6 || hueGap >= 40,
+      `${theme.label} bull/bear volume bars are too alike: ${theme.indicator.bullBar} vs ${theme.indicator.bearBar}`,
+    );
+  });
+}
+
+check("IndicatorPane keeps no palette of its own", () => {
+  // It held two, behind an `isDark` boolean. A colour change in chartTheme.ts
+  // never reached the indicator bars, and a fifth preset would have silently
+  // inherited whichever of the two its isDark flag picked.
+  const pane = readFileSync(
+    new URL("../src/components/chart/indicators/IndicatorPane.tsx", import.meta.url),
+    "utf8",
+  );
+  const code = pane.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(!/indicatorColors\s*\(/.test(code), "the private palette function must be gone");
+  assert.ok(
+    !/rgba\(\d/.test(code),
+    "no colour literal may live in the pane any more; they belong in chartTheme.ts",
+  );
+  assert.ok(code.includes("theme.indicator"), "the pane must read the theme's palette");
+  assert.ok(!/isDark/.test(code), "the boolean that split the two palettes must be gone");
+
+  const screen = readFileSync(
+    new URL("../src/components/chart/ChartScreen.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    /<IndicatorPane[^>]*theme=\{chartTheme\}/.test(screen),
+    "the one call site must hand over the whole theme",
+  );
+});
+
+check("a theme switch actually repaints the bars", () => {
+  // The volume bars and the MACD histogram bake their colour into a memoized
+  // geometry object. That memo did not depend on the palette, so switching
+  // theme left the bars in the old theme's colours until a new candle, a
+  // resize or a mode switch happened to invalidate it. eslint's
+  // exhaustive-deps had been printing this warning the whole time.
+  const pane = readFileSync(
+    new URL("../src/components/chart/indicators/IndicatorPane.tsx", import.meta.url),
+    "utf8",
+  );
+  const deps = pane.match(/\}, \[candles[^\]]*\]\);/);
+  assert.ok(deps, "the geometry memo's dependency array moved; re-check this guard");
+  assert.ok(
+    deps[0].includes("colors"),
+    "the geometry memo bakes palette colours in, so it must depend on the palette",
+  );
+  assert.ok(
+    !/eslint-disable[^\n]*exhaustive-deps/.test(pane),
+    "silencing the warning is not fixing it",
+  );
+});
+
+check("every preset declares its own indicator palette", () => {
+  for (const key of Object.keys(CHART_THEMES)) {
+    const palette = CHART_THEMES[key].indicator;
+    assert.ok(palette, `${key} has no indicator palette`);
+    for (const field of [...INDICATOR_MEASURED, ...INDICATOR_STRUCTURE, "titleText"]) {
+      assert.ok(palette[field], `${key}.indicator.${field} is missing`);
+    }
+  }
+});
 
 console.log(`\n${passed} checks passed`);

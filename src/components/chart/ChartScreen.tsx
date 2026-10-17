@@ -4964,7 +4964,7 @@ export function ChartScreen({
             onMoveUp={multiPane && idx > 0 ? () => movePaneInOrder(mode, -1) : undefined}
             onMoveDown={multiPane && idx < enabledPanesList.length - 1 ? () => movePaneInOrder(mode, 1) : undefined}
           >
-            <IndicatorPane mode={mode} candles={liveCandles} canvasRef={canvasRef} background={chartTheme.chartCanvasBackground} isDark={chartTheme.isDark} />
+            <IndicatorPane mode={mode} candles={liveCandles} canvasRef={canvasRef} theme={chartTheme} />
           </ResizablePane>
         ));
       })()

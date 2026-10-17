@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, useCallback } from "react"
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
 import { macdSeries, rsiSeries } from "@/lib/chart/indicatorMath";
+import { CHART_THEME, type ChartThemeConfig } from "@/components/chart/chartTheme";
 
 /**
  * IndicatorPane renders a single technical indicator (volume or RSI) in its
@@ -19,62 +20,27 @@ type Props = {
   mode: Mode;
   candles: MetaApiCandle[];
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
-  /** Match the main chart background so indicator panes look seamless. */
-  background?: string;
-  /** Whether the theme is dark (adjusts separator/label colors). */
-  isDark?: boolean;
+  /**
+   * The chart's own theme. The pane used to hold two private palettes behind
+   * an `isDark` boolean, so a color change in chartTheme.ts never reached the
+   * indicator bars and a new preset silently inherited one of the two. The
+   * values are unchanged — only where they live is.
+   */
+  theme?: ChartThemeConfig;
 };
 
 type Size = { w: number; h: number };
 
 const MIN_AXIS_WIDTH = 56;
 
-/**
- * Theme-aware indicator colors — ensures visibility on both dark and light backgrounds.
- * Dark themes use bright/vivid colors; light (Paper) uses deeper, saturated tones.
- */
-function indicatorColors(dark: boolean) {
-  return dark
-    ? {
-        bullBar: "rgba(45,212,191,0.78)",
-        bearBar: "rgba(239,68,68,0.78)",
-        rsiLine: "rgba(34,211,238,0.95)",
-        macdLine: "rgba(34,211,238,0.95)",
-        macdSignal: "rgba(250,204,21,0.92)",
-        macdHistBull: "rgba(45,212,191,0.72)",
-        macdHistBear: "rgba(244,63,94,0.72)",
-        levelLine: "rgba(255,255,255,0.16)",
-        levelLineDim: "rgba(255,255,255,0.08)",
-        separator: "rgba(255,255,255,0.04)",
-        labelEmphasis: "rgba(232,238,246,0.85)",
-        labelNormal: "rgba(168,180,196,0.7)",
-        titleText: "text-white/70",
-      }
-    : {
-        /* Paper palette — candle-coloured volume bars: light bull, darker bear */
-        bullBar: "rgba(42,46,57,0.38)",        /* #2a2e39 lighter — bullish candle hint */
-        bearBar: "rgba(19,23,34,0.72)",       /* #131722 — bearish candle body */
-        rsiLine: "rgba(0,90,110,1)",          /* dark cyan — same hue as RSI cyan */
-        macdLine: "rgba(0,90,110,1)",         /* dark cyan */
-        macdSignal: "rgba(160,110,0,1)",      /* dark amber — same hue as yellow signal */
-        macdHistBull: "rgba(0,100,85,0.92)",  /* dark teal */
-        macdHistBear: "rgba(150,18,35,0.92)", /* dark rose */
-        levelLine: "rgba(0,0,0,0.22)",
-        levelLineDim: "rgba(0,0,0,0.12)",
-        separator: "rgba(0,0,0,0.10)",
-        labelEmphasis: "rgba(20,25,35,0.92)",
-        labelNormal: "rgba(50,55,65,0.82)",
-        titleText: "text-black/80",
-      };
-}
-
-export function IndicatorPane({ mode, candles, canvasRef, background, isDark = true }: Props) {
+export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }: Props) {
   const clipId = `indicator-pane-plot-${useId().replace(/:/g, "")}`;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState<number>(MIN_AXIS_WIDTH);
   const [version, setVersion] = useState(0);
-  const colors = useMemo(() => indicatorColors(isDark), [isDark]);
+  const colors = theme.indicator;
+  const background = theme.chartCanvasBackground;
 
   useEffect(() => {
     const el = hostRef.current;
@@ -248,7 +214,14 @@ export function IndicatorPane({ mode, candles, canvasRef, background, isDark = t
       macdBars: [],
       latestMacd: null,
     };
-  }, [candles, canvasRef, mode, plotWidth, size.h, size.w, version]);
+    // `colors` belongs here: the volume bars and the MACD histogram bake their
+    // colour into the geometry above. Without it, switching chart theme left
+    // the bars painted in the old theme's colours until something else — a new
+    // candle, a resize, a mode switch — happened to invalidate this memo. The
+    // exhaustive-deps warning had been saying so for as long as the file
+    // existed. The palettes are module constants, so this is one identity per
+    // theme and recomputes exactly when the theme changes.
+  }, [candles, canvasRef, colors, mode, plotWidth, size.h, size.w, version]);
 
   const top = 18;
   const bottom = 6;

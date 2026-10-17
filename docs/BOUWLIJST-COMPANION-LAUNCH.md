@@ -139,8 +139,10 @@ Indicatoren, annotaties, SL/TP-lijnen, trade-plan-lijnen ✅ bestaan allemaal.
   een kleurwijziging daar bereikt de indicatorbalken niet. Dat is een echte
   refactor met zichtbaar regressierisico op een werkende chart; ik heb hem niet
   gedaan voor een vinkje. Staat als 4.6 hieronder
-- [ ] **4.6** `IndicatorPane` het gedeelde `chartTheme` laten lezen in plaats
-  van een eigen palet, zodat de paletten niet uit elkaar lopen
+- [x] **4.6 — gedaan (L17.2).** `IndicatorPane` leest nu `theme.indicator`.
+  De twee privé-paletten achter een `isDark`-boolean staan als
+  `IndicatorPalette` in `chartTheme.ts`, elke preset declareert de zijne.
+  Waarden ongewijzigd overgezet, op één na — zie L17.3
 - [x] **4.4** Rechter prijsbalk — verkleind naar 10px ✅
 - [ ] **4.5** Bottom dock in elke combinatie — gebouwd vorige ronde ✅, nog door jou te bevestigen op de PWA
 
@@ -223,11 +225,12 @@ Gemeten: `src/lib/alerts/` ✅ — `smartAlertRules`, `smartAlertTemplates`,
   actie een `requires` die de intel-feed noemt waarop hij leunt. Twee checks
   weigeren een tweede kopie en een `requires` die naar een niet-bestaande feed
   wijst
-- [ ] **7.3** De knop "Market Tide" leunt op een Unusual Whales-feed die we
-  niet hebben. AXE antwoordt eerlijk "niet geconfigureerd", dus hij liegt niet,
-  maar het is wel een doodlopende knop. De koppeling staat nu vastgelegd
-  (`requires: "marketTide"`), dus wegfilteren is één filter — zodra
-  beschikbaarheid de client bereikt
+- [x] **7.3 — gedaan (L17.1).** De knop "Market Tide" is weg zolang Unusual
+  Whales niet betaald is. `GET /api/intel-chat` geeft nu per intel-actie terug
+  of er een feed achter zit, `useIntelQuickActions` filtert daarop, en beide
+  composers lezen die lijst. Een mislukte call laat alles staan — alles
+  verbergen omdat één fetch faalt is erger dan de doodlopende knop. Komt
+  vanzelf terug zodra `UNUSUAL_WHALES_ENABLED=true`
 
 ---
 
@@ -699,10 +702,9 @@ uit git, de twee helften samengevoegd, en als nieuwe hero op `/` gezet.
   zijn topbalk begint onder de notch van de hero
 - [x] **L11.5** `LandingHeroPhone` (de oude enkele telefoon) is weg. Gemeten:
   0px horizontale overflow op 390px en op 1440px
-- [ ] **L11.6 — Nog een keuze voor jou.** Op telefoonbreedte staat de iPad boven
-  de telefoon en is hij klein. Hij is herkenbaar als tablet maar de tekst erin
-  is niet te lezen. Ik laat hem staan omdat jij beide toestellen wilde; zeg het
-  als hij op mobiel weg mag
+- [x] **L11.6 — beslist en gedaan, zie L16.4.** Gemeten: 0.30 schaal op 390px.
+  Onder 640px staat de iPad uit, daarboven krijgt hij een eigen cap in plaats
+  van die van een telefoon. Zeg het als je hem op mobiel toch terug wilt
 
 ## L12 — Wat ik vandaag niet kon, en waarom
 
@@ -947,7 +949,10 @@ endpoint actief en ik wil dat niet stilletjes breken.
   service token is hier de passende vorm: de apps sturen
   `CF-Access-Client-Id` en `CF-Access-Client-Secret` mee, een vreemde komt er
   niet in. Zeg het en ik zet het op, inclusief de headers in de drie apps
-- [ ] **L15.2** `OLLAMA_URL` op de Companion-host naar beide endpoints zetten,
+- [x] **L15.2 — gedaan door Luka.** Gemeten 2026-10-17 op
+  `https://www.axecompanion.com/api/debug/chat-health`: `"status":"ok_ollama"`,
+  `ollama.reachable: true`. Oorspronkelijke opdracht hieronder bewaard:
+  `OLLAMA_URL` op de Companion-host naar beide endpoints zetten,
   komma-gescheiden: eerst `https://ollama.axecompanion.com` (altijd aan, geen
   proxy-limiet), dan `https://ollama.tradingosapp.com` (de Mac Mini, grotere
   modellen). `OLLAMA_MODEL` mag je leeg laten — dan kiest hij zelf
@@ -1045,3 +1050,45 @@ curl -s -H "Authorization: Bearer $CRON_SECRET" \
 ```
 
 Verwacht: `"status":"ok_ollama"` met `ollama_resolved.model` = `llama3.1:8b`.
+
+
+---
+
+## L17 — Doodlopende knoppen en een palet dat niemand kon meten (2026-10-17)
+
+- [x] **L17.1 De quick action "Market Tide" was een doodlopende knop.** Hij
+  stond in de composer van elke intel-gebruiker terwijl de Unusual
+  Whales-feed erachter nooit gekocht is. AXE antwoordde eerlijk "niet
+  geconfigureerd" — geen leugen, maar wel een knop met precies één mogelijke
+  uitkomst. `requires` legde die koppeling al maanden vast; dit is het filter
+  dat hem eindelijk leest. `GET /api/intel-chat` geeft nu `actions` terug en
+  claimt ook niet langer onvoorwaardelijk twee providers: hij noemt degene die
+  echt geconfigureerd zijn.
+- [x] **L17.2 `IndicatorPane` hield twee eigen paletten** achter een
+  `isDark`-boolean. Twee gevolgen: een kleurwijziging in `chartTheme.ts`
+  bereikte de indicatorbalken nooit, en een vijfde preset zou stilletjes een
+  van de twee erven in plaats van zijn eigen te kiezen. Staat nu als
+  `IndicatorPalette` in `chartTheme.ts`, per preset.
+- [x] **L17.3 En toen de contrastmeter er eindelijk bij kon:** de bullish
+  volumebalk op het Paper-thema scoorde **2.03:1** tegen zijn eigen canvas,
+  onder de 3:1 van WCAG 1.4.11. De twee balken verschilden bovendien vooral in
+  hoe donker ze waren, niet in kleur — op een volumehistogram zie je dat niet
+  in één oogopslag. Ze gebruiken nu dezelfde teal/rose als het MACD-histogram
+  op dat thema al deed: 4.26:1 en 5.41:1, twee kleuren. **Dit is de enige
+  zichtbare verandering aan de chart**; zeg het als je het grijze paar terug
+  wilt, dan zet ik het terug met de meting erbij.
+- [x] **L17.4 Van thema wisselen herverfde de balken niet.** De volumebalken en
+  het MACD-histogram bakken hun kleur in een gememoïseerd geometrie-object, en
+  dat memo hing niet van het palet af. Van Midnight naar Paper springen liet de
+  balken dus in de oude kleuren staan tot er toevallig iets anders veranderde —
+  een nieuwe candle, een resize, een andere modus. De
+  `exhaustive-deps`-waarschuwing van eslint stond dit al die tijd te melden.
+
+### Nog open, en niet vanaf hier te doen
+
+- [ ] De snelactie "Companion: live check" (`tos-chart-dock`) zit in **AXE
+  Core**, niet in deze repo. Zet AXE Core erbij in een sessie, dan maak ik hem
+  meebewegen met de nieuwste deploy
+- [ ] **L15.1** staat nog: beide Ollama-endpoints zijn open op het internet,
+  zonder auth. Ik heb het anoniem vanaf deze container bevestigd. Cloudflare
+  Access met een service token is de passende vorm; zeg het en ik zet het op
