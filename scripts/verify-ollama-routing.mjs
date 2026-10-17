@@ -81,6 +81,11 @@ check("several endpoints can be configured, in order", () => {
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_URL: `${SERVER}, ${MAC}` }), [SERVER, MAC]);
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_URL: `${SERVER}\n${MAC}/` }), [SERVER, MAC]);
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_HOST: SERVER }), [SERVER], "OLLAMA_HOST still works");
+  assert.deepEqual(
+    parseOllamaEndpoints({ OLLAMA_URL: "  ", OLLAMA_HOST: SERVER }),
+    [SERVER],
+    "an empty OLLAMA_URL must not shadow OLLAMA_HOST",
+  );
   assert.deepEqual(parseOllamaEndpoints({}), []);
   // A bare host would be fetched over plaintext by accident; refuse it.
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_URL: "ollama.axecompanion.com" }), []);
@@ -150,6 +155,30 @@ check("we give up before Cloudflare does", () => {
   // The proxy cuts a request at ~100s. Failing at 90 leaves the router time
   // to fall back instead of inheriting an HTML error page.
   assert.ok(/AbortSignal\.timeout\(90_000\)/.test(client), "non-streaming must abort under 100s");
+});
+
+const health = readFileSync("src/app/api/debug/chat-health/route.ts", "utf8");
+const router = readFileSync("src/lib/llm/llmRouter.ts", "utf8");
+
+check("chat-health uses the same resolver as the router", () => {
+  assert.ok(/parseOllamaEndpoints/.test(health), "health must parse the same env");
+  assert.ok(/ollamaTarget\(true\)/.test(health), "reachable means a chat would work");
+  assert.ok(/parseOllamaEndpoints\(process\.env\)/.test(router), "the router must use the same parser");
+  assert.ok(
+    !/OLLAMA_BASE_URL/.test(health),
+    "the old health check read OLLAMA_BASE_URL; the router never did",
+  );
+});
+
+check("anonymous chat-health does not leak URLs or error text", () => {
+  assert.ok(/hasCronSecret\(request\.headers\)/.test(health), "detail is behind CRON_SECRET");
+  const publicReturn = health.slice(
+    health.indexOf("if (!hasCronSecret"),
+    health.indexOf("return NextResponse.json", health.indexOf("if (!hasCronSecret")) + 400,
+  );
+  assert.ok(/ollama: \{ configured:/.test(publicReturn), "public payload is booleans only");
+  assert.ok(!/ollama_endpoints/.test(publicReturn), "endpoint URLs stay off the public payload");
+  assert.ok(!/ollama_resolved/.test(publicReturn), "resolved host/model stay off the public payload");
 });
 
 console.log(`\n${passed} checks passed`);

@@ -40,7 +40,10 @@ export async function GET(request: NextRequest) {
      to "qwen3:4b". Two different variables and two different models: the
      health check could be green about an endpoint nothing ever called. It now
      asks the router's own resolver, so "reachable" means a chat would work. */
-  const endpoints = parseOllamaEndpoints(process.env);
+  const endpoints = parseOllamaEndpoints({
+    OLLAMA_URL: process.env.OLLAMA_URL,
+    OLLAMA_HOST: process.env.OLLAMA_HOST,
+  });
   const target = await ollamaTarget(true);
   const openaiKey = process.env.OPENAI_API_KEY;
   const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
