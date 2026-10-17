@@ -97,6 +97,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "preferences/instant-sl-tp-modify": "A user preference",
   "preferences/squawk-stations": "A user preference",
   "preferences/trade-execution": "A user preference",
+  "preferences/push-notifications": "A user preference — per-category opt-in and quiet hours",
 
   // Account lifecycle and plumbing.
   "auth/demo": "Returns 410 — anonymous demo sessions were removed on 2026-10-11",

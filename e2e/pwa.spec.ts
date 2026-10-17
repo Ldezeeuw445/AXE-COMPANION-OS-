@@ -67,6 +67,8 @@ test.describe("PWA install surface", () => {
     expect(body).toContain("/offline");
     expect(body).toContain("CACHE_LAST_VIEWED");
     expect(body).toContain("SKIP_WAITING");
+    expect(body).toContain("AXE_PUSH_OPEN");
+    expect(body).toContain('addEventListener("notificationclick"');
     expect(body).toContain("/api/feed");
     expect(body).toContain("self.skipWaiting()");
     expect(body).not.toMatch(/addEventListener\(\s*"install"[\s\S]{0,400}skipWaiting/);

@@ -46,8 +46,7 @@ import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeT
 import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
 import { buildAxeEngineSystemGate, getAxeEngineProfile } from "@/services/axeEngineService";
 import { isForexPairSymbol, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
-import { getPublicAppBaseUrl } from "@/lib/env";
-import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { dispatchPushEvent } from "@/lib/push/dispatch";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -475,12 +474,35 @@ export async function ensurePrimaryConversation(
 
 export async function getChatThread(
   type: "axe" | "intel" = "axe",
+  threadId?: string | null,
 ): Promise<{
   conversation: ConversationSummary;
   messages: DomainChatMessage[];
 }> {
   const authed = await getAuthedServiceSupabase();
   if (authed) {
+    if (threadId?.trim()) {
+      const { data: named } = await authed.supabase
+        .from("conversations")
+        .select("id,title,pinned_context,last_message_at")
+        .eq("user_id", authed.user.id)
+        .eq("id", threadId.trim())
+        .maybeSingle();
+      if (named) {
+        const { data, error } = await authed.supabase
+          .from("messages")
+          .select("id,role,content,created_at,metadata")
+          .eq("conversation_id", named.id)
+          .eq("user_id", authed.user.id)
+          .order("created_at", { ascending: true });
+        if (!error) {
+          return {
+            conversation: mapConversation(named as ConversationRow),
+            messages: (data as MessageRow[]).map(mapMessage),
+          };
+        }
+      }
+    }
     const conversation = await ensurePrimaryConversation(authed.user.id, authed, type);
     if (conversation) {
       const { data, error } = await authed.supabase
@@ -739,13 +761,17 @@ export async function streamChatMessage(
   }
 
   // Fire-and-forget push notification to user's subscribed devices
-  async function firePush(title: string, body: string, url = "/chat") {
+  async function firePush(title: string, body: string, url = "/chat", extra?: { category?: "price_alert" | "axe_finding"; eventKey?: string; threadId?: string; symbol?: string }) {
     try {
-      const baseUrl = getPublicAppBaseUrl();
-      await fetch(`${baseUrl}/api/push/send`, {
-        method: "POST",
-        headers: internalPushHeaders(),
-        body: JSON.stringify({ userId: user.id, title, body, url }),
+      await dispatchPushEvent({
+        userId: user.id,
+        category: extra?.category ?? "axe_finding",
+        eventKey: extra?.eventKey ?? `chat:${user.id}:${Date.now()}`,
+        title,
+        body,
+        url,
+        threadId: extra?.threadId,
+        symbol: extra?.symbol,
       });
     } catch (e) {
       console.warn("[push] send failed:", e);
@@ -766,7 +792,11 @@ export async function streamChatMessage(
         console.error("[create_alert] insert failed:", alertError.message);
         return `Alert creation failed: ${alertError.message}`;
       }
-      firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts");
+      firePush(`AXE Alert: ${title}`, body ?? "Alert set.", "/alerts", {
+        category: "price_alert",
+        eventKey: `price_alert:chat:${user.id}:${Date.now()}`,
+        symbol: typeof toolCall.args.symbol === "string" ? toolCall.args.symbol : undefined,
+      });
       return "Alert created — visible under Alerts in the app.";
 
     } else if (toolCall.tool === "track_commitment") {
@@ -961,7 +991,7 @@ export async function streamChatMessage(
       return handleRouteChartAction(supabase, user.id, toolCall.args);
     } else if (toolCall.tool === "prepare_execution_request") {
       return handlePrepareExecutionRequest(supabase, user.id, toolCall.args, (title, body, url) => {
-        firePush(title, body, url);
+        firePush(title, body, url, { category: "axe_finding", eventKey: `axe_finding:exec:${user.id}:${Date.now()}` });
       });
     } else if (toolCall.tool === "save_note") {
       const { content, tag } = toolCall.args;

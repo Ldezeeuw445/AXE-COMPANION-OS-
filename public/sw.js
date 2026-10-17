@@ -67,6 +67,7 @@ const NEVER_CACHE_PREFIXES = [
   "/api/tools",
   "/api/push/subscribe",
   "/api/push/send",
+  "/api/push/test",
   "/auth",
 ];
 
@@ -345,13 +346,16 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// ── Notification click: focus or open app ────────────────────────────────────
+// ── Notification click: focus or open the deep link, then patch session ──────
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   // If the user picked the dismiss action we just close — don't open the app.
   if (event.action === "dismiss") return;
 
-  const targetUrl = event.notification.data?.url || "/chat";
+  const data = event.notification.data || {};
+  const targetUrl = data.url || "/chat";
+  const session = data.session && typeof data.session === "object" ? data.session : {};
+  const message = { type: "AXE_PUSH_OPEN", url: targetUrl, session };
 
   event.waitUntil(
     self.clients
@@ -359,9 +363,20 @@ self.addEventListener("notificationclick", (event) => {
       .then((windowClients) => {
         for (const client of windowClients) {
           if (client.url.includes(self.location.origin) && "focus" in client) {
-            // Navigate the existing client to the target URL and bring it
-            // forward — keeps the PWA single-window on iOS.
-            client.navigate(targetUrl);
+            // Tell the open PWA to patch ActiveSessionProvider, then navigate
+            // it to the deep link. iOS 16.4+ may not implement navigate().
+            try {
+              client.postMessage(message);
+            } catch (_err) {
+              /* ignore */
+            }
+            if (typeof client.navigate === "function") {
+              try {
+                client.navigate(targetUrl);
+              } catch (_err) {
+                /* iOS */
+              }
+            }
             return client.focus();
           }
         }
