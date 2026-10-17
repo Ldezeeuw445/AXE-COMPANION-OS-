@@ -158,6 +158,7 @@ check("we give up before Cloudflare does", () => {
 });
 
 const health = readFileSync("src/app/api/debug/chat-health/route.ts", "utf8");
+const healthCode = health.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const router = readFileSync("src/lib/llm/llmRouter.ts", "utf8");
 
 check("chat-health uses the same resolver as the router", () => {
@@ -165,20 +166,22 @@ check("chat-health uses the same resolver as the router", () => {
   assert.ok(/ollamaTarget\(true\)/.test(health), "reachable means a chat would work");
   assert.ok(/parseOllamaEndpoints\(process\.env\)/.test(router), "the router must use the same parser");
   assert.ok(
-    !/OLLAMA_BASE_URL/.test(health),
+    !/OLLAMA_BASE_URL/.test(healthCode),
     "the old health check read OLLAMA_BASE_URL; the router never did",
   );
 });
 
 check("anonymous chat-health does not leak URLs or error text", () => {
   assert.ok(/hasCronSecret\(request\.headers\)/.test(health), "detail is behind CRON_SECRET");
-  const publicReturn = health.slice(
-    health.indexOf("if (!hasCronSecret"),
-    health.indexOf("return NextResponse.json", health.indexOf("if (!hasCronSecret")) + 400,
-  );
+  const gate = health.indexOf("if (!hasCronSecret");
+  const publicStart = health.indexOf("return NextResponse.json", gate);
+  const authedStart = health.indexOf("return NextResponse.json", publicStart + 1);
+  const publicReturn = health.slice(publicStart, authedStart);
+  assert.ok(publicStart > 0 && authedStart > publicStart, "public and authed payloads must be separate returns");
   assert.ok(/ollama: \{ configured:/.test(publicReturn), "public payload is booleans only");
   assert.ok(!/ollama_endpoints/.test(publicReturn), "endpoint URLs stay off the public payload");
   assert.ok(!/ollama_resolved/.test(publicReturn), "resolved host/model stay off the public payload");
+  assert.ok(/ollama_endpoints/.test(health.slice(authedStart)), "authed payload may name the resolved host");
 });
 
 console.log(`\n${passed} checks passed`);
