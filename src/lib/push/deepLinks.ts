@@ -74,6 +74,18 @@ export function canonicalizePushPath(pathname: string): string {
   return pathname;
 }
 
+function normalizeSearchParams(params: URLSearchParams): string {
+  const symbol = params.get("symbol");
+  if (symbol?.trim()) params.set("symbol", normalizeSessionSymbol(symbol));
+  const tf = params.get("tf") ?? params.get("timeframe");
+  if (tf?.trim()) {
+    params.set("tf", normalizeSessionTimeframe(tf));
+    params.delete("timeframe");
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export function sanitizePushUrl(raw: string | null | undefined, fallback = "/chat"): string {
   const cleaned = cleanPath(raw ?? "");
   if (!cleaned) return fallback;
@@ -85,7 +97,7 @@ export function sanitizePushUrl(raw: string | null | undefined, fallback = "/cha
   }
   const pathname = canonicalizePushPath(parsed.pathname);
   if (!isSafeAppPath(pathname)) return fallback;
-  return `${pathname}${parsed.search}`;
+  return `${pathname}${normalizeSearchParams(parsed.searchParams)}`;
 }
 
 export function buildChartDeepLink(symbol?: string | null, timeframe?: string | null, accountId?: string | null): string {
