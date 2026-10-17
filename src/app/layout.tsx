@@ -25,11 +25,17 @@ export const metadata: Metadata = {
     startupImage: "/axe-icon-512.png",
   },
   icons: {
-    apple: "/apple-touch-icon.png",
-    icon: "/axe-icon-192.png",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    icon: [
+      { url: "/axe-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/axe-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   },
   formatDetection: {
     telephone: false,
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
   },
 };
 

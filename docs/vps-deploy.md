@@ -63,10 +63,41 @@ Then `sudo nginx -t && sudo systemctl reload nginx`.
 
 Same-origin chart WS is `wss://www.axecompanion.com/ws/chart`. You do **not** need `NEXT_PUBLIC_CHART_WS_URL` unless you also run Cloudflare `axe-chart-edge`.
 
-## Host cron
+## Who owns cron
 
-Install `scripts/vps.crontab` on the box (replace `APP_ROOT`) and keep `CRON_SECRET` in `.env.local`.
-Scheduling also lives in Supabase `pg_cron` + `pg_net` via `axe_ops.dispatch_cron` — see `docs/CRON-RUNBOOK.md`.
+Read-only check on 2026-10-17 against `cron.job` and `axe_ops.cron_job` on
+project `pqnngpcgbdwxavbatbia`. **One scheduler owns each job.** Prefer the
+copy that is already live in `pg_cron`; the IONOS crontab only keeps jobs that
+are not registered there.
+
+| Job | Route | Owner | Why |
+|---|---|---|---|
+| `mt5-sync` | `/api/cron/mt5-sync` | **pg_cron** (`axe-companion-mt5-sync`) | Live, active |
+| `axe-watcher` | `/api/cron/axe-watcher` | **pg_cron** | Live, active |
+| `intel-warmup` | `/api/cron/intel-warmup` | **pg_cron** | Live, active |
+| `daily-briefing` | `/api/cron/daily-briefing` | **pg_cron** | Live, active |
+| `weekly-briefing` | `/api/cron/weekly-briefing` | **pg_cron** | Live, active |
+| `cockpit-snapshots` | `/api/cron/cockpit-snapshots` | **pg_cron** | Live, active |
+| `knowledge-sync` | `/api/cron/knowledge-sync` | **pg_cron** | Live, active |
+| `krater-feed-sync` | `/api/cron/krater-feed-sync` | **pg_cron** | Live, active |
+| `intel-correlate` | `/api/cron/intel-correlate` | **pg_cron** | Live, active (Claude launch) |
+| `journal-sweep` | `/api/cron/journal-sweep` | **pg_cron** | Live, active (Claude launch) |
+| `user-knowledge-sync` | `/api/cron/user-knowledge-sync` | **pg_cron** | Live, active; never was in the host crontab |
+| `congress-trades-sync` | `/api/cron/congress-trades-sync` | **IONOS crontab** | Documented in `docs/CRON-RUNBOOK.md` but **not** in live `cron.job` / `axe_ops.cron_job` |
+
+`scripts/vps.crontab` therefore contains only `congress-trades-sync`. After a
+deploy, **replace** the host crontab with that file (substitute `APP_ROOT`) so
+the old duplicate lines for journal-sweep / intel-correlate / the original
+eight jobs do not keep firing next to `pg_cron`. Keep `CRON_SECRET` in
+`.env.local` — `pg_cron` still needs the same value in Vault
+(`axe_companion_cron_secret`) and the host job still sends it as Bearer.
+
+Do **not** `cron.schedule` congress-trades-sync from this PR. If you later
+promote it to `pg_cron`, delete the host line the same day.
+
+Health: `select * from axe_ops.cron_health;` and
+`curl -s https://www.axecompanion.com/api/debug/cron-health`. Full dispatch
+path is in `docs/CRON-RUNBOOK.md`.
 
 ## Check on the phone
 
