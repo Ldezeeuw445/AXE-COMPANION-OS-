@@ -4,6 +4,11 @@
  */
 import type OpenAI from "openai";
 import type { AxeResponse, AxeToolCall } from "@/services/axeService";
+import {
+  parseOllamaEndpoints,
+  resolveOllamaTarget,
+  type OllamaTarget,
+} from "@/lib/llm/ollamaEndpoints";
 
 export type OllamaToolCall = {
   id: string;
@@ -13,14 +18,49 @@ export type OllamaToolCall = {
 
 type OllamaResult = { content: string | null; toolCalls: OllamaToolCall[] };
 
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:4b";
+/* ── Which endpoint, which model ───────────────────────────────────────────
+   OLLAMA_URL may hold several addresses in preference order. The model is a
+   *preference*: if the endpoint does not have it we take one it does have,
+   because the alternative — what used to happen — is a health check that
+   says "reachable" while every chat comes back "model not found".
+   Resolved once per minute, not per request.
+   ───────────────────────────────────────────────────────────────────────── */
 
-function baseUrl(): string {
-  return (
-    process.env.OLLAMA_URL ??
-    process.env.OLLAMA_HOST ??
-    "http://localhost:11434"
-  ).replace(/\/$/, "");
+const PREFERRED_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:4b";
+const TARGET_TTL = 60_000;
+
+let _target: OllamaTarget | null = null;
+let _targetAt = 0;
+
+function endpoints(): string[] {
+  const configured = parseOllamaEndpoints(process.env);
+  // Keep the old behaviour for a local dev box with nothing configured.
+  return configured.length > 0 ? configured : ["http://localhost:11434"];
+}
+
+async function listModels(url: string): Promise<string[] | null> {
+  try {
+    const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { models?: Array<{ name?: string }> };
+    return (json.models ?? []).map((m) => m.name ?? "").filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+/** The endpoint and model to use now, or null when none can serve a chat. */
+export async function ollamaTarget(force = false): Promise<OllamaTarget | null> {
+  const now = Date.now();
+  if (!force && _target && now - _targetAt < TARGET_TTL) return _target;
+  _target = await resolveOllamaTarget(endpoints(), PREFERRED_MODEL, listModels);
+  _targetAt = now;
+  return _target;
+}
+
+export function invalidateOllamaTarget(): void {
+  _target = null;
+  _targetAt = 0;
 }
 
 function messagesToOllama(
@@ -40,26 +80,34 @@ function messagesToOllama(
   });
 }
 
+/**
+ * True only when some endpoint is up *and* holds a model that can chat.
+ *
+ * The old version returned `res.ok` on /api/tags. Measured 2026-10-17: that
+ * returned true against a server whose twelve models did not include the
+ * configured one, so the router reported ok_ollama and every chat silently
+ * became an OpenAI call.
+ */
 export async function ollamaHealth(): Promise<boolean> {
-  try {
-    const res = await fetch(`${baseUrl()}/api/tags`, {
-      signal: AbortSignal.timeout(5_000),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  return (await ollamaTarget()) !== null;
 }
 
 export async function ollamaChat(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   options: { temperature?: number; maxTokens?: number } = {}
 ): Promise<OllamaResult> {
-  const res = await fetch(`${baseUrl()}/api/chat`, {
+  const target = await ollamaTarget();
+  if (!target) throw new Error("Ollama: no endpoint has a usable chat model");
+  const res = await fetch(`${target.url}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: OLLAMA_MODEL,
+      model: target.model,
+      // Measured 2026-10-17: qwen3:4b spent its whole token budget in
+      // `thinking` and returned content:"" with done_reason:"length". AXE
+      // would have rendered a blank reply. Ollama ignores this on models that
+      // cannot think, so it is safe to always send.
+      think: false,
       messages: messagesToOllama(messages),
       stream: false,
       options: {
@@ -67,11 +115,26 @@ export async function ollamaChat(
         num_predict: options.maxTokens ?? 1024,
       },
     }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(90_000),
   });
-  if (!res.ok) throw new Error(`Ollama error: ${res.status}`);
+  if (!res.ok) {
+    // 524 is Cloudflare giving up on a proxied origin after ~100s — a cold
+    // model load on the Mac Mini outlasts it. The body is then HTML, so say
+    // which it was rather than failing on a JSON parse further down.
+    throw new Error(
+      res.status === 524
+        ? `Ollama timed out loading a model at ${target.url} (Cloudflare 524)`
+        : `Ollama error: ${res.status}`,
+    );
+  }
   const json = (await res.json()) as { message?: { content?: string } };
-  return { content: json?.message?.content ?? null, toolCalls: [] };
+  const content = json?.message?.content ?? null;
+  // Empty content is a failure, not an answer. Returning it would show the
+  // trader a blank message instead of falling back to a provider that works.
+  if (!content || !content.trim()) {
+    throw new Error(`Ollama returned an empty reply from ${target.model}`);
+  }
+  return { content, toolCalls: [] };
 }
 
 export async function ollamaChatStreaming(
@@ -79,11 +142,14 @@ export async function ollamaChatStreaming(
   onToken: (text: string) => void,
   options: { temperature?: number; maxTokens?: number } = {}
 ): Promise<OllamaResult> {
-  const res = await fetch(`${baseUrl()}/api/chat`, {
+  const target = await ollamaTarget();
+  if (!target) throw new Error("Ollama: no endpoint has a usable chat model");
+  const res = await fetch(`${target.url}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: OLLAMA_MODEL,
+      model: target.model,
+      think: false,
       messages: messagesToOllama(messages),
       stream: true,
       options: {

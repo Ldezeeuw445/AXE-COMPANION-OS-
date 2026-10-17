@@ -93,12 +93,16 @@ export function LandingHeroDevices() {
         onFocusCapture={() => setLit(true)}
         onBlurCapture={() => setLit(false)}
       >
+        {/* Below 640px the iPad frame is display:none (globals.css) — at that
+            width its 1024px mock renders at 0.3 scale and reads as a smudge.
+            Hidden rather than unmounted so the markup is the same on the
+            server and the client, and so `loading="lazy"` never fetches it. */}
         <DeviceFrame device="phone" eager />
         <DeviceFrame device="ipad" eager={false} />
       </div>
 
       <p className="relative z-10 mt-4 text-center text-[11px] uppercase tracking-[0.2em] text-white/38">
-        Tap around — both screens are live demos, no account needed
+        Tap around — these are live demos, no account needed
       </p>
     </div>
   );

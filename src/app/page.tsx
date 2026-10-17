@@ -68,7 +68,7 @@ const LANDING_FEATURES = [
   },
   {
     title: "News & intel, cached to save credits",
-    desc: "Polygon, Perigon, Finnhub, EODHD, FRED — with smart 5-minute caching so a quiet hour doesn't burn your provider quota. Intel adds free public sources: SEC EDGAR insider filings, GDELT events, flight and vessel tracking.",
+    desc: "Polygon, Perigon, Finnhub, EODHD, FRED — with smart 5-minute caching so a quiet hour doesn't burn your provider quota. Intel adds free public sources: SEC EDGAR insider filings, congressional STOCK Act trades, GDELT events, flight and vessel tracking.",
     Icon: Newspaper,
     color: "text-cyan-300",
   },
@@ -188,7 +188,7 @@ const FAQ = [
   },
   {
     q: "Which market intelligence is actually live?",
-    a: "Charting, depth, and the news chain (Polygon → Perigon → Finnhub → EODHD, plus FRED macro) are live, as are the free intel sources: SEC EDGAR insider filings, GDELT event data, flight and vessel tracking. Senate trades, dark-pool prints, options flow and market tide need a paid Unusual Whales subscription we have not bought — the app says \"not configured\" for those rather than pretending they failed.",
+    a: "Charting, depth, and the news chain (Polygon → Perigon → Finnhub → EODHD, plus FRED macro) are live, as are the free intel sources: SEC EDGAR insider filings, congressional STOCK Act disclosures from Alpha Vantage (House and Senate), GDELT event data, flight and vessel tracking. Dark-pool prints, options flow and market tide need a paid Unusual Whales subscription we have not bought — the app says \"not configured\" for those rather than pretending they failed.",
   },
   {
     q: "Where do I paste the MT5 link token?",
@@ -453,16 +453,35 @@ export default function HomeLandingPage() {
             mean what they say.
           </p>
 
+          {/* Ten tiles in three columns leaves one alone on the last row, which
+              reads as a tile that forgot its neighbours. The last one is the
+              platform claim rather than a feature, so it earns the full width
+              instead of being padded out with something we do not ship. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {LANDING_FEATURES.map(({ title, desc, Icon, color }) => (
-              <div key={title} className="axe-landing-card-glow p-6">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04]">
-                  <Icon className={`h-5 w-5 ${color}`} aria-hidden />
+            {LANDING_FEATURES.map(({ title, desc, Icon, color }, index) => {
+              const wide =
+                index === LANDING_FEATURES.length - 1 && LANDING_FEATURES.length % 3 === 1;
+              return (
+                <div
+                  key={title}
+                  className={`axe-landing-card-glow p-6 ${
+                    wide ? "lg:col-span-3 lg:flex lg:items-start lg:gap-5" : ""
+                  }`}
+                >
+                  <div
+                    className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] ${
+                      wide ? "lg:mb-0 lg:shrink-0" : ""
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 ${color}`} aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="mb-1.5 text-base font-semibold text-white">{title}</h3>
+                    <p className="text-sm leading-relaxed text-tos-muted">{desc}</p>
+                  </div>
                 </div>
-                <h3 className="mb-1.5 text-base font-semibold text-white">{title}</h3>
-                <p className="text-sm leading-relaxed text-tos-muted">{desc}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Trading OS callout */}

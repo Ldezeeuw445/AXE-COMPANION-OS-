@@ -15,7 +15,7 @@ Production: `www.axecompanion.com` · host `212.227.91.79` · app
 1. This PR is green (tsc, lint, `npm test`, `npm run verify`, `test:e2e`,
    `next build`).
 2. `main` contains #110 (Claude launch), #112 (C2 shell), #111 (drawings),
-   plus this prep.
+   #113 (IONOS prep), plus the waitlist + Ollama resolver work.
 3. You have the IONOS SSH key and can edit `/root/AXE-COMPANION-OS-/.env.local`.
 4. You can open the Supabase SQL editor for this project (migrations are
    applied there, not by `deploy-vps.sh`).
@@ -26,37 +26,57 @@ Production: `www.axecompanion.com` · host `212.227.91.79` · app
 
 `supabase_migrations.schema_migrations` on this project is **AXE Core's CLI
 history** (versions from `20260707` / `axe_core_agents` through
-`20261017114651` / `marketing_waitlist`). None of the 48 files in this repo's
+`20261017114651` / `marketing_waitlist`). None of the files in this repo's
 `supabase/migrations/` are recorded there.
 
-Object-level check against the live catalog:
+Object-level check against the live catalog (re-read 2026-10-17):
 
 | Repo file | Live? |
 |---|---|
 | `20260329`–`20260703` companion tables/columns (broadcast, onboarding, prefs, intel, journal, billing, …) | **Present** — already applied ad-hoc |
 | Distinctive later columns (`favorite_workflow_ids`, `live_trading_enabled`, `chart_theme`, `onboarding_completed_at`, `alert_auto_trade_*`, `conversation_type`) | **Present** |
+| `20261017120000_marketing_waitlist.sql` → `public.marketing_waitlist` | **Table present** (AXE Core `20261017114651`, same columns + unique `lower(email)`, RLS on, **no policies**). Anon/authenticated still hold default SELECT/INSERT/UPDATE/DELETE grants — blocked only by RLS. |
 | `20261017121000_chart_drawings.sql` → `public.chart_drawings` | **Missing** |
 
-**Apply only this file before or immediately after the Next restart:**
+**Apply these two files in the SQL editor (do not skip drawings):**
+
+1. `supabase/migrations/20261017120000_marketing_waitlist.sql` — idempotent.
+   `CREATE TABLE IF NOT EXISTS` is a no-op on the live table. The **REVOKE**
+   of anon/authenticated/public is the real change: today a
+   `DISABLE ROW LEVEL SECURITY` would leak every waitlist email. After this
+   file, only `service_role` keeps grants. Landing signups need this **before**
+   traffic hits `POST /api/waitlist` (otherwise inserts still work via
+   service role, but the grant hole stays).
+2. `supabase/migrations/20261017121000_chart_drawings.sql` — the drawings
+   client upserts this table.
 
 ```bash
-# From a trusted machine with the Supabase CLI logged in, or paste the file
-# into the SQL editor. Do not skip: the drawings client upserts this table.
+# From a trusted machine with the Supabase CLI logged in, or paste the files
+# into the SQL editor. Do not skip drawings: the client upserts that table.
 ```
-
-In the SQL editor, run the full contents of
-`supabase/migrations/20261017121000_chart_drawings.sql`.
 
 Confirm:
 
 ```sql
 select to_regclass('public.chart_drawings');
 -- must return public.chart_drawings
+
+select c.relrowsecurity
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relname = 'marketing_waitlist';
+-- must be true
+
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'marketing_waitlist'
+  and grantee in ('anon', 'authenticated');
+-- must return zero rows
 ```
 
 If you later want Companion migrations tracked in
-`schema_migrations`, record `20261017121000` / `chart_drawings` in the same
-transaction. Do not replay the older 47 files.
+`schema_migrations`, record `20261017120000` / `marketing_waitlist` and
+`20261017121000` / `chart_drawings` in the same transaction. Do not replay
+the older companion files.
 
 ---
 
@@ -91,7 +111,7 @@ restart.
 |---|---|
 | `ALPHAVANTAGE_API_KEY` | Host-owned `congress-trades-sync` |
 | `METAAPI_TOKEN` | `mt5-sync` |
-| `OLLAMA_BASE_URL` / `OPENAI_API_KEY` | Chat, journal-sweep, intel-correlate |
+| `OLLAMA_URL` / `OPENAI_API_KEY` | Chat, journal-sweep, intel-correlate. See “Ollama after this ship” below. |
 
 Same `EDGE_SECRET` (or `CRON_SECRET`) must exist as a **Supabase Edge
 secret** for `market-proxy`. See `docs/market-context-providers.md`.
@@ -108,6 +128,46 @@ select * from axe_ops.cron_secret_fingerprint();
 ```
 
 Equal digests ⇒ Vault and `.env.local` match.
+
+### Ollama after this ship (`OLLAMA_URL` comma-list)
+
+The router and `/api/debug/chat-health` now share one parser
+(`src/lib/llm/ollamaEndpoints.ts`):
+
+- Read `OLLAMA_URL`, then `OLLAMA_HOST`. `OLLAMA_BASE_URL` is **not** what
+  chat uses (that was the old health-check lie).
+- Value may be **one URL or a comma/whitespace list**, tried in order.
+- The model is a preference: if `OLLAMA_MODEL` is missing on that host, a
+  chatable model that is present is chosen. Embedders are never chosen.
+- Empty reply = error (router falls through). `think: false` on every call.
+- Non-streaming abort is 90s so a Cloudflare 524 (~100s) is not inherited.
+
+**Do not put a comma-list into `.env.local` until this commit is running.**
+Older `ollamaClient` treated the whole string as a single URL, so
+`https://a,https://b` would  fail every chat until rollback. Sequence:
+
+1. Deploy this code (`./scripts/deploy-vps.sh main`).
+2. Confirm `curl -s https://www.axecompanion.com/api/debug/chat-health`
+   returns `ollama.configured` / `reachable` booleans only (no URLs).
+3. Then edit `.env.local`:
+
+```
+OLLAMA_URL=https://ollama.axecompanion.com,https://ollama.tradingosapp.com
+```
+
+Leave `OLLAMA_MODEL` unset (both hosts have `llama3.1:8b`; `qwen3:4b` is a
+think-model and is missing on the always-on server). Restart
+`axe-companion`, then with `CRON_SECRET`:
+
+```bash
+curl -s -H "Authorization: Bearer $CRON_SECRET" \
+  https://www.axecompanion.com/api/debug/chat-health
+# status: ok_ollama
+# env.ollama_resolved.model: llama3.1:8b  (or whatever that host actually has)
+```
+
+A single-URL `OLLAMA_URL` that already works can stay through the deploy;
+only the comma-list has to wait until the new process is up.
 
 ---
 
@@ -237,7 +297,7 @@ still uses Share → Add to Home Screen.
 
 ## 8. Rollback
 
-App only (leave the new `chart_drawings` table — it is additive):
+App only (leave `chart_drawings` and the waitlist REVOKEs — both additive):
 
 ```bash
 cd /root/AXE-COMPANION-OS-
@@ -260,10 +320,15 @@ broken and you accept losing synced annotations.
 
 ## Order on the day
 
-1. Apply `20261017121000_chart_drawings.sql` in the SQL editor.
-2. Confirm/fix `.env.local` (EDGE/CRON, VAPID, Stripe).
+1. Apply `20261017120000_marketing_waitlist.sql` (REVOKE) then
+   `20261017121000_chart_drawings.sql` in the SQL editor.
+2. Confirm/fix `.env.local` (EDGE/CRON, VAPID, Stripe). Leave any
+   `OLLAMA_URL` comma-list until after step 5.
 3. Snapshot `crontab -l`, install the new `scripts/vps.crontab`.
 4. Confirm nginx Upgrade headers; reload if you changed them.
 5. `./scripts/deploy-vps.sh main`
-6. `npm run smoke:launch` + phone WS + PWA reload.
-7. If bad: redeploy previous SHA (step 8).
+6. Only now: set `OLLAMA_URL` to the comma-list if you want both hosts;
+   restart; check authenticated `/api/debug/chat-health`.
+7. `npm run smoke:launch` + phone WS + PWA reload.
+8. If bad: redeploy previous SHA (Rollback below). Leave the waitlist
+   REVOKEs and `chart_drawings` table in place — both are additive.

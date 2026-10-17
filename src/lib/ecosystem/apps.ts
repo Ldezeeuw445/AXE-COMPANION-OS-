@@ -59,12 +59,11 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     tagline: "Desktop terminal on the same account — multi-chart, intel, quant",
     url: "https://www.tradingosapp.com",
     form: "desktop",
-    // Measured 2026-10-12: both www (Vercel direct) and the apex (via
-    // Cloudflare) answer HTTP 402 with x-vercel-error: DEPLOYMENT_DISABLED.
-    // The domain is ours and stays, so this URL survives the move off Vercel —
-    // set this back to "beta" the day the new host answers 200 and the
-    // switcher links out again with no other change.
-    availability: "offline",
+    // Was "offline" while Vercel answered 402 DEPLOYMENT_DISABLED. Measured
+    // 2026-10-17, after the DNS moved to our own Cloudflare Tunnel: apex and
+    // www both answer 200. "beta" rather than "live" because signup is still
+    // invite-only — the switcher links out, the badge says so.
+    availability: "beta",
   },
   {
     id: "axe-core",

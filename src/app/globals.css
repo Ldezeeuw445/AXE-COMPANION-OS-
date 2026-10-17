@@ -2374,8 +2374,14 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
   transform-origin: top left;
 }
 
-/* Under ~1100px the iPad leads and the phone sits beneath it, so neither
-   shrinks past the point where the mock inside stops being readable. */
+/* Under ~1100px the iPad leads and the phone sits beneath it.
+
+   Both used to be capped at `min(390px, 86vw)` here. That cap is a phone's
+   width, and the iPad lays its mock out at 1024 logical px: measured
+   2026-10-17 it came out at scale 0.30 on a 390px viewport and 0.36 on a
+   768px one — a tablet rendered at a third of life size, where the chip row
+   reads as grey smudges. The two devices need different caps because they
+   hold different amounts of pixels. */
 @media (max-width: 1100px) {
   .axe-hero-stage {
     flex-direction: column-reverse;
@@ -2383,13 +2389,31 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
     border-radius: 22px;
   }
 
-  .axe-hero-device--phone,
+  .axe-hero-device--phone {
+    width: min(330px, 80vw);
+  }
+
   .axe-hero-device--ipad {
-    width: min(390px, 86vw);
+    width: min(760px, 88vw);
   }
 
   .axe-hero-dots {
     inset: -1.2rem;
+  }
+}
+
+/* Below ~640px there is no width left at which the iPad is legible: at 390px
+   its screen would be 0.3 of life size. A hero that shows a trader an
+   unreadable smudge of a tablet says less than one that shows them the phone
+   this app is built for, full size. The iPad comes back the moment the
+   viewport can carry it. */
+@media (max-width: 639px) {
+  .axe-hero-device--ipad {
+    display: none;
+  }
+
+  .axe-hero-device--phone {
+    width: min(360px, 88vw);
   }
 }
 
