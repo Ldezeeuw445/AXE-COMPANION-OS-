@@ -16,7 +16,7 @@ function check(name, fn) {
   console.log(`  ok  ${name}`);
 }
 
-const migration = readFileSync("supabase/migrations/20261017200000_journal_attachments.sql", "utf8");
+const migration = readFileSync("supabase/migrations/20261017210000_journal_attachments.sql", "utf8");
 const history = readFileSync("src/components/history/HistoryScreen.tsx", "utf8");
 const host = readFileSync("src/components/journal/QuickJournalHost.tsx", "utf8");
 const sheet = readFileSync("src/components/journal/QuickJournalSheet.tsx", "utf8");
