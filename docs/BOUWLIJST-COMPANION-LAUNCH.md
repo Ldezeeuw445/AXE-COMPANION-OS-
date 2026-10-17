@@ -730,3 +730,65 @@ computer-use-tools en ook geen schakelaar om ze aan te zetten. In het algemeen
 kan ik apps bedienen op een computer waar de Claude-desktopapp draait met
 Computer use aan, of via het +-menu → Devices op claude.ai vóór je een nieuw
 bericht stuurt.
+
+## L13 — De DNS, precies, en de weg die we over het hoofd zagen
+
+Luka deelde op 2026-10-17 de volledige recordlijst van `tradingosapp.com`
+(13 records). Twee dingen vielen op.
+
+### 1. Er draait al een Cloudflare Tunnel op de Mac Mini
+
+`ollama.tradingosapp.com` is een **Tunnel**-record naar
+`MacMini-Ollama-SSDExtern`. Dat betekent dat `cloudflared` al op de Mac Mini
+draait — en op diezelfde Mac staat de goede Trading OS-build.
+
+Daarmee is de hele hostingvraag anders. Geen VPS nodig, geen Vercel, geen open
+poorten, geen certificaat regelen: een tunnel publiceert een lokale poort op
+een publieke hostname en Cloudflare doet TLS. Bevestigd in de Cloudflare-docs:
+een *published application route* koppelt `tradingosapp.com` aan
+`http://localhost:<poort>`, en `cloudflared tunnel route dns <naam> <hostname>`
+maakt zelf het CNAME naar `<UUID>.cfargotunnel.com`.
+
+Let op één ding uit diezelfde docs: dat lukt niet op een hostname waar al een
+CNAME staat. De twee Vercel-CNAME's moeten dus eerst weg.
+
+### 2. De records, met wat weg mag en wat je nooit moet aanraken
+
+**Weg (Vercel en oud):**
+
+| Naam | Type | Inhoud | Waarom |
+|---|---|---|---|
+| `tradingosapp.com` | CNAME | `cname.vercel-dns.com` (Proxied) | dit is de 402 op de apex; blokkeert ook de tunnel-hostname |
+| `www.tradingosapp.com` | CNAME | `cc384ed6d38922b8.vercel-dns-016.com` (DNS only) | de 402 op www |
+| `_vercel.tradingosapp.com` | TXT | `vc-domain-verify=...` | alleen nodig zolang Vercel het domein claimt |
+| `www.tradingosapp.com` | TXT | `replit-verify=b83dfc9f-...` | restant uit de Replit-tijd |
+
+**Nooit aanraken** — hier hangt de e-mail en de verificatie aan:
+
+- de vijf `MX`-records naar Google (`aspmx`, `alt1`, `alt2`, `alt3`, `alt4`)
+- `TXT v=spf1 include:_spf.google.com ~all`
+- `TXT google-site-verification=...`
+- `TXT www openai-domain-verification=...`
+- `ollama.tradingosapp.com` (de tunnel zelf)
+
+Het verwijderen van de apex-CNAME raakt de e-mail niet: MX is een eigen
+recordtype.
+
+### 3. Hoe ik dit zelf kan doen
+
+De Cloudflare-connector die nu aan dit account hangt is de *Developer
+Platform* (Workers, KV, R2, D1, Hyperdrive) — geverifieerd, geen DNS-tools.
+
+Maar Cloudflare heeft er nog één: de **Cloudflare API MCP server** op
+`https://mcp.cloudflare.com/mcp`. Die dekt de héle Cloudflare API, ruim 2.500
+endpoints inclusief DNS en Zero Trust, via `search()` en `execute()`. Verbindt
+Luka die als connector, dan kan ik de records hierboven zelf zetten en de
+tunnel-route zelf aanmaken.
+
+- [ ] **L13.1** Cloudflare API MCP (`https://mcp.cloudflare.com/mcp`) als
+  connector toevoegen — dan doe ik de rest
+- [ ] **L13.2** Trading OS bouwen op de Mac en op een lokale poort serveren
+- [ ] **L13.3** Published application route op de bestaande tunnel:
+  `tradingosapp.com` en `www` → `http://localhost:<poort>`
+- [ ] **L13.4** Daarna `availability` in `src/lib/ecosystem/apps.ts` van
+  `"offline"` naar `"beta"`, en hetzelfde bestand in `the-one`
