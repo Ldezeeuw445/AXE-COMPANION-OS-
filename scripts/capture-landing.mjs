@@ -62,18 +62,30 @@ try {
   if ((await page.locator("nextjs-portal").count()) > 0) {
     throw new Error("dev badge is visible — this must be a production server");
   }
+  await page.screenshot({ path: join(shotDir, "hero-390.png") });
   await page.screenshot({ path: join(shotDir, "landing-390x844.png"), fullPage: true });
-  await page.locator("#pricing").scrollIntoViewIfNeeded();
-  await page.screenshot({ path: join(shotDir, "landing-pricing-390x844.png") });
+  await page.locator("#pricing").screenshot({
+    path: join(shotDir, "landing-pricing-390x844.png"),
+  });
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(baseURL, { waitUntil: "networkidle" });
+  await page.screenshot({ path: join(shotDir, "hero-1440.png") });
   await page.screenshot({ path: join(shotDir, "landing-1440x900.png"), fullPage: true });
-  await page.locator("#pricing").scrollIntoViewIfNeeded();
-  await page.screenshot({ path: join(shotDir, "landing-pricing-1440x900.png") });
+  await page.locator("#pricing").screenshot({
+    path: join(shotDir, "landing-pricing-1440x900.png"),
+  });
 
   await browser.close();
   console.log(`wrote screenshots to ${shotDir}`);
 } finally {
   server.kill("SIGTERM");
+  setTimeout(() => {
+    try {
+      server.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+    process.exit(0);
+  }, 1500).unref();
 }

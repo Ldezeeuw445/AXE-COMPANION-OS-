@@ -48,8 +48,7 @@ test.describe("companion landing", () => {
       path: join(shotDir, "landing-390x844.png"),
       fullPage: true,
     });
-    await page.locator("#pricing").scrollIntoViewIfNeeded();
-    await page.screenshot({
+    await page.locator("#pricing").screenshot({
       path: join(shotDir, "landing-pricing-390x844.png"),
     });
 
@@ -59,8 +58,7 @@ test.describe("companion landing", () => {
       path: join(shotDir, "landing-1440x900.png"),
       fullPage: true,
     });
-    await page.locator("#pricing").scrollIntoViewIfNeeded();
-    await page.screenshot({
+    await page.locator("#pricing").screenshot({
       path: join(shotDir, "landing-pricing-1440x900.png"),
     });
   });
