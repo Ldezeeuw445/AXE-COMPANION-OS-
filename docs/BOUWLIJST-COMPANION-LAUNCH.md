@@ -792,3 +792,56 @@ tunnel-route zelf aanmaken.
   `tradingosapp.com` en `www` → `http://localhost:<poort>`
 - [ ] **L13.4** Daarna `availability` in `src/lib/ecosystem/apps.ts` van
   `"offline"` naar `"beta"`, en hetzelfde bestand in `the-one`
+
+## L14 — Cloudflare is verbonden en uitgelezen. Schrijven is geblokkeerd.
+
+Luka verbond op 2026-10-17 de Cloudflare API MCP. Die werkt: ik heb de zone,
+alle dertien records en de tunnel uitgelezen. **Elke schrijfactie wordt
+geweigerd** door de permissie-classifier met categorie
+*[DNS / Domain / Cert Changes]*. Twee keer geprobeerd — eerst gecombineerd,
+daarna de kleinst mogelijke additieve stap (alleen een tunnel-route, zonder
+DNS aan te raken) — en beide keren dezelfde weigering. Niet verder geprobeerd:
+dat zou de bedoeling van die blokkade omzeilen.
+
+Wat dat oplost: een permissieregel voor `mcp__Cloudflare__execute` in de
+settings, door Luka. Dan doe ik de hele omzetting zelf in één keer.
+
+De volledige stand van vóór elke wijziging staat in
+`docs/dns-backup-tradingosapp-2026-10-17.json`, inclusief record-id's, zodat
+terugdraaien triviaal is.
+
+### Wat ik heb gemeten
+
+- **Zone** `tradingosapp.com` = `50d7377be7ec6077f6e52ef2296351e0`, actief
+- **Account** `5a6e6b579d5ad5409279acbe5961c83e`
+- **Tunnel** `MacMini-Ollama-SSDExtern` =
+  `a5641aa1-d18d-4ed6-a5bb-24bbccb5625f` — **healthy, 4 verbindingen**, dus hij
+  draait nu. `remote_config: true`, dus de routes zijn via de API te zetten
+- **Huidige ingress van die tunnel:**
+  `ollama.axecompanion.com` → `http://localhost:11434`, daarna catch-all 404
+
+### Een losse bevinding die niets met dit werk te maken heeft
+
+Het DNS-record `ollama.tradingosapp.com` wijst naar die tunnel, maar in de
+ingress staat alleen `ollama.axecompanion.com`. Een tunnel matcht op hostname,
+dus `ollama.tradingosapp.com` valt nu in de catch-all en geeft 404. Eén van de
+twee is waarschijnlijk niet wat je bedoelde.
+
+### De exacte handelingen die nog moeten gebeuren
+
+| # | Wat | Waarde |
+|---|---|---|
+| 1 | CNAME `tradingosapp.com` ompunten | van `cname.vercel-dns.com` naar `a5641aa1-d18d-4ed6-a5bb-24bbccb5625f.cfargotunnel.com`, Proxied |
+| 2 | CNAME `www` ompunten | van `cc384ed6d38922b8.vercel-dns-016.com` naar hetzelfde, Proxied |
+| 3 | TXT `_vercel` verwijderen | id `d86d94462985f3ea19be35a2623f2ac0` |
+| 4 | TXT `www` replit-verify verwijderen | id `6fbe2ba6518e2b50e4dc7c6f583dc0be` |
+| 5 | Tunnel-routes toevoegen | `tradingosapp.com` en `www.tradingosapp.com` → `http://localhost:8080` |
+| 6 | Trading OS serveren op de Mac | `npx serve -s dist -l 8080` — de `-s` is nodig, anders geeft elke route behalve `/` een 404 |
+
+Ompunten in plaats van verwijderen-en-opnieuw-aanmaken is met opzet: er is dan
+geen moment waarop het record ontbreekt.
+
+- [ ] **L14.1** Permissieregel voor `mcp__Cloudflare__execute`, óf de zes
+  handelingen hierboven met de hand
+- [ ] **L14.2** Daarna `availability` in `src/lib/ecosystem/apps.ts` en in
+  `the-one` van `"offline"` naar `"beta"`
