@@ -21,6 +21,8 @@ import {
   parseOllamaEndpoints,
   pickOllamaModel,
   resolveOllamaTarget,
+  ollamaAuthHeaders,
+  resolveOllamaEndpoints,
 } from "../src/lib/llm/ollamaEndpoints.ts";
 
 let passed = 0;
@@ -30,6 +32,17 @@ function check(name, fn) {
   console.log(`  ok  ${name}`);
 }
 async function acheck(name, fn) {
+  await fn();
+  passed += 1;
+  console.log(`  ok  ${name}`);
+}
+
+/**
+ * check() counts the moment fn() returns, so a check that returns a promise
+ * would print "ok" before its assertions ran and only surface as an unhandled
+ * rejection afterwards. Anything async goes through this instead.
+ */
+async function checkAsync(name, fn) {
   await fn();
   passed += 1;
   console.log(`  ok  ${name}`);
@@ -150,6 +163,129 @@ check("we give up before Cloudflare does", () => {
   // The proxy cuts a request at ~100s. Failing at 90 leaves the router time
   // to fall back instead of inheriting an HTML error page.
   assert.ok(/AbortSignal\.timeout\(90_000\)/.test(client), "non-streaming must abort under 100s");
+});
+
+/* ── credentials, and saying so when they are wrong ──────────────────────
+   Both endpoints are shut now: the IONOS one behind nginx basic auth, the Mac
+   Mini behind Cloudflare Access on its tunnel. Measured 2026-10-17,
+   `https://ollama.axecompanion.com/api/tags` answered 401 from
+   nginx/1.24.0 — and to the old resolver a 401 looked exactly like a host
+   that was off, so the router silently used one endpoint and nothing said
+   why. */
+
+check("a service token becomes the two Cloudflare Access headers", () => {
+  const h = ollamaAuthHeaders({
+    OLLAMA_CF_ACCESS_CLIENT_ID: "abc.access",
+    OLLAMA_CF_ACCESS_CLIENT_SECRET: "shhh",
+  });
+  assert.equal(h["CF-Access-Client-Id"], "abc.access");
+  assert.equal(h["CF-Access-Client-Secret"], "shhh");
+});
+
+check("half a service token sends nothing", () => {
+  // One header alone produces a 403 that reads like a policy problem rather
+  // than the missing half it actually is.
+  assert.deepEqual(ollamaAuthHeaders({ OLLAMA_CF_ACCESS_CLIENT_ID: "abc.access" }), {});
+  assert.deepEqual(ollamaAuthHeaders({ OLLAMA_CF_ACCESS_CLIENT_SECRET: "shhh" }), {});
+  assert.deepEqual(ollamaAuthHeaders({}), {});
+  assert.deepEqual(ollamaAuthHeaders({ OLLAMA_CF_ACCESS_CLIENT_ID: "   " }), {});
+});
+
+check("basic auth is encoded, and only when it is a pair", () => {
+  const h = ollamaAuthHeaders({ OLLAMA_BASIC_AUTH: "axe:hunter2" });
+  assert.equal(h.Authorization, `Basic ${Buffer.from("axe:hunter2", "utf8").toString("base64")}`);
+  // No colon means somebody pasted half of it; a malformed header is worse
+  // than none, because nginx answers 401 either way and the env looks set.
+  assert.equal(ollamaAuthHeaders({ OLLAMA_BASIC_AUTH: "axe" }).Authorization, undefined);
+});
+
+check("both credentials can be sent at once", () => {
+  // Two endpoints, two mechanisms. Access ignores an Authorization header it
+  // does not need; nginx ignores the CF-Access ones.
+  const h = ollamaAuthHeaders({
+    OLLAMA_CF_ACCESS_CLIENT_ID: "abc.access",
+    OLLAMA_CF_ACCESS_CLIENT_SECRET: "shhh",
+    OLLAMA_BASIC_AUTH: "axe:hunter2",
+  });
+  assert.equal(Object.keys(h).length, 3);
+});
+
+check("the client sends them on every call, not just the probe", () => {
+  const client = readFileSync(new URL("../src/lib/llm/ollamaClient.ts", import.meta.url), "utf8");
+  // /api/tags, /api/chat and the streaming /api/chat: three places, and the
+  // probe passing while the chat 401s would be the same bug one layer down.
+  const uses = client.match(/ollamaAuthHeaders\(process\.env\)/g) ?? [];
+  assert.equal(uses.length, 3, `expected 3 authed fetches, found ${uses.length}`);
+});
+
+await checkAsync("a refusal is reported as a refusal, not as a dead host", async () => {
+  const probes = {
+    "https://closed.example": { models: null, status: "unauthorized" },
+    "https://down.example": { models: null, status: "unreachable" },
+  };
+  await resolveOllamaEndpoints(
+    Object.keys(probes),
+    "llama3.1:8b",
+    async (url) => probes[url],
+  ).then((res) => {
+    assert.equal(res.target, null);
+    assert.deepEqual(
+      res.endpoints.map((e) => e.status),
+      ["unauthorized", "unreachable"],
+      "the two must stay apart: one is a credential to fix, the other a host to wait for",
+    );
+  });
+});
+
+await checkAsync("the first endpoint that works wins, and the rest stay untried", async () => {
+  const seen = [];
+  await resolveOllamaEndpoints(
+    ["https://a.example", "https://b.example", "https://c.example"],
+    "llama3.1:8b",
+    async (url) => {
+      seen.push(url);
+      return url === "https://a.example"
+        ? { models: null, status: "unauthorized" }
+        : { models: ["llama3.1:8b"], status: "ok" };
+    },
+  ).then((res) => {
+    assert.equal(res.target.url, "https://b.example");
+    assert.deepEqual(seen, ["https://a.example", "https://b.example"], "c must not be probed");
+    // An endpoint nobody tried is not an endpoint that failed.
+    assert.deepEqual(res.endpoints.map((e) => e.url), ["https://a.example", "https://b.example"]);
+  });
+});
+
+await checkAsync("an endpoint that answers but holds no chat model says so", async () => {
+  await resolveOllamaEndpoints(
+    ["https://embeds.example"],
+    undefined,
+    async () => ({ models: ["nomic-embed-text:latest", "bge-m3:latest"], status: "ok" }),
+  ).then((res) => {
+    assert.equal(res.target, null);
+    assert.equal(res.endpoints[0].status, "no-chat-model");
+    assert.equal(res.endpoints[0].models, 2);
+  });
+});
+
+check("chat-health tells an operator which endpoint refused it", () => {
+  const route = readFileSync(
+    new URL("../src/app/api/debug/chat-health/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(route.includes("ollama_endpoint_status"), "report every endpoint, not just the winner");
+  assert.ok(
+    /refused\.length === endpoints\.length/.test(route),
+    "all endpoints refusing is a credential problem and must say so",
+  );
+  assert.ok(
+    route.includes("OLLAMA_BASIC_AUTH / OLLAMA_CF_ACCESS_"),
+    "name the variables to fix, not just the symptom",
+  );
+  // The anonymous half must stay anonymous: no URLs, no credentials.
+  const anon = route.slice(route.indexOf("if (!hasCronSecret"), route.indexOf("return NextResponse.json(\n    {\n      status,\n      env:"));
+  assert.ok(!/ollama_endpoints|ollama_resolved|CLIENT_SECRET/.test(anon), "the public answer must not leak the setup");
+  assert.ok(/refused: refused\.length > 0/.test(anon), "but it may say a credential is the problem");
 });
 
 console.log(`\n${passed} checks passed`);
