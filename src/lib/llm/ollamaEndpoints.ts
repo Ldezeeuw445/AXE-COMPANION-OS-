@@ -107,23 +107,120 @@ export function pickOllamaModel(
   return chatable[0];
 }
 
+/* ── credentials ───────────────────────────────────────────────────────────
+   An endpoint that is open to the internet is one `/api/delete` away from
+   losing its models, so both of ours are now shut: the IONOS one behind nginx
+   basic auth, the Mac Mini behind Cloudflare Access on its tunnel.
+
+   The apps have to carry the matching credential or the protection reads, from
+   the router's side, exactly like a server that is down — which is the quiet
+   failure this whole file exists to stop. Both header sets are sent to every
+   endpoint: Access ignores an Authorization header it does not need, and nginx
+   ignores the CF-Access ones.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/** `user:password`, base64 for a Basic header. No Buffer: this file is DOM-free. */
+function toBase64(value: string): string {
+  if (typeof btoa === "function") return btoa(value);
+  // Node before btoa was global, and the verify scripts.
+  return (globalThis as { Buffer?: { from(v: string, e: string): { toString(e: string): string } } })
+    .Buffer!.from(value, "utf8")
+    .toString("base64");
+}
+
+export function ollamaAuthHeaders(env: Record<string, string | undefined>): Record<string, string> {
+  const headers: Record<string, string> = {};
+
+  const id = (env.OLLAMA_CF_ACCESS_CLIENT_ID ?? "").trim();
+  const secret = (env.OLLAMA_CF_ACCESS_CLIENT_SECRET ?? "").trim();
+  // Half a service token is not a service token; sending one header alone just
+  // produces a confusing 403 rather than an obvious misconfiguration.
+  if (id && secret) {
+    headers["CF-Access-Client-Id"] = id;
+    headers["CF-Access-Client-Secret"] = secret;
+  }
+
+  const basic = (env.OLLAMA_BASIC_AUTH ?? "").trim();
+  if (basic.includes(":")) headers.Authorization = `Basic ${toBase64(basic)}`;
+
+  return headers;
+}
+
 export type OllamaTarget = { url: string; model: string };
 
 /**
- * Walk the endpoints in order and return the first that is up and holds a
- * model we can talk to. `listModels` is injected so this stays testable
- * without a network.
+ * Why an endpoint was not used. `unauthorized` is the one worth separating:
+ * it means the server is alive and refusing us, which is a credential to fix,
+ * not a host to wait for.
  */
+export type OllamaEndpointStatus =
+  | "ok"
+  | "unauthorized"
+  | "unreachable"
+  | "no-chat-model";
+
+export type OllamaEndpointReport = {
+  url: string;
+  status: OllamaEndpointStatus;
+  /** The model that would be used, when status is "ok". */
+  model?: string;
+  /** How many models the endpoint listed, when it answered at all. */
+  models?: number;
+};
+
+export type OllamaProbe = { models: string[] | null; status: OllamaEndpointStatus };
+
+export type OllamaResolution = {
+  target: OllamaTarget | null;
+  endpoints: OllamaEndpointReport[];
+};
+
+/**
+ * Walk the endpoints in order and return the first that is up and holds a
+ * model we can talk to, plus a line about each one that did not work.
+ *
+ * Returning the reasons is the point: before this, a 401 from an endpoint we
+ * had just put behind basic auth looked identical to a server that was off,
+ * so the router silently used only the other one and nothing said why.
+ *
+ * `probe` is injected so this stays testable without a network.
+ */
+export async function resolveOllamaEndpoints(
+  endpoints: readonly string[],
+  preferred: string | undefined,
+  probe: (url: string) => Promise<OllamaProbe>,
+): Promise<OllamaResolution> {
+  const reports: OllamaEndpointReport[] = [];
+  let target: OllamaTarget | null = null;
+
+  for (const url of endpoints) {
+    if (target) break; // the rest are untried, not broken; do not report on them
+    const { models, status } = await probe(url);
+    if (!models) {
+      reports.push({ url, status });
+      continue;
+    }
+    const model = pickOllamaModel(models, preferred);
+    if (!model) {
+      reports.push({ url, status: "no-chat-model", models: models.length });
+      continue;
+    }
+    reports.push({ url, status: "ok", model, models: models.length });
+    target = { url, model };
+  }
+
+  return { target, endpoints: reports };
+}
+
+/** The older shape, kept for callers that only need the answer. */
 export async function resolveOllamaTarget(
   endpoints: readonly string[],
   preferred: string | undefined,
   listModels: (url: string) => Promise<string[] | null>,
 ): Promise<OllamaTarget | null> {
-  for (const url of endpoints) {
+  const { target } = await resolveOllamaEndpoints(endpoints, preferred, async (url) => {
     const models = await listModels(url);
-    if (!models) continue; // endpoint down — try the next
-    const model = pickOllamaModel(models, preferred);
-    if (model) return { url, model };
-  }
-  return null;
+    return { models, status: models ? "ok" : "unreachable" };
+  });
+  return target;
 }

@@ -945,7 +945,7 @@ opvragen en chats kunnen draaien op jouw hardware. Dezelfde API kent ook
 wissen. Ik heb daar bewust niets aan veranderd, want AXE Core gebruikt dit
 endpoint actief en ik wil dat niet stilletjes breken.
 
-- [ ] **L15.1** Beide Ollama-endpoints afschermen. Cloudflare Access met een
+- [x] **L15.1 — gedaan, zie L18.** Cloudflare Access met een
   service token is hier de passende vorm: de apps sturen
   `CF-Access-Client-Id` en `CF-Access-Client-Secret` mee, een vreemde komt er
   niet in. Zeg het en ik zet het op, inclusief de headers in de drie apps
@@ -1092,3 +1092,101 @@ Verwacht: `"status":"ok_ollama"` met `ollama_resolved.model` = `llama3.1:8b`.
 - [ ] **L15.1** staat nog: beide Ollama-endpoints zijn open op het internet,
   zonder auth. Ik heb het anoniem vanaf deze container bevestigd. Cloudflare
   Access met een service token is de passende vorm; zeg het en ik zet het op
+
+
+---
+
+## L18 — De deur dicht bij Ollama (2026-10-17)
+
+### Wat er stond toen ik begon
+
+| Endpoint | DNS | Status bij een vreemde |
+|---|---|---|
+| `ollama.axecompanion.com` | A → `217.160.135.111`, **grijze wolk** | **401** (nginx basic auth, door Luka gezet) |
+| `ollama.tradingosapp.com` | CNAME → tunnel `MacMini-Ollama-SSDExtern`, **oranje wolk** | **200, wijd open** |
+| `217.160.135.111:11434` direct | — | timeout (poort dicht) |
+
+Twee dingen die daaruit volgen en die niet voor de hand liggen:
+
+1. **Cloudflare Access kan `ollama.axecompanion.com` niet beschermen.** Die
+   naam staat op grijze wolk, dus het verkeer raakt Cloudflare nooit. Een
+   Access-applicatie erop zetten zou er in het dashboard uitzien alsof hij
+   beschermd is en in werkelijkheid niets doen — precies de soort groene vink
+   waar deze hele audit over gaat. De nginx basic auth die jij erop hebt gezet
+   is daar het juiste middel; die blijft staan.
+2. **Jouw basic auth maakte dat endpoint stil onbruikbaar voor de apps.** De
+   router stuurde geen inloggegevens mee, dus hij kreeg 401 — en een 401 zag er
+   voor hem precies zo uit als een server die uit staat. Companion draaide dus
+   op één endpoint in plaats van twee, zonder dat iets dat zei.
+
+### Wat ik heb gedaan
+
+- [x] **L18.1 Cloudflare Access op `ollama.tradingosapp.com`.** Applicatie
+  `Ollama — Mac Mini (tunnel)`, type self-hosted, twee policies:
+  1. *Companion VPS (IONOS) — bypass*, `212.227.91.79/32`, zodat Companion
+     geen seconde zonder vangnet zat;
+  2. *Service token*, het bestaande token **`Vercel-Ollama`** (bestond al sinds
+     juni, was nog nooit ergens voor gebruikt; loopt af 2027-06-24).
+  `skip_interstitial` staat aan: Ollama is een API, een inlogpagina ervoor zou
+  elke app-call in een HTML-redirect veranderen in plaats van een 403 die de
+  client kan lezen.
+  **Gemeten direct na het aanzetten:** anoniem vanaf deze container →
+  **403 Cloudflare Access**; `https://www.axecompanion.com/api/debug/chat-health`
+  → **nog steeds `ok_ollama`, reachable `true`**. Dicht voor vreemden, open
+  voor ons.
+- [x] **L18.2 De apps kunnen nu een sleutel meesturen.** `ollamaAuthHeaders()`
+  zet `OLLAMA_CF_ACCESS_CLIENT_ID` + `OLLAMA_CF_ACCESS_CLIENT_SECRET` om in de
+  twee `CF-Access-*` headers en `OLLAMA_BASIC_AUTH` (`user:pass`) in een
+  `Authorization: Basic`. Beide gaan naar elk endpoint: Access negeert een
+  Authorization-header die hij niet nodig heeft, nginx negeert de CF-headers.
+  Op alle drie de fetches — `/api/tags`, `/api/chat` en de streamende variant —
+  want een probe die slaagt terwijl de chat 401't is dezelfde bug een laag
+  dieper.
+- [x] **L18.3 Een weigering heet nu een weigering.** De resolver geeft per
+  endpoint terug waarom het er niet werd: `ok` / `unauthorized` /
+  `unreachable` / `no-chat-model`. `chat-health` toont die regels
+  (`ollama_endpoint_status`) en zegt bij een volledige weigering welke
+  variabele je moet zetten in plaats van alleen "geen endpoint werkt".
+
+### Wat jij nog moet doen — twee regels per host
+
+Op **212.227.91.79** in `/root/AXE-COMPANION-OS-/.env.local`, en op de hosts van
+Trading OS en AXE Core:
+
+```
+OLLAMA_CF_ACCESS_CLIENT_ID=<client id van het token Vercel-Ollama>
+OLLAMA_CF_ACCESS_CLIENT_SECRET=<client secret>
+OLLAMA_BASIC_AUTH=<gebruiker>:<wachtwoord van de nginx auth op ollama.axecompanion.com>
+```
+
+Plak die waarden nooit in de chat — alleen in de env-bestanden.
+
+Het **secret** van `Vercel-Ollama` is in juni één keer getoond en daarna nooit
+meer. Heb je het niet meer: Zero Trust → Access → Service Auth → het token →
+**Rotate**, dan zie je een nieuw secret één keer. De policy blijft werken, want
+die verwijst naar het token-ID en niet naar het secret.
+
+Zodra die regels op de Companion-host staan kan de IP-bypass weg en draait
+alles op het token. Zeg het, dan haal ik die policy weg — één call.
+
+### Nog open
+
+- [ ] **L18.4** `OLLAMA_BASIC_AUTH` is nodig vóór Companion weer **twee**
+  endpoints heeft. Nu is `ollama.axecompanion.com` een 401 en draait alles op
+  de Mac Mini; slaapt die, dan valt AXE terug op OpenAI (betaald). Dat is
+  zichtbaar in `chat-health` → `ollama_endpoint_status`
+- [ ] **L18.5 Tunnelopruiming, voor jou om te bevestigen.** Er staan vijf
+  tunnels:
+  - `MacMini-Ollama-SSDExtern` — **healthy**, serveert beide ollama-hostnames
+    plus tradingosapp.com. Dit is de werkende
+  - `ollama-axe` — **healthy, 4 verbindingen, en ontvangt niets**: zijn ingress
+    claimt dezelfde twee ollama-hostnames, maar het DNS van allebei wijst
+    ergens anders heen. Ik kan vanaf hier niet zien op welke machine hij draait,
+    dus ik raak hem niet aan. Draait hij op de IONOS-bak, dan is dit de nette
+    route om `ollama.axecompanion.com` óók achter Access te krijgen: DNS naar
+    `c9ec8547-352e-4c8c-9b7a-aa23d1619647.cfargotunnel.com`, oranje wolk, en de
+    poort hoeft nergens meer open
+  - `hq-os` — **down**. Dit is AXE Core (`localhost:8888`). Hij staat dus uit
+  - `ollama-axecompanion` — **down**, ingress wijst naar een hostname die een
+    A-record is. Dood gewicht
+  - `tunnel to the world` — **down**, geen configuratie

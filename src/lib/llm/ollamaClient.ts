@@ -5,8 +5,11 @@
 import type OpenAI from "openai";
 import type { AxeResponse, AxeToolCall } from "@/services/axeService";
 import {
+  ollamaAuthHeaders,
   parseOllamaEndpoints,
-  resolveOllamaTarget,
+  resolveOllamaEndpoints,
+  type OllamaEndpointReport,
+  type OllamaProbe,
   type OllamaTarget,
 } from "@/lib/llm/ollamaEndpoints";
 
@@ -30,6 +33,7 @@ const PREFERRED_MODEL = process.env.OLLAMA_MODEL ?? "qwen3:4b";
 const TARGET_TTL = 60_000;
 
 let _target: OllamaTarget | null = null;
+let _reports: OllamaEndpointReport[] = [];
 let _targetAt = 0;
 
 function endpoints(): string[] {
@@ -38,28 +42,57 @@ function endpoints(): string[] {
   return configured.length > 0 ? configured : ["http://localhost:11434"];
 }
 
-async function listModels(url: string): Promise<string[] | null> {
+/**
+ * Ask one endpoint what it has.
+ *
+ * 401/403 is reported apart from "down" on purpose. Measured 2026-10-17:
+ * `ollama.axecompanion.com` went behind nginx basic auth and started
+ * answering 401. To this function that used to be indistinguishable from a
+ * dead host, so the router quietly used only the other endpoint — and if that
+ * one had been asleep, every chat would have fallen through to OpenAI with
+ * nothing saying why.
+ */
+async function probeEndpoint(url: string): Promise<OllamaProbe> {
   try {
-    const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(5_000) });
-    if (!res.ok) return null;
+    const res = await fetch(`${url}/api/tags`, {
+      headers: ollamaAuthHeaders(process.env),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (res.status === 401 || res.status === 403) return { models: null, status: "unauthorized" };
+    if (!res.ok) return { models: null, status: "unreachable" };
     const json = (await res.json()) as { models?: Array<{ name?: string }> };
-    return (json.models ?? []).map((m) => m.name ?? "").filter(Boolean);
+    return {
+      models: (json.models ?? []).map((m) => m.name ?? "").filter(Boolean),
+      status: "ok",
+    };
   } catch {
-    return null;
+    return { models: null, status: "unreachable" };
   }
 }
 
 /** The endpoint and model to use now, or null when none can serve a chat. */
 export async function ollamaTarget(force = false): Promise<OllamaTarget | null> {
+  return (await ollamaResolution(force)).target;
+}
+
+/** The same answer, with a line about every endpoint that did not work. */
+export async function ollamaResolution(
+  force = false,
+): Promise<{ target: OllamaTarget | null; endpoints: OllamaEndpointReport[] }> {
   const now = Date.now();
-  if (!force && _target && now - _targetAt < TARGET_TTL) return _target;
-  _target = await resolveOllamaTarget(endpoints(), PREFERRED_MODEL, listModels);
+  if (!force && _target && now - _targetAt < TARGET_TTL) {
+    return { target: _target, endpoints: _reports };
+  }
+  const resolution = await resolveOllamaEndpoints(endpoints(), PREFERRED_MODEL, probeEndpoint);
+  _target = resolution.target;
+  _reports = resolution.endpoints;
   _targetAt = now;
-  return _target;
+  return resolution;
 }
 
 export function invalidateOllamaTarget(): void {
   _target = null;
+  _reports = [];
   _targetAt = 0;
 }
 
@@ -100,7 +133,7 @@ export async function ollamaChat(
   if (!target) throw new Error("Ollama: no endpoint has a usable chat model");
   const res = await fetch(`${target.url}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...ollamaAuthHeaders(process.env) },
     body: JSON.stringify({
       model: target.model,
       // Measured 2026-10-17: qwen3:4b spent its whole token budget in
@@ -146,7 +179,7 @@ export async function ollamaChatStreaming(
   if (!target) throw new Error("Ollama: no endpoint has a usable chat model");
   const res = await fetch(`${target.url}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...ollamaAuthHeaders(process.env) },
     body: JSON.stringify({
       model: target.model,
       think: false,

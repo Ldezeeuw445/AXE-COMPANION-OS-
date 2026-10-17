@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { hasCronSecret } from "@/lib/auth/cronSecret";
-import { ollamaTarget } from "@/lib/llm/ollamaClient";
+import { ollamaResolution } from "@/lib/llm/ollamaClient";
 import { parseOllamaEndpoints } from "@/lib/llm/ollamaEndpoints";
 
 /**
@@ -40,20 +40,24 @@ export async function GET(request: NextRequest) {
      to "qwen3:4b". Two different variables and two different models: the
      health check could be green about an endpoint nothing ever called. It now
      asks the router's own resolver, so "reachable" means a chat would work. */
-  const endpoints = parseOllamaEndpoints({
-    OLLAMA_URL: process.env.OLLAMA_URL,
-    OLLAMA_HOST: process.env.OLLAMA_HOST,
-  });
-  const target = await ollamaTarget(true);
+  const endpoints = parseOllamaEndpoints(process.env);
+  const { target, endpoints: reports } = await ollamaResolution(true);
+  // An endpoint that refuses us is alive and needs a credential, not patience.
+  // It used to be reported the same way as a host that was off.
+  const refused = reports.filter((r) => r.status === "unauthorized");
   const openaiKey = process.env.OPENAI_API_KEY;
   const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
 
   const ollama: ProviderCheck = {
     configured: endpoints.length > 0,
     reachable: target !== null,
-    error: target ? null : endpoints.length === 0
-      ? "OLLAMA_URL is not set"
-      : "no configured endpoint has a model that can chat",
+    error: target
+      ? null
+      : endpoints.length === 0
+        ? "OLLAMA_URL is not set"
+        : refused.length === endpoints.length
+          ? "every endpoint refused us — check OLLAMA_BASIC_AUTH / OLLAMA_CF_ACCESS_*"
+          : "no configured endpoint has a model that can chat",
   };
 
   const [openai] = await Promise.all([
@@ -75,7 +79,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         status,
-        ollama: { configured: ollama.configured, reachable: ollama.reachable },
+        ollama: {
+          configured: ollama.configured,
+          reachable: ollama.reachable,
+          // Not the URL, not the credential — just whether the thing that is
+          // wrong is a credential, which is what a smoke script needs to know.
+          refused: refused.length > 0,
+        },
         openai: { configured: openai.configured, reachable: openai.reachable },
       },
       { status: httpStatus, headers: { "Cache-Control": "no-store" } },
@@ -91,6 +101,15 @@ export async function GET(request: NextRequest) {
         // What a chat would *actually* use right now, which is the only
         // number worth reporting.
         ollama_resolved: target,
+        // One line per endpoint, so "it is not using the fast one" has an
+        // answer instead of a shrug.
+        ollama_endpoint_status: reports,
+        ollama_credentials: {
+          cf_access: Boolean(
+            process.env.OLLAMA_CF_ACCESS_CLIENT_ID && process.env.OLLAMA_CF_ACCESS_CLIENT_SECRET,
+          ),
+          basic_auth: (process.env.OLLAMA_BASIC_AUTH ?? "").includes(":"),
+        },
         openai_key_set: !!openaiKey,
         openai_model: openaiModel,
       },
