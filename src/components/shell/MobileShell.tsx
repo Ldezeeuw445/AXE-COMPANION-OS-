@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AppChrome } from "@/components/shell/AppChrome";
 import { ActiveSessionProvider } from "@/components/session/ActiveSessionProvider";
+import { QuickJournalHost } from "@/components/journal/QuickJournalHost";
 import { DEFAULT_ACTIVE_SESSION, type ActiveSessionState } from "@/lib/session/activeSession";
 import type { ShellViewport } from "@/lib/viewport/shellViewportServer";
 
@@ -17,7 +18,9 @@ export function MobileShell({
 }: MobileShellProps) {
   return (
     <ActiveSessionProvider initialSession={initialSession} initialViewport={initialViewport}>
-      <AppChrome>{children}</AppChrome>
+      <QuickJournalHost>
+        <AppChrome>{children}</AppChrome>
+      </QuickJournalHost>
     </ActiveSessionProvider>
   );
 }

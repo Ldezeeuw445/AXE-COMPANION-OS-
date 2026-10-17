@@ -85,6 +85,10 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "shell/status": "App shell status",
   "squawk/resolve": "Squawk station resolution",
   "vault/save-axe": "Saving an answer you already received",
+  "journal/quick": "Manual journal capture is on Free; auto-journal scoring is the paid feature",
+  "journal/last-close": "Looking up your own last closed trade to prefill a journal",
+  "journal/attachments": "Attaching a photo or voice note to your own journal entry",
+  "journal/transcribe": "Optional STT for a voice note you already recorded",
 
   // Preferences are per-user settings, never a product tier.
   "preferences/alert-armed": "A user preference",

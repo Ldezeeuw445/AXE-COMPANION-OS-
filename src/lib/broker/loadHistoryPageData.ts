@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { sumLedger } from "@/lib/journal/tradePnl";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
 import { getMetaApiCloudAccountById } from "@/lib/mt5/activeCloudAccount";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
@@ -54,6 +55,8 @@ export type HistoryDealRow = {
 export type HistorySummary = {
   totalTrades: number;
   totalPnl: number;
+  totalFees: number;
+  netPnl: number;
   winRate: number;
   avgWin: number | null;
   avgLoss: number | null;
@@ -237,35 +240,17 @@ function dayEndUtc(isoDate: string): string | null {
 }
 
 function buildSummary(trades: BrokerTradeRow[]): HistorySummary {
-  const totalTrades = trades.length;
-  let totalPnl = 0;
-  const winPnls: number[] = [];
-  const lossPnls: number[] = [];
-  for (const t of trades) {
-    totalPnl += t.pnl;
-    if (t.pnl > 0) winPnls.push(t.pnl);
-    else if (t.pnl < 0) lossPnls.push(t.pnl);
-  }
-  const wins = winPnls.length;
-  const losses = lossPnls.length;
-  const decided = wins + losses;
-  const winRate = decided > 0 ? wins / decided : 0;
-  const avgWin =
-    winPnls.length > 0
-      ? winPnls.reduce((a, b) => a + b, 0) / winPnls.length
-      : null;
-  const avgLoss =
-    lossPnls.length > 0
-      ? lossPnls.reduce((a, b) => a + b, 0) / lossPnls.length
-      : null;
+  const ledger = sumLedger(trades);
   return {
-    totalTrades,
-    totalPnl,
-    winRate,
-    avgWin,
-    avgLoss,
-    wins,
-    losses,
+    totalTrades: ledger.tradeCount,
+    totalPnl: ledger.grossPnl,
+    totalFees: ledger.fees,
+    netPnl: ledger.netPnl,
+    winRate: ledger.winRate,
+    avgWin: ledger.avgWin,
+    avgLoss: ledger.avgLoss,
+    wins: ledger.wins,
+    losses: ledger.losses,
   };
 }
 

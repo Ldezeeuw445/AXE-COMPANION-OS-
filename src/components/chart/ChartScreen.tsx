@@ -74,6 +74,11 @@ import type {
   ChartActionResult,
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { useQuickJournal } from "@/components/journal/QuickJournalHost";
+import {
+  captureElementFrame,
+  registerChartFrameCapture,
+} from "@/lib/journal/chartCaptureRegistry";
 import { ChartThemeTogglerButton, CHART_THEME_VIEW_TRANSITION } from "@/components/chart/ChartThemeTogglerButton";
 import { ChartPendingOrderSheet } from "@/components/chart/ChartPendingOrderSheet";
 import { TradePlanLine } from "@/components/chart/TradePlanLine";
@@ -700,6 +705,7 @@ export function ChartScreen({
   const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
+  const { openQuickJournal } = useQuickJournal();
 
   useEffect(() => {
     trackChartPreference("chart_opened", {
@@ -764,6 +770,22 @@ export function ChartScreen({
   const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
   const userDismissedLandscapeRef = useRef(false);
+
+  useEffect(() => {
+    registerChartFrameCapture(async () => {
+      const root = chartFrameRef.current;
+      if (root) {
+        const composed = await captureElementFrame(root);
+        if (composed) return composed;
+      }
+      const shot = canvasRef.current?.takeScreenshot();
+      if (!shot) return null;
+      return await new Promise<Blob | null>((resolve) => {
+        shot.toBlob((blob) => resolve(blob), "image/png");
+      });
+    });
+    return () => registerChartFrameCapture(null);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => {
@@ -2997,8 +3019,13 @@ export function ChartScreen({
           {
             id: "journal",
             label: "Journal this setup",
+            description: "Last close on this symbol — one tap",
             icon: <BookOpen className="h-3.5 w-3.5" />,
-            href: "/journal",
+            onSelect: () =>
+              openQuickJournal({
+                accountId: accountId ?? undefined,
+                symbol: data.symbol,
+              }),
           },
           {
             id: "snapshot",
@@ -3027,6 +3054,8 @@ export function ChartScreen({
     tfLabel,
     overlays.length,
     accountLabel,
+    accountId,
+    openQuickJournal,
     saveSnapshotToVault,
   ]);
 

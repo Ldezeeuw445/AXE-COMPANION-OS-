@@ -20,7 +20,12 @@ export type TradeHighlight = {
   accountId: string;
   symbol: string;
   side: string;
+  volume: number;
+  open_price: number | null;
+  close_price: number | null;
+  open_time: string | null;
   pnl: number;
+  fees: number;
   close_time: string | null;
   label: string | null;
   note: string | null;
@@ -124,7 +129,7 @@ export async function loadJournalPageData(opts: {
   async function buildHighlight(tradeId: string, accountId: string): Promise<TradeHighlight | null> {
     const { data: tr, error: te } = await sb
       .from("broker_trades")
-      .select("id,symbol,side,pnl,close_time")
+      .select("id,symbol,side,volume,open_time,close_time,open_price,close_price,pnl,fees")
       .eq("user_id", userId)
       .eq("account_id", accountId)
       .eq("id", tradeId)
@@ -144,7 +149,12 @@ export async function loadJournalPageData(opts: {
       accountId,
       symbol: tr.symbol as string,
       side: tr.side as string,
+      volume: Number(tr.volume ?? 0) || 0,
+      open_price: tr.open_price != null ? Number(tr.open_price) : null,
+      close_price: tr.close_price != null ? Number(tr.close_price) : null,
+      open_time: (tr.open_time as string | null) ?? null,
       pnl: Number(tr.pnl ?? 0) || 0,
+      fees: Number(tr.fees ?? 0) || 0,
       close_time: (tr.close_time as string | null) ?? null,
       label: (lbl?.label as string | undefined) ?? null,
       note: (lbl?.note as string | undefined) ?? null,
@@ -164,7 +174,7 @@ export async function loadJournalPageData(opts: {
   if (activeAccountId) {
     const { data: tradeRows, error: trErr } = await sb
       .from("broker_trades")
-      .select("id,symbol,side,pnl,close_time")
+      .select("id,symbol,side,volume,open_time,close_time,open_price,close_price,pnl,fees")
       .eq("user_id", userId)
       .eq("account_id", activeAccountId)
       .order("close_time", { ascending: false, nullsFirst: false })
@@ -230,7 +240,12 @@ export async function loadJournalPageData(opts: {
         accountId: activeAccountId,
         symbol: String(tr.symbol ?? ""),
         side: String(tr.side ?? ""),
+        volume: Number(tr.volume ?? 0) || 0,
+        open_price: tr.open_price != null ? Number(tr.open_price) : null,
+        close_price: tr.close_price != null ? Number(tr.close_price) : null,
+        open_time: (tr.open_time as string | null) ?? null,
         pnl: Number(tr.pnl ?? 0) || 0,
+        fees: Number(tr.fees ?? 0) || 0,
         close_time: (tr.close_time as string | null) ?? null,
         label: lb?.label ?? null,
         note: lb?.note ?? null,
@@ -242,7 +257,7 @@ export async function loadJournalPageData(opts: {
     }
 
     analytics = computeJournalAnalytics(
-      journalTrades.map((t) => ({ pnl: t.pnl, label: t.label })),
+      journalTrades.map((t) => ({ pnl: t.pnl, fees: t.fees, label: t.label })),
     );
 
     // Weak spots need volume and open times, which TradeHighlight does not

@@ -11,11 +11,15 @@
  */
 
 import { useRouter } from "next/navigation";
-import { useState, useMemo, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Filter, X } from "lucide-react";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { setLiveStatus, clearLiveStatusScope } from "@/lib/liveStatusBus";
 import { useEffect } from "react";
+import { useQuickJournal } from "@/components/journal/QuickJournalHost";
+import { buildQuickJournalDraft } from "@/lib/journal/quickJournalDraft";
+import { formatSignedMoney, netPnl } from "@/lib/journal/tradePnl";
+import { useActiveSession } from "@/lib/session/activeSessionStore";
 import type {
   BrokerTradeRow,
   HistoryDealRow,
@@ -38,11 +42,7 @@ function fmtPrice(n: number | null, digits = 2) {
 }
 
 function fmtPnl(n: number) {
-  const s = n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return n > 0 ? `+${s}` : s;
+  return formatSignedMoney(n);
 }
 
 function fmtTime(iso: string | null) {
@@ -126,12 +126,10 @@ export function HistoryScreen({
     return qs ? `/history?${qs}` : "/history";
   }
 
-  /* ── Summary totals ────────────────────────────────────────────── */
-  const totalProfit = summary?.totalPnl ?? 0;
-  const totalFees = useMemo(
-    () => trades.reduce((s, t) => s + t.fees, 0),
-    [trades],
-  );
+  /* ── Summary totals — net = gross + signed fees (not abs). ───── */
+  const totalProfit = summary?.totalPnl ?? trades.reduce((s, t) => s + t.pnl, 0);
+  const totalFees = summary?.totalFees ?? trades.reduce((s, t) => s + t.fees, 0);
+  const totalNet = summary?.netPnl ?? netPnl(totalProfit, totalFees);
 
   /* ── No account selected ───────────────────────────────────────── */
   if (!selectedAccountId) {
@@ -305,6 +303,7 @@ export function HistoryScreen({
           trades={trades}
           totalProfit={totalProfit}
           totalFees={totalFees}
+          totalNet={totalNet}
           summary={summary}
         />
       )}
@@ -323,13 +322,18 @@ function PositionsTab({
   trades,
   totalProfit,
   totalFees,
+  totalNet,
   summary,
 }: {
   trades: BrokerTradeRow[];
   totalProfit: number;
   totalFees: number;
+  totalNet: number;
   summary: HistorySummary | null;
 }) {
+  const { openQuickJournal } = useQuickJournal();
+  const session = useActiveSession();
+
   if (trades.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6">
@@ -338,40 +342,61 @@ function PositionsTab({
     );
   }
 
-  const balance = totalProfit - Math.abs(totalFees);
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Scrollable trade list */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {/* Balance header row */}
+        {/* Realized header — net, not a broker cash balance */}
         <div className="flex items-center justify-between border-b border-white/[0.04] px-4 py-2.5">
-          <span className="text-[11px] font-medium text-white/40">Balance</span>
+          <span className="text-[11px] font-medium text-white/40">Realized (net)</span>
           <span
             className={`font-mono text-sm font-bold tabular-nums ${
-              totalProfit >= 0 ? "text-cyan-400" : "text-rose-400"
+              totalNet >= 0 ? "text-cyan-400" : "text-rose-400"
             }`}
           >
-            {fmtPnl(totalProfit)}
+            {fmtPnl(totalNet)}
           </span>
         </div>
 
         {/* Trade rows */}
         {trades.map((t, i) => {
           const digits = priceDigits(t.openPrice);
+          const rowNet = netPnl(t.pnl, t.fees);
           const pnlColor =
-            t.pnl > 0
+            rowNet > 0
               ? "text-cyan-400"
-              : t.pnl < 0
+              : rowNet < 0
                 ? "text-rose-400"
                 : "text-white/40";
           const sideColor =
             t.side === "buy" ? "text-cyan-400/80" : "text-rose-400/80";
 
           return (
-            <div
+            <button
               key={t.id}
-              className={`border-b border-white/[0.04] px-4 py-2.5 ${
+              type="button"
+              data-testid="history-trade-row"
+              onClick={() =>
+                openQuickJournal({
+                  draft: buildQuickJournalDraft(
+                    {
+                      id: t.id,
+                      accountId: t.accountId,
+                      symbol: t.symbol,
+                      side: t.side,
+                      volume: t.volume,
+                      openPrice: t.openPrice,
+                      closePrice: t.closePrice,
+                      openTime: t.openTime,
+                      closeTime: t.closeTime,
+                      pnl: t.pnl,
+                      fees: t.fees,
+                    },
+                    session,
+                  ),
+                })
+              }
+              className={`w-full border-b border-white/[0.04] px-4 py-2.5 text-left ${
                 i % 2 === 1 ? "bg-white/[0.015]" : ""
               }`}
             >
@@ -389,7 +414,7 @@ function PositionsTab({
                   </span>
                 </div>
                 <span className={`font-mono text-[12px] font-bold tabular-nums shrink-0 ${pnlColor}`}>
-                  {fmtPnl(t.pnl)}
+                  {fmtPnl(rowNet)}
                 </span>
               </div>
               {/* Row 2: entry → exit  ·····  timestamp */}
@@ -401,7 +426,7 @@ function PositionsTab({
                   {fmtTime(t.closeTime)}
                 </span>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -409,7 +434,7 @@ function PositionsTab({
       {/* ── Summary footer ────────────────────────────────────────── */}
       <div className="shrink-0 border-t border-white/[0.08] bg-[#0a0a0e] px-4 py-2.5">
         <div className="flex items-center justify-between text-[10px]">
-          <span className="text-white/30">Profit</span>
+          <span className="text-white/30">Gross</span>
           <span
             className={`font-mono font-semibold tabular-nums ${
               totalProfit >= 0 ? "text-cyan-400" : "text-rose-400"
@@ -420,12 +445,22 @@ function PositionsTab({
         </div>
         {totalFees !== 0 && (
           <div className="mt-1 flex items-center justify-between text-[10px]">
-            <span className="text-white/30">Commission</span>
+            <span className="text-white/30">Fees (signed)</span>
             <span className="font-mono tabular-nums text-white/40">
-              {fmtPnl(-Math.abs(totalFees))}
+              {fmtPnl(totalFees)}
             </span>
           </div>
         )}
+        <div className="mt-1 flex items-center justify-between text-[10px]">
+          <span className="text-white/30">Net</span>
+          <span
+            className={`font-mono font-semibold tabular-nums ${
+              totalNet >= 0 ? "text-cyan-400" : "text-rose-400"
+            }`}
+          >
+            {fmtPnl(totalNet)}
+          </span>
+        </div>
         {summary && (
           <div className="mt-1 flex items-center justify-between text-[10px]">
             <span className="text-white/30">
