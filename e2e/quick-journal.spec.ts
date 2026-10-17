@@ -13,8 +13,8 @@ test.describe("quick journal", () => {
     await expect(sheet).toBeVisible();
     await expect(page.getByTestId("quick-journal-symbol")).toHaveText("XAUUSD");
     await expect(page.getByTestId("quick-journal-direction")).toHaveText("Sell");
-    await expect(page.getByTestId("quick-journal-entry")).toContainText("2651");
-    await expect(page.getByTestId("quick-journal-exit")).toContainText("2644");
+    await expect(page.getByTestId("quick-journal-entry")).toHaveText(/2,?651\.20/);
+    await expect(page.getByTestId("quick-journal-exit")).toHaveText(/2,?644\.80/);
     await expect(page.getByTestId("quick-journal-pnl")).toContainText("62.60");
     await expect(page.getByTestId("quick-journal-account")).toContainText("Probe Live");
     await expect(page.getByTestId("quick-journal-axe-draft")).toContainText("Held the plan");

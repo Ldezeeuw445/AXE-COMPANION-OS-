@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Camera, ImageIcon, Mic, Square, X } from "lucide-react";
 import {
@@ -85,12 +85,12 @@ export function QuickJournalSheet({ draft: incoming, persist = true, onClose, on
   const axeText = draft.axe.explanation || draft.axe.axeNote;
   const canSave = Boolean(label || note.trim() || pending.length > 0);
 
-  const addPending = useCallback((kind: JournalAttachmentKind, file: File, transcript?: string | null) => {
+  function addPending(kind: JournalAttachmentKind, file: File, transcript?: string | null) {
     setPending((prev) => [
       ...prev,
       { id: `${kind}-${Date.now()}-${prev.length}`, kind, file, transcript: transcript ?? null },
     ]);
-  }, []);
+  }
 
   const stopRecognition = () => {
     try {
@@ -101,7 +101,7 @@ export function QuickJournalSheet({ draft: incoming, persist = true, onClose, on
     recognitionRef.current = null;
   };
 
-  const startVoice = useCallback(async () => {
+  async function startVoice() {
     if (recording) {
       recorderRef.current?.stop();
       return;
@@ -175,9 +175,9 @@ export function QuickJournalSheet({ draft: incoming, persist = true, onClose, on
     } catch {
       setStatus("Microphone permission was denied.");
     }
-  }, [addPending, persist, recording]);
+  }
 
-  const captureChart = useCallback(async () => {
+  async function captureChart() {
     setStatus("Capturing chart…");
     const blob = await captureRegisteredChartFrame();
     if (!blob) {
@@ -186,14 +186,15 @@ export function QuickJournalSheet({ draft: incoming, persist = true, onClose, on
     }
     addPending("chart", new File([blob], `chart-${Date.now()}.png`, { type: "image/png" }));
     setStatus("Chart snapshot attached.");
-  }, [addPending]);
+  }
 
-  const save = useCallback(async () => {
+  async function save() {
     if (!canSave || busy) return;
     setBusy(true);
     setStatus(null);
 
     const payload = {
+      kind: "save" as const,
       tradeId: draft.tradeId,
       accountId: draft.accountId,
       label,
@@ -297,7 +298,7 @@ export function QuickJournalSheet({ draft: incoming, persist = true, onClose, on
     setStatus(saveState === "queued" || fileState === "queued" ? "Saved locally — will upload when you are back online." : "Saved.");
     onSaved?.();
     window.setTimeout(onClose, persist ? 700 : 400);
-  }, [busy, canSave, draft.accountId, draft.tradeId, label, note, onClose, onSaved, pending, persist]);
+  }
 
   return (
     <BodyPortal>

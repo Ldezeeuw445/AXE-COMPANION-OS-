@@ -704,25 +704,8 @@ export function ChartScreen({
   const [livePositionsCount, setLivePositionsCount] = useState<number>(data.totalPositions);
   const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
-  const chartFrameRef = useRef<HTMLDivElement>(null);
   const lastReactPriceAt = useRef<number>(0);
   const { openQuickJournal } = useQuickJournal();
-
-  useEffect(() => {
-    registerChartFrameCapture(async () => {
-      const root = chartFrameRef.current;
-      if (root) {
-        const composed = await captureElementFrame(root);
-        if (composed) return composed;
-      }
-      const shot = canvasRef.current?.takeScreenshot();
-      if (!shot) return null;
-      return await new Promise<Blob | null>((resolve) => {
-        shot.toBlob((blob) => resolve(blob), "image/png");
-      });
-    });
-    return () => registerChartFrameCapture(null);
-  }, []);
 
   useEffect(() => {
     trackChartPreference("chart_opened", {
@@ -787,6 +770,22 @@ export function ChartScreen({
   const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
   const userDismissedLandscapeRef = useRef(false);
+
+  useEffect(() => {
+    registerChartFrameCapture(async () => {
+      const root = chartFrameRef.current;
+      if (root) {
+        const composed = await captureElementFrame(root);
+        if (composed) return composed;
+      }
+      const shot = canvasRef.current?.takeScreenshot();
+      if (!shot) return null;
+      return await new Promise<Blob | null>((resolve) => {
+        shot.toBlob((blob) => resolve(blob), "image/png");
+      });
+    });
+    return () => registerChartFrameCapture(null);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => {
@@ -3341,7 +3340,6 @@ export function ChartScreen({
 
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
-        ref={chartFrameRef}
         className={`relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden select-none md:min-h-[420px] md:rounded-none ${
           chartTheme.isDark ? "border-t border-white/[0.08]" : ""
         }`}
