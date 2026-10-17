@@ -1,26 +1,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { internalPushHeaders } from "@/lib/push/internalPushAuth";
-import { getPublicAppBaseUrl } from "@/lib/env";
+import { dispatchPushEvent } from "@/lib/push/dispatch";
+import { type PushCategory } from "@/lib/push/categories";
 
 async function fireFeedPush(
   userId: string,
   title: string,
   body: string,
   url: string,
+  eventKey: string,
+  category: PushCategory = "axe_finding",
 ): Promise<void> {
   try {
-    const baseUrl = getPublicAppBaseUrl();
-
-    await fetch(`${baseUrl}/api/push/send`, {
-      method: "POST",
-      headers: internalPushHeaders(),
-      body: JSON.stringify({
-        userId,
-        title: `AXE · ${title}`,
-        body: body.length > 180 ? `${body.slice(0, 177)}…` : body,
-        url,
-        tag: `feed-${Date.now()}`,
-      }),
+    await dispatchPushEvent({
+      userId,
+      category,
+      eventKey: `feed:${eventKey}`,
+      title: `AXE · ${title}`,
+      body,
+      url,
+      tag: `feed-${eventKey}`,
     });
   } catch {
     /* best-effort */
@@ -35,7 +33,7 @@ export async function recordProactiveFeedEvent(
   title: string,
   body: string,
   url: string,
-  opts?: { push?: boolean },
+  opts?: { push?: boolean; category?: PushCategory },
 ): Promise<boolean> {
   const { error } = await supabase.from("axe_proactive_events").insert({
     user_id: userId,
@@ -51,7 +49,7 @@ export async function recordProactiveFeedEvent(
   }
 
   if (opts?.push !== false) {
-    void fireFeedPush(userId, title, body, url);
+    void fireFeedPush(userId, title, body, url, eventKey, opts?.category ?? "axe_finding");
   }
 
   return true;
