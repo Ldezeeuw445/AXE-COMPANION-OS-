@@ -21,6 +21,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 
 import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP } from "../src/lib/billing/tiers.ts";
+import { INTEL_ACTION_SOURCE } from "../src/lib/intel/intelSources.ts";
 import {
   ECOSYSTEM_APPS,
   PUBLIC_ECOSYSTEM_APPS,
@@ -68,6 +69,51 @@ check("it does name the free intel sources that do work", () => {
   for (const source of ["SEC EDGAR", "GDELT"]) {
     assert.ok(landing.includes(source), `${source} should be named instead`);
   }
+});
+
+check("the FAQ's 'not subscribed' list matches INTEL_ACTION_SOURCE", () => {
+  // The page said Senate trades needed Unusual Whales for as long as that was
+  // true. It stayed on the page after the feed moved to Alpha Vantage, so the
+  // landing was telling visitors a working feature was unavailable. The two
+  // sides are now checked against each other.
+  const faq = landing.slice(landing.indexOf("Which market intelligence"));
+  // Start at the answer, not the question: the question's own closing `",`
+  // would otherwise end the slice before a single claim had been read.
+  const body = faq.slice(faq.indexOf('a: "') + 4);
+  const answer = body.slice(0, body.indexOf('",'));
+  assert.ok(answer.length > 200, "the intel answer did not parse out of the FAQ");
+  const label = {
+    darkPoolPrints: "dark-pool prints",
+    unusualOptions: "options flow",
+    marketTide: "market tide",
+    senateTrades: "congressional",
+  };
+  // The answer has two halves: the sentence listing what is live, and the one
+  // ending in "we have not bought". Which half a feed is named in is the claim.
+  const uwAt = answer.indexOf("need a paid Unusual Whales");
+  assert.ok(uwAt > 0, "the answer must still disclose what Unusual Whales gates");
+  const split = answer.lastIndexOf(". ", uwAt) + 1;
+  const live = answer.slice(0, split).toLowerCase();
+  const paywalled = answer.slice(split).toLowerCase();
+
+  for (const [action, source] of Object.entries(INTEL_ACTION_SOURCE)) {
+    const name = label[action]?.toLowerCase();
+    if (!name) continue;
+    if (source === "unusual_whales") {
+      assert.ok(paywalled.includes(name), `${action} needs UW; say so in the disclosure`);
+      assert.ok(!live.includes(name), `${action} is not live; it must not be listed as such`);
+    } else {
+      assert.ok(
+        !paywalled.includes(name),
+        `${action} runs on "${source}" now — the FAQ must not list it behind Unusual Whales`,
+      );
+      assert.ok(live.includes(name), `${action} works; the FAQ should say so`);
+    }
+  }
+  assert.ok(
+    /Alpha Vantage/.test(answer),
+    "the congress feed has a free source now; name it so the claim is checkable",
+  );
 });
 
 // ── pricing comes from the source of truth ───────────────────────────────
@@ -228,9 +274,11 @@ check("a surface that is not open yet says so", () => {
 });
 
 check("nothing links out to a surface that is down", () => {
-  // tradingosapp.com answers 402 (DEPLOYMENT_DISABLED) on both the apex and
-  // www while it moves off Vercel. A switcher that hands a visitor that page
-  // is worse than one that says the terminal is between hosts.
+  // The gate exists because tradingosapp.com answered 402
+  // (DEPLOYMENT_DISABLED) on both the apex and www for days while it moved
+  // off Vercel. A switcher that hands a visitor that page is worse than one
+  // that says the terminal is between hosts. The gate stays whether or not
+  // anything is down today — the next outage should not need new code.
   assert.ok(
     switcher.includes("if (!isReachable(app.availability))"),
     "the switcher must render an unreachable surface as text, not a link",
@@ -249,10 +297,24 @@ check("nothing links out to a surface that is down", () => {
       "a hardcoded one left the page saying 'Private beta' while the switcher " +
       "said 'Moving hosts'",
   );
-  // And the gate has to actually bite for the one surface that is down today.
+});
+
+check("Trading OS is linked again now that its own host answers", () => {
+  // Measured 2026-10-17 after the DNS moved to our Cloudflare Tunnel:
+  //   https://tradingosapp.com      -> 200
+  //   https://www.tradingosapp.com  -> 200
+  // So the two landings link to each other in both directions again. If this
+  // ever has to go back to "offline", the gate above is what carries it.
+  const tos = ecosystemApp("trading-os");
+  assert.equal(tos.availability, "beta", "invite-only, but up and linkable");
+  assert.ok(isReachable(tos.availability), "the switcher must link out again");
+  assert.equal(availabilityLabel(tos.availability), "Private beta");
+  // The page's "between hosts" fallback copy must not be what a visitor reads
+  // while the terminal is actually up.
   assert.ok(
-    !isReachable(ecosystemApp("trading-os").availability),
-    "Trading OS is 402 right now; flip it back to beta when the new host answers 200",
+    !landing.includes("Trading OS is between hosts right now") ||
+      isReachable(tos.availability),
+    "that line may only render for a surface that is genuinely down",
   );
 });
 

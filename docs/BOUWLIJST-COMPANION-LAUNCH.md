@@ -869,3 +869,179 @@ geen moment waarop het record ontbreekt.
   de bundel door nginx serveerde
 - [ ] **L14.2** Daarna `availability` in `src/lib/ecosystem/apps.ts` en in
   `the-one` van `"offline"` naar `"beta"`
+
+## L15 — Ollama: het gratis vangnet was aanwezig en kapot
+
+Jouw vraag was of alle drie de apps Ollama kunnen gebruiken als gratis
+fallback. Het antwoord was ja — maar drie dingen eronder waren stuk, en alle
+drie op dezelfde manier: een groen vinkje dat niets betekende.
+
+### Wat er mis was, gemeten op 2026-10-17
+
+**1. De twee hostnames waren gekruist.** `ollama.axecompanion.com` stond in de
+tunnel-ingress maar zijn DNS wees naar server `217.160.135.111`, dus die regel
+werd nooit gebruikt. `ollama.tradingosapp.com` wees mét DNS naar de tunnel
+maar stond *niet* in de ingress, dus viel in de catch-all: **404**.
+
+**2. Het geconfigureerde model bestond niet.** `ollama.axecompanion.com`
+antwoordt op `/api/tags` met twaalf modellen — `qwen3:4b`, het default van de
+router, zit er niet bij. `ollamaHealth()` keek alleen of `/api/tags` 200 gaf.
+Dus `chat-health` meldde `ok_ollama` terwijl élke chat terugkwam met
+`{"error":"model 'qwen3:4b' not found"}` en stil naar OpenAI viel. En dat is
+precies het pad dat eerder dit onderzoek doodliep toen OpenAI geen credits
+meer had: het vangnet hing er, maar met een gat erin.
+
+**3. De healthcheck las een ándere variabele.** De route las
+`OLLAMA_BASE_URL` met default `llama3.2`; de router leest `OLLAMA_URL` /
+`OLLAMA_HOST` met default `qwen3:4b`. Twee variabelen, twee modellen: groen
+over een endpoint waar niets ooit heen ging.
+
+### Wat er nu staat
+
+- `ollama.tradingosapp.com` toegevoegd aan de tunnel-ingress. Gaf daarna 403
+  — Ollama weigert een `Host` die niet localhost is — opgelost met
+  `httpHostHeader` in cloudflared, dus er hoefde niets op de Mac te wijzigen.
+  **Nu 200 met tien modellen**, waaronder `gemma4:latest` (9,6 GB),
+  `deepseek-r1:8b`, `llama3.1:8b` en de embedders `bge-m3` en
+  `nomic-embed-text`
+- `src/lib/llm/ollamaEndpoints.ts`: `OLLAMA_URL` mag nu een **lijst** zijn, op
+  volgorde. Het model is een *voorkeur*: staat hij er niet, dan pakt hij er
+  een die er wél is in plaats van te falen. Embedding-modellen worden nooit
+  gekozen om mee te chatten — een endpoint met alleen embedders is bereikbaar
+  en nutteloos, en dat moet doorschuiven naar het volgende
+- `ollamaHealth()` betekent nu "een chat zou lukken", niet "de server gaf 200"
+- `chat-health` gebruikt dezelfde resolver en rapporteert wat er écht gekozen
+  wordt
+
+### Drie dingen die ik onderweg tegenkwam en ook heb opgelost
+
+- **`qwen3:4b` is een denkmodel.** Hij stopte zijn hele tokenbudget in
+  `thinking` en gaf `content: ""` terug met `done_reason: "length"`. AXE zou
+  een leeg bericht hebben getoond. Nu gaat `think: false` mee op elke call
+- **Een leeg antwoord is een fout, geen antwoord.** Het werd teruggegeven als
+  geldige tekst; nu gooit hij, zodat de router doorvalt naar een provider die
+  wél werkt
+- **Cloudflare 524.** Een koude `llama3.1:8b` (4,9 GB) duurde 125 seconden en
+  de proxy kapte hem af met HTML in plaats van JSON. De niet-streamende call
+  geeft nu op bij 90 s, onder de ~100 s van de proxy, zodat er nog tijd is om
+  terug te vallen. Let op: `ollama.axecompanion.com` staat op **grijs wolkje**
+  en heeft die limiet niet; `ollama.tradingosapp.com` is proxied en wel
+
+### Eind-tot-eind gemeten
+
+| Endpoint | Gekozen model | Antwoord |
+|---|---|---|
+| `ollama.axecompanion.com` | `llama3.1:8b` (zelf gekozen, `qwen3:4b` bestaat daar niet) | "Effortlessly" |
+| `ollama.tradingosapp.com` | `qwen3:4b` met `think:false` | gevulde `content` |
+
+### ⚠️ Eén ding dat je moet weten
+
+**Beide endpoints staan volledig open op het internet, zonder enige
+authenticatie.** Ik heb vanaf een cloudcontainer anoniem `/api/tags` kunnen
+opvragen en chats kunnen draaien op jouw hardware. Dezelfde API kent ook
+`/api/pull` en `/api/delete` — iedereen die het adres kent kan je modellen
+wissen. Ik heb daar bewust niets aan veranderd, want AXE Core gebruikt dit
+endpoint actief en ik wil dat niet stilletjes breken.
+
+- [ ] **L15.1** Beide Ollama-endpoints afschermen. Cloudflare Access met een
+  service token is hier de passende vorm: de apps sturen
+  `CF-Access-Client-Id` en `CF-Access-Client-Secret` mee, een vreemde komt er
+  niet in. Zeg het en ik zet het op, inclusief de headers in de drie apps
+- [ ] **L15.2** `OLLAMA_URL` op de Companion-host naar beide endpoints zetten,
+  komma-gescheiden: eerst `https://ollama.axecompanion.com` (altijd aan, geen
+  proxy-limiet), dan `https://ollama.tradingosapp.com` (de Mac Mini, grotere
+  modellen). `OLLAMA_MODEL` mag je leeg laten — dan kiest hij zelf
+  `llama3.1:8b`, wat op beide staat. Zet hem **niet** op `qwen3:4b`: dat is
+  een denkmodel en antwoordt rommelig
+- [ ] **L15.3** Trading OS en AXE Core naar dezelfde twee hostnames laten
+  wijzen, dan heeft elke app hetzelfde vangnet
+
+---
+
+## L16 — De landingspagina van Companion afgemaakt (2026-10-17)
+
+Aanleiding: `tradingosapp.com` geeft sinds de DNS-verhuizing naar onze eigen
+Cloudflare Tunnel weer 200 op apex én www, dus de twee landingspagina's kunnen
+weer naar elkaar linken. Bij het nalopen van `/` kwamen vier dingen boven die
+er wél stonden maar niet deden wat ze beloofden.
+
+- [x] **L16.1 De wachtlijst verzamelde niets.** `LandingWaitlist` schreef het
+  adres naar `localStorage` en zette dan "You're on the list — thank you." Geen
+  tabel, geen endpoint, geen mail. Elk adres dat sinds de livegang is ingevuld
+  is weg, terwijl `PrivacyPageContent` "waitlist communication" belooft.
+  - `supabase/migrations/20261017120000_marketing_waitlist.sql` —
+    `marketing_waitlist`, RLS aan **zonder policies**: geen enkele browser-client
+    kan lezen of schrijven. Uniek index op `lower(email)`.
+  - `POST /api/waitlist` — service-role insert, validatie, 5 signups per uur per
+    IP, 503 wanneer de service-role key ontbreekt (liever eerlijk stuk dan een
+    bedankje zonder opslag). 23505 telt als succes: twee keer inschrijven is
+    geen foutmelding.
+  - Het formulier zegt pas dank u als de server ja zei; een netwerkfout is een
+    fout, geen bedankje.
+  - `scripts/verify-waitlist.mjs`, 12 checks.
+  - Nog te doen: er gaat nog geen mail uit. De adressen staan nu veilig in de
+    database tot je besluit waarmee je ze mailt.
+- [x] **L16.2 De FAQ noemde Senate trades achter Unusual Whales.** Die feed
+  draait sinds L13 op Alpha Vantage. De pagina vertelde bezoekers dus dat een
+  werkende functie onbeschikbaar was. De claim wordt nu vergeleken met
+  `INTEL_ACTION_SOURCE`, dus hij kan niet opnieuw verlopen.
+- [x] **L16.3 De hero-mock sneed zijn eigen tabbalk af.** `.layout` in
+  `public/hero-demo/app.html` rekende met `calc(100% - 68px)`, de hoogte van de
+  standaard topbar — maar in het telefoonframe is die 96px (hij moet onder de
+  notch van de bezel door). De mock was dus 28px te hoog en de onderste tabrij
+  viel half buiten het scherm. Nu vult de layout wat er over is. De grafiek
+  vult ook de dode zwarte band die onder de BUY-knop stond.
+- [x] **L16.4 De iPad was onleesbaar op telefoons.** Onder 1100px kregen iPhone
+  en iPad allebei `min(390px, 86vw)`. De iPad tekent zijn mock op 1024 logische
+  px: gemeten 0.30 schaal op 390px, 0.36 op 768px. Aparte caps per apparaat, en
+  onder 640px staat de iPad uit — daar is geen breedte waarop hij leesbaar is.
+- [x] **L16.5** Trading OS van `offline` naar `beta` in
+  `src/lib/ecosystem/apps.ts`; switcher en "Go to Trading OS" linken weer.
+- [x] **L16.6** Tien feature-tegels lieten er één alleen achter op de laatste
+  rij van drie; de laatste (het platformverhaal, geen feature) is nu de volle
+  breedte. En "Open on your phone" stond twee keer onder elkaar.
+
+### L16.7 — De switcher op tradingosapp.com doet niets (open)
+
+Gemeten op de live site, 2026-10-17: het menu linksboven ("AXE INTELLIGENT
+TERMINAL") opent, toont beide rijen, maar beide rijen zijn `<button>` zonder
+`href` en navigeren nergens heen — ook de rij "AXE Companion · Mobile command
+center · axecompanion.com" niet. De CTA **"Explore AXE Companion"** lager op de
+pagina is wél een echte `<a href="https://www.axecompanion.com">` en werkt.
+
+Die component staat niet in `Ldezeeuw445/the-one` — niet op `main`, niet op
+`claude/landing-app-switcher`. De strings "AXE INTELLIGENT TERMINAL" en
+"Mobile command center" komen alleen in de gedeployde bundel voor. De live site
+is dus gebouwd uit een nieuwere lokale versie die nooit gepusht is.
+
+De branch `claude/landing-app-switcher` heeft wél een werkende switcher
+(`src/components/landing/AppSwitcher.tsx`, rendert een `<a>`). Opnieuw
+deployen met die branch zou de switcher repareren maar ook de nieuwere
+landingspagina terugdraaien — dat is jouw keuze, niet de mijne:
+
+```bash
+REF=claude/landing-app-switcher bash scripts/deploy-vps-tradingos.sh
+```
+
+Beter: push de lokale versie die nu live staat, dan repareer ik de switcher
+daarin zonder iets anders kwijt te raken.
+
+### L15.2 — nog te doen, en ik kan er niet bij
+
+Deze container heeft geen `ssh`, dus ik kan de env-variabele niet zelf op de
+VPS zetten. Op `212.227.91.79`, in `/root/AXE-COMPANION-OS-/.env.local`
+(er is geen `EnvironmentFile`, zie `docs/VPS-RUNBOOK.md`):
+
+```
+OLLAMA_URL=https://ollama.axecompanion.com,https://ollama.tradingosapp.com
+```
+
+`OLLAMA_MODEL` leeg laten. Daarna `systemctl restart axe-companion` en
+controleren met:
+
+```bash
+curl -s -H "Authorization: Bearer $CRON_SECRET" \
+  https://www.axecompanion.com/api/debug/chat-health | jq .
+```
+
+Verwacht: `"status":"ok_ollama"` met `ollama_resolved.model` = `llama3.1:8b`.

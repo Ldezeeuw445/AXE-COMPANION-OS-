@@ -29,6 +29,8 @@
       box-shadow: 0 32px 72px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.06);
       overflow: hidden;
       position: relative;
+      display: flex;
+      flex-direction: column;
     }
 
     .device.mobile { width: min(440px, 96vw); height: min(880px, 95vh); border-radius: 36px; }
@@ -72,6 +74,7 @@
     }
 
     .topbar {
+      flex: 0 0 auto;
       height: 68px;
       border-bottom: 1px solid var(--line);
       display: flex;
@@ -86,7 +89,13 @@
     .brand { font-size: 13px; letter-spacing: .2em; text-transform: uppercase; color: rgba(232,244,255,.9); }
     .status { margin-left: auto; font-size: 11px; border: 1px solid rgba(65,220,255,.35); color: rgba(65,220,255,.95); border-radius: 999px; padding: 6px 10px; background: rgba(65,220,255,.08); }
 
-    .layout { height: calc(100% - 68px); display: grid; grid-template-columns: 1fr; }
+    /* Measured 2026-10-17 in the hero: this used to be
+       `height: calc(100% - 68px)`, the default top bar's height. In the hero's
+       phone frame the top bar is 96px (it has to clear the bezel's notch), so
+       the mock came out 28px taller than the screen it sits in and the bottom
+       tab row was sliced in half. Filling the leftover space instead of
+       subtracting a guess means the top bar can be any height. */
+    .layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr; }
     .device.tablet .layout { grid-template-columns: 74px 1fr; }
 
     .sidebar {
@@ -113,9 +122,27 @@
 
     .main { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
 
-    .screen-wrap { min-height: 0; overflow: auto; }
+    .screen-wrap { min-height: 0; overflow: auto; display: grid; }
     .screen { display: none; padding: 14px; }
-    .screen.active { display: block; }
+    .screen.active { display: flex; flex-direction: column; min-height: 0; }
+
+    /* The hero hands each frame a real device's full height (390x844, 1024x768),
+       which is taller than the chart screen's content — so the first thing a
+       visitor saw under the BUY button was a dead black band a third of the
+       phone high. The chart takes that space instead; it is the one element on
+       the screen that is better for being bigger. */
+    .screen.active[data-screen="chart"] .chart-card {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .screen.active[data-screen="chart"] .chart-canvas {
+      flex: 1 1 0;
+      height: auto;
+      min-height: 180px;
+    }
 
     .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
     .chip {

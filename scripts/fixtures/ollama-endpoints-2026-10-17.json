@@ -1,0 +1,17 @@
+{
+  "captured": "2026-10-17",
+  "note": "Echte /api/tags van beide endpoints, live opgehaald. Niet verzonnen.",
+  "endpoints": {
+    "https://ollama.axecompanion.com": [
+      "qwen3.5:2b", "hermes3:8b", "llama3.1:8b-16k", "deepseek-coder-v2:16b",
+      "qwen2.5-coder:14b", "nomic-embed-text:latest", "qwen2.5-coder:7b",
+      "deepseek-coder:6.7b", "mistral:latest", "llama3:latest",
+      "llama3.1:8b", "llama3.2:3b"
+    ],
+    "https://ollama.tradingosapp.com": [
+      "bge-m3:latest", "nomic-embed-text:latest", "gemma4:e2b-mlx",
+      "qwen3.5:4b", "qwen3.5:2b", "gemma4:latest", "qwen3:4b",
+      "deepseek-r1:8b", "llama3.1:8b", "qwen2.5-coder:7b"
+    ]
+  }
+}

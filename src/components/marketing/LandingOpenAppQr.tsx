@@ -10,7 +10,9 @@ export function LandingOpenAppQr() {
   if (isLocal) {
     return (
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-6 text-center">
-        <p className="text-sm font-medium text-white">Open on your phone</p>
+        {/* The section above already has the "Open on your phone" heading; this
+            card said it a second time, right under it. */}
+        <p className="text-sm font-medium text-white">No QR in this build</p>
         <p className="mt-2 text-xs text-tos-muted">
           Set <code className="rounded bg-white/10 px-1 text-[11px]">NEXT_PUBLIC_APP_URL</code> to{" "}
           <code className="rounded bg-white/10 px-1 text-[11px]">https://www.axecompanion.com</code>{" "}
