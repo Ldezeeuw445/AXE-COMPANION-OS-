@@ -21,6 +21,7 @@ import {
   isSourceAvailable,
   INTEL_ACTION_SOURCE,
 } from "../src/lib/intel/intelSources.ts";
+import { INTEL_QUICK_ACTIONS } from "../src/lib/intel/intelQuickActions.ts";
 
 let passed = 0;
 function check(name, fn) {
@@ -136,6 +137,85 @@ check("senateTrades is off Unusual Whales and onto a free source", () => {
   );
   // And the UW switch must not accidentally gate it any more.
   assert.equal(actionAvailability("senateTrades", { UNUSUAL_WHALES_ENABLED: "true" }).available, false);
+});
+
+// ── no quick action may be a dead end ────────────────────────────────────
+const quickHook = readFileSync(
+  new URL("../src/lib/intel/useIntelQuickActions.ts", import.meta.url),
+  "utf8",
+);
+const composers = [
+  "src/components/chat/Composer.tsx",
+  "src/components/chat/IntelTerminalComposer.tsx",
+].map((f) => [f, readFileSync(new URL(`../${f}`, import.meta.url), "utf8")]);
+
+check("every quick action names a feed that exists", () => {
+  for (const q of INTEL_QUICK_ACTIONS) {
+    assert.ok(
+      q.requires in INTEL_ACTION_SOURCE,
+      `"${q.label}" requires "${q.requires}", which is not an intel action`,
+    );
+  }
+});
+
+check("the composers render the filtered list, never the raw one", () => {
+  // "Market Tide" sat in every intel user's composer while the Unusual Whales
+  // subscription behind it was never bought: a button whose only outcome was
+  // "not configured". `requires` recorded the link for months; this is the
+  // filter that reads it.
+  for (const [file, src] of composers) {
+    assert.ok(
+      src.includes("useIntelQuickActions()"),
+      `${file} must read availability before offering a shortcut`,
+    );
+    assert.ok(
+      !/INTEL_QUICK_ACTIONS\.map/.test(src),
+      `${file} still maps the unfiltered list`,
+    );
+  }
+});
+
+check("a failed availability call leaves the shortcuts alone", () => {
+  // Hiding every shortcut because one fetch timed out is worse than the dead
+  // end this filter removes, so an empty answer must be a no-op.
+  assert.ok(
+    /Object\.keys\(map\)\.length === 0\) return/.test(quickHook),
+    "an empty map means the call failed, not that everything is off",
+  );
+  assert.ok(
+    /map\[q\.requires\] !== false/.test(quickHook),
+    "an action the server did not mention must stay visible",
+  );
+  assert.ok(
+    /useState<readonly IntelQuickAction\[\]>\(INTEL_QUICK_ACTIONS\)/.test(quickHook),
+    "the first paint must match the server markup",
+  );
+});
+
+check("the health route reports availability and its real providers", () => {
+  const route = readFileSync(
+    new URL("../src/app/api/intel-chat/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(route.includes("actionAvailability("), "the GET must compute availability");
+  assert.ok(/actions,/.test(route), "and return it as `actions`");
+  assert.ok(
+    !/providers: \["ollama", "openai"\]/.test(route),
+    "it used to claim both providers whether or not either was configured",
+  );
+  assert.ok(
+    route.includes("parseOllamaEndpoints(process.env).length > 0"),
+    "ollama is only a provider when an endpoint is configured",
+  );
+});
+
+// Market Tide is the live example: with nothing configured it must disappear.
+check("Market Tide drops out while Unusual Whales is unsubscribed", () => {
+  const tide = INTEL_QUICK_ACTIONS.find((q) => q.label === "Market Tide");
+  assert.ok(tide, "the example this filter was written for must still exist");
+  assert.equal(INTEL_ACTION_SOURCE[tide.requires], "unusual_whales");
+  assert.equal(actionAvailability(tide.requires, OFF).available, false);
+  assert.equal(actionAvailability(tide.requires, ON).available, true, "and come back when it is bought");
 });
 
 console.log(`\n${passed} checks passed`);

@@ -12,7 +12,7 @@
  */
 
 import { Suspense, useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
-import { INTEL_QUICK_ACTIONS } from "@/lib/intel/intelQuickActions";
+import { useIntelQuickActions } from "@/lib/intel/useIntelQuickActions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -112,6 +112,8 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
   const recognitionRef = useRef<any>(null);
   // Opened from the mic click so the browser still sees a user gesture.
   const beamMic = useMicrophone();
+  // Only the intel shortcuts whose feed exists; see useIntelQuickActions.
+  const quickActions = useIntelQuickActions();
 
   const focusDraft = useCallback((draft: string) => {
     const el = textareaRef.current;
@@ -543,7 +545,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
                 />
                 {intelMode ? (
                   <div className="-mx-1 mb-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {INTEL_QUICK_ACTIONS.map((q) => (
+                    {quickActions.map((q) => (
                       <button
                         key={q.label}
                         type="button"

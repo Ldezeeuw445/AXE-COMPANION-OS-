@@ -53,7 +53,85 @@ export interface ChartThemeConfig {
   orderSell: string;
   /** Dark theme? Used by overlays to pick text/bg colors. */
   isDark: boolean;
+  /** Colors for the indicator panes under the chart. See IndicatorPalette. */
+  indicator: IndicatorPalette;
 }
+
+/**
+ * The colors the indicator panes (volume, RSI, MACD) draw with.
+ *
+ * These lived inside `IndicatorPane` as two palettes behind an `isDark`
+ * boolean. Two problems with that: a color change here never reached the
+ * indicator bars, and a fifth preset would silently inherit whichever of the
+ * two its `isDark` flag happened to pick instead of declaring its own.
+ *
+ * Every value below is byte-identical to what IndicatorPane drew before the
+ * move, so the chart looks exactly the same — the point of this change is
+ * that there is now one place to edit, not a new look.
+ */
+export interface IndicatorPalette {
+  bullBar: string;
+  bearBar: string;
+  rsiLine: string;
+  macdLine: string;
+  macdSignal: string;
+  macdHistBull: string;
+  macdHistBear: string;
+  levelLine: string;
+  levelLineDim: string;
+  separator: string;
+  labelEmphasis: string;
+  labelNormal: string;
+  /** Tailwind class for the pane title, which is DOM text rather than canvas. */
+  titleText: string;
+}
+
+/** Shared by the three dark presets, which drew identically before the move. */
+const DARK_INDICATORS: IndicatorPalette = {
+  bullBar: "rgba(45,212,191,0.78)",
+  bearBar: "rgba(239,68,68,0.78)",
+  rsiLine: "rgba(34,211,238,0.95)",
+  macdLine: "rgba(34,211,238,0.95)",
+  macdSignal: "rgba(250,204,21,0.92)",
+  macdHistBull: "rgba(45,212,191,0.72)",
+  macdHistBear: "rgba(244,63,94,0.72)",
+  levelLine: "rgba(255,255,255,0.16)",
+  levelLineDim: "rgba(255,255,255,0.08)",
+  separator: "rgba(255,255,255,0.04)",
+  labelEmphasis: "rgba(232,238,246,0.85)",
+  labelNormal: "rgba(168,180,196,0.7)",
+  titleText: "text-white/70",
+};
+
+/**
+ * Paper.
+ *
+ * The volume bars used to mimic the hollow candle styling — a light grey bull
+ * bar and a near-black bear bar. Measured 2026-10-17 against the paper canvas
+ * (#d7d6d0) when the palette moved here and the contrast guard finally reached
+ * it: the bull bar scored **2.03:1**, under WCAG 1.4.11's 3:1, and the two
+ * bars differed mostly in how dark they were. A hollow candle carries its
+ * contrast in its border; a volume bar has no border, so it had nothing.
+ *
+ * They now use the same teal/rose the MACD histogram already uses on this
+ * theme — 4.26:1 and 5.41:1, two different hues, and one visual language for
+ * everything drawn in the indicator panes.
+ */
+const PAPER_INDICATORS: IndicatorPalette = {
+  bullBar: "rgba(0,100,85,0.92)" /* dark teal — was rgba(42,46,57,0.38) at 2.03:1 */,
+  bearBar: "rgba(150,18,35,0.92)" /* dark rose */,
+  rsiLine: "rgba(0,90,110,1)" /* dark cyan — same hue as the RSI cyan */,
+  macdLine: "rgba(0,90,110,1)",
+  macdSignal: "rgba(160,110,0,1)" /* dark amber — same hue as the yellow signal */,
+  macdHistBull: "rgba(0,100,85,0.92)" /* dark teal */,
+  macdHistBear: "rgba(150,18,35,0.92)" /* dark rose */,
+  levelLine: "rgba(0,0,0,0.22)",
+  levelLineDim: "rgba(0,0,0,0.12)",
+  separator: "rgba(0,0,0,0.10)",
+  labelEmphasis: "rgba(20,25,35,0.92)",
+  labelNormal: "rgba(50,55,65,0.82)",
+  titleText: "text-black/80",
+};
 
 /* ── Theme presets ──────────────────────────────────────────────── */
 
@@ -88,6 +166,7 @@ const MIDNIGHT: ChartThemeConfig = {
   orderBuy: "#2E9BD6",
   orderSell: "#E13947",
   isDark: true,
+  indicator: DARK_INDICATORS,
 };
 
 const CHARCOAL: ChartThemeConfig = {
@@ -121,6 +200,7 @@ const CHARCOAL: ChartThemeConfig = {
   orderBuy: "#2E9BD6",
   orderSell: "#E13947",
   isDark: true,
+  indicator: DARK_INDICATORS,
 };
 
 const SLATE: ChartThemeConfig = {
@@ -154,6 +234,7 @@ const SLATE: ChartThemeConfig = {
   orderBuy: "#2E9BD6",
   orderSell: "#E13947",
   isDark: true,
+  indicator: DARK_INDICATORS,
 };
 
 const PAPER: ChartThemeConfig = {
@@ -188,6 +269,7 @@ const PAPER: ChartThemeConfig = {
   orderBuy: "#0B4F8F",
   orderSell: "#A3101C",
   isDark: false,
+  indicator: PAPER_INDICATORS,
 };
 
 /* ── Public API ─────────────────────────────────────────────────── */

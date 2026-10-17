@@ -1,7 +1,7 @@
 "use client";
 
 import { Send } from "lucide-react";
-import { INTEL_QUICK_ACTIONS } from "@/lib/intel/intelQuickActions";
+import { useIntelQuickActions } from "@/lib/intel/useIntelQuickActions";
 import { BorderBeam } from "border-beam";
 import { AxeOrb } from "@/components/chat/AxeThinkingOrb";
 
@@ -32,6 +32,9 @@ export function IntelTerminalComposer({
   onFocus,
   textareaRef,
 }: IntelTerminalComposerProps) {
+  // Only the shortcuts whose feed exists; see useIntelQuickActions.
+  const quickActions = useIntelQuickActions();
+
   return (
     <div className="relative overflow-visible">
       {showAura ? (
@@ -75,7 +78,7 @@ export function IntelTerminalComposer({
           />
           <div className="flex items-center gap-1.5">
             <div className="-mx-1 flex flex-1 gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {INTEL_QUICK_ACTIONS.map((q) => (
+              {quickActions.map((q) => (
                 <button
                   key={q.label}
                   type="button"

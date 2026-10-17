@@ -116,12 +116,20 @@ check("the intel quick actions exist once, not once per composer", () => {
       /const INTEL_QUICK_ACTIONS\s*=/,
       `${file} defines its own copy again`,
     );
-    assert.match(
-      src,
-      /import \{ INTEL_QUICK_ACTIONS \} from "@\/lib\/intel\/intelQuickActions"/,
-      `${file} must import the shared list`,
+    // Either directly, or through useIntelQuickActions — which is the shared
+    // list with the unavailable feeds filtered out, and imports it itself.
+    assert.ok(
+      /import \{ INTEL_QUICK_ACTIONS \} from "@\/lib\/intel\/intelQuickActions"/.test(src) ||
+        /import \{ useIntelQuickActions \} from "@\/lib\/intel\/useIntelQuickActions"/.test(src),
+      `${file} must reach the shared list, not keep its own`,
     );
   }
+  const hook = readFileSync("src/lib/intel/useIntelQuickActions.ts", "utf8");
+  assert.match(
+    hook,
+    /import \{ INTEL_QUICK_ACTIONS[\s\S]{0,80}from "@\/lib\/intel\/intelQuickActions"/,
+    "the hook must filter the shared list rather than restate it",
+  );
 });
 
 check("every quick action names the feed it leans on", () => {

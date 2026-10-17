@@ -18,6 +18,8 @@ import { buildIntelContext } from "@/lib/intel/buildIntelContext";
 import { streamLLM } from "@/services/llmClient";
 import type { LLMRequest } from "@/services/llmClient";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
+import { INTEL_ACTION_SOURCE, actionAvailability } from "@/lib/intel/intelSources";
+import { parseOllamaEndpoints } from "@/lib/llm/ollamaEndpoints";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -156,16 +158,38 @@ Be concrete. Use numbers. Connect the dots others miss.`;
   });
 }
 
-/** GET — health check */
+/**
+ * GET — health check, and which intel actions have a feed behind them.
+ *
+ * `actions` is what the composer reads: "Market Tide" sat in every intel
+ * user's quick-action row while the Unusual Whales subscription behind it was
+ * never bought. The answer was honest ("not configured") but the button was a
+ * dead end. Availability lives in process.env, so the client has to ask.
+ *
+ * It also stops claiming two providers unconditionally: it now names the ones
+ * that are actually configured.
+ */
 export async function GET() {
+  const actions = Object.fromEntries(
+    Object.keys(INTEL_ACTION_SOURCE).map((action) => [
+      action,
+      actionAvailability(action, process.env).available,
+    ]),
+  );
+  const providers = [
+    parseOllamaEndpoints(process.env).length > 0 ? "ollama" : null,
+    process.env.OPENAI_API_KEY ? "openai" : null,
+  ].filter((p): p is string => p !== null);
+
   return new Response(
     JSON.stringify({
       service: "intel-chat",
       status: "operational",
       auth: "supabase",
       streaming: true,
-      providers: ["ollama", "openai"],
+      providers,
+      actions,
     }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
+    { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }
   );
 }
