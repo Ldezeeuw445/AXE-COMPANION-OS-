@@ -189,8 +189,8 @@ al naar je toe na 5 min ("tap to approve").
 
 Jouw 3 vinkjes ❌ bestaan niet. Nodig:
 
-- [ ] **6.1** Veiligheidsniveau per user: (1) alleen voorstellen · (2) voorbereiden, ik keur goed · (3) zelfstandig plaatsen binnen limieten
-- [ ] **6.2** Drie expliciete vinkjes vóór niveau 3, met harde grenzen: max lot, max risico per trade, max trades per dag
+- [x] **6.1 — gedaan (L19).** Drie niveaus in `src/lib/trading/autonomy.ts`, standaard niveau 2. Radio's in Instellingen, en het paneel toont wat er *geldt*, niet wat er is opgeslagen
+- [x] **6.2 — gedaan (L19).** Drie vinkjes én drie getallen. Mist er één, dan zakt niveau 3 naar 2 en zegt welke. De getallen gaan naar de guard, en waar de broker óók een plafond heeft wint de strengste
 - [x] **6.3 — De feed-helft staat.** Beide paden naar MT5 schrijven een
   feed-regel: bij plaatsen én bij blokkeren, met de regel die stopte erbij
   (`alert_trade:`, `alert_trade_blocked:`, `exec_placed:`, `exec_blocked:`).
@@ -1190,3 +1190,68 @@ alles op het token. Zeg het, dan haal ik die policy weg — één call.
   - `ollama-axecompanion` — **down**, ingress wijst naar een hostname die een
     A-record is. Dood gewicht
   - `tunnel to the world` — **down**, geen configuratie
+
+
+---
+
+## L19 — Hoeveel AXE zelf mag (2026-10-17)
+
+Bouwlijst 6.1 en 6.2. Tot nu was er één schakelaar —
+`alert_auto_trade_enabled` — tussen "AXE stelt voor" en "AXE stuurt live
+orders naar MT5 terwijl jij slaapt". De guard hield dat van roekeloos af, maar
+élk getal dat hij afdwong kwam van het account-profiel van de broker of van een
+constante in de broncode. Nergens had de trader in zijn eigen woorden gezegd
+hoeveel hij bereid was te verliezen aan een machine.
+
+- [x] **L19.1 Drie niveaus.** 1 voorstellen · 2 voorbereiden, jij keurt goed ·
+  3 zelfstandig plaatsen binnen jouw limieten. **Standaard 2.** Niveau 3 is een
+  besluit dat je neemt, nooit een dat je erft van een default.
+- [x] **L19.2 De gevaarlijke staat is de half-ingevulde.** Kies niveau 3 en
+  laat één getal of één vinkje leeg, en `resolveAutonomy()` geeft niveau **2**
+  terug mét de lijst van wat er ontbreekt. De guard, de API en het paneel
+  gebruiken alle drie dezelfde functie, dus ze kunnen niet uit elkaar lopen. Het
+  paneel toont *wat er geldt*, niet wat er is opgeslagen.
+- [x] **L19.3 Drie getallen, en de strengste wint.** Max lot, max risico per
+  trade (%), max trades per dag. Waar de broker óók een plafond heeft wordt de
+  tightere genomen: een prop-firm van 2 lot wordt geen 5 omdat jij 5 typte, en
+  jouw 0,5 wordt geen 2 omdat de broker het toestaat. De melding zegt wiens
+  limiet het was, want "verhoog de limiet" is twee verschillende schermen.
+- [x] **L19.4 Een risicolimiet die alleen soms geldt, is geen limiet.** Kan AXE
+  niet uitrekenen wat een trade riskeert — geen stop, of geen bekend saldo —
+  dan wordt hij **geweigerd**, niet gegokt. Het risico wordt berekend met
+  dezelfde `pointValuePerLot` waarmee de risicobalk in de app is getekend, dus
+  het getal dat wordt afgedwongen is het getal dat je zag.
+- [x] **L19.5 De vinkjes zijn kolommen, geen blob**, zodat "heeft deze persoon
+  echt ingestemd met onbemand handelen?" een vraag is die SQL kan beantwoorden.
+  De tijdstempel wordt server-side gezet: een door de client meegestuurde
+  datum op een toestemmingsrecord bewijst niets.
+
+### Onderweg gevonden, en dit is de ernstige
+
+- [x] **L19.6 `/market` matchte ook `/marketing/…`.** De bescherming in
+  `src/proxy.ts` deed een kale `startsWith`, dus elke dev-screenshotroute
+  stuurde door naar `/login` — en `npm run capture:marketing`, dat in
+  `package.json` staat en bovenaan zijn eigen script gedocumenteerd is, stond
+  al die tijd stilletjes de **inlogpagina** te fotograferen. Niets zei dat,
+  want een redirect naar login ziet er precies zo uit als "je bent niet
+  ingelogd". Een prefix moet nu op een `/` of op het einde eindigen.
+- [x] **L19.7 Een verify-check las dood bestand en gaf groen licht.**
+  `src/lib/supabase/middleware.ts` werd sinds Next middleware → proxy hernoemde
+  door niets meer geïmporteerd. `verify-no-anonymous-auth` controleerde
+  daarin dat een anonieme JWT als uitgelogd geldt — en dat klopte, in dat
+  bestand. **De echte middleware (`src/proxy.ts`) deed `user = u` zonder enige
+  controle**, dus een anonieme sessie kwam ongehinderd op elke beschermde
+  pagina. De app vraagt er zelf geen meer aan, maar de schakelaar in Supabase
+  staat nog aan (L1.5b), dus elders geslagen tokens werkten gewoon.
+  Nu: `user = isAnonymousUser(u) ? null : u` in de echte proxy, de check wijst
+  naar het echte bestand, en het dode bestand is weg. Een check die naar het
+  verkeerde bestand wijst is erger dan geen check — het is een groen lampje met
+  niets erachter.
+
+### Nog open
+
+- [ ] **L19.8** `alert_auto_trade_enabled` en het autonomieniveau zijn nog twee
+  aparte schakelaars. De guard weigert nu correct op beide, maar je kunt
+  auto-trade aan hebben staan terwijl het niveau 2 is — dan krijg je bij elke
+  trigger een nette weigering in de feed in plaats van een order. Dat is veilig
+  maar niet elegant; het samenvoegen is een UI-beslissing van jou

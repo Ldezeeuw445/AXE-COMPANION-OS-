@@ -76,7 +76,10 @@ export async function executeExecutionRequestOnMt5(
      land inside a news window, over a lot cap, or past the day's loss
      limit by the time it is tapped. `attended` drops only the daily cap
      on unattended automation; every account rule still applies. */
-  const guard = await decideAutoTradeAllowed(supabase, userId, displaySymbol, volumeLots, true);
+  const guard = await decideAutoTradeAllowed(supabase, userId, displaySymbol, volumeLots, true, {
+    entryPrice,
+    stopLoss,
+  });
   if (!guard.allowed) {
     await recordProactiveFeedEvent(
       supabase,

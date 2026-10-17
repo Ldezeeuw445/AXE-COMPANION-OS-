@@ -19,7 +19,7 @@
  * Run: node scripts/verify-no-anonymous-auth.mjs
  */
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 let passed = 0;
@@ -107,8 +107,20 @@ check("an anonymous JWT is treated as signed out, wherever it arrives", () => {
   // a dashboard switch this code cannot flip, so a token could still be minted
   // elsewhere. Checked in the proxy and in both server auth helpers, so one of
   // them failing open is not enough to let one in.
-  const proxy = readFileSync("src/lib/supabase/middleware.ts", "utf8");
+  // src/proxy.ts, not src/lib/supabase/middleware.ts. This check used to read
+  // the latter: a file nothing had imported since Next renamed middleware to
+  // proxy. It asserted against dead code and passed for as long as it existed,
+  // while the live middleware handed anonymous JWTs to every protected page.
+  // A check pointed at the wrong file is worse than no check — it is a green
+  // light with nothing behind it.
+  const proxyPath = "src/proxy.ts";
+  assert.ok(existsSync(proxyPath), `${proxyPath} is the live middleware; this check must follow it`);
+  const proxy = readFileSync(proxyPath, "utf8");
   assert.ok(/isAnonymousUser\(u\) \? null : u/.test(proxy), "the proxy still accepts anonymous sessions");
+  assert.ok(
+    !existsSync("src/lib/supabase/middleware.ts"),
+    "the old middleware is gone; if it comes back, make sure it is not what this check reads",
+  );
 
   const helpers = readFileSync("src/services/serviceSupabase.ts", "utf8");
   const hits = helpers.match(/isAnonymousUser\(/g) ?? [];
