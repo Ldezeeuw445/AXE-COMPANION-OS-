@@ -20,6 +20,9 @@ export const metadata: Metadata = {
     "AXE Companion is the trader phone OS: live chart, market depth, news, one-tap execution, quick journal, push alerts and AXE chat — on the same Supabase brain Trading OS uses.",
 };
 
+/** Founder seats are read from the database on each request — do not bake 0. */
+export const dynamic = "force-dynamic";
+
 export default async function HomeLandingPage() {
   const catalog = await loadLandingCatalog();
 

@@ -85,3 +85,4 @@ src-tauri/gen/
 # Persoonlijke Claude Code-instellingen (permissies, env). Nooit committen:
 # die gelden per machine en per account.
 .claude/settings.local.json
+/e2e/artifacts/

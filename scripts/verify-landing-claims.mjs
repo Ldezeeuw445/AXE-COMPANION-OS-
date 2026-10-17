@@ -170,6 +170,10 @@ check("the founder seat cap is read, not retyped, and 0/100 is not hardcoded", (
   assert.ok(!landing.includes("0/100"), "never hardcode an empty Founder counter");
   assert.ok(landing.includes("loadLandingCatalog") || landing.includes("getBillingCatalogState"), "seats come from the DB");
   assert.ok(landing.includes("founderSeatsUsed"), "render the live used count when the catalog loads");
+  assert.ok(
+    read("src/app/page.tsx").includes('export const dynamic = "force-dynamic"'),
+    "the homepage must not statically bake a stale Founder count",
+  );
 });
 
 check("AXE can execute, and Companion has News", () => {

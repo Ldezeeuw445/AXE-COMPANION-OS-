@@ -11,7 +11,7 @@ test.describe("companion landing", () => {
 
     await expect(page.getByRole("heading", { level: 1 })).toContainText("your intelligence");
     await expect(page.getByText("Same stack · two surfaces")).toBeVisible();
-    await expect(page.getByText("AXE ENGINE")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "The brain behind every decision." })).toBeVisible();
     await expect(page.getByText("Example — sample cockpit, not live data")).toBeVisible();
     await expect(page.getByText("Freya H.")).toHaveCount(0);
     await expect(page.getByText("Verified quotes")).toHaveCount(0);
