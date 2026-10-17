@@ -42,7 +42,7 @@ Companion simply never received them when the app moved off Vercel — its own
 `METAAPI_TOKEN` (MT5), `SUPABASE_SERVICE_ROLE_KEY`, `OLLAMA_BASE_URL`,
 `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `FRED_API_KEY`, `CRON_SECRET` (app env
 and Vault agree — pg_cron reaches the app with HTTP 200),
-`NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`,
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY` (fallback `VAPID_PUBLIC_KEY`)/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`,
 `CHART_SESSION_JWT_SECRET`, `AXE_CORE_TOOLS_SECRET`.
 
 ## Needs no key at all

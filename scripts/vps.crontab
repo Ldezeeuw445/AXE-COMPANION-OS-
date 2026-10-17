@@ -14,7 +14,6 @@
 #     axe-companion-weekly-briefing     */15 4-11 * * 1
 #     axe-companion-cockpit-snapshots   30 6 * * *
 #     axe-companion-knowledge-sync      0 5 * * 0
-#     axe-companion-krater-feed-sync    */10 4-20 * * *
 #     axe-companion-intel-correlate     5 * * * *
 #     axe-companion-journal-sweep       25 * * * *
 #     axe-companion-user-knowledge-sync 40 5 * * *

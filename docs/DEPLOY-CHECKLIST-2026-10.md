@@ -102,7 +102,7 @@ restart.
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://pqnngpcgbdwxavbatbia.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser client |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server routes + smoke freshness |
-| `NEXT_PUBLIC_APP_URL` | `https://www.axecompanion.com` |
+| `NEXT_PUBLIC_APP_URL` | `https://www.axecompanion.com` (apex `https://axecompanion.com` is rewritten to www in code) |
 | `NEXT_PUBLIC_DATA_SOURCE` | `supabase` (or omit if URL+anon are set) |
 
 ### Required for jobs that would otherwise 503
@@ -265,9 +265,9 @@ SMOKE_BASE_URL=https://www.axecompanion.com npm run smoke:launch
 ```
 
 The script is `scripts/smoke-launch.mjs`. It hits homepage, feed, chat,
-onboarding, cron 401, optional authenticated cron, and table freshness
-(`axe_broadcast_feed`, `axe_daily_briefings`,
-`assistant_cockpit_snapshots`).
+onboarding (anonymous must 401), cron 401, cron-health, optional authenticated
+cron (`intel-warmup`), and table freshness (`axe_broadcast_feed`,
+`axe_daily_briefings`, `assistant_cockpit_snapshots`). It does not probe Krater.
 
 Also by hand:
 

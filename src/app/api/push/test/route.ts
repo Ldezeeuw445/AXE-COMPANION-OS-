@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
+import { getVapidPublicKey } from "@/lib/env";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
@@ -16,7 +17,7 @@ import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 export async function POST(_req: NextRequest): Promise<NextResponse> {
   void _req;
   const subject = process.env.VAPID_SUBJECT;
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const publicKey = getVapidPublicKey();
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!subject || !publicKey || !privateKey) {
     return NextResponse.json({ error: "VAPID not configured on this server" }, { status: 500 });

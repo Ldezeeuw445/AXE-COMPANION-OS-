@@ -60,7 +60,7 @@ run these as two separate executions or the HTTP result is hidden by whatever
 follows it:
 
 ```sql
-select axe_ops.dispatch_cron('manual-check', '/api/cron/krater-feed-sync');
+select axe_ops.dispatch_cron('manual-check', '/api/cron/intel-warmup');
 ```
 
 ```sql
@@ -137,14 +137,15 @@ stale.
 | `axe-companion-weekly-briefing` | `*/15 4-11 * * 1` | `/api/cron/weekly-briefing` |
 | `axe-companion-cockpit-snapshots` | `30 6 * * *` | `/api/cron/cockpit-snapshots` |
 | `axe-companion-knowledge-sync` | `0 5 * * 0` | `/api/cron/knowledge-sync` |
-| `axe-companion-krater-feed-sync` | `*/10 4-20 * * *` | `/api/cron/krater-feed-sync` |
 | `axe-companion-intel-correlate` | `5 * * * *` | `/api/cron/intel-correlate` |
 | `axe-companion-journal-sweep` | `25 * * * *` | `/api/cron/journal-sweep` |
 | `axe-companion-user-knowledge-sync` | `40 5 * * *` | `/api/cron/user-knowledge-sync` |
 | `congress-trades-sync` (IONOS crontab only) | `20 6 * * *` | `/api/cron/congress-trades-sync` |
 
-The first eight carry the exact schedules `vercel.json` used, already written in
-UTC. `intel-correlate` is new here: its route has always existed but was never
+The original Vercel schedules (minus the retired Krater feed-sync) are already
+written in UTC. `axe-companion-krater-feed-sync` is paused in production and
+unscheduled by migration `20261017140000`; do not list or re-enable it.
+`intel-correlate` is new here: its route has always existed but was never
 in `vercel.json`, so it would not have run even on Vercel.
 
 ### journal-sweep

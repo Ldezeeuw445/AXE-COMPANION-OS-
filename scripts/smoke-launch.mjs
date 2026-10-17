@@ -84,9 +84,14 @@ await check("Onboarding page", async () => {
 
 await check("Onboarding API (anonymous)", async () => {
   const res = await fetch(`${BASE}/api/onboarding`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const j = await res.json();
-  return `completed=${j.completed} reason=${j.reason ?? "auth"}`;
+  const j = await res.json().catch(() => ({}));
+  if (res.status !== 401) {
+    throw new Error(`expected 401, got ${res.status} completed=${j.completed ?? "?"}`);
+  }
+  if (j.completed === true || j.prefs || j.completedAt) {
+    throw new Error("anonymous response leaked onboarding or user data");
+  }
+  return "401 not signed in";
 });
 
 await check("Feed API (anonymous)", async () => {
@@ -104,20 +109,26 @@ await check("Chat health (LLM providers)", async () => {
   return `status=${j.status ?? res.status} LLM_TARGET=${target} ollama=${j.ollama?.reachable ?? "?"} openai=${j.openai?.reachable ?? "?"}`;
 });
 
-await check("Krater cron unauthorized", async () => {
-  const res = await fetch(`${BASE}/api/cron/krater-feed-sync?debug=1`);
+await check("Cron unauthorized", async () => {
+  const res = await fetch(`${BASE}/api/cron/intel-warmup`);
   if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
   return "401 as expected";
 });
 
+await check("Cron health", async () => {
+  const res = await fetch(`${BASE}/api/debug/cron-health`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const j = await res.json();
+  return `secret=${j.cron_secret_configured} app_url=${j.app_url ?? "?"}`;
+});
+
 if (cronSecret) {
-  await check("Krater cron debug", async () => {
-    const res = await fetch(`${BASE}/api/cron/krater-feed-sync?debug=1`, {
+  await check("Authenticated cron (intel-warmup)", async () => {
+    const res = await fetch(`${BASE}/api/cron/intel-warmup`, {
       headers: { Authorization: `Bearer ${cronSecret}` },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const j = await res.json();
-    return `mode=${j.syncMode} hasKey=${j.hasKraterApiKey} probeOk=${j.generateProbe?.some((p) => p.ok) ?? false}`;
+    return `HTTP ${res.status}`;
   });
 } else {
   // Not a pass. This suite reported 9/9 for two months while every cron was
