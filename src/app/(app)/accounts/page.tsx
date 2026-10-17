@@ -3,7 +3,7 @@ import { loadAccountsPageData } from "@/lib/broker/loadAccountsPageData";
 import { getDefaultRegionForRequest } from "@/lib/mt5/getDefaultRegionForRequest";
 
 export default async function AccountsPage() {
-  const [{ accounts, activeAccountId, error }, defaultRegion] = await Promise.all([
+  const [{ accounts, activeAccountId, ledgers, error }, defaultRegion] = await Promise.all([
     loadAccountsPageData(),
     getDefaultRegionForRequest(),
   ]);
@@ -12,6 +12,7 @@ export default async function AccountsPage() {
     <AccountsScreen
       initialAccounts={accounts}
       initialActiveId={activeAccountId}
+      ledgers={ledgers}
       loadError={error}
       defaultMetaApiRegion={defaultRegion}
     />

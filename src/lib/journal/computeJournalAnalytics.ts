@@ -1,9 +1,15 @@
 import { JOURNAL_TRADE_TAGS } from "@/lib/journal/tradeTags";
+import { netPnl } from "@/lib/journal/tradePnl";
 
 export type JournalTradeForAnalytics = {
   pnl: number;
+  fees?: number;
   label: string | null;
 };
+
+function tradeNet(t: JournalTradeForAnalytics): number {
+  return netPnl(t.pnl, t.fees ?? 0);
+}
 
 export type JournalAnalytics = {
   totalTrades: number;
@@ -50,7 +56,7 @@ export function computeJournalAnalytics(trades: JournalTradeForAnalytics[]): Jou
     }
   }
 
-  const losers = trades.filter((t) => t.pnl < 0 && isPresetLabel(t.label));
+  const losers = trades.filter((t) => tradeNet(t) < 0 && isPresetLabel(t.label));
   const loseByTag = new Map<string, number>();
   for (const t of losers) {
     const k = t.label!.trim();
@@ -70,7 +76,7 @@ export function computeJournalAnalytics(trades: JournalTradeForAnalytics[]): Jou
   for (const tag of JOURNAL_TRADE_TAGS) {
     const subset = trades.filter((t) => t.label?.trim() === tag);
     if (subset.length === 0) continue;
-    const avg = subset.reduce((a, t) => a + t.pnl, 0) / subset.length;
+    const avg = subset.reduce((a, t) => a + tradeNet(t), 0) / subset.length;
     if (bestPerformingTagAvgPnl === null || avg > bestPerformingTagAvgPnl) {
       bestPerformingTagAvgPnl = avg;
       bestPerformingTag = tag;
@@ -81,7 +87,7 @@ export function computeJournalAnalytics(trades: JournalTradeForAnalytics[]): Jou
   const impatientCount = impatient.length;
   const avgPnlWhenImpatient =
     impatientCount > 0
-      ? impatient.reduce((a, t) => a + t.pnl, 0) / impatientCount
+      ? impatient.reduce((a, t) => a + tradeNet(t), 0) / impatientCount
       : null;
 
   const tagDistribution = JOURNAL_TRADE_TAGS.map((tag) => ({

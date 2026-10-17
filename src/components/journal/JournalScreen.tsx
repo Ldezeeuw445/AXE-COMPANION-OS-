@@ -21,6 +21,7 @@ import { JOURNAL_TRADE_TAGS } from "@/lib/journal/tradeTags";
 import { AlignmentBadge } from "@/components/journal/AlignmentBadge";
 import { upsertTradeJournalLabelAction } from "@/app/actions/journalLabels";
 import {
+  BookOpen,
   ChevronDown,
   ChevronRight,
   Hash,
@@ -33,6 +34,9 @@ import { WeakSpotsPanel } from "@/components/journal/WeakSpotsPanel";
 import type { WeakSpot } from "@/lib/journal/weakSpots";
 import { LearningArcPanel } from "@/components/axe/LearningArcPanel";
 import type { LearningStage } from "@/lib/axe/learningStage";
+import { useQuickJournal } from "@/components/journal/QuickJournalHost";
+import { buildQuickJournalDraft } from "@/lib/journal/quickJournalDraft";
+import { useActiveSession } from "@/lib/session/activeSessionStore";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 
@@ -93,6 +97,8 @@ function TradeRow({
   onToggle: () => void;
 }) {
   const router = useRouter();
+  const { openQuickJournal } = useQuickJournal();
+  const session = useActiveSession();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [note, setNote] = useState(trade.note ?? "");
@@ -126,11 +132,12 @@ function TradeRow({
   return (
     <div className={`border-b border-white/[0.04] ${expanded ? "bg-white/[0.015]" : ""}`}>
       {/* Row header — always visible */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors active:bg-white/[0.03]"
-      >
+      <div className="flex w-full items-center gap-2 px-4 py-3 text-left">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left transition-colors active:bg-white/[0.03]"
+        >
         {/* Expand chevron */}
         <span className="shrink-0 text-white/20">
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -161,6 +168,43 @@ function TradeRow({
             </span>
           )}
         </div>
+        </button>
+
+        <button
+          type="button"
+          data-testid="journal-quick-open"
+          aria-label="Quick journal"
+          onClick={(e) => {
+            e.stopPropagation();
+            openQuickJournal({
+              draft: buildQuickJournalDraft(
+                {
+                  id: trade.id,
+                  accountId: trade.accountId,
+                  symbol: trade.symbol,
+                  side: trade.side,
+                  volume: trade.volume,
+                  openPrice: trade.open_price,
+                  closePrice: trade.close_price,
+                  openTime: trade.open_time,
+                  closeTime: trade.close_time,
+                  pnl: trade.pnl,
+                  fees: trade.fees,
+                  label: trade.label,
+                  note: trade.note,
+                  axe_label: trade.axe_label,
+                  axe_note: trade.axe_note,
+                  alignment_score: trade.alignment_score,
+                  axe_journal: trade.axe_journal,
+                },
+                session,
+              ),
+            });
+          }}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] text-white/40 hover:text-cyan-200"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+        </button>
 
         {/* PnL */}
         <span className={`min-w-[54px] text-right font-mono text-[12px] font-semibold tabular-nums ${
@@ -173,7 +217,7 @@ function TradeRow({
         <span className="hidden min-w-[80px] text-right text-[10px] text-white/25 sm:block">
           {trade.close_time ? fmt(trade.close_time) : "—"}
         </span>
-      </button>
+      </div>
 
       {/* Expanded: tag selector + note + AXE score */}
       {expanded && (
@@ -367,6 +411,7 @@ export function JournalScreen({
   const [filter, setFilter] = useState<FilterMode>("all");
   const autoJournalAttemptedRef = useRef(false);
   const router = useRouter();
+  const { openQuickJournal } = useQuickJournal();
   const [journalStatus, setJournalStatus] = useState<
     { tone: "working" | "done" | "blocked"; text: string } | null
   >(null);
@@ -437,10 +482,12 @@ export function JournalScreen({
           {
             id: "setup",
             label: "Journal this setup",
-            description: focusSymbol ? `${focusSymbol} — what to log` : "What to log",
-            href: `/chat?q=${encodeURIComponent(
-              `[AXE · journal]\nGive me a short journal checklist for my next trade${focusSymbol ? ` on ${focusSymbol}` : ""}: bias, entry reason, invalidation, exit plan, emotions.`,
-            )}`,
+            description: focusSymbol ? `${focusSymbol} — last close` : "Last close",
+            onSelect: () =>
+              openQuickJournal({
+                accountId: activeAccountId ?? undefined,
+                symbol: focusSymbol ?? undefined,
+              }),
           },
         ],
       },
@@ -452,7 +499,7 @@ export function JournalScreen({
         ],
       },
     ],
-    [focusSymbol],
+    [focusSymbol, activeAccountId, openQuickJournal],
   );
 
   const { setCenter, setRight } = useAppTopBar();

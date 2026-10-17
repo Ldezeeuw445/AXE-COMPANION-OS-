@@ -20,6 +20,8 @@ import {
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
+import type { AccountLedger } from "@/lib/account/reconcileAccountLedger";
+import { formatSignedMoney } from "@/lib/journal/tradePnl";
 import { setActiveAccountAction, deleteBrokerAccountAction } from "@/app/actions/brokerAccounts";
 import {
   createCloudMt5ConnectionAction,
@@ -42,6 +44,7 @@ import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 type Props = {
   initialAccounts: BrokerAccountRow[];
   initialActiveId: string | null;
+  ledgers: Record<string, AccountLedger>;
   loadError: string | null;
   defaultMetaApiRegion: string;
 };
@@ -75,12 +78,14 @@ function AccountCard({
   account,
   isActive,
   pending,
+  ledger,
   onActivate,
   onRemove,
 }: {
   account: BrokerAccountRow;
   isActive: boolean;
   pending: boolean;
+  ledger: AccountLedger | null;
   onActivate: () => void;
   onRemove: () => void;
 }) {
@@ -325,6 +330,37 @@ function AccountCard({
           <ChevronRight className="h-4 w-4 shrink-0 text-white/15" />
         )}
       </div>
+
+      {ledger && (ledger.tradeCount > 0 || ledger.balance != null) ? (
+        <div className="mt-3 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-2" data-testid="account-ledger">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-white/35">Realized (closed trades)</span>
+            <span
+              className={`font-mono font-semibold tabular-nums ${
+                ledger.netPnl >= 0 ? "text-cyan-300" : "text-rose-300"
+              }`}
+            >
+              {formatSignedMoney(ledger.netPnl)}
+              {ledger.currency ? ` ${ledger.currency}` : ""}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-white/35">
+            <span>
+              {ledger.tradeCount} trades · {ledger.wins}W / {ledger.losses}L
+              {ledger.fees !== 0 ? ` · fees ${formatSignedMoney(ledger.fees)}` : ""}
+            </span>
+            {ledger.balance != null ? (
+              <span className="font-mono tabular-nums">
+                Broker {formatSignedMoney(ledger.balance)}
+                {ledger.currency ? ` ${ledger.currency}` : ""}
+              </span>
+            ) : null}
+          </div>
+          {ledger.hasBothViews ? (
+            <p className="mt-1.5 text-[9px] leading-relaxed text-white/28">{ledger.caveat}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Status feedback */}
       {actionBusy && (
@@ -657,7 +693,13 @@ function SubmitStep2() {
 
 /* ── Main Screen ─────────────────────────────────────────────────────── */
 
-export function AccountsScreen({ initialAccounts, initialActiveId, loadError, defaultMetaApiRegion }: Props) {
+export function AccountsScreen({
+  initialAccounts,
+  initialActiveId,
+  ledgers,
+  loadError,
+  defaultMetaApiRegion,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -776,6 +818,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
             <AccountCard
               key={a.id}
               account={a}
+              ledger={ledgers[a.id] ?? null}
               isActive={a.id === initialActiveId}
               pending={pending}
               onActivate={() => void onActivate(a.id)}
