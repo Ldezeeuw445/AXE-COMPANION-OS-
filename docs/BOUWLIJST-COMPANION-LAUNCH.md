@@ -955,3 +955,93 @@ endpoint actief en ik wil dat niet stilletjes breken.
   een denkmodel en antwoordt rommelig
 - [ ] **L15.3** Trading OS en AXE Core naar dezelfde twee hostnames laten
   wijzen, dan heeft elke app hetzelfde vangnet
+
+---
+
+## L16 — De landingspagina van Companion afgemaakt (2026-10-17)
+
+Aanleiding: `tradingosapp.com` geeft sinds de DNS-verhuizing naar onze eigen
+Cloudflare Tunnel weer 200 op apex én www, dus de twee landingspagina's kunnen
+weer naar elkaar linken. Bij het nalopen van `/` kwamen vier dingen boven die
+er wél stonden maar niet deden wat ze beloofden.
+
+- [x] **L16.1 De wachtlijst verzamelde niets.** `LandingWaitlist` schreef het
+  adres naar `localStorage` en zette dan "You're on the list — thank you." Geen
+  tabel, geen endpoint, geen mail. Elk adres dat sinds de livegang is ingevuld
+  is weg, terwijl `PrivacyPageContent` "waitlist communication" belooft.
+  - `supabase/migrations/20261017120000_marketing_waitlist.sql` —
+    `marketing_waitlist`, RLS aan **zonder policies**: geen enkele browser-client
+    kan lezen of schrijven. Uniek index op `lower(email)`.
+  - `POST /api/waitlist` — service-role insert, validatie, 5 signups per uur per
+    IP, 503 wanneer de service-role key ontbreekt (liever eerlijk stuk dan een
+    bedankje zonder opslag). 23505 telt als succes: twee keer inschrijven is
+    geen foutmelding.
+  - Het formulier zegt pas dank u als de server ja zei; een netwerkfout is een
+    fout, geen bedankje.
+  - `scripts/verify-waitlist.mjs`, 12 checks.
+  - Nog te doen: er gaat nog geen mail uit. De adressen staan nu veilig in de
+    database tot je besluit waarmee je ze mailt.
+- [x] **L16.2 De FAQ noemde Senate trades achter Unusual Whales.** Die feed
+  draait sinds L13 op Alpha Vantage. De pagina vertelde bezoekers dus dat een
+  werkende functie onbeschikbaar was. De claim wordt nu vergeleken met
+  `INTEL_ACTION_SOURCE`, dus hij kan niet opnieuw verlopen.
+- [x] **L16.3 De hero-mock sneed zijn eigen tabbalk af.** `.layout` in
+  `public/hero-demo/app.html` rekende met `calc(100% - 68px)`, de hoogte van de
+  standaard topbar — maar in het telefoonframe is die 96px (hij moet onder de
+  notch van de bezel door). De mock was dus 28px te hoog en de onderste tabrij
+  viel half buiten het scherm. Nu vult de layout wat er over is. De grafiek
+  vult ook de dode zwarte band die onder de BUY-knop stond.
+- [x] **L16.4 De iPad was onleesbaar op telefoons.** Onder 1100px kregen iPhone
+  en iPad allebei `min(390px, 86vw)`. De iPad tekent zijn mock op 1024 logische
+  px: gemeten 0.30 schaal op 390px, 0.36 op 768px. Aparte caps per apparaat, en
+  onder 640px staat de iPad uit — daar is geen breedte waarop hij leesbaar is.
+- [x] **L16.5** Trading OS van `offline` naar `beta` in
+  `src/lib/ecosystem/apps.ts`; switcher en "Go to Trading OS" linken weer.
+- [x] **L16.6** Tien feature-tegels lieten er één alleen achter op de laatste
+  rij van drie; de laatste (het platformverhaal, geen feature) is nu de volle
+  breedte. En "Open on your phone" stond twee keer onder elkaar.
+
+### L16.7 — De switcher op tradingosapp.com doet niets (open)
+
+Gemeten op de live site, 2026-10-17: het menu linksboven ("AXE INTELLIGENT
+TERMINAL") opent, toont beide rijen, maar beide rijen zijn `<button>` zonder
+`href` en navigeren nergens heen — ook de rij "AXE Companion · Mobile command
+center · axecompanion.com" niet. De CTA **"Explore AXE Companion"** lager op de
+pagina is wél een echte `<a href="https://www.axecompanion.com">` en werkt.
+
+Die component staat niet in `Ldezeeuw445/the-one` — niet op `main`, niet op
+`claude/landing-app-switcher`. De strings "AXE INTELLIGENT TERMINAL" en
+"Mobile command center" komen alleen in de gedeployde bundel voor. De live site
+is dus gebouwd uit een nieuwere lokale versie die nooit gepusht is.
+
+De branch `claude/landing-app-switcher` heeft wél een werkende switcher
+(`src/components/landing/AppSwitcher.tsx`, rendert een `<a>`). Opnieuw
+deployen met die branch zou de switcher repareren maar ook de nieuwere
+landingspagina terugdraaien — dat is jouw keuze, niet de mijne:
+
+```bash
+REF=claude/landing-app-switcher bash scripts/deploy-vps-tradingos.sh
+```
+
+Beter: push de lokale versie die nu live staat, dan repareer ik de switcher
+daarin zonder iets anders kwijt te raken.
+
+### L15.2 — nog te doen, en ik kan er niet bij
+
+Deze container heeft geen `ssh`, dus ik kan de env-variabele niet zelf op de
+VPS zetten. Op `212.227.91.79`, in `/root/AXE-COMPANION-OS-/.env.local`
+(er is geen `EnvironmentFile`, zie `docs/VPS-RUNBOOK.md`):
+
+```
+OLLAMA_URL=https://ollama.axecompanion.com,https://ollama.tradingosapp.com
+```
+
+`OLLAMA_MODEL` leeg laten. Daarna `systemctl restart axe-companion` en
+controleren met:
+
+```bash
+curl -s -H "Authorization: Bearer $CRON_SECRET" \
+  https://www.axecompanion.com/api/debug/chat-health | jq .
+```
+
+Verwacht: `"status":"ok_ollama"` met `ollama_resolved.model` = `llama3.1:8b`.
