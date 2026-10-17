@@ -33,6 +33,9 @@ import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
 import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { accountTypeFromBroker } from "@/lib/session/accountType";
+import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
+import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
@@ -674,7 +677,24 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
       const r = await setActiveAccountAction(id === initialActiveId ? null : id);
       if (!r.error) {
         if (id !== initialActiveId) {
-          router.push(`/chart?account=${encodeURIComponent(id)}&symbol=XAUUSD&tf=h1`);
+          const account = initialAccounts.find((a) => a.id === id);
+          const session = getActiveSession();
+          patchActiveSession({
+            accountId: id,
+            accountLabel: account?.label ?? null,
+            accountType: accountTypeFromBroker({
+              label: account?.label,
+              mt5Server: account?.mt5_server,
+              metadata: account?.metadata,
+              connectionMethod: account?.connection_method,
+            }),
+            lastTab: "chart",
+          });
+          router.push(
+            `/chart?account=${encodeURIComponent(id)}&symbol=${encodeURIComponent(session.symbol)}&tf=${encodeURIComponent(session.timeframe)}`,
+          );
+        } else {
+          patchActiveSession({ accountId: null, accountLabel: null, accountType: "unknown" });
         }
         router.refresh();
       }
@@ -691,8 +711,25 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
 
   const onlyDemo = initialAccounts.length > 0 && initialAccounts.every((a) => isDemoAccount(a));
 
+  const activeAccount = initialAccounts.find((a) => a.id === initialActiveId) ?? null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto gap-5 pb-4">
+      <ActiveSessionSeed
+        accountId={initialActiveId}
+        accountLabel={activeAccount?.label ?? null}
+        accountType={
+          activeAccount
+            ? accountTypeFromBroker({
+                label: activeAccount.label,
+                mt5Server: activeAccount.mt5_server,
+                metadata: activeAccount.metadata,
+                connectionMethod: activeAccount.connection_method,
+              })
+            : "unknown"
+        }
+        lastTab="account"
+      />
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
         liveCount={connectedCount}

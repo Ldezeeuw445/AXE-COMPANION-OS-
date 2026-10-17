@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
+import { SESSION_COOKIE, parseActiveSession, pathForTab } from "@/lib/session/activeSession";
 
 const PROTECTED_PREFIXES = [
   "/chart",
@@ -37,7 +38,8 @@ export async function proxy(request: NextRequest) {
     pathEarly.startsWith("/_next/") ||
     pathEarly === "/login" ||
     pathEarly === "/welcome" ||
-    pathEarly === "/"
+    pathEarly === "/" ||
+    pathEarly.startsWith("/marketing")
   ) {
     return NextResponse.next({ request });
   }
@@ -102,15 +104,17 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
+  const lastTabPath = pathForTab(parseActiveSession(request.cookies.get(SESSION_COOKIE)?.value)?.lastTab ?? "axe");
+
   if (path === "/welcome" && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/chat";
+    url.pathname = lastTabPath;
     return NextResponse.redirect(url);
   }
 
   if (path === "/" && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/chat";
+    url.pathname = lastTabPath;
     return NextResponse.redirect(url);
   }
 
@@ -122,7 +126,7 @@ export async function proxy(request: NextRequest) {
 
   if (path === "/login" && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/chat";
+    url.pathname = lastTabPath;
     return NextResponse.redirect(url);
   }
 

@@ -16,12 +16,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Clock,
+  Home,
+  Landmark,
   LineChart,
   MessageSquare,
-  Repeat2,
-  Settings,
-  Star,
 } from "lucide-react";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
 import { useSwipeNav } from "./SwipeNavContext";
@@ -29,6 +27,8 @@ import { useTabletNavCollapse, useTabletNavSwipe } from "@/components/shell/Tabl
 import { FeedNavBadge } from "@/components/feed/FeedNavBadge";
 import { useShellStatus } from "@/components/shell/useShellStatus";
 import type { RuntimeTruthState } from "@/lib/runtime/runtimeTruth";
+import { MOBILE_SHELL_TABS } from "@/lib/session/activeSession";
+import { patchActiveSession } from "@/lib/session/activeSessionStore";
 
 const CYAN = "#00d4f5";
 
@@ -72,22 +72,23 @@ function NavBadge({ count, className, label }: { count: number; className: strin
     </span>
   );
 }
-const GOLD = "#d4af37";
+const TAB_ICONS = {
+  home: Home,
+  markets: BarChart3,
+  chart: LineChart,
+  axe: MessageSquare,
+  account: Landmark,
+} as const;
 
-const CORE_TABS = [
-  { href: "/chat",       label: "AXE",     Icon: MessageSquare },
-  { href: "/watchlist",  label: "Quotes",  Icon: BarChart3 },
-  { href: "/chart",      label: "Chart",   Icon: LineChart },
-  { href: "/positions",  label: "Trade",   Icon: Repeat2 },
-  { href: "/history",    label: "History",  Icon: Clock },
-] as const;
+const CORE_TABS = MOBILE_SHELL_TABS.map((tab) => ({
+  ...tab,
+  Icon: TAB_ICONS[tab.id],
+}));
 
 export function BottomNav() {
   const pathname = usePathname();
   const { playSound, vibrate } = useAmbient();
   const navRef = useRef<HTMLElement>(null);
-  const isAxeView = pathname === "/chat" || pathname.startsWith("/chat/");
-
   // iOS can report stale safe-area after chart landscape → portrait; force a reflow.
   useEffect(() => {
     let settleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -119,12 +120,7 @@ export function BottomNav() {
   const shell = useShellStatus();
   const expandSwipe = useTabletNavSwipe("expand", expandNav);
 
-  // Conditional 6th tab
-  const sixthTab = isAxeView
-    ? { href: "/upgrade",  label: "Upgrade",  Icon: Star,     accent: GOLD }
-    : { href: "/settings", label: "Settings", Icon: Settings, accent: undefined };
-
-  const tabs = [...CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined })), sixthTab];
+  const tabs = CORE_TABS.map((t) => ({ ...t, accent: undefined as string | undefined }));
 
   /* ── Glass bubble ──────────────────────────────────────────── */
   const isSwiping = Math.abs(progress) > 0.05;
@@ -133,6 +129,7 @@ export function BottomNav() {
   return (
     <nav
       ref={navRef}
+      data-testid="bottom-nav"
       className={`tos-nav-pill tos-shell-mobile-nav pointer-events-auto ${navCollapsible ? "tos-tablet-nav-pill" : ""} ${navCollapsed ? "tos-nav-pill-rail" : ""}`}
       style={{
         // Matches the composer card above it — same gradient, radius and shadow.
@@ -207,7 +204,7 @@ export function BottomNav() {
         </button>
       ) : (
       <div className="relative z-10 flex items-center justify-around gap-1">
-        {tabs.map(({ href, label, Icon, accent }, idx) => {
+        {tabs.map(({ id, href, label, Icon, accent }, idx) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const bubbleOver = isSwiping && Math.abs(fractionalIdx - idx) < 0.6;
           const color = active ? (accent ?? CYAN) : undefined;
@@ -216,9 +213,12 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
+              data-testid={`shell-tab-${id}`}
+              data-shell-tab-active={active ? "true" : "false"}
               onClick={(e) => {
                 vibrate("light");
                 playSound("tap");
+                patchActiveSession({ lastTab: id });
                 if (href === "/chat" && active) {
                   e.preventDefault();
                   window.dispatchEvent(new CustomEvent("axe:chat-scroll-top"));
@@ -235,7 +235,7 @@ export function BottomNav() {
                   label={`${shell.alertsTriggered} alerts triggered in the last 24 hours`}
                 />
               ) : null}
-              {href === "/positions" && shell.positions != null && shell.positions > 0 ? (
+              {href === "/accounts" && shell.positions != null && shell.positions > 0 ? (
                 <NavBadge
                   count={shell.positions}
                   className="bg-[#C9F24B]"

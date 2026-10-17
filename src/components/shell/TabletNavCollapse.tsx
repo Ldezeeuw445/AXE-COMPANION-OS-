@@ -11,7 +11,7 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { isMouseDesktopLayout } from "@/lib/viewport/tablet";
+import { useShellViewport } from "@/lib/viewport/shellViewport";
 
 type TabletNavCollapseContextValue = {
   enabled: boolean;
@@ -24,35 +24,44 @@ type TabletNavCollapseContextValue = {
 const TabletNavCollapseContext = createContext<TabletNavCollapseContextValue | null>(null);
 
 const STORAGE_KEY = "axe.navCollapsed";
+const COLLAPSE_COOKIE = "axe.nav-collapsed";
+
+function persistCollapsed(collapsed: boolean) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+  try {
+    document.cookie = `${COLLAPSE_COOKIE}=${collapsed ? "1" : "0"}; Path=/; Max-Age=1800; SameSite=Lax`;
+  } catch {
+    /* ignore */
+  }
+}
+
+function readCollapsedHint(): boolean {
+  if (typeof document === "undefined") return false;
+  if (/(?:^|; )axe\.nav-collapsed=1(?:;|$)/.test(document.cookie)) return true;
+  try {
+    return sessionStorage.getItem(STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export function TabletNavCollapseProvider({ children }: { children: ReactNode }) {
-  const [enabled, setEnabled] = useState(false);
+  const viewport = useShellViewport();
+  // Phone-first: enabled on phone/tablet from the first render. Desktop
+  // (mouse) has no bottom nav, so collapsing is off — matching CSS.
+  const enabled = viewport !== "desktop";
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    function syncEnabled() {
-      // Collapsing started as a tablet-only affordance, but a phone is where
-      // screen space is scarcest. Enabled everywhere except the mouse desktop
-      // layout, which has no bottom nav to hide.
-      setEnabled(!isMouseDesktopLayout());
+    if (!enabled) {
+      setCollapsed(false);
+      return;
     }
-    syncEnabled();
-    window.addEventListener("resize", syncEnabled);
-    window.addEventListener("orientationchange", syncEnabled);
-    return () => {
-      window.removeEventListener("resize", syncEnabled);
-      window.removeEventListener("orientationchange", syncEnabled);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!enabled) return;
-    try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw === "1") setCollapsed(true);
-    } catch {
-      /* ignore */
-    }
+    setCollapsed(readCollapsedHint());
   }, [enabled]);
 
   useEffect(() => {
@@ -61,11 +70,7 @@ export function TabletNavCollapseProvider({ children }: { children: ReactNode })
       return;
     }
     document.body.classList.toggle("tos-tablet-nav-collapsed", collapsed);
-    try {
-      sessionStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
+    persistCollapsed(collapsed);
   }, [collapsed, enabled]);
 
   const collapse = useCallback(() => setCollapsed(true), []);
@@ -86,7 +91,7 @@ export function useTabletNavCollapse(): TabletNavCollapseContextValue {
   const ctx = useContext(TabletNavCollapseContext);
   if (!ctx) {
     return {
-      enabled: false,
+      enabled: true,
       collapsed: false,
       collapse: () => {},
       expand: () => {},

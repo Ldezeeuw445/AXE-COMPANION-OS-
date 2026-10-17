@@ -16,6 +16,8 @@ import { CockpitAdaptiveSuggestions } from "@/components/adaptive/CockpitAdaptiv
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
+import { ActiveSessionChip } from "@/components/session/ActiveSessionChip";
 import { UpgradeGate } from "@/components/billing/UpgradeGate";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -82,6 +84,8 @@ export default async function CockpitPage() {
 
   return (
     <div className="axe-stagger-enter flex flex-col gap-5 pb-2">
+      <ActiveSessionSeed userId={userId ?? null} lastTab="home" />
+      <ActiveSessionChip />
       <LiveStatusReporter
         liveCount={hasSnapshot ? 1 : 0}
         totalCount={1}
