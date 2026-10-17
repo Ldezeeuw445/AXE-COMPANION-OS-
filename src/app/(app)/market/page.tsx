@@ -8,6 +8,8 @@ import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { buildMarketContext } from "@/lib/market/marketContextService";
+import { readActiveSessionCookie } from "@/lib/session/readActiveSession.server";
+import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 import type {
   EconomicEvent,
   MacroSnapshot,
@@ -27,8 +29,11 @@ type PageProps = {
 export default async function MarketContextPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const requestedSymbol = (sp.symbol ?? "").trim().toUpperCase();
-  const watchlist = (await listWatchlistItems()).map((w) => w.symbol);
-  const symbol = requestedSymbol || watchlist[0]?.toUpperCase() || DEFAULT_SYMBOL;
+  const [watchlist, session] = await Promise.all([
+    listWatchlistItems().then((items) => items.map((w) => w.symbol)),
+    readActiveSessionCookie(),
+  ]);
+  const symbol = requestedSymbol || session.symbol || watchlist[0]?.toUpperCase() || DEFAULT_SYMBOL;
 
   const ctx = await buildMarketContext({ symbol, watchlist });
   const macroPoints = ctx.macro?.points.filter((point) => point.value != null) ?? [];
@@ -89,6 +94,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
     ctx.providers.some((p) => (p.id === "finnhub" || p.id === "forexFactory") && p.state === "live");
   return (
     <div className="axe-stagger-enter flex flex-col gap-4 pb-6">
+      <ActiveSessionSeed symbol={symbol} lastTab="markets" />
       {/* Mobile top bar: the AXE wordmark in the centre carries the
           single live indicator now, fed by `LiveStatusReporter` below.
           We deliberately no longer inject a "LIVE" pill in the centre

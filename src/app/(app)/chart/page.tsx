@@ -15,6 +15,8 @@ import {
   getFredKey,
   getPerigonKey,
 } from "@/lib/market/providerStatus";
+import { readActiveSessionCookie } from "@/lib/session/readActiveSession.server";
+import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 
 type PageProps = {
   searchParams: Promise<{ symbol?: string; tf?: string; account?: string; action?: string }>;
@@ -55,28 +57,41 @@ async function ChartData({
   }
 
   return (
-    <ChartScreen
-      data={data}
-      initialAction={action}
-      liveTradingEnabled={liveTrading.enabled}
-      instantSlTpModify={instantSlTpModify}
-      favoriteWorkflowIds={favoriteWorkflowIds}
-      workflowRuntime={workflowRuntime}
-      canFullIndicators={canFullIndicators}
-    />
+    <>
+      <ActiveSessionSeed
+        symbol={data.symbol}
+        timeframe={data.timeframeKey}
+        accountId={data.account?.brokerAccountId ?? null}
+        accountLabel={data.account?.label ?? null}
+        lastTab="chart"
+      />
+      <ChartScreen
+        data={data}
+        initialAction={action}
+        liveTradingEnabled={liveTrading.enabled}
+        instantSlTpModify={instantSlTpModify}
+        favoriteWorkflowIds={favoriteWorkflowIds}
+        workflowRuntime={workflowRuntime}
+        canFullIndicators={canFullIndicators}
+      />
+    </>
   );
 }
 
 export default async function ChartPage({ searchParams }: PageProps) {
   const sp = await searchParams;
+  const session = await readActiveSessionCookie();
+  const symbol = (sp.symbol ?? "").trim() || session.symbol;
+  const tf = (sp.tf ?? "").trim() || session.timeframe;
+  const account = (sp.account ?? "").trim() || session.accountId || undefined;
   return (
     <Suspense
-      fallback={<ChartCacheFallback symbol={sp.symbol} tf={sp.tf} />}
+      fallback={<ChartCacheFallback symbol={symbol} tf={tf} />}
     >
       <ChartData
-        symbol={sp.symbol}
-        tf={sp.tf}
-        account={sp.account}
+        symbol={symbol}
+        tf={tf}
+        account={account}
         action={sp.action}
       />
     </Suspense>

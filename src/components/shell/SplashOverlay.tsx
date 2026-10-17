@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
 
 export function SplashOverlay() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(true);
+  if (pathname.startsWith("/marketing")) return null;
 
   if (!visible) return null;
 

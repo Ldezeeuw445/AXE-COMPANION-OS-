@@ -5,14 +5,12 @@ import { usePathname } from "next/navigation";
 import {
   BarChart2,
   BarChart3,
-  Clock,
   Crosshair,
+  Home,
   Landmark,
   LineChart,
   MessageSquare,
   Newspaper,
-  Repeat2,
-  Settings,
   Star,
   X,
   Zap,
@@ -22,12 +20,11 @@ import { useAmbient } from "@/components/ambient/AmbientProvider";
 const CYAN = "#00d4f5";
 
 const NAV_TABS = [
-  { href: "/chat", label: "AXE", Icon: MessageSquare },
-  { href: "/watchlist", label: "Quotes", Icon: BarChart3 },
+  { href: "/cockpit", label: "Home", Icon: Home },
+  { href: "/watchlist", label: "Markets", Icon: BarChart3 },
   { href: "/chart", label: "Chart", Icon: LineChart },
-  { href: "/positions", label: "Trade", Icon: Repeat2 },
-  { href: "/history", label: "History", Icon: Clock },
-  { href: "/settings", label: "Settings", Icon: Settings },
+  { href: "/chat", label: "AXE", Icon: MessageSquare },
+  { href: "/accounts", label: "Account", Icon: Landmark },
 ] as const;
 
 type Props = {
