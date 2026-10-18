@@ -56,7 +56,7 @@ const hero = read("src/components/marketing/LandingHeroDevices.tsx");
 const heroCss = read("src/app/globals.css");
 const heroMock = read("public/hero-demo/app.html");
 const sitemap = read("src/app/sitemap.ts");
-const strayLanding = read("public/landing/index.html");
+const nextConfig = read("next.config.ts");
 
 console.log("landing claims");
 
@@ -289,12 +289,18 @@ check("the retired drafts redirect to / instead of competing with it", () => {
   }
 });
 
-check("the stray public/landing page redirects home", () => {
+check("the stray /landing page is a real redirect, not a client hop", () => {
   assert.ok(
-    /url=\/|location\.replace\("\/"\)/.test(strayLanding),
-    "public/landing/index.html must send visitors to /",
+    !existsSync(new URL("../public/landing/index.html", import.meta.url)),
+    "a static public/landing/index.html would win over next.config redirects",
   );
-  assert.ok(!/Interactive dashboard mockup/.test(strayLanding));
+  for (const source of ['source: "/landing"', 'source: "/landing/"', 'source: "/landing/index.html"']) {
+    assert.ok(nextConfig.includes(source), `${source} must 308 to / in next.config.ts`);
+  }
+  assert.ok(
+    /source:\s*"\/landing\/index\.html"[\s\S]{0,80}destination:\s*"\/"[\s\S]{0,40}permanent:\s*true/.test(nextConfig),
+    "/landing/index.html must be a permanent redirect to /",
+  );
 });
 
 check("no retired draft is advertised in the sitemap", () => {
