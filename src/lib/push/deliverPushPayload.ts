@@ -84,3 +84,57 @@ export function watcherAlertReachedDevice(args: {
 }): boolean {
   return args.hasSubscription && args.pushSendOk && args.sent > 0;
 }
+
+/**
+ * Shape a proactive-watcher alert into the /api/push/send request body.
+ * Keeps title prefix + severity consistent across cron and feed paths.
+ */
+export function buildWatcherAlertPushRequest(args: {
+  userId: string;
+  title: string;
+  body: string;
+  url: string;
+  severity?: PushDeliveryRequest["severity"];
+}): PushDeliveryRequest {
+  const title = args.title.startsWith("AXE · ") ? args.title : `AXE · ${args.title}`;
+  return {
+    userId: args.userId,
+    title,
+    body: args.body,
+    url: args.url,
+    tag: "axe-watcher",
+    severity: args.severity ?? "alert",
+  };
+}
+
+/**
+ * End-to-end delivery decision for a watcher alert (no network):
+ * event recorded → optional push → summarize results → device reached?
+ */
+export function evaluateWatcherAlertDelivery(args: {
+  userId: string;
+  title: string;
+  body: string;
+  url: string;
+  subscriptions: PushSubscriptionRow[];
+  sendResults: PushSendResult[];
+}): {
+  request: PushDeliveryRequest;
+  summary: ReturnType<typeof summarizePushDelivery>;
+  reachedDevice: boolean;
+} {
+  const request = buildWatcherAlertPushRequest(args);
+  const summary = summarizePushDelivery({
+    subscriptions: args.subscriptions,
+    results: args.sendResults,
+  });
+  return {
+    request,
+    summary,
+    reachedDevice: watcherAlertReachedDevice({
+      hasSubscription: args.subscriptions.length > 0,
+      pushSendOk: summary.sent > 0,
+      sent: summary.sent,
+    }),
+  };
+}

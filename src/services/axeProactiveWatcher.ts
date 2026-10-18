@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { buildWatcherAlertPushRequest } from "@/lib/push/deliverPushPayload";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -17,10 +18,11 @@ type WatcherUser = {
 async function firePush(userId: string, title: string, body: string, url: string): Promise<boolean> {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.VERCEL_URL ?? "localhost:3000"}`;
+    const payload = buildWatcherAlertPushRequest({ userId, title, body, url });
     const res = await fetch(`${baseUrl}/api/push/send`, {
       method: "POST",
       headers: internalPushHeaders(),
-      body: JSON.stringify({ userId, title, body, url }),
+      body: JSON.stringify(payload),
     });
     return res.ok;
   } catch {
@@ -112,7 +114,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/cockpit");
     if (inserted) {
       created += 1;
-      if (hasPush && (await firePush(userId, `AXE · ${title}`, body, "/cockpit"))) pushed += 1;
+      if (hasPush && (await firePush(userId, title, body, "/cockpit"))) pushed += 1;
     }
   }
 
@@ -125,7 +127,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/actions");
     if (inserted) {
       created += 1;
-      if (hasPush && (await firePush(userId, `AXE · ${title}`, body, "/actions"))) pushed += 1;
+      if (hasPush && (await firePush(userId, title, body, "/actions"))) pushed += 1;
     }
   }
 
@@ -148,7 +150,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
         const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/positions");
         if (inserted) {
           created += 1;
-          if (hasPush && (await firePush(userId, `AXE · ${title}`, body, "/positions"))) pushed += 1;
+          if (hasPush && (await firePush(userId, title, body, "/positions"))) pushed += 1;
         }
       }
     } catch {

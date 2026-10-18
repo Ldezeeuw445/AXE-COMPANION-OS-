@@ -1,47 +1,104 @@
 /**
  * C6 — push delivery path test (no VAPID / no production data).
- * Run: node scripts/test-push-delivery.mjs
+ * Run: npm run test:push-delivery
+ *
+ * Tries to load the real TS helpers via --experimental-strip-types;
+ * falls back to an inline mirror so CI stays zero-dep.
  */
 import assert from "node:assert/strict";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-// Mirrors src/lib/push/deliverPushPayload.ts (zero-dep; keep in sync).
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const srcPath = join(__dirname, "../src/lib/push/deliverPushPayload.ts");
 
-function buildPushNotificationPayload(req) {
-  return JSON.stringify({
-    title: req.title,
-    body: req.body ?? "",
-    url: req.url ?? "/chat",
-    tag: req.tag ?? "axe-notification",
-    severity: req.severity ?? "alert",
-    requireInteraction: req.requireInteraction ?? req.severity === "risk",
-    silent: req.silent ?? false,
-    image: req.image,
-    actions: req.actions,
-  });
-}
+async function loadHelpers() {
+  try {
+    return await import(pathToFileURL(srcPath).href);
+  } catch {
+    function buildPushNotificationPayload(req) {
+      return JSON.stringify({
+        title: req.title,
+        body: req.body ?? "",
+        url: req.url ?? "/chat",
+        tag: req.tag ?? "axe-notification",
+        severity: req.severity ?? "alert",
+        requireInteraction: req.requireInteraction ?? req.severity === "risk",
+        silent: req.silent ?? false,
+        image: req.image,
+        actions: req.actions,
+      });
+    }
 
-function summarizePushDelivery({ subscriptions, results }) {
-  if (subscriptions.length === 0) {
-    return { sent: 0, total: 0, expiredEndpoints: [] };
+    function summarizePushDelivery({ subscriptions, results }) {
+      if (subscriptions.length === 0) {
+        return { sent: 0, total: 0, expiredEndpoints: [] };
+      }
+      const expiredEndpoints = [];
+      let sent = 0;
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+          sent += 1;
+          return;
+        }
+        if (r.statusCode === 410 || r.statusCode === 404) {
+          const endpoint = subscriptions[i]?.endpoint;
+          if (endpoint) expiredEndpoints.push(endpoint);
+        }
+      });
+      return { sent, total: subscriptions.length, expiredEndpoints };
+    }
+
+    function watcherAlertReachedDevice({ hasSubscription, pushSendOk, sent }) {
+      return hasSubscription && pushSendOk && sent > 0;
+    }
+
+    function buildWatcherAlertPushRequest({ userId, title, body, url, severity }) {
+      const prefixed = title.startsWith("AXE · ") ? title : `AXE · ${title}`;
+      return {
+        userId,
+        title: prefixed,
+        body,
+        url,
+        tag: "axe-watcher",
+        severity: severity ?? "alert",
+      };
+    }
+
+    function evaluateWatcherAlertDelivery(args) {
+      const request = buildWatcherAlertPushRequest(args);
+      const summary = summarizePushDelivery({
+        subscriptions: args.subscriptions,
+        results: args.sendResults,
+      });
+      return {
+        request,
+        summary,
+        reachedDevice: watcherAlertReachedDevice({
+          hasSubscription: args.subscriptions.length > 0,
+          pushSendOk: summary.sent > 0,
+          sent: summary.sent,
+        }),
+      };
+    }
+
+    return {
+      buildPushNotificationPayload,
+      summarizePushDelivery,
+      watcherAlertReachedDevice,
+      buildWatcherAlertPushRequest,
+      evaluateWatcherAlertDelivery,
+    };
   }
-  const expiredEndpoints = [];
-  let sent = 0;
-  results.forEach((r, i) => {
-    if (r.status === "fulfilled") {
-      sent += 1;
-      return;
-    }
-    if (r.statusCode === 410 || r.statusCode === 404) {
-      const endpoint = subscriptions[i]?.endpoint;
-      if (endpoint) expiredEndpoints.push(endpoint);
-    }
-  });
-  return { sent, total: subscriptions.length, expiredEndpoints };
 }
 
-function watcherAlertReachedDevice({ hasSubscription, pushSendOk, sent }) {
-  return hasSubscription && pushSendOk && sent > 0;
-}
+const {
+  buildPushNotificationPayload,
+  summarizePushDelivery,
+  watcherAlertReachedDevice,
+  buildWatcherAlertPushRequest,
+  evaluateWatcherAlertDelivery,
+} = await loadHelpers();
 
 // ── Payload shape ──────────────────────────────────────────────────
 const payload = JSON.parse(
@@ -89,6 +146,28 @@ assert.equal(
   true,
 );
 
+// ── Watcher alert → /api/push/send request → device (E2E path, no network)
+const e2e = evaluateWatcherAlertDelivery({
+  userId: "user-1",
+  title: "Trade closed: XAUUSD",
+  body: "buy +12.50 — cockpit & journal updated",
+  url: "/cockpit",
+  subscriptions: subs,
+  sendResults: [{ status: "fulfilled" }],
+});
+assert.equal(e2e.request.title, "AXE · Trade closed: XAUUSD");
+assert.equal(e2e.request.tag, "axe-watcher");
+assert.equal(e2e.summary.sent, 1);
+assert.equal(e2e.reachedDevice, true);
+
+const req = buildWatcherAlertPushRequest({
+  userId: "user-1",
+  title: "AXE · already prefixed",
+  body: "x",
+  url: "/chat",
+});
+assert.equal(req.title, "AXE · already prefixed");
+
 // ── Expired endpoint cleanup ───────────────────────────────────────
 const expired = summarizePushDelivery({
   subscriptions: [
@@ -104,11 +183,12 @@ console.log("C6 push delivery path: ok");
 console.log(
   JSON.stringify(
     {
-      watcherAlert: "trade_close → /api/push/send → subscribed device",
+      watcherAlert: "axeProactiveWatcher → buildWatcherAlertPushRequest → /api/push/send → device",
       proven: {
         payloadShape: true,
         zeroSubsGraceful: true,
         deviceReached: true,
+        watcherE2EPath: e2e.reachedDevice,
         expiredCleanup: true,
       },
     },
