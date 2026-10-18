@@ -265,19 +265,24 @@ export default async function IntelPage({ searchParams }: PageProps) {
         </div>
         {intel.shortVolume.length > 0 ? (
           <ul className="mt-3 space-y-2">
-            {intel.shortVolume.slice(0, 8).map((row, i) => (
+            {intel.shortVolume.slice(0, 8).map((row, i) => {
+              const ratioUi = shortVolumeRatioUi(row.shortRatio);
+              return (
               <li
                 key={`${row.symbol}-${row.date}-${i}`}
-                className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                className={`flex items-baseline gap-3 rounded-lg border bg-[#0a0a0d]/90 px-3 py-2 ${ratioUi.rowClassName}`}
               >
                 <span className="font-mono text-[11px] font-semibold text-tos-text">{row.symbol}</span>
                 <span className="font-mono text-[10px] text-tos-dim">
                   short {formatCompactVolume(row.shortVolume)} / {formatCompactVolume(row.totalVolume)}
                 </span>
-                {/* TODO(learning): show shortRatio as a % and accent rows above a threshold you choose */}
+                <span className={`font-mono text-[10px] font-semibold ${ratioUi.ratioClassName}`}>
+                  {ratioUi.label}
+                </span>
                 <span className="ml-auto font-mono text-[10px] text-tos-muted">{row.date}</span>
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : (
           <p className="mt-2 text-xs text-tos-muted">
@@ -1011,6 +1016,30 @@ function formatCompactVolume(value: number): string {
   if (abs >= 1e6) return `${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 1e3) return `${(abs / 1e3).toFixed(1)}K`;
   return String(Math.round(abs));
+}
+
+/**
+ * INTEL-FREE short-volume row accent.
+ * shortRatio is 0..1 from FINRA (shortVolume / totalVolume).
+ */
+function shortVolumeRatioUi(shortRatio: number): {
+  label: string;
+  ratioClassName: string;
+  rowClassName: string;
+} {
+  const pct = Number.isFinite(shortRatio) ? Math.round(shortRatio * 100) : 0;
+  const label = `${pct}% short`;
+
+  // TODO(learning): choose elevated-short threshold + accent classes.
+  // Trade-off: low (~0.25) highlights many names; high (~0.45+) is rarer/louder.
+  // Hint: compare shortRatio to your threshold, then return amber vs muted classes.
+  const elevated = false; // replace with: shortRatio >= YOUR_THRESHOLD
+
+  return {
+    label,
+    ratioClassName: elevated ? "text-amber-300" : "text-tos-muted",
+    rowClassName: elevated ? "border-amber-300/25" : "border-white/[0.05]",
+  };
 }
 
 function formatAge(seconds: number): string {

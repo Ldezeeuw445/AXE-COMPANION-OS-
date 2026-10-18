@@ -1,6 +1,7 @@
 /**
  * SEC EDGAR Form 4 insider trades (free, no API key).
  * Uses EFTS search + Form 4 XML from Archives.
+ * Pure XML helpers are exported for unit tests without network.
  */
 
 export type EdgarInsiderTrade = {
@@ -24,7 +25,8 @@ const SEC_HEADERS = {
   Accept: "application/json",
 };
 
-function xmlVal(xml: string, tag: string): string {
+/** Read a Form 4 tag — prefers nested <value>, else direct text. */
+export function xmlVal(xml: string, tag: string): string {
   const outerRe = new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "i");
   const outerMatch = xml.match(outerRe);
   if (!outerMatch) return "";
@@ -33,6 +35,61 @@ function xmlVal(xml: string, tag: string): string {
   if (valMatch) return valMatch[1].trim();
   const directMatch = inner.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
   return directMatch ? directMatch[1].trim() : "";
+}
+
+/**
+ * Parse non-derivative P/S transactions from one Form 4 XML body.
+ * Skips codes other than purchase (P) / sale (S).
+ */
+export function parseForm4Xml(xml: string): EdgarInsiderTrade[] {
+  const ticker = xmlVal(xml, "issuerTradingSymbol").split(/[\s,]+/)[0].toUpperCase();
+  const insiderName = xmlVal(xml, "rptOwnerName");
+  const officerTitle = xmlVal(xml, "officerTitle") || undefined;
+  const txDate = xmlVal(xml, "periodOfReport") || xmlVal(xml, "transactionDate");
+
+  const trades: EdgarInsiderTrade[] = [];
+  const txRegex = /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/gi;
+  let txMatch;
+  while ((txMatch = txRegex.exec(xml)) !== null) {
+    const txXml = txMatch[1];
+    const code = xmlVal(txXml, "transactionCode").toUpperCase();
+    if (code !== "P" && code !== "S") continue;
+    const shares = Math.round(Number(xmlVal(txXml, "transactionShares")) || 0);
+    const price = Number(xmlVal(txXml, "transactionPricePerShare")) || 0;
+    const value = Math.round(shares * price);
+    if (value <= 0 && shares <= 0) continue;
+    trades.push({
+      ticker: ticker || "N/A",
+      insider: insiderName || "Unknown",
+      role: officerTitle,
+      type: code === "P" ? "BUY" : "SELL",
+      shares: shares > 0 ? shares : undefined,
+      value,
+      date: txDate,
+    });
+  }
+  return trades;
+}
+
+/** Dedupe + sort by value; optional ticker filter. */
+export function finalizeEdgarTrades(
+  trades: EdgarInsiderTrade[],
+  symbol?: string,
+  limit = 25,
+): EdgarInsiderTrade[] {
+  const seen = new Set<string>();
+  const unique = trades.filter((t) => {
+    const key = `${t.insider}:${t.ticker}:${t.date}:${t.type}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  unique.sort((a, b) => b.value - a.value);
+
+  const filtered = symbol
+    ? unique.filter((t) => t.ticker === symbol || t.ticker.startsWith(symbol))
+    : unique;
+  return filtered.slice(0, limit);
 }
 
 /**
@@ -92,45 +149,8 @@ export async function fetchInsiderTradesFromEdgar(
   const trades: EdgarInsiderTrade[] = [];
   for (const result of xmlResults) {
     if (!result) continue;
-    const { xml } = result;
-    const ticker = xmlVal(xml, "issuerTradingSymbol").split(/[\s,]+/)[0].toUpperCase();
-    const insiderName = xmlVal(xml, "rptOwnerName");
-    const officerTitle = xmlVal(xml, "officerTitle") || undefined;
-    const txDate = xmlVal(xml, "periodOfReport") || xmlVal(xml, "transactionDate");
-
-    const txRegex = /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/gi;
-    let txMatch;
-    while ((txMatch = txRegex.exec(xml)) !== null) {
-      const txXml = txMatch[1];
-      const code = xmlVal(txXml, "transactionCode").toUpperCase();
-      if (code !== "P" && code !== "S") continue;
-      const shares = Math.round(Number(xmlVal(txXml, "transactionShares")) || 0);
-      const price = Number(xmlVal(txXml, "transactionPricePerShare")) || 0;
-      const value = Math.round(shares * price);
-      if (value <= 0 && shares <= 0) continue;
-      trades.push({
-        ticker: ticker || "N/A",
-        insider: insiderName || "Unknown",
-        role: officerTitle,
-        type: code === "P" ? "BUY" : "SELL",
-        shares: shares > 0 ? shares : undefined,
-        value,
-        date: txDate,
-      });
-    }
+    trades.push(...parseForm4Xml(result.xml));
   }
 
-  const seen = new Set<string>();
-  const unique = trades.filter((t) => {
-    const key = `${t.insider}:${t.ticker}:${t.date}:${t.type}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  unique.sort((a, b) => b.value - a.value);
-
-  const filtered = symbol
-    ? unique.filter((t) => t.ticker === symbol || t.ticker.startsWith(symbol))
-    : unique;
-  return filtered.slice(0, 25);
+  return finalizeEdgarTrades(trades, symbol);
 }
