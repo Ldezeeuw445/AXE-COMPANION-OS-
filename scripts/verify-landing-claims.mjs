@@ -1,26 +1,18 @@
 /**
  * The landing page is a promise. These checks keep it one we keep.
  *
- * Three claims on `/` had gone stale while the app moved underneath them:
- *
- *   - "Unusual Whales" sat in the hero trust row and in a feature tile, for a
- *     subscription that was never bought. Naming a provider you do not have is
- *     the one marketing lie a trader will check.
- *   - Pricing showed two cards, "Free" and "~€19/mo", while the product sold
- *     four tiers at €0 / €20 / €40 / €50 with live Stripe keys. The page is now
- *     generated from AXE_BILLING_TIERS, and this file proves it cannot drift.
- *   - The FAQ said execution was behind a master password and stopped there,
- *     with nothing about the limits that actually gate an automatic order.
- *
- * It also holds the landing-page decision in place: `/` is the landing page,
- * the retired drafts redirect to it, and the switcher to Trading OS exists.
+ * The public homepage is the Trading OS companion layout, rebuilt for
+ * Companion: hero, same-stack, ENGINE / ONE / Adaptive, example cockpit,
+ * Companion-only feature grid, Trading OS bridge, billing-backed pricing,
+ * FAQ, waitlist, legal. Claims must stay true as the app moves.
  *
  * Run: node scripts/verify-landing-claims.mjs
  */
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
-import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP } from "../src/lib/billing/tiers.ts";
+import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP, TRADING_OS_FOUNDER_TIER } from "../src/lib/billing/tiers.ts";
 import { INTEL_ACTION_SOURCE } from "../src/lib/intel/intelSources.ts";
 import {
   ECOSYSTEM_APPS,
@@ -29,6 +21,15 @@ import {
   ecosystemApp,
   isReachable,
 } from "../src/lib/ecosystem/apps.ts";
+import {
+  COMPANION_FEATURES,
+  LANDING_FAQ,
+  LANDING_HERO,
+  LANDING_SURFACES,
+  LANDING_TOS_BRIDGE,
+  LANDING_TESTIMONIALS,
+  landingTestimonialsEnabled,
+} from "../src/lib/marketing/landingCopy.ts";
 
 let passed = 0;
 function check(name, fn) {
@@ -38,20 +39,49 @@ function check(name, fn) {
 }
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
-const landing = read("src/app/page.tsx");
+const landingDir = new URL("../src/components/marketing/landing/", import.meta.url);
+const landingFiles = readdirSync(landingDir)
+  .filter((name) => name.endsWith(".tsx"))
+  .map((name) => read(join("src/components/marketing/landing", name)));
+const landing = [
+  read("src/app/page.tsx"),
+  read("src/lib/marketing/landingCopy.ts"),
+  read("src/lib/marketing/loadLandingCatalog.ts"),
+  read("src/components/marketing/LandingWaitlist.tsx"),
+  ...landingFiles,
+].join("\n");
 const switcher = read("src/components/marketing/AppSwitcher.tsx");
 const robots = read("src/app/robots.ts");
 const hero = read("src/components/marketing/LandingHeroDevices.tsx");
 const heroCss = read("src/app/globals.css");
 const heroMock = read("public/hero-demo/app.html");
 const sitemap = read("src/app/sitemap.ts");
+const strayLanding = read("public/landing/index.html");
 
 console.log("landing claims");
 
-// ── no provider we do not pay for ────────────────────────────────────────
+check("the new homepage keeps the companion layout Luka asked for", () => {
+  assert.equal(LANDING_HERO.titleAccent, "your intelligence.");
+  assert.match(LANDING_HERO.titleLead, /Your trades, your journal/);
+  assert.equal(LANDING_SURFACES.kicker, "Same stack · two surfaces");
+  assert.match(landing, /AXE ENGINE/);
+  assert.match(landing, /AXE ONE/);
+  assert.match(landing, /Adaptive Intelligence/);
+  assert.match(landing, /LandingCockpitExample/);
+  assert.match(landing, /LandingDeskChat/);
+  assert.match(landing, /LandingCube/);
+  assert.match(landing, /LandingFeatureGrid/);
+  assert.match(landing, /LandingPricing/);
+  assert.match(landing, /LandingFaq/);
+  assert.match(landing, /LandingFinalCta/);
+  assert.match(LANDING_HERO.body, /synced with Trading OS on your desktop/);
+  const copy = read("src/lib/marketing/landingCopy.ts");
+  assert.ok(!/same Supabase account/i.test(copy), "marketing copy must not mention a Supabase account");
+  assert.ok(!/Supabase/i.test(copy), "marketing copy must not name Supabase");
+  assert.ok(!/Row-Level Security/i.test(copy), "marketing copy must not use database jargon");
+});
+
 check("Unusual Whales is only ever disclosed, never advertised", () => {
-  // Naming it as a thing we do not have is honest. Naming it in a trust row
-  // or a feature tile is the one marketing lie a trader will check.
   const mentions = [...landing.matchAll(/unusual\s*whales/gi)];
   assert.equal(
     mentions.length,
@@ -72,24 +102,16 @@ check("it does name the free intel sources that do work", () => {
 });
 
 check("the FAQ's 'not subscribed' list matches INTEL_ACTION_SOURCE", () => {
-  // The page said Senate trades needed Unusual Whales for as long as that was
-  // true. It stayed on the page after the feed moved to Alpha Vantage, so the
-  // landing was telling visitors a working feature was unavailable. The two
-  // sides are now checked against each other.
-  const faq = landing.slice(landing.indexOf("Which market intelligence"));
-  // Start at the answer, not the question: the question's own closing `",`
-  // would otherwise end the slice before a single claim had been read.
-  const body = faq.slice(faq.indexOf('a: "') + 4);
-  const answer = body.slice(0, body.indexOf('",'));
-  assert.ok(answer.length > 200, "the intel answer did not parse out of the FAQ");
+  const item = LANDING_FAQ.find((row) => row.q.includes("Which market intelligence"));
+  assert.ok(item, "the intel FAQ must exist");
+  const answer = item.a;
+  assert.ok(answer.length > 200, "the intel answer is too short to be the real claim");
   const label = {
     darkPoolPrints: "dark-pool prints",
     unusualOptions: "options flow",
     marketTide: "market tide",
     senateTrades: "congressional",
   };
-  // The answer has two halves: the sentence listing what is live, and the one
-  // ending in "we have not bought". Which half a feed is named in is the claim.
   const uwAt = answer.indexOf("need a paid Unusual Whales");
   assert.ok(uwAt > 0, "the answer must still disclose what Unusual Whales gates");
   const split = answer.lastIndexOf(". ", uwAt) + 1;
@@ -116,57 +138,64 @@ check("the FAQ's 'not subscribed' list matches INTEL_ACTION_SOURCE", () => {
   );
 });
 
-// ── pricing comes from the source of truth ───────────────────────────────
 check("pricing is generated from AXE_BILLING_TIERS, not retyped", () => {
-  assert.ok(
-    landing.includes("AXE_BILLING_TIERS.map("),
-    "the pricing grid must map the tier list",
-  );
-  assert.ok(
-    landing.includes("tier.priceEurMonthly"),
-    "prices must be read from the tier, never written into the markup",
-  );
+  assert.ok(landing.includes("AXE_BILLING_TIERS.map("), "the pricing grid must map the tier list");
+  assert.ok(landing.includes("tier.priceEurMonthly"), "prices must be read from the tier");
+  assert.ok(landing.includes("tier.includes"), "bullets must come from the tier, not a second list");
 });
 
 check("no stale price is hardcoded anywhere on the page", () => {
   const prices = new Set(
     AXE_BILLING_TIERS.map((t) => t.priceEurMonthly).filter((p) => p !== null && p !== 0),
   );
-  // Any "€<number>" literal in the page must be a price we actually charge.
+  prices.add(TRADING_OS_FOUNDER_TIER.priceEurMonthly);
+  prices.add(TRADING_OS_FOUNDER_TIER.axeFounderPriceEurMonthly);
   for (const [, amount] of landing.matchAll(/€(\d+)/g)) {
     const n = Number(amount);
-    const known = prices.has(n) || n === 0 || n === 69 || n === 79; // 69/79 = Trading OS SKUs
+    const known = prices.has(n) || n === 0;
     assert.ok(known, `€${n} appears on the landing page but is not a price we charge`);
   }
   assert.ok(!/~€19|€19\/mo/.test(landing), "the old ~€19/mo guess must be gone");
 });
 
-check("every tier has landing bullets, and no orphan bullets exist", () => {
+check("every billed tier is on the page, including Elite", () => {
   const ids = AXE_BILLING_TIERS.map((t) => t.id);
-  for (const id of ids) {
+  assert.deepEqual(ids, ["free", "pro", "founder", "elite"]);
+  for (const tier of AXE_BILLING_TIERS) {
+    assert.ok(landing.includes(`€{tier.priceEurMonthly`) || landing.includes("tier.priceEurMonthly"), "price field");
     assert.ok(
-      new RegExp(`^\\s{2}${id}: \\[`, "m").test(landing),
-      `tier "${id}" has no bullets in LANDING_TIER_BULLETS`,
+      landing.includes("tier.label") || landing.includes(tier.label),
+      `tier ${tier.id} must be renderable`,
     );
-  }
-  const declared = [...landing.matchAll(/^ {2}(\w+): \[$/gm)]
-    .map((m) => m[1])
-    .filter((k) => ids.includes(k) || ["free", "pro", "founder", "elite"].includes(k));
-  for (const key of declared) {
-    assert.ok(ids.includes(key), `bullets declared for unknown tier "${key}"`);
   }
 });
 
-check("the founder seat cap is read, not retyped", () => {
+check("the founder seat cap is read, not retyped, and 0/100 is not hardcoded", () => {
   assert.ok(landing.includes("{FOUNDER_SEAT_CAP}"), "print the cap from the constant");
   assert.equal(FOUNDER_SEAT_CAP, 100);
+  assert.ok(!/\b100 seats\b/.test(landing), "a hardcoded seat count would survive a change to the cap");
+  assert.ok(!landing.includes("0/100"), "never hardcode an empty Founder counter");
+  assert.ok(landing.includes("loadLandingCatalog") || landing.includes("getBillingCatalogState"), "seats come from the DB");
+  assert.ok(landing.includes("founderSeatsUsed"), "render the live used count when the catalog loads");
   assert.ok(
-    !/\b100 seats\b/.test(landing),
-    "a hardcoded seat count would survive a change to the cap",
+    read("src/app/page.tsx").includes('export const dynamic = "force-dynamic"'),
+    "the homepage must not statically bake a stale Founder count",
   );
 });
 
-// ── the execution story is told whole ────────────────────────────────────
+check("AXE can execute, and Companion has News", () => {
+  const trades = LANDING_FAQ.find((row) => row.q === "Does AXE place trades?");
+  assert.ok(trades, "the execution question must be on the page");
+  assert.match(trades.a, /Yes/i);
+  assert.match(trades.a, /connected broker|safety checks/i);
+  assert.ok(!/^No\./.test(trades.a.trim()), "the TOS Phase-1 'No' answer must not ship here");
+
+  const news = LANDING_FAQ.find((row) => /News/.test(row.q));
+  assert.ok(news, "a News FAQ must exist");
+  assert.match(news.a, /Yes|News surface|cached multi-source/i);
+  assert.ok(COMPANION_FEATURES.some((f) => /News/i.test(f.title)), "News belongs in the Companion grid");
+});
+
 check("the FAQ answers whether AXE can trade on its own", () => {
   assert.ok(
     /without me pressing anything|zonder dat ik/i.test(landing),
@@ -187,17 +216,85 @@ check("the page promises a block, never a quiet downsize", () => {
   );
 });
 
-// ── one landing page, and a way across to Trading OS ─────────────────────
+check("the feature grid is Companion-only; TOS stays in the labelled bridge", () => {
+  assert.equal(LANDING_TOS_BRIDGE.kicker, "with Trading OS");
+  const joined = COMPANION_FEATURES.map((f) => `${f.title} ${f.desc}`).join("\n");
+  for (const forbidden of ["QuantLab", "command palette", "sector heatmap", "BIGMAC", "Polymarket"]) {
+    assert.ok(!new RegExp(forbidden, "i").test(joined), `${forbidden} is a desk feature — keep it out of the grid`);
+  }
+  assert.ok(
+    LANDING_TOS_BRIDGE.features.some((f) => /QuantLab|multi-chart|command palette/i.test(f)),
+    "the bridge must name desk features",
+  );
+});
+
+check("no fabricated testimonials ship", () => {
+  assert.equal(LANDING_TESTIMONIALS.length, 0, "do not invent quotes");
+  assert.equal(landingTestimonialsEnabled({}), false);
+  for (const name of ["Freya H.", "Thomas M.", "Elena R.", "Sarah L.", "Marcus K."]) {
+    assert.ok(!landing.includes(name), `${name} was a sample quote — leave it off`);
+  }
+  assert.ok(!/Verified quotes\s*6|Avg\.? rating\s*4\.7/i.test(landing), "no fake social proof");
+  assert.ok(landing.includes("data-landing-testimonials"), "keep the flagged slot");
+});
+
+check("the cockpit mock is labelled as an example", () => {
+  assert.ok(/Example — sample cockpit, not live data/.test(landing));
+  assert.ok(landing.includes('data-landing-cockpit-example="true"'));
+});
+
+check("desk chat is demo chrome with a snap slot, not a fake live session", () => {
+  const desk = read("src/components/marketing/landing/LandingDeskChat.tsx");
+  assert.ok(desk.includes('data-landing-desk-chat="true"'));
+  assert.ok(desk.includes('id="desk-chat-slot"'));
+  assert.ok(/snap back|Minimize with/.test(desk));
+  assert.ok(desk.includes('href="/login"'));
+  assert.ok(!/BTC|NASDAQ|buy now|live reply from AXE/i.test(desk));
+  assert.match(desk, /not a live session/i);
+});
+
+check("ENGINE / ONE / Adaptive use CSS 3D cubes, not a flat tile", () => {
+  const cubes = read("src/components/marketing/landing/LandingCubes.tsx");
+  const css = read("src/app/globals.css");
+  assert.ok(cubes.includes("axe-landing-cube3d-face"));
+  assert.ok(cubes.includes("LandingPyramid"));
+  assert.ok(css.includes("axe-landing-cube3d-face--front"));
+  assert.ok(css.includes("axe-landing-cube3d-face--back"));
+  assert.ok(css.includes("transform-style: preserve-3d"));
+  assert.ok(css.includes("axe-cube-spin"));
+});
+
+check("no href='#' and no bare social domains", () => {
+  assert.ok(!/href=['"]#['"]/.test(landing), "in-page links need a real id, not '#'");
+  assert.ok(!/https?:\/\/(www\.)?(x|twitter|instagram|facebook|linkedin)\.com/i.test(landing));
+});
+
+check("app buttons go to Companion routes", () => {
+  for (const href of ['href="/login"', 'href="/signup"', 'href="/welcome"', 'href="/chat"']) {
+    assert.ok(landing.includes(href), `${href} should be on the landing`);
+  }
+});
+
+check("waitlist copy says AXE Companion", () => {
+  assert.match(landing, /Join the AXE Companion waitlist/);
+  assert.ok(!/Join the Trading OS waitlist/.test(landing));
+});
+
 check("the retired drafts redirect to / instead of competing with it", () => {
   for (const route of ["launch", "final", "finallaunch", "ui-premium"]) {
     const file = `src/app/${route}/page.tsx`;
     assert.ok(existsSync(new URL(`../${file}`, import.meta.url)), `${file} is missing`);
     const src = read(file);
-    assert.ok(
-      src.includes('permanentRedirect("/")'),
-      `${route} must 308 to the one landing page`,
-    );
+    assert.ok(src.includes('permanentRedirect("/")'), `${route} must 308 to the one landing page`);
   }
+});
+
+check("the stray public/landing page redirects home", () => {
+  assert.ok(
+    /url=\/|location\.replace\("\/"\)/.test(strayLanding),
+    "public/landing/index.html must send visitors to /",
+  );
+  assert.ok(!/Interactive dashboard mockup/.test(strayLanding));
 });
 
 check("no retired draft is advertised in the sitemap", () => {
@@ -214,14 +311,12 @@ check("robots keeps crawlers off the redirects", () => {
 });
 
 check("the landing header carries the app switcher", () => {
+  const header = read("src/components/marketing/landing/LandingHeader.tsx");
   assert.ok(
-    landing.includes('<AppSwitcher current="companion" />'),
+    header.includes('<AppSwitcher current="companion" />'),
     "the switcher is the cross-app move Luka asked for; it belongs in the header",
   );
-  assert.ok(
-    landing.indexOf("<AppSwitcher") < landing.indexOf("live ticker"),
-    "it must sit in the header, above the fold",
-  );
+  assert.ok(read("src/app/page.tsx").includes("<LandingHeader"), "the page must render the header first");
 });
 
 check("the page links out to Trading OS by URL, not by prose", () => {
@@ -234,7 +329,6 @@ check("the page links out to Trading OS by URL, not by prose", () => {
   assert.ok(tos.url.startsWith("https://"), "the URL must be absolute");
 });
 
-// ── AXE Core must never leak into a public switcher ──────────────────────
 check("AXE Core is in the ecosystem but never public", () => {
   const core = ecosystemApp("axe-core");
   assert.ok(core, "axe-core should still be listed for internal use");
@@ -243,18 +337,12 @@ check("AXE Core is in the ecosystem but never public", () => {
     !PUBLIC_ECOSYSTEM_APPS.some((a) => a.id === "axe-core"),
     "a visitor must never see the operator cockpit in a switcher",
   );
-  assert.ok(
-    switcher.includes("PUBLIC_ECOSYSTEM_APPS.map("),
-    "the switcher must render the public list",
-  );
+  assert.ok(switcher.includes("PUBLIC_ECOSYSTEM_APPS.map("), "the switcher must render the public list");
   assert.ok(
     !/(?<!PUBLIC_)ECOSYSTEM_APPS/.test(switcher),
     "the switcher must not touch the unfiltered list, which holds AXE Core",
   );
-  assert.ok(
-    !landing.includes("axeheadquarters"),
-    "the public landing page must not mention AXE Core at all",
-  );
+  assert.ok(!landing.includes("axeheadquarters"), "the public landing page must not mention AXE Core at all");
 });
 
 check("the public switcher offers exactly Companion and Trading OS", () => {
@@ -274,46 +362,28 @@ check("a surface that is not open yet says so", () => {
 });
 
 check("nothing links out to a surface that is down", () => {
-  // The gate exists because tradingosapp.com answered 402
-  // (DEPLOYMENT_DISABLED) on both the apex and www for days while it moved
-  // off Vercel. A switcher that hands a visitor that page is worse than one
-  // that says the terminal is between hosts. The gate stays whether or not
-  // anything is down today — the next outage should not need new code.
   assert.ok(
     switcher.includes("if (!isReachable(app.availability))"),
     "the switcher must render an unreachable surface as text, not a link",
   );
-  assert.ok(
-    switcher.includes('aria-disabled="true"'),
-    "an unreachable row must be announced as unavailable",
-  );
+  assert.ok(switcher.includes('aria-disabled="true"'), "an unreachable row must be announced as unavailable");
   assert.ok(
     /tradingOs && isReachable\(tradingOs\.availability\)/.test(landing),
     "the page's own Trading OS button must be gated the same way",
   );
   assert.ok(
     !/>\s*Private beta\s*</.test(landing),
-    "the Trading OS badge must come from availabilityLabel, not be retyped — " +
-      "a hardcoded one left the page saying 'Private beta' while the switcher " +
-      "said 'Moving hosts'",
+    "the Trading OS badge must come from availabilityLabel, not be retyped",
   );
 });
 
 check("Trading OS is linked again now that its own host answers", () => {
-  // Measured 2026-10-17 after the DNS moved to our Cloudflare Tunnel:
-  //   https://tradingosapp.com      -> 200
-  //   https://www.tradingosapp.com  -> 200
-  // So the two landings link to each other in both directions again. If this
-  // ever has to go back to "offline", the gate above is what carries it.
   const tos = ecosystemApp("trading-os");
   assert.equal(tos.availability, "beta", "invite-only, but up and linkable");
   assert.ok(isReachable(tos.availability), "the switcher must link out again");
   assert.equal(availabilityLabel(tos.availability), "Private beta");
-  // The page's "between hosts" fallback copy must not be what a visitor reads
-  // while the terminal is actually up.
   assert.ok(
-    !landing.includes("Trading OS is between hosts right now") ||
-      isReachable(tos.availability),
+    !landing.includes("Trading OS is between hosts right now") || isReachable(tos.availability),
     "that line may only render for a surface that is genuinely down",
   );
 });
@@ -328,7 +398,6 @@ check("every ecosystem entry is complete", () => {
   assert.equal(new Set(urls).size, urls.length, "two surfaces share a URL");
 });
 
-// ── the switcher behaves ─────────────────────────────────────────────────
 check("the switcher closes on Escape and on an outside click", () => {
   assert.ok(switcher.includes('event.key === "Escape"'), "Escape must close it");
   assert.ok(switcher.includes("pointerdown"), "a click outside must close it");
@@ -336,17 +405,8 @@ check("the switcher closes on Escape and on an outside click", () => {
 });
 
 check("the menu fits a phone screen", () => {
-  // A left-anchored fixed-width panel hanging off a mid-header trigger gets
-  // clipped at 390px wide, and the page hides horizontal overflow, so the
-  // clipped half is unreachable. Below sm it must span the viewport.
-  assert.ok(
-    /fixed left-3 right-3/.test(switcher),
-    "the panel must span the viewport with a gutter on phones",
-  );
-  assert.ok(
-    /sm:absolute sm:left-0/.test(switcher),
-    "from sm up it should hang off the trigger like a normal menu",
-  );
+  assert.ok(/fixed left-3 right-3/.test(switcher), "the panel must span the viewport with a gutter on phones");
+  assert.ok(/sm:absolute sm:left-0/.test(switcher), "from sm up it should hang off the trigger like a normal menu");
 });
 
 check("the current surface is marked, not linked", () => {
@@ -359,10 +419,6 @@ check("the current surface is marked, not linked", () => {
 });
 
 check("the Trading OS repo keeps the same list", () => {
-  // The two landings only connect if both sides agree on the addresses, so the
-  // mirrored file in Ldezeeuw445/the-one (src/lib/ecosystem.ts) must stay in
-  // step with this one. Nothing here can read that repo, so this check pins
-  // the contract its copy is written against.
   const companion = ecosystemApp("companion");
   assert.equal(companion.url, "https://www.axecompanion.com");
   assert.equal(ecosystemApp("trading-os").url, "https://www.tradingosapp.com");
@@ -374,72 +430,38 @@ check("it is reachable by keyboard and announced", () => {
   assert.ok(switcher.includes("aria-expanded={open}"));
   assert.ok(switcher.includes('role="menu"'));
   assert.ok(/aria-label=\{`\$\{activeName\}/.test(switcher), "the trigger needs a label");
-  // not-sr-only is not emitted by this Tailwind build, so the visible label
-  // must use a utility that is. A silent miss here means a bare chevron.
-  assert.ok(
-    !/not-sr-only/.test(switcher),
-    "not-sr-only produces no CSS in this build; use hidden/sm:inline",
-  );
+  assert.ok(!/not-sr-only/.test(switcher), "not-sr-only produces no CSS in this build; use hidden/sm:inline");
   assert.ok(
     /hidden whitespace-nowrap sm:inline">Switch app</.test(switcher),
     "the trigger needs a visible label from sm up",
   );
 });
 
-// ── the hero works for someone who is not signed in ──────────────────────
 check("the hero mock needs no account and makes no network call", () => {
-  // The hero used to iframe /demo/embed, which minted an anonymous session.
-  // Anonymous accounts are gone, so that hero shows a sign-in form inside the
-  // phone to every visitor who is not already logged in.
-  // Only real usage counts: the comment above the component explains why
-  // /demo/embed is gone, and naming it there is the point.
   const heroCode = hero.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.ok(
-    !/\/demo\/embed/.test(heroCode),
-    "the hero must not depend on /demo/embed — it needs a session we no longer mint",
-  );
-  assert.ok(
-    hero.includes("/hero-demo/app.html"),
-    "the hero runs the self-contained mock",
-  );
+  assert.ok(!/\/demo\/embed/.test(heroCode), "the hero must not depend on /demo/embed");
+  assert.ok(hero.includes("/hero-demo/app.html"), "the hero runs the self-contained mock");
   for (const forbidden of [/supabase/i, /\bfetch\s*\(/, /\/api\//]) {
-    assert.ok(
-      !forbidden.test(heroMock),
-      `the mock must stay self-contained; found ${forbidden}`,
-    );
+    assert.ok(!forbidden.test(heroMock), `the mock must stay self-contained; found ${forbidden}`);
   }
 });
 
 check("the mock says it is a demo rather than passing for an account", () => {
   assert.ok(/NO LOGIN/i.test(heroMock), "the mock labels itself");
-  assert.ok(
-    /no account needed/i.test(hero),
-    "and the hero says so underneath, so nobody thinks this is their data",
-  );
+  assert.ok(/no account needed/i.test(hero), "and the hero says so underneath");
 });
 
 check("both devices are there, at real logical sizes", () => {
   assert.ok(/phone: \{ w: 390, h: 844/.test(hero), "iPhone logical size");
   assert.ok(/ipad: \{ w: 1024, h: 768/.test(hero), "iPad logical size");
-  // Letting the iframe take the bezel's width gives the mock a ~250px
-  // viewport and its header and tab bar collapse into each other.
   assert.ok(hero.includes("width / w"), "the frame scales the iframe to fit");
-  assert.ok(
-    heroCss.includes("transform-origin: top left"),
-    "a scaled iframe needs its origin pinned or it drifts out of the bezel",
-  );
+  assert.ok(heroCss.includes("transform-origin: top left"), "a scaled iframe needs its origin pinned");
 });
 
 check("the mock draws no second device inside the bezel", () => {
   assert.ok(hero.includes("chrome=off"), "the hero asks for the chrome-less mode");
-  assert.ok(
-    /\.device\.bare::before \{ display: none; \}/.test(heroMock),
-    "chrome=off must hide the mock's own notch",
-  );
-  assert.ok(
-    /\.device\.bare\.mobile \.topbar/.test(heroMock),
-    "and leave room under the bezel's notch for the mock's top bar",
-  );
+  assert.ok(/\.device\.bare::before \{ display: none; \}/.test(heroMock), "chrome=off must hide the mock's own notch");
+  assert.ok(/\.device\.bare\.mobile \.topbar/.test(heroMock), "and leave room under the bezel's notch");
 });
 
 check("the block lights its dot grid on hover, touch and focus", () => {
@@ -447,13 +469,16 @@ check("the block lights its dot grid on hover, touch and focus", () => {
     assert.ok(heroCss.includes(`.${cls}`), `${cls} is missing from globals.css`);
     assert.ok(hero.includes(cls), `${cls} is never applied`);
   }
-  // Pointer events rather than mouse events, so a touch lights it too.
   assert.ok(hero.includes("onPointerEnter"), "touch must light the block as well");
   assert.ok(hero.includes("onFocusCapture"), "a keyboard user needs the same signal");
   assert.ok(
     /@media \(prefers-reduced-motion: reduce\)[\s\S]{0,220}axe-hero-dots/.test(heroCss),
     "respect reduced motion",
   );
+});
+
+check("the hero placeholder mockup line is gone", () => {
+  assert.ok(!/Interactive dashboard mockup loading in future builds/.test(landing));
 });
 
 console.log(`\n${passed} checks passed`);

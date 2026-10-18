@@ -14,9 +14,10 @@ export default defineConfig({
     trace: "off",
   },
   webServer: {
-    command: `npx next dev -p ${port} -H 127.0.0.1`,
+    // Production server so screenshots never include the Next.js dev "N" badge.
+    command: `npx next start -p ${port} -H 127.0.0.1`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 180_000,
   },
   projects: [

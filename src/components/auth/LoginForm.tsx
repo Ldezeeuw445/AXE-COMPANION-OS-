@@ -20,9 +20,9 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-export function LoginForm() {
+export function LoginForm({ initialMode = "signin" }: { initialMode?: "signin" | "signup" }) {
   const supabaseConfigured = hasSupabaseConfig();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [signInState, signInFormAction] = useActionState<ActionResult, FormData>(signInAction, undefined);
   const [signUpState, signUpFormAction] = useActionState<ActionResult, FormData>(signUpAction, undefined);
 
