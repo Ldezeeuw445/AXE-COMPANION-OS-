@@ -6,6 +6,7 @@
  * falls back to an inline mirror so CI stays zero-dep.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -179,6 +180,20 @@ const expired = summarizePushDelivery({
 assert.equal(expired.sent, 1);
 assert.deepEqual(expired.expiredEndpoints, ["https://push.example/gone"]);
 
+// ── Wiring: watcher + send route share the delivery helpers ────────
+const watcherSrc = readFileSync(
+  join(__dirname, "../src/services/axeProactiveWatcher.ts"),
+  "utf8",
+);
+const sendSrc = readFileSync(
+  join(__dirname, "../src/app/api/push/send/route.ts"),
+  "utf8",
+);
+assert.ok(watcherSrc.includes("buildWatcherAlertPushRequest"));
+assert.ok(watcherSrc.includes("/api/push/send"));
+assert.ok(sendSrc.includes("buildPushNotificationPayload"));
+assert.ok(sendSrc.includes("summarizePushDelivery"));
+
 console.log("C6 push delivery path: ok");
 console.log(
   JSON.stringify(
@@ -190,6 +205,8 @@ console.log(
         deviceReached: true,
         watcherE2EPath: e2e.reachedDevice,
         expiredCleanup: true,
+        watcherWired: true,
+        sendRouteWired: true,
       },
     },
     null,

@@ -19,6 +19,7 @@
     "smoke:launch": "node scripts/smoke-launch.mjs",
     "test:push-delivery": "node scripts/test-push-delivery.mjs",
     "test:finra-short-volume": "node scripts/test-finra-short-volume.mjs",
+    "test:congress-public": "node scripts/test-congress-public.mjs",
     "test:mt5-sync-write-client": "node scripts/test-mt5-sync-write-client.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

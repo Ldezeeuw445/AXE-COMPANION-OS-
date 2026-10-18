@@ -927,13 +927,23 @@ function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id:
     p.state === "live" ? "live" : p.state === "error" ? "unavailable" : "off";
   const textColor =
     p.state === "live" ? "text-emerald-300/80" : p.state === "error" ? "text-amber-300/80" : "text-tos-dim";
+  // INTEL-FREE: failing sources stay visible as unavailable + reason (not a whole-page failure).
+  const reason =
+    p.state === "error" && p.reason
+      ? p.reason.length > 36
+        ? `${p.reason.slice(0, 33)}…`
+        : p.reason
+      : null;
   return (
     <span
-      className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}
+      className={`inline-flex max-w-[14rem] items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}
       title={p.reason ?? p.description}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
-      {text}
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} aria-hidden />
+      <span className="truncate">
+        {text}
+        {reason ? ` · ${reason}` : ""}
+      </span>
     </span>
   );
 }

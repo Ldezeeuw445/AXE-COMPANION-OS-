@@ -29,6 +29,7 @@ import { unusualWhalesHeaders } from "./freeSources/uwGate.ts";
 import { fetchInsiderTradesFromEdgar } from "./freeSources/secEdgar.ts";
 import { fetchInsiderTradesFromFmp } from "./freeSources/fmpInsider.ts";
 import { fetchCongressFromFmpSenateAndHouse } from "./freeSources/fmpCongress.ts";
+import { fetchCongressFromFreeSources } from "./freeSources/congressPublic.ts";
 import {
   fetchFinraShortVolume,
   type FreeShortVolume,
@@ -295,7 +296,7 @@ async function handleSenateTrades(): Promise<Response> {
   }
 
   try {
-    const trades = await fetchCongressFromFreeSources();
+    const trades = await fetchCongressFromFreeSources(fetchWithTimeout);
     if (trades.length > 0) {
       await persistCongressTrades(trades, "free_public");
       await markSynced("congressTrades", trades.length, "free_public");
@@ -496,78 +497,6 @@ async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
 
   throw new Error("quiver_no_data");
 }
-
-async function fetchCongressFromFreeSources(): Promise<SenateTrade[]> {
-  // Free public APIs from House Stock Watcher and Senate Stock Watcher.
-  // No API key required. Returns the most recent disclosures.
-  const results: SenateTrade[] = [];
-
-  try {
-    const senateRes = await fetchWithTimeout(
-      "https://senatestockwatcher.com/api/v1/transactions",
-      12_000,
-    );
-    if (senateRes.ok) {
-      const body = (await senateRes.json()) as Array<Record<string, unknown>>;
-      const raw = Array.isArray(body) ? body : [];
-      results.push(
-        ...raw.slice(0, 25).map((r) => {
-          const txType = String(r.type ?? r.transaction_type ?? "").toLowerCase();
-          const isPurchase = txType.includes("purchase") || txType.includes("buy");
-          return {
-            politician: String(r.senator ?? r.name ?? r.representative ?? "Unknown"),
-            chamber: "Senate",
-            ticker: String(r.ticker ?? r.symbol ?? ""),
-            direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
-            size: String(r.amount_range ?? r.range ?? r.amount ?? "N/A"),
-            date: String(r.transaction_date ?? r.date ?? r.filing_date ?? ""),
-          };
-        }).filter((t) => t.ticker && t.date),
-      );
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const houseRes = await fetchWithTimeout(
-      "https://housestockwatcher.com/api/v1/transactions",
-      12_000,
-    );
-    if (houseRes.ok) {
-      const body = (await houseRes.json()) as Array<Record<string, unknown>>;
-      const raw = Array.isArray(body) ? body : [];
-      results.push(
-        ...raw.slice(0, 25).map((r) => {
-          const txType = String(r.type ?? r.transaction_type ?? "").toLowerCase();
-          const isPurchase = txType.includes("purchase") || txType.includes("buy");
-          return {
-            politician: String(r.representative ?? r.name ?? r.senator ?? "Unknown"),
-            chamber: "House",
-            ticker: String(r.ticker ?? r.symbol ?? ""),
-            direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
-            size: String(r.amount_range ?? r.range ?? r.amount ?? "N/A"),
-            date: String(r.transaction_date ?? r.date ?? r.filing_date ?? ""),
-          };
-        }).filter((t) => t.ticker && t.date),
-      );
-    }
-  } catch { /* ignore */ }
-
-  // Deduplicate and keep the 25 most recent
-  const seen = new Set<string>();
-  const unique = results
-    .filter((t) => {
-      const key = `${t.politician}|${t.ticker}|${t.date}|${t.direction}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 25);
-
-  if (unique.length === 0) throw new Error("free_public_empty");
-  return unique;
-}
-
 
 // ═══════════════════════════════════════════════════════════════════
 // 3. DARK POOL PRINTS — Unusual Whales → Finnhub volume anomaly
