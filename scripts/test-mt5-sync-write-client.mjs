@@ -61,16 +61,25 @@ function assertNoSessionWrites(fileRel) {
     if (fromMatch) {
       pendingFrom = { client: fromMatch[1], table: fromMatch[2], line: i + 1 };
     }
-    // Multi-line: client on previous lines
-    const clientOnly = line.match(/^\s*(await\s+)?(writeSb|supabase)\s*$/);
+    // Multi-line: client alone (optional void/await), e.g. `void writeSb`
+    const clientOnly = line.match(/^\s*(?:await\s+|void\s+)?(writeSb|supabase)\s*$/);
     if (clientOnly) {
-      pendingFrom = { client: clientOnly[2], table: null, line: i + 1 };
+      pendingFrom = { client: clientOnly[1], table: null, line: i + 1 };
     }
     const fromOnly = line.match(
       /^\s*\.from\(\s*["'](broker_trades|user_broker_accounts)["']\s*\)/,
     );
     if (fromOnly && pendingFrom && pendingFrom.table == null) {
       pendingFrom.table = fromOnly[1];
+    }
+    // Reads must not keep a stale pendingFrom that later .update chains inherit.
+    if (/^\s*\.(select|maybeSingle|single|order|limit|eq|neq|in|not|or|gte|lte|gt|lt)\b/.test(line)) {
+      if (pendingFrom?.table && !/^\s*\.(update|insert|upsert|delete)\b/.test(line)) {
+        // keep chaining filters; clear only when the chain is clearly a read
+        if (/^\s*\.(select|maybeSingle|single)\b/.test(line)) {
+          pendingFrom = null;
+        }
+      }
     }
     const mutate = line.match(/^\s*\.(update|insert|upsert|delete)\s*\(/);
     if (mutate && pendingFrom?.table) {
@@ -109,6 +118,8 @@ function assertNoSessionWrites(fileRel) {
 
 assertNoSessionWrites("src/lib/mt5/syncCloudAccount.ts");
 assertNoSessionWrites("src/app/actions/mt5Cloud.ts");
+// Chart symbol-map backfill also mutates user_broker_accounts — must use writeSb.
+assertNoSessionWrites("src/lib/broker/loadChartPageData.ts");
 
 console.log("TOS-SEC-2 MT5 sync write client: ok");
 console.log(
@@ -118,7 +129,17 @@ console.log(
       fallbackToSessionWhenMissing: true,
       ownershipStillViaUserIdFilter: true,
       noSessionWritesOnBrokerTables: true,
-      filesScanned: ["src/lib/mt5/syncCloudAccount.ts", "src/app/actions/mt5Cloud.ts"],
+      filesScanned: [
+        "src/lib/mt5/syncCloudAccount.ts",
+        "src/app/actions/mt5Cloud.ts",
+        "src/lib/broker/loadChartPageData.ts",
+      ],
+      // Known remaining session writers (hub/demo/alpaca) — block full RLS drop until migrated.
+      rlsDropBlockedBy: [
+        "src/lib/broker/hub/adapters/supabaseDatabase.ts",
+        "src/lib/broker/demoAccount.ts",
+        "src/lib/alpaca/provision.ts",
+      ],
     },
     null,
     2,

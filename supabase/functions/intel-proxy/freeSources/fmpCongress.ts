@@ -13,7 +13,8 @@ type FetchFn = (
   headers?: Record<string, string>,
 ) => Promise<Response>;
 
-function mapCongressRow(
+/** Pure FMP senate/house row → FreeCongressTrade (offline-testable). */
+export function mapCongressRow(
   r: Record<string, unknown>,
   defaultChamber: string,
 ): FreeCongressTrade | null {

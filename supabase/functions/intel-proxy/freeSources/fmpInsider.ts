@@ -14,7 +14,8 @@ type FetchFn = (
   headers?: Record<string, string>,
 ) => Promise<Response>;
 
-function mapFmpInsiderRow(r: Record<string, unknown>): FreeInsiderTrade | null {
+/** Pure FMP → FreeInsiderTrade mapper (offline-testable). */
+export function mapFmpInsiderRow(r: Record<string, unknown>): FreeInsiderTrade | null {
   const ticker = String(r.symbol ?? r.ticker ?? "").toUpperCase().trim();
   if (!ticker) return null;
 

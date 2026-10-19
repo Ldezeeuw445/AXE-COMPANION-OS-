@@ -38,6 +38,7 @@ import {
   metadataSymbolUniverseFresh,
   probeBrokerSymbolReport,
 } from "@/lib/broker/brokerSymbolRuntime";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
 const DEFAULT_SYMBOL = "XAUUSD";
@@ -847,7 +848,9 @@ export async function loadChartPageData(
     symbolMap = runtimeMeta.symbol_map;
     knownAccountSymbols = Array.from(new Set([...knownAccountSymbols, ...Object.values(symbolMap)]));
     const nextMetadata = { ...accountMetadata, ...runtimeMeta };
-    void supabase
+    // TOS-SEC-2: account metadata writes via service role (not session UPDATE).
+    const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+    void writeSb
       .from("user_broker_accounts")
       .update({ metadata: nextMetadata })
       .eq("id", account.brokerAccountId)
@@ -860,7 +863,7 @@ export async function loadChartPageData(
       displays: [requested, ...CANONICAL_BROKER_SYMBOLS],
       timeoutMs: 2_000,
     }).then((symbol_resolution_report) => {
-      void supabase
+      void writeSb
         .from("user_broker_accounts")
         .update({
           metadata: {
