@@ -120,6 +120,8 @@ assertNoSessionWrites("src/lib/mt5/syncCloudAccount.ts");
 assertNoSessionWrites("src/app/actions/mt5Cloud.ts");
 // Chart symbol-map backfill also mutates user_broker_accounts — must use writeSb.
 assertNoSessionWrites("src/lib/broker/loadChartPageData.ts");
+// Hub column backfill after MT5 connect/sync — called from mt5Cloud.
+assertNoSessionWrites("src/lib/broker/hub/sync.ts");
 
 console.log("TOS-SEC-2 MT5 sync write client: ok");
 console.log(
@@ -133,10 +135,13 @@ console.log(
         "src/lib/mt5/syncCloudAccount.ts",
         "src/app/actions/mt5Cloud.ts",
         "src/lib/broker/loadChartPageData.ts",
+        "src/lib/broker/hub/sync.ts",
       ],
-      // Known remaining session writers (hub/demo/alpaca) — block full RLS drop until migrated.
+      // Known remaining session writers (hub adapters / demo / alpaca) —
+      // block full RLS drop until migrated. hub/sync.ts is no longer a blocker.
       rlsDropBlockedBy: [
         "src/lib/broker/hub/adapters/supabaseDatabase.ts",
+        "src/lib/broker/hub/adapters/mt5BrokerApi.ts",
         "src/lib/broker/demoAccount.ts",
         "src/lib/alpaca/provision.ts",
       ],
