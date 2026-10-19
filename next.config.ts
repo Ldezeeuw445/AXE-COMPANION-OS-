@@ -5,6 +5,17 @@ import { fileURLToPath } from "node:url";
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // The MT5 connect form can carry a broker's `servers.dat`, the file that
+      // registers a broker MetaApi does not know yet. Default is 1MB, and the
+      // app refuses anything over 2MB with a readable reason — so the limit is
+      // 3mb to leave room for multipart boundaries and part headers, which the
+      // raw body counts too. Without this a slightly large file fails at the
+      // framework with a message nobody can act on.
+      bodySizeLimit: "3mb",
+    },
+  },
   typescript: {
     // Was `ignoreBuildErrors: true` as "a temporary measure", and it stayed on
     // long enough to hide 89 type errors — two of which were live runtime bugs
