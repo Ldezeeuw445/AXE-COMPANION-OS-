@@ -48,8 +48,21 @@ export type AccountProfileInput = {
    firm name, because a funded account is the one with real consequences.
    ───────────────────────────────────────────────────────────────── */
 
+/**
+ * Firms whose name alone is enough to treat an account as a prop account.
+ *
+ * Measured 2026-10-19 against a real $200,000 Upcomers "Oracle" funded
+ * account: the server is literally `Upcomers` and the dashboard never uses the
+ * word "funded", so unless the trader happened to type it into the label this
+ * classified as `unknown` — news trading allowed, no daily loss limit, weekend
+ * holding allowed. Every rail off, on a funded account where one bad news
+ * candle ends the whole thing.
+ *
+ * The list will always be behind the market; that is why `UNKNOWN_IS_NOT_SAFE`
+ * below exists. Keep adding, but do not rely on it alone.
+ */
 const PROP_FIRMS =
-  /\b(ftmo|myforexfunds|mff|the5ers|fundednext|funding\s*pips|e8|alpha\s*capital|topstep|apex|truefx|smart\s*prop|goat\s*funded|blue\s*guardian)\b/i;
+  /\b(ftmo|myforexfunds|mff|the5ers|fundednext|funding\s*pips|e8|alpha\s*capital|topstep|apex|truefx|smart\s*prop|goat\s*funded|blue\s*guardian|upcomers|alpha\s*futures|funded\s*trading\s*plus|maven|breakout\s*prop|instant\s*funding|fundingtraders|for\s*traders|seacrest|aquafunded|quanttekel|city\s*traders\s*imperium|cti|lark\s*funding|ment\s*funding)\b/i;
 
 function classify(input: AccountProfileInput): AccountKind {
   const hay = `${input.label ?? ""} ${input.mt5Server ?? ""}`.toLowerCase();

@@ -55,6 +55,10 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   // all. Gating it behind a plan would mean nobody could ever reach one.
   waitlist: "Public landing-page signup; there is no user to charge yet",
 
+  // Telling AXE what your own account's rules are is how the guard protects
+  // you. Charging for that would be charging for the brakes.
+  "preferences/account-rules": "Stating your own account's trading rules",
+
   // Your own broker account and your own orders. Gating these would mean
   // charging a trader to reach their own money.
   "broker/hub": "The trader's own broker connection",
