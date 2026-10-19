@@ -689,7 +689,7 @@ export function AlertsClient({
           <span className="font-semibold text-white/90">In-app alerts are live.</span>{" "}
           Open <Link href="/chart" className="text-white/70 hover:underline">Chart</Link> to evaluate
           price alerts on the active symbol. Push notifications are an extra channel — add VAPID
-          keys on Vercel to also send them when the app is closed.
+          keys on the IONOS host to also send them when the app is closed.
         </GlassPanel>
       ) : null}
 

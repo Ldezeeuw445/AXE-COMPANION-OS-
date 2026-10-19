@@ -75,6 +75,16 @@ check("the demo endpoint refuses and points at a real sign-up", () => {
   assert.ok(/signupUrl/.test(src), "refusing without an alternative is a dead end");
 });
 
+check("onboarding GET refuses anonymous callers without leaking prefs", () => {
+  const src = readFileSync("src/app/api/onboarding/route.ts", "utf8");
+  assert.ok(/rejectAnonymous/.test(src), "anonymous JWTs must be treated as signed out");
+  assert.ok(/status:\s*401/.test(src), "unauthenticated GET must not look completed");
+  assert.ok(
+    !/completed:\s*true,\s*reason:\s*"anonymous"/.test(src),
+    "GET /api/onboarding still reports completed=true for anon",
+  );
+});
+
 check("/demo leads somewhere a visitor can actually get in", () => {
   const src = readFileSync("src/app/demo/page.tsx", "utf8");
   assert.ok(/redirect\(/.test(src));

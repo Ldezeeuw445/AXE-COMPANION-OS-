@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { patchActiveSession } from "@/lib/session/activeSessionStore";
 
 export function SymbolDropdown({ symbols, current }: { symbols: string[]; current: string }) {
   const router = useRouter();
@@ -17,6 +18,7 @@ export function SymbolDropdown({ symbols, current }: { symbols: string[]; curren
             if (val === "__ALL__") {
               router.push("/market");
             } else {
+              patchActiveSession({ symbol: val, lastTab: "markets" });
               router.push(`/market?symbol=${encodeURIComponent(val)}`);
             }
           }}

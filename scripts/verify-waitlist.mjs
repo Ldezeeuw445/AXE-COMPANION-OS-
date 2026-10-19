@@ -88,6 +88,10 @@ check("a repeat signup is a success, not an error page", () => {
     /error\.code === "23505"[\s\S]{0,80}ok: true/.test(route),
     "signing up twice must read as already on the list",
   );
+  assert.ok(
+    !/already:\s*true/.test(route),
+    "whether the address was already stored is not a public signal",
+  );
 });
 
 check("the migration denies every browser client", () => {
@@ -95,6 +99,18 @@ check("the migration denies every browser client", () => {
   assert.ok(
     !/create policy/i.test(migration),
     "no policy means no client can read the addresses — that is the point",
+  );
+  assert.ok(
+    /revoke all[\s\S]{0,80}from anon/i.test(migration),
+    "anon must not keep the default SELECT grant; RLS is not the only lock",
+  );
+  assert.ok(
+    /revoke all[\s\S]{0,80}from authenticated/i.test(migration),
+    "authenticated must not keep SELECT either",
+  );
+  assert.ok(
+    /grant all[\s\S]{0,80}to service_role/i.test(migration),
+    "only the service role writes",
   );
   assert.ok(
     /create unique index[\s\S]{0,120}lower\(email\)/i.test(migration),

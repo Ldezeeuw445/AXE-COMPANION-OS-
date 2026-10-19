@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Vercel Cron — daily Cockpit snapshots for paid users. */
+/** Host cron — daily Cockpit snapshots for paid users. See scripts/vps.crontab. */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();
   const auth = request.headers.get("authorization") ?? "";

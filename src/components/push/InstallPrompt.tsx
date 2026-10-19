@@ -20,9 +20,14 @@ type BeforeInstallPromptEvent = Event & {
  * required, no token configuration, no shared workspace — it just becomes
  * a homescreen launcher with its own task switcher entry.
  */
+function isSamsungInternet(ua: string): boolean {
+  return /SamsungBrowser/i.test(ua);
+}
+
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
+  const [samsungHint, setSamsungHint] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -48,12 +53,22 @@ export function InstallPrompt() {
       if (!cancelled) {
         setInstalled(true);
         setDeferredPrompt(null);
+        setSamsungHint(false);
       }
     };
     window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener("appinstalled", installedHandler);
+
+    // Samsung Internet sometimes withholds beforeinstallprompt until the
+    // user opens the browser menu. After a short wait, show the menu path.
+    const samsungTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      if (isSamsungInternet(navigator.userAgent)) setSamsungHint(true);
+    }, 1500);
+
     return () => {
       cancelled = true;
+      window.clearTimeout(samsungTimer);
       window.removeEventListener("beforeinstallprompt", handler);
       window.removeEventListener("appinstalled", installedHandler);
     };
@@ -76,15 +91,29 @@ export function InstallPrompt() {
       </p>
     );
   }
-  if (!deferredPrompt) return null;
+
+  if (!deferredPrompt && !samsungHint) return null;
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
-    >
-      Install AXE on this device
-    </button>
+    <div className="space-y-2">
+      {deferredPrompt ? (
+        <button
+          type="button"
+          onClick={onClick}
+          className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
+        >
+          Install AXE on this device
+        </button>
+      ) : null}
+      {samsungHint && !deferredPrompt ? (
+        <p className="text-[11px] leading-relaxed text-white/70">
+          Samsung Internet: open the browser menu{" "}
+          <span className="font-mono text-[10px] text-white/90">⋮</span> and tap{" "}
+          <span className="text-white/90">Add page to</span> /{" "}
+          <span className="text-white/90">Install</span>. AXE then opens standalone
+          with its own home-screen icon.
+        </p>
+      ) : null}
+    </div>
   );
 }

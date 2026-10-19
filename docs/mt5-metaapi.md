@@ -4,8 +4,8 @@ Premium in-app path: users enter MT5 login, server, and **investor (read-only) p
 
 ## Environment variables
 
-These must be available to the **Next.js server** (e.g. Vercel project → Environment Variables).  
-Supabase **Dashboard → Project Settings → Secrets** is only visible to Edge Functions / vault workflows; the MetaApi server actions do **not** read Supabase secrets automatically. Copy the same token value to Vercel (or your host) under one of the names below.
+These must be available to the **Next.js server** (IONOS `.env.local` on `www.axecompanion.com`).  
+Supabase **Dashboard → Project Settings → Secrets** is only visible to Edge Functions / vault workflows; the MetaApi server actions do **not** read Supabase secrets automatically. Copy the same token value onto the IONOS host under one of the names below.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -29,9 +29,9 @@ Adds to `user_broker_accounts`: `connection_method`, `external_connection_id`, `
 
 ## Deployment
 
-1. Set env vars on Vercel/host (never `NEXT_PUBLIC_*` for MetaApi token).
+1. Set env vars on the IONOS host (never `NEXT_PUBLIC_*` for MetaApi token).
 2. Run SQL migration on Supabase.
-3. Redeploy Next.js.
+3. Redeploy Next.js with `./scripts/deploy-vps.sh`.
 4. In **Accounts**, use **Connect MT5 (MetaApi cloud)** → **Test** → **Sync** → **Doctor** when anything looks degraded.
 
 ## Launch onboarding expectations

@@ -59,6 +59,9 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   // you. Charging for that would be charging for the brakes.
   "preferences/account-rules": "Stating your own account's trading rules",
 
+  // The landing page's own form, posted by visitors who have no account at
+  // all. Gating it behind a plan would mean nobody could ever reach one.
+
   // Your own broker account and your own orders. Gating these would mean
   // charging a trader to reach their own money.
   "broker/hub": "The trader's own broker connection",
@@ -81,6 +84,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "chart/live": "Live price data — the chart must work for everyone",
   "chart/session": "Chart session state",
   "chart/snapshot": "Saving a chart image",
+  "chart/drawings": "Manual chart drawings are basic charting on Free; chart_actions gates AI-routed overlays only",
   "context": "Context the client needs to render anything at all",
   "feed": "The feed itself; its paid items are gated where they are produced",
   "market/context": "Market context for the chart",
@@ -88,6 +92,10 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "shell/status": "App shell status",
   "squawk/resolve": "Squawk station resolution",
   "vault/save-axe": "Saving an answer you already received",
+  "journal/quick": "Manual journal capture is on Free; auto-journal scoring is the paid feature",
+  "journal/last-close": "Looking up your own last closed trade to prefill a journal",
+  "journal/attachments": "Attaching a photo or voice note to your own journal entry",
+  "journal/transcribe": "Optional STT for a voice note you already recorded",
 
   // Preferences are per-user settings, never a product tier.
   "preferences/alert-armed": "A user preference",
@@ -96,6 +104,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "preferences/instant-sl-tp-modify": "A user preference",
   "preferences/squawk-stations": "A user preference",
   "preferences/trade-execution": "A user preference",
+  "preferences/push-notifications": "A user preference — per-category opt-in and quiet hours",
 
   // Account lifecycle and plumbing.
   "auth/demo": "Returns 410 — anonymous demo sessions were removed on 2026-10-11",

@@ -3,7 +3,19 @@
 import { revalidatePath } from "next/cache";
 import { getMetadataSymbolMap } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
+import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
+import { runPushTestSuite, type PushTestSuiteResult } from "@/lib/push/runTestSuite";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
+
+export async function sendPushTestSuiteAction(): Promise<
+  PushTestSuiteResult | { ok: false; error: string; sent?: number }
+> {
+  const authed = await getAuthedServiceSupabase();
+  if (!authed) return { ok: false, error: "Unauthorized" };
+  const gate = await requireEntitlementFeature(authed.supabase, authed.user.id, "push_notifications");
+  if (!gate.ok) return { ok: false, error: gate.error };
+  return runPushTestSuite(authed.user.id, authed.supabase);
+}
 
 export async function updatePinnedContext(
   conversationId: string,

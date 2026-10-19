@@ -14,7 +14,8 @@ export function LandingOpenAppQr() {
             card said it a second time, right under it. */}
         <p className="text-sm font-medium text-white">No QR in this build</p>
         <p className="mt-2 text-xs text-tos-muted">
-          Set <code className="rounded bg-white/10 px-1 text-[11px]">NEXT_PUBLIC_APP_URL</code> to the public URL
+          Set <code className="rounded bg-white/10 px-1 text-[11px]">NEXT_PUBLIC_APP_URL</code> to{" "}
+          <code className="rounded bg-white/10 px-1 text-[11px]">https://www.axecompanion.com</code>{" "}
           and rebuild to show a QR here — it is a NEXT_PUBLIC_ value, so it is baked in at build time and a restart
           alone will not pick it up. Locally, open{" "}
           <code className="rounded bg-white/10 px-1 text-[11px]">{chatUrl}</code> on the same Wi‑Fi.
@@ -31,7 +32,7 @@ export function LandingOpenAppQr() {
       <div className="max-w-sm text-left text-sm text-tos-muted">
         <p className="font-medium text-white">Scan to open chat</p>
         <p className="mt-2">
-          Same Supabase login after you open the link.{" "}
+          Same login after you open the link — synced with Trading OS on your desktop.{" "}
           <span className="text-white/80">AXE Companion is the brain. Trading OS is the terminal.</span>
         </p>
         <p className="mt-3 break-all font-mono text-[11px] text-white/45">{chatUrl}</p>

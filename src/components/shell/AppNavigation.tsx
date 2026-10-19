@@ -128,7 +128,6 @@ export function AppNavigation() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const slots = useAppTopBarSlots();
-  const isChart = pathname === "/chart" || pathname.startsWith("/chart/");
 
   const close = useCallback(() => setOpen(false), []);
   useEffect(() => {
@@ -152,7 +151,10 @@ export function AppNavigation() {
   return (
     <>
       {/* Mobile top bar */}
-      <div className="tos-shell-mobile-chrome sticky top-0 z-40 flex min-h-[var(--tos-topbar-h)] shrink-0 items-center justify-between border-b border-white/[0.05] bg-[var(--tos-bg-base)]/88 px-2.5 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+      <div
+        data-testid="mobile-topbar"
+        className="tos-shell-mobile-chrome sticky top-0 z-40 flex min-h-[var(--tos-topbar-h)] shrink-0 items-center justify-between border-b border-white/[0.05] bg-[var(--tos-bg-base)]/88 px-2.5 pt-[env(safe-area-inset-top)] backdrop-blur-xl"
+      >
         {/* Left — hamburger */}
         <button
           type="button"

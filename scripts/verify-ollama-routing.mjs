@@ -36,7 +36,6 @@ async function acheck(name, fn) {
   passed += 1;
   console.log(`  ok  ${name}`);
 }
-
 /**
  * check() counts the moment fn() returns, so a check that returns a promise
  * would print "ok" before its assertions ran and only surface as an unhandled
@@ -47,6 +46,7 @@ async function checkAsync(name, fn) {
   passed += 1;
   console.log(`  ok  ${name}`);
 }
+
 
 const fx = JSON.parse(readFileSync("scripts/fixtures/ollama-endpoints-2026-10-17.json", "utf8"));
 const SERVER = "https://ollama.axecompanion.com";
@@ -94,6 +94,11 @@ check("several endpoints can be configured, in order", () => {
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_URL: `${SERVER}, ${MAC}` }), [SERVER, MAC]);
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_URL: `${SERVER}\n${MAC}/` }), [SERVER, MAC]);
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_HOST: SERVER }), [SERVER], "OLLAMA_HOST still works");
+  assert.deepEqual(
+    parseOllamaEndpoints({ OLLAMA_URL: "  ", OLLAMA_HOST: SERVER }),
+    [SERVER],
+    "an empty OLLAMA_URL must not shadow OLLAMA_HOST",
+  );
   assert.deepEqual(parseOllamaEndpoints({}), []);
   // A bare host would be fetched over plaintext by accident; refuse it.
   assert.deepEqual(parseOllamaEndpoints({ OLLAMA_URL: "ollama.axecompanion.com" }), []);
@@ -163,6 +168,51 @@ check("we give up before Cloudflare does", () => {
   // The proxy cuts a request at ~100s. Failing at 90 leaves the router time
   // to fall back instead of inheriting an HTML error page.
   assert.ok(/AbortSignal\.timeout\(90_000\)/.test(client), "non-streaming must abort under 100s");
+});
+
+const health = readFileSync("src/app/api/debug/chat-health/route.ts", "utf8");
+const healthCode = health.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const router = readFileSync("src/lib/llm/llmRouter.ts", "utf8");
+
+check("chat-health uses the same resolver as the router", () => {
+  assert.ok(/parseOllamaEndpoints/.test(health), "health must parse the same env");
+  // `ollamaResolution(true)` is `ollamaTarget(true)` plus a line about every
+  // endpoint that did not work. Either satisfies what this check is for: the
+  // health route must ask the router's own resolver, forced, rather than
+  // running a second code path that can disagree with it.
+  assert.ok(
+    /ollamaTarget\(true\)|ollamaResolution\(true\)/.test(health),
+    "reachable means a chat would work",
+  );
+  assert.ok(/parseOllamaEndpoints\(process\.env\)/.test(router), "the router must use the same parser");
+  assert.ok(
+    !/OLLAMA_BASE_URL/.test(healthCode),
+    "the old health check read OLLAMA_BASE_URL; the router never did",
+  );
+});
+
+check("anonymous chat-health does not leak URLs or error text", () => {
+  assert.ok(/hasCronSecret\(request\.headers\)/.test(health), "detail is behind CRON_SECRET");
+  const gate = health.indexOf("if (!hasCronSecret");
+  const publicStart = health.indexOf("return NextResponse.json", gate);
+  const authedStart = health.indexOf("return NextResponse.json", publicStart + 1);
+  const publicReturn = health.slice(publicStart, authedStart);
+  assert.ok(publicStart > 0 && authedStart > publicStart, "public and authed payloads must be separate returns");
+  // Booleans only — but not necessarily on one line. The public payload gained
+  // `refused`, so an operator's smoke script can tell "a credential is wrong"
+  // from "the host is down" without being handed either. Assert the shape, not
+  // the formatting: every value in there must be a boolean expression.
+  assert.ok(/ollama: \{/.test(publicReturn), "the public payload reports ollama");
+  for (const field of ["configured", "reachable"]) {
+    assert.ok(new RegExp(`${field}:`).test(publicReturn), `${field} belongs in the public payload`);
+  }
+  assert.ok(
+    !/CLIENT_SECRET|BASIC_AUTH|https?:\/\//.test(publicReturn),
+    "no credential and no URL may appear in the anonymous answer",
+  );
+  assert.ok(!/ollama_endpoints/.test(publicReturn), "endpoint URLs stay off the public payload");
+  assert.ok(!/ollama_resolved/.test(publicReturn), "resolved host/model stay off the public payload");
+  assert.ok(/ollama_endpoints/.test(health.slice(authedStart)), "authed payload may name the resolved host");
 });
 
 /* ── credentials, and saying so when they are wrong ──────────────────────

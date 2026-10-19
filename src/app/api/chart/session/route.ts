@@ -2,12 +2,9 @@ import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { signChartSessionToken } from "@/lib/chart/sessionToken";
 import { normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
-import {
-  DEFAULT_CLOUDFLARE_CHART_WS_URL,
-  getChartSessionSecret,
-  getExplicitChartWsUrl,
-} from "@/lib/chart/chartSessionSecret";
+import { getChartSessionSecret, getExplicitChartWsUrl } from "@/lib/chart/chartSessionSecret";
 import { sameOriginChartWsUrl } from "@/lib/chart/sameOriginWsUrl";
+import { resolveChartLiveUrls } from "@/lib/chart/resolveChartLiveUrls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,22 +101,18 @@ export async function POST(request: NextRequest) {
     secret,
   );
 
-  const sameOrigin = sameOriginChartWsUrl(request);
-  const explicit = getExplicitChartWsUrl();
-  const cloudflareFallback = source === "env" ? explicit || DEFAULT_CLOUDFLARE_CHART_WS_URL : explicit;
-
-  const wsUrl = sameOrigin || cloudflareFallback || null;
-  const fallbackWsUrl =
-    cloudflareFallback && wsUrl && cloudflareFallback.replace(/\/$/, "") !== wsUrl.replace(/\/$/, "")
-      ? cloudflareFallback
-      : null;
+  const { wsUrl, fallbackWsUrl, reason } = resolveChartLiveUrls({
+    sameOrigin: sameOriginChartWsUrl(request),
+    explicit: getExplicitChartWsUrl(),
+    secretSource: source,
+  });
 
   return Response.json({
     token,
     wsUrl,
     fallbackWsUrl,
     expiresIn,
-    reason: sameOrigin ? "same_origin" : source === "env" ? "cloudflare" : "derived",
+    reason,
   });
 }
 

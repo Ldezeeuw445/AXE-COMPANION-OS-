@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerInit } from "@/components/push/ServiceWorkerInit";
+import { ShellBootScript } from "@/components/shell/ShellBootScript";
 import { getPublicAppBaseUrl } from "@/lib/env";
 
 const inter = Inter({
@@ -24,11 +25,17 @@ export const metadata: Metadata = {
     startupImage: "/axe-icon-512.png",
   },
   icons: {
-    apple: "/apple-touch-icon.png",
-    icon: "/axe-icon-192.png",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    icon: [
+      { url: "/axe-icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/axe-icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   },
   formatDetection: {
     telephone: false,
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
   },
 };
 
@@ -50,6 +57,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-svh overflow-x-hidden font-normal">
+        <ShellBootScript />
         <ServiceWorkerInit />
         {children}
       </body>

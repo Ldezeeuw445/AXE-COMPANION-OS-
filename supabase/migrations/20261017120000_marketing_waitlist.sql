@@ -6,10 +6,17 @@
 -- page went up is gone, and the privacy policy already promised "waitlist
 -- communication" we had no way to send.
 --
--- RLS is on with no policies at all: anon and authenticated clients can
--- neither read nor write. Inserts go through /api/waitlist on the service
--- role, so the email address is never readable from the browser and the
--- endpoint can validate and throttle before anything is stored.
+-- Access model (stricter than "anon INSERT"):
+--   RLS is on with no policies at all. Default table grants to anon /
+--   authenticated are revoked. Inserts go through POST /api/waitlist on the
+--   service role, which validates and rate-limits (5/hour/IP) before writing.
+--   An anon INSERT policy would let anyone with the public anon key dump rows
+--   and skip that throttle, and a SELECT grant would leak every address if RLS
+--   were ever disabled. No client can read or write this table.
+--
+-- Live note: AXE Core already applied `20261017114651` / marketing_waitlist on
+-- pqnngpcgbdwxavbatbia (same columns + unique lower(email)). This file is
+-- idempotent; applying it still matters for the REVOKE below.
 
 create table if not exists public.marketing_waitlist (
   id          uuid primary key default gen_random_uuid(),
@@ -34,6 +41,10 @@ create index if not exists marketing_waitlist_created_at_idx
 alter table public.marketing_waitlist enable row level security;
 
 -- No policies by design. See the header: only the service role touches this.
+revoke all on table public.marketing_waitlist from public;
+revoke all on table public.marketing_waitlist from anon;
+revoke all on table public.marketing_waitlist from authenticated;
+grant all on table public.marketing_waitlist to service_role;
 
 comment on table public.marketing_waitlist is
   'Public landing-page waitlist. Written only by /api/waitlist on the service role; RLS denies every client.';

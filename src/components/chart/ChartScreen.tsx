@@ -42,6 +42,9 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { TosNotice, type TosNoticeAccent } from "@/components/ui/TosNotice";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { isPhoneLandscapeViewport, isTabletChartLayout, lockTabletLandscape } from "@/lib/viewport/tablet";
+import { accountTypeFromBroker } from "@/lib/session/accountType";
+import { patchActiveSession, useActiveSession } from "@/lib/session/activeSessionStore";
+import { useShellViewport } from "@/lib/viewport/shellViewport";
 import { useTabletNavCollapse } from "@/components/shell/TabletNavCollapse";
 import { ChartLandscapeDrawer, ChartLandscapeDockHandle } from "@/components/chart/ChartLandscapeDrawer";
 import { ChartQuickActions } from "@/components/chart/ChartQuickActions";
@@ -71,6 +74,11 @@ import type {
   ChartActionResult,
 } from "@/lib/axeChartActions/chartActionTypes";
 import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { useQuickJournal } from "@/components/journal/QuickJournalHost";
+import {
+  captureElementFrame,
+  registerChartFrameCapture,
+} from "@/lib/journal/chartCaptureRegistry";
 import { ChartThemeTogglerButton, CHART_THEME_VIEW_TRANSITION } from "@/components/chart/ChartThemeTogglerButton";
 import { ChartPendingOrderSheet } from "@/components/chart/ChartPendingOrderSheet";
 import { TradePlanLine } from "@/components/chart/TradePlanLine";
@@ -104,6 +112,7 @@ import {
 } from "@/components/axe/AxeContextToolbar";
 import {
   appendAnnotation,
+  hydrateAnnotations,
   loadAnnotations,
   removeAnnotation,
   saveAnnotations,
@@ -643,6 +652,9 @@ export function ChartScreen({
 }: Props) {
   const router = useRouter();
   const { playSound, vibrate } = useAmbient();
+  const session = useActiveSession();
+  const drawingSymbol = data.symbol || session.symbol;
+  const drawingTf = data.timeframeKey || session.timeframe;
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
   const trackChartPreference = useCallback(
@@ -693,6 +705,7 @@ export function ChartScreen({
   const [pendingOrders, setPendingOrders] = useState<PendingOrderOverlay[]>(data.pendingOrdersOnSymbol);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const lastReactPriceAt = useRef<number>(0);
+  const { openQuickJournal } = useQuickJournal();
 
   useEffect(() => {
     trackChartPreference("chart_opened", {
@@ -750,12 +763,29 @@ export function ChartScreen({
 
   /* ── Landscape fullscreen mode ───────────────────────────────── */
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isTabletLayout, setIsTabletLayout] = useState(false);
+  const shellViewport = useShellViewport();
+  const [isTabletLayout, setIsTabletLayout] = useState(shellViewport === "tablet");
   const { enabled: tabletNavCollapse, collapsed: tabletNavCollapsed, collapse: collapseTabletNav } =
     useTabletNavCollapse();
   const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
   const userDismissedLandscapeRef = useRef(false);
+
+  useEffect(() => {
+    registerChartFrameCapture(async () => {
+      const root = chartFrameRef.current;
+      if (root) {
+        const composed = await captureElementFrame(root);
+        if (composed) return composed;
+      }
+      const shot = canvasRef.current?.takeScreenshot();
+      if (!shot) return null;
+      return await new Promise<Blob | null>((resolve) => {
+        shot.toBlob((blob) => resolve(blob), "image/png");
+      });
+    });
+    return () => registerChartFrameCapture(null);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => {
@@ -1132,11 +1162,11 @@ export function ChartScreen({
           };
         });
         if (!mutated) return prev;
-        saveAnnotations(data.symbol, data.timeframeKey, next);
+        saveAnnotations(drawingSymbol, drawingTf, next);
         return next;
       });
     },
-    [data.symbol, data.timeframeKey],
+    [drawingSymbol, drawingTf],
   );
 
   // MT5-style resizable indicator panes. Defaults match what we previously
@@ -1675,11 +1705,15 @@ export function ChartScreen({
     }
   }, [data.account?.brokerAccountId, isAlpacaAccount, orderConfirmInput]);
 
-  // Load saved annotations when symbol/tf changes
+  // Load saved annotations when symbol/tf changes (local-first, then sync).
+  // Keys follow the displayed chart, falling back to the cookie-backed
+  // ActiveSession so /chart without query params still restores drawings.
   useEffect(() => {
+    const symbol = drawingSymbol;
+    const timeframe = drawingTf;
     queueMicrotask(() => {
-      setAnnotations(loadAnnotations(data.symbol, data.timeframeKey));
-      setAnnotationsLoadedKey(`${data.symbol}|${data.timeframeKey}`);
+      setAnnotations(loadAnnotations(symbol, timeframe));
+      setAnnotationsLoadedKey(`${symbol}|${timeframe}`);
       setDrawingMode(null);
       drawingPointsRef.current = [];
       setDrawingHint(null);
@@ -1687,12 +1721,30 @@ export function ChartScreen({
       setPendingStopLossPrice(null);
       setPendingTakeProfitPrice(null);
     });
-  }, [data.symbol, data.timeframeKey]);
+    let cancelled = false;
+    void hydrateAnnotations(symbol, timeframe).then((list) => {
+      if (cancelled) return;
+      setAnnotations(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [drawingSymbol, drawingTf]);
 
   useEffect(() => {
-    window.localStorage.setItem("axe_active_symbol", data.symbol);
-    window.localStorage.setItem("axe_active_tf", data.timeframeKey);
-  }, [data.symbol, data.timeframeKey]);
+    patchActiveSession({
+      accountId: data.account?.brokerAccountId ?? null,
+      accountLabel: data.account?.label ?? null,
+      accountType: accountTypeFromBroker({
+        label: data.account?.label,
+        mt5Server: data.account?.mt5Server,
+        connectionMethod: data.account?.connectionMethod,
+      }),
+      symbol: data.symbol,
+      timeframe: data.timeframeKey,
+      lastTab: "chart",
+    });
+  }, [data.account?.brokerAccountId, data.account?.connectionMethod, data.account?.label, data.account?.mt5Server, data.symbol, data.timeframeKey]);
 
   useEffect(() => {
     setPendingOrderPrice((prev) => prev ?? data.lastPrice);
@@ -2153,6 +2205,7 @@ export function ChartScreen({
   const goSymbol = useCallback(
     (sym: string) => {
       setRouteFallbackMessage(null);
+      patchActiveSession({ symbol: sym, lastTab: "chart" });
       startRouteTransition(() => {
         router.push(buildHref(accountId, sym, data.timeframeKey));
       });
@@ -2163,6 +2216,7 @@ export function ChartScreen({
     (key: string) => {
       setPendingTfKey(key);
       setRouteFallbackMessage(null);
+      patchActiveSession({ timeframe: key, lastTab: "chart" });
       startRouteTransition(() => {
         router.push(buildHref(accountId, data.symbol, key));
       });
@@ -2174,13 +2228,23 @@ export function ChartScreen({
     (newAccountId: string) => {
       if (newAccountId === accountId) return;
       setRouteFallbackMessage(null);
-      // Persist choice so other pages pick it up
+      const choice = data.accountChoices.find((a) => a.brokerAccountId === newAccountId);
+      patchActiveSession({
+        accountId: newAccountId,
+        accountLabel: choice?.label ?? null,
+        accountType: accountTypeFromBroker({
+          label: choice?.label,
+          mt5Server: choice?.mt5Server,
+          connectionMethod: choice?.connectionMethod,
+        }),
+        lastTab: "chart",
+      });
       void setActiveAccountAction(newAccountId);
       startRouteTransition(() => {
         router.push(buildHref(newAccountId, data.symbol, data.timeframeKey));
       });
     },
-    [router, accountId, data.symbol, data.timeframeKey, startRouteTransition],
+    [router, accountId, data.accountChoices, data.symbol, data.timeframeKey, startRouteTransition],
   );
 
   const lastPriceText = useMemo(
@@ -2251,8 +2315,8 @@ export function ChartScreen({
       if (next.length >= needed) {
         const annotation: ChartAnnotation = {
           id: newAnnotationId(),
-          symbol: data.symbol,
-          timeframe: data.timeframeKey,
+          symbol: drawingSymbol,
+          timeframe: drawingTf,
           type: drawingMode,
           points:
             drawingMode === "text" || drawingMode === "horizontal_level"
@@ -2267,7 +2331,7 @@ export function ChartScreen({
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        const list = appendAnnotation(data.symbol, data.timeframeKey, annotation);
+        const list = appendAnnotation(drawingSymbol, drawingTf, annotation);
         setAnnotations(list);
         drawingPointsRef.current = [];
         setDrawingMode(null);
@@ -2276,43 +2340,43 @@ export function ChartScreen({
         setDrawingHint(drawingNextHint(drawingMode));
       }
     },
-    [drawingMode, data.symbol, data.timeframeKey],
+    [drawingMode, drawingSymbol, drawingTf],
   );
 
   const updateAnnotation = useCallback(
     (updated: ChartAnnotation) => {
       setAnnotations((prev) => {
         const next = prev.map((a) => (a.id === updated.id ? updated : a));
-        saveAnnotations(data.symbol, data.timeframeKey, next);
+        saveAnnotations(drawingSymbol, drawingTf, next);
         return next;
       });
     },
-    [data.symbol, data.timeframeKey],
+    [drawingSymbol, drawingTf],
   );
 
   const removeAnnotationById = useCallback(
     (id: string) => {
-      const next = removeAnnotation(data.symbol, data.timeframeKey, id);
+      const next = removeAnnotation(drawingSymbol, drawingTf, id);
       setAnnotations(next);
     },
-    [data.symbol, data.timeframeKey],
+    [drawingSymbol, drawingTf],
   );
 
   const clearAllDrawings = useCallback(() => {
     cancelDrawing();
-    saveAnnotations(data.symbol, data.timeframeKey, []);
+    saveAnnotations(drawingSymbol, drawingTf, []);
     setAnnotations([]);
     setSnapshotMessage("Cleared all chart drawings.");
     setTimeout(() => setSnapshotMessage(null), 3000);
-  }, [cancelDrawing, data.symbol, data.timeframeKey]);
+  }, [cancelDrawing, drawingSymbol, drawingTf]);
 
   const appendAndRenderAnnotation = useCallback(
     (annotation: ChartAnnotation): ChartAnnotation[] => {
-      const list = appendAnnotation(data.symbol, data.timeframeKey, annotation);
+      const list = appendAnnotation(drawingSymbol, drawingTf, annotation);
       setAnnotations(list);
       return list;
     },
-    [data.symbol, data.timeframeKey],
+    [drawingSymbol, drawingTf],
   );
 
   const applyLayerFlags = useCallback(
@@ -2620,7 +2684,7 @@ export function ChartScreen({
     const fibs = annotations.filter((a) => a.type === "fib_retracement");
     let nextList = annotations;
     for (const ann of fibs) {
-      nextList = removeAnnotation(data.symbol, data.timeframeKey, ann.id);
+      nextList = removeAnnotation(drawingSymbol, drawingTf, ann.id);
     }
     setAnnotations(nextList);
     // Defer to the next tick so the remove settles before we draw the
@@ -2628,7 +2692,7 @@ export function ChartScreen({
     setTimeout(() => {
       executeActionByType("draw_fibonacci", "user");
     }, 0);
-  }, [fibMode, fibSwingOffset, annotations, data.symbol, data.timeframeKey, executeActionByType]);
+  }, [fibMode, fibSwingOffset, annotations, drawingSymbol, drawingTf, executeActionByType]);
 
   // Tap the toolbar Fib/Trend button: if there's already an auto drawing of
   // that type on the chart, remove it (toggle off). Otherwise, draw a new one.
@@ -2640,7 +2704,7 @@ export function ChartScreen({
       if (existing.length > 0) {
         let nextList = annotations;
         for (const ann of existing) {
-          nextList = removeAnnotation(data.symbol, data.timeframeKey, ann.id);
+          nextList = removeAnnotation(drawingSymbol, drawingTf, ann.id);
         }
         setAnnotations(nextList);
         trackChartPreference("chart_mode_disabled", {
@@ -2654,7 +2718,7 @@ export function ChartScreen({
         mode: kind === "fib_retracement" ? fibMode : "auto_trend",
       });
     },
-    [annotations, data.symbol, data.timeframeKey, executeActionByType, fibMode, trackChartPreference],
+    [annotations, drawingSymbol, drawingTf, executeActionByType, fibMode, trackChartPreference],
   );
 
   // Flip the existing fib so the 0% level switches between top and bottom.
@@ -2674,14 +2738,14 @@ export function ChartScreen({
         if (a.type !== "fib_retracement" || a.points.length < 2) return a;
         return { ...a, points: [a.points[1], a.points[0]], updatedAt: now };
       });
-      saveAnnotations(data.symbol, data.timeframeKey, next);
+      saveAnnotations(drawingSymbol, drawingTf, next);
       return next;
     });
-  }, [annotations, data.symbol, data.timeframeKey, executeActionByType]);
+  }, [annotations, drawingSymbol, drawingTf, executeActionByType]);
 
   useEffect(() => {
     if (!initialAction) return;
-    if (annotationsLoadedKey !== `${data.symbol}|${data.timeframeKey}`) return;
+    if (annotationsLoadedKey !== `${drawingSymbol}|${drawingTf}`) return;
     if (data.failure !== "ok") return;
 
     const normalized = initialAction.toLowerCase();
@@ -2740,8 +2804,8 @@ export function ChartScreen({
     accountId,
     annotationsLoadedKey,
     data.failure,
-    data.symbol,
-    data.timeframeKey,
+    drawingSymbol,
+    drawingTf,
     executeActionByType,
     executeChartAction,
     initialAction,
@@ -2749,7 +2813,7 @@ export function ChartScreen({
   ]);
 
   useEffect(() => {
-    if (annotationsLoadedKey !== `${data.symbol}|${data.timeframeKey}`) return;
+    if (annotationsLoadedKey !== `${drawingSymbol}|${drawingTf}`) return;
     if (data.failure !== "ok") return;
 
     const runQueued = async () => {
@@ -2823,6 +2887,8 @@ export function ChartScreen({
     data.failure,
     data.symbol,
     data.timeframeKey,
+    drawingSymbol,
+    drawingTf,
     executeActionByType,
     executeChartAction,
   ]);
@@ -2953,8 +3019,13 @@ export function ChartScreen({
           {
             id: "journal",
             label: "Journal this setup",
+            description: "Last close on this symbol — one tap",
             icon: <BookOpen className="h-3.5 w-3.5" />,
-            href: "/journal",
+            onSelect: () =>
+              openQuickJournal({
+                accountId: accountId ?? undefined,
+                symbol: data.symbol,
+              }),
           },
           {
             id: "snapshot",
@@ -2983,6 +3054,8 @@ export function ChartScreen({
     tfLabel,
     overlays.length,
     accountLabel,
+    accountId,
+    openQuickJournal,
     saveSnapshotToVault,
   ]);
 

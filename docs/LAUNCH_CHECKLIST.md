@@ -12,10 +12,10 @@
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | A1 | `main` branch contains launch foundation (feed, onboarding, alerts, risk) | [x] | PR #11 merged |
-| A2 | Production deploy on the VPS (nginx, `212.227.91.79`) | [!] | **Not Vercel.** Verified 2026-09-07. Vercel is not returning; `vercel.json` crons never fired here — see `docs/CRON-RUNBOOK.md` |
+| A2 | Production deploy from `main` on the IONOS VPS | [~] | `www.axecompanion.com` nginx → Next `:5000` (`212.227.91.79`). Chart WS ships via `scripts/deploy-vps.sh`. Host crontab + pg_cron — see `docs/CRON-RUNBOOK.md` |
 | A3 | Supabase migrations applied (broadcast feed, onboarding prefs) | [x] | Verified via MCP |
-| A4 | `KRATER_SYNC_MODE=generate` on Vercel Production | [x] | Set explicitly |
-| A5 | `CRON_SECRET` + `KRATER_API_KEY` on Vercel Production | [x] | Encrypted vars present |
+| A4 | Local broadcast generator (Krater retired) | [x] | Krater key no longer read; `/api/cron/krater-feed-sync` is a historical path for the local writer |
+| A5 | `CRON_SECRET` on IONOS + host crontab | [~] | Install `scripts/vps.crontab` (congress-trades only); pg_cron owns the rest |
 | A6 | Krater dashboard Scheduled Tasks paused (Daily News + Market Recap) | [x] | Confirmed manually by Luka — credits saved, no app impact |
 | A7 | Railway active streamer deploy healthy | [x] | `superb-benevolence` / `axe-metaapi-streamer` SUCCESS; old AXE-COMPANION-OS Railway projects are not used |
 | A8 | Smoke script passes from repo root | [~] | 9/9 still pass, but they are public HTTP checks only — they never covered the crons, which were dead for two months while this stayed green. Needs cron assertions |
@@ -28,9 +28,9 @@
 |---|------|--------|-------|
 | B1 | 3 tabs: Morning Brief / Daily News / Market Recap | [x] | |
 | B2 | Per-tab unread badges | [x] | |
-| B3 | Krater cron generates + upserts `axe_broadcast_feed` | [!] | Last row 2026-07-06. Now scheduled via pg_cron; blocked on inserting `CRON_SECRET` into Supabase Vault |
+| B3 | Local broadcast generator upserts `axe_broadcast_feed` | [~] | Krater job `axe-companion-krater-feed-sync` is paused/retired; local writer remains at the historical route |
 | B4 | Feed shows items for authenticated users | [~] | Prod broadcast rows + feed code verified; needs browser auth spot-check |
-| B5 | Cron window 07:00 + 20:00 Amsterdam | [~] | Same UTC schedule, now on pg_cron (`axe-companion-krater-feed-sync`). Krater dashboard tasks stay paused |
+| B5 | Cron window 07:00 + 20:00 Amsterdam | [~] | Host crontab on IONOS (`scripts/vps.crontab`) is congress-trades only. Krater dashboard + `axe-companion-krater-feed-sync` stay paused |
 
 ---
 
@@ -89,7 +89,7 @@
 | G1 | `/chat` loads without crash | [x] | Smoke HTTP 200 |
 | G2 | `/chat?intel=1` — intelligence mode works | [x] | Prod HTTP 200 |
 | G3 | `LLM_TARGET=auto` — Ollama first, OpenAI fallback | [x] | chat-health: ok_ollama. Both providers verified reachable 2026-09-07 (OpenAI 1012 ms, gpt-4o) |
-| G4 | Ollama reachable from the app host | [x] | Reachable in 3 ms because Ollama runs on the same VPS. One llama3.2 instance serves every user — a scaling risk, not a correctness one |
+| G4 | Ollama on the same IONOS host as Next (`localhost:11434`) | [x] | Same box as `www.axecompanion.com`. Reachable in 3 ms. One llama3.2 instance serves every user — a scaling risk, not a correctness one |
 | G5 | Chat quota: Free 20/day, Pro unlimited | [x] | Supabase RPC verified: free=20, paid/exempt `remaining=-1` |
 
 ---

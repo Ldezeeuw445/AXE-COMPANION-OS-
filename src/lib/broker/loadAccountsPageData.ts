@@ -1,4 +1,11 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  groupTradesByAccount,
+  readAccountSnapshot,
+  reconcileAccountLedger,
+  type AccountLedger,
+} from "@/lib/account/reconcileAccountLedger";
+import { asFiniteNumber } from "@/lib/journal/tradePnl";
 import { ensureActiveDemoWhenEmpty } from "@/lib/broker/demoAccount";
 import { isAccountOffered, isDemoBrokerEnabled } from "@/lib/broker/brokerAvailability";
 import { ensureAlpacaPaperAccount } from "@/lib/alpaca/provision";
@@ -23,6 +30,7 @@ export type BrokerAccountRow = {
 export type AccountsPageData = {
   accounts: BrokerAccountRow[];
   activeAccountId: string | null;
+  ledgers: Record<string, AccountLedger>;
   error: string | null;
 };
 
@@ -33,6 +41,7 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
     return {
       accounts: [],
       activeAccountId: null,
+      ledgers: {},
       error: "Supabase is not configured.",
     };
   }
@@ -44,6 +53,7 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
     return {
       accounts: [],
       activeAccountId: null,
+      ledgers: {},
       error: "Not signed in.",
     };
   }
@@ -67,6 +77,7 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
     return {
       accounts: [],
       activeAccountId: null,
+      ledgers: {},
       error: accsRes.error.message,
     };
   }
@@ -102,9 +113,33 @@ export async function loadAccountsPageData(): Promise<AccountsPageData> {
     }
   }
 
+  const { data: tradeRows } = await supabase
+    .from("broker_trades")
+    .select("account_id,pnl,fees")
+    .eq("user_id", user.id)
+    .not("close_time", "is", null);
+
+  const grouped = groupTradesByAccount(
+    (tradeRows ?? []).map((r) => ({
+      accountId: String((r as { account_id: string }).account_id),
+      pnl: asFiniteNumber((r as { pnl: unknown }).pnl, 0),
+      fees: asFiniteNumber((r as { fees: unknown }).fees, 0),
+    })),
+  );
+
+  const ledgers: Record<string, AccountLedger> = {};
+  for (const account of accounts) {
+    ledgers[account.id] = reconcileAccountLedger({
+      accountId: account.id,
+      trades: grouped.get(account.id) ?? [],
+      snapshot: readAccountSnapshot(account.metadata ?? null),
+    });
+  }
+
   return {
     accounts,
     activeAccountId,
+    ledgers,
     error: prefsErr ?? null,
   };
 }

@@ -174,7 +174,7 @@ export function PrivacyPageContent() {
         <li>Supabase — database, auth, storage, backend</li>
         <li>OpenAI or AI provider — AI responses</li>
         <li>Stripe — billing and payments</li>
-        <li>Vercel or hosting provider — hosting/deployment</li>
+        <li>IONOS — hosting/deployment</li>
         <li>Cloudflare — security, CDN, workers, realtime infrastructure</li>
         <li>MetaApi or MT5 connector provider — account connection/sync</li>
         <li>market-data providers — market/news/macro data</li>

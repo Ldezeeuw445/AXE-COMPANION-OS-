@@ -102,7 +102,7 @@ export type RunCloudMt5SyncOptions = {
 
 /**
  * Core MetaAPI → Supabase sync for a single cloud_mt5 account.
- * Used by the manual Sync button, Vercel cron, and stale-sync triggers.
+ * Used by the manual Sync button, host cron, and stale-sync triggers.
  */
 export async function runCloudMt5Sync(
   supabase: SupabaseClient,

@@ -73,7 +73,7 @@ export function createAlpacaBrokerApiAdapter(supabase: SupabaseClient): BrokerAp
               label: "Server credentials",
               status: "fail",
               message: "ALPACA_PAPER_API_KEY_ID / SECRET not set.",
-              remediation: "Add Alpaca paper keys to Railway/Vercel env.",
+              remediation: "Add Alpaca paper keys to the IONOS host env.",
             },
           ],
         };

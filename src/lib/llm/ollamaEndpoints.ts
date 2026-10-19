@@ -48,8 +48,19 @@ export function isEmbeddingModel(name: string): boolean {
  * the order they should be tried. `OLLAMA_HOST` is accepted for the same job
  * because the old code did.
  */
-export function parseOllamaEndpoints(env: Record<string, string | undefined>): string[] {
-  const raw = (env.OLLAMA_URL ?? env.OLLAMA_HOST ?? "").trim();
+export function parseOllamaEndpoints(env: {
+  [key: string]: string | undefined;
+}): string[] {
+  // Empty-but-present OLLAMA_URL must not shadow OLLAMA_HOST (same class of
+  // bug as firstNonEmptyEnv: `??` only falls through on null/undefined).
+  let raw = "";
+  for (const name of ["OLLAMA_URL", "OLLAMA_HOST"] as const) {
+    const value = env[name];
+    if (typeof value === "string" && value.trim()) {
+      raw = value.trim();
+      break;
+    }
+  }
   if (!raw) return [];
   const seen = new Set<string>();
   const out: string[] = [];

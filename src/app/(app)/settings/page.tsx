@@ -14,7 +14,9 @@ import { PinnedContextEditor } from "@/components/settings/PinnedContextEditor";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
 import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
+import { PushNotificationPrefsPanel } from "@/components/push/PushNotificationPrefsPanel";
 import { InstallPrompt } from "@/components/push/InstallPrompt";
+import { getPushNotificationPrefsServerState } from "@/lib/push/serverPrefs";
 import { LiveTradingPanel } from "@/components/settings/LiveTradingPanel";
 import { SlTpModifyPanel } from "@/components/settings/SlTpModifyPanel";
 import { getLiveTradingServerState } from "@/lib/liveTrading/serverFlag";
@@ -68,7 +70,7 @@ export default async function SettingsPage() {
     }
   }
 
-  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs, favoriteWorkflowIds, engineProfile] = await Promise.all([
+  const [metrics, memory, conversation, watchlist, accountName, liveTrading, instantSlTpModify, squawkStationIds, tradeExecutionPrefs, favoriteWorkflowIds, engineProfile, pushPrefs] = await Promise.all([
     listLearningMetricsPreview(),
     listMemoryPreview(),
     getPrimaryConversation(),
@@ -88,6 +90,7 @@ export default async function SettingsPage() {
           return getAxeEngineProfile(supabase, user.id, { source: "settings_page" }).catch(() => null);
         })()
       : Promise.resolve(null),
+    getPushNotificationPrefsServerState(),
   ]);
 
   const toolbarSections: AxeToolbarSection[] = [
@@ -210,6 +213,9 @@ export default async function SettingsPage() {
         </p>
         <div className="mt-3">
           <PushPermission />
+        </div>
+        <div className="mt-4 border-t border-white/[0.06] pt-3">
+          <PushNotificationPrefsPanel initial={pushPrefs} />
         </div>
         <div className="mt-3">
           <InstallPrompt />

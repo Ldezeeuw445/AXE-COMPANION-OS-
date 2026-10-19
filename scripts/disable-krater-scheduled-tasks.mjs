@@ -115,7 +115,7 @@ if (!anyDisabled) {
   console.log("\nManual step (recommended):");
   console.log("1. Open https://app.krater.ai → Scheduled Tasks");
   console.log("2. Pause/disable: Daily News + Market Recap");
-  console.log("3. Confirm Vercel env: KRATER_SYNC_MODE=generate");
+  console.log("3. Confirm IONOS env: KRATER_SYNC_MODE=generate");
 }
 
 process.exit(0);

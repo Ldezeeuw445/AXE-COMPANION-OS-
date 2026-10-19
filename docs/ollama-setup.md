@@ -89,9 +89,11 @@ If Ollama is not running, you'll see:
 [llmClient] OpenAI fallback success (provider: openai)
 ```
 
-## Connecting Vercel Production to Your Local Ollama (via Cloudflare Tunnel)
+## Connecting production (or a remote Ollama) via Cloudflare Tunnel
 
-If you want your **live Vercel app** to use your local Ollama (instead of expensive OpenAI), use a Cloudflare Tunnel:
+Production Ollama on IONOS is `http://localhost:11434` on the same box as Next — no tunnel needed.
+
+If you want the **live IONOS app** to use Ollama on a *different* machine, use a Cloudflare Tunnel:
 
 ### 1. Install cloudflared
 
@@ -110,9 +112,9 @@ This gives you a public URL like:
 https://mijntradingapp-abc123.trycloudflare.com
 ```
 
-### 3. Set the Tunnel URL in Vercel
+### 3. Set the Tunnel URL on IONOS
 
-In your Vercel dashboard → Project Settings → Environment Variables:
+On the IONOS host, add to `.env.local` and restart Next (`./scripts/deploy-vps.sh` or restart the process):
 
 ```
 OLLAMA_HOST=https://mijntradingapp-abc123.trycloudflare.com
@@ -123,11 +125,11 @@ OPENAI_API_KEY=sk-...   (still needed as fallback)
 
 ### 4. Keep the Tunnel Running
 
-Your Mac Mini must stay on with:
+The machine running Ollama must stay on with:
 - `ollama serve` running
 - `cloudflared tunnel` running
 
-If either stops, Vercel automatically falls back to OpenAI.
+If either stops, Companion automatically falls back to OpenAI.
 
 ---
 
@@ -140,7 +142,7 @@ By default, anyone who knows your tunnel URL can access your Ollama. To secure i
 1. Go to [Cloudflare Zero Trust Dashboard](https://dash.teams.cloudflare.com)
 2. Navigate to **Access** → **Service Auth** → **Service Tokens**
 3. Click **Create Service Token**
-   - Name: `vercel-ollama-access`
+   - Name: `companion-ollama-access`
    - Client ID: auto-generated (save this)
    - Client Secret: auto-generated (⚠️ **shown only once** — save it immediately!)
 
@@ -149,14 +151,14 @@ By default, anyone who knows your tunnel URL can access your Ollama. To secure i
 1. Go to **Access** → **Applications**
 2. Find your `ollama.axecompanion.com` application (or create one for your tunnel hostname)
 3. Add a policy:
-   - Name: `Vercel Service Auth`
+   - Name: `Companion Service Auth`
    - Action: **Allow**
-   - Include: **Service Token** → select `vercel-ollama-access`
+   - Include: **Service Token** → select `companion-ollama-access`
    - Decision: **Non-identity** (no user login required)
 
-### 3. Add Credentials to Vercel
+### 3. Add Credentials on the IONOS host
 
-In your Vercel dashboard → Project Settings → Environment Variables:
+On the IONOS host `.env.local`:
 
 ```
 CF_ACCESS_CLIENT_ID=<your-service-token-client-id>
@@ -212,10 +214,10 @@ Non-vision models can't see chart images. The app automatically strips the image
 
 ## Advanced: Running Ollama on a Dedicated Server
 
-If you have a more powerful machine (or a cheap VPS), run Ollama there and point both your local dev and Vercel production to it:
+If you have a more powerful machine (or a cheap VPS), run Ollama there and point both your local dev and IONOS production to it:
 
 ```env
-# On your dev machine AND in Vercel
+# On your dev machine AND on the IONOS host
 OLLAMA_HOST=https://your-ollama-server.com
 OLLAMA_MODEL=qwen2.5:14b
 ```

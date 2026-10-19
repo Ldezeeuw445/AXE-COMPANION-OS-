@@ -1,9 +1,9 @@
-import type { NextRequest } from "next/server";
-
 /** Same-origin chart websocket path served by the Next Node process. */
 export const CHART_WS_PATH = "/ws/chart";
 
-export function sameOriginChartWsUrl(request: NextRequest): string | null {
+type HeaderReadable = { headers: { get(name: string): string | null } };
+
+export function sameOriginChartWsUrl(request: HeaderReadable): string | null {
   const host = (
     request.headers.get("x-forwarded-host") ??
     request.headers.get("host") ??

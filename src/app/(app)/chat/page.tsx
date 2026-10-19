@@ -6,6 +6,7 @@ import { ChatMorningBrief } from "@/components/chat/ChatMorningBrief";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
 import { ChatFeedStrip } from "@/components/feed/ChatFeedStrip";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
+import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { skipChatQuota } from "@/lib/chatQuota";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
@@ -17,7 +18,9 @@ export default async function ChatPage({
 }) {
   const params = await searchParams;
   const chatType = params?.intel === "1" ? "intel" : "axe";
-  const { conversation, messages } = await getChatThread(chatType);
+  const threadParam = params?.thread;
+  const threadId = Array.isArray(threadParam) ? threadParam[0] : threadParam;
+  const { conversation, messages } = await getChatThread(chatType, threadId);
   const supabase = await createServerSupabaseClient();
   let operatorName: string | null = null;
   let initialQuota: ChatQuotaPayload | null = null;
@@ -61,6 +64,7 @@ export default async function ChatPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overscroll-none">
+      <ActiveSessionSeed lastTab="axe" />
       <LiveStatusReporter
         liveCount={liveCount}
         totalCount={totalCount}

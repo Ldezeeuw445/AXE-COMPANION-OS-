@@ -20,6 +20,8 @@ import {
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
+import type { AccountLedger } from "@/lib/account/reconcileAccountLedger";
+import { formatSignedMoney } from "@/lib/journal/tradePnl";
 import { setActiveAccountAction, deleteBrokerAccountAction } from "@/app/actions/brokerAccounts";
 import {
   createCloudMt5ConnectionAction,
@@ -33,12 +35,16 @@ import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
 import { isDemoAccount } from "@/lib/broker/demoAccount";
 import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { accountTypeFromBroker } from "@/lib/session/accountType";
+import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
+import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
 type Props = {
   initialAccounts: BrokerAccountRow[];
   initialActiveId: string | null;
+  ledgers: Record<string, AccountLedger>;
   loadError: string | null;
   defaultMetaApiRegion: string;
 };
@@ -72,12 +78,14 @@ function AccountCard({
   account,
   isActive,
   pending,
+  ledger,
   onActivate,
   onRemove,
 }: {
   account: BrokerAccountRow;
   isActive: boolean;
   pending: boolean;
+  ledger: AccountLedger | null;
   onActivate: () => void;
   onRemove: () => void;
 }) {
@@ -322,6 +330,37 @@ function AccountCard({
           <ChevronRight className="h-4 w-4 shrink-0 text-white/15" />
         )}
       </div>
+
+      {ledger && (ledger.tradeCount > 0 || ledger.balance != null) ? (
+        <div className="mt-3 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-2" data-testid="account-ledger">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-white/35">Realized (closed trades)</span>
+            <span
+              className={`font-mono font-semibold tabular-nums ${
+                ledger.netPnl >= 0 ? "text-cyan-300" : "text-rose-300"
+              }`}
+            >
+              {formatSignedMoney(ledger.netPnl)}
+              {ledger.currency ? ` ${ledger.currency}` : ""}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-white/35">
+            <span>
+              {ledger.tradeCount} trades · {ledger.wins}W / {ledger.losses}L
+              {ledger.fees !== 0 ? ` · fees ${formatSignedMoney(ledger.fees)}` : ""}
+            </span>
+            {ledger.balance != null ? (
+              <span className="font-mono tabular-nums">
+                Broker {formatSignedMoney(ledger.balance)}
+                {ledger.currency ? ` ${ledger.currency}` : ""}
+              </span>
+            ) : null}
+          </div>
+          {ledger.hasBothViews ? (
+            <p className="mt-1.5 text-[9px] leading-relaxed text-white/28">{ledger.caveat}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Status feedback */}
       {actionBusy && (
@@ -701,7 +740,13 @@ function SubmitStep2() {
 
 /* ── Main Screen ─────────────────────────────────────────────────────── */
 
-export function AccountsScreen({ initialAccounts, initialActiveId, loadError, defaultMetaApiRegion }: Props) {
+export function AccountsScreen({
+  initialAccounts,
+  initialActiveId,
+  ledgers,
+  loadError,
+  defaultMetaApiRegion,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -721,7 +766,24 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
       const r = await setActiveAccountAction(id === initialActiveId ? null : id);
       if (!r.error) {
         if (id !== initialActiveId) {
-          router.push(`/chart?account=${encodeURIComponent(id)}&symbol=XAUUSD&tf=h1`);
+          const account = initialAccounts.find((a) => a.id === id);
+          const session = getActiveSession();
+          patchActiveSession({
+            accountId: id,
+            accountLabel: account?.label ?? null,
+            accountType: accountTypeFromBroker({
+              label: account?.label,
+              mt5Server: account?.mt5_server,
+              metadata: account?.metadata,
+              connectionMethod: account?.connection_method,
+            }),
+            lastTab: "chart",
+          });
+          router.push(
+            `/chart?account=${encodeURIComponent(id)}&symbol=${encodeURIComponent(session.symbol)}&tf=${encodeURIComponent(session.timeframe)}`,
+          );
+        } else {
+          patchActiveSession({ accountId: null, accountLabel: null, accountType: "unknown" });
         }
         router.refresh();
       }
@@ -738,8 +800,25 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
 
   const onlyDemo = initialAccounts.length > 0 && initialAccounts.every((a) => isDemoAccount(a));
 
+  const activeAccount = initialAccounts.find((a) => a.id === initialActiveId) ?? null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto gap-5 pb-4">
+      <ActiveSessionSeed
+        accountId={initialActiveId}
+        accountLabel={activeAccount?.label ?? null}
+        accountType={
+          activeAccount
+            ? accountTypeFromBroker({
+                label: activeAccount.label,
+                mt5Server: activeAccount.mt5_server,
+                metadata: activeAccount.metadata,
+                connectionMethod: activeAccount.connection_method,
+              })
+            : "unknown"
+        }
+        lastTab="account"
+      />
       <Mt5ProvisioningAutoPoll targets={provisioningTargets} />
       <LiveStatusReporter
         liveCount={connectedCount}
@@ -786,6 +865,7 @@ export function AccountsScreen({ initialAccounts, initialActiveId, loadError, de
             <AccountCard
               key={a.id}
               account={a}
+              ledger={ledgers[a.id] ?? null}
               isActive={a.id === initialActiveId}
               pending={pending}
               onActivate={() => void onActivate(a.id)}

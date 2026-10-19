@@ -10,7 +10,7 @@ AXE Companion launches first as the mobile/operator app. Its job is to be stable
 4. AXE Core context/memory
 5. Intel via `intel-proxy`
 6. Premium mobile UX polish
-7. Vercel/Supabase/Cloudflare deploy stability
+7. IONOS / Supabase / Cloudflare deploy stability
 8. Trading OS integration later
 
 ## Product Boundaries
@@ -24,7 +24,7 @@ AXE Companion launches first as the mobile/operator app. Its job is to be stable
 ## Platform Boundaries
 
 - Next 16 / React 19 is the current canonical app stack.
-- Vercel hosts the production Companion app.
+- IONOS hosts the production Companion app (`www.axecompanion.com`). Deploy with `scripts/deploy-vps.sh` — see `docs/vps-deploy.md`.
 - Supabase is the source of truth for auth, database state, Edge Functions, and server-side secrets.
 - Cloudflare `axe-chart-edge` powers the current chart live flow.
 - Supabase Realtime is currently not publishing app tables.

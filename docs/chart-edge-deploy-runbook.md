@@ -1,8 +1,8 @@
 # Chart edge — production deploy runbook
 
 End-to-end steps for the **optional** Cloudflare chart-edge worker. Production
-Next is the IONOS host (`docs/vps-deploy.md`), not Vercel. Same-origin
-`/ws/chart` does not require this worker.
+Next is the IONOS host (`docs/vps-deploy.md`). Same-origin `/ws/chart` does
+not require this worker.
 
 > Anything in `<angle brackets>` is a placeholder you fill in.
 
@@ -63,8 +63,6 @@ Existing required env (already on the box):
 - `METAAPI_TOKEN` (server-only)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - Supabase keys
-
-Do not use `vercel env add` or `vercel --prod`.
 
 ## 3. Smoke test
 

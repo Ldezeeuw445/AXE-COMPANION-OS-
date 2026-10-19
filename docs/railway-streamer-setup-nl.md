@@ -1,6 +1,6 @@
 # MetaApi Streamer — Railway (3 stappen, geen Root Directory)
 
-Deploy de streamer als **apart Railway-project** (niet dezelfde service als Vercel/Next).
+Deploy de streamer als **apart Railway-project** (niet dezelfde service als IONOS/Next).
 
 ## Stap 1 — Nieuw Railway-project
 
@@ -26,11 +26,11 @@ Service → **Variables**:
 
 | Variable | Waarde |
 |----------|--------|
-| `METAAPI_TOKEN` | Zelfde als Vercel |
+| `METAAPI_TOKEN` | Zelfde als IONOS Next `.env.local` |
 | `WORKER_URL` | Cloudflare chart-edge URL (zonder trailing slash) |
 | `STREAMER_SECRET` | Random string — ook op Cloudflare zetten |
 | `SUPABASE_URL` | Zelfde als `NEXT_PUBLIC_SUPABASE_URL` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Zelfde als Vercel |
+| `SUPABASE_SERVICE_ROLE_KEY` | Zelfde als IONOS Next `.env.local` |
 
 ## Cloudflare (eenmalig)
 

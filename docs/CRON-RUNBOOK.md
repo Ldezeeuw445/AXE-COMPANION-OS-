@@ -1,8 +1,8 @@
 # AXE Companion — cron runbook (VPS + pg_cron)
 
-Production runs on the VPS, not Vercel. `vercel.json` is therefore dead config:
-Vercel Cron only fires for apps deployed on Vercel, which is why the broadcast
-feed stopped on 2026-07-06 and the briefings on 2026-07-18.
+Production runs on the IONOS Ubuntu host (`www.axecompanion.com`). `vercel.json`
+was deleted in PR #108. The broadcast feed stopped on 2026-07-06 and the
+briefings on 2026-07-18 because those jobs never ran on this host.
 
 Scheduling now lives inside Supabase, using the same `pg_cron` + `pg_net`
 mechanism AXE Core already uses for its two memory jobs. That is deliberate:
@@ -60,7 +60,7 @@ run these as two separate executions or the HTTP result is hidden by whatever
 follows it:
 
 ```sql
-select axe_ops.dispatch_cron('manual-check', '/api/cron/krater-feed-sync');
+select axe_ops.dispatch_cron('manual-check', '/api/cron/intel-warmup');
 ```
 
 ```sql
@@ -137,12 +137,15 @@ stale.
 | `axe-companion-weekly-briefing` | `*/15 4-11 * * 1` | `/api/cron/weekly-briefing` |
 | `axe-companion-cockpit-snapshots` | `30 6 * * *` | `/api/cron/cockpit-snapshots` |
 | `axe-companion-knowledge-sync` | `0 5 * * 0` | `/api/cron/knowledge-sync` |
-| `axe-companion-krater-feed-sync` | `*/10 4-20 * * *` | `/api/cron/krater-feed-sync` |
 | `axe-companion-intel-correlate` | `5 * * * *` | `/api/cron/intel-correlate` |
 | `axe-companion-journal-sweep` | `25 * * * *` | `/api/cron/journal-sweep` |
+| `axe-companion-user-knowledge-sync` | `40 5 * * *` | `/api/cron/user-knowledge-sync` |
+| `congress-trades-sync` (IONOS crontab only) | `20 6 * * *` | `/api/cron/congress-trades-sync` |
 
-The first eight carry the exact schedules `vercel.json` used, already written in
-UTC. `intel-correlate` is new here: its route has always existed but was never
+The original Vercel schedules (minus the retired Krater feed-sync) are already
+written in UTC. `axe-companion-krater-feed-sync` is paused in production and
+unscheduled by migration `20261017140000`; do not list or re-enable it.
+`intel-correlate` is new here: its route has always existed but was never
 in `vercel.json`, so it would not have run even on Vercel.
 
 ### journal-sweep
@@ -198,10 +201,13 @@ The base URL is one row, not nine job definitions:
 update axe_ops.cron_target set base_url = 'https://new-host.example', updated_at = now();
 ```
 
-## Retiring vercel.json
+## vercel.json / dual scheduling
 
-`vercel.json` is kept only so the crons are documented in one more place. It has
-no effect on the VPS. Delete it once you are sure you will not return to Vercel.
+`vercel.json` was deleted in PR #108. **Do not schedule the same route from
+both the IONOS crontab and `pg_cron`.** Ownership as of 2026-10-17 is in
+`docs/vps-deploy.md` (Who owns cron). `scripts/vps.crontab` is only the
+fallback for jobs that are not live in `cron.job` — today that is
+`congress-trades-sync` alone.
 
 ## congress-trades-sync — de congresfeed terug, gratis
 

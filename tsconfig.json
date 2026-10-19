@@ -30,5 +30,16 @@
     ".next/dev/types/**/*.ts",
     "src/**/*.mts"
   ],
-  "exclude": ["node_modules", "cloudflare/**", "docs/**", "node/**"]
+  "exclude": [
+    "node_modules",
+    "cloudflare/**",
+    "docs/**",
+    "node/**",
+    "src/**/*.test.ts",
+    "AXE ADAPTIVENESS/**",
+    "AXE Improvents/**",
+    "Alpaca Live/**",
+    "OKComputer_Untitled_Chat/**",
+    "axe-companion-super-agent/**"
+  ]
 }

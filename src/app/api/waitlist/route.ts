@@ -60,7 +60,9 @@ export async function POST(request: NextRequest) {
   const { error } = await supabase.from("marketing_waitlist").insert({ email, surface, source });
 
   if (error) {
-    if (error.code === "23505") return NextResponse.json({ ok: true, already: true });
+    // Same success shape as a fresh insert: whether the address was already
+    // stored is not something a stranger's POST gets to learn.
+    if (error.code === "23505") return NextResponse.json({ ok: true });
     console.error("[waitlist] insert failed:", error.message);
     return NextResponse.json({ error: "Could not save that just now." }, { status: 500 });
   }

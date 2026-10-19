@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { getVapidPublicKey } from "@/lib/env";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 function vapidConfigured() {
   return Boolean(
     process.env.VAPID_SUBJECT &&
-      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY &&
+      getVapidPublicKey() &&
       process.env.VAPID_PRIVATE_KEY,
   );
 }

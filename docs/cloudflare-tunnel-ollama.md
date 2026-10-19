@@ -1,7 +1,7 @@
 # Cloudflare Tunnel Setup voor Ollama (AXE Companion OS)
 
 ## Doel
-Maak Ollama bereikbaar vanaf Vercel via een publieke HTTPS URL, zodat AXE Companion OS Ollama kan gebruiken als LLM (met OpenAI fallback).
+Maak Ollama bereikbaar vanaf de IONOS-host via een publieke HTTPS URL, zodat AXE Companion OS Ollama kan gebruiken als LLM (met OpenAI fallback). Productie-Ollama op dezelfde IONOS-box is `http://localhost:11434` — deze tunnel is alleen nodig als Ollama op een andere machine draait.
 
 ## Vereisten
 - Cloudflare account (gratis)
@@ -109,31 +109,26 @@ Je zou de JSON lijst van modellen moeten zien. Werkt het? Mooi!
 
 ---
 
-## Stap 7: Zet de Ollama URL in Vercel
+## Stap 7: Zet de Ollama URL op IONOS
 
-1. Ga naar https://vercel.com/dashboard
-2. Klik je AXE Companion OS project
-3. Ga naar **Settings** → **Environment Variables**
-4. Voeg toe of update:
+1. SSH naar de IONOS-host (`www.axecompanion.com`)
+2. Open `.env.local` in de app-repo
+3. Voeg toe of update:
    - **Name**: `OLLAMA_HOST`
    - **Value**: `https://ollama.jouwdomein.nl` (zonder trailing slash)
-5. Klik **Save**
-6. **Redeploy** je project (of wacht tot de volgende deploy)
+4. Sla op
+5. Herstart Next: `./scripts/deploy-vps.sh main` (of restart het Next-proces)
 
 ---
 
 ## Stap 8: Zorg dat de code gedeployed is
 
-De code wijzigingen (intel routes → llmClient) moeten ook op Vercel staan:
+De code wijzigingen (intel routes → llmClient) moeten ook op IONOS staan. Push naar GitHub, daarna op de VPS:
 
 ```bash
-cd "/Users/luka/Desktop/AXE Companion /AXE-COMPANION-OS-runtime-fix"
-git add -A
-git commit -m "refactor: migrate intel routes to llmClient (Ollama + OpenAI fallback)"
-git push
+cd /path/to/AXE-COMPANION-OS-
+./scripts/deploy-vps.sh main
 ```
-
-Vercel zal automatisch opnieuw deployen.
 
 ---
 
@@ -177,7 +172,7 @@ launchctl load ~/Library/LaunchAgents/com.ollama.ollama.plist
 
 ## Troubleshooting
 
-### "Connection refused" van Vercel
+### "Connection refused" van de IONOS-host
 - Check of de tunnel draait: `sudo cloudflared service status`
 - Check of Ollama draait: `curl http://localhost:11434/api/tags`
 
@@ -196,6 +191,6 @@ launchctl load ~/Library/LaunchAgents/com.ollama.ollama.plist
 |-----------|---------------|
 | Ollama lokaal | `http://localhost:11434` |
 | Ollama via Cloudflare | `https://ollama.jouwdomein.nl` |
-| Vercel env var | `OLLAMA_HOST=https://ollama.jouwdomein.nl` |
+| IONOS env var | `OLLAMA_HOST=https://ollama.jouwdomein.nl` |
 | Tunnel status | `sudo cloudflared service status` |
 | Ollama status | `curl http://localhost:11434/api/tags` |

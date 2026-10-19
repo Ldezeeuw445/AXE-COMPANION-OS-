@@ -1,0 +1,6 @@
+# Per-function JWT settings. market-proxy authenticates with a shared secret
+# in Authorization: Bearer (EDGE_SECRET / CRON_SECRET), which is not a JWT,
+# so the platform check must stay off.
+
+[functions.market-proxy]
+verify_jwt = false

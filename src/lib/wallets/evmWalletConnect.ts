@@ -92,7 +92,7 @@ async function connectWalletConnect(
     metadata: {
       name: "AXE Companion",
       description: "Read-only wallet tracking — AXE never moves funds",
-      url: typeof window !== "undefined" ? window.location.origin : "https://axecompanion.com",
+      url: typeof window !== "undefined" ? window.location.origin : "https://www.axecompanion.com",
       icons: [`${typeof window !== "undefined" ? window.location.origin : ""}/axe-logo-companion.png`],
     },
   });

@@ -106,7 +106,7 @@ Symbols like **SPCXUSD** (SpaceX CFD on MT5) are **not** on Alpaca — those sta
 
 ## Testing checklist
 
-- [ ] Set `ALPACA_PAPER_*` env on Railway/Vercel
+- [ ] Set `ALPACA_PAPER_*` env on the IONOS host (and Railway if the streamer needs them)
 - [ ] `GET /api/alpaca/provision` → `{ configured: true }`
 - [ ] `POST /api/alpaca/provision` while signed in → account row created
 - [ ] Open demo chart on **TSLA** → real candles (not flat synthetic)

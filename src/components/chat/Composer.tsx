@@ -30,6 +30,7 @@ import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartIntent";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
+import { getActiveSession } from "@/lib/session/activeSessionStore";
 
 declare global {
   interface Window {
@@ -41,9 +42,6 @@ declare global {
 }
 
 /** Intel's two standing questions — the reason its composer differs at all. */
-
-const LS_SYMBOL = "axe_active_symbol";
-const LS_TF = "axe_active_tf";
 
 type ComposerProps = {
   initialQuota?: ChatQuotaPayload | null;
@@ -141,13 +139,8 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     [focusDraft],
   );
 
-  // Read pair/TF from localStorage (PinnedContext writes these)
-  const getSymbol = useCallback(() => {
-    try { return localStorage.getItem(LS_SYMBOL) ?? ""; } catch { return ""; }
-  }, []);
-  const getTf = useCallback(() => {
-    try { return localStorage.getItem(LS_TF) ?? ""; } catch { return ""; }
-  }, []);
+  const getSymbol = useCallback(() => getActiveSession().symbol, []);
+  const getTf = useCallback(() => getActiveSession().timeframe, []);
 
   const resolvePrefillDraft = useCallback((): string | null => {
     const staged = readStagedChatPrefill();
@@ -282,7 +275,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
     try {
       // Get Supabase session token so server-side auth works even if cookies
-      // aren't forwarded (common on Vercel deployments).
+      // aren't forwarded.
       let authHeader: Record<string, string> = {};
       try {
         const sb = createClient();

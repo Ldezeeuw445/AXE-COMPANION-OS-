@@ -12,7 +12,7 @@
  * Palette: cyan #00d4f5 · purple #5853b2 · violet #9270d8 · bg #060608
  */
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const BG = "#060608";
 const PARTICLE_COUNT = 200;
@@ -172,112 +172,7 @@ export function FullScreenLoader({
   label?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef(0);
-  const startRef = useRef(0);
   const [opacity, setOpacity] = useState(1);
-
-  const draw = useCallback(
-    (particles: Particle[], orbs: Orb[], ctx: CanvasRenderingContext2D, W: number, H: number) => {
-      const now = performance.now();
-      if (!startRef.current) startRef.current = now;
-      const elapsed = now - startRef.current;
-
-      // Phase timing
-      const formT = Math.min(elapsed / FORM_DURATION, 1);
-      let globalAlpha = 1;
-
-      if (autoFade) {
-        const totalVisible = FORM_DURATION + HOLD_DURATION;
-        const fadingOut = elapsed > totalVisible;
-        const fadeT = fadingOut ? Math.min((elapsed - totalVisible) / FADE_DURATION, 1) : 0;
-        globalAlpha = 1 - fadeT;
-
-        if (fadeT >= 1) {
-          setOpacity(0);
-          onDone?.();
-          return; // stop loop
-        }
-
-        setOpacity(globalAlpha);
-      }
-
-      ctx.clearRect(0, 0, W, H);
-      ctx.globalAlpha = globalAlpha;
-
-      // ── Hex grid overlay ──────────────────────────────────────────────
-      const hexSize = 28;
-      const hexH = hexSize * Math.sqrt(3);
-      ctx.strokeStyle = "rgba(255,255,255,0.03)";
-      ctx.lineWidth = 0.5;
-      for (let row = -1; row < H / hexH + 1; row++) {
-        for (let col = -1; col < W / (hexSize * 1.5) + 1; col++) {
-          const cx = col * hexSize * 1.5;
-          const cy = row * hexH + (col % 2 ? hexH / 2 : 0);
-          ctx.beginPath();
-          for (let i = 0; i < 6; i++) {
-            const angle = (Math.PI / 3) * i - Math.PI / 6;
-            const hx = cx + hexSize * Math.cos(angle);
-            const hy = cy + hexSize * Math.sin(angle);
-            if (i === 0) ctx.moveTo(hx, hy);
-            else ctx.lineTo(hx, hy);
-          }
-          ctx.closePath();
-          ctx.stroke();
-        }
-      }
-
-      // ── Particles ─────────────────────────────────────────────────────
-      for (const p of particles) {
-        const pElapsed = Math.max(elapsed - p.delay, 0);
-        const pFormT = easeOutCubic(Math.min(pElapsed / FORM_DURATION, 1));
-        const x = lerp(p.sx, p.tx, pFormT);
-        const y = lerp(p.sy, p.ty, pFormT);
-
-        const [cr, cg, cb] = p.color;
-        // Slight twinkle
-        const twinkle = 0.5 + 0.5 * Math.sin(now * 0.003 + p.sx + p.sy);
-        const alpha = (0.4 + 0.6 * pFormT) * twinkle;
-
-        ctx.beginPath();
-        ctx.arc(x, y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`;
-        ctx.fill();
-      }
-
-      // ── Glass orbs ────────────────────────────────────────────────────
-      for (const orb of orbs) {
-        orb.x += orb.vx;
-        orb.y += orb.vy;
-        // Bounce softly off edges
-        if (orb.x - orb.r < 0 || orb.x + orb.r > W) orb.vx *= -1;
-        if (orb.y - orb.r < 0 || orb.y + orb.r > H) orb.vy *= -1;
-
-        const wobble = 0.7 + 0.3 * Math.sin(now * 0.001 + orb.x * 0.01);
-        const a = orb.opacity * wobble;
-
-        // Outer glow
-        const glow = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.r);
-        glow.addColorStop(0, `rgba(0,212,245,${a * 0.12})`);
-        glow.addColorStop(0.5, `rgba(88,83,178,${a * 0.06})`);
-        glow.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.beginPath();
-        ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
-        ctx.fillStyle = glow;
-        ctx.fill();
-
-        // Glass rim
-        ctx.beginPath();
-        ctx.arc(orb.x, orb.y, orb.r * 0.85, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255,255,255,${a * 0.08})`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      ctx.globalAlpha = 1;
-      frameRef.current = requestAnimationFrame(() => draw(particles, orbs, ctx, W, H));
-    },
-    [onDone, autoFade],
-  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -298,7 +193,6 @@ export function FullScreenLoader({
     const cy = H * 0.42;
     const triRadius = Math.min(W, H) * 0.28;
 
-    // Build particles
     const particles: Particle[] = [];
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       const [tx, ty] = triangleTarget(i, PARTICLE_COUNT, cx, cy, triRadius);
@@ -313,7 +207,6 @@ export function FullScreenLoader({
       });
     }
 
-    // Build glass orbs
     const orbs: Orb[] = [];
     for (let i = 0; i < ORB_COUNT; i++) {
       orbs.push({
@@ -326,10 +219,98 @@ export function FullScreenLoader({
       });
     }
 
-    startRef.current = 0;
-    frameRef.current = requestAnimationFrame(() => draw(particles, orbs, ctx, W, H));
-    return () => cancelAnimationFrame(frameRef.current);
-  }, [draw]);
+    let raf = 0;
+    let start = 0;
+    const tick = () => {
+      const now = performance.now();
+      if (!start) start = now;
+      const elapsed = now - start;
+      let globalAlpha = 1;
+
+      if (autoFade) {
+        const totalVisible = FORM_DURATION + HOLD_DURATION;
+        const fadingOut = elapsed > totalVisible;
+        const fadeT = fadingOut ? Math.min((elapsed - totalVisible) / FADE_DURATION, 1) : 0;
+        globalAlpha = 1 - fadeT;
+
+        if (fadeT >= 1) {
+          setOpacity(0);
+          onDone?.();
+          return;
+        }
+
+        setOpacity(globalAlpha);
+      }
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = globalAlpha;
+
+      const hexSize = 28;
+      const hexH = hexSize * Math.sqrt(3);
+      ctx.strokeStyle = "rgba(255,255,255,0.03)";
+      ctx.lineWidth = 0.5;
+      for (let row = -1; row < H / hexH + 1; row++) {
+        for (let col = -1; col < W / (hexSize * 1.5) + 1; col++) {
+          const hx0 = col * hexSize * 1.5;
+          const hy0 = row * hexH + (col % 2 ? hexH / 2 : 0);
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI / 3) * i - Math.PI / 6;
+            const hx = hx0 + hexSize * Math.cos(angle);
+            const hy = hy0 + hexSize * Math.sin(angle);
+            if (i === 0) ctx.moveTo(hx, hy);
+            else ctx.lineTo(hx, hy);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+
+      for (const p of particles) {
+        const pElapsed = Math.max(elapsed - p.delay, 0);
+        const pFormT = easeOutCubic(Math.min(pElapsed / FORM_DURATION, 1));
+        const x = lerp(p.sx, p.tx, pFormT);
+        const y = lerp(p.sy, p.ty, pFormT);
+        const [cr, cg, cb] = p.color;
+        const twinkle = 0.5 + 0.5 * Math.sin(now * 0.003 + p.sx + p.sy);
+        const alpha = (0.4 + 0.6 * pFormT) * twinkle;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`;
+        ctx.fill();
+      }
+
+      for (const orb of orbs) {
+        orb.x += orb.vx;
+        orb.y += orb.vy;
+        if (orb.x - orb.r < 0 || orb.x + orb.r > W) orb.vx *= -1;
+        if (orb.y - orb.r < 0 || orb.y + orb.r > H) orb.vy *= -1;
+
+        const wobble = 0.7 + 0.3 * Math.sin(now * 0.001 + orb.x * 0.01);
+        const a = orb.opacity * wobble;
+        const glow = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.r);
+        glow.addColorStop(0, `rgba(0,212,245,${a * 0.12})`);
+        glow.addColorStop(0.5, `rgba(88,83,178,${a * 0.06})`);
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.beginPath();
+        ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
+        ctx.fillStyle = glow;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(orb.x, orb.y, orb.r * 0.85, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255,255,255,${a * 0.08})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [autoFade, onDone]);
 
   return (
     <div

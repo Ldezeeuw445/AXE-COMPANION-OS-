@@ -8,6 +8,7 @@ import {
   ollamaHealth,
   type OllamaToolCall,
 } from "./ollamaClient";
+import { parseOllamaEndpoints } from "./ollamaEndpoints";
 import {
   openaiChat,
   openaiChatStreaming,
@@ -20,8 +21,12 @@ import type { AxeResponse, AxeToolCall } from "@/services/axeService";
  * LLM Router — tries Ollama first, falls back to OpenAI.
  *
  * Configuration:
- *   OLLAMA_URL            — Cloudflare tunnel URL (e.g. https://ollama-xxx.trycloudflare.com)
- *   OLLAMA_MODEL          — model name (default: llama3.1)
+ *   OLLAMA_URL            — one URL, or a comma/whitespace list in preference
+ *                           order (e.g. always-on, then Mac Mini). Set the list
+ *                           only after this resolver is live — older code treated
+ *                           the whole string as a single address.
+ *   OLLAMA_MODEL          — preferred model; if missing on the endpoint, a
+ *                           chatable model that is present is chosen instead
  *   OPENAI_API_KEY        — existing OpenAI key
  *   LLM_FALLBACK_ENABLED  — true (default) to enable OpenAI fallback; false to fail fast on Ollama errors
  *
@@ -35,7 +40,7 @@ import type { AxeResponse, AxeToolCall } from "@/services/axeService";
  * because Ollama vision support is model-dependent and unreliable.
  */
 
-// Accept both naming conventions — FALLBACK_TO_OPENAI (Vercel) and LLM_FALLBACK_ENABLED (code default)
+// Accept both naming conventions — FALLBACK_TO_OPENAI and LLM_FALLBACK_ENABLED
 const FALLBACK_ENABLED =
   (process.env.LLM_FALLBACK_ENABLED ?? process.env.FALLBACK_TO_OPENAI ?? "true").toLowerCase() !== "false";
 
@@ -48,8 +53,9 @@ let _ollamaLastCheck = 0;
 const OLLAMA_HEALTH_TTL = 30_000;
 
 async function isOllamaReachable(): Promise<boolean> {
-  // Accept both OLLAMA_URL and OLLAMA_HOST
-  if (!process.env.OLLAMA_URL && !process.env.OLLAMA_HOST) return false;
+  // Same parser as the client and /api/debug/chat-health: a present-but-empty
+  // var, or a host without a scheme, is "not configured" — not localhost.
+  if (parseOllamaEndpoints(process.env).length === 0) return false;
   const now = Date.now();
   if (_ollamaHealthy !== null && now - _ollamaLastCheck < OLLAMA_HEALTH_TTL) {
     return _ollamaHealthy === true;

@@ -5,13 +5,24 @@
 // this when local env vars (FRED_API_KEY, FINNHUB_API_KEY) are absent,
 // keeping all third-party credentials in a single secrets store.
 //
+// Auth: shared secret on Authorization: Bearer (not verify_jwt).
+//   Accepts EDGE_SECRET, CRON_SECRET, or SUPABASE_SERVICE_ROLE_KEY.
+//   verify_jwt stays false — a dedicated secret is not a user JWT, and
+//   anonymous demo JWTs would still burn quota if we only checked JWTs.
+//
 // Deploy:  supabase functions deploy market-proxy --no-verify-jwt
 // Secrets: supabase secrets set FRED_API_KEY=xxx FINNHUB_API_KEY=yyy
+//          supabase secrets set EDGE_SECRET=xxx   # or CRON_SECRET
 // Optional: EDGE_PROVIDER_KEYS_JSON='{"FRED_API_KEY":"…","FINNHUB_API_KEY":"…"}'
 // ─────────────────────────────────────────────────────────────────────
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getMergedEdgeEnv } from "../_shared/mergeEdgeEnv.ts";
+import {
+  bearerMatchesSharedSecret,
+  extractBearerToken,
+  resolveSharedSecrets,
+} from "../_shared/requireSharedSecret.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -199,6 +210,24 @@ function mapImpact(raw: string | null): string {
   return "unknown";
 }
 
+function authorize(req: Request, env: Record<string, string>): Response | null {
+  const expected = resolveSharedSecrets(env);
+  if (expected.length === 0) {
+    return json(
+      {
+        ok: false,
+        error: "proxy_auth_not_configured",
+        hint: "Set EDGE_SECRET or CRON_SECRET on Supabase Edge secrets",
+      },
+      503,
+    );
+  }
+  if (!bearerMatchesSharedSecret(extractBearerToken(req), expected)) {
+    return json({ ok: false, error: "unauthorized" }, 401);
+  }
+  return null;
+}
+
 // ── Handler ────────────────────────────────────────────────────────────
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -206,6 +235,8 @@ serve(async (req: Request) => {
   }
 
   const env = getMergedEdgeEnv();
+  const denied = authorize(req, env);
+  if (denied) return denied;
 
   try {
     const body = await req.json();

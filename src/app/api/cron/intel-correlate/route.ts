@@ -20,12 +20,11 @@ const AXE_OWNER_USER_ID = "acff7a12-1111-481d-a7a9-cc07583b8069";
  * button (src/lib/intel/correlationEngine.ts), same table, just triggered
  * on a schedule instead of on-demand.
  *
- * Not Vercel-Cron-driven — this app now runs as a packaged Tauri desktop
- * build with a local sidecar server, not a Vercel deployment. AXE Core (a
- * sibling Tauri app on the same Mac) polls this route on its own interval
- * instead, the same way it drives its own 24/7 trading loop while its
- * window is open. CORS-open since the real gate is the bearer secret and
- * this server only ever binds to 127.0.0.1.
+ * Host crontab (`scripts/vps.crontab`) can hit this route. AXE Core (a
+ * sibling Tauri app on the same Mac) may also poll it on its own interval
+ * while its window is open, the same way it drives its own 24/7 trading
+ * loop. CORS-open since the real gate is the bearer secret and this
+ * server only ever binds to 127.0.0.1 when used as a sidecar.
  */
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

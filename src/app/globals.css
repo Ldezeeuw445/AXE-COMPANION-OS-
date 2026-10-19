@@ -836,10 +836,13 @@ body.chart-landscape-active .tos-shell-desktop-layout {
 /* Phone landscape on chart route — same immersive shell even before JS hydrates */
 @media (orientation: landscape) and (max-height: 520px) {
   body.tos-route-chart .tos-shell-mobile-nav,
-  body.tos-route-chart .tos-shell-mobile-chrome {
+  body.tos-route-chart .tos-shell-mobile-chrome,
+  .tos-shell-desktop-layout.tos-route-chart .tos-shell-mobile-nav,
+  .tos-shell-desktop-layout.tos-route-chart .tos-shell-mobile-chrome {
     display: none !important;
   }
-  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
+  body.tos-route-chart .tos-shell-desktop-content.tos-flush-route,
+  .tos-shell-desktop-layout.tos-route-chart .tos-shell-desktop-content.tos-flush-route {
     padding: 0 !important;
   }
 }
@@ -852,7 +855,8 @@ body.chart-landscape-active .tos-shell-desktop-layout {
 }
 
 /* Chart route — edge-to-edge canvas on phone portrait (no side gutters) */
-body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route {
+body.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route,
+.tos-shell-desktop-layout.tos-route-chart .tos-shell-desktop-content.tos-chart-route.tos-flush-route {
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
@@ -1311,6 +1315,134 @@ select {
 
 .axe-landing-pulse-cyan {
   animation: axe-cyan-pulse 2.6s ease-in-out infinite;
+}
+
+.axe-landing-scene {
+  perspective: 900px;
+  height: 11rem;
+  margin-top: 1.75rem;
+  display: grid;
+  place-items: center;
+}
+
+.axe-landing-scene--tall {
+  height: 13rem;
+}
+
+.axe-landing-cube3d {
+  --cube: 6.6rem;
+  position: relative;
+  width: var(--cube);
+  height: var(--cube);
+  transform-style: preserve-3d;
+  transform: rotateX(-18deg) rotateY(-28deg);
+  animation: axe-cube-spin 22s linear infinite;
+}
+
+.axe-landing-cube3d--tall {
+  --cube: 7.2rem;
+  height: 8.4rem;
+}
+
+.axe-landing-cube3d-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(34, 211, 238, 0.32);
+  background:
+    linear-gradient(160deg, rgba(0, 224, 255, 0.16), rgba(5, 8, 12, 0.92)),
+    repeating-linear-gradient(135deg, rgba(34, 211, 238, 0.05) 0 8px, transparent 8px 16px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1.05;
+  text-transform: uppercase;
+  color: rgba(165, 243, 252, 0.95);
+  backface-visibility: hidden;
+}
+
+.axe-landing-cube3d-face span {
+  display: block;
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+}
+
+.axe-landing-cube3d-face--front { transform: translateZ(calc(var(--cube) / 2)); }
+.axe-landing-cube3d-face--back { transform: rotateY(180deg) translateZ(calc(var(--cube) / 2)); }
+.axe-landing-cube3d-face--right { transform: rotateY(90deg) translateZ(calc(var(--cube) / 2)); }
+.axe-landing-cube3d-face--left { transform: rotateY(-90deg) translateZ(calc(var(--cube) / 2)); }
+.axe-landing-cube3d-face--top { transform: rotateX(90deg) translateZ(calc(var(--cube) / 2)); }
+.axe-landing-cube3d-face--bottom { transform: rotateX(-90deg) translateZ(calc(var(--cube) / 2)); }
+
+.axe-landing-cube3d--tall .axe-landing-cube3d-face--front,
+.axe-landing-cube3d--tall .axe-landing-cube3d-face--back,
+.axe-landing-cube3d--tall .axe-landing-cube3d-face--right,
+.axe-landing-cube3d--tall .axe-landing-cube3d-face--left {
+  height: 8.4rem;
+}
+
+@keyframes axe-cube-spin {
+  0% { transform: rotateX(-18deg) rotateY(-28deg); }
+  100% { transform: rotateX(-18deg) rotateY(332deg); }
+}
+
+.axe-landing-pyramid {
+  --py: 4.4rem;
+  position: relative;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(-16deg) rotateY(-24deg);
+  animation: axe-cube-spin 26s linear infinite;
+}
+
+.axe-landing-pyramid-face {
+  position: absolute;
+  left: calc(var(--py) * -1);
+  top: calc(var(--py) * -1.15);
+  width: calc(var(--py) * 2);
+  height: calc(var(--py) * 2);
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+  background: linear-gradient(180deg, rgba(0, 224, 255, 0.22), rgba(5, 8, 12, 0.85));
+  border: 1px solid rgba(34, 211, 238, 0.28);
+}
+
+.axe-landing-pyramid-face--front { transform: rotateX(18deg) translateZ(1.4rem); }
+.axe-landing-pyramid-face--right { transform: rotateY(90deg) rotateX(18deg) translateZ(1.4rem); }
+.axe-landing-pyramid-face--left { transform: rotateY(-90deg) rotateX(18deg) translateZ(1.4rem); }
+.axe-landing-pyramid-face--back { transform: rotateY(180deg) rotateX(18deg) translateZ(1.4rem); }
+
+.axe-landing-phone-card {
+  position: relative;
+  min-height: 11rem;
+  border-radius: 1.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    radial-gradient(120px 80px at 50% 18%, rgba(0, 224, 255, 0.1), transparent 70%);
+  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.9);
+  padding: 1.5rem 1.4rem 1.6rem;
+}
+
+.axe-landing-phone-card::before {
+  content: "";
+  position: absolute;
+  top: 0.7rem;
+  left: 50%;
+  width: 3.2rem;
+  height: 0.28rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axe-landing-cube3d,
+  .axe-landing-pyramid {
+    animation: none;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════

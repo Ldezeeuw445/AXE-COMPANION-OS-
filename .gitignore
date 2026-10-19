@@ -13,6 +13,9 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
 
 # next.js
 /.next/
@@ -36,7 +39,7 @@
 Icon?
 skills-lock.json
 
-# Replit / agent / design dumps — not needed for Vercel production
+# Replit / agent / design dumps — not needed for production
 .replit
 replit.md
 .agents/
@@ -57,7 +60,7 @@ yarn-error.log*
 .env*
 !.env*.example
 
-# vercel
+# leftover local CLI cache — do not commit
 .vercel
 
 # typescript
@@ -79,13 +82,7 @@ src-tauri/gen/
 # OpenNext build output
 .open-next/
 
-# Scratch drops and vendor exports — never part of the app build.
-/AXE ADAPTIVENESS/
-/AXE Improvents/
-/OKComputer_Untitled_Chat/
-/axe-companion-super-agent/
-/Alpaca Live/
-
 # Persoonlijke Claude Code-instellingen (permissies, env). Nooit committen:
 # die gelden per machine en per account.
 .claude/settings.local.json
+/e2e/artifacts/

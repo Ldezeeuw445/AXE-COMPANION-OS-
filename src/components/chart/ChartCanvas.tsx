@@ -76,6 +76,8 @@ export type ChartCanvasHandle = {
   getRightAxisWidth: () => number;
   /** Scroll the chart time axis by a pixel delta (negative = scroll left / back in time). */
   scrollByPixels: (deltaX: number) => void;
+  /** Raster of the candle canvas (drawings live in overlay layers). */
+  takeScreenshot: () => HTMLCanvasElement | null;
 };
 
 /** Default native zoom: how many of the most recent bars are visible at first paint
@@ -717,6 +719,15 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
             false,
           );
         } catch { /* ignore */ }
+      },
+      takeScreenshot() {
+        const chart = chartRef.current;
+        if (!chart) return null;
+        try {
+          return chart.takeScreenshot();
+        } catch {
+          return null;
+        }
       },
     }),
     [],

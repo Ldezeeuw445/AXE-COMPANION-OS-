@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getPublicAppBaseUrl } from "@/lib/env";
 import { firstNonEmptyEnv } from "@/lib/envFallback";
 import { blockingLlmFailure, llmHealthSnapshot } from "@/lib/ops/llmFailure";
 
@@ -94,6 +95,6 @@ export async function GET() {
       consecutive_failures: e.consecutiveFailures,
       total_failures: e.totalFailures,
     })),
-    app_url: process.env.NEXT_PUBLIC_APP_URL ?? null,
+    app_url: getPublicAppBaseUrl(),
   });
 }

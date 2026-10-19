@@ -1,6 +1,6 @@
 import "server-only";
 import { getFinnhubKey } from "@/lib/market/providerStatus";
-import { getSupabaseKey, getSupabaseServiceRoleKey } from "@/lib/env";
+import { getMarketProxyRequest } from "@/lib/market/marketProxyClient";
 import { loadForexFactoryCalendar } from "@/lib/market/forexFactoryCalendar";
 import type { EconomicEvent } from "@/lib/market/marketTypes";
 
@@ -82,21 +82,16 @@ function guessCurrency(country: string): string | null {
 }
 
 // ── Edge Function fallback ──────────────────────────────────────────────
-// When FINNHUB_API_KEY is missing from the Vercel env, route through the
+// When FINNHUB_API_KEY is missing from the IONOS env, route through the
 // market-proxy Supabase Edge Function which holds the key in its secrets.
+// Requires EDGE_SECRET / CRON_SECRET (or service-role fallback).
 async function fetchCalendarViaEdgeFunction(daysAhead: number): Promise<EconomicEvent[]> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
-  const anonKey = getSupabaseKey();
-  if (!url || !anonKey) return [];
-  const bearerKey = getSupabaseServiceRoleKey() ?? anonKey;
+  const proxy = getMarketProxyRequest();
+  if (!proxy) return [];
   try {
-    const res = await fetch(`${url}/functions/v1/market-proxy`, {
+    const res = await fetch(proxy.url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${bearerKey}`,
-        apikey: anonKey,
-      },
+      headers: proxy.headers,
       body: JSON.stringify({ action: "economicCalendar", daysAhead }),
       next: { revalidate: REVALIDATE_SECONDS, tags: ["calendar:edge-proxy"] },
     });

@@ -17,7 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
-import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
 
 type Body = {
@@ -111,20 +111,17 @@ export async function POST(req: NextRequest, { params }: Params) {
   // and we still consider the trigger successful (in-app already shows it).
   let pushed = false;
   try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-    const res = await fetch(`${baseUrl}/api/push/send`, {
-      method: "POST",
-      headers: internalPushHeaders(),
-      body: JSON.stringify({
-        userId: user.id,
-        title: `Alert · ${existing.symbol ?? existing.type}`,
-        body: message,
-        url: existing.symbol ? chartDeepLink(existing.symbol) : "/alerts",
-        tag: `alert-${id}`,
-      }),
+    const delivered = await dispatchPushEvent({
+      userId: user.id,
+      category: "price_alert",
+      eventKey: `price_alert:${id}:${now}`,
+      title: `Alert · ${existing.symbol ?? existing.type}`,
+      body: message,
+      url: existing.symbol ? chartDeepLink(existing.symbol) : "/alerts",
+      symbol: existing.symbol,
+      tag: `alert-${id}`,
     });
-    pushed = res.ok;
+    pushed = delivered.ok && delivered.sent > 0;
   } catch {
     pushed = false;
   }

@@ -36,6 +36,21 @@ const nextConfig: NextConfig = {
     "*.riker.replit.dev",
     "*.replit.dev",
   ].filter(Boolean),
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
+        source: "/manifest.json",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: "/legal/terms", destination: "/terms", permanent: true },
@@ -46,6 +61,8 @@ const nextConfig: NextConfig = {
       { source: "/legal/refunds", destination: "/refunds", permanent: true },
       { source: "/legal/subprocessors", destination: "/subprocessors", permanent: true },
       { source: "/legal/contact", destination: "/contact", permanent: true },
+      { source: "/landing", destination: "/", permanent: true },
+      { source: "/landing/", destination: "/", permanent: true },
     ];
   },
 };

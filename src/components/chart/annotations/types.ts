@@ -17,7 +17,7 @@ export type AnnotationPoint = {
 
 export type ChartAnnotation = {
   id: string;
-  /** Reserved for server persistence later — local store omits it. */
+  /** Owner when the drawing has been synced to Supabase. */
   userId?: string | null;
   accountId?: string | null;
   symbol: string;
@@ -27,6 +27,8 @@ export type ChartAnnotation = {
   settings?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  /** Tombstone for last-write-wins sync. Omitted/false on visible drawings. */
+  deleted?: boolean;
 };
 
 /** Standard Fibonacci retracement levels (0 → 1 from anchor → swing). */

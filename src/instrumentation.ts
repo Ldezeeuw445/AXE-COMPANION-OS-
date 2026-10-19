@@ -32,6 +32,7 @@ export async function register() {
     console.error("[instrumentation] keystore load threw:", e);
   }
 
+
   try {
     const { attachChartWebSocket } = await import("@/lib/chart/attachChartWebSocket");
     await attachChartWebSocket();

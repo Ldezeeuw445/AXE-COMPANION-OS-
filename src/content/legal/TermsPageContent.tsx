@@ -190,7 +190,7 @@ export function TermsPageContent() {
 
       <h2>15. Third-party services</h2>
       <p>
-        The services may depend on third parties such as Supabase, OpenAI, Stripe, Vercel, Cloudflare, MetaApi, brokers,
+        The services may depend on third parties such as Supabase, OpenAI, Stripe, IONOS, Cloudflare, MetaApi, brokers,
         market-data providers, analytics providers or other integrations.
       </p>
       <p>We are not responsible for the availability, accuracy, policies or outages of third-party services.</p>

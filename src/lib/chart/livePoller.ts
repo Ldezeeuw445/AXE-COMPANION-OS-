@@ -24,9 +24,8 @@ export const POSITIONS_INTERVAL_MS = 8_000;
 export const HEARTBEAT_INTERVAL_MS = 4_000;
 export const DELAYED_THRESHOLD_FAILURES = 3;
 
-/** Self-hosted Node keeps SSE open; a 50s cap remains only if VERCEL is set. */
+/** Self-hosted Node keeps SSE open unless CHART_SSE_MAX_MS is set. */
 export function chartSseMaxDurationMs(): number {
-  if (process.env.VERCEL) return 50_000;
   const override = Number(process.env.CHART_SSE_MAX_MS ?? "");
   if (Number.isFinite(override) && override > 5_000) return override;
   return 10 * 60_000;

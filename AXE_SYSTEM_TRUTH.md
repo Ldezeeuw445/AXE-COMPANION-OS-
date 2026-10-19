@@ -11,18 +11,16 @@ This file records the verified operational truth for AXE Companion. Treat it as 
 
 ## Current Runtime Truth
 
-- Production runs on a self-managed Ubuntu VPS behind nginx (`212.227.91.79`),
-  **not** on Vercel. Verified 2026-09-07: `server: nginx/1.24.0 (Ubuntu)`, and
-  the Vercel team holds no Companion project. Vercel is not coming back.
-- Because of that, `vercel.json` crons never fire. Scheduling lives in Supabase
-  `pg_cron` + `pg_net` via `axe_ops.dispatch_cron` — see `docs/CRON-RUNBOOK.md`.
-- Ollama runs on the same VPS (`localhost:11434`), which is why chat-health
-  reports it reachable in ~3 ms. One instance serves every user.
-- Website: `www.axecompanion.com`
-- Deploy by running `scripts/deploy-vps.sh` on the VPS (merge into `deployed`, never check out a branch based on stale `main`). nginx must forward WebSocket upgrades for `/ws/chart` — see `docs/vps-deploy.md`.
+- Production is the IONOS Ubuntu host only (`www.axecompanion.com`, `212.227.91.79`).
+- Production website: `www.axecompanion.com` (nginx reverse-proxy → Next `next start` on port 5000).
+- Deploy by running `scripts/deploy-vps.sh` **on that box**. Canonical branch is `main`. See `docs/vps-deploy.md`.
+- nginx must forward WebSocket upgrades for `/ws/chart`.
+- One scheduler per job: live Companion crons are `pg_cron` (`axe_ops.dispatch_cron`); `scripts/vps.crontab` only keeps jobs that are not in `cron.job` (today: `congress-trades-sync`). See `docs/vps-deploy.md`.
+- Ollama runs on the same host (`localhost:11434`), which is why chat-health reports it reachable in ~3 ms. One instance serves every user.
 - GitHub repo: `Ldezeeuw445/AXE-COMPANION-OS-`
 - Current canonical app stack: Next 16 / React 19.
 - The app is built as a Next App Router application with server actions, route handlers, server-side services, and client UI.
+- Chart live: same-origin `wss://www.axecompanion.com/ws/chart` first, optional Cloudflare `axe-chart-edge`, SSE last.
 
 ## Supabase Truth
 
@@ -57,10 +55,10 @@ These functions already exist and must be treated as live infrastructure:
 
 ## Chart Live Truth
 
-- Cloudflare worker `axe-chart-edge` exists.
-- `axe-chart-edge` powers the chart live flow.
-- Current chart live system uses Cloudflare WebSocket / poll mode with SSE fallback.
-- The live chart path should be stabilized, not replaced without a dedicated audit.
+- Same-origin Next gateway `/ws/chart` is the default live path on the IONOS host.
+- Cloudflare worker `axe-chart-edge` is optional (Mode A poll / Mode B streamer push).
+- SSE `/api/chart/live` is the safety net only.
+- nginx must forward HTTP Upgrade or the phone chart stays on SSE.
 
 ## AXE Core Truth
 

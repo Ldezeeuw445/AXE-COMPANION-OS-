@@ -3,27 +3,15 @@
 /**
  * PinnedContext — chip-based context strip at the top of the chat view.
  *
- * Layout: [XAUUSD ▾] [H1 ▾] 📌 Session brief text... >
- *
- * Left side:
- *   - Pair chip: tap to open inline edit (type symbol, enter/blur to commit)
- *   - TF chip: tap to cycle through timeframes
- *
- * Right side:
- *   - Red pin icon + pinned context text (truncated) + chevron
- *   - Tapping the pin/text area navigates to /settings
- *
- * Reads/writes localStorage:
- *   axe_active_symbol, axe_active_tf
+ * Reads/writes the shared active-session store (symbol + timeframe) so
+ * Home / Markets / Chart / AXE / Account stay in sync.
  */
 
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Pin, ChevronRight } from "lucide-react";
-
-const LS_SYMBOL = "axe_active_symbol";
-const LS_TF = "axe_active_tf";
-const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "D", "W"];
+import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
+import { useActiveSession, usePatchActiveSession } from "@/lib/session/activeSessionStore";
 
 type PinnedContextProps = {
   /** Static pinned text from the server — shown next to pin icon. */
@@ -32,27 +20,20 @@ type PinnedContextProps = {
 
 export function PinnedContext({ text }: PinnedContextProps) {
   const router = useRouter();
-  const [symbol, setSymbol] = useState("");
-  const [tf, setTf] = useState("");
+  const session = useActiveSession();
+  const patchSession = usePatchActiveSession();
+  const symbol = session.symbol;
+  const tf = session.timeframe;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Hydrate from localStorage (SSR-safe)
-  useEffect(() => {
-    setSymbol(localStorage.getItem(LS_SYMBOL) ?? "");
-    setTf(localStorage.getItem(LS_TF) ?? "");
-  }, []);
-
-  // Focus input when editing opens
   useEffect(() => {
     if (editing) {
       inputRef.current?.focus();
       inputRef.current?.select();
     }
   }, [editing]);
-
-  // ── Handlers ────────────────────────────────────────────────────────────
 
   function openEdit() {
     setDraft(symbol);
@@ -61,25 +42,20 @@ export function PinnedContext({ text }: PinnedContextProps) {
 
   function commitSymbol() {
     const upper = draft.trim().toUpperCase();
-    setSymbol(upper);
-    if (upper) localStorage.setItem(LS_SYMBOL, upper);
-    else localStorage.removeItem(LS_SYMBOL);
+    if (upper) patchSession({ symbol: upper });
     setEditing(false);
   }
 
   function cycleTf() {
-    const idx = tf ? TIMEFRAMES.indexOf(tf) : -1;
-    const next = idx === TIMEFRAMES.length - 1 ? "" : (TIMEFRAMES[idx + 1] ?? "");
-    setTf(next);
-    if (next) localStorage.setItem(LS_TF, next);
-    else localStorage.removeItem(LS_TF);
+    const idx = CHART_TF_OPTIONS.findIndex((option) => option.key === tf);
+    const next = CHART_TF_OPTIONS[(idx + 1) % CHART_TF_OPTIONS.length] ?? CHART_TF_OPTIONS[0];
+    if (next) patchSession({ timeframe: next.key });
   }
+
+  const tfLabel = CHART_TF_OPTIONS.find((option) => option.key === tf)?.label ?? tf;
 
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-white/[0.015] px-3 py-2">
-      {/* ── Left: pair + TF chips (interactive) ──────────────────────── */}
-
-      {/* Pair chip */}
       {editing ? (
         <input
           ref={inputRef}
@@ -99,30 +75,20 @@ export function PinnedContext({ text }: PinnedContextProps) {
         <button
           type="button"
           onClick={openEdit}
-          className={`rounded-lg border px-2.5 py-1.5 font-mono text-[11px] tracking-wider transition-colors active:scale-95 ${
-            symbol
-              ? "border-[rgba(0,212,245,0.15)] bg-[rgba(0,212,245,0.06)] text-[#00d4f5] hover:bg-[rgba(0,212,245,0.1)]"
-              : "border-white/[0.06] bg-white/[0.03] text-white/25 hover:border-white/10 hover:text-white/40"
-          }`}
+          className="rounded-lg border border-[rgba(0,212,245,0.15)] bg-[rgba(0,212,245,0.06)] px-2.5 py-1.5 font-mono text-[11px] tracking-wider text-[#00d4f5] transition-colors hover:bg-[rgba(0,212,245,0.1)] active:scale-95"
         >
-          {symbol || "+ pair"}
+          {symbol}
         </button>
       )}
 
-      {/* TF chip */}
       <button
         type="button"
         onClick={cycleTf}
-        className={`rounded-lg border px-2.5 py-1.5 font-mono text-[11px] tracking-wider transition-colors active:scale-95 ${
-          tf
-            ? "border-[rgba(0,212,245,0.15)] bg-[rgba(0,212,245,0.06)] text-[#00d4f5] hover:bg-[rgba(0,212,245,0.1)]"
-            : "border-white/[0.06] bg-white/[0.03] text-white/25 hover:border-white/10 hover:text-white/40"
-        }`}
+        className="rounded-lg border border-[rgba(0,212,245,0.15)] bg-[rgba(0,212,245,0.06)] px-2.5 py-1.5 font-mono text-[11px] tracking-wider text-[#00d4f5] transition-colors hover:bg-[rgba(0,212,245,0.1)] active:scale-95"
       >
-        {tf || "tf"}
+        {tfLabel}
       </button>
 
-      {/* ── Right: red pin + context text → settings ─────────────────── */}
       <button
         type="button"
         onClick={() => router.push("/settings")}

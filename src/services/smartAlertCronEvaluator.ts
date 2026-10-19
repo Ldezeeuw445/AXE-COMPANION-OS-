@@ -16,7 +16,7 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
-import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import { dispatchPushEvent } from "@/lib/push/dispatch";
 
 type AlertRow = {
   id: string;
@@ -43,18 +43,17 @@ function isSmartAlert(alert: AlertRow): boolean {
   return false;
 }
 
-async function firePush(userId: string, title: string, body: string, url: string): Promise<boolean> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${process.env.VERCEL_URL ?? "localhost:3000"}`;
-    const res = await fetch(`${baseUrl}/api/push/send`, {
-      method: "POST",
-      headers: internalPushHeaders(),
-      body: JSON.stringify({ userId, title, body, url }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+async function firePush(userId: string, title: string, body: string, url: string, eventKey: string, symbol?: string | null): Promise<boolean> {
+  const result = await dispatchPushEvent({
+    userId,
+    category: "risk_alert",
+    eventKey,
+    title,
+    body,
+    url,
+    symbol: symbol ?? undefined,
+  });
+  return result.ok && result.sent > 0;
 }
 
 async function triggerAlert(
@@ -98,7 +97,7 @@ async function triggerAlert(
   );
 
   const title = `Alert · ${alert.symbol ?? alert.type}`;
-  const pushed = hasPush && (await firePush(userId, title, message, feedUrl));
+  const pushed = hasPush && (await firePush(userId, title, message, feedUrl, `smart:${alert.id}:${now}`, alert.symbol));
   return { triggered: true, pushed };
 }
 
