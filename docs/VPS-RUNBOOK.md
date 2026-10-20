@@ -12,7 +12,8 @@ cost a session to rediscover.
 | SSH | `ssh root@api.axecompanion.com` |
 | OS | Ubuntu 24.04 LTS · Node v22.23.1 · nginx 1.24.0 |
 | App path | `/root/AXE-COMPANION-OS-` |
-| Deployed branch | `deployed` (not `main`) |
+| Deployed branch | `main` |
+| Autodeploy | cron every 5 min · `/var/log/axe-autodeploy.log` |
 | Service | `axe-companion.service` |
 | Log | `/var/log/axe-companion.log` |
 | Memory cap | `MemoryMax=3G` |
@@ -38,26 +39,41 @@ Changing it therefore requires a service restart, not just a rebuild.
 
 ## Deploying
 
+Pushing to `main` is the deploy. A cron pulls, builds and restarts every five
+minutes; `scripts/install-autodeploy.sh main` is what put it there, and it logs
+to `/var/log/axe-autodeploy.log`. Measured end to end on 2026-10-20: pushed at
+19:16, built at 19:21:21, serving at 19:22:39 — about six minutes, unattended.
+
+**This table said `deployed` for weeks and the box was on `main` the whole
+time.** Four pushes to `deployed` reached nobody, and nothing said so, because
+a build that fails restarts nothing and the old process keeps serving quite
+happily. So do not trust this page either — ask production:
+
+```bash
+curl -s https://www.axecompanion.com/api/debug/build
+```
+
+```json
+{"commit":"0f0e647…","shortCommit":"0f0e647","branch":"main",
+ "builtAt":"2026-10-20T19:31:30.507Z","ageSeconds":770,"now":"…"}
+```
+
+That is the only answer that counts: the commit actually serving, the branch it
+came from, and how long ago it was built. Compare `shortCommit` against
+`git rev-parse --short HEAD`. A stale `builtAt` with a new commit on `main`
+means the build is failing — read the autodeploy log.
+
+By hand, when the cron is wedged:
+
 ```bash
 cd /root/AXE-COMPANION-OS-
-git fetch origin
-git checkout deployed
-git merge --ff-only origin/<branch-to-ship>   # or: git reset --hard origin/<branch>
+git fetch origin main
+git merge --ff-only origin/main
 npm ci
 npm run build
 systemctl restart axe-companion
-systemctl status axe-companion --no-pager | head -5
+curl -s https://www.axecompanion.com/api/debug/build
 ```
-
-Then confirm the running code is actually the new code — a build that fails
-leaves the old process happily serving:
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://www.axecompanion.com/robots.txt
-```
-
-`200` means the deploy landed (that route only exists from the audit branch
-onward). `404` means it did not.
 
 ### Building on a full box
 
@@ -103,14 +119,14 @@ curl -s https://www.axecompanion.com/api/debug/cron-health     # host side
 select * from axe_ops.cron_secret_fingerprint();               -- Vault side
 ```
 
-Equal fingerprints mean equal strings. `/api/debug/cron-health` exists only from
-the audit branch onward; a 404 means the host is on older code.
+Equal fingerprints mean equal strings. A 404 from `/api/debug/cron-health`
+means the host is on older code — check `/api/debug/build` to see how old.
 
-## One thing to fix before the next rebuild
+## Settled
 
-`src/app/migrations/page.tsx` renders `MIGRATION_SECRET` verbatim to any
-anonymous visitor, in its "example URL" block. `MIGRATION_SECRET` **is** set in
-`.env.local`. The live page happens to render it empty today, so nothing is
-leaking right now, but the code path is there and a rebuild could start showing
-it. The audit branch deletes that page and `/api/internal/migrate` outright —
-which is a reason to ship that branch rather than `main`.
+- **`src/app/migrations/page.tsx` leaking `MIGRATION_SECRET`.** The page
+  rendered the secret verbatim in its "example URL" block to any anonymous
+  visitor. The page and `/api/internal/migrate` are both deleted from `main`;
+  there is no `MIGRATION_SECRET` reference left in `src/`. Verified
+  2026-10-20.
+- **No way to tell what was deployed.** `/api/debug/build`, above.
