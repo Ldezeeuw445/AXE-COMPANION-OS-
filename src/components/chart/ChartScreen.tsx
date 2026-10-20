@@ -3425,6 +3425,7 @@ export function ChartScreen({
         <ChartIndicatorLayer
           candles={liveCandles}
           canvasRef={canvasRef}
+          brokerTimezone={data.account?.brokerTimezone ?? null}
           isDark={chartTheme.isDark}
           futureProjectionX={futureProjectionX}
           orderBlockCount={orderBlockCount}

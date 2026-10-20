@@ -17,6 +17,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  DEFAULT_SESSION_ZONE,
+  resolveSessionZone,
+  sessionDayKey,
+} from "../src/lib/chart/sessionDay.ts";
+import {
   atrSeries,
   bollingerBands,
   emaSeries,
@@ -350,6 +355,125 @@ check("no range and no volume mean no POC, not a made-up price", () => {
     null,
     "a range with no volume in it has no point of control",
   );
+});
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Where the trading day starts.
+//
+// Five things on the chart hung off this: session VWAP, the session open line,
+// and Previous Day High / Low / Equilibrium. All five bucketed candles by UTC
+// date, and all five were therefore wrong for FX — worst on Mondays, where
+// "previous day" came out as Sunday evening's two-hour stub instead of
+// Friday's full session.
+// ───────────────────────────────────────────────────────────────────────────────
+
+console.log("\nthe broker's trading day");
+
+const sec = (iso) => Date.parse(iso) / 1000;
+
+check("a broker's own shorthand resolves to a zone that observes DST", () => {
+  assert.equal(resolveSessionZone("EET"), "Europe/Athens");
+  assert.equal(resolveSessionZone("eet"), "Europe/Athens", "case must not matter");
+  assert.equal(resolveSessionZone("EET/EEST"), "Europe/Athens");
+  assert.equal(resolveSessionZone("EST"), "America/New_York");
+  assert.equal(resolveSessionZone("UTC"), "UTC");
+  // A fixed +02:00 would be an hour out for seven months of the year, which
+  // is why these map to IANA zones and not to offsets.
+  assert.ok(!/[+\-]\d\d:?\d\d/.test(resolveSessionZone("EET")));
+});
+
+check("an IANA zone passes through and nonsense falls back instead of throwing", () => {
+  assert.equal(resolveSessionZone("Asia/Tokyo"), "Asia/Tokyo");
+  assert.equal(resolveSessionZone(""), DEFAULT_SESSION_ZONE);
+  assert.equal(resolveSessionZone(null), DEFAULT_SESSION_ZONE);
+  assert.equal(resolveSessionZone(undefined), DEFAULT_SESSION_ZONE);
+  assert.equal(
+    resolveSessionZone("Mars/Olympus_Mons"),
+    DEFAULT_SESSION_ZONE,
+    "an unknown zone makes Intl throw — the chart must not blank out over it",
+  );
+});
+
+check("the default is EET, because that is what MT5 brokers run", () => {
+  assert.equal(DEFAULT_SESSION_ZONE, "Europe/Athens");
+  // UTC is wrong for nearly every FX broker; EET is right for most.
+  assert.notEqual(DEFAULT_SESSION_ZONE, "UTC");
+});
+
+check("Sunday's FX open belongs to Monday on the broker's day", () => {
+  // 2026-10-18 is a Sunday. FX reopens at 21:00 UTC, which is 00:00 Monday in
+  // Athens (EEST, UTC+3 until 25 October). Under a UTC key this candle was
+  // its own day — and so Monday's "previous day" was this two-hour stub
+  // rather than Friday.
+  const sundayOpen = sec("2026-10-18T21:00:00Z");
+  assert.equal(sessionDayKey(sundayOpen, "Europe/Athens"), "2026-10-19");
+  assert.equal(sessionDayKey(sundayOpen, "UTC"), "2026-10-18", "the old behaviour, for contrast");
+});
+
+check("the boundary moves with the broker's DST, as a fixed offset could not", () => {
+  // Athens is UTC+3 in summer and UTC+2 in winter, so the UTC instant that
+  // starts a trading day is not the same instant all year.
+  assert.equal(sessionDayKey(sec("2026-10-18T21:00:00Z"), "Europe/Athens"), "2026-10-19");
+  // Same clock time in November, after EEST ends: still Sunday.
+  assert.equal(sessionDayKey(sec("2026-11-15T21:00:00Z"), "Europe/Athens"), "2026-11-15");
+  // An hour later it rolls.
+  assert.equal(sessionDayKey(sec("2026-11-15T22:00:00Z"), "Europe/Athens"), "2026-11-16");
+});
+
+check("midnight and the last second of a day land on the right side", () => {
+  assert.equal(sessionDayKey(sec("2026-11-16T22:00:00Z"), "Europe/Athens"), "2026-11-17");
+  assert.equal(sessionDayKey(sec("2026-11-16T21:59:59Z"), "Europe/Athens"), "2026-11-16");
+});
+
+check("a candle with a broken timestamp does not join today", () => {
+  assert.equal(sessionDayKey(Number.NaN, "Europe/Athens"), "");
+  assert.equal(sessionDayKey(Number.POSITIVE_INFINITY, "Europe/Athens"), "");
+});
+
+check("VWAP keeps Sunday's open in Monday's session on the broker's day", () => {
+  const candles = [
+    // Friday afternoon — a different session either way.
+    { ...candle(0, 100, { high: 100, low: 100, volume: 10 }), time: sec("2026-10-16T14:00:00Z") },
+    // Sunday 21:00 UTC: Monday 00:00 in Athens.
+    { ...candle(0, 200, { high: 200, low: 200, volume: 10 }), time: sec("2026-10-18T21:00:00Z") },
+    // Monday morning.
+    { ...candle(0, 300, { high: 300, low: 300, volume: 10 }), time: sec("2026-10-19T06:00:00Z") },
+  ];
+
+  const broker = sessionVwap(candles, "Europe/Athens");
+  near(broker[2], 250, 1e-9, "Sunday's open and Monday morning are one session: (200+300)/2");
+
+  const utc = sessionVwap(candles, "UTC");
+  near(utc[2], 300, 1e-9, "under UTC, Monday morning starts from nothing — the old behaviour");
+});
+
+check("the chart layer uses one trading day for all five overlays", () => {
+  const layer = readFileSync("src/components/chart/indicators/ChartIndicatorLayer.tsx", "utf8");
+  assert.ok(
+    !/utcDateKey/.test(layer),
+    "session open and the previous-day levels had their own UTC bucketing",
+  );
+  assert.ok(/sessionDayKey\(candle\.time, timeZone\)/.test(layer));
+  assert.ok(/sessionVwap\(mathCandles, sessionZone\)/.test(layer));
+  assert.ok(
+    /pal, sessionZone\]/.test(layer),
+    "the zone must be a memo dependency or an account switch keeps the old day",
+  );
+  const math = readFileSync("src/lib/chart/indicatorMath.ts", "utf8");
+  assert.ok(!/utcSessionKey/.test(math), "VWAP had a second copy of the same wrong boundary");
+});
+
+check("the broker timezone is stored for every account, not just new brokers", () => {
+  const connect = readFileSync("src/app/actions/mt5Cloud.ts", "utf8");
+  assert.ok(
+    !/\? \{ provisioningProfileId, brokerTimezone \}/.test(connect),
+    "it used to be saved only alongside a provisioning profile, so known brokers had none",
+  );
+  const loader = readFileSync("src/lib/broker/loadChartPageData.ts", "utf8");
+  assert.ok(/brokerTimezone: brokerTz/.test(loader), "and the chart has to be able to read it");
+  const screen = readFileSync("src/components/chart/ChartScreen.tsx", "utf8");
+  assert.ok(/brokerTimezone=\{data\.account\?\.brokerTimezone/.test(screen));
 });
 
 console.log("\nsingle source of truth");

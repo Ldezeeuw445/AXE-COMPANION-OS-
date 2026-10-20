@@ -125,8 +125,16 @@ check("the connect action creates, uploads and passes the profile", () => {
 
 check("the profile id is remembered so nobody uploads it twice", () => {
   assert.ok(
-    /provisioningProfileId, brokerTimezone/.test(action),
+    /\.\.\.\(provisioningProfileId \? \{ provisioningProfileId \} : \{\}\)/.test(action),
     "stored in metadata, so a reconnect on this broker just works",
+  );
+  // The broker timezone used to ride along with the profile id, so an account
+  // on a broker MetaApi already knew stored none at all — and the chart then
+  // had nothing to place the trading day with. It is written for every
+  // account now, profile or not.
+  assert.ok(
+    /\n    brokerTimezone,\n/.test(action),
+    "the broker timezone belongs on every account, not just newly registered brokers",
   );
 });
 

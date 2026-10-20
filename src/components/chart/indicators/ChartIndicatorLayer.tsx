@@ -12,6 +12,7 @@ import {
   emaSeries,
   type IndicatorMathCandle,
 } from "@/lib/chart/indicatorMath";
+import { resolveSessionZone, sessionDayKey } from "@/lib/chart/sessionDay";
 
 /**
  * Shared right-rail offset. Right-rail labels (OB volume, fib %, fib
@@ -33,6 +34,13 @@ const LEFT_RAIL_OFFSET = 8;
 type Props = {
   candles: MetaApiCandle[];
   canvasRef: React.RefObject<ChartCanvasHandle | null>;
+  /**
+   * The broker's server timezone, as the account stored it ("EET", an IANA
+   * zone, or absent). Decides where the trading day starts for VWAP, the
+   * session open line and Previous Day High / Low / EQ — see
+   * `@/lib/chart/sessionDay` for why UTC was the wrong answer.
+   */
+  brokerTimezone?: string | null;
   active: {
     ma?: boolean;
     bollinger?: boolean;
@@ -50,7 +58,7 @@ type Props = {
     pdl?: boolean;
     /** Previous Day Equilibrium — midpoint of yesterday's H+L. */
     pdq?: boolean;
-    /** Current session (UTC day) open — first candle open of today. */
+    /** Current session open — first candle open of the broker's trading day. */
     sessionOpen?: boolean;
     /** Compact swing high/low levels used as Fib anchor references. */
     swingPoints?: boolean;
@@ -275,6 +283,7 @@ type OverlayPalette = ReturnType<typeof overlayPalette>;
 export function ChartIndicatorLayer({
   candles,
   canvasRef,
+  brokerTimezone = null,
   active,
   orderBlockCount = 1,
   inverseFvgCount = 1,
@@ -287,6 +296,7 @@ export function ChartIndicatorLayer({
   bottomAxisHeight = 34,
 }: Props) {
   const pal = useMemo(() => overlayPalette(isDark), [isDark]);
+  const sessionZone = useMemo(() => resolveSessionZone(brokerTimezone), [brokerTimezone]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState(56);
@@ -411,7 +421,7 @@ export function ChartIndicatorLayer({
       }
     }
 
-    const vwapValues = sessionVwap(mathCandles);
+    const vwapValues = sessionVwap(mathCandles, sessionZone);
     const vwapPoints: Point[] = [];
     for (let index = 0; index < visibleWithTime.length; index += 1) {
       const value = vwapValues[index];
@@ -440,8 +450,8 @@ export function ChartIndicatorLayer({
       pal,
     );
     const { high: previousDayHigh, low: previousDayLow, eq: previousDayEq } =
-      buildPreviousDayLevels(visibleWithTime, handle);
-    const sessionOpen = buildSessionOpenLevel(visibleWithTime, handle);
+      buildPreviousDayLevels(visibleWithTime, handle, sessionZone);
+    const sessionOpen = buildSessionOpenLevel(visibleWithTime, handle, sessionZone);
     const swingPointLevels = buildSwingPointLevels(visibleWithTime, handle, futureExtensionX);
     const supplyDemand = buildSupplyDemandBands(visibleWithTime, handle);
     // Total tickVolume across the visible window — used as the
@@ -498,7 +508,11 @@ export function ChartIndicatorLayer({
       supplyDemand,
       totalChartVolume,
     };
-  }, [candles, canvasRef, size.h, size.w, plotRight, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal]);
+    // `sessionZone` belongs here: switching accounts can change the broker's
+    // trading day, and without it VWAP and the previous-day levels would keep
+    // the previous account's boundary until something else happened to
+    // invalidate the memo.
+  }, [candles, canvasRef, size.h, size.w, plotRight, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal, sessionZone]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>
@@ -2314,19 +2328,23 @@ function buildInverseFvgs(
 }
 
 /**
- * Compute previous trading day's high/low. We bucket candles by UTC date and
- * pick the bucket immediately before the current one.
+ * Today's first open, on the broker's trading day.
+ *
+ * Bucketed by UTC date before, which on FX put the line on a candle two or
+ * three hours into the day — and on a Monday put it on Sunday evening's open
+ * rather than Monday's. `sessionDay.ts` has the full reasoning.
  */
 function buildSessionOpenLevel(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
+  timeZone: string,
 ): { y: number; price: number } | null {
   if (candles.length === 0) return null;
 
-  const todayKey = utcDateKey(candles[candles.length - 1].time);
+  const todayKey = sessionDayKey(candles[candles.length - 1].time, timeZone);
   let firstToday: (IndicatorCandle & { time: number }) | null = null;
   for (const candle of candles) {
-    if (utcDateKey(candle.time) !== todayKey) continue;
+    if (sessionDayKey(candle.time, timeZone) !== todayKey) continue;
     if (!firstToday || candle.time < firstToday.time) {
       firstToday = candle;
     }
@@ -2340,9 +2358,19 @@ function buildSessionOpenLevel(
   return { y, price: openPrice };
 }
 
+/**
+ * Previous Day High / Low / Equilibrium, on the broker's trading day.
+ *
+ * The UTC bucketing this replaces made every Monday wrong: FX opens Sunday
+ * 21:00 or 22:00 UTC, which is its own UTC "day" — a two-hour stub — so
+ * Monday's "previous day" was Sunday evening instead of Friday's full
+ * session. On the broker's day those candles belong to Monday and the
+ * previous bucket is Friday, which is what MT5 draws.
+ */
 function buildPreviousDayLevels(
   candles: Array<IndicatorCandle & { time: number }>,
   handle: ChartCanvasHandle,
+  timeZone: string,
 ): {
   high: { y: number; price: number } | null;
   low: { y: number; price: number } | null;
@@ -2353,7 +2381,7 @@ function buildPreviousDayLevels(
   const buckets = new Map<string, { high: number; low: number }>();
   const order: string[] = [];
   for (const candle of candles) {
-    const key = utcDateKey(candle.time);
+    const key = sessionDayKey(candle.time, timeZone);
     const existing = buckets.get(key);
     if (existing) {
       existing.high = Math.max(existing.high, candle.high);
@@ -2385,7 +2413,4 @@ function buildPreviousDayLevels(
   };
 }
 
-function utcDateKey(unixSeconds: number): string {
-  const d = new Date(unixSeconds * 1000);
-  return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
-}
+

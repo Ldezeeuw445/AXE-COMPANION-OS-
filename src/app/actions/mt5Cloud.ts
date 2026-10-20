@@ -397,7 +397,12 @@ export async function createCloudMt5ConnectionAction(
     createdVia: "axe_companion_cloud_mt5",
     // Kept so a reconnect on this broker reuses the profile instead of
     // asking the trader for servers.dat a second time.
-    ...(provisioningProfileId ? { provisioningProfileId, brokerTimezone } : {}),
+    ...(provisioningProfileId ? { provisioningProfileId } : {}),
+    // Always stored, not only alongside a provisioning profile. The chart
+    // reads this to know where the broker's trading day starts — session
+    // VWAP, the session open line and Previous Day High / Low / EQ all hang
+    // off it — and that is just as true for a broker MetaApi already knew.
+    brokerTimezone,
     metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,
     provisioningProbedAt: new Date().toISOString(),

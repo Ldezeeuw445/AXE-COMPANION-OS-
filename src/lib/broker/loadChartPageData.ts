@@ -108,6 +108,12 @@ export type AccountSummary = {
   connectionMethod?: string | null;
   /** MetaApi region the cloud terminal lives in — needed to hit the right host. */
   metaApiRegion?: string | null;
+  /**
+   * The broker's server timezone as stored on the account ("EET" for most MT5
+   * brokers). The chart needs it to know where the trading day starts: VWAP,
+   * the session open line and Previous Day High / Low / EQ all hang off it.
+   */
+  brokerTimezone?: string | null;
 };
 
 export type ChartFailureKind =
@@ -594,6 +600,10 @@ export async function loadChartPageData(
     .map((r) => {
       const meta = (r.metadata ?? {}) as Record<string, unknown>;
       const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
+      const brokerTz =
+        typeof meta.brokerTimezone === "string" && meta.brokerTimezone.trim()
+          ? meta.brokerTimezone.trim()
+          : null;
       return {
         brokerAccountId: r.id as string,
         metaApiAccountId: isDemoAccount(r)
@@ -606,6 +616,7 @@ export async function loadChartPageData(
         active: resolvedActiveId === r.id || prefs?.active_account_id === r.id,
         connectionMethod: (r.connection_method as string) ?? null,
         metaApiRegion: region,
+        brokerTimezone: brokerTz,
       };
     });
 

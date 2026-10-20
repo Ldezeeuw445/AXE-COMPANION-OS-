@@ -1,3 +1,8 @@
+// Relative, not `@/lib/chart/sessionDay`: the verify suite imports this module
+// directly with tsx, where the `@/` alias does not resolve. Same directory,
+// same dependency-free rules.
+import { sessionDayKey } from "./sessionDay";
+
 export type IndicatorMathCandle = {
   time: number;
   open: number;
@@ -145,24 +150,24 @@ export function bollingerBands(values: number[], period = 20, multiplier = 2): B
 }
 
 /**
- * Session VWAP, reset at UTC midnight.
+ * Session VWAP, reset at midnight in `timeZone`.
  *
- * Known limit, stated so nobody has to find it by surprise: MT5 and
- * TradingView reset an FX session on the broker's or exchange's own day, which
- * for most MT5 brokers is EET midnight — two or three hours before this does,
- * depending on the time of year. On an intraday chart the two lines therefore
- * differ for the first hours of the day. The broker's timezone is now stored
- * per account (`metadata.brokerTimezone`), so this can be made exact; it needs
- * the timezone threaded down to the chart first.
+ * It used to reset at UTC midnight, which is two or three hours after the
+ * broker's own day has rolled — so the line restarted well after the new
+ * day's first candles had already printed. `sessionDay.ts` explains the whole
+ * problem; the caller passes the account's broker timezone.
  */
-export function sessionVwap(candles: IndicatorMathCandle[]): Array<number | null> {
+export function sessionVwap(
+  candles: IndicatorMathCandle[],
+  timeZone = "UTC",
+): Array<number | null> {
   const out: Array<number | null> = Array(candles.length).fill(null);
   let sessionKey: string | null = null;
   let pvSum = 0;
   let volumeSum = 0;
   for (let i = 0; i < candles.length; i += 1) {
     const candle = candles[i];
-    const nextKey = utcSessionKey(candle.time);
+    const nextKey = sessionDayKey(candle.time, timeZone);
     if (nextKey !== sessionKey) {
       sessionKey = nextKey;
       pvSum = 0;
@@ -284,9 +289,4 @@ export function pointOfControl(
     price: low + step * (bestIndex + 0.5),
     volume: bestVolume,
   };
-}
-
-function utcSessionKey(unixSeconds: number): string {
-  const d = new Date(unixSeconds * 1000);
-  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
 }
