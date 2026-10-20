@@ -133,6 +133,35 @@ assertNoSessionWrites("src/app/actions/brokerAccounts.ts");
 assertNoSessionWrites("src/app/api/broker/hub/route.ts");
 assertNoSessionWrites("src/app/(app)/settings/actions.ts");
 
+// SELECT-only RLS migration must exist before ops applies the write-policy drop.
+const rlsMigrationRel =
+  "supabase/migrations/20260705120000_tos_sec2_broker_tables_select_only.sql";
+const rlsMigration = readFileSync(join(root, rlsMigrationRel), "utf8");
+assert.ok(
+  rlsMigration.includes("user_broker_accounts") &&
+    rlsMigration.includes("broker_trades"),
+  `${rlsMigrationRel} must target both broker tables`,
+);
+assert.ok(
+  /cmd in\s*\(\s*'INSERT',\s*'UPDATE',\s*'DELETE',\s*'ALL'\s*\)/i.test(
+    rlsMigration,
+  ) ||
+    (rlsMigration.includes("'INSERT'") &&
+      rlsMigration.includes("'UPDATE'") &&
+      rlsMigration.includes("'DELETE'") &&
+      rlsMigration.includes("'ALL'")),
+  `${rlsMigrationRel} must drop INSERT/UPDATE/DELETE/ALL policies`,
+);
+assert.ok(
+  rlsMigration.includes("user_broker_accounts_select_own") &&
+    rlsMigration.includes("broker_trades_select_own"),
+  `${rlsMigrationRel} must ensure SELECT-own policies`,
+);
+assert.ok(
+  rlsMigration.includes("auth.uid() = user_id"),
+  `${rlsMigrationRel} must scope SELECT to auth.uid() = user_id`,
+);
+
 console.log("TOS-SEC-2 MT5 sync write client: ok");
 console.log(
   JSON.stringify(
@@ -141,6 +170,7 @@ console.log(
       fallbackToSessionWhenMissing: true,
       ownershipStillViaUserIdFilter: true,
       noSessionWritesOnBrokerTables: true,
+      selectOnlyMigration: rlsMigrationRel,
       filesScanned: [
         "src/lib/mt5/syncCloudAccount.ts",
         "src/app/actions/mt5Cloud.ts",
@@ -156,8 +186,7 @@ console.log(
         "src/app/api/broker/hub/route.ts",
         "src/app/(app)/settings/actions.ts",
       ],
-      // Primary account/trade write paths migrated. Before dropping user WRITE
-      // RLS, re-scan for any new session mutators on these two tables.
+      // Write paths migrated + SELECT-only migration staged (not applied here).
       rlsDropBlockedBy: [],
     },
     null,
