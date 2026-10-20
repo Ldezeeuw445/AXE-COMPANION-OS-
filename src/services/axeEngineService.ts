@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normaliseAlignment } from "@/lib/axe/learningArc";
 
 export type AxeEngineConfidenceTier = "low" | "medium" | "high";
 export type AxeEngineGateMode = "strict" | "guided" | "proactive";
@@ -132,8 +133,21 @@ export async function refreshAxeEngineProfile(
         .eq("user_id", userId),
     ]);
 
-    const rawAlignment = Number(snapshotRes.data?.alignment_score ?? 0);
-    const alignmentPct = rawAlignment > 1 ? clampInt(rawAlignment, 0, 100) : clampInt(rawAlignment * 100, 0, 100);
+    /*
+     * Alignment carries 55% of the confidence score, and confidence sets the
+     * gate mode — how freely AXE is allowed to speak and act. So a trader
+     * with no snapshot yet has to land somewhere, and it has to be the
+     * cautious end: unmeasured counts as 0 and the gate stays strict.
+     *
+     * What was wrong was not the 0, it was that nothing recorded it as a
+     * guess. `rationale` is what a trader (or I) reads to understand a score,
+     * and a 0 there was indistinguishable from a measured zero. It now says
+     * which it was. Shared normaliser so the engine and the learning arc
+     * cannot disagree about what the column means — it has held both 0–1
+     * floats and 0–100 integers over its life.
+     */
+    const measuredAlignment = normaliseAlignment(snapshotRes.data?.alignment_score);
+    const alignmentPct = clampInt(measuredAlignment ?? 0, 0, 100);
     const signalCount = Number(signalCountRes.count ?? 0);
     const tradeLabelCount = Number(tradeLabelCountRes.count ?? 0);
     const memoryCount = Number(memoryCountRes.count ?? 0);
@@ -151,6 +165,8 @@ export async function refreshAxeEngineProfile(
     const { tier, gateMode } = computeTier(confidenceScore);
     const rationale: Record<string, unknown> = {
       alignmentPct,
+      /** False means `alignmentPct` is a cautious default, not a measurement. */
+      alignmentMeasured: measuredAlignment !== null,
       signalComponent: clampInt(signalComponent, 0, 100),
       tradeLabelComponent: clampInt(tradeLabelComponent, 0, 100),
       memoryComponent: clampInt(memoryComponent, 0, 100),
@@ -166,7 +182,7 @@ export async function refreshAxeEngineProfile(
       confidence_score: confidenceScore,
       confidence_tier: tier,
       gate_mode: gateMode,
-      alignment_score: rawAlignment > 1 ? rawAlignment / 100 : rawAlignment,
+      alignment_score: alignmentPct / 100,
       signal_count: totalSignals,
       trade_label_count: tradeLabelCount,
       memory_count: memoryCount,
@@ -197,7 +213,7 @@ export async function refreshAxeEngineProfile(
       confidenceScore,
       confidenceTier: tier,
       gateMode,
-      alignmentScore: rawAlignment > 1 ? rawAlignment / 100 : rawAlignment,
+      alignmentScore: alignmentPct / 100,
       signalCount: totalSignals,
       tradeLabelCount,
       memoryCount,

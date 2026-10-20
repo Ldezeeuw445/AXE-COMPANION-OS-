@@ -358,6 +358,20 @@ check("the brief separates the session that is open from the session they trade"
   );
 });
 
+check("the engine and the arc cannot disagree about what alignment means", () => {
+  const engine = codeOnly(readFileSync("src/services/axeEngineService.ts", "utf8"));
+  // The column has held both 0-1 floats and 0-100 integers. Two readers with
+  // two conversions is how one screen ends up showing 62 and another 0.62.
+  assert.ok(/normaliseAlignment/.test(engine));
+  assert.ok(
+    !/rawAlignment > 1 \?/.test(engine),
+    "the engine had its own conversion of the same column",
+  );
+  // Confidence sets the gate mode, so an unmeasured alignment has to land on
+  // the cautious end — but it has to be legible as a default, not a reading.
+  assert.ok(/alignmentMeasured/.test(engine), "rationale is what a trader reads to check a score");
+});
+
 check("the model may rewrite the words but not the numbers", () => {
   assert.ok(/mergeMilestoneNarratives/.test(snapshots));
   assert.ok(
