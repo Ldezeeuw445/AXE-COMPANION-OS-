@@ -39,10 +39,19 @@ export type JournalResult = {
   axe_note: string;
   alignment_score: number;
   breakdown: {
-    rule_adherence: number;
-    playbook_alignment: number;
-    risk_management: number;
-    emotional_discipline: number;
+    /**
+     * 0–25 each, or null when AXE genuinely could not judge that dimension —
+     * no playbooks to align against, no stated rules to adhere to. These used
+     * to be `Number(x) || 15`, so a dimension AXE never scored arrived as 15
+     * and was indistinguishable from one it had actually read at 15. That 15
+     * then became 60/100 inside the cockpit's Execution and Discipline
+     * pillars, marked `available: true`. A real 0 became 15 for the same
+     * reason: `0 || 15` is 15.
+     */
+    rule_adherence: number | null;
+    playbook_alignment: number | null;
+    risk_management: number | null;
+    emotional_discipline: number | null;
     explanation: string;
   };
 };
@@ -366,7 +375,7 @@ Scoring dimensions (each 0-25):
 4. EMOTIONAL DISCIPLINE (25pts) — Signs of patience, no FOMO, no revenge?
    Examples: avoiding known weaknesses, waiting for confirmation, not overtrading
 
-If there's insufficient data for a dimension (e.g., no playbooks), score that dimension at 15/25 (neutral) rather than penalizing.
+If there is genuinely nothing to judge a dimension against (e.g. the trader has stated no playbooks), return null for that dimension. Do NOT substitute a neutral score — a 15 nobody measured is read downstream as a measurement. Never penalise a trader for a dimension that does not apply to them.
 
 Respond in EXACTLY this JSON (no markdown fences):
 {
@@ -375,7 +384,7 @@ Respond in EXACTLY this JSON (no markdown fences):
   "alignment_score": 78,
   "breakdown": {
     "rule_adherence": 20,
-    "playbook_alignment": 18,
+    "playbook_alignment": null,
     "risk_management": 22,
     "emotional_discipline": 18,
     "explanation": "2-3 sentence analysis with specific references to rules/playbooks/memories"
@@ -410,16 +419,34 @@ Label mapping:
   const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed = JSON.parse(cleaned) as JournalResult;
 
+  // `Number(x) || fallback` is the wrong shape for a score, twice over: it
+  // cannot tell a missing value from a measured zero, and it hides a model
+  // that returned nothing behind a plausible number. A dimension AXE did not
+  // judge is null; a trade AXE could not score at all is a failure, which the
+  // comment above already says is the right outcome.
+  const alignment = Number(parsed.alignment_score);
+  if (!Number.isFinite(alignment)) {
+    throw new Error("Model returned no usable alignment_score");
+  }
+
   return {
     axe_label: parsed.axe_label || "OK",
     axe_note: String(parsed.axe_note || "").slice(0, 500),
-    alignment_score: Math.max(0, Math.min(100, Number(parsed.alignment_score) || 50)),
+    alignment_score: Math.max(0, Math.min(100, alignment)),
     breakdown: {
-      rule_adherence: Math.max(0, Math.min(25, Number(parsed.breakdown?.rule_adherence) || 15)),
-      playbook_alignment: Math.max(0, Math.min(25, Number(parsed.breakdown?.playbook_alignment) || 15)),
-      risk_management: Math.max(0, Math.min(25, Number(parsed.breakdown?.risk_management) || 15)),
-      emotional_discipline: Math.max(0, Math.min(25, Number(parsed.breakdown?.emotional_discipline) || 15)),
+      rule_adherence: journalDimension(parsed.breakdown?.rule_adherence),
+      playbook_alignment: journalDimension(parsed.breakdown?.playbook_alignment),
+      risk_management: journalDimension(parsed.breakdown?.risk_management),
+      emotional_discipline: journalDimension(parsed.breakdown?.emotional_discipline),
       explanation: String(parsed.breakdown?.explanation || "").slice(0, 1000),
     },
   };
+}
+
+/** 0–25, keeping a measured zero, or null when there is nothing there. */
+function journalDimension(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(25, n));
 }

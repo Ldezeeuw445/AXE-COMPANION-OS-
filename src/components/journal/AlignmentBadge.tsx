@@ -9,10 +9,10 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 type Breakdown = {
-  rule_adherence: number;
-  playbook_alignment: number;
-  risk_management: number;
-  emotional_discipline: number;
+  rule_adherence: number | null;
+  playbook_alignment: number | null;
+  risk_management: number | null;
+  emotional_discipline: number | null;
   explanation: string;
 };
 
@@ -54,6 +54,14 @@ function labelEmoji(label: string | null): string {
 function barWidth(value: number): string {
   return `${Math.round((value / 25) * 100)}%`;
 }
+
+/**
+ * A dimension AXE could not judge. It is not a zero and it is not a 15:
+ * both of those are scores, and this is the absence of one. Saying so is the
+ * whole point — a trader who has written no playbook should see that AXE had
+ * no playbook to check the trade against, not a bar that looks like a verdict.
+ */
+const NOT_JUDGED = "n/a";
 
 function barColor(value: number): string {
   if (value >= 22) return "bg-emerald-400/60";
@@ -108,24 +116,35 @@ export function AlignmentBadge({ score, axeLabel, axeNote, breakdown }: Props) {
       {/* Expanded breakdown */}
       {expanded && breakdown && (
         <div className="ml-1 space-y-2 rounded-lg border border-white/[0.05] bg-white/[0.015] p-2.5">
-          {DIMENSION_LABELS.map(({ key, label, icon }) => (
-            <div key={key} className="space-y-0.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] text-white/40">
-                  {icon} {label}
-                </span>
-                <span className="text-[9px] font-mono text-white/30">
-                  {breakdown[key]}/25
-                </span>
+          {DIMENSION_LABELS.map(({ key, label, icon }) => {
+            const value = breakdown[key];
+            const judged = typeof value === "number" && Number.isFinite(value);
+            return (
+              <div key={key} className="space-y-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] text-white/40">
+                    {icon} {label}
+                  </span>
+                  <span
+                    className="text-[9px] font-mono text-white/30"
+                    title={judged ? undefined : "AXE had nothing to judge this against"}
+                  >
+                    {judged ? `${value}/25` : NOT_JUDGED}
+                  </span>
+                </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.04]">
+                  {judged ? (
+                    <div
+                      className={`h-full rounded-full transition-all ${barColor(value)}`}
+                      style={{ width: barWidth(value) }}
+                    />
+                  ) : (
+                    <div className="h-full w-full rounded-full border border-dashed border-white/[0.09]" />
+                  )}
+                </div>
               </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.04]">
-                <div
-                  className={`h-full rounded-full transition-all ${barColor(breakdown[key])}`}
-                  style={{ width: barWidth(breakdown[key]) }}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
 
           {breakdown.explanation && (
             <p className="mt-1.5 border-t border-white/[0.04] pt-1.5 text-[9px] leading-relaxed text-white/35">
