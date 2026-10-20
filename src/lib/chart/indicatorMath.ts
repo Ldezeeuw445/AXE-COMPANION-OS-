@@ -59,14 +59,37 @@ export function atrSeries(candles: IndicatorMathCandle[], period: number): Array
   return out;
 }
 
+/**
+ * Simple moving average.
+ *
+ * A gap in the input used to be `values[i] ?? 0`, which got it wrong in two
+ * different directions. An `undefined` entry became a price of zero and
+ * dragged the average through the floor for a whole window. A `NaN` — which
+ * `??` does not catch — poisoned the running sum permanently, so one bad tick
+ * killed the moving average for every bar after it, and it came out as NaN
+ * rather than null: not a gap in the line, a line made of garbage.
+ *
+ * Measured on the old code with a single NaN at index 2 of a 7-bar series:
+ * every output from there on was NaN. Now the whole window has to be real
+ * numbers or the average over it is null, and the line resumes as soon as the
+ * gap leaves the window.
+ */
 export function smaSeries(values: number[], period: number): Array<number | null> {
   const out: Array<number | null> = Array(values.length).fill(null);
   if (period <= 0) return out;
   let sum = 0;
+  let missing = 0;
   for (let i = 0; i < values.length; i += 1) {
-    sum += values[i] ?? 0;
-    if (i >= period) sum -= values[i - period] ?? 0;
-    if (i + 1 >= period) out[i] = sum / period;
+    const value = values[i];
+    if (Number.isFinite(value)) sum += value;
+    else missing += 1;
+
+    if (i >= period) {
+      const leaving = values[i - period];
+      if (Number.isFinite(leaving)) sum -= leaving;
+      else missing -= 1;
+    }
+    if (i + 1 >= period && missing === 0) out[i] = sum / period;
   }
   return out;
 }
@@ -121,6 +144,17 @@ export function bollingerBands(values: number[], period = 20, multiplier = 2): B
   });
 }
 
+/**
+ * Session VWAP, reset at UTC midnight.
+ *
+ * Known limit, stated so nobody has to find it by surprise: MT5 and
+ * TradingView reset an FX session on the broker's or exchange's own day, which
+ * for most MT5 brokers is EET midnight — two or three hours before this does,
+ * depending on the time of year. On an intraday chart the two lines therefore
+ * differ for the first hours of the day. The broker's timezone is now stored
+ * per account (`metadata.brokerTimezone`), so this can be made exact; it needs
+ * the timezone threaded down to the chart first.
+ */
 export function sessionVwap(candles: IndicatorMathCandle[]): Array<number | null> {
   const out: Array<number | null> = Array(candles.length).fill(null);
   let sessionKey: string | null = null;
@@ -135,10 +169,15 @@ export function sessionVwap(candles: IndicatorMathCandle[]): Array<number | null
       volumeSum = 0;
     }
     const volume = Math.max(0, Number(candle.tickVolume ?? candle.volume ?? 0) || 0);
-    if (volume <= 0) continue;
-    const typicalPrice = (candle.high + candle.low + candle.close) / 3;
-    pvSum += typicalPrice * volume;
-    volumeSum += volume;
+    if (volume > 0) {
+      const typicalPrice = (candle.high + candle.low + candle.close) / 3;
+      pvSum += typicalPrice * volume;
+      volumeSum += volume;
+    }
+    // A bar that printed no ticks does not move VWAP, but it does not erase it
+    // either. `continue` used to leave a null here, so one quiet bar mid-session
+    // broke the line into two pieces on the chart and handed the alert rules a
+    // null where a price belonged. The average simply carries.
     out[i] = volumeSum > 0 ? pvSum / volumeSum : null;
   }
   return out;
@@ -159,7 +198,7 @@ export function rsiSeries(values: number[], period: number): Array<number | null
   }
   let avgGain = seedGain / period;
   let avgLoss = seedLoss / period;
-  out[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  out[period] = wilderRsi(avgGain, avgLoss);
 
   for (let i = period + 1; i < values.length; i += 1) {
     const change = values[i] - values[i - 1];
@@ -167,9 +206,21 @@ export function rsiSeries(values: number[], period: number): Array<number | null
     const loss = change < 0 ? Math.abs(change) : 0;
     avgGain = (avgGain * (period - 1) + gain) / period;
     avgLoss = (avgLoss * (period - 1) + loss) / period;
-    out[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    out[i] = wilderRsi(avgGain, avgLoss);
   }
   return out;
+}
+
+/**
+ * `avgLoss === 0 ? 100` on its own called a price that had not moved at all
+ * maximally overbought: no losses, so RSI 100. A market with no gains and no
+ * losses is neutral, and MT5 reports 50 there. It matters more than it looks —
+ * `smartAlertRules` fires on RSI, so a dead-flat series was an overbought
+ * alert waiting to happen on any thin instrument out of hours.
+ */
+function wilderRsi(avgGain: number, avgLoss: number): number {
+  if (avgLoss === 0) return avgGain === 0 ? 50 : 100;
+  return 100 - 100 / (1 + avgGain / avgLoss);
 }
 
 export function macdSeries(
