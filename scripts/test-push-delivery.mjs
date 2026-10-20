@@ -54,6 +54,27 @@ async function loadHelpers() {
       return hasSubscription && pushSendOk && sent > 0;
     }
 
+    function parsePushSendHttpBody(raw) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      return {
+        ok: typeof raw.ok === "boolean" ? raw.ok : undefined,
+        sent: typeof raw.sent === "number" ? raw.sent : undefined,
+        total: typeof raw.total === "number" ? raw.total : undefined,
+        error: typeof raw.error === "string" ? raw.error : undefined,
+      };
+    }
+
+    function pushSendHttpReachedDevice({ httpOk, body }) {
+      if (!httpOk || !body) return false;
+      const sent = Number(body.sent ?? 0);
+      const total = Number(body.total ?? 0);
+      return watcherAlertReachedDevice({
+        hasSubscription: total > 0 || sent > 0,
+        pushSendOk: body.ok !== false && sent > 0,
+        sent,
+      });
+    }
+
     function buildWatcherAlertPushRequest({ userId, title, body, url, severity }) {
       const prefixed = title.startsWith("AXE · ") ? title : `AXE · ${title}`;
       return {
@@ -87,6 +108,8 @@ async function loadHelpers() {
       buildPushNotificationPayload,
       summarizePushDelivery,
       watcherAlertReachedDevice,
+      parsePushSendHttpBody,
+      pushSendHttpReachedDevice,
       buildWatcherAlertPushRequest,
       evaluateWatcherAlertDelivery,
     };
@@ -97,6 +120,8 @@ const {
   buildPushNotificationPayload,
   summarizePushDelivery,
   watcherAlertReachedDevice,
+  parsePushSendHttpBody,
+  pushSendHttpReachedDevice,
   buildWatcherAlertPushRequest,
   evaluateWatcherAlertDelivery,
 } = await loadHelpers();
@@ -169,6 +194,32 @@ const req = buildWatcherAlertPushRequest({
 });
 assert.equal(req.title, "AXE · already prefixed");
 
+// ── HTTP response accounting (watcher firePush must use sent > 0) ──
+assert.equal(
+  pushSendHttpReachedDevice({
+    httpOk: true,
+    body: parsePushSendHttpBody({ ok: true, sent: 0, total: 0 }),
+  }),
+  false,
+  "ok:true sent:0 must NOT count as device reached",
+);
+assert.equal(
+  pushSendHttpReachedDevice({
+    httpOk: true,
+    body: parsePushSendHttpBody({ ok: true, sent: 1, total: 1 }),
+  }),
+  true,
+  "ok:true sent:1 must count as device reached",
+);
+assert.equal(
+  pushSendHttpReachedDevice({
+    httpOk: false,
+    body: parsePushSendHttpBody({ ok: false, error: "VAPID not configured" }),
+  }),
+  false,
+);
+assert.equal(pushSendHttpReachedDevice({ httpOk: true, body: null }), false);
+
 // ── Expired endpoint cleanup ───────────────────────────────────────
 const expired = summarizePushDelivery({
   subscriptions: [
@@ -190,9 +241,21 @@ const sendSrc = readFileSync(
   "utf8",
 );
 assert.ok(watcherSrc.includes("buildWatcherAlertPushRequest"));
+assert.ok(watcherSrc.includes("pushSendHttpReachedDevice"));
 assert.ok(watcherSrc.includes("/api/push/send"));
 assert.ok(sendSrc.includes("buildPushNotificationPayload"));
 assert.ok(sendSrc.includes("summarizePushDelivery"));
+
+const smartSrc = readFileSync(
+  join(__dirname, "../src/services/smartAlertCronEvaluator.ts"),
+  "utf8",
+);
+const triggerSrc = readFileSync(
+  join(__dirname, "../src/app/api/alerts/[id]/trigger/route.ts"),
+  "utf8",
+);
+assert.ok(smartSrc.includes("pushSendHttpReachedDevice"));
+assert.ok(triggerSrc.includes("pushSendHttpReachedDevice"));
 
 console.log("C6 push delivery path: ok");
 console.log(
@@ -203,9 +266,13 @@ console.log(
         payloadShape: true,
         zeroSubsGraceful: true,
         deviceReached: true,
+        httpSentZeroNotReached: true,
+        httpSentOneReached: true,
         watcherE2EPath: e2e.reachedDevice,
         expiredCleanup: true,
         watcherWired: true,
+        smartAlertWired: true,
+        triggerRouteWired: true,
         sendRouteWired: true,
       },
     },

@@ -18,6 +18,10 @@ import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import {
+  parsePushSendHttpBody,
+  pushSendHttpReachedDevice,
+} from "@/lib/push/deliverPushPayload";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
 
 type Body = {
@@ -106,9 +110,8 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
 
-  // Best-effort push delivery — fire and forget. If VAPID isn't configured
-  // or the user has no subscribed device, /api/push/send returns gracefully
-  // and we still consider the trigger successful (in-app already shows it).
+  // Best-effort push — trigger stays successful even when no device is reached
+  // (in-app feed already shows it). `pushed` is true only when sent > 0 (C6).
   let pushed = false;
   try {
     const baseUrl =
@@ -124,7 +127,16 @@ export async function POST(req: NextRequest, { params }: Params) {
         tag: `alert-${id}`,
       }),
     });
-    pushed = res.ok;
+    let json: unknown = null;
+    try {
+      json = await res.json();
+    } catch {
+      json = null;
+    }
+    pushed = pushSendHttpReachedDevice({
+      httpOk: res.ok,
+      body: parsePushSendHttpBody(json),
+    });
   } catch {
     pushed = false;
   }

@@ -2,7 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
-import { buildWatcherAlertPushRequest } from "@/lib/push/deliverPushPayload";
+import {
+  buildWatcherAlertPushRequest,
+  parsePushSendHttpBody,
+  pushSendHttpReachedDevice,
+} from "@/lib/push/deliverPushPayload";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -24,7 +28,17 @@ async function firePush(userId: string, title: string, body: string, url: string
       headers: internalPushHeaders(),
       body: JSON.stringify(payload),
     });
-    return res.ok;
+    let json: unknown = null;
+    try {
+      json = await res.json();
+    } catch {
+      json = null;
+    }
+    // C6: count only when a subscribed device actually received the alert.
+    return pushSendHttpReachedDevice({
+      httpOk: res.ok,
+      body: parsePushSendHttpBody(json),
+    });
   } catch {
     return false;
   }

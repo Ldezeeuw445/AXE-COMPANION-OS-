@@ -85,6 +85,47 @@ export function watcherAlertReachedDevice(args: {
   return args.hasSubscription && args.pushSendOk && args.sent > 0;
 }
 
+/** JSON body shape returned by POST /api/push/send. */
+export type PushSendHttpBody = {
+  ok?: boolean;
+  sent?: number;
+  total?: number;
+  error?: string;
+};
+
+/**
+ * C6: HTTP 200 alone is not delivery — `/api/push/send` returns ok:true with
+ * sent:0 when the user has no subscribed device. Only count a device reach
+ * when the route reports at least one fulfilled web-push send.
+ */
+export function pushSendHttpReachedDevice(args: {
+  httpOk: boolean;
+  body: PushSendHttpBody | null;
+}): boolean {
+  if (!args.httpOk || !args.body) return false;
+  const sent = Number(args.body.sent ?? 0);
+  const total = Number(args.body.total ?? 0);
+  return watcherAlertReachedDevice({
+    hasSubscription: total > 0 || sent > 0,
+    pushSendOk: args.body.ok !== false && sent > 0,
+    sent,
+  });
+}
+
+/**
+ * Parse /api/push/send JSON safely (cron callers must not throw on bad bodies).
+ */
+export function parsePushSendHttpBody(raw: unknown): PushSendHttpBody | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  return {
+    ok: typeof o.ok === "boolean" ? o.ok : undefined,
+    sent: typeof o.sent === "number" ? o.sent : undefined,
+    total: typeof o.total === "number" ? o.total : undefined,
+    error: typeof o.error === "string" ? o.error : undefined,
+  };
+}
+
 /**
  * Shape a proactive-watcher alert into the /api/push/send request body.
  * Keeps title prefix + severity consistent across cron and feed paths.

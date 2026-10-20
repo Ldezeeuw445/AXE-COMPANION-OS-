@@ -17,6 +17,10 @@ import { buildMarketContext } from "@/lib/market/marketContextService";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
 import { internalPushHeaders } from "@/lib/push/internalPushAuth";
+import {
+  parsePushSendHttpBody,
+  pushSendHttpReachedDevice,
+} from "@/lib/push/deliverPushPayload";
 
 type AlertRow = {
   id: string;
@@ -51,7 +55,17 @@ async function firePush(userId: string, title: string, body: string, url: string
       headers: internalPushHeaders(),
       body: JSON.stringify({ userId, title, body, url }),
     });
-    return res.ok;
+    let json: unknown = null;
+    try {
+      json = await res.json();
+    } catch {
+      json = null;
+    }
+    // C6: HTTP ok with sent:0 (no device) must not count as delivered.
+    return pushSendHttpReachedDevice({
+      httpOk: res.ok,
+      body: parsePushSendHttpBody(json),
+    });
   } catch {
     return false;
   }
