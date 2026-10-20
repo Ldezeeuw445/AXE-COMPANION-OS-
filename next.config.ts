@@ -1,10 +1,47 @@
 import type { NextConfig } from "next";
+import { execFileSync } from "node:child_process";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Stamp the build with the commit it was built from.
+ *
+ * Without this, "is my fix live?" has no answer. Twice in one session the
+ * deploy was reasoned about instead of measured: once assuming an autodeploy
+ * cron existed on the VPS when none ever had, and once assuming the box
+ * tracked the `deployed` branch when it was on `main` — the runbook said
+ * otherwise and the runbook was wrong. Four pushes reached nobody and nothing
+ * said so. `/api/debug/build` now answers it in one request.
+ *
+ * Read at build time, not runtime: the running server has no reason to shell
+ * out to git, and on a host without a checkout it could not anyway.
+ */
+function gitStamp(): { commit: string; branch: string } {
+  const run = (args: string[]): string => {
+    try {
+      return execFileSync("git", args, { cwd: rootDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      // No git, no checkout, or a shallow clone without refs. An unknown
+      // commit is a usable answer; a failed build is not.
+      return "";
+    }
+  };
+  return {
+    commit: process.env.AXE_BUILD_COMMIT || run(["rev-parse", "HEAD"]),
+    branch: process.env.AXE_BUILD_BRANCH || run(["rev-parse", "--abbrev-ref", "HEAD"]),
+  };
+}
+
+const stamp = gitStamp();
+
 const nextConfig: NextConfig = {
+  env: {
+    AXE_BUILD_COMMIT: stamp.commit,
+    AXE_BUILD_BRANCH: stamp.branch,
+    AXE_BUILD_TIME: new Date().toISOString(),
+  },
   experimental: {
     serverActions: {
       // The MT5 connect form can carry a broker's `servers.dat`, the file that
