@@ -10,22 +10,89 @@ import type {
   CockpitTodaySummary,
   CockpitLearningArc,
 } from "@/types/cockpit";
-import { getTraderLearningArc, type TraderLearningArc } from "@/services/learningArcService";
+import {
+  ARC_WINDOW_DAYS,
+  getTraderLearningArc,
+  type TraderLearningArc,
+} from "@/services/learningArcService";
+import {
+  summariseFeedback,
+  type FeedbackSummary,
+  type FeedbackVote,
+} from "@/lib/axe/learningArc";
 import { getAxeEngineProfile } from "@/services/axeEngineService";
 
-function toCockpitLearningArc(arc: TraderLearningArc): CockpitLearningArc {
-  const focus = arc.topPairs.slice(0, 5).map((label, i) => ({
-    label,
-    count: Math.max(1, 5 - i),
-  }));
+/**
+ * The cockpit's "Learning arc · live" panel, from measurements only.
+ *
+ * Two things used to be made up here. The focus list printed
+ * `count: Math.max(1, 5 - i)` — so the "5 signals / 4 signals / 3 signals"
+ * beside each instrument was the row's position in the list, not a count of
+ * anything, under a panel whose own subtitle reads "no fake milestones, only
+ * signals you actually sent". And `messageFeedback` was hardcoded to
+ * `{ up: 0, down: 0 }` with an empty trend, so the thumbs a trader had
+ * actually pressed never appeared.
+ */
+function toCockpitLearningArc(
+  arc: TraderLearningArc,
+  feedback: FeedbackSummary,
+): CockpitLearningArc {
   return {
-    headline: arc.topPairs[0]
-      ? `Top pair: ${arc.topPairs[0]} · ${arc.topTimeframes[0] ?? ""}`
-      : "Keep trading to build your arc",
-    weeklyFocus: focus,
-    messageFeedback: { up: 0, down: 0 },
-    weeklyFeedbackTrend: [],
+    headline:
+      arc.headline ??
+      (arc.dataUnavailable
+        ? "AXE could not read your trade history just now — this is not an empty account."
+        : ""),
+    weeklyFocus: arc.topPairs.slice(0, 5).map((pair) => ({
+      label: pair.symbol,
+      count: pair.trades,
+    })),
+    windowDays: arc.windowDays,
+    messageFeedback: { up: feedback.up, down: feedback.down },
+    weeklyFeedbackTrend: feedback.weekly,
   };
+}
+
+/**
+ * Thumbs on AXE replies. Stored on the message itself when the trader presses
+ * one (`src/app/api/chat/messages/[id]/feedback/route.ts`), so this reads them
+ * back rather than counting a separate table that does not exist.
+ *
+ * `feedback_at` is what the timeline is built from — a thumb pressed today on
+ * a three-week-old reply belongs in this week, not that one.
+ */
+async function fetchMessageFeedback(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<FeedbackSummary> {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("metadata, created_at")
+    .eq("user_id", userId)
+    .eq("role", "assistant")
+    .not("metadata->>feedback", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    console.error("[Cockpit] message feedback read failed:", error.message);
+    return summariseFeedback([]);
+  }
+
+  const votes: FeedbackVote[] = [];
+  for (const row of (data ?? []) as Array<{
+    metadata: Record<string, unknown> | null;
+    created_at: string | null;
+  }>) {
+    const rating = row.metadata?.feedback;
+    if (rating !== "up" && rating !== "down") continue;
+    const at = row.metadata?.feedback_at;
+    votes.push({
+      rating,
+      at: typeof at === "string" && at ? at : row.created_at,
+    });
+  }
+  return summariseFeedback(votes);
 }
 import { computeTraderScores } from "@/services/traderScoresService";
 
@@ -87,6 +154,7 @@ const EMPTY_DASHBOARD: CockpitDashboard = {
   learningArc: {
     headline: "",
     weeklyFocus: [],
+    windowDays: ARC_WINDOW_DAYS,
     messageFeedback: { up: 0, down: 0 },
     weeklyFeedbackTrend: [],
   },
@@ -302,14 +370,16 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
   }
 
   const { supabase, user } = authed;
-  const [todayBase, rawLearningArc, traderScores, engineProfile] = await Promise.all([
-    fetchCockpitTodaySummary(supabase, user.id),
-    getTraderLearningArc(user.id, supabase),
-    computeTraderScores(supabase, user.id),
-    getAxeEngineProfile(supabase, user.id, { source: "cockpit_dashboard" }).catch(() => null),
-  ]);
+  const [todayBase, rawLearningArc, messageFeedback, traderScores, engineProfile] =
+    await Promise.all([
+      fetchCockpitTodaySummary(supabase, user.id),
+      getTraderLearningArc(user.id, supabase),
+      fetchMessageFeedback(supabase, user.id),
+      computeTraderScores(supabase, user.id),
+      getAxeEngineProfile(supabase, user.id, { source: "cockpit_dashboard" }).catch(() => null),
+    ]);
   const today: CockpitTodaySummary = todayBase;
-  const learningArc: CockpitLearningArc = toCockpitLearningArc(rawLearningArc);
+  const learningArc: CockpitLearningArc = toCockpitLearningArc(rawLearningArc, messageFeedback);
   const engine = {
     name: engineProfile?.engineName ?? "AXE One",
     version: engineProfile?.engineVersion ?? "v1",

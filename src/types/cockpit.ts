@@ -117,8 +117,12 @@ export type CockpitTodaySummary = {
 };
 
 export type CockpitLearningArc = {
+  /** Empty when there is nothing measured to say. The panel supplies its own copy. */
   headline: string;
+  /** Instruments with the number of closed trades behind each — never a rank index. */
   weeklyFocus: { label: string; count: number }[];
+  /** The window `weeklyFocus` was counted over, so the panel can name it. */
+  windowDays: number;
   messageFeedback: { up: number; down: number };
   weeklyFeedbackTrend: { weekLabel: string; up: number; down: number }[];
 };

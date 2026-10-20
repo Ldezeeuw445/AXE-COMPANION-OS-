@@ -15,6 +15,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { learningStage, learningPoints, stageProgress } from "../src/lib/axe/learningStage.ts";
+import {
+  arcHeadline,
+  normaliseAlignment,
+  normaliseSymbol,
+  rankTradedSymbols,
+  sessionOfHourUtc,
+  sessionSplit,
+  summariseFeedback,
+  SESSION_MIN_TRADES,
+} from "../src/lib/axe/learningArc.ts";
 
 let passed = 0;
 function check(name, fn) {
@@ -115,6 +125,246 @@ check("a count that cannot be read is zero, never a guess", () => {
 check("the arc reaches the trader, not just the cockpit", () => {
   const screen = readFileSync("src/components/journal/JournalScreen.tsx", "utf8");
   assert.ok(/<LearningArcPanel/.test(screen), "it was only ever visible in the cockpit");
+});
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+// The present-tense half of the arc: what AXE has measured about how you trade.
+//
+// This is where the lies were. A trader with no closed trades was shown
+// "Top pair: EURUSD · H1", told their session was London, given an alignment
+// of 50% and — inside the morning-brief prompt, under "Key facts" — "Key
+// indicators they use: RSI, MACD, MA". All five were constants in the source,
+// and the panel above them said "no fake milestones, only signals you actually
+// sent". These checks are what stop any of it coming back.
+// ───────────────────────────────────────────────────────────────────────────────
+
+console.log("\nlearningArc — measured, or empty");
+
+const trade = (o) => ({ symbol: null, pnl: null, openTime: null, closeTime: null, ...o });
+
+check("a broker suffix does not split one instrument into four", () => {
+  assert.equal(normaliseSymbol("XAUUSD.r"), "XAUUSD");
+  assert.equal(normaliseSymbol("eurusd-ecn"), "EURUSD");
+  assert.equal(normaliseSymbol("  gbpusd_pro "), "GBPUSD");
+  // A numeric tail is part of the name, not a suffix.
+  assert.equal(normaliseSymbol("US30"), "US30");
+  assert.equal(normaliseSymbol("SPX500"), "SPX500");
+  assert.equal(normaliseSymbol(null), "");
+});
+
+check("instruments are ranked by closed trades, with the count that proves it", () => {
+  const ranked = rankTradedSymbols([
+    trade({ symbol: "XAUUSD", pnl: 120 }),
+    trade({ symbol: "xauusd.r", pnl: -40 }),
+    trade({ symbol: "EURUSD", pnl: 10 }),
+  ]);
+  assert.equal(ranked.length, 2);
+  assert.deepEqual(ranked[0], { symbol: "XAUUSD", trades: 2, netPnl: 80 });
+  assert.equal(ranked[1].symbol, "EURUSD");
+});
+
+check("no trades means no pairs — not a plausible three", () => {
+  assert.deepEqual(rankTradedSymbols([]), []);
+  const headline = arcHeadline(null, 0, 0);
+  assert.equal(headline, null, "an empty account must have nothing to say, not something to claim");
+});
+
+check("the headline states the share it was counted from", () => {
+  const line = arcHeadline({ symbol: "XAUUSD", trades: 23, netPnl: 0 }, 61, 4);
+  assert.match(line, /XAUUSD/);
+  assert.match(line, /23 of your 61 closed trades/, "a rank with no denominator cannot be checked");
+});
+
+check("watched charts are named as watched, never as traded", () => {
+  const line = arcHeadline(null, 0, 3);
+  assert.match(line, /No closed trades yet/);
+  assert.match(line, /watching 3 symbols/);
+});
+
+check("a session preference needs a sample, and a tie is not a preference", () => {
+  assert.equal(sessionSplit([]).session, null, "zero trades used to resolve to london");
+  const four = Array.from({ length: 4 }, () =>
+    trade({ openTime: "2026-10-01T09:00:00Z" }),
+  );
+  assert.ok(four.length < SESSION_MIN_TRADES);
+  assert.equal(sessionSplit(four).session, null, "four entries is not a habit");
+
+  const tied = [
+    ...Array.from({ length: 3 }, () => trade({ openTime: "2026-10-01T09:00:00Z" })),
+    ...Array.from({ length: 3 }, () => trade({ openTime: "2026-10-01T15:00:00Z" })),
+  ];
+  assert.equal(sessionSplit(tied).session, null, "a 3-3 split must not be decided by key order");
+});
+
+check("the session comes from the entry, not the exit", () => {
+  // Entered in London, held until the New York afternoon. Reading close_time
+  // called this a New York trader.
+  const held = Array.from({ length: 6 }, () =>
+    trade({ openTime: "2026-10-01T08:00:00Z", closeTime: "2026-10-01T19:00:00Z" }),
+  );
+  const split = sessionSplit(held);
+  assert.equal(split.session, "london");
+  assert.equal(split.basis, "open");
+  assert.equal(split.counts.london, 6);
+  assert.equal(split.counts.newyork, 0);
+});
+
+check("an entry with no open time falls back to the close, and says so", () => {
+  const split = sessionSplit(
+    Array.from({ length: 6 }, () => trade({ closeTime: "2026-10-01T14:00:00Z" })),
+  );
+  assert.equal(split.session, "newyork");
+  assert.equal(split.basis, "close", "the trader can see which timestamp this came from");
+});
+
+check("session windows cover the clock exactly once", () => {
+  const seen = { london: 0, newyork: 0, asia: 0 };
+  for (let h = 0; h < 24; h += 1) seen[sessionOfHourUtc(h)] += 1;
+  assert.equal(seen.london + seen.newyork + seen.asia, 24);
+  assert.equal(seen.london, 5);
+  assert.equal(seen.newyork, 9);
+  assert.equal(seen.asia, 10);
+});
+
+check("an unmeasured alignment is null, never 50", () => {
+  assert.equal(normaliseAlignment(null), null);
+  assert.equal(normaliseAlignment(undefined), null);
+  assert.equal(normaliseAlignment(""), null);
+  assert.equal(normaliseAlignment("not a number"), null);
+  assert.equal(normaliseAlignment(140), null, "out of range is unknown, not clamped to a score");
+  // Both historic storage shapes still read correctly.
+  assert.equal(normaliseAlignment(0.62), 62);
+  assert.equal(normaliseAlignment(62), 62);
+  assert.equal(normaliseAlignment(0), 0, "a measured zero is not the same as no measurement");
+});
+
+console.log("\nchat feedback — the thumbs that were already there");
+
+check("votes are counted, not hardcoded to zero", () => {
+  const now = Date.parse("2026-10-20T12:00:00Z");
+  const summary = summariseFeedback(
+    [
+      { rating: "up", at: "2026-10-19T10:00:00Z" },
+      { rating: "up", at: "2026-10-12T10:00:00Z" },
+      { rating: "down", at: "2026-10-05T10:00:00Z" },
+      { rating: "up", at: null },
+    ],
+    now,
+  );
+  assert.equal(summary.up, 3);
+  assert.equal(summary.down, 1);
+});
+
+check("the four-week bar always has four weeks, oldest first", () => {
+  const now = Date.parse("2026-10-20T12:00:00Z");
+  const summary = summariseFeedback([{ rating: "up", at: "2026-10-19T10:00:00Z" }], now);
+  assert.equal(summary.weekly.length, 4);
+  assert.equal(summary.weekly[3].up, 1, "a vote from yesterday belongs in the newest bucket");
+  assert.equal(summary.weekly[0].up, 0);
+});
+
+check("a vote with no timestamp counts but is not placed in a week", () => {
+  const now = Date.parse("2026-10-20T12:00:00Z");
+  const summary = summariseFeedback([{ rating: "up", at: null }], now);
+  assert.equal(summary.up, 1);
+  assert.equal(
+    summary.weekly.reduce((sum, w) => sum + w.up + w.down, 0),
+    0,
+    "dropping it into this week would show activity in a week where none happened",
+  );
+});
+
+check("a vote older than the window is in the totals, not in the bars", () => {
+  const now = Date.parse("2026-10-20T12:00:00Z");
+  const summary = summariseFeedback([{ rating: "down", at: "2026-01-01T10:00:00Z" }], now);
+  assert.equal(summary.down, 1);
+  assert.equal(summary.weekly.reduce((sum, w) => sum + w.down, 0), 0);
+});
+
+console.log("\nno invented constants in the service layer");
+
+/**
+ * These checks assert that old code is gone, and the comments explaining why
+ * quote that code verbatim — on purpose, so the next reader knows what the
+ * line used to say. So match against the source with its block comments
+ * removed, or every check would find its own explanation and pass (or, worse,
+ * fail) on prose.
+ */
+const codeOnly = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "");
+
+const arcService = codeOnly(readFileSync("src/services/learningArcService.ts", "utf8"));
+const cockpit = codeOnly(readFileSync("src/services/cockpitService.ts", "utf8"));
+const briefing = codeOnly(readFileSync("src/services/axeDailyBriefingService.ts", "utf8"));
+const snapshots = codeOnly(readFileSync("src/services/cockpitSnapshotService.ts", "utf8"));
+const arcPanel = codeOnly(readFileSync("src/components/cockpit/CockpitLearningArc.tsx", "utf8"));
+
+check("the stand-in pairs, timeframes and indicators are gone", () => {
+  for (const source of [arcService, cockpit, briefing]) {
+    assert.ok(
+      !/\["EURUSD", "XAUUSD", "GBPUSD"\]/.test(source),
+      "a trader with no history was told these were their top pairs",
+    );
+    assert.ok(!/\["H1", "H4", "D1"\]/.test(source));
+    assert.ok(
+      !/\["RSI", "MACD", "MA"\]/.test(source),
+      "indicators live in localStorage only — the server cannot know them, so it must not claim to",
+    );
+  }
+  assert.ok(!/topIndicators/.test(briefing), "the brief must not state indicators it never measured");
+});
+
+check("a failed read is distinguishable from an empty account", () => {
+  assert.ok(/dataUnavailable/.test(arcService));
+  assert.ok(
+    /Boolean\(tradesRes\.error\)/.test(arcService),
+    "`?? []` turned an outage into 'this trader has never traded'",
+  );
+});
+
+check("the focus list carries trade counts, not its own row numbers", () => {
+  assert.ok(
+    !/Math\.max\(1, 5 - i\)/.test(cockpit),
+    "the '5 signals / 4 signals / 3 signals' beside each pair was the row index",
+  );
+  assert.ok(/count: pair\.trades/.test(cockpit));
+  assert.ok(/trade\{item\.count === 1 \? "" : "s"\}/.test(arcPanel), "and the label must say trades");
+});
+
+check("chat feedback is read back from where it is stored", () => {
+  assert.ok(
+    !/messageFeedback: \{ up: 0, down: 0 \},\s*\n\s*weeklyFeedbackTrend: \[\],\s*\n\s*\};/.test(cockpit),
+    "the mapper hardcoded both, so thumbs the trader had pressed never showed",
+  );
+  assert.ok(/metadata->>feedback/.test(cockpit));
+  assert.ok(/fetchMessageFeedback/.test(cockpit));
+});
+
+check("a missing alignment score cannot become a sentence with a number in it", () => {
+  assert.ok(/alignment: number \| null/.test(briefing));
+  assert.ok(
+    /alignment === null/.test(briefing),
+    "with a plain number a missing score arrived as 0: \"You're at 0% aligned — AXE knows your style well.\"",
+  );
+  assert.ok(!/alignment: 0,/.test(briefing));
+});
+
+check("the brief separates the session that is open from the session they trade", () => {
+  assert.ok(/Session open as this is written/.test(briefing));
+  assert.ok(/Session they actually enter in/.test(briefing));
+  assert.ok(
+    /not enough closed trades to say/.test(briefing),
+    "the model must be told there is no answer, not handed a default",
+  );
+});
+
+check("the model may rewrite the words but not the numbers", () => {
+  assert.ok(/mergeMilestoneNarratives/.test(snapshots));
+  assert.ok(
+    !/milestones: Array\.isArray\(parsed\.milestones\) \? parsed\.milestones/.test(snapshots),
+    "every progress bar under 'AXE will not show fake progress' was the model's to change",
+  );
+  assert.ok(/keepsOurNumbers/.test(snapshots));
 });
 
 console.log(`\n${passed} checks passed`);
