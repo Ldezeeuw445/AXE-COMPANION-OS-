@@ -41,8 +41,10 @@ import {
   provisioningFindMt5CloudAccount,
   provisioningGetAccount,
   provisioningRedeployAccount,
+  provisioningSearchKnownServers,
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
+import { ambiguousServerMessage, chooseServer } from "@/lib/mt5/serverName";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
 import { metadataHasSymbolMap, refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
 import { syncBrokerHubFromAccountRow } from "@/lib/broker/hub/sync";
@@ -282,7 +284,7 @@ export async function createCloudMt5ConnectionAction(
 
   const label = String(formData.get("label") ?? "").trim();
   const mt5Login = String(formData.get("mt5Login") ?? "").trim().replace(/\D/g, "");
-  const mt5Server = String(formData.get("mt5Server") ?? "").trim();
+  const typedServer = String(formData.get("mt5Server") ?? "").trim();
   const passwordTypeRaw = String(formData.get("passwordType") ?? "investor").trim();
   const passwordType = passwordTypeRaw === "master" ? "master" : "investor";
   const mt5Password =
@@ -294,7 +296,7 @@ export async function createCloudMt5ConnectionAction(
 
   if (!label) return { ok: false, code: "validation", message: "Label is required." };
   if (!mt5Login) return { ok: false, code: "validation", message: "MT5 login (digits) is required." };
-  if (!mt5Server) return { ok: false, code: "validation", message: "MT5 server name is required." };
+  if (!typedServer) return { ok: false, code: "validation", message: "MT5 server name is required." };
   if (!mt5Password) {
     return {
       ok: false,
@@ -322,10 +324,26 @@ export async function createCloudMt5ConnectionAction(
      upload the same file again. */
   let provisioningProfileId: string | null = null;
   const serversDat = formData.get("serversDat");
+  const ownProfile = serversDat instanceof File && serversDat.size > 0;
+
+  /* ── The dashboard name is rarely the MT5 server name ────────────────────
+     "Upcomers" on the firm's dashboard is "Upcomers-Server" in MT5, and that
+     one word was a failed connect. Ask MetaApi's registry first; see
+     lib/mt5/serverName.ts for when we correct and when we ask. A trader who
+     brings their own servers.dat is connecting a server the registry does not
+     have, so their name stands. */
+  let mt5Server = typedServer;
+  if (!ownProfile) {
+    const choice = chooseServer(typedServer, await provisioningSearchKnownServers(typedServer));
+    if (choice.kind === "resolved") mt5Server = choice.server;
+    if (choice.kind === "ambiguous") {
+      return { ok: false, code: "mt5_server_not_found", message: ambiguousServerMessage(typedServer, choice.options) };
+    }
+  }
   const brokerTimezone =
     String(formData.get("brokerTimezone") ?? "").trim() || DEFAULT_BROKER_TIMEZONE;
 
-  if (serversDat instanceof File && serversDat.size > 0) {
+  if (ownProfile && serversDat instanceof File) {
     const bytes = new Uint8Array(await serversDat.arrayBuffer());
     const sane = checkServersDat(serversDat.name, bytes);
     if (!sane.ok) return { ok: false, code: "validation", message: sane.reason };
