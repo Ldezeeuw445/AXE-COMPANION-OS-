@@ -86,6 +86,51 @@ function classify(input: AccountProfileInput): AccountKind {
   return "unknown";
 }
 
+/* ── What a firm's own rulebook says ──────────────────────────────────────
+   The generic prop default is 5% daily, news off, weekend off. It is a
+   deliberately careful guess, and for some firms it is wrong in the one
+   direction that costs money.
+
+   Upcomers Oracle is the case that prompted this: its daily limit is **4%**,
+   not 5%. On a $200,000 account that gap is $2,000 — and worse than the money,
+   AXE would have kept placing trades between 4% and 5% down, past the point
+   where the firm had already closed the account. Their news and weekend rules
+   are the other way round: both allowed, where the generic guess blocks them.
+
+   Rules here are still a guess, not a verdict: `explicit` stays false, the
+   description still says "assumed", and anything the trader states in
+   `metadata.tradingRules` wins. Every entry carries where it came from and
+   when it was read, because a firm can change its rulebook and this file
+   cannot notice.
+   ───────────────────────────────────────────────────────────────────────── */
+
+export type KnownFirmRules = TradingConstraints & {
+  /** Where these numbers were read. */
+  source: string;
+  /** When. A rule older than a year is worth re-reading. */
+  asOf: string;
+};
+
+export const KNOWN_FIRM_RULES: Record<string, KnownFirmRules> = {
+  upcomers: {
+    newsTradingAllowed: true,
+    weekendHoldingAllowed: true,
+    maxDailyLossPct: 4,
+    maxLot: null,
+    source: "help.upcomers.com — Oracle: 4% daily from the day's starting equity, news and weekend holding allowed",
+    asOf: "2026-10-19",
+  },
+};
+
+/** The firm's own rules, when we know them. Matched on label + server. */
+export function knownFirmRules(input: AccountProfileInput): KnownFirmRules | null {
+  const hay = `${input.label ?? ""} ${input.mt5Server ?? ""}`.toLowerCase();
+  for (const [firm, rules] of Object.entries(KNOWN_FIRM_RULES)) {
+    if (hay.includes(firm)) return rules;
+  }
+  return null;
+}
+
 /** Defaults per account kind, before the trader's own rules are applied. */
 function defaultsFor(kind: AccountKind): TradingConstraints {
   switch (kind) {
@@ -151,7 +196,17 @@ function kindLabel(kind: AccountKind): string {
 
 export function buildAccountProfile(input: AccountProfileInput): AccountProfile {
   const kind = classify(input);
-  const base = defaultsFor(kind);
+  const firm = knownFirmRules(input);
+  // A firm we have read the rulebook of beats the generic guess for its kind,
+  // and still loses to anything the trader states themselves.
+  const base: TradingConstraints = firm
+    ? {
+        newsTradingAllowed: firm.newsTradingAllowed,
+        weekendHoldingAllowed: firm.weekendHoldingAllowed,
+        maxDailyLossPct: firm.maxDailyLossPct,
+        maxLot: firm.maxLot,
+      }
+    : defaultsFor(kind);
 
   const rulesRaw = (input.metadata ?? {})["tradingRules"];
   const rules =

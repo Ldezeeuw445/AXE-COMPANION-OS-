@@ -20,7 +20,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { buildAccountProfile } from "../src/lib/risk/accountProfile.ts";
+import {
+  KNOWN_FIRM_RULES,
+  buildAccountProfile,
+  knownFirmRules,
+} from "../src/lib/risk/accountProfile.ts";
 import {
   EMPTY_ACCOUNT_RULES,
   MAX_DAILY_LOSS_PCT_CEILING,
@@ -47,10 +51,58 @@ check("an Upcomers account is never read as 'unknown'", () => {
   for (const label of ["Oracle $200k", "$200,000 Oracle", "Upcomers", ""]) {
     const p = buildAccountProfile({ label, mt5Server: "Upcomers", metadata: null });
     assert.notEqual(p.kind, "unknown", `"${label}" on server Upcomers must not be unknown`);
-    assert.equal(p.newsTradingAllowed, false, "an unstated prop account errs toward careful");
-    assert.equal(p.weekendHoldingAllowed, false);
-    assert.ok(p.maxDailyLossPct !== null, "and must have some daily loss limit");
+    // It used to assert news and weekend were both off — the careful guess for
+    // a prop account nobody had read the rulebook of. We have read this one:
+    // Upcomers allows both. What must never come back is "no limit at all".
+    assert.ok(p.maxDailyLossPct !== null, "a prop account must have a daily loss limit");
+    assert.equal(p.maxDailyLossPct, 4, "and for Upcomers it is their 4%, not the generic 5%");
   }
+});
+
+check("a firm whose rulebook we read gets its own numbers", () => {
+  // The generic prop default is 5% daily, news off, weekend off. For Upcomers
+  // Oracle that is wrong in the one direction that costs money: its daily
+  // limit is 4%, so AXE would have kept trading between 4% and 5% down — past
+  // the point where the firm had already closed the account.
+  const p = buildAccountProfile({ label: "Oracle $200k", mt5Server: "Upcomers", metadata: null });
+  assert.equal(p.maxDailyLossPct, 4, "the firm's own number, not the generic 5%");
+  assert.equal(p.newsTradingAllowed, true, "Upcomers allows news trading");
+  assert.equal(p.weekendHoldingAllowed, true, "and weekend holding");
+});
+
+check("a firm we have not read keeps the careful guess", () => {
+  const p = buildAccountProfile({ label: "FTMO Challenge", mt5Server: "FTMO-Server2", metadata: null });
+  assert.equal(p.maxDailyLossPct, 5);
+  assert.equal(p.newsTradingAllowed, false, "unknown stays careful");
+  assert.equal(p.weekendHoldingAllowed, false);
+});
+
+check("every known firm says where its numbers came from, and when", () => {
+  // A firm can change its rulebook and this file cannot notice. Without a
+  // source and a date, a stale number is indistinguishable from a fresh one.
+  for (const [firm, rules] of Object.entries(KNOWN_FIRM_RULES)) {
+    assert.ok(rules.source && rules.source.length > 20, `${firm} needs a real source`);
+    assert.match(rules.asOf, /^\d{4}-\d{2}-\d{2}$/, `${firm} needs a date it was read`);
+    assert.equal(firm, firm.toLowerCase(), "matched case-insensitively against label + server");
+  }
+  assert.ok(knownFirmRules({ mt5Server: "Upcomers" }), "matched on the server alone");
+  assert.equal(knownFirmRules({ mt5Server: "Pepperstone-Live01" }), null);
+});
+
+check("a firm rule is still a guess, and still loses to the trader", () => {
+  // Being in the table does not make it a verdict. The trader's own word wins,
+  // and the description keeps saying the rest was assumed.
+  const stated = buildAccountProfile({
+    label: "Oracle $200k",
+    mt5Server: "Upcomers",
+    metadata: { tradingRules: { maxDailyLossPct: 3 } },
+  });
+  assert.equal(stated.maxDailyLossPct, 3, "what the trader states wins over the firm table");
+  assert.equal(stated.explicit, true);
+
+  const unstated = buildAccountProfile({ label: "Oracle $200k", mt5Server: "Upcomers", metadata: null });
+  assert.equal(unstated.explicit, false, "a firm rule is not something the trader said");
+  assert.ok(/assumed from the account name/.test(unstated.description));
 });
 
 check("the guess announces itself as a guess", () => {
@@ -108,8 +160,10 @@ check("'not stated' is not the same as 'stated as off'", () => {
   const meta = withTradingRules(null, rules);
   assert.ok(!("newsTradingAllowed" in meta.tradingRules), "an unanswered rule is absent, not false");
 
-  // And a profile built from it keeps the careful default for the rest.
-  const p = buildAccountProfile({ label: "Upcomers", mt5Server: "Upcomers", metadata: meta });
+  // And a profile built from it keeps the default for the rest. A firm that is
+  // NOT in KNOWN_FIRM_RULES, so the thing being tested is the fallback and not
+  // somebody's published rulebook.
+  const p = buildAccountProfile({ label: "FTMO Challenge", mt5Server: "FTMO-Server2", metadata: meta });
   assert.equal(p.newsTradingAllowed, false, "unstated stays careful");
   assert.equal(p.maxDailyLossPct, 4, "stated wins");
 });
