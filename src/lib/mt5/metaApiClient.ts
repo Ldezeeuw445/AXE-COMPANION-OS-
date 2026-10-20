@@ -131,6 +131,31 @@ export async function provisioningListAccounts(): Promise<MetaApiTradingAccount[
   return Array.isArray(body) ? (body as MetaApiTradingAccount[]) : [];
 }
 
+/**
+ * MetaApi's registry of MT5 servers it can reach, grouped by broker:
+ * `{"Upcomers Ltd.": ["Upcomers-Server"]}`. See lib/mt5/serverName.ts.
+ *
+ * Never throws: a failed lookup must not block a connect that would have
+ * worked with the name as typed. `{}` means "no answer", not "no servers".
+ */
+export async function provisioningSearchKnownServers(query: string): Promise<Record<string, unknown>> {
+  const q = query.trim();
+  if (!q) return {};
+  try {
+    const base = getMetaApiProvisioningBaseUrl();
+    const res = await fetchWithTimeout(`${base}/known-mt-servers/5/search?query=${encodeURIComponent(q)}`, {
+      method: "GET",
+      headers: authHeadersGet(),
+      timeoutMs: 15_000,
+    });
+    if (!res.ok) return {};
+    const body = await readJson(res);
+    return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
 function normalizeMt5Login(login: string | number | null | undefined): string {
   return String(login ?? "").replace(/\D/g, "");
 }

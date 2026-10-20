@@ -14,7 +14,7 @@
     "build": "next build",
     "start": "next start -p 5000 -H 0.0.0.0",
     "lint": "eslint",
-    "test": "tsx --test src/lib/chart/chartLive.test.ts src/lib/chart/drawingsSync.test.ts src/lib/chart/clientChartCache.test.ts src/lib/session/activeSessionStore.test.ts src/lib/pwa/cachePolicy.test.ts src/lib/pwa/manifest.test.ts src/lib/pwa/staleAge.test.ts src/lib/pwa/lastQuotesCache.test.ts src/lib/env.test.ts src/lib/journal/tradePnl.test.ts src/lib/journal/quickJournalDraft.test.ts src/lib/journal/attachmentPath.test.ts src/lib/journal/offlineUploadQueue.test.ts src/lib/account/reconcileAccountLedger.test.ts src/lib/push/pushEvents.test.ts src/lib/mt5/knownBrokers.test.ts",
+    "test": "tsx --test src/lib/chart/chartLive.test.ts src/lib/chart/drawingsSync.test.ts src/lib/chart/clientChartCache.test.ts src/lib/session/activeSessionStore.test.ts src/lib/pwa/cachePolicy.test.ts src/lib/pwa/manifest.test.ts src/lib/pwa/staleAge.test.ts src/lib/pwa/lastQuotesCache.test.ts src/lib/env.test.ts src/lib/journal/tradePnl.test.ts src/lib/journal/quickJournalDraft.test.ts src/lib/journal/attachmentPath.test.ts src/lib/journal/offlineUploadQueue.test.ts src/lib/account/reconcileAccountLedger.test.ts src/lib/push/pushEvents.test.ts src/lib/mt5/knownBrokers.test.ts src/lib/mt5/serverName.test.ts",
     "test:e2e": "playwright test",
     "capture:marketing": "node scripts/capture-marketing.mjs",
     "capture:landing": "node scripts/capture-landing.mjs",
