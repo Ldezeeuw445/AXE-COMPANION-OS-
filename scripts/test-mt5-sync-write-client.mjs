@@ -122,6 +122,16 @@ assertNoSessionWrites("src/app/actions/mt5Cloud.ts");
 assertNoSessionWrites("src/lib/broker/loadChartPageData.ts");
 // Hub column backfill after MT5 connect/sync — called from mt5Cloud.
 assertNoSessionWrites("src/lib/broker/hub/sync.ts");
+// Hub adapters + provision paths (disconnect / save / demo / alpaca).
+assertNoSessionWrites("src/lib/broker/hub/adapters/mt5BrokerApi.ts");
+assertNoSessionWrites("src/lib/broker/hub/adapters/alpacaLive.ts");
+assertNoSessionWrites("src/lib/broker/hub/adapters/supabaseDatabase.ts");
+assertNoSessionWrites("src/lib/broker/hub/adapters/ibkrGateway.ts");
+assertNoSessionWrites("src/lib/broker/demoAccount.ts");
+assertNoSessionWrites("src/lib/alpaca/provision.ts");
+assertNoSessionWrites("src/app/actions/brokerAccounts.ts");
+assertNoSessionWrites("src/app/api/broker/hub/route.ts");
+assertNoSessionWrites("src/app/(app)/settings/actions.ts");
 
 console.log("TOS-SEC-2 MT5 sync write client: ok");
 console.log(
@@ -136,15 +146,19 @@ console.log(
         "src/app/actions/mt5Cloud.ts",
         "src/lib/broker/loadChartPageData.ts",
         "src/lib/broker/hub/sync.ts",
-      ],
-      // Known remaining session writers (hub adapters / demo / alpaca) —
-      // block full RLS drop until migrated. hub/sync.ts is no longer a blocker.
-      rlsDropBlockedBy: [
-        "src/lib/broker/hub/adapters/supabaseDatabase.ts",
         "src/lib/broker/hub/adapters/mt5BrokerApi.ts",
+        "src/lib/broker/hub/adapters/alpacaLive.ts",
+        "src/lib/broker/hub/adapters/supabaseDatabase.ts",
+        "src/lib/broker/hub/adapters/ibkrGateway.ts",
         "src/lib/broker/demoAccount.ts",
         "src/lib/alpaca/provision.ts",
+        "src/app/actions/brokerAccounts.ts",
+        "src/app/api/broker/hub/route.ts",
+        "src/app/(app)/settings/actions.ts",
       ],
+      // Primary account/trade write paths migrated. Before dropping user WRITE
+      // RLS, re-scan for any new session mutators on these two tables.
+      rlsDropBlockedBy: [],
     },
     null,
     2,

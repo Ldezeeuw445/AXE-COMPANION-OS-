@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
+import { isDemoAccount } from "@/lib/broker/accountKind";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
+
+export { isDemoAccount };
 
 export const DEMO_CONNECTION_METHOD = "demo_paper";
 export const DEMO_EXTERNAL_ID = "axe-demo-paper";
@@ -36,12 +40,6 @@ type DemoAccountRow = Pick<
   | "metadata"
 >;
 
-export function isDemoAccount(
-  account: { connection_method?: string | null; provider?: string | null } | null | undefined,
-) {
-  return account?.connection_method === DEMO_CONNECTION_METHOD || account?.provider === "demo";
-}
-
 export async function ensureDemoAccount(
   supabase: SupabaseClient,
   userId: string,
@@ -64,7 +62,9 @@ export async function ensureDemoAccount(
   if (existing) return existing as DemoAccountRow;
 
   const now = new Date().toISOString();
-  const { data: created, error: createErr } = await supabase
+  // TOS-SEC-2: demo account INSERT via service role (lookup stays session).
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const { data: created, error: createErr } = await writeSb
     .from("user_broker_accounts")
     .insert({
       user_id: userId,

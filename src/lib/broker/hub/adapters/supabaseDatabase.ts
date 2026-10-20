@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import type {
   AccountConnection,
   BrokerSymbolMapping,
@@ -41,8 +42,10 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
   }
 
   async saveAccount(account: AccountConnection): Promise<AccountConnection> {
+    // TOS-SEC-2: account row UPDATE via service role (reads stay on session).
+    const { client: writeSb } = resolveMt5SyncWriteClient(this.supabase);
     const patch = accountConnectionToDbPatch(account);
-    const { data, error } = await this.supabase
+    const { data, error } = await writeSb
       .from("user_broker_accounts")
       .update(patch)
       .eq("id", account.id)
@@ -56,7 +59,9 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
   }
 
   async deleteAccount(accountId: string): Promise<void> {
-    const { error } = await this.supabase
+    // TOS-SEC-2: account DELETE via service role.
+    const { client: writeSb } = resolveMt5SyncWriteClient(this.supabase);
+    const { error } = await writeSb
       .from("user_broker_accounts")
       .delete()
       .eq("id", accountId);

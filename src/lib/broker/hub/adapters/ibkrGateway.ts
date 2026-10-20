@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import type {
   BrokerApiAdapter,
   ConnectAccountInput,
@@ -110,9 +111,11 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
 
       if (lookupError) return { success: false, error: lookupError.message };
 
+      // TOS-SEC-2: account INSERT/UPDATE via service role (lookup stays session).
+      const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
       let dbId: string;
       if (existing?.id) {
-        const { error: updateError } = await supabase
+        const { error: updateError } = await writeSb
           .from("user_broker_accounts")
           .update({
             label: input.label || "IBKR Account",
@@ -132,7 +135,7 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
         if (updateError) return { success: false, error: updateError.message };
         dbId = existing.id;
       } else {
-        const { data: created, error: createError } = await supabase
+        const { data: created, error: createError } = await writeSb
           .from("user_broker_accounts")
           .insert({
             user_id: userId,
@@ -182,7 +185,8 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
       };
     },
     async disconnect(accountId: string): Promise<void> {
-      await supabase
+      const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+      await writeSb
         .from("user_broker_accounts")
         .update({
           hub_status: "disconnected",
@@ -247,7 +251,8 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
         },
       ];
 
-      await supabase
+      const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+      await writeSb
         .from("user_broker_accounts")
         .update({
           provider_status: auth.ok ? "connected" : "gateway_offline",

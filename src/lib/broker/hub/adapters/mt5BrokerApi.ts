@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import type {
   BrokerApiAdapter,
   ConnectAccountInput,
@@ -27,7 +28,9 @@ export function createMt5BrokerApiAdapter(supabase: SupabaseClient): BrokerApiAd
       };
     },
     async disconnect(accountId: string): Promise<void> {
-      await supabase
+      // TOS-SEC-2: hub status UPDATE via service role (not session).
+      const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+      await writeSb
         .from("user_broker_accounts")
         .update({ hub_status: "disconnected", provider_status: "disconnected" })
         .eq("id", accountId);

@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import { provisioningDeleteAccount } from "@/lib/mt5/metaApiClient";
 
@@ -35,7 +36,9 @@ export async function createBrokerAccountAction(
   const linkToken = newLinkToken();
   const linkTokenHash = sha256Hex(linkToken);
 
-  const { error } = await supabase.from("user_broker_accounts").insert({
+  // TOS-SEC-2: account INSERT via service role (auth already checked above).
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const { error } = await writeSb.from("user_broker_accounts").insert({
     user_id: user.id,
     provider: "mt5",
     label,
@@ -124,6 +127,9 @@ export async function deleteBrokerAccountAction(accountId: string): Promise<{ er
 
   if (trListErr) return { error: trListErr.message };
 
+  // TOS-SEC-2: trade + account DELETEs via service role (ownership checked above).
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+
   const tradeIds = (tradeRows ?? []).map((t) => t.id as string);
   if (tradeIds.length > 0) {
     const { error: labDel } = await supabase
@@ -133,7 +139,7 @@ export async function deleteBrokerAccountAction(accountId: string): Promise<{ er
       .in("trade_id", tradeIds);
     if (labDel) return { error: labDel.message };
 
-    const { error: brDel } = await supabase
+    const { error: brDel } = await writeSb
       .from("broker_trades")
       .delete()
       .eq("account_id", accountId)
@@ -149,7 +155,7 @@ export async function deleteBrokerAccountAction(accountId: string): Promise<{ er
 
   if (clearActive) return { error: clearActive.message };
 
-  const { error: accDel } = await supabase
+  const { error: accDel } = await writeSb
     .from("user_broker_accounts")
     .delete()
     .eq("id", accountId)

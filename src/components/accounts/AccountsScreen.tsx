@@ -31,8 +31,7 @@ import {
 import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAutoPoll";
 import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
 import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
-import { isDemoAccount } from "@/lib/broker/demoAccount";
-import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { isAlpacaAccount, isDemoAccount } from "@/lib/broker/accountKind";
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 

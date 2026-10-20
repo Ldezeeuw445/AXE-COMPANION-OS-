@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getMetadataSymbolMap } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 
 export async function updatePinnedContext(
@@ -159,7 +160,9 @@ export async function addBrokerWatchlistSymbol(
   if (!resolvedBroker) return {};
 
   const nextMap = { ...existingMap, [display]: resolvedBroker };
-  await supabase
+  // TOS-SEC-2: symbol_map metadata UPDATE via service role (ownership checked above).
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  await writeSb
     .from("user_broker_accounts")
     .update({
       metadata: {

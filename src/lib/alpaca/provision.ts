@@ -1,17 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
 import { getAlpacaAccount } from "@/lib/alpaca/client";
+import { isAlpacaAccount } from "@/lib/broker/accountKind";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+
+export { isAlpacaAccount };
 
 export const ALPACA_CONNECTION_METHOD = "cloud_alpaca";
 export const ALPACA_PROVIDER = "alpaca";
-
-export function isAlpacaAccount(
-  account: { connection_method?: string | null; provider?: string | null } | null | undefined,
-): boolean {
-  return (
-    account?.connection_method === ALPACA_CONNECTION_METHOD || account?.provider === ALPACA_PROVIDER
-  );
-}
 
 export type AlpacaProvisionResult =
   | { ok: true; accountId: string; created: boolean }
@@ -80,8 +76,11 @@ export async function ensureAlpacaPaperAccount(
     provisioned_at: now,
   };
 
+  // TOS-SEC-2: provision INSERT/UPDATE via service role (lookup stays session).
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+
   if (existing?.id) {
-    await supabase
+    await writeSb
       .from("user_broker_accounts")
       .update({
         external_connection_id: alpacaAccountId,
@@ -97,7 +96,7 @@ export async function ensureAlpacaPaperAccount(
     return { ok: true, accountId: existing.id, created: false };
   }
 
-  const { data: created, error: createErr } = await supabase
+  const { data: created, error: createErr } = await writeSb
     .from("user_broker_accounts")
     .insert({
       user_id: userId,

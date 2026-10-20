@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAxeBrokerConnectionHubForSession } from "@/lib/broker/hub/createHub";
+import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,7 +75,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Account not found." }, { status: 404 });
   }
 
-  const { error: updateError } = await supabase
+  // TOS-SEC-2: status/metadata UPDATE via service role (ownership checked above).
+  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const { error: updateError } = await writeSb
     .from("user_broker_accounts")
     .update({
       provider_status:
