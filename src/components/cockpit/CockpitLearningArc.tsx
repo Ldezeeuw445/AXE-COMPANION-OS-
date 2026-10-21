@@ -20,26 +20,32 @@ export function CockpitLearningArc({ data }: Props) {
       </p>
       <p className="mt-2 text-sm leading-relaxed text-tos-muted">
         {data.headline ||
-          "Weekly focus areas and chat feedback — no fake milestones, only signals you actually sent."}
+          "Your instruments and your chat feedback — no fake milestones, only what you actually did."}
       </p>
 
       {data.weeklyFocus.length > 0 ? (
-        <ul className="mt-5 space-y-3">
-          {data.weeklyFocus.map((item) => (
-            <li
-              key={item.label}
-              className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
-            >
-              <span className="text-[13px] font-medium text-tos-text">{item.label}</span>
-              <span className="font-mono text-[11px] tabular-nums text-tos-warm/90">
-                {item.count} signal{item.count === 1 ? "" : "s"}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="mt-5 text-[10px] uppercase tracking-wider text-tos-dim">
+            Most traded · last {data.windowDays} days
+          </p>
+          <ul className="mt-2 space-y-3">
+            {data.weeklyFocus.map((item) => (
+              <li
+                key={item.label}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5"
+              >
+                <span className="text-[13px] font-medium text-tos-text">{item.label}</span>
+                <span className="font-mono text-[11px] tabular-nums text-tos-warm/90">
+                  {item.count} trade{item.count === 1 ? "" : "s"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : (
         <p className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3 text-[12px] text-tos-muted">
-          No learning signals in the last 30 days. Journal a trade or thumbs-rate an AXE reply in chat.
+          No trades closed in the last {data.windowDays} days. AXE ranks your instruments from
+          trades that actually closed, so this stays empty until one does.
         </p>
       )}
 

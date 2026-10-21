@@ -103,7 +103,14 @@ import {
   type ChartThemeKey,
   type ChartGridStyle,
 } from "@/components/chart/chartTheme";
-import { seedGlobalsFromAccount, seedGlobalsFromSymbol, writePref, writeSymbolPref } from "@/lib/accountPreferences";
+import {
+  pullChartPrefs,
+  pushChartPrefs,
+  seedGlobalsFromAccount,
+  seedGlobalsFromSymbol,
+  writePref,
+  writeSymbolPref,
+} from "@/lib/accountPreferences";
 import { describeResolvedLayers, resolveIndicatorNames } from "@/lib/axeChartActions/indicatorMapping";
 import { consumeLocalChartActions } from "@/lib/axeChartActions/chartActionQueue";
 import {
@@ -729,9 +736,43 @@ export function ChartScreen({
     }
   }, [accountId]);
 
-  /** Write to symbol-scoped + global localStorage for the active pair. */
+  /**
+   * Adopt the setup saved on the trader's account, once per mount.
+   *
+   * Runs after the local values are already on screen, so a slow or failed
+   * pull leaves the chart exactly as it was rather than flashing defaults.
+   * Only scopes newer than this device's are applied — a scope this device
+   * has never written is adopted outright, which is the new-phone case and
+   * the whole point. `syncedPrefs` bumps so the layers below re-read.
+   */
+  const [syncedPrefs, setSyncedPrefs] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void pullChartPrefs().then((adopted) => {
+      if (!alive || adopted.length === 0) return;
+      setChartThemeKey(readChartThemeKey());
+      setChartGridStyle(readGridStyle());
+      setSyncedPrefs((n) => n + 1);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /**
+   * Write to symbol-scoped + global localStorage for the active pair, then
+   * send it up.
+   *
+   * localStorage first and synchronously, so the chart never waits on a
+   * network call to redraw; the push is debounced per scope, because the
+   * pane-height drag writes on every change and one request per pixel would
+   * be absurd.
+   */
   const savePref = useCallback(
-    (key: string, value: string) => writeSymbolPref(accountId, data.symbol, key, value),
+    (key: string, value: string) => {
+      writeSymbolPref(accountId, data.symbol, key, value);
+      pushChartPrefs(accountId, data.symbol);
+    },
     [accountId, data.symbol],
   );
 
@@ -741,6 +782,8 @@ export function ChartScreen({
   const handleChartThemeChange = useCallback((key: ChartThemeKey) => {
     writePref(accountId ?? null, "axe-chart-theme", key);
     setChartThemeKey(key);
+    // Theme and grid are per account, not per symbol — the `*` symbol scope.
+    pushChartPrefs(accountId ?? null, null);
     fetch("/api/preferences/chart-theme", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1042,7 +1085,11 @@ export function ChartScreen({
     } catch {
       /* localStorage may be blocked */
     }
-  }, [accountId, data.symbol]);
+    // `syncedPrefs` re-runs this once the server's setup has been adopted:
+    // the values are in localStorage by then, and without it the indicator
+    // and SMC toggles would keep this device's state until an account or
+    // symbol switch happened to re-read them.
+  }, [accountId, data.symbol, syncedPrefs]);
 
   // ── Cache candles to localStorage so the next visit renders instantly ──
   useEffect(() => {
@@ -3425,6 +3472,7 @@ export function ChartScreen({
         <ChartIndicatorLayer
           candles={liveCandles}
           canvasRef={canvasRef}
+          brokerTimezone={data.account?.brokerTimezone ?? null}
           isDark={chartTheme.isDark}
           futureProjectionX={futureProjectionX}
           orderBlockCount={orderBlockCount}

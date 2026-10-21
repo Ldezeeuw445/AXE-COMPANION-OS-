@@ -1051,7 +1051,6 @@ curl -s -H "Authorization: Bearer $CRON_SECRET" \
 
 Verwacht: `"status":"ok_ollama"` met `ollama_resolved.model` = `llama3.1:8b`.
 
-
 ---
 
 ## L17 — Doodlopende knoppen en een palet dat niemand kon meten (2026-10-17)

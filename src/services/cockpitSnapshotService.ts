@@ -448,6 +448,57 @@ function buildLearningProgress(
   return { headline, milestones };
 }
 
+/**
+ * Our headline states counts — journaled trades, chat messages, feedback
+ * signals, the alignment percentage. The model is asked to keep them and
+ * given no reason to, so this checks: every number we wrote must still be
+ * there, or we keep our own sentence. Extra numbers of its own are allowed —
+ * a date or an ordinal is harmless; a changed count is not.
+ */
+function keepsOurNumbers(ours: string, theirs: string): boolean {
+  const mine = ours.match(/\d+/g) ?? [];
+  if (mine.length === 0) return true;
+  const yours = new Set(theirs.match(/\d+/g) ?? []);
+  return mine.every((n) => yours.has(n));
+}
+
+/**
+ * Take the model's prose, keep our arithmetic.
+ *
+ * The system prompt asks it to "keep all numbers and facts exactly as given",
+ * and then the whole milestone array it returned was used as-is — `progress`,
+ * `label` and `periodLabel` included. So every bar in a panel that states
+ * "AXE will not show fake progress" was a number gpt-4o-mini was free to
+ * change, and a dropped or invented milestone id would change the list
+ * itself. An instruction is not an enforcement.
+ *
+ * So: milestones are matched by id, only `narrative` is taken from the model,
+ * and a milestone it did not return keeps the narrative we computed. Anything
+ * it invented is discarded.
+ */
+function mergeMilestoneNarratives(
+  computed: unknown,
+  fromModel: unknown,
+): Array<Record<string, unknown>> {
+  const base = Array.isArray(computed) ? (computed as Array<Record<string, unknown>>) : [];
+  if (!Array.isArray(fromModel)) return base;
+
+  const narratives = new Map<string, string>();
+  for (const entry of fromModel) {
+    if (!entry || typeof entry !== "object") continue;
+    const row = entry as Record<string, unknown>;
+    const id = typeof row.id === "string" ? row.id : "";
+    const narrative = typeof row.narrative === "string" ? row.narrative.trim() : "";
+    if (id && narrative) narratives.set(id, narrative);
+  }
+
+  return base.map((milestone) => {
+    const id = typeof milestone.id === "string" ? milestone.id : "";
+    const narrative = id ? narratives.get(id) : undefined;
+    return narrative ? { ...milestone, narrative } : milestone;
+  });
+}
+
 async function maybeEnrichNarrativeWithGpt(
   data: CockpitSourceData,
   learningProgress: Record<string, unknown>,
@@ -484,10 +535,12 @@ async function maybeEnrichNarrativeWithGpt(
     if (!match) return learningProgress;
     const parsed = JSON.parse(match[0]) as { headline?: string; milestones?: unknown[] };
     if (!parsed.headline) return learningProgress;
+    const ourHeadline =
+      typeof learningProgress.headline === "string" ? learningProgress.headline : "";
     return {
       ...learningProgress,
-      headline: parsed.headline,
-      milestones: Array.isArray(parsed.milestones) ? parsed.milestones : learningProgress.milestones,
+      headline: keepsOurNumbers(ourHeadline, parsed.headline) ? parsed.headline : ourHeadline,
+      milestones: mergeMilestoneNarratives(learningProgress.milestones, parsed.milestones),
     };
   } catch {
     return learningProgress;

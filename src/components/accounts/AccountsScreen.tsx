@@ -630,6 +630,53 @@ function ConnectWizard({ defaultRegion }: { defaultRegion: string }) {
             </p>
           </div>
 
+          {/* Only once MetaApi has said it does not know this broker. Showing a
+              file picker to everyone makes the normal path look harder than it
+              is — most brokers need nothing here. */}
+          {err?.code === "mt5_server_not_found" && (
+            <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.05] px-3 py-3">
+              <p className="text-[11px] font-medium text-amber-100/95">
+                MetaApi does not know this broker yet
+              </p>
+              <p className="mt-1 text-[10.5px] leading-relaxed text-amber-100/75">
+                Normal for a new prop firm: MetaApi only knows the servers in its own registry. Give it
+                your broker&apos;s <span className="font-mono">servers.dat</span> once and it knows them
+                from then on — for you and for anyone else who connects the same firm.
+              </p>
+              <ol className="mt-2 list-decimal space-y-0.5 pl-4 text-[10.5px] leading-relaxed text-amber-100/70">
+                <li>Open the MT5 <strong>desktop</strong> terminal that can log into this account</li>
+                <li>File → Open Data Folder → <span className="font-mono">config</span></li>
+                <li>Upload <span className="font-mono">servers.dat</span> from that folder</li>
+              </ol>
+              <label className="mt-2.5 block text-[10px] uppercase tracking-wider text-amber-100/70">
+                servers.dat
+                <input
+                  type="file"
+                  name="serversDat"
+                  accept=".dat"
+                  className="mt-1 block w-full text-[11px] text-amber-100/90 file:mr-3 file:rounded-full file:border-0 file:bg-amber-400/15 file:px-3 file:py-1.5 file:text-[11px] file:text-amber-100"
+                />
+              </label>
+              <label className="mt-2 block text-[10px] uppercase tracking-wider text-amber-100/70">
+                Broker timezone
+                <input
+                  name="brokerTimezone"
+                  defaultValue="EET"
+                  placeholder="EET"
+                  className="mt-1 w-full rounded-xl border border-white/[0.08] bg-[#0c0d0e] px-3 py-2 text-sm text-white/90 outline-none focus:border-white/[0.15]"
+                />
+              </label>
+              <p className="mt-1 text-[10px] leading-relaxed text-amber-100/60">
+                Almost every MT5 broker is EET. Only change it if your firm says otherwise — it decides
+                how candle times line up.
+              </p>
+              <p className="mt-2 text-[10px] leading-relaxed text-amber-100/60">
+                The file only describes the broker&apos;s servers. It carries no credentials, and the
+                server name you typed above is still used.
+              </p>
+            </div>
+          )}
+
           <MetaApiComplianceCheckboxes variant={passwordType === "master" ? "master" : "default"} />
 
           {err && (

@@ -35,12 +35,16 @@ export type TradeHighlight = {
   axe_note: string | null;
   /** AXE alignment score 0-100 (null until scored) */
   alignment_score: number | null;
-  /** AXE full journal breakdown */
+  /**
+   * AXE full journal breakdown. A dimension is null when AXE had nothing to
+   * judge it against — no stated playbook, no stated rules — and the badge
+   * says so rather than drawing an empty bar out of 25.
+   */
   axe_journal: {
-    rule_adherence: number;
-    playbook_alignment: number;
-    risk_management: number;
-    emotional_discipline: number;
+    rule_adherence: number | null;
+    playbook_alignment: number | null;
+    risk_management: number | null;
+    emotional_discipline: number | null;
     explanation: string;
   } | null;
 };

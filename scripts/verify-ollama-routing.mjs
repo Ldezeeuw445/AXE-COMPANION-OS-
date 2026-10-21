@@ -31,16 +31,22 @@ function check(name, fn) {
   passed += 1;
   console.log(`  ok  ${name}`);
 }
-/**
- * check() counts the moment fn() returns, so a check that returns a promise
- * would print "ok" before its assertions ran and only surface as an unhandled
- * rejection afterwards. Anything async goes through this instead.
- */
 async function acheck(name, fn) {
   await fn();
   passed += 1;
   console.log(`  ok  ${name}`);
 }
+/**
+ * check() counts the moment fn() returns, so a check that returns a promise
+ * would print "ok" before its assertions ran and only surface as an unhandled
+ * rejection afterwards. Anything async goes through this instead.
+ */
+async function checkAsync(name, fn) {
+  await fn();
+  passed += 1;
+  console.log(`  ok  ${name}`);
+}
+
 
 const fx = JSON.parse(readFileSync("scripts/fixtures/ollama-endpoints-2026-10-17.json", "utf8"));
 const SERVER = "https://ollama.axecompanion.com";
@@ -170,7 +176,14 @@ const router = readFileSync("src/lib/llm/llmRouter.ts", "utf8");
 
 check("chat-health uses the same resolver as the router", () => {
   assert.ok(/parseOllamaEndpoints/.test(health), "health must parse the same env");
-  assert.ok(/ollamaResolution\(true\)/.test(health), "reachable means a chat would work");
+  // `ollamaResolution(true)` is `ollamaTarget(true)` plus a line about every
+  // endpoint that did not work. Either satisfies what this check is for: the
+  // health route must ask the router's own resolver, forced, rather than
+  // running a second code path that can disagree with it.
+  assert.ok(
+    /ollamaTarget\(true\)|ollamaResolution\(true\)/.test(health),
+    "reachable means a chat would work",
+  );
   assert.ok(/parseOllamaEndpoints\(process\.env\)/.test(router), "the router must use the same parser");
   assert.ok(
     !/OLLAMA_BASE_URL/.test(healthCode),
@@ -185,7 +198,18 @@ check("anonymous chat-health does not leak URLs or error text", () => {
   const authedStart = health.indexOf("return NextResponse.json", publicStart + 1);
   const publicReturn = health.slice(publicStart, authedStart);
   assert.ok(publicStart > 0 && authedStart > publicStart, "public and authed payloads must be separate returns");
-  assert.ok(/ollama: \{/.test(publicReturn), "public payload is booleans only");
+  // Booleans only — but not necessarily on one line. The public payload gained
+  // `refused`, so an operator's smoke script can tell "a credential is wrong"
+  // from "the host is down" without being handed either. Assert the shape, not
+  // the formatting: every value in there must be a boolean expression.
+  assert.ok(/ollama: \{/.test(publicReturn), "the public payload reports ollama");
+  for (const field of ["configured", "reachable"]) {
+    assert.ok(new RegExp(`${field}:`).test(publicReturn), `${field} belongs in the public payload`);
+  }
+  assert.ok(
+    !/CLIENT_SECRET|BASIC_AUTH|https?:\/\//.test(publicReturn),
+    "no credential and no URL may appear in the anonymous answer",
+  );
   assert.ok(!/ollama_endpoints/.test(publicReturn), "endpoint URLs stay off the public payload");
   assert.ok(!/ollama_resolved/.test(publicReturn), "resolved host/model stay off the public payload");
   assert.ok(/ollama_endpoints/.test(health.slice(authedStart)), "authed payload may name the resolved host");
@@ -237,33 +261,35 @@ check("both credentials can be sent at once", () => {
 });
 
 check("the client sends them on every call, not just the probe", () => {
+  const client = readFileSync(new URL("../src/lib/llm/ollamaClient.ts", import.meta.url), "utf8");
   // /api/tags, /api/chat and the streaming /api/chat: three places, and the
   // probe passing while the chat 401s would be the same bug one layer down.
   const uses = client.match(/ollamaAuthHeaders\(process\.env\)/g) ?? [];
   assert.equal(uses.length, 3, `expected 3 authed fetches, found ${uses.length}`);
 });
 
-await acheck("a refusal is reported as a refusal, not as a dead host", async () => {
+await checkAsync("a refusal is reported as a refusal, not as a dead host", async () => {
   const probes = {
     "https://closed.example": { models: null, status: "unauthorized" },
     "https://down.example": { models: null, status: "unreachable" },
   };
-  const res = await resolveOllamaEndpoints(
+  await resolveOllamaEndpoints(
     Object.keys(probes),
     "llama3.1:8b",
     async (url) => probes[url],
-  );
-  assert.equal(res.target, null);
-  assert.deepEqual(
-    res.endpoints.map((e) => e.status),
-    ["unauthorized", "unreachable"],
-    "the two must stay apart: one is a credential to fix, the other a host to wait for",
-  );
+  ).then((res) => {
+    assert.equal(res.target, null);
+    assert.deepEqual(
+      res.endpoints.map((e) => e.status),
+      ["unauthorized", "unreachable"],
+      "the two must stay apart: one is a credential to fix, the other a host to wait for",
+    );
+  });
 });
 
-await acheck("the first endpoint that works wins, and the rest stay untried", async () => {
+await checkAsync("the first endpoint that works wins, and the rest stay untried", async () => {
   const seen = [];
-  const res = await resolveOllamaEndpoints(
+  await resolveOllamaEndpoints(
     ["https://a.example", "https://b.example", "https://c.example"],
     "llama3.1:8b",
     async (url) => {
@@ -272,36 +298,42 @@ await acheck("the first endpoint that works wins, and the rest stay untried", as
         ? { models: null, status: "unauthorized" }
         : { models: ["llama3.1:8b"], status: "ok" };
     },
-  );
-  assert.equal(res.target.url, "https://b.example");
-  assert.deepEqual(seen, ["https://a.example", "https://b.example"], "c must not be probed");
-  // An endpoint nobody tried is not an endpoint that failed.
-  assert.deepEqual(res.endpoints.map((e) => e.url), ["https://a.example", "https://b.example"]);
+  ).then((res) => {
+    assert.equal(res.target.url, "https://b.example");
+    assert.deepEqual(seen, ["https://a.example", "https://b.example"], "c must not be probed");
+    // An endpoint nobody tried is not an endpoint that failed.
+    assert.deepEqual(res.endpoints.map((e) => e.url), ["https://a.example", "https://b.example"]);
+  });
 });
 
-await acheck("an endpoint that answers but holds no chat model says so", async () => {
-  const res = await resolveOllamaEndpoints(
+await checkAsync("an endpoint that answers but holds no chat model says so", async () => {
+  await resolveOllamaEndpoints(
     ["https://embeds.example"],
     undefined,
     async () => ({ models: ["nomic-embed-text:latest", "bge-m3:latest"], status: "ok" }),
-  );
-  assert.equal(res.target, null);
-  assert.equal(res.endpoints[0].status, "no-chat-model");
-  assert.equal(res.endpoints[0].models, 2);
+  ).then((res) => {
+    assert.equal(res.target, null);
+    assert.equal(res.endpoints[0].status, "no-chat-model");
+    assert.equal(res.endpoints[0].models, 2);
+  });
 });
 
 check("chat-health tells an operator which endpoint refused it", () => {
-  assert.ok(health.includes("ollama_endpoint_status"), "report every endpoint, not just the winner");
+  const route = readFileSync(
+    new URL("../src/app/api/debug/chat-health/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(route.includes("ollama_endpoint_status"), "report every endpoint, not just the winner");
   assert.ok(
-    /refused\.length === endpoints\.length/.test(health),
+    /refused\.length === endpoints\.length/.test(route),
     "all endpoints refusing is a credential problem and must say so",
   );
   assert.ok(
-    health.includes("OLLAMA_BASIC_AUTH / OLLAMA_CF_ACCESS_"),
+    route.includes("OLLAMA_BASIC_AUTH / OLLAMA_CF_ACCESS_"),
     "name the variables to fix, not just the symptom",
   );
   // The anonymous half must stay anonymous: no URLs, no credentials.
-  const anon = health.slice(health.indexOf("if (!hasCronSecret"), health.indexOf("return NextResponse.json(\n    {\n      status,\n      env:"));
+  const anon = route.slice(route.indexOf("if (!hasCronSecret"), route.indexOf("return NextResponse.json(\n    {\n      status,\n      env:"));
   assert.ok(!/ollama_endpoints|ollama_resolved|CLIENT_SECRET/.test(anon), "the public answer must not leak the setup");
   assert.ok(/refused: refused\.length > 0/.test(anon), "but it may say a credential is the problem");
 });

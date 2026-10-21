@@ -15,6 +15,9 @@ import "server-only";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { callLLM, type LLMRequest } from "@/services/llmClient";
 import { getTraderLearningArc } from "@/services/learningArcService";
+import type { ArcSession, SessionSplit } from "@/lib/axe/learningArc";
+import type { ChartSetupSummary } from "@/lib/chart/chartPrefs";
+import { getChartSetup } from "@/services/chartSetupService";
 import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
 import { getAxeEngineProfile } from "@/services/axeEngineService";
 import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
@@ -112,10 +115,31 @@ export interface TraderBriefingContext {
   name: string;
   timezone: string;
   preferredPairs: string[];
-  alignment: number; // 0-100
+  /**
+   * 0–100 from the latest cockpit snapshot, or null when AXE has never scored
+   * this trader. It used to default to 50, which the prompt then handed the
+   * model as "how well AXE has learned this trader's style" — so a trader AXE
+   * knew nothing about was told it was half way there.
+   */
+  alignment: number | null;
   periodPerformance: BriefPeriodPerformance;
-  topIndicators: string[];
-  preferredSession: "london" | "newyork" | "asia";
+  /**
+   * The indicators and SMC overlays this trader actually has switched on,
+   * read from their own saved chart setup.
+   *
+   * This line used to read `topIndicators: string[]` and always contain
+   * "RSI", "MACD", "MA" — a constant in `learningArcService`, handed to the
+   * model under "Key facts". It was removed when there was no way to know,
+   * and comes back now that chart preferences are synced server-side.
+   */
+  chartSetup: ChartSetupSummary;
+  /** Which session is open as the brief is written. Not a fact about the trader. */
+  liveSession: "london" | "newyork" | "asia";
+  /**
+   * Where this trader actually enters, counted from their own closed trades.
+   * Null until there are enough of them to mean anything.
+   */
+  sessionHistory: ArcSessionHistory | null;
   tier: "free" | "pro" | "founder" | "elite";
   weather: WeatherSnapshot | null;
   preferences: Record<string, unknown>;
@@ -142,15 +166,26 @@ function normalizeBriefHeader(line: string): string {
   return line.trim().replace(/:+$/, "").toUpperCase();
 }
 
-function alignmentSentence(alignment: number): string {
+/**
+ * `null` means AXE has never scored this trader. The old signature took a
+ * plain number, so a missing score arrived as 0 and the brief read "You're at
+ * 0% aligned — AXE knows your style well." — two false statements in one
+ * sentence. There is no percentage to lock in that case, so the locked
+ * sentence says what is missing instead.
+ */
+function alignmentSentence(alignment: number | null): string {
+  if (alignment === null) {
+    return "AXE has not scored your alignment yet — close a trade, or journal one with AXE, and it will.";
+  }
   return `You're at ${Math.max(0, Math.min(100, Math.round(alignment)))}% aligned — AXE knows your style well.`;
 }
 
 /**
  * Keep the alignment section deterministic and synced with Cockpit score.
- * This prevents model drift/hallucinations like "75%" when true score is 48%.
+ * This prevents model drift/hallucinations like "75%" when true score is 48%,
+ * and — when there is no score — stops it inventing one at all.
  */
-function syncBriefAlignmentSection(body: string, alignment: number): string {
+function syncBriefAlignmentSection(body: string, alignment: number | null): string {
   const source = body.replace(/\r\n/g, "\n").trim();
   if (!source) return source;
 
@@ -235,9 +270,10 @@ export async function buildBriefingContext(
   options?: { weekly?: boolean },
 ): Promise<TraderBriefingContext> {
   try {
-    const [profile, arc] = await Promise.all([
+    const [profile, arc, chartSetup] = await Promise.all([
       fetchProfileDirect(supabase, traderId),
       getTraderLearningArc(traderId, supabase),
+      getChartSetup(supabase, traderId),
     ]);
     const engineProfile = await getAxeEngineProfile(supabase, traderId, {
       source: "briefing_context",
@@ -255,9 +291,9 @@ export async function buildBriefingContext(
     );
     const hour = tzDate.getHours();
 
-    let session: "london" | "newyork" | "asia" = "asia";
-    if (hour >= 7 && hour < 16) session = "london";
-    if (hour >= 14 && hour < 23) session = "newyork";
+    let liveSession: "london" | "newyork" | "asia" = "asia";
+    if (hour >= 7 && hour < 16) liveSession = "london";
+    if (hour >= 14 && hour < 23) liveSession = "newyork";
 
     // Weather: on by default — use explicit location when set, else timezone city
     let weather: WeatherSnapshot | null = null;
@@ -275,11 +311,12 @@ export async function buildBriefingContext(
       traderId,
       name: profile.displayName,
       timezone: profile.timezone,
-      preferredPairs: arc.topPairs.slice(0, 3),
+      preferredPairs: arc.topPairs.slice(0, 3).map((pair) => pair.symbol),
       alignment: arc.alignmentScore,
       periodPerformance,
-      topIndicators: arc.topIndicators.slice(0, 3),
-      preferredSession: session,
+      chartSetup,
+      liveSession,
+      sessionHistory: toSessionHistory(arc.session),
       tier: profile.tier,
       weather,
       preferences: profile.preferences,
@@ -296,7 +333,7 @@ export async function buildBriefingContext(
       name: "Trader",
       timezone: "Europe/Amsterdam",
       preferredPairs: [],
-      alignment: 0,
+      alignment: null,
       periodPerformance: {
         since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
         trades: [],
@@ -305,8 +342,9 @@ export async function buildBriefingContext(
         breakeven: 0,
         netPnl: 0,
       },
-      topIndicators: [],
-      preferredSession: "london",
+      chartSetup: { indicators: [], smcTools: [], scopes: 0, symbols: [] },
+      liveSession: "london",
+      sessionHistory: null,
       tier: "free",
       weather: null,
       preferences: {},
@@ -317,6 +355,45 @@ export async function buildBriefingContext(
       },
     };
   }
+}
+
+export type ArcSessionHistory = {
+  session: ArcSession;
+  /** Entries in that window, and the total that could be placed. */
+  trades: number;
+  classified: number;
+};
+
+/**
+ * Only hand the model a session preference when the trader's own trades show
+ * one. `sessionSplit` already returns null below its minimum sample and on a
+ * tie, so this is the whole check.
+ */
+function toSessionHistory(split: SessionSplit): ArcSessionHistory | null {
+  if (!split.session) return null;
+  return {
+    session: split.session,
+    trades: split.counts[split.session],
+    classified: split.classified,
+  };
+}
+
+/**
+ * The trader's own chart setup, in one line for the prompt.
+ *
+ * Empty means they have never changed a default, which is worth saying as
+ * itself: the model should not name indicators, and it should not be
+ * encouraging about ones it invented. The old line said "standard set" here,
+ * which reads like a fact and is not one.
+ */
+function describeChartSetup(setup: ChartSetupSummary): string {
+  const parts: string[] = [];
+  if (setup.indicators.length > 0) parts.push(`indicators on: ${setup.indicators.join(", ")}`);
+  if (setup.smcTools.length > 0) parts.push(`overlays on: ${setup.smcTools.join(", ")}`);
+  if (parts.length === 0) {
+    return "nothing saved yet — they have not changed a chart default, so do not name any indicator as theirs";
+  }
+  return `${parts.join("; ")} (across ${setup.scopes} of their saved charts: ${setup.symbols.join(", ")})`;
 }
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
@@ -333,17 +410,23 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
   const hasPairs = context.preferredPairs.length > 0;
   const hasPeriodTrades = context.periodPerformance.trades.length > 0;
   const isWeekly = options?.weekly ?? false;
+  const hasAlignment = context.alignment !== null;
 
   let prompt = `You are AXE — a warm, sharp trading companion. Generate a ${isWeekly ? "personalized weekly outlook" : "personalized morning brief"} for ${context.name}.
 
 Key facts:
 - Their local time: ${timeStr} (${context.timezone})
 - Tier: ${context.tier}
-- Top pairs: ${hasPairs ? context.preferredPairs.join(", ") : "not yet identified — be encouraging"}
-- AXE alignment score: ${context.alignment}% (how well AXE has learned this trader's style)
+- Top pairs: ${hasPairs ? context.preferredPairs.join(", ") : "not yet identified — be encouraging, and do not name pairs as if they were theirs"}
+- AXE alignment score: ${hasAlignment ? `${context.alignment}% (how well AXE has learned this trader's style)` : "not scored yet — AXE has taken no snapshot of this trader. Do not state or imply a number."}
 - AXE engine confidence: ${context.engineConfidence.score}/100 (${context.engineConfidence.tier}, gate: ${context.engineConfidence.gateMode})
-- Session focus: ${context.preferredSession}
-- Key indicators they use: ${context.topIndicators.length > 0 ? context.topIndicators.join(", ") : "standard set"}`;
+- Session open as this is written: ${context.liveSession}
+- Session they actually enter in: ${
+    context.sessionHistory
+      ? `${context.sessionHistory.session} (${context.sessionHistory.trades} of ${context.sessionHistory.classified} closed trades opened in that window)`
+      : "not enough closed trades to say — do not guess one"
+  }
+- How they read a chart: ${describeChartSetup(context.chartSetup)}`;
 
   if (context.weather) {
     prompt += `\n- Weather in ${context.weather.location}: ${context.weather.summary}, ${context.weather.tempC}°C, wind ${context.weather.windKmh} km/h`;
@@ -359,8 +442,8 @@ Key facts:
 Write a weekly outlook that:
 1. Opens with a greeting that uses ${context.name}'s name and frames the week ahead
 2. Calls out 2-3 high-probability setups or macro themes for the week
-3. References their tier (${context.tier}) and alignment score in a motivating way
-4. Includes one tactical insight tied to their preferred session or recent winners
+3. References their tier (${context.tier})${hasAlignment ? " and alignment score" : " — AXE has no alignment score for them yet, so do not mention one"} in a motivating way
+4. Includes one tactical insight tied to ${context.sessionHistory ? `the ${context.sessionHistory.session} session they trade` : "their recent winners"}
 5. Ends with the single most important thing to watch this week
 
 Tone: warm, direct, confident. Like a senior trader who actually knows them. No generic textbook talk.
@@ -386,7 +469,11 @@ RECENT PERFORMANCE
 [Only include if closed History trades are listed above. Summarize wins AND losses. Use exact P/L currency amounts from the data — never percentages. Never mention Quotes or chart timeframes.]
 
 ALIGNMENT SCORE
-[Exactly ONE sentence, e.g. "You're at ${context.alignment}% aligned — AXE knows your style well." Do NOT repeat the words "Alignment score" in this sentence.]
+[${
+      hasAlignment
+        ? `Exactly ONE sentence, e.g. "You're at ${context.alignment}% aligned — AXE knows your style well."`
+        : "Exactly ONE sentence saying AXE has not scored alignment yet and what would produce one — a closed trade, or a trade journalled with AXE. Never state a percentage here."
+    } Do NOT repeat the words "Alignment score" in this sentence.]
 
 ACTION ITEMS
 [2-4 numbered tactical points for today — plain numbers like 1. 2. 3., no markdown]

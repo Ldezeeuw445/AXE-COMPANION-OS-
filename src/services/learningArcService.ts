@@ -1,61 +1,117 @@
 /**
  * Learning Arc Service
  *
- * Tracks trader behaviour over time and derives insights directly from
- * Supabase — no relative-URL fetch calls that would break in server components.
+ * What AXE has measured about how this trader actually trades, read straight
+ * from Supabase. Nothing here is a default dressed up as a measurement.
  *
- * Provides:
- * - Top pairs and timeframes from real broker trades / chart snapshots
- * - Win/loss breakdown from broker_trades
- * - Alignment score from the latest cockpit snapshot
+ * What changed and why: this service used to fill every gap with a plausible
+ * guess. A trader with no closed trades was told their top pairs were EURUSD,
+ * XAUUSD and GBPUSD, their top timeframes H1/H4/D1, their indicators RSI,
+ * MACD and MA, their preferred session London, and their alignment 50%. Those
+ * five values were constants in the source. They reached the trader twice
+ * over: once in the cockpit's "Learning arc · live" panel, and once inside the
+ * morning-brief prompt, under the heading "Key facts", where the model took
+ * them as true and wrote around them. The brief even had a branch for the
+ * honest case — `topPairs.length ? ... : "not yet identified — be
+ * encouraging"` — that could never run, because the fallback made the list
+ * never empty.
+ *
+ * Now: a thing that was not measured comes back empty or null, a failed read
+ * says so instead of looking like an empty account, and every count carries
+ * what it was counted from. The arithmetic lives in
+ * `@/lib/axe/learningArc` so the verify suite can exercise it without a
+ * database.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  arcHeadline,
+  normaliseAlignment,
+  normaliseSymbol,
+  rankTradedSymbols,
+  sessionSplit,
+  type ArcTrade,
+  type SessionSplit,
+  type SymbolTally,
+} from "@/lib/axe/learningArc";
+
+/** How far back closed trades are counted. */
+export const ARC_WINDOW_DAYS = 90;
 
 export interface TraderLearningArc {
   traderId: string;
-  topPairs: string[];
-  topTimeframes: string[];
-  topIndicators: string[];
-  preferredSession: "london" | "newyork" | "asia";
-  recentWins: Array<{ pair: string; timeframe: string; gain: number; timestamp: string }>;
-  recentLosses: Array<{ pair: string; timeframe: string; loss: number; timestamp: string }>;
-  alignmentScore: number; // 0-100: how well AXE matches trader
+  /** Window the trade counts were taken over, in days. */
+  windowDays: number;
+  /** Instruments ranked by closed trades in the window. Empty is a real answer. */
+  topPairs: SymbolTally[];
+  /** Closed trades in the window, the denominator behind every share above. */
+  tradeCount: number;
+  /**
+   * Symbols with a live chart snapshot right now. A watchlist, not a
+   * frequency: `chart_live_snapshots` holds one row per
+   * (account, symbol, timeframe) and updates it in place, so these cannot be
+   * ranked by use and are never folded into `topPairs`.
+   */
+  watchedSymbols: string[];
+  /** Timeframes those charts are open on. Presence, not usage. */
+  chartTimeframes: string[];
+  /** Entry-time session split, with the counts behind it. */
+  session: SessionSplit;
+  /** 0–100 from the latest cockpit snapshot, or null when none has been taken. */
+  alignmentScore: number | null;
+  /** One true sentence, or null when there is nothing true to say yet. */
+  headline: string | null;
+  /**
+   * A read failed. The caller must not render this as an empty account —
+   * "you have no trades" and "we could not reach your trades" are different
+   * sentences and only one of them is honest.
+   */
+  dataUnavailable: boolean;
   updatedAt: string;
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Main entry point — call with a Supabase client from the server component
-// ────────────────────────────────────────────────────────────────────────────
+function emptyArc(traderId: string, dataUnavailable: boolean): TraderLearningArc {
+  return {
+    traderId,
+    windowDays: ARC_WINDOW_DAYS,
+    topPairs: [],
+    tradeCount: 0,
+    watchedSymbols: [],
+    chartTimeframes: [],
+    session: { session: null, counts: { london: 0, newyork: 0, asia: 0 }, classified: 0, basis: "none" },
+    alignmentScore: null,
+    headline: null,
+    dataUnavailable,
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 export async function getTraderLearningArc(
   traderId: string,
   supabase?: SupabaseClient,
 ): Promise<TraderLearningArc> {
-  if (!supabase) {
-    console.warn("[LearningArc] No Supabase client provided — returning defaults");
-    return getDefaultArc(traderId);
-  }
+  // No client is not "no history" — it is "we did not look".
+  if (!supabase) return emptyArc(traderId, true);
 
   try {
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const windowStart = new Date(
+      Date.now() - ARC_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
 
-    // Fetch trades, chart snapshots and latest alignment score in parallel
-    const [tradesRes, chartSnapshotsRes, snapshotRes] = await Promise.all([
+    const [tradesRes, chartsRes, snapshotRes] = await Promise.all([
       supabase
         .from("broker_trades")
-        .select("symbol, pnl, close_time")
+        .select("symbol, pnl, open_time, close_time")
         .eq("user_id", traderId)
         .not("close_time", "is", null)
-        .gte("close_time", ninetyDaysAgo)
+        .gte("close_time", windowStart)
         .order("close_time", { ascending: false })
-        .limit(300),
+        .limit(1000),
 
       supabase
         .from("chart_live_snapshots")
-        .select("display_symbol, timeframe, updated_at")
+        .select("display_symbol, timeframe")
         .eq("user_id", traderId)
-        .order("updated_at", { ascending: false })
         .limit(200),
 
       supabase
@@ -67,218 +123,62 @@ export async function getTraderLearningArc(
         .maybeSingle(),
     ]);
 
-    const trades = (tradesRes.data ?? []) as Array<{
+    // A query error used to be swallowed by `?? []`, which turned an outage
+    // into "this trader has never traded". Say which it was.
+    const dataUnavailable = Boolean(tradesRes.error);
+    if (tradesRes.error) {
+      console.error("[LearningArc] broker_trades read failed:", tradesRes.error.message);
+    }
+    if (chartsRes.error) {
+      console.error("[LearningArc] chart_live_snapshots read failed:", chartsRes.error.message);
+    }
+
+    const rows = (tradesRes.data ?? []) as Array<{
       symbol: string | null;
       pnl: number | null;
+      open_time: string | null;
       close_time: string | null;
     }>;
+    const trades: ArcTrade[] = rows.map((r) => ({
+      symbol: r.symbol,
+      pnl: r.pnl,
+      openTime: r.open_time,
+      closeTime: r.close_time,
+    }));
 
-    const chartSnapshots = (chartSnapshotsRes.data ?? []) as Array<{
+    const charts = (chartsRes.data ?? []) as Array<{
       display_symbol: string | null;
       timeframe: string | null;
     }>;
 
-    const rawAlignment = snapshotRes.data?.alignment_score ?? null;
+    const topPairs = rankTradedSymbols(trades);
 
-    // ── Top pairs ──────────────────────────────────────────────────────────
-    const pairCounts: Record<string, number> = {};
-    for (const t of trades) {
-      // Strip broker suffixes (.r, .x, etc.)
-      const sym = (t.symbol ?? "").replace(/\.[a-z]+$/i, "").toUpperCase().trim();
-      if (sym) pairCounts[sym] = (pairCounts[sym] ?? 0) + 1;
+    const watched = new Set<string>();
+    const timeframes = new Set<string>();
+    for (const c of charts) {
+      const sym = normaliseSymbol(c.display_symbol);
+      if (sym) watched.add(sym);
+      const tf = String(c.timeframe ?? "").trim().toUpperCase();
+      if (tf) timeframes.add(tf);
     }
-    // Also count pairs from chart snapshots (user opened these)
-    for (const s of chartSnapshots) {
-      const sym = (s.display_symbol ?? "").replace(/\.[a-z]+$/i, "").toUpperCase().trim();
-      if (sym) pairCounts[sym] = (pairCounts[sym] ?? 0) + 0.5; // half-weight vs trades
-    }
-    const topPairs = Object.entries(pairCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([sym]) => sym);
 
-    // ── Top timeframes ─────────────────────────────────────────────────────
-    const tfCounts: Record<string, number> = {};
-    for (const s of chartSnapshots) {
-      const tf = (s.timeframe ?? "").toUpperCase().trim();
-      if (tf) tfCounts[tf] = (tfCounts[tf] ?? 0) + 1;
-    }
-    const topTimeframes = Object.entries(tfCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([tf]) => tf);
-
-    // ── Preferred session (heuristic from trade close times) ──────────────
-    let londonCount = 0;
-    let nyCount = 0;
-    let asiaCount = 0;
-    for (const t of trades) {
-      if (!t.close_time) continue;
-      const hour = new Date(t.close_time).getUTCHours();
-      if (hour >= 7 && hour < 12) londonCount++;
-      else if (hour >= 12 && hour < 21) nyCount++;
-      else asiaCount++;
-    }
-    const preferredSession: "london" | "newyork" | "asia" =
-      londonCount >= nyCount && londonCount >= asiaCount
-        ? "london"
-        : nyCount >= asiaCount
-          ? "newyork"
-          : "asia";
-
-    // ── Wins & losses ──────────────────────────────────────────────────────
-    const defaultTf = topTimeframes[0] ?? "H1";
-
-    const recentWins = trades
-      .filter((t) => Number(t.pnl ?? 0) > 0)
-      .slice(0, 5)
-      .map((t) => ({
-        pair: (t.symbol ?? "").replace(/\.[a-z]+$/i, "").toUpperCase(),
-        timeframe: defaultTf,
-        gain: Number(t.pnl),
-        timestamp: t.close_time ?? new Date().toISOString(),
-      }));
-
-    const recentLosses = trades
-      .filter((t) => Number(t.pnl ?? 0) < 0)
-      .slice(0, 5)
-      .map((t) => ({
-        pair: (t.symbol ?? "").replace(/\.[a-z]+$/i, "").toUpperCase(),
-        timeframe: defaultTf,
-        loss: Math.abs(Number(t.pnl)),
-        timestamp: t.close_time ?? new Date().toISOString(),
-      }));
-
-    // ── Alignment score ────────────────────────────────────────────────────
-    // snapshot stores score as 0-1 float or 0-100 integer — normalise to 0-100
-    let alignmentScore = 50;
-    if (rawAlignment !== null) {
-      const n = Number(rawAlignment);
-      alignmentScore = Number.isFinite(n)
-        ? n > 1
-          ? Math.round(n)
-          : Math.round(n * 100)
-        : 50;
-    }
+    const session = sessionSplit(trades);
 
     return {
       traderId,
-      topPairs: topPairs.length ? topPairs : ["EURUSD", "XAUUSD", "GBPUSD"],
-      topTimeframes: topTimeframes.length ? topTimeframes : ["H1", "H4", "D1"],
-      topIndicators: ["RSI", "MACD", "MA"],
-      preferredSession,
-      recentWins,
-      recentLosses,
-      alignmentScore,
+      windowDays: ARC_WINDOW_DAYS,
+      topPairs,
+      tradeCount: trades.length,
+      watchedSymbols: [...watched].sort(),
+      chartTimeframes: [...timeframes].sort(),
+      session,
+      alignmentScore: normaliseAlignment(snapshotRes.data?.alignment_score),
+      headline: arcHeadline(topPairs[0] ?? null, trades.length, watched.size),
+      dataUnavailable,
       updatedAt: new Date().toISOString(),
     };
   } catch (error) {
     console.error("[LearningArc] Error querying Supabase:", error);
-    return getDefaultArc(traderId);
-  }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Default arc — used when Supabase is unavailable or returns no data
-// ────────────────────────────────────────────────────────────────────────────
-
-function getDefaultArc(traderId: string): TraderLearningArc {
-  return {
-    traderId,
-    topPairs: ["EURUSD", "XAUUSD", "GBPUSD"],
-    topTimeframes: ["H1", "H4", "D1"],
-    topIndicators: ["RSI", "MACD", "MA"],
-    preferredSession: "london",
-    recentWins: [],
-    recentLosses: [],
-    alignmentScore: 50,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Event recording — used when a trade closes or a suggestion is acted on
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Record a trade event via API (client-side only — uses relative URL).
- * Do NOT call this from server components.
- */
-export async function recordTradeEvent(
-  traderId: string,
-  event: {
-    pair: string;
-    timeframe: string;
-    outcome: "win" | "loss" | "breakeven";
-    gain?: number;
-    loss?: number;
-    indicators?: string[];
-    entryTime?: string;
-    exitTime?: string;
-  },
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const response = await fetch("/api/profile/trade-event", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: traderId,
-        ...event,
-        timestamp: new Date().toISOString(),
-      }),
-    });
-
-    if (!response.ok) {
-      const err = (await response.json()) as { error?: string };
-      return { success: false, error: err.error };
-    }
-
-    return { success: true };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[LearningArc] Failed to record event:", errorMessage);
-    return { success: false, error: errorMessage };
-  }
-}
-
-/**
- * Update alignment score based on AXE suggestion acceptance.
- * Do NOT call this from server components.
- */
-export async function updateAlignmentScore(
-  traderId: string,
-  action: "accepted" | "rejected" | "followed",
-  suggestionId: string,
-): Promise<{ newScore: number; change: number }> {
-  try {
-    const response = await fetch("/api/profile/alignment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: traderId, action, suggestionId }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to update alignment: ${response.status}`);
-    }
-
-    return await response.json() as { newScore: number; change: number };
-  } catch (error) {
-    console.error("[LearningArc] Failed to update alignment:", error);
-    return { newScore: 50, change: 0 };
-  }
-}
-
-/**
- * Get trader's preferred session (client-side).
- * Do NOT call this from server components.
- */
-export async function getTraderSessionPreference(
-  traderId: string,
-): Promise<"london" | "newyork" | "asia"> {
-  try {
-    const arc = await getTraderLearningArc(traderId);
-    return arc.preferredSession;
-  } catch {
-    return "london";
+    return emptyArc(traderId, true);
   }
 }

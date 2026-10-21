@@ -204,6 +204,128 @@ export async function provisioningRedeployAccount(accountId: string): Promise<Me
   return provisioningPostAccountOperation(accountId, "redeploy");
 }
 
+/* ── Provisioning profiles ────────────────────────────────────────────────
+   MetaApi only knows the broker servers in its own registry, which comes from
+   MetaQuotes' public list. A prop firm on a fresh white-label MT5 server is not
+   in it, and every attempt comes back `E_SRV_NOT_FOUND` — measured 2026-10-19
+   against a real Upcomers $200,000 funded account.
+
+   The way out is the one MetaApi's own error message names: a provisioning
+   profile carrying that broker's `servers.dat`, the file the MT5 terminal keeps
+   in its config folder. Create the profile, upload the file, then create the
+   account with `provisioningProfileId`. After that the broker is known and
+   everything downstream — quotes, candles, the account's own symbol list —
+   works like any other.
+
+   Without this, AXE can only connect brokers MetaApi happens to already know.
+   That is not "every MT5 account", which is the whole promise.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Almost every MT5 broker runs on EET (UTC+2, UTC+3 in summer) — it is what
+ * MetaQuotes ships and what MetaApi's own example uses. Wrong only for the
+ * handful that do not, and then it is a field the trader can change.
+ */
+export const DEFAULT_BROKER_TIMEZONE = "EET";
+
+export type CreateProvisioningProfileInput = {
+  name: string;
+  brokerTimezone?: string;
+  brokerDSTSwitchTimezone?: string;
+};
+
+export async function provisioningCreateProfile(
+  input: CreateProvisioningProfileInput,
+): Promise<{ id: string }> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const tz = (input.brokerTimezone || DEFAULT_BROKER_TIMEZONE).trim();
+  const res = await fetchWithTimeout(`${base}/users/current/provisioning-profiles`, {
+    method: "POST",
+    headers: authHeadersJson(),
+    body: JSON.stringify({
+      name: input.name,
+      version: 5,
+      brokerTimezone: tz,
+      brokerDSTSwitchTimezone: (input.brokerDSTSwitchTimezone || tz).trim(),
+    }),
+    timeoutMs: 45_000,
+  });
+  const body = await readJson(res);
+  if (res.status !== 201 && res.status !== 200) {
+    throw new MetaApiRequestError(
+      classifyHttpStatus(res.status),
+      `Create provisioning profile ${res.status}`,
+      res.status,
+      body,
+    );
+  }
+  const id = (body as { id?: string })?.id;
+  if (!id) throw new MetaApiRequestError("unknown", "Missing profile id in response", res.status, body);
+  return { id };
+}
+
+/** List existing profiles so the same broker is not uploaded twice. */
+export async function provisioningListProfiles(): Promise<
+  Array<{ _id?: string; id?: string; name?: string; status?: string }>
+> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const res = await fetchWithTimeout(`${base}/users/current/provisioning-profiles?version=5`, {
+    method: "GET",
+    headers: authHeadersGet(),
+    timeoutMs: 30_000,
+  });
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new MetaApiRequestError(
+      classifyHttpStatus(res.status),
+      `List provisioning profiles ${res.status}`,
+      res.status,
+      body,
+    );
+  }
+  return Array.isArray(body) ? body : [];
+}
+
+/**
+ * Upload `servers.dat` to a profile.
+ *
+ * multipart/form-data with the file under the field name `file`, per MetaApi's
+ * upload endpoint. The Content-Type header is deliberately not set: `fetch`
+ * writes it from the FormData, boundary included, and setting it by hand is how
+ * a multipart upload ends up unparseable at the other end.
+ */
+export async function provisioningUploadProfileFile(
+  profileId: string,
+  fileName: "servers.dat",
+  bytes: ArrayBuffer | Uint8Array,
+): Promise<void> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const token = getMetaApiToken();
+  if (!token) throw new MetaApiRequestError("provider_not_configured", "Missing MetaApi token", 0, null);
+
+  const form = new FormData();
+  form.append("file", new Blob([bytes as BlobPart]), fileName);
+
+  const res = await fetchWithTimeout(
+    `${base}/users/current/provisioning-profiles/${encodeURIComponent(profileId)}/${fileName}`,
+    {
+      method: "PUT",
+      headers: { Accept: "application/json", "auth-token": token },
+      body: form,
+      timeoutMs: 60_000,
+    },
+  );
+  if (!res.ok) {
+    const body = await readJson(res);
+    throw new MetaApiRequestError(
+      classifyHttpStatus(res.status),
+      `Upload ${fileName} ${res.status}`,
+      res.status,
+      body,
+    );
+  }
+}
+
 export type CreateMt5CloudAccountInput = {
   login: string;
   password: string;
@@ -212,6 +334,12 @@ export type CreateMt5CloudAccountInput = {
   region: string;
   /** true = investor (read-only) password; false = master password */
   manualTrades: boolean;
+  /**
+   * Set when MetaApi does not know this broker's server on its own. `server`
+   * stays required alongside it — the profile says which broker, the server
+   * string still says which of that broker's servers.
+   */
+  provisioningProfileId?: string | null;
 };
 
 export async function provisioningCreateMt5CloudAccount(
@@ -229,6 +357,9 @@ export async function provisioningCreateMt5CloudAccount(
     manualTrades: input.manualTrades,
     magic: 0,
     region: input.region,
+    ...(input.provisioningProfileId
+      ? { provisioningProfileId: input.provisioningProfileId }
+      : {}),
   };
 
   const maxPasses = 40;

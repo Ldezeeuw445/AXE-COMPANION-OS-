@@ -6,10 +6,10 @@ const IMPATIENT_LABELS = new Set(["impatient", "emotional", "poor"]);
 const POSITIVE_LABELS = new Set(["perfect", "good", "ok"]);
 
 type JournalBreakdown = {
-  rule_adherence?: number;
-  playbook_alignment?: number;
-  risk_management?: number;
-  emotional_discipline?: number;
+  rule_adherence?: number | null;
+  playbook_alignment?: number | null;
+  risk_management?: number | null;
+  emotional_discipline?: number | null;
 };
 
 function clampScore(n: number): number {
@@ -17,10 +17,26 @@ function clampScore(n: number): number {
   return Math.round(Math.min(100, Math.max(0, n)));
 }
 
+/**
+ * A journal dimension is 0–25; the pillars are 0–100, hence ×4.
+ *
+ * The null guard matters more than it looks: `Number(null)` is 0, so without
+ * it a dimension AXE never judged would have come through as a measured zero
+ * and dragged the pillar down — the opposite of the old bug, and just as
+ * wrong. Only an actual number counts.
+ */
 function dimToScore(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return clampScore(n * 4);
+}
+
+/** "2.1h", "35m" — a median hold of 0.58 hours tells a trader nothing. */
+function formatHold(hours: number): string {
+  if (hours >= 24) return `${(hours / 24).toFixed(1)}d`;
+  if (hours >= 1) return `${hours.toFixed(1)}h`;
+  return `${Math.round(hours * 60)}m`;
 }
 
 function avg(nums: number[]): number | null {
@@ -167,14 +183,21 @@ export async function computeTraderScores(
     patienceFromLabels = clampScore(positiveRate * 70 + (1 - impatienceRate) * 30);
   }
 
-  let patienceFromFrequency: number | null = null;
-  if (trades.length >= 3) {
-    if (tradesPerWeek <= 3) patienceFromFrequency = 85;
-    else if (tradesPerWeek <= 7) patienceFromFrequency = 70;
-    else if (tradesPerWeek <= 14) patienceFromFrequency = 50;
-    else patienceFromFrequency = 30;
-  }
-
+  /*
+   * Trade frequency and hold time used to set this score directly:
+   * <=3 trades a week scored 85, >14 scored 30, a median hold under 15
+   * minutes scored 25. Those are thresholds on a trading style, not
+   * measurements of patience — they called every scalper impatient and every
+   * swing trader disciplined, whatever either of them actually did. A funded
+   * scalper hitting 20 clean trades a week would have been marked down for
+   * trading their own strategy well.
+   *
+   * So patience now comes only from AXE's own read of each trade: the
+   * emotional-discipline dimension and the Impatient / Emotional / Poor
+   * labels, which are judgments made with that trade's context in front of
+   * them. Frequency and median hold are still shown — in the hint, as facts
+   * the trader can check — they just no longer stand in for a verdict.
+   */
   const holdHours: number[] = [];
   for (const t of trades) {
     if (!t.open_time || !t.close_time) continue;
@@ -184,20 +207,13 @@ export async function computeTraderScores(
   const medianHold = holdHours.length
     ? holdHours.sort((a, b) => a - b)[Math.floor(holdHours.length / 2)]
     : null;
-  let patienceFromHold: number | null = null;
-  if (medianHold != null) {
-    if (medianHold >= 4) patienceFromHold = 80;
-    else if (medianHold >= 1) patienceFromHold = 65;
-    else if (medianHold >= 0.25) patienceFromHold = 45;
-    else patienceFromHold = 25;
-  }
 
-  const patienceParts = [patienceFromLabels, patienceFromFrequency, patienceFromHold].filter(
+  const disciplineFromJournal = disciplineDims.length ? avg(disciplineDims) : null;
+  const patienceParts = [patienceFromLabels, disciplineFromJournal].filter(
     (n): n is number => n != null,
   );
   const patienceScore = patienceParts.length ? clampScore(avg(patienceParts)!) : null;
 
-  const tradeCount = labels.length + signals.filter((s) => s.signal_type === "trade_alignment").length;
   const sampleSize = Math.max(labels.length, alignmentScores.length, trades.length);
 
   const build = (
@@ -243,7 +259,14 @@ export async function computeTraderScores(
         "Patience",
         patienceScore,
         patienceParts.length
-          ? `${trades.length} closes · ${labeledCount} labeled · ~${tradesPerWeek.toFixed(1)}/wk`
+          ? [
+              `${labeledCount} labelled by AXE`,
+              `${trades.length} closes`,
+              `~${tradesPerWeek.toFixed(1)}/wk`,
+              medianHold != null ? `median hold ${formatHold(medianHold)}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
           : "Patience needs a few closed trades with AXE labels.",
       ),
     ];

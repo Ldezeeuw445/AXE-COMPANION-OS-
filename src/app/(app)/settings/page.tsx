@@ -28,6 +28,7 @@ import { getSquawkStationIdsServerState } from "@/lib/squawk/serverPrefs";
 import { FavoriteWorkflowsPicker } from "@/components/settings/FavoriteWorkflowsPicker";
 import { TradeExecutionPrefsPanel } from "@/components/settings/TradeExecutionPrefsPanel";
 import { AutonomyPanel } from "@/components/settings/AutonomyPanel";
+import { AccountRulesPanel } from "@/components/settings/AccountRulesPanel";
 import { getFavoriteWorkflowIdsServerState } from "@/lib/workflows/serverFavorites";
 import { getTradeExecutionPrefsServerState } from "@/lib/trading/serverTradePrefs";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -250,6 +251,12 @@ export default async function SettingsPage() {
           settings because that is where the auto-trade switch lives. */}
       <div className="mb-4">
         <AutonomyPanel initial={tradeExecutionPrefs.autonomy} />
+      </div>
+
+      {/* The other half of the same question: what AXE may do, and what this
+          account allows. The guard takes the tighter of the two. */}
+      <div className="mb-4">
+        <AccountRulesPanel />
       </div>
 
       {/* Trading OS upcoming terminal — short, premium, no MT5 token chatter */}

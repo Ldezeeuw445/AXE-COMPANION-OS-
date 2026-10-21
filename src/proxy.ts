@@ -36,6 +36,11 @@ const PROTECTED_PREFIXES = [
  * different route and is not.
  */
 function isProtectedPath(pathname: string): boolean {
+  // A prefix has to end at a path boundary. A bare `startsWith` meant
+  // `/market` also matched `/marketing/...`, which is why the dev screenshot
+  // routes needed an explicit bypass above — and why `npm run capture:marketing`
+  // had been quietly photographing the login page. The bypass stays (it is
+  // cheaper than an auth round-trip), but the matcher is no longer wrong.
   return PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
@@ -115,11 +120,12 @@ export async function proxy(request: NextRequest) {
       // Measured 2026-10-17: this line was `user = u`. The check that was
       // supposed to hold it — verify-no-anonymous-auth — was reading
       // src/lib/supabase/middleware.ts, a file nothing has imported since the
-      // move to proxy.ts. It asserted against dead code and passed, while the
-      // live middleware let an anonymous JWT straight through to every
-      // protected page. The app's own call to mint one is gone, but the
-      // Supabase project switch is a dashboard setting this code cannot flip,
-      // so a token minted elsewhere has to die here too.
+      // move to proxy.ts (Next renamed middleware to proxy). It asserted
+      // against dead code and passed, while the live middleware let an
+      // anonymous JWT straight through to every protected page. The app's own
+      // call to mint one is gone, but the Supabase project switch is a
+      // dashboard setting this code cannot flip, so a token minted elsewhere
+      // has to die here too.
       user = isAnonymousUser(u) ? null : u;
     } catch (error) {
       // If auth check times out or fails, let the request through

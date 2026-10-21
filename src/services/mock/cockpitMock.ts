@@ -175,11 +175,13 @@ export const mockCockpitDashboard: CockpitDashboard = {
   },
   learningArc: {
     headline: "Mock arc: invalidation language and NY size discipline are your strongest teaching signals this month.",
+    // Instruments with a trade count, matching what the real mapper produces.
     weeklyFocus: [
-      { label: "Reasoning fixes", count: 14 },
-      { label: "Trade alignment", count: 9 },
-      { label: "Chat response quality", count: 6 },
+      { label: "XAUUSD", count: 14 },
+      { label: "EURUSD", count: 9 },
+      { label: "GBPJPY", count: 6 },
     ],
+    windowDays: 90,
     messageFeedback: { up: 11, down: 3 },
     weeklyFeedbackTrend: [
       { weekLabel: "3 Mar", up: 2, down: 1 },

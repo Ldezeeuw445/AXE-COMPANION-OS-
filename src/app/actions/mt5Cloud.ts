@@ -3,6 +3,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import {
+  checkServersDat,
+  findProfileForServer,
+  profileNameForServer,
+} from "@/lib/mt5/brokerProfile";
 import type {
   Mt5DoctorOverallStatus,
   Mt5DoctorReport,
@@ -22,6 +27,10 @@ import {
   clientGetAccountInformation,
   clientGetHistoryDealsRange,
   clientListSymbols,
+  provisioningCreateProfile,
+  provisioningListProfiles,
+  provisioningUploadProfileFile,
+  DEFAULT_BROKER_TIMEZONE,
   clientGetPositions,
   clientGetSymbolPrice,
   defaultRegionForProvisioning,
@@ -303,6 +312,43 @@ export async function createCloudMt5ConnectionAction(
     ? (rawRegion as MetaApiRegion)
     : (defaultRegionForProvisioning() as MetaApiRegion);
 
+  /* ── Does MetaApi know this broker at all? ──────────────────────────────
+     It only knows the servers in its own registry, so a prop firm on a fresh
+     white-label MT5 server fails with E_SRV_NOT_FOUND however correct the
+     credentials are. When the trader hands us the broker's `servers.dat` we
+     register the broker first and point the account at that profile.
+
+     Reused by name, so connecting a second account on the same server does not
+     upload the same file again. */
+  let provisioningProfileId: string | null = null;
+  const serversDat = formData.get("serversDat");
+  const brokerTimezone =
+    String(formData.get("brokerTimezone") ?? "").trim() || DEFAULT_BROKER_TIMEZONE;
+
+  if (serversDat instanceof File && serversDat.size > 0) {
+    const bytes = new Uint8Array(await serversDat.arrayBuffer());
+    const sane = checkServersDat(serversDat.name, bytes);
+    if (!sane.ok) return { ok: false, code: "validation", message: sane.reason };
+    try {
+      const existingProfiles = await withActionBudget(
+        "list_provisioning_profiles",
+        provisioningListProfiles(),
+        TEST_PROVISIONING_TIMEOUT_MS,
+      );
+      provisioningProfileId = findProfileForServer(existingProfiles, mt5Server);
+      if (!provisioningProfileId) {
+        const created = await provisioningCreateProfile({
+          name: profileNameForServer(mt5Server),
+          brokerTimezone,
+        });
+        provisioningProfileId = created.id;
+      }
+      await provisioningUploadProfileFile(provisioningProfileId, "servers.dat", bytes);
+    } catch (e) {
+      return mapMetaError(e);
+    }
+  }
+
   let metaId: string;
   let existingMetaAccount: MetaApiTradingAccount | null = null;
   try {
@@ -349,6 +395,14 @@ export async function createCloudMt5ConnectionAction(
     passwordType,
     metaApiComplianceConfirmed: true,
     createdVia: "axe_companion_cloud_mt5",
+    // Kept so a reconnect on this broker reuses the profile instead of
+    // asking the trader for servers.dat a second time.
+    ...(provisioningProfileId ? { provisioningProfileId } : {}),
+    // Always stored, not only alongside a provisioning profile. The chart
+    // reads this to know where the broker's trading day starts — session
+    // VWAP, the session open line and Previous Day High / Low / EQ all hang
+    // off it — and that is just as true for a broker MetaApi already knew.
+    brokerTimezone,
     metaapiAccountReused: existingMetaAccount != null,
     provisionedReady: probe.ready,
     provisioningProbedAt: new Date().toISOString(),
