@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, type PointerEvent } from "react";
+import type { PointerEvent } from "react";
 import { LANDING_REVEAL_CARDS } from "@/lib/marketing/landingCopy";
 
 function setCardPoint(event: PointerEvent<HTMLElement>) {
@@ -11,8 +11,6 @@ function setCardPoint(event: PointerEvent<HTMLElement>) {
 }
 
 export function LandingRevealCards() {
-  const onMove = useCallback(setCardPoint, []);
-
   return (
     <section className="axe-launch-reveal relative px-5 py-8 md:py-12">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 md:grid-cols-3 md:items-start">
@@ -20,7 +18,7 @@ export function LandingRevealCards() {
           <article
             key={card.title}
             className={`axe-launch-reveal-card axe-launch-reveal-card--${index + 1}`}
-            onPointerMove={onMove}
+            onPointerMove={setCardPoint}
           >
             <div className="axe-launch-reveal-default">
               <div className="axe-launch-reveal-default-inner">

@@ -218,9 +218,10 @@ export type LandingIntelFeed = {
  * Count matches this repo: 13 `IntelProviderStatus` ids in `intelClient.ts`
  * plus Macro, Calendar, News, Correlation, Conviction and Déjà Vu.
  *
- * Unusual Whales is never named here. Dark pool, options flow and market tide
- * exist as tiles; the FAQ is the only place that says we have not bought the
- * paid source. No fabricated notionals ($1.71B, SPY 1.2M).
+ * The paid options/dark-pool vendor is never named here. Dark pool, options
+ * flow and market tide exist as tiles; the FAQ is the only place that says we
+ * have not bought that source. Do not paste sample tide or dark-pool notionals
+ * into copy.
  */
 export const LANDING_INTEL_FEEDS: ReadonlyArray<LandingIntelFeed> = [
   {

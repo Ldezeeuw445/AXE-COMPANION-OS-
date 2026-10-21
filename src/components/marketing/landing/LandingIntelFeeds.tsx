@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, type PointerEvent } from "react";
+import type { PointerEvent } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -60,12 +60,11 @@ function setCardPoint(event: PointerEvent<HTMLElement>) {
 
 function FeedCard({ feed }: { feed: LandingIntelFeed }) {
   const Icon = ICONS[feed.icon];
-  const onMove = useCallback(setCardPoint, []);
 
   return (
     <article
       className={`axe-launch-feed-card ${feed.span === 2 ? "axe-launch-feed-card--feature" : ""}`}
-      onPointerMove={onMove}
+      onPointerMove={setCardPoint}
     >
       <span className="axe-launch-feed-pill" aria-hidden />
       <div className="axe-launch-feed-icon">

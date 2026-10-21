@@ -124,7 +124,12 @@ check("the intel feed headline uses the real count from this repo", () => {
   // 13 intelClient providers + Macro, Calendar, News, Correlation, Conviction, Déjà Vu
   assert.equal(LANDING_INTEL_FEED_COUNT, 13 + 6);
   assert.equal(LANDING_INTEL_FEEDS.length, LANDING_INTEL_FEED_COUNT);
-  assert.match(landing, new RegExp(`${LANDING_INTEL_FEED_COUNT} live AXE feeds`));
+  assert.match(landing, /live AXE feeds/);
+  assert.match(
+    read("src/components/marketing/landing/LandingIntelFeeds.tsx"),
+    /\{LANDING_INTEL_FEED_COUNT\}/,
+    "the headline must print the counted constant, not a retyped 19",
+  );
   assert.equal(LANDING_INTEL_FEEDS.filter((feed) => feed.span === 2).length, 3);
   assert.ok(!/\$1\.71B/.test(landing), "do not ship fabricated tide notionals");
   assert.ok(!/SPY 1\.2M/.test(landing), "do not ship fabricated dark-pool prints");
