@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getActiveMetaApiCloudAccount } from "@/lib/mt5/activeCloudAccount";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import { clientGetPositions, clientGetOrders, clientGetAccountInformation } from "@/lib/mt5/metaApiClient";
+import { asFiniteNumber } from "@/lib/journal/tradePnl";
 
 export type OpenPositionRow = {
   id: string;
@@ -41,12 +42,52 @@ export type PositionsPageData = {
   positions: OpenPositionRow[];
   pendingOrders: PendingOrderRow[];
   accountSummary: AccountSummary | null;
+  /** ISO last sync for the figures bar. Null when the account never synced. */
+  lastSyncAt: string | null;
+  /** True when balance/equity came from the last stored snapshot, not a live fetch. */
+  figuresFromCache: boolean;
   providerStatus: string | null;
   error: string | null;
   hint: string | null;
   /** Supabase user_broker_accounts.id — needed by client for close/modify calls. */
   brokerAccountId: string | null;
 };
+
+function emptyPositions(partial: Partial<PositionsPageData> = {}): PositionsPageData {
+  return {
+    positions: [],
+    pendingOrders: [],
+    accountSummary: null,
+    lastSyncAt: null,
+    figuresFromCache: false,
+    providerStatus: null,
+    error: null,
+    hint: null,
+    brokerAccountId: null,
+    ...partial,
+  };
+}
+
+function accountSummaryFromMetadata(metadata: Record<string, unknown>): AccountSummary | null {
+  const raw = metadata.accountSummary;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const summary = raw as Record<string, unknown>;
+  const num = (value: unknown): number | null => {
+    if (value == null) return null;
+    const n = asFiniteNumber(value, Number.NaN);
+    return Number.isFinite(n) ? n : null;
+  };
+  const mapped: AccountSummary = {
+    balance: num(summary.balance),
+    equity: num(summary.equity),
+    margin: num(summary.margin),
+    freeMargin: num(summary.freeMargin),
+    marginLevel: num(summary.marginLevel),
+    currency: typeof summary.currency === "string" ? summary.currency.trim().toUpperCase() : null,
+  };
+  if (mapped.balance == null && mapped.equity == null) return null;
+  return mapped;
+}
 
 function mapSide(t: string | undefined): string {
   const u = (t ?? "").toUpperCase();
@@ -69,39 +110,30 @@ function mapOrderType(t: string | undefined): string {
 export async function loadPositionsPageData(): Promise<PositionsPageData> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
-    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Supabase is not configured.", hint: null, brokerAccountId: null };
+    return emptyPositions({ error: "Supabase is not configured." });
   }
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { positions: [], pendingOrders: [], accountSummary: null, providerStatus: null, error: "Not signed in.", hint: null, brokerAccountId: null };
+    return emptyPositions({ error: "Not signed in." });
   }
 
   if (!getMetaApiToken()) {
-    return {
-      positions: [],
-      pendingOrders: [],
-      accountSummary: null,
+    return emptyPositions({
       providerStatus: "provider_not_configured",
-      error: null,
       hint: "AXE MT5 Cloud is not configured on the server yet, so live positions cannot load.",
-      brokerAccountId: null,
-    };
+    });
   }
 
   const cloud = await getActiveMetaApiCloudAccount(supabase, user.id);
   if (!cloud) {
-    return {
-      positions: [],
-      pendingOrders: [],
-      accountSummary: null,
-      providerStatus: null,
-      error: null,
+    return emptyPositions({
       hint: "Set an active AXE MT5 Cloud account on Accounts, then Sync. Positions load from your MT5 terminal through AXE.",
-      brokerAccountId: null,
-    };
+    });
   }
+
+  const cachedSummary = accountSummaryFromMetadata(cloud.metadata);
 
   try {
     // Fetch account info, positions, and pending orders in parallel
@@ -111,7 +143,7 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       clientGetOrders(cloud.metaApiAccountId, false, cloud.metaApiRegion).catch(() => [] as Record<string, unknown>[]) as Promise<Record<string, unknown>[]>,
     ]);
 
-    const accountSummary: AccountSummary = {
+    const liveSummary: AccountSummary = {
       balance: rawAccountInfo.balance != null ? Number(rawAccountInfo.balance) : null,
       equity: rawAccountInfo.equity != null ? Number(rawAccountInfo.equity) : null,
       margin: rawAccountInfo.margin != null ? Number(rawAccountInfo.margin) : null,
@@ -119,6 +151,9 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       marginLevel: rawAccountInfo.marginLevel != null ? Number(rawAccountInfo.marginLevel) : null,
       currency: typeof rawAccountInfo.currency === "string" ? rawAccountInfo.currency : null,
     };
+    const liveHasFigures = liveSummary.balance != null || liveSummary.equity != null;
+    const accountSummary = liveHasFigures ? liveSummary : cachedSummary;
+    const figuresFromCache = !liveHasFigures && cachedSummary != null;
 
     const positions: OpenPositionRow[] = rawPositions.map((p, i) => {
       const id = String(p.id ?? p.positionId ?? i);
@@ -160,20 +195,21 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
       positions,
       pendingOrders,
       accountSummary,
+      lastSyncAt: liveHasFigures ? new Date().toISOString() : cloud.lastSyncAt,
+      figuresFromCache,
       providerStatus: "connected",
       error: null,
       hint: isEmpty ? "No open positions or pending orders on this account right now." : null,
       brokerAccountId: cloud.brokerAccountId,
     };
   } catch {
-    return {
-      positions: [],
-      pendingOrders: [],
-      accountSummary: null,
+    return emptyPositions({
+      accountSummary: cachedSummary,
+      lastSyncAt: cloud.lastSyncAt,
+      figuresFromCache: cachedSummary != null,
       providerStatus: "failed",
-      error: null,
       hint: "Could not load positions through AXE MT5 Cloud. Try Test/Sync on Accounts, or check server logs.",
       brokerAccountId: cloud.brokerAccountId,
-    };
+    });
   }
 }

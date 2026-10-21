@@ -6,7 +6,12 @@
  * Never cache cron, billing, or write endpoints.
  */
 
-export const PWA_CACHE_VERSION = "axe-v5";
+/** Shell cache. Bump when sw.js behaviour changes so the update banner fires. */
+export const PWA_CACHE_VERSION = "axe-v6";
+/** Last-viewed GET data. Keep previous generations so offline quotes/candles survive the bump. */
+export const PWA_DATA_CACHE_VERSION = "axe-data-v6";
+export const PWA_LEGACY_DATA_CACHES = ["axe-data-v5"] as const;
+export const PWA_FROM_CACHE_HEADER = "X-Axe-From-Cache";
 export const PWA_OFFLINE_PATH = "/offline";
 export const PWA_START_URL = "/chat";
 
