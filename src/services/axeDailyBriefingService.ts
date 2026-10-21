@@ -16,6 +16,8 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { callLLM, type LLMRequest } from "@/services/llmClient";
 import { getTraderLearningArc } from "@/services/learningArcService";
 import type { ArcSession, SessionSplit } from "@/lib/axe/learningArc";
+import type { ChartSetupSummary } from "@/lib/chart/chartPrefs";
+import { getChartSetup } from "@/services/chartSetupService";
 import { trackAdaptiveEvent } from "@/services/trackAdaptiveEvent";
 import { getAxeEngineProfile } from "@/services/axeEngineService";
 import { fetchWeatherForBrief, type WeatherSnapshot } from "@/services/weatherService";
@@ -121,6 +123,16 @@ export interface TraderBriefingContext {
    */
   alignment: number | null;
   periodPerformance: BriefPeriodPerformance;
+  /**
+   * The indicators and SMC overlays this trader actually has switched on,
+   * read from their own saved chart setup.
+   *
+   * This line used to read `topIndicators: string[]` and always contain
+   * "RSI", "MACD", "MA" — a constant in `learningArcService`, handed to the
+   * model under "Key facts". It was removed when there was no way to know,
+   * and comes back now that chart preferences are synced server-side.
+   */
+  chartSetup: ChartSetupSummary;
   /** Which session is open as the brief is written. Not a fact about the trader. */
   liveSession: "london" | "newyork" | "asia";
   /**
@@ -258,9 +270,10 @@ export async function buildBriefingContext(
   options?: { weekly?: boolean },
 ): Promise<TraderBriefingContext> {
   try {
-    const [profile, arc] = await Promise.all([
+    const [profile, arc, chartSetup] = await Promise.all([
       fetchProfileDirect(supabase, traderId),
       getTraderLearningArc(traderId, supabase),
+      getChartSetup(supabase, traderId),
     ]);
     const engineProfile = await getAxeEngineProfile(supabase, traderId, {
       source: "briefing_context",
@@ -301,6 +314,7 @@ export async function buildBriefingContext(
       preferredPairs: arc.topPairs.slice(0, 3).map((pair) => pair.symbol),
       alignment: arc.alignmentScore,
       periodPerformance,
+      chartSetup,
       liveSession,
       sessionHistory: toSessionHistory(arc.session),
       tier: profile.tier,
@@ -328,6 +342,7 @@ export async function buildBriefingContext(
         breakeven: 0,
         netPnl: 0,
       },
+      chartSetup: { indicators: [], smcTools: [], scopes: 0, symbols: [] },
       liveSession: "london",
       sessionHistory: null,
       tier: "free",
@@ -363,6 +378,24 @@ function toSessionHistory(split: SessionSplit): ArcSessionHistory | null {
   };
 }
 
+/**
+ * The trader's own chart setup, in one line for the prompt.
+ *
+ * Empty means they have never changed a default, which is worth saying as
+ * itself: the model should not name indicators, and it should not be
+ * encouraging about ones it invented. The old line said "standard set" here,
+ * which reads like a fact and is not one.
+ */
+function describeChartSetup(setup: ChartSetupSummary): string {
+  const parts: string[] = [];
+  if (setup.indicators.length > 0) parts.push(`indicators on: ${setup.indicators.join(", ")}`);
+  if (setup.smcTools.length > 0) parts.push(`overlays on: ${setup.smcTools.join(", ")}`);
+  if (parts.length === 0) {
+    return "nothing saved yet — they have not changed a chart default, so do not name any indicator as theirs";
+  }
+  return `${parts.join("; ")} (across ${setup.scopes} of their saved charts: ${setup.symbols.join(", ")})`;
+}
+
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 
 function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?: boolean }): string {
@@ -392,7 +425,8 @@ Key facts:
     context.sessionHistory
       ? `${context.sessionHistory.session} (${context.sessionHistory.trades} of ${context.sessionHistory.classified} closed trades opened in that window)`
       : "not enough closed trades to say — do not guess one"
-  }`;
+  }
+- How they read a chart: ${describeChartSetup(context.chartSetup)}`;
 
   if (context.weather) {
     prompt += `\n- Weather in ${context.weather.location}: ${context.weather.summary}, ${context.weather.tempC}°C, wind ${context.weather.windKmh} km/h`;
