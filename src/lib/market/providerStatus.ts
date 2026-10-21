@@ -1,4 +1,8 @@
 import type { ProviderId, ProviderStatus } from "@/lib/market/marketTypes";
+import {
+  isUnusualWhalesEnabled,
+  resolveUnusualWhalesToken,
+} from "@/lib/intel/freeSources/uwGate";
 
 /**
  * Read-only env detection — returns null if not configured. Server-only;
@@ -8,6 +12,10 @@ import type { ProviderId, ProviderStatus } from "@/lib/market/marketTypes";
 function trimOrNull(v: string | undefined): string | null {
   const t = (v ?? "").trim();
   return t.length > 0 ? t : null;
+}
+
+function envGet(key: string): string {
+  return process.env[key] ?? "";
 }
 
 export function getFredKey(): string | null {
@@ -27,10 +35,10 @@ export function getFinnhubKey(): string | null {
 export function getEodhdKey(): string | null {
   return trimOrNull(process.env.EODHD_API_KEY);
 }
+/** INTEL-FREE: UW only when flag + token; same truth table as intel-proxy uwGate. */
 export function getUnusualWhalesKey(): string | null {
-  const enabled = (process.env.UNUSUAL_WHALES_ENABLED ?? "").trim().toLowerCase();
-  if (!["1", "true", "yes", "on"].includes(enabled)) return null;
-  return trimOrNull(process.env.UNUSUAL_WHALES_TOKEN ?? process.env.UNUSUAL_WHALES_API_KEY);
+  if (!isUnusualWhalesEnabled(envGet)) return null;
+  return resolveUnusualWhalesToken(envGet);
 }
 
 export function detectProviders(): ProviderStatus[] {

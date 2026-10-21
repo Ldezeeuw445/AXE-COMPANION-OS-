@@ -23,6 +23,7 @@
     "test:congress-public": "node scripts/test-congress-public.mjs",
     "test:sec-edgar": "node scripts/test-sec-edgar.mjs",
     "test:fmp-free-mappers": "node scripts/test-fmp-free-mappers.mjs",
+    "test:uw-gate": "node scripts/test-uw-gate.mjs",
     "test:mt5-sync-write-client": "node scripts/test-mt5-sync-write-client.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
