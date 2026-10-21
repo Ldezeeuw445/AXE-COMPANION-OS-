@@ -376,7 +376,10 @@ export function suggestKnownBrokers(query: string, limit = 6): BrokerSupportMatc
       return { broker, score };
     })
     .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score || a.broker.name.localeCompare(b.broker.name));
+    .sort((a, b) => {
+      if (!q) return 0;
+      return b.score - a.score || a.broker.name.localeCompare(b.broker.name);
+    });
 
   return ranked.slice(0, limit).map(({ broker }) => ({
     id: broker.id,

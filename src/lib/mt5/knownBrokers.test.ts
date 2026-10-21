@@ -77,7 +77,7 @@ describe("suggestKnownBrokers / pickBrokerServer", () => {
   it("offers popular brokers when the field is empty", () => {
     const popular = suggestKnownBrokers("");
     assert.ok(popular.length >= 4);
-    assert.ok(popular.some((b) => b.id === "icmarkets"));
+    assert.equal(popular[0]?.id, "icmarkets");
     assert.ok(popular.some((b) => b.id === "ftmo"));
   });
 
