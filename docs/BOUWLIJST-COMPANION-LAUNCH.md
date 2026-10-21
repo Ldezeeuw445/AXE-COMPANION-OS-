@@ -139,8 +139,10 @@ Indicatoren, annotaties, SL/TP-lijnen, trade-plan-lijnen ✅ bestaan allemaal.
   een kleurwijziging daar bereikt de indicatorbalken niet. Dat is een echte
   refactor met zichtbaar regressierisico op een werkende chart; ik heb hem niet
   gedaan voor een vinkje. Staat als 4.6 hieronder
-- [ ] **4.6** `IndicatorPane` het gedeelde `chartTheme` laten lezen in plaats
-  van een eigen palet, zodat de paletten niet uit elkaar lopen
+- [x] **4.6 — gedaan (L17.2).** `IndicatorPane` leest nu `theme.indicator`.
+  De twee privé-paletten achter een `isDark`-boolean staan als
+  `IndicatorPalette` in `chartTheme.ts`, elke preset declareert de zijne.
+  Waarden ongewijzigd overgezet, op één na — zie L17.3
 - [x] **4.4** Rechter prijsbalk — verkleind naar 10px ✅
 - [ ] **4.5** Bottom dock in elke combinatie — gebouwd vorige ronde ✅, nog door jou te bevestigen op de PWA
 
@@ -187,8 +189,8 @@ al naar je toe na 5 min ("tap to approve").
 
 Jouw 3 vinkjes ❌ bestaan niet. Nodig:
 
-- [ ] **6.1** Veiligheidsniveau per user: (1) alleen voorstellen · (2) voorbereiden, ik keur goed · (3) zelfstandig plaatsen binnen limieten
-- [ ] **6.2** Drie expliciete vinkjes vóór niveau 3, met harde grenzen: max lot, max risico per trade, max trades per dag
+- [x] **6.1 — gedaan (L19).** Drie niveaus in `src/lib/trading/autonomy.ts`, standaard niveau 2. Radio's in Instellingen, en het paneel toont wat er *geldt*, niet wat er is opgeslagen
+- [x] **6.2 — gedaan (L19).** Drie vinkjes én drie getallen. Mist er één, dan zakt niveau 3 naar 2 en zegt welke. De getallen gaan naar de guard, en waar de broker óók een plafond heeft wint de strengste
 - [x] **6.3 — De feed-helft staat.** Beide paden naar MT5 schrijven een
   feed-regel: bij plaatsen én bij blokkeren, met de regel die stopte erbij
   (`alert_trade:`, `alert_trade_blocked:`, `exec_placed:`, `exec_blocked:`).
@@ -223,11 +225,12 @@ Gemeten: `src/lib/alerts/` ✅ — `smartAlertRules`, `smartAlertTemplates`,
   actie een `requires` die de intel-feed noemt waarop hij leunt. Twee checks
   weigeren een tweede kopie en een `requires` die naar een niet-bestaande feed
   wijst
-- [ ] **7.3** De knop "Market Tide" leunt op een Unusual Whales-feed die we
-  niet hebben. AXE antwoordt eerlijk "niet geconfigureerd", dus hij liegt niet,
-  maar het is wel een doodlopende knop. De koppeling staat nu vastgelegd
-  (`requires: "marketTide"`), dus wegfilteren is één filter — zodra
-  beschikbaarheid de client bereikt
+- [x] **7.3 — gedaan (L17.1).** De knop "Market Tide" is weg zolang Unusual
+  Whales niet betaald is. `GET /api/intel-chat` geeft nu per intel-actie terug
+  of er een feed achter zit, `useIntelQuickActions` filtert daarop, en beide
+  composers lezen die lijst. Een mislukte call laat alles staan — alles
+  verbergen omdat één fetch faalt is erger dan de doodlopende knop. Komt
+  vanzelf terug zodra `UNUSUAL_WHALES_ENABLED=true`
 
 ---
 
@@ -699,10 +702,9 @@ uit git, de twee helften samengevoegd, en als nieuwe hero op `/` gezet.
   zijn topbalk begint onder de notch van de hero
 - [x] **L11.5** `LandingHeroPhone` (de oude enkele telefoon) is weg. Gemeten:
   0px horizontale overflow op 390px en op 1440px
-- [ ] **L11.6 — Nog een keuze voor jou.** Op telefoonbreedte staat de iPad boven
-  de telefoon en is hij klein. Hij is herkenbaar als tablet maar de tekst erin
-  is niet te lezen. Ik laat hem staan omdat jij beide toestellen wilde; zeg het
-  als hij op mobiel weg mag
+- [x] **L11.6 — beslist en gedaan, zie L16.4.** Gemeten: 0.30 schaal op 390px.
+  Onder 640px staat de iPad uit, daarboven krijgt hij een eigen cap in plaats
+  van die van een telefoon. Zeg het als je hem op mobiel toch terug wilt
 
 ## L12 — Wat ik vandaag niet kon, en waarom
 
@@ -943,11 +945,14 @@ opvragen en chats kunnen draaien op jouw hardware. Dezelfde API kent ook
 wissen. Ik heb daar bewust niets aan veranderd, want AXE Core gebruikt dit
 endpoint actief en ik wil dat niet stilletjes breken.
 
-- [ ] **L15.1** Beide Ollama-endpoints afschermen. Cloudflare Access met een
+- [x] **L15.1 — gedaan, zie L18.** Cloudflare Access met een
   service token is hier de passende vorm: de apps sturen
   `CF-Access-Client-Id` en `CF-Access-Client-Secret` mee, een vreemde komt er
   niet in. Zeg het en ik zet het op, inclusief de headers in de drie apps
-- [ ] **L15.2** `OLLAMA_URL` op de Companion-host naar beide endpoints zetten,
+- [x] **L15.2 — gedaan door Luka.** Gemeten 2026-10-17 op
+  `https://www.axecompanion.com/api/debug/chat-health`: `"status":"ok_ollama"`,
+  `ollama.reachable: true`. Oorspronkelijke opdracht hieronder bewaard:
+  `OLLAMA_URL` op de Companion-host naar beide endpoints zetten,
   komma-gescheiden: eerst `https://ollama.axecompanion.com` (altijd aan, geen
   proxy-limiet), dan `https://ollama.tradingosapp.com` (de Mac Mini, grotere
   modellen). `OLLAMA_MODEL` mag je leeg laten — dan kiest hij zelf
@@ -1090,8 +1095,6 @@ Verwacht: `"status":"ok_ollama"` met `ollama_resolved.model` = `llama3.1:8b`.
 
 ---
 
----
-
 ## L18 — De deur dicht bij Ollama (2026-10-17)
 
 ### Wat er stond toen ik begon
@@ -1187,8 +1190,6 @@ alles op het token. Zeg het, dan haal ik die policy weg — één call.
     A-record is. Dood gewicht
   - `tunnel to the world` — **down**, geen configuratie
 
-
----
 
 ---
 

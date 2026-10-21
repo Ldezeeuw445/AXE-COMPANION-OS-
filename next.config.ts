@@ -100,6 +100,7 @@ const nextConfig: NextConfig = {
       { source: "/legal/contact", destination: "/contact", permanent: true },
       { source: "/landing", destination: "/", permanent: true },
       { source: "/landing/", destination: "/", permanent: true },
+      { source: "/landing/index.html", destination: "/", permanent: true },
     ];
   },
 };
