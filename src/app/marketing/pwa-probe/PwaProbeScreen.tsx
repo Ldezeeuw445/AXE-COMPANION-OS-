@@ -120,7 +120,7 @@ export function PwaProbeScreen() {
 
       <section
         data-testid="pwa-probe-candles"
-        className="h-[220px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/20"
+        className="h-[280px] overflow-hidden rounded-2xl border border-white/[0.06] bg-black/20"
       >
         {chartReady ? <ChartCacheFallback symbol="XAUUSD" tf="h1" /> : null}
       </section>

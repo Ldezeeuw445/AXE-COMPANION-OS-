@@ -29,6 +29,7 @@ test.describe("PWA C9 stale marks", () => {
 
     await expect(page.getByTestId("chart-cache-stale")).toBeVisible();
     await expect(page.getByTestId("chart-cache-stale")).toHaveAttribute("data-freshness", /stale|offline/);
+    await expect(page.locator("canvas").first()).toBeVisible();
 
     await page.screenshot({
       path: join(shotDir, "pwa-c9-stale-390x844.png"),

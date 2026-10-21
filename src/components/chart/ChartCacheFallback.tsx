@@ -16,7 +16,7 @@ import { readCachedChart, type CachedChartSnapshot } from "@/lib/chart/clientCha
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 import { StaleAgeBadge } from "@/components/pwa/StaleAgeBadge";
-import { candleFreshness } from "@/lib/pwa/staleAge";
+import { candleFreshness, formatCompactAge } from "@/lib/pwa/staleAge";
 import { useOnlineStatus } from "@/lib/pwa/useOnlineStatus";
 
 type Props = {
@@ -83,11 +83,17 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
           {/* Loading overlay */}
           <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/60 to-transparent pb-4 pt-8">
             <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/70 px-3 py-1.5 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  freshness.stale ? "bg-amber-300/80" : "animate-pulse bg-cyan-400"
+                }`}
+              />
               <span className="text-[10px] font-medium text-white/50">
-                {freshness.stale
-                  ? `Last candles ${freshness.badge ?? "cached"} · loading live data…`
-                  : "Loading live data…"}
+                {freshness.kind === "offline"
+                  ? `Showing last candles${freshness.ageMs != null ? ` · ${formatCompactAge(freshness.ageMs)} ago` : ""}`
+                  : freshness.stale
+                    ? `Last candles ${freshness.badge ?? "cached"} · loading live data…`
+                    : "Loading live data…"}
               </span>
             </div>
           </div>
