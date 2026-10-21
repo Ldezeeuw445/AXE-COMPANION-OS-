@@ -38,6 +38,9 @@ import { isAlpacaAccount } from "@/lib/alpaca/provision";
 import { accountTypeFromBroker } from "@/lib/session/accountType";
 import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
 import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
+import { StaleAgeBadge } from "@/components/pwa/StaleAgeBadge";
+import { accountFreshness } from "@/lib/pwa/staleAge";
+import { useOnlineStatus } from "@/lib/pwa/useOnlineStatus";
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
@@ -97,6 +100,11 @@ function AccountCard({
   const isDemo = isDemoAccount(account);
   const isAlpaca = isAlpacaAccount(account);
   const isCloud = account.connection_method === "cloud_mt5" && account.external_connection_id;
+  const online = useOnlineStatus();
+  const figuresFreshness = accountFreshness({
+    lastSyncAt: account.last_sync_at ?? null,
+    online,
+  });
   const passwordType =
     typeof account.metadata?.passwordType === "string" ? account.metadata.passwordType : null;
   const isInvestorLinked = passwordType === "investor";
@@ -333,6 +341,13 @@ function AccountCard({
 
       {ledger && (ledger.tradeCount > 0 || ledger.balance != null) ? (
         <div className="mt-3 rounded-xl border border-white/[0.05] bg-black/20 px-3 py-2" data-testid="account-ledger">
+          <div className="mb-1.5 flex items-center justify-end">
+            <StaleAgeBadge
+              freshness={figuresFreshness}
+              always
+              testId={`account-stale-${account.id}`}
+            />
+          </div>
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-white/35">Realized (closed trades)</span>
             <span
