@@ -5,16 +5,18 @@ import { expect, test } from "playwright/test";
 const shotDir = process.env.LANDING_SHOT_DIR ?? join(process.cwd(), "e2e/artifacts");
 
 test.describe("companion landing", () => {
-  test("renders the new homepage and hides sample testimonials", async ({ page }) => {
+  test("renders the restored Companion homepage and hides sample testimonials", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("your intelligence");
-    await expect(page.getByText("Same stack · two surfaces")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "The brain behind every decision." })).toBeVisible();
-    await expect(page.getByText("Example — sample cockpit, not live data")).toBeVisible();
-    await expect(page.getByText("Floating desk chat · Terminal")).toBeVisible();
-    await expect(page.getByText(/Drag to explore/)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("The trader's phone OS");
+    await expect(page.getByText("Your Second Brain For Trading")).toBeVisible();
+    await expect(page.getByText(/19 live AXE feeds/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Execution discipline, visible in real time." }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Try the live demo" }).first()).toHaveAttribute(
+      "href",
+      "#hero-devices",
+    );
     await expect(page.getByText("Freya H.")).toHaveCount(0);
     await expect(page.getByText("Verified quotes")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");

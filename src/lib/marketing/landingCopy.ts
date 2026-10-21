@@ -4,72 +4,326 @@
  * Keep this file dependency-free so `scripts/verify-landing-claims.mjs` can
  * import it with tsx and check the claims against billing + intel sources.
  * Visual chrome lives in the React sections; the promises live here.
+ *
+ * Hero copy is the original LaunchHeroExperience ("The trader's phone OS").
+ * The 19-feed grid, showcase rows and execution-discipline section are ported
+ * from `public/landing/index.html` (last full file at af5b0cd / 9f9351e^).
+ * "Your Second Brain For Trading" was only in Luka's screenshots — rebuilt
+ * here. Pricing, FAQ, waitlist and legal stay on the current truthful keep-list.
  */
 
 export const LANDING_HERO = {
-  badge: "AXE Companion",
-  titleLead: "Your trades, your journal,",
-  titleAccent: "your intelligence.",
+  badge: "AXE Companion OS · Early access",
+  titleLead: "AXE Companion.",
+  titleAccent: "The trader's phone OS.",
   body:
-    "AXE Companion is the phone OS: live chart, depth, news, one-tap execution, quick journal, and AXE chat — synced with Trading OS on your desktop.",
+    "AXE Companion is what an MT5-native phone workflow should feel like: live chart, depth, news, intel, execution, journal and AXE in one calm dark operating surface.",
 } as const;
 
-export const LANDING_SURFACES = {
-  kicker: "Same stack · two surfaces",
-  title: "Everything you need. Nothing you don't.",
+export const LANDING_RAIL = [
+  "Live chart, premium toolset",
+  "Market depth drawer",
+  "News & intel, cached to save credits",
+  "One-tap execution dock",
+  "AXE copilot that knows the app",
+] as const;
+
+export const LANDING_REVEAL_CARDS = [
+  {
+    orb: "A",
+    title: "Surface the signal.",
+    kicker: "Canvas reveal",
+    body: "One calm card layer that lights up just enough to feel alive, without breaking the dark restraint of the landing page.",
+  },
+  {
+    orb: "X",
+    title: "Quiet, but not flat.",
+    kicker: "App language",
+    body: "Thin Linear-style edges, cyan energy and soft reveal motion keep the whole section feeling like part of AXE itself.",
+  },
+  {
+    orb: "E",
+    title: "Premium motion cues.",
+    kicker: "Depth",
+    body: "Hover brings in a controlled canvas field so the cards feel reactive and expensive, not decorative or noisy.",
+  },
+] as const;
+
+export const LANDING_SECOND_BRAIN = {
+  badge: "AXE Companion OS",
+  titleLead: "AXE Companion.",
+  titleAccent: "Your Second Brain For Trading.",
   body:
-    "AXE Companion is your mobile command center today. Trading OS adds the full terminal desk — same account, same memory, seamlessly connected.",
+    "A premium trading platform combining professional charting, market intelligence, execution tools and an AI companion that learns, adapts and evolves alongside you. Trade smarter. Stay consistent. Improve continuously.",
+} as const;
+
+export const LANDING_FEEDS_BAND = {
+  kicker: "Beyond the chart",
+  titleLead: "live AXE feeds",
+  titleAccent: "no other trading app has.",
+  body:
+    "AXE watches what actually moves markets — macro, geopolitics, logistics, military activity, smart money and more — and streams it live, right next to your chart.",
+} as const;
+
+export const LANDING_DISCIPLINE = {
+  kicker: "Behavior map",
+  title: "Execution discipline, visible in real time.",
+  body:
+    "AXE builds a behavior map from your real MT5 fills — sessions, instruments, the rules you keep and the ones you break. The FIT score tracks alignment.",
+  aside:
+    "Not a dashboard that judges you after the fact — a technical analysis tool that tracks your patterns before you make them.",
   quote:
-    "Built for traders who want clarity without another noisy dashboard. AXE focuses on what happened in your account, why it mattered, and what to watch next. Trading OS is the desk that same memory plugs into — Companion is the brain you use first.",
+    "The same calm dark canvas as Trading OS, the same execution model as MT5, the same brain that journals what you actually did — wrapped around an intelligence layer that watches the whole board.",
+  quoteBy: "AXE Companion · design principle",
 } as const;
 
-export const LANDING_ENGINE = {
-  kicker: "AXE ENGINE",
-  title: "The brain behind every decision.",
-  body: "AXE Engine reads your account, chart, news and journal, then talks and acts only inside the rules you set.",
-  items: [
-    { label: "Learn", body: "Adapts from journal labels, chat feedback and the Learning Arc." },
-    { label: "Ingest", body: "Broker history, live ticks, cached news, intel and the notes you attach." },
-    {
-      label: "Execute",
-      body: "Market and limit orders to the connected broker after you confirm — plus alert auto-trade behind the five account checks.",
-    },
-    { label: "Analyze", body: "Chart structure, news and account context in one AXE chat." },
-    {
-      label: "Protect",
-      body: "Pre-trade risk check and auto-trade guard: news window, weekend, lot cap, daily loss, max automatic trades.",
-    },
-    { label: "Orchestrate", body: "Cockpit, briefings, push alerts and journal on the same account." },
-  ],
+export const LANDING_INTRO = {
+  kicker: "First impression",
+  titleLead: "Secure. Intelligent.",
+  titleAccent: "Encrypted.",
+  body: "From the moment you open AXE — the particle triangle, the encrypted command channel, one tap to enter.",
+  loginTitle: "Private command channel",
+  loginBody: "Signed-in workspace · not a social feed · your data stays yours",
+  splashTitle: "Boot sequence",
+  splashBody: "Particle triangle · encrypted handshake · live context restore",
 } as const;
 
-export const LANDING_ONE = {
-  kicker: "AXE ONE",
-  title: "One Source of Truth.",
-  body: "One account, one memory, one set of broker rows — phone and desk stay aligned.",
-  items: [
-    { label: "Trading Data", body: "Trades, positions, orders and fills from the linked broker." },
-    { label: "Market Data", body: "Live ticks and a depth drawer anchored on your broker bid / ask." },
-    { label: "News & Intel", body: "Cached news plus free intel: SEC EDGAR, congressional STOCK Act trades, GDELT, flights and vessels." },
-    { label: "Unified View", body: "Chart, depth, news, execute, journal and AXE — one phone OS." },
-    { label: "Consistent Data", body: "The same rows Trading OS reads. Each workspace stays private to your login." },
-    { label: "Smarter Insights", body: "Context from what you actually traded, not a generic feed." },
-  ],
+export const LANDING_SHOWCASE_BAND = {
+  kicker: "Inside the app",
+  titleLead: "Every screen,",
+  titleAccent: "built for the candle.",
+  body: "From the chart to the cockpit — every pixel is tuned for the trader who needs clarity, not clutter.",
 } as const;
 
-export const LANDING_ADAPTIVE = {
-  kicker: "AXE",
-  title: "Adaptive Intelligence. Real Results.",
-  body: "The layer that connects the engine to your book. It learns from what you keep, dismiss and journal.",
-  items: [
-    { label: "Adaptive AI", body: "Suggestions you can accept or dismiss — the next ones follow what you taught." },
-    { label: "Context Aware", body: "Decisions grounded in your chart, accounts, journal and news." },
-    { label: "Outcome Focused", body: "Learning Arc follows real teaching moments, not a vanity score." },
-    { label: "Risk Intelligent", body: "Account health and the same pre-trade checks that gate automatic orders." },
-    { label: "Performance Driven", body: "Journal outcomes, alignment and chat feedback in Cockpit." },
-    { label: "Built for Traders", body: "Phone-first. The desk is Trading OS — same brain, different surface." },
-  ],
-} as const;
+export const LANDING_SHOWCASE: ReadonlyArray<{
+  step: string;
+  title: string;
+  body: string;
+  href: string;
+  cta: string;
+  image: string;
+  alt: string;
+  flip?: boolean;
+}> = [
+  {
+    step: "01 · Chart",
+    title: "Read the candle, not the noise.",
+    body: "MT5 ticks on a calm dark canvas — auto-Fib, BOS/CHoCH structure, order blocks and FVGs that extend until mitigated. Lightweight Charts, steady and sharp.",
+    href: "#hero-devices",
+    cta: "Open the chart",
+    image: "/landing/photos/809_1x_shots_so.png",
+    alt: "AXE Chart — BOS/LH/SFP structure",
+  },
+  {
+    step: "02 · Intel",
+    title: "See the whole board.",
+    body: "Global chokepoints, military radar, vessels and jets — live AXE feeds that watch what actually moves price, scored by risk and surfaced the moment they shift.",
+    href: "#product",
+    cta: "Explore the feeds",
+    image: "/landing/photos/54_1x_shots_so.png",
+    alt: "AXE Intel Analysis",
+    flip: true,
+  },
+  {
+    step: "03 · Cockpit",
+    title: "It learns your edge.",
+    body: "A behavior map built from your real MT5 fills. The FIT score tracks how aligned your execution is with your plan — a technical analysis tool that tracks your patterns before you make them.",
+    href: "#cockpit",
+    cta: "See your Cockpit",
+    image: "/landing/photos/482_1x_shots_so.png",
+    alt: "AXE Cockpit — FIT alignment",
+  },
+  {
+    step: "04 · AXE Chat",
+    title: "Your analyst, always on.",
+    body: "Ask AXE about your chart, your trades, your thesis. Full context awareness — it sees the candle, the structure, the intel. Streaming responses with chart-aware reasoning.",
+    href: "/chat",
+    cta: "Talk to AXE",
+    image: "/landing/photos/595_1x_shots_so.png",
+    alt: "AXE Chat — H1 Analysis",
+    flip: true,
+  },
+  {
+    step: "05 · Market Depth",
+    title: "See the order book.",
+    body: "Real L1 bid/ask from your broker plus a deterministic synthetic ladder — spread, mid, uptick/downtick. Honest about what's real and what's estimated.",
+    href: "#hero-devices",
+    cta: "Open Depth",
+    image: "/landing/photos/446_1x_shots_so.png",
+    alt: "AXE Market Depth",
+  },
+  {
+    step: "06 · Global Chokepoints",
+    title: "Trade the supply chain.",
+    body: "Hormuz, Malacca, Suez, Panama, Bab-el-Mandeb, Taiwan Strait — ship counts and risk scoring as conflict reshapes logistics.",
+    href: "#product",
+    cta: "Track Chokepoints",
+    image: "/landing/photos/688_1x_shots_so.png",
+    alt: "AXE Global Chokepoints",
+    flip: true,
+  },
+  {
+    step: "07 · MT5 Connect",
+    title: "Your broker, your data.",
+    body: "Connect multiple MT5 accounts — Goat, FTMO, Funded Next or your own. AXE reads your fills, syncs your history and keeps your edge private.",
+    href: "#mt5",
+    cta: "Connect MT5",
+    image: "/landing/photos/569_1x_shots_so.png",
+    alt: "AXE MT5 Connect",
+  },
+  {
+    step: "08 · Chart Tools",
+    title: "Every tool, one drawer.",
+    body: "Indicators, annotations, overlays — RSI, MACD, Volume, Fib, trendlines, S&D zones. Drag on, configure, toggle. No clutter, no hunting through menus.",
+    href: "#hero-devices",
+    cta: "Browse Tools",
+    image: "/landing/photos/423_1x_shots_so-2.png",
+    alt: "AXE Chart Tools",
+    flip: true,
+  },
+];
+
+export type LandingFeedIcon =
+  | "tide"
+  | "macro"
+  | "conviction"
+  | "insider"
+  | "policy"
+  | "darkpool"
+  | "options"
+  | "jets"
+  | "radar"
+  | "emergency"
+  | "vessel"
+  | "energy"
+  | "chokepoints"
+  | "seismic"
+  | "cyber"
+  | "correlation"
+  | "news"
+  | "calendar"
+  | "dejavu";
+
+export type LandingIntelFeed = {
+  title: string;
+  desc: string;
+  icon: LandingFeedIcon;
+  /** Wide tiles in public/landing/index.html (span2). */
+  span?: 2;
+};
+
+/**
+ * The 19 intel tiles from `public/landing/index.html`, kept in that order.
+ *
+ * Count matches this repo: 13 `IntelProviderStatus` ids in `intelClient.ts`
+ * plus Macro, Calendar, News, Correlation, Conviction and Déjà Vu.
+ *
+ * Unusual Whales is never named here. Dark pool, options flow and market tide
+ * exist as tiles; the FAQ is the only place that says we have not bought the
+ * paid source. No fabricated notionals ($1.71B, SPY 1.2M).
+ */
+export const LANDING_INTEL_FEEDS: ReadonlyArray<LandingIntelFeed> = [
+  {
+    title: "AXE Intel Tide",
+    desc: "Net call vs put premium, directional bias per instrument and smart-money pressure — the same tide the Intel desk reads.",
+    icon: "tide",
+    span: 2,
+  },
+  {
+    title: "AXE Macro",
+    desc: "Rates, inflation, growth and central-bank posture distilled into a regime read that frames every trade.",
+    icon: "macro",
+  },
+  {
+    title: "AXE Market Conviction",
+    desc: "A single conviction score blending breadth, flow and momentum — how hard the tape is leaning.",
+    icon: "conviction",
+  },
+  {
+    title: "AXE Insider Flow",
+    desc: "Form-4 buys and sells the moment they hit, sized in dollars, ranked by signal. SEC EDGAR, no paid tape.",
+    icon: "insider",
+  },
+  {
+    title: "AXE Policy Flow",
+    desc: "Congressional STOCK Act trades — House and Senate — the policy tape that front-runs the price tape.",
+    icon: "policy",
+  },
+  {
+    title: "AXE Dark Pool",
+    desc: "Off-exchange block prints so size can show up before it moves the lit book.",
+    icon: "darkpool",
+  },
+  {
+    title: "AXE Options Flow",
+    desc: "Sweeps, blocks and unusual contracts — strike, premium and aggressor side.",
+    icon: "options",
+  },
+  {
+    title: "AXE Jet Tracker",
+    desc: "Corporate jets. Who is airborne, who is grounded — Dell, Alphabet, Pfizer, ExxonMobil and the rest of the tracked fleet.",
+    icon: "jets",
+  },
+  {
+    title: "AXE Military Radar",
+    desc: "Aircraft tracked across bombers, ISR and tankers — flight level and speed when the feed has a fresh row.",
+    icon: "radar",
+  },
+  {
+    title: "AXE Emergency Monitor",
+    desc: "Distress feed across global airspace. Active alerts surface the moment a row exists.",
+    icon: "emergency",
+  },
+  {
+    title: "AXE Vessel Intel",
+    desc: "Tracked tankers and container ships positioned against live chokepoint risk.",
+    icon: "vessel",
+  },
+  {
+    title: "AXE Energy Flow",
+    desc: "Crude, gas and power — cargoes, storage and pipeline shifts that set the floor under risk assets.",
+    icon: "energy",
+  },
+  {
+    title: "AXE Global Chokepoints",
+    desc: "Hormuz, Malacca, Suez, Panama, Bab-el-Mandeb, Taiwan Strait — ship counts and risk scoring as conflict reshapes supply chains.",
+    icon: "chokepoints",
+    span: 2,
+  },
+  {
+    title: "AXE Seismic Events",
+    desc: "Earthquakes, volcanoes, wildfires and conflict events tagged with market impact — supply shocks before the wire catches up.",
+    icon: "seismic",
+  },
+  {
+    title: "AXE Cyber Intel",
+    desc: "Breaches, ransomware and outages mapped to tickers — the digital risk feed equities now trade on.",
+    icon: "cyber",
+  },
+  {
+    title: "AXE Correlation Engine",
+    desc: "Cross-asset correlations computed live — how gold, yields, crude and crypto are actually moving together right now.",
+    icon: "correlation",
+    span: 2,
+  },
+  {
+    title: "AXE News",
+    desc: "Multi-source headlines fused and de-duped — cached so a quiet hour never burns your feed.",
+    icon: "news",
+  },
+  {
+    title: "AXE Calendar",
+    desc: "Upcoming events, prints and earnings on one timeline — know what hits the tape before it does.",
+    icon: "calendar",
+  },
+  {
+    title: "AXE Déjà Vu",
+    desc: "Similar-patterns engine — finds the historical analogues to today's setup and what happened next.",
+    icon: "dejavu",
+  },
+];
+
+export const LANDING_INTEL_FEED_COUNT = LANDING_INTEL_FEEDS.length;
 
 export type LandingFeatureIcon =
   | "chart"
