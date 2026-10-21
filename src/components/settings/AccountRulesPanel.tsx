@@ -7,8 +7,11 @@ import {
   EMPTY_ACCOUNT_RULES,
   MAX_DAILY_LOSS_PCT_CEILING,
   MAX_LOT_CEILING,
+  MAX_TOTAL_LOSS_PCT_CEILING,
   type AccountTradingRules,
 } from "@/lib/trading/accountRules";
+
+type ConstraintSource = "stated" | "firm" | "default";
 
 type AccountRow = {
   id: string;
@@ -19,17 +22,40 @@ type AccountRow = {
     kind: string;
     explicit: boolean;
     description: string;
+    newsTradingAllowed: boolean;
+    weekendHoldingAllowed: boolean;
+    maxDailyLossPct: number | null;
+    maxTotalLossPct: number | null;
+    maxLot: number | null;
+    provenance: Record<string, ConstraintSource>;
+    firm: {
+      name: string;
+      model: string | null;
+      models: string[];
+      tightestAcrossModels: boolean;
+      source: string | null;
+      asOf: string | null;
+    } | null;
   };
 };
 
 /**
- * "What are this account's rules?" — asked once, instead of guessed forever.
+ * "Here is what AXE worked out. Is that right?" — not "type in your rulebook".
  *
- * `accountProfile` always promised that rules stated here win over its
- * heuristics. Nothing could state them until this panel existed, so every
- * funded account ran on a guess from its own name. On a $200,000 account with
- * a 4% daily limit, the guess was 5% — and AXE would have kept trading past
- * the point the account was already breached.
+ * This panel started as a form. That was the wrong shape and Luka said so:
+ * a trader who already chose their firm, paid their firm and passed their
+ * firm's evaluation should not then have to copy the firm's rules into an app.
+ * It is homework, and homework is the thing people skip — leaving every funded
+ * account running on a guess, which is the exact failure the panel was built
+ * to fix.
+ *
+ * So the order is inverted. AXE reads the MT5 server name, names the firm, and
+ * shows the limits it will actually enforce with a badge saying where each one
+ * came from: the firm's own published rules, a careful default, or the
+ * trader's own word. Where a firm's limits differ per account model — FTMO is
+ * 3% daily on two of its three and 5% on the other — it asks one answerable
+ * question with the models as buttons, and uses the strictest until told.
+ * Typing is what is left for the cases AXE genuinely cannot know.
  */
 export function AccountRulesPanel() {
   const [accounts, setAccounts] = useState<AccountRow[] | null>(null);
@@ -68,6 +94,52 @@ export function AccountRulesPanel() {
     setError(null);
     setDraft(accounts?.find((a) => a.id === id)?.rules ?? EMPTY_ACCOUNT_RULES);
   };
+
+  /**
+   * One tap on "2-Step" and AXE has FTMO's real numbers for that account.
+   *
+   * It saves straight away rather than waiting for the Save button, because
+   * this is not a rule the trader is stating — it is them answering a question
+   * AXE asked, and the answer changes every number on screen. Making them
+   * press Save afterwards would leave the panel showing the strictest-model
+   * figures next to the model they just picked.
+   */
+  const pickModel = useCallback(
+    async (model: string | null) => {
+      if (!selected) return;
+      const next = { ...draft, firmModel: model };
+      setDraft(next);
+      setSaved(false);
+      setError(null);
+      setSaving(true);
+      try {
+        const res = await fetch("/api/preferences/account-rules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ accountId: selected, rules: next }),
+        });
+        const body = (await res.json().catch(() => null)) as
+          | { error?: string; rules?: AccountTradingRules; profile?: AccountRow["profile"] }
+          | null;
+        if (!res.ok || !body?.profile) {
+          setError(body?.error ?? "Could not save.");
+          return;
+        }
+        setDraft(body.rules ?? next);
+        setAccounts((prev) =>
+          (prev ?? []).map((a) =>
+            a.id === selected ? { ...a, rules: body.rules ?? a.rules, profile: body.profile! } : a,
+          ),
+        );
+      } catch {
+        setError("Could not save.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [selected, draft],
+  );
 
   const save = useCallback(async () => {
     if (!selected) return;
@@ -111,8 +183,9 @@ export function AccountRulesPanel() {
           This account&apos;s rules
         </h2>
         <p className="mt-1 text-xs text-tos-muted">
-          AXE guesses these from the account name. Where the guess is wrong, say so here — what you
-          state wins, and it is what the guard enforces before any automated order.
+          AXE works these out from your account and shows you where each one came from. Correct
+          anything that is wrong — what you state wins, and it is what the guard enforces before any
+          automated order.
         </p>
       </header>
 
@@ -139,12 +212,7 @@ export function AccountRulesPanel() {
             ))}
           </div>
 
-          {current ? (
-            <p className="mt-3 text-[10.5px] leading-relaxed text-tos-dim">
-              AXE currently reads this as <span className="text-white/75">{current.profile.description}</span>
-              {current.profile.explicit ? "" : " — a guess, until you state otherwise."}
-            </p>
-          ) : null}
+          {current ? <DetectedSummary row={current} onPickModel={pickModel} /> : null}
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <NumberField
@@ -152,6 +220,12 @@ export function AccountRulesPanel() {
               value={draft.maxDailyLossPct}
               onChange={(v) => setDraft((d) => ({ ...d, maxDailyLossPct: v }))}
               placeholder={`e.g. 4 · ≤ ${MAX_DAILY_LOSS_PCT_CEILING}`}
+            />
+            <NumberField
+              label="Max total drawdown (%)"
+              value={draft.maxTotalLossPct}
+              onChange={(v) => setDraft((d) => ({ ...d, maxTotalLossPct: v }))}
+              placeholder={`e.g. 10 · ≤ ${MAX_TOTAL_LOSS_PCT_CEILING}`}
             />
             <NumberField
               label="Max lots per position"
@@ -202,6 +276,122 @@ export function AccountRulesPanel() {
         </>
       )}
     </section>
+  );
+}
+
+/** stated / firm / default, in one word a trader can act on. */
+function SourceBadge({ source, firmName }: { source: ConstraintSource; firmName?: string | null }) {
+  const style =
+    source === "stated"
+      ? "border-cyan-400/35 bg-cyan-400/[0.10] text-cyan-100"
+      : source === "firm"
+        ? "border-emerald-400/30 bg-emerald-400/[0.08] text-emerald-100/90"
+        : "border-amber-300/25 bg-amber-300/[0.07] text-amber-100/85";
+  const text =
+    source === "stated" ? "you said" : source === "firm" ? firmName ?? "the firm" : "assumed";
+  return (
+    <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] ${style}`}>{text}</span>
+  );
+}
+
+function pctOrDash(value: number | null): string {
+  return value === null ? "—" : `${value}%`;
+}
+
+/**
+ * What AXE already knows about this account, before the trader types anything.
+ *
+ * The whole point of the panel: the limits that are protecting them right now,
+ * each labelled with where it came from, and — where a firm's rules differ per
+ * account model — the one question worth asking, as buttons.
+ */
+function DetectedSummary({
+  row,
+  onPickModel,
+}: {
+  row: AccountRow;
+  onPickModel: (model: string | null) => void;
+}) {
+  const { profile } = row;
+  const firm = profile.firm;
+  const rows: Array<{ key: string; label: string; value: string }> = [
+    { key: "maxDailyLossPct", label: "Daily loss cap", value: pctOrDash(profile.maxDailyLossPct) },
+    { key: "maxTotalLossPct", label: "Total drawdown cap", value: pctOrDash(profile.maxTotalLossPct) },
+    {
+      key: "newsTradingAllowed",
+      label: "Trading through news",
+      value: profile.newsTradingAllowed ? "allowed" : "not allowed",
+    },
+    {
+      key: "weekendHoldingAllowed",
+      label: "Holding over the weekend",
+      value: profile.weekendHoldingAllowed ? "allowed" : "not allowed",
+    },
+  ];
+
+  return (
+    <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+      <p className="text-[10.5px] leading-relaxed text-tos-muted">
+        {profile.description}
+      </p>
+
+      <dl className="mt-2.5 space-y-1">
+        {rows.map((r) => (
+          <div key={r.key} className="flex items-center justify-between gap-2">
+            <dt className="text-[10.5px] text-tos-dim">{r.label}</dt>
+            <dd className="flex items-center gap-1.5">
+              <span className="font-mono text-[11px] tabular-nums text-white/80">{r.value}</span>
+              <SourceBadge source={profile.provenance[r.key] ?? "default"} firmName={firm?.name} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {firm && firm.models.length > 0 ? (
+        <div className="mt-3 border-t border-white/[0.06] pt-2.5">
+          <p className="text-[10.5px] leading-relaxed text-tos-muted">
+            Which {firm.name} account is this? AXE is using the strictest of them until you say.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {firm.models.map((model) => (
+              <button
+                key={model}
+                type="button"
+                onClick={() => onPickModel(model)}
+                className="rounded-lg border border-white/[0.1] bg-white/[0.02] px-2.5 py-1.5 text-[11px] text-white/75 transition-colors hover:border-emerald-300/40 hover:text-emerald-100"
+              >
+                {model}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {firm?.model ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-2.5">
+          <span className="text-[10.5px] text-tos-dim">
+            Read as {firm.name} {firm.model}
+            {firm.asOf ? ` · rules read ${firm.asOf}` : ""}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPickModel(null)}
+            className="rounded-lg border border-white/[0.1] px-2 py-0.5 text-[10px] text-white/55 transition-colors hover:border-white/[0.2] hover:text-white/80"
+          >
+            Not this one
+          </button>
+        </div>
+      ) : null}
+
+      {firm?.source ? (
+        // A number with no provenance is a number a trader has to take on
+        // faith, and prop firm rules change. Saying where it was read lets
+        // them check it in ten seconds.
+        <p className="mt-2 break-words text-[9.5px] leading-relaxed text-tos-dim/80">
+          Source: {firm.source}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { buildAccountProfile } from "@/lib/risk/accountProfile";
+import { buildAccountProfile, type AccountProfile } from "@/lib/risk/accountProfile";
 import { parseAccountRules, withTradingRules } from "@/lib/trading/accountRules";
 
 /**
@@ -15,6 +15,44 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const COLUMNS = "id,label,mt5_server,connection_method,metadata";
+
+/**
+ * What the guard would use right now, and where each number came from.
+ *
+ * The panel exists so a trader does not have to type their own firm's
+ * rulebook into an app. For that it has to be able to show them what AXE
+ * already worked out — the firm, the model, the limits, and which of those
+ * are the firm's published numbers rather than a careful guess. Sending only
+ * the numbers left the panel unable to tell the trader anything except
+ * "here are some empty fields".
+ */
+function publicProfile(profile: AccountProfile) {
+  return {
+    kind: profile.kind,
+    explicit: profile.explicit,
+    description: profile.description,
+    newsTradingAllowed: profile.newsTradingAllowed,
+    weekendHoldingAllowed: profile.weekendHoldingAllowed,
+    maxDailyLossPct: profile.maxDailyLossPct,
+    maxDailyLossBasis: profile.maxDailyLossBasis,
+    maxTotalLossPct: profile.maxTotalLossPct,
+    maxTotalLossBasis: profile.maxTotalLossBasis,
+    maxLot: profile.maxLot,
+    provenance: profile.provenance,
+    firm: profile.firm
+      ? {
+          name: profile.firm.name,
+          model: profile.firm.model,
+          /** Which models to offer as one-tap choices. */
+          models: profile.firm.unresolvedModels,
+          tightestAcrossModels: profile.firm.rulesAreTightestAcrossModels,
+          /** Where the numbers were read, so the trader can check them too. */
+          source: profile.firm.rules?.source ?? null,
+          asOf: profile.firm.rules?.asOf ?? null,
+        }
+      : null,
+  };
+}
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
@@ -43,17 +81,7 @@ export async function GET() {
       label: (row.label as string | null) ?? "Account",
       server: (row.mt5_server as string | null) ?? null,
       rules: parseAccountRules(metadata?.tradingRules),
-      // What the guard would use right now, guess or not — so the panel can
-      // show the trader the number that is actually protecting them.
-      profile: {
-        kind: profile.kind,
-        explicit: profile.explicit,
-        description: profile.description,
-        newsTradingAllowed: profile.newsTradingAllowed,
-        weekendHoldingAllowed: profile.weekendHoldingAllowed,
-        maxDailyLossPct: profile.maxDailyLossPct,
-        maxLot: profile.maxLot,
-      },
+      profile: publicProfile(profile),
     };
   });
 
@@ -108,5 +136,5 @@ export async function POST(request: NextRequest) {
     connectionMethod: (row.connection_method as string | null) ?? null,
   });
 
-  return NextResponse.json({ ok: true, rules, profile });
+  return NextResponse.json({ ok: true, rules, profile: publicProfile(profile) });
 }

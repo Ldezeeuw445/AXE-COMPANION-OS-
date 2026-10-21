@@ -99,16 +99,28 @@ check("a size at the limit is allowed", () => {
 });
 
 check("the daily loss cap stops automation for the day", () => {
-  // Funded default is 5%.
-  const d = evaluateAutoTrade({ ...base, profile: funded, dayResultPct: -5.2 });
+  // Asserted against the profile's own cap rather than a hardcoded 5%: an
+  // FTMO account without a named model now resolves to the strictest of
+  // FTMO's three models (3%), and a test that pins the number would fail
+  // every time a firm's published rules are read more precisely. What has to
+  // hold is that the guard enforces whatever cap the profile carries, and
+  // says which cap that was.
+  const cap = funded.maxDailyLossPct;
+  assert.ok(cap !== null, "a funded profile must carry a daily cap");
+  const breach = -(cap + 0.2);
+  const d = evaluateAutoTrade({ ...base, profile: funded, dayResultPct: breach });
   assert.equal(d.allowed, false);
   assert.equal(d.reason, "daily_loss_reached");
-  assert.match(d.detail, /5\.20% down today/);
-  assert.match(d.detail, /limit is 5%/);
+  assert.match(d.detail, new RegExp(`${Math.abs(breach).toFixed(2)}% down today`));
+  assert.match(d.detail, new RegExp(`limit is ${cap}%`));
 });
 
 check("a loss below the cap still trades", () => {
-  assert.equal(evaluateAutoTrade({ ...base, profile: funded, dayResultPct: -2 }).allowed, true);
+  const cap = funded.maxDailyLossPct;
+  assert.equal(
+    evaluateAutoTrade({ ...base, profile: funded, dayResultPct: -(cap / 2) }).allowed,
+    true,
+  );
 });
 
 check("an unknown day result does not block — we do not guess", () => {

@@ -21,9 +21,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
-  KNOWN_FIRM_RULES,
+  FIRMS,
   buildAccountProfile,
-  knownFirmRules,
+  detectFirm,
 } from "../src/lib/risk/accountProfile.ts";
 import {
   EMPTY_ACCOUNT_RULES,
@@ -70,23 +70,86 @@ check("a firm whose rulebook we read gets its own numbers", () => {
   assert.equal(p.weekendHoldingAllowed, true, "and weekend holding");
 });
 
-check("a firm we have not read keeps the careful guess", () => {
+check("an unnamed model gets the strictest of the firm's, not the generic guess", () => {
+  // FTMO's daily limit is 3% on its 1-Step and Instant and 5% on its 2-Step.
+  // "FTMO Challenge" does not say which, so AXE takes the 3%: it can only be
+  // more careful than the real rulebook, never less. Falling back to the
+  // generic 5% here would have handed back a limit looser than any FTMO
+  // account actually has.
   const p = buildAccountProfile({ label: "FTMO Challenge", mt5Server: "FTMO-Server2", metadata: null });
-  assert.equal(p.maxDailyLossPct, 5);
-  assert.equal(p.newsTradingAllowed, false, "unknown stays careful");
+  assert.equal(p.maxDailyLossPct, 3);
+  assert.equal(p.maxTotalLossPct, 10);
+  // All three FTMO models take the daily limit from the day's opening
+  // balance, so that half of the rule holds whichever model this is. They
+  // disagree on the total — static, end-of-day trailing, intraday trailing —
+  // and a basis is not something to guess at, so that one comes back blank.
+  assert.equal(p.maxDailyLossBasis, "day_start_balance");
+  assert.equal(p.maxTotalLossBasis, null);
+  assert.equal(p.newsTradingAllowed, false, "unconfirmed stays careful");
   assert.equal(p.weekendHoldingAllowed, false);
+  assert.match(p.description, /strictest of FTMO's accounts/);
 });
 
-check("every known firm says where its numbers came from, and when", () => {
+check("a firm whose rulebook nobody has read keeps the careful default", () => {
+  const p = buildAccountProfile({ label: "Maven 100K", mt5Server: "Maven-Live", metadata: null });
+  assert.equal(p.maxDailyLossPct, 5, "the generic prop default, and labelled as one");
+  assert.equal(p.provenance.maxDailyLossPct, "default");
+  assert.equal(p.newsTradingAllowed, false);
+  assert.match(p.description, /limits not confirmed for Maven Trading/);
+});
+
+check("every firm rule says where its numbers came from, and when", () => {
   // A firm can change its rulebook and this file cannot notice. Without a
   // source and a date, a stale number is indistinguishable from a fresh one.
-  for (const [firm, rules] of Object.entries(KNOWN_FIRM_RULES)) {
-    assert.ok(rules.source && rules.source.length > 20, `${firm} needs a real source`);
-    assert.match(rules.asOf, /^\d{4}-\d{2}-\d{2}$/, `${firm} needs a date it was read`);
-    assert.equal(firm, firm.toLowerCase(), "matched case-insensitively against label + server");
+  for (const firm of FIRMS) {
+    assert.ok(firm.id === firm.id.toLowerCase(), `${firm.id} must be a lower-case id`);
+    for (const model of firm.models) {
+      assert.ok(/^https?:\/\//.test(model.source), `${firm.id} ${model.model} needs a real source`);
+      assert.match(model.asOf, /^\d{4}-\d{2}-\d{2}$/, `${firm.id} needs a date it was read`);
+    }
   }
-  assert.ok(knownFirmRules({ mt5Server: "Upcomers" }), "matched on the server alone");
-  assert.equal(knownFirmRules({ mt5Server: "Pepperstone-Live01" }), null);
+  assert.ok(detectFirm({ mt5Server: "Upcomers" }), "matched on the server alone");
+  assert.equal(detectFirm({ mt5Server: "Pepperstone-Live01" }), null);
+});
+
+check("naming the model in metadata is enough to resolve the firm's rules", () => {
+  // This is the whole point of storing `firmModel`: one tap on a list AXE
+  // already knows, instead of the trader typing their firm's rulebook in.
+  const before = detectFirm({ mt5Server: "FTMO-Server" });
+  assert.equal(before.model, null, "FTMO alone cannot say which model this is");
+  assert.equal(before.rulesAreTightestAcrossModels, true);
+  assert.equal(before.rules.maxDailyLossPct, 3, "so it takes the strictest until told");
+  assert.deepEqual(before.unresolvedModels, ["2-Step", "1-Step", "Instant"]);
+
+  const after = detectFirm({ mt5Server: "FTMO-Server", metadata: { firmModel: "1-Step" } });
+  assert.equal(after.model, "1-Step");
+  assert.equal(after.rules.maxDailyLossPct, 3);
+  assert.equal(after.rules.maxTotalLossBasis, "trailing_eod_balance");
+});
+
+check("naming the model does not make the profile claim the trader stated rules", () => {
+  // `explicit` drives the "assumed" wording and the guard's trust. Picking
+  // your account model is not stating a limit, so it must stay false.
+  const p = buildAccountProfile({
+    mt5Server: "FTMO-Server",
+    metadata: { firmModel: "2-Step" },
+  });
+  assert.equal(p.explicit, false);
+  assert.equal(p.provenance.maxDailyLossPct, "firm");
+  assert.equal(p.maxDailyLossPct, 5);
+});
+
+check("a model name cannot be used to smuggle another firm's rules in", () => {
+  // It lands in the string every firm pattern is matched against, and it
+  // arrives in a request body.
+  const rules = parseAccountRules({ firmModel: "x".repeat(500) });
+  assert.ok(rules.firmModel.length <= 40, "length-capped where it is parsed");
+  assert.equal(parseAccountRules({ firmModel: "   " }).firmModel, null);
+  assert.equal(parseAccountRules({ firmModel: 42 }).firmModel, null);
+  // The firm itself still comes from the server name, so a model naming a
+  // different firm cannot move the account to that firm.
+  const p = detectFirm({ mt5Server: "Upcomers", metadata: { firmModel: "FTMO 2-Step" } });
+  assert.equal(p.id, "upcomers", "the server name decides the firm, not the model field");
 });
 
 check("a firm rule is still a guess, and still loses to the trader", () => {
@@ -102,15 +165,36 @@ check("a firm rule is still a guess, and still loses to the trader", () => {
 
   const unstated = buildAccountProfile({ label: "Oracle $200k", mt5Server: "Upcomers", metadata: null });
   assert.equal(unstated.explicit, false, "a firm rule is not something the trader said");
-  assert.ok(/assumed from the account name/.test(unstated.description));
+  // It is still not the trader's word, but "assumed from the account name" was
+  // the wrong admission: these numbers were read off Upcomers' own help pages.
+  // Saying which of the two it is, is the difference between a number a trader
+  // trusts and one they switch off.
+  assert.match(unstated.description, /from Upcomers' published rules/);
+  assert.equal(unstated.provenance.maxDailyLossPct, "firm");
 });
 
-check("the guess announces itself as a guess", () => {
-  const p = buildAccountProfile({ label: "Oracle $200k", mt5Server: "Upcomers", metadata: null });
-  assert.equal(p.explicit, false);
+check("every profile says where it got its numbers", () => {
+  // A trader has to be able to tell three things apart: a rule they set, a
+  // number read off the firm's own page, and a blanket guess. One phrase for
+  // all three — the old "assumed from the account name" — is what makes people
+  // switch the rails off.
+  const fromFirm = buildAccountProfile({ label: "Oracle $200k", mt5Server: "Upcomers", metadata: null });
+  assert.equal(fromFirm.explicit, false);
+  assert.match(fromFirm.description, /from Upcomers' published rules/);
+
+  const guessed = buildAccountProfile({ label: "Maven 50K", mt5Server: "Maven-Live", metadata: null });
+  assert.equal(guessed.explicit, false);
+  assert.match(guessed.description, /limits not confirmed for Maven Trading/);
+
+  const stated = buildAccountProfile({
+    label: "Maven 50K",
+    mt5Server: "Maven-Live",
+    metadata: { tradingRules: { maxDailyLossPct: 4 } },
+  });
+  assert.equal(stated.explicit, true);
   assert.ok(
-    /assumed from the account name/.test(p.description),
-    "a trader must be able to tell a guess from a rule they set",
+    !/assumed|not confirmed|strictest/.test(stated.description),
+    "stop hedging once the trader has told you",
   );
 });
 
@@ -213,10 +297,34 @@ check("something actually writes tradingRules now", () => {
   assert.ok(settings.includes("<AccountRulesPanel />"), "mounted where a trader will find it");
 });
 
-check("the panel shows whether the number protecting them is a guess", () => {
+check("the panel labels every limit with where it came from", () => {
   const panel = read("src/components/settings/AccountRulesPanel.tsx");
-  assert.ok(panel.includes("profile.explicit"), "say which rules are stated and which are assumed");
-  assert.ok(/a guess, until you state otherwise/.test(panel));
+  // One word for all three — the old "a guess, until you state otherwise" —
+  // could not distinguish a number read off FTMO's own page from a blanket
+  // assumption, so a trader had no way to know which of their rails to trust.
+  assert.ok(/SourceBadge/.test(panel));
+  assert.ok(/"you said"/.test(panel));
+  assert.ok(/"assumed"/.test(panel));
+  assert.ok(/profile\.provenance\[r\.key\]/.test(panel), "per field, not per account");
+  // And where the numbers came from, so the trader can check them in ten
+  // seconds — prop firms change their rulebooks.
+  assert.ok(/Source: \{firm\.source\}/.test(panel));
+});
+
+check("the panel asks which model instead of making the trader type the rules", () => {
+  const panel = read("src/components/settings/AccountRulesPanel.tsx");
+  // The complaint this answers: a trader who already chose their firm, paid
+  // their firm and passed their firm's evaluation should not then copy the
+  // firm's rulebook into an app. One tap on a list AXE already knows.
+  assert.ok(/Which \{firm\.name\} account is this\?/.test(panel));
+  assert.ok(/onPickModel\(model\)/.test(panel), "the models are buttons");
+  assert.ok(/onPickModel\(null\)/.test(panel), "and the answer is reversible");
+  assert.ok(
+    /const pickModel = useCallback/.test(panel),
+    "it saves on tap — leaving it to Save would show the old numbers next to the new model",
+  );
+  // Total drawdown is the rule that ends an account, and it had no field.
+  assert.ok(/Max total drawdown/.test(panel));
 });
 
 check("the route is classified for the tier gate", () => {
