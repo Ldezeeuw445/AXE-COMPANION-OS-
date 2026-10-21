@@ -10,6 +10,7 @@ import { IntelAiChat } from "@/components/intel/IntelAiChat";
 import { CorrelateButton } from "@/components/intel/CorrelateButton";
 import { CorrelationEngine } from "@/components/intel/CorrelationEngine";
 import { ConvictionEngine } from "@/components/intel/ConvictionEngine";
+import { shortVolumeRatioUi } from "@/lib/intel/shortVolumeRatioUi";
 
 const DEFAULT_SYMBOL = "XAUUSD";
 
@@ -1016,30 +1017,6 @@ function formatCompactVolume(value: number): string {
   if (abs >= 1e6) return `${(abs / 1e6).toFixed(2)}M`;
   if (abs >= 1e3) return `${(abs / 1e3).toFixed(1)}K`;
   return String(Math.round(abs));
-}
-
-/**
- * INTEL-FREE short-volume row accent.
- * shortRatio is 0..1 from FINRA (shortVolume / totalVolume).
- */
-function shortVolumeRatioUi(shortRatio: number): {
-  label: string;
-  ratioClassName: string;
-  rowClassName: string;
-} {
-  const pct = Number.isFinite(shortRatio) ? Math.round(shortRatio * 100) : 0;
-  const label = `${pct}% short`;
-
-  // TODO(learning): choose elevated-short threshold + accent classes.
-  // Trade-off: low (~0.25) highlights many names; high (~0.45+) is rarer/louder.
-  // Hint: compare shortRatio to your threshold, then return amber vs muted classes.
-  const elevated = false; // replace with: shortRatio >= YOUR_THRESHOLD
-
-  return {
-    label,
-    ratioClassName: elevated ? "text-amber-300" : "text-tos-muted",
-    rowClassName: elevated ? "border-amber-300/25" : "border-white/[0.05]",
-  };
 }
 
 function formatAge(seconds: number): string {

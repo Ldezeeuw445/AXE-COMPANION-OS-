@@ -19,6 +19,7 @@
     "smoke:launch": "node scripts/smoke-launch.mjs",
     "test:push-delivery": "node scripts/test-push-delivery.mjs",
     "test:finra-short-volume": "node scripts/test-finra-short-volume.mjs",
+    "test:short-volume-ratio-ui": "node scripts/test-short-volume-ratio-ui.mjs",
     "test:congress-public": "node scripts/test-congress-public.mjs",
     "test:sec-edgar": "node scripts/test-sec-edgar.mjs",
     "test:fmp-free-mappers": "node scripts/test-fmp-free-mappers.mjs",
