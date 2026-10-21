@@ -13,9 +13,9 @@ import { generateBroadcastLocally } from "@/services/broadcastGenerator";
  * that did not expose the endpoints the code hoped for.
  *
  * The route is still called `/api/cron/krater-feed-sync`. Renaming it means
- * moving a registered pg_cron job and a row in `axe_ops.cron_job` in step with
- * a deploy, and a mistimed rename leaves the feed silent for a day. Not worth
- * it for a name. The path is a label; this file is the behaviour.
+ * moving the host crontab line in `scripts/vps.crontab` in step with a deploy,
+ * and a mistimed rename leaves the feed silent. Not worth it for a name. The
+ * path is a label; this file is the behaviour.
  */
 
 export type BroadcastKind = "daily_news" | "market_recap";

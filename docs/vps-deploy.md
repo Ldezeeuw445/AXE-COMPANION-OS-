@@ -65,10 +65,14 @@ Same-origin chart WS is `wss://www.axecompanion.com/ws/chart`. You do **not** ne
 
 ## Who owns cron
 
-Read-only check on 2026-10-17 against `cron.job` and `axe_ops.cron_job` on
-project `pqnngpcgbdwxavbatbia`. **One scheduler owns each job.** Prefer the
-copy that is already live in `pg_cron`; the IONOS crontab only keeps jobs that
-are not registered there.
+**One scheduler owns each job.** Do not fire the same `/api/cron/*` path from
+both the IONOS crontab and `pg_cron`.
+
+The live crontab on `212.227.91.79` is **shared with AXE Core**. After a
+Companion deploy, **append** the Companion lines from `scripts/vps.crontab`
+(substitute `APP_ROOT` where that token is still in the line). **Never**
+install that file with `crontab -` — a wholesale replace drops AXE Core jobs
+that are not in this repo's file.
 
 | Job | Route | Owner | Why |
 |---|---|---|---|
@@ -83,16 +87,16 @@ are not registered there.
 | `journal-sweep` | `/api/cron/journal-sweep` | **pg_cron** | Live, active (Claude launch) |
 | `user-knowledge-sync` | `/api/cron/user-knowledge-sync` | **pg_cron** | Live, active; never was in the host crontab |
 | `congress-trades-sync` | `/api/cron/congress-trades-sync` | **IONOS crontab** | Documented in `docs/CRON-RUNBOOK.md` but **not** in live `cron.job` / `axe_ops.cron_job` |
+| `krater-feed-sync` | `/api/cron/krater-feed-sync` | **IONOS crontab** | Writes `axe_broadcast_feed`. pg_cron job `axe-companion-krater-feed-sync` was unscheduled on 2026-10-17; **host crontab is the only scheduler** — do not re-enable pg_cron |
 
-`scripts/vps.crontab` therefore contains only `congress-trades-sync`. After a
-deploy, **replace** the host crontab with that file (substitute `APP_ROOT`) so
-the old duplicate lines for journal-sweep / intel-correlate / the original
-eight jobs do not keep firing next to `pg_cron`. Keep `CRON_SECRET` in
+`scripts/vps.crontab` therefore holds the Companion host lines:
+`congress-trades-sync` and `krater-feed-sync`. Keep `CRON_SECRET` in
 `.env.local` — `pg_cron` still needs the same value in Vault
-(`axe_companion_cron_secret`) and the host job still sends it as Bearer.
+(`axe_companion_cron_secret`) and the host jobs still send it as Bearer.
 
-Do **not** `cron.schedule` congress-trades-sync from this PR. If you later
-promote it to `pg_cron`, delete the host line the same day.
+Do **not** `cron.schedule` congress-trades-sync or krater-feed-sync from this
+PR. If you later promote either to `pg_cron`, delete the host line the same
+day so only one scheduler remains.
 
 Health: `select * from axe_ops.cron_health;` and
 `curl -s https://www.axecompanion.com/api/debug/cron-health`. Full dispatch
