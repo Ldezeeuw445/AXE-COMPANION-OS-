@@ -933,9 +933,10 @@ function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id:
     p.state === "live" ? "live" : p.state === "error" ? "unavailable" : "off";
   const textColor =
     p.state === "live" ? "text-emerald-300/80" : p.state === "error" ? "text-amber-300/80" : "text-tos-dim";
-  // INTEL-FREE: failing sources stay visible as unavailable + reason (not a whole-page failure).
+  // INTEL-FREE: failing (or stale) sources stay visible with reason — not a whole-page failure.
+  // Live + reason = stale DB / partial source failure while rows still render.
   const reason =
-    p.state === "error" && p.reason
+    p.reason && (p.state === "error" || p.state === "live")
       ? p.reason.length > 36
         ? `${p.reason.slice(0, 33)}…`
         : p.reason

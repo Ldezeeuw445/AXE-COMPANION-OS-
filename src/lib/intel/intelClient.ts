@@ -1,5 +1,9 @@
 import "server-only";
 import { getSupabaseKey } from "@/lib/env";
+import {
+  intelProviderShowsLive,
+  reasonFromIntelEnvelope,
+} from "@/lib/intel/freeSources/providerFromEnvelope";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
 const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
@@ -256,7 +260,10 @@ type IntelAction =
   | "militaryRadar"
   | "emergencyMonitor";
 
-type IntelEnvelope<T> = { ok: true; data: T } | { ok: false; error: string };
+/** Proxy/DB result; INTEL-FREE keeps unavailable[] when live sources fail. */
+type IntelEnvelope<T> =
+  | { ok: true; data: T; source?: string; unavailable?: string[] }
+  | { ok: false; error: string; unavailable?: string[] };
 
 type IntelSnapshotCacheEntry = {
   snapshot: IntelSnapshot;
@@ -837,6 +844,34 @@ async function loadIntelFromDb<T>(
   }
 }
 
+function parseUnavailableList(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const list = raw
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  return list.length > 0 ? list : undefined;
+}
+
+/** Prefer live proxy rows; on client DB fallback mark source db_stale + reasons. */
+function withStaleDbFallback<T>(
+  db: IntelEnvelope<T>,
+  unavailable?: string[],
+  proxyError?: string,
+): IntelEnvelope<T> | null {
+  if (!db.ok) return null;
+  const reasons = [
+    ...(unavailable ?? []),
+    ...(proxyError ? [proxyError] : []),
+  ];
+  return {
+    ok: true,
+    data: db.data,
+    source: "db_stale",
+    unavailable: reasons.length > 0 ? reasons.slice(0, 8) : undefined,
+  };
+}
+
 async function callIntelProxy<T>(
   action: IntelAction,
   args: Record<string, unknown> = {},
@@ -869,34 +904,43 @@ async function callIntelProxy<T>(
       next: { revalidate: REVALIDATE_SECONDS, tags: [`intel:${action}`] },
     });
     if (!res.ok) {
-      const db = await loadIntelFromDb<T>(action, args);
-      if (db.ok) return db;
       const body = await res.text().catch(() => "");
-      return { ok: false, error: `intel_proxy_${res.status}:${body.slice(0, 120)}` };
+      const proxyError = `intel_proxy_${res.status}:${body.slice(0, 120)}`;
+      const db = await loadIntelFromDb<T>(action, args);
+      const stale = withStaleDbFallback(db, undefined, proxyError);
+      if (stale) return stale;
+      return { ok: false, error: proxyError };
     }
     const json = (await res.json()) as {
       ok?: boolean;
       data?: unknown;
       error?: string;
       message?: string;
+      source?: string;
       unavailable?: string[];
     };
+    const unavailable = parseUnavailableList(json.unavailable);
     if (!json.ok) {
+      const proxyError =
+        json.message ?? json.error ?? "intel_proxy_unknown_error";
       const db = await loadIntelFromDb<T>(action, args);
-      if (db.ok) return db;
-      const unavailable =
-        Array.isArray(json.unavailable) && json.unavailable.length > 0
-          ? ` (${json.unavailable.slice(0, 3).join("; ")})`
-          : "";
+      const stale = withStaleDbFallback(db, unavailable, proxyError);
+      if (stale) return stale;
       return {
         ok: false,
-        error: `${json.message ?? json.error ?? "intel_proxy_unknown_error"}${unavailable}`,
+        error: proxyError,
+        unavailable,
       };
     }
     const normalized = normalizeProxyPayload<T>(action, json.data);
+    const source =
+      typeof json.source === "string" && json.source.trim()
+        ? json.source.trim()
+        : undefined;
     if (action === "marketTide" && (normalized == null || normalized === undefined)) {
       const db = await loadIntelFromDb<T>(action, args);
-      if (db.ok && db.data != null) return db;
+      const stale = withStaleDbFallback(db, unavailable, "market_tide_empty");
+      if (stale) return stale;
     }
     if (
       Array.isArray(normalized) &&
@@ -904,16 +948,34 @@ async function callIntelProxy<T>(
       !DB_ONLY_ACTIONS.has(action)
     ) {
       const db = await loadIntelFromDb<T>(action, args);
-      if (db.ok && Array.isArray(db.data) && db.data.length > 0) return db;
+      if (db.ok && Array.isArray(db.data) && db.data.length > 0) {
+        return (
+          withStaleDbFallback(db, unavailable, "proxy_empty") ?? {
+            ok: true,
+            data: db.data,
+            source: "db_stale",
+            unavailable,
+          }
+        );
+      }
     }
-    return { ok: true, data: normalized };
+    return {
+      ok: true,
+      data: normalized,
+      source,
+      unavailable,
+    };
   } catch (e) {
+    const proxyError =
+      e instanceof Error && e.name === "AbortError"
+        ? `intel_proxy_timeout_${INTEL_PROXY_TIMEOUT_MS}ms`
+        : e instanceof Error
+          ? e.message
+          : String(e);
     const db = await loadIntelFromDb<T>(action, args);
-    if (db.ok) return db;
-    if (e instanceof Error && e.name === "AbortError") {
-      return { ok: false, error: `intel_proxy_timeout_${INTEL_PROXY_TIMEOUT_MS}ms` };
-    }
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const stale = withStaleDbFallback(db, undefined, proxyError);
+    if (stale) return stale;
+    return { ok: false, error: proxyError };
   } finally {
     clearTimeout(timer);
   }
@@ -926,7 +988,16 @@ function toStatus(
   ok: boolean,
   err?: string,
 ): IntelProviderStatus {
-  if (ok) return { id, label, state: "live", description };
+  // INTEL-FREE: live may still carry a stale/unavailable reason for the badge.
+  if (ok) {
+    return {
+      id,
+      label,
+      state: "live",
+      description: err ? `${description} — ${err}` : description,
+      reason: err,
+    };
+  }
   if (err) {
     return {
       id,
@@ -943,6 +1014,25 @@ function toStatus(
     description: `${description} — waiting for new signals…`,
     reason: "no_data",
   };
+}
+
+function statusFromEnvelope(
+  id: IntelProviderStatus["id"],
+  label: string,
+  description: string,
+  envelope: IntelEnvelope<unknown>,
+  hasData: boolean,
+): IntelProviderStatus {
+  const unavailable = envelope.unavailable;
+  const hasUnavailable = Boolean(unavailable && unavailable.length > 0);
+  const live = intelProviderShowsLive({ hasData, hasUnavailable });
+  const reason = reasonFromIntelEnvelope({
+    ok: envelope.ok,
+    error: envelope.ok ? undefined : envelope.error,
+    source: envelope.ok ? envelope.source : undefined,
+    unavailable,
+  });
+  return toStatus(id, label, description, live, reason);
 }
 
 export async function loadIntelSnapshot(opts?: {
@@ -1057,105 +1147,106 @@ async function fetchIntelSnapshot(
     );
   }
 
+  // INTEL-FREE free feeds first: preserve unavailable reasons from proxy/DB.
   const providers: IntelProviderStatus[] = [
-    toStatus(
+    statusFromEnvelope(
       "insiderTrades",
       "Insider trades",
       "AXE Intel insider transaction feed",
-      insiderRes.ok && insiders.length > 0,
-      insiderRes.ok ? undefined : insiderRes.error,
+      insiderRes,
+      insiders.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "senateTrades",
       "Congress",
       "AXE Intel congressional disclosure feed",
-      senateRes.ok && senate.length > 0,
-      senateRes.ok ? undefined : senateRes.error,
+      senateRes,
+      senate.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "shortVolume",
       "Short volume",
       "FINRA daily short sale volume",
-      shortVolumeRes.ok && shortVolume.length > 0,
-      shortVolumeRes.ok ? undefined : shortVolumeRes.error,
+      shortVolumeRes,
+      shortVolume.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "darkPoolPrints",
       "Dark pool",
       "AXE Intel off-exchange print feed",
-      darkPoolRes.ok && darkPool.length > 0,
-      darkPoolRes.ok ? undefined : darkPoolRes.error,
+      darkPoolRes,
+      darkPool.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "unusualOptions",
       "Options flow",
       "AXE Intel smart-money options feed",
-      optionsRes.ok && options.length > 0,
-      optionsRes.ok ? undefined : optionsRes.error,
+      optionsRes,
+      options.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "marketTide",
       "Market tide",
       "AXE Intel net call/put premium tide",
-      tideRes.ok && tide != null,
-      tideRes.ok ? undefined : tideRes.error,
+      tideRes,
+      tide != null,
     ),
-    toStatus(
+    statusFromEnvelope(
       "corporateJets",
       "Corporate jets",
       "AXE Intel executive mobility tracking",
-      jetsRes.ok && jets.length > 0,
-      jetsRes.ok ? undefined : jetsRes.error,
+      jetsRes,
+      jets.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "vesselTracking",
       "Vessel tracking",
       "AXE Intel supply chain & chokepoint monitoring",
-      vesselRes.ok && vessels.length > 0,
-      vesselRes.ok ? undefined : vesselRes.error,
+      vesselRes,
+      vessels.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "chokepoints",
       "Chokepoints",
       "AXE Intel global chokepoint monitoring",
-      chokepointRes.ok && chokepoints.length > 0,
-      chokepointRes.ok ? undefined : chokepointRes.error,
+      chokepointRes,
+      chokepoints.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "conflictEvents",
       "Seismic events",
       "AXE Intel geopolitical & seismic events",
-      conflictRes.ok && conflicts.length > 0,
-      conflictRes.ok ? undefined : conflictRes.error,
+      conflictRes,
+      conflicts.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "energyFlows",
       "Energy flows",
       "AXE Intel energy inventory & pricing",
-      energyRes.ok && energy.length > 0,
-      energyRes.ok ? undefined : energyRes.error,
+      energyRes,
+      energy.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "cyberThreats",
       "Cyber threats",
       "AXE Intel cyber threat detection",
-      cyberRes.ok && cyber.length > 0,
-      cyberRes.ok ? undefined : cyberRes.error,
+      cyberRes,
+      cyber.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "militaryRadar",
       "Military radar",
       "AXE Intel global military aircraft tracking",
-      militaryRes.ok && military.length > 0,
-      militaryRes.ok ? undefined : militaryRes.error,
+      militaryRes,
+      military.length > 0,
     ),
-    toStatus(
+    statusFromEnvelope(
       "emergencyMonitor",
       "Emergency monitor",
       "AXE Intel aviation emergency squawk tracking",
       // 0 emergencies is normal — only mark error if the call itself failed
+      emergencyRes,
       emergencyRes.ok,
-      emergencyRes.ok ? undefined : emergencyRes.error,
     ),
   ];
 
