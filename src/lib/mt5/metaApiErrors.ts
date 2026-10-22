@@ -1,5 +1,6 @@
 export type Mt5CloudErrorCode =
   | "provider_not_configured"
+  | "service_role_required"
   | "metaapi_auth_failed"
   | "mt5_invalid_credentials"
   | "mt5_server_not_found"
@@ -17,6 +18,9 @@ export type Mt5CloudErrorCode =
 const USER_MESSAGES: Record<Mt5CloudErrorCode, string> = {
   provider_not_configured:
     "MT5 cloud is not configured on the server (missing MetaApi token). Add METAAPI_TOKEN or AXE_MT5_METAAPI_TOKEN to the deployment environment.",
+  // TOS-SEC-2: shown when broker table writes cannot use the service-role client.
+  service_role_required:
+    "Broker account sync writes need SUPABASE_SERVICE_ROLE_KEY on the server. Add that key (or set AXE_ALLOW_SESSION_BROKER_WRITES=true for local/dev only).",
   metaapi_auth_failed: "MetaApi rejected the server token. Check METAAPI_TOKEN / AXE_MT5_METAAPI_TOKEN and that the token is valid for your MetaApi app.",
   mt5_invalid_credentials:
     "MetaTrader login, investor password, or server name was rejected by the broker. Double-check read-only password and exact server string from your broker.",

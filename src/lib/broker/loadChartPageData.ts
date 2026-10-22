@@ -38,7 +38,7 @@ import {
   metadataSymbolUniverseFresh,
   probeBrokerSymbolReport,
 } from "@/lib/broker/brokerSymbolRuntime";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import type { OpenPositionRow } from "@/lib/broker/loadPositionsPageData";
 
 const DEFAULT_SYMBOL = "XAUUSD";
@@ -848,32 +848,35 @@ export async function loadChartPageData(
     symbolMap = runtimeMeta.symbol_map;
     knownAccountSymbols = Array.from(new Set([...knownAccountSymbols, ...Object.values(symbolMap)]));
     const nextMetadata = { ...accountMetadata, ...runtimeMeta };
-    // TOS-SEC-2: account metadata writes via service role (not session UPDATE).
-    const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
-    void writeSb
-      .from("user_broker_accounts")
-      .update({ metadata: nextMetadata })
-      .eq("id", account.brokerAccountId)
-      .eq("user_id", user.id);
-    void probeBrokerSymbolReport({
-      accountId: account.metaApiAccountId,
-      region: account.metaApiRegion ?? null,
-      report: runtimeMeta.symbol_resolution_report,
-      timeframe: metaApiTimeframe,
-      displays: [requested, ...CANONICAL_BROKER_SYMBOLS],
-      timeoutMs: 2_000,
-    }).then((symbol_resolution_report) => {
+    // TOS-SEC-2: account metadata writes via service role (best-effort; chart still loads).
+    const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+    if (writeResolved.ok) {
+      const writeSb = writeResolved.client;
       void writeSb
         .from("user_broker_accounts")
-        .update({
-          metadata: {
-            ...nextMetadata,
-            symbol_resolution_report,
-          },
-        })
+        .update({ metadata: nextMetadata })
         .eq("id", account.brokerAccountId)
         .eq("user_id", user.id);
-    });
+      void probeBrokerSymbolReport({
+        accountId: account.metaApiAccountId,
+        region: account.metaApiRegion ?? null,
+        report: runtimeMeta.symbol_resolution_report,
+        timeframe: metaApiTimeframe,
+        displays: [requested, ...CANONICAL_BROKER_SYMBOLS],
+        timeoutMs: 2_000,
+      }).then((symbol_resolution_report) => {
+        void writeSb
+          .from("user_broker_accounts")
+          .update({
+            metadata: {
+              ...nextMetadata,
+              symbol_resolution_report,
+            },
+          })
+          .eq("id", account.brokerAccountId)
+          .eq("user_id", user.id);
+      });
+    }
   }
 
   const rawCachedBroker = symbolMap[requested] ?? symbolMap[requestedRaw];

@@ -27,7 +27,7 @@ import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { withActionBudget } from "@/lib/mt5/mt5ActionBudget";
 import { mapMetaApiActionError } from "@/lib/mt5/mapMetaApiActionError";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 
 export type CloudMt5SyncResult =
   | { ok: true; data: { dealsFetched: number; dealsUpserted: number; tradesNormalized: number } }
@@ -128,8 +128,12 @@ export async function runCloudMt5Sync(
     return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
   }
 
-  // TOS-SEC-2: ledger + account status writes go through service role.
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  // TOS-SEC-2: ledger + account status writes go through service role (fail-closed).
+  const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!writeResolved.ok) {
+    return { ok: false, code: writeResolved.code, message: writeResolved.message };
+  }
+  const writeSb = writeResolved.client;
 
   let extId = row.external_connection_id as string;
   const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
@@ -443,7 +447,12 @@ export async function refreshCloudAccountSymbolMap(
     return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
   }
 
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  // TOS-SEC-2: symbol_map writes via service role (fail-closed).
+  const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!writeResolved.ok) {
+    return { ok: false, code: writeResolved.code, message: writeResolved.message };
+  }
+  const writeSb = writeResolved.client;
 
   let extId = row.external_connection_id as string;
   const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAxeBrokerConnectionHubForSession } from "@/lib/broker/hub/createHub";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,7 +76,14 @@ export async function POST(request: Request) {
   }
 
   // TOS-SEC-2: status/metadata UPDATE via service role (ownership checked above).
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!writeResolved.ok) {
+    return NextResponse.json(
+      { ok: false, code: writeResolved.code, message: writeResolved.message },
+      { status: 503 },
+    );
+  }
+  const writeSb = writeResolved.client;
   const { error: updateError } = await writeSb
     .from("user_broker_accounts")
     .update({

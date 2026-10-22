@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
 import { isDemoAccount } from "@/lib/broker/accountKind";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 
 export { isDemoAccount };
@@ -63,7 +63,12 @@ export async function ensureDemoAccount(
 
   const now = new Date().toISOString();
   // TOS-SEC-2: demo account INSERT via service role (lookup stays session).
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!writeResolved.ok) {
+    console.warn("[demoAccount] write client unavailable", writeResolved.message);
+    return null;
+  }
+  const writeSb = writeResolved.client;
   const { data: created, error: createErr } = await writeSb
     .from("user_broker_accounts")
     .insert({

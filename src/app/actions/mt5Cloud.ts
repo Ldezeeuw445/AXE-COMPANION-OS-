@@ -26,7 +26,7 @@ import {
 } from "@/lib/mt5/metaApiClient";
 import { META_API_REGIONS, type MetaApiRegion } from "@/lib/mt5/metaApiRegions";
 import { metadataHasSymbolMap, refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import { syncBrokerHubFromAccountRow } from "@/lib/broker/hub/sync";
 import {
   metaApiComplianceConfirmed,
@@ -39,10 +39,20 @@ import type {
   Mt5DoctorStepId,
   Mt5DoctorStepStatus,
 } from "@/types/mt5Doctor";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
   | { ok: false; code: Mt5CloudErrorCode; message: string };
+
+/** TOS-SEC-2: fail-closed broker table writes for Mt5CloudResult actions. */
+function requireBrokerWriteClient(
+  supabase: SupabaseClient,
+): { ok: true; writeSb: SupabaseClient } | { ok: false; code: Mt5CloudErrorCode; message: string } {
+  const resolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!resolved.ok) return resolved;
+  return { ok: true, writeSb: resolved.client };
+}
 
 function sha256Hex(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
@@ -366,7 +376,9 @@ export async function createCloudMt5ConnectionAction(
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
   // TOS-SEC-2: account row writes go through service role (ownership via userId filter).
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeGate = requireBrokerWriteClient(supabase);
+  if (!writeGate.ok) return writeGate;
+  const writeSb = writeGate.writeSb;
 
   const label = String(formData.get("label") ?? "").trim();
   const mt5Login = String(formData.get("mt5Login") ?? "").trim().replace(/\D/g, "");
@@ -569,7 +581,9 @@ export async function probeCloudMt5StatusAction(accountId: string): Promise<
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeGate = requireBrokerWriteClient(supabase);
+  if (!writeGate.ok) return writeGate;
+  const writeSb = writeGate.writeSb;
 
   const { data: row, error } = await supabase
     .from("user_broker_accounts")
@@ -651,7 +665,9 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeGate = requireBrokerWriteClient(supabase);
+  if (!writeGate.ok) return writeGate;
+  const writeSb = writeGate.writeSb;
 
   const { data: row, error } = await supabase
     .from("user_broker_accounts")
@@ -798,7 +814,9 @@ export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5Clo
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeGate = requireBrokerWriteClient(supabase);
+  if (!writeGate.ok) return writeGate;
+  const writeSb = writeGate.writeSb;
 
   const [{ data: row, error }, prefsRes, chartRes] = await Promise.all([
     supabase
@@ -1160,7 +1178,9 @@ export async function disconnectCloudMt5AccountAction(accountId: string): Promis
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeGate = requireBrokerWriteClient(supabase);
+  if (!writeGate.ok) return writeGate;
+  const writeSb = writeGate.writeSb;
 
   const { data: row, error } = await supabase
     .from("user_broker_accounts")
@@ -1221,7 +1241,9 @@ export async function recoverCloudMt5AccountAction(accountId: string): Promise<M
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, code: "validation", message: "Not signed in." };
 
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeGate = requireBrokerWriteClient(supabase);
+  if (!writeGate.ok) return writeGate;
+  const writeSb = writeGate.writeSb;
 
   const { data: row, error } = await supabase
     .from("user_broker_accounts")

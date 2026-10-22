@@ -3,7 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import { provisioningDeleteAccount } from "@/lib/mt5/metaApiClient";
 
@@ -37,7 +37,9 @@ export async function createBrokerAccountAction(
   const linkTokenHash = sha256Hex(linkToken);
 
   // TOS-SEC-2: account INSERT via service role (auth already checked above).
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!writeResolved.ok) return { error: writeResolved.message };
+  const writeSb = writeResolved.client;
   const { error } = await writeSb.from("user_broker_accounts").insert({
     user_id: user.id,
     provider: "mt5",
@@ -128,7 +130,9 @@ export async function deleteBrokerAccountAction(accountId: string): Promise<{ er
   if (trListErr) return { error: trListErr.message };
 
   // TOS-SEC-2: trade + account DELETEs via service role (ownership checked above).
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!writeResolved.ok) return { error: writeResolved.message };
+  const writeSb = writeResolved.client;
 
   const tradeIds = (tradeRows ?? []).map((t) => t.id as string);
   if (tradeIds.length > 0) {

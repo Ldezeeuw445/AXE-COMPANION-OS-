@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 import {
   accountConnectionToDbPatch,
   dbRowToAccountConnection,
@@ -67,7 +67,9 @@ export async function syncBrokerHubFromAccountRow(
       hub_permissions: permissions as unknown as Record<string, unknown>,
     });
 
-    const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+    const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+    if (!writeResolved.ok) return;
+    const writeSb = writeResolved.client;
     await writeSb
       .from("user_broker_accounts")
       .update(accountConnectionToDbPatch(connection))

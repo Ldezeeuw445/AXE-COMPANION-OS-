@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
 import { getAlpacaAccount } from "@/lib/alpaca/client";
 import { isAlpacaAccount } from "@/lib/broker/accountKind";
-import { resolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
+import { tryResolveMt5SyncWriteClient } from "@/lib/mt5/resolveSyncWriteClient";
 
 export { isAlpacaAccount };
 
@@ -77,7 +77,11 @@ export async function ensureAlpacaPaperAccount(
   };
 
   // TOS-SEC-2: provision INSERT/UPDATE via service role (lookup stays session).
-  const { client: writeSb } = resolveMt5SyncWriteClient(supabase);
+  const writeResolved = tryResolveMt5SyncWriteClient(supabase);
+  if (!writeResolved.ok) {
+    return { ok: false, code: writeResolved.code, message: writeResolved.message };
+  }
+  const writeSb = writeResolved.client;
 
   if (existing?.id) {
     await writeSb
