@@ -33,8 +33,8 @@ export class Mt5SyncWriteClientUnavailableError extends Error {
  * Explicit opt-in for local/dev without SUPABASE_SERVICE_ROLE_KEY.
  * Flag accepts: "1", "true", "yes", "on" (case-insensitive).
  *
- * Production guard: implement `shouldBlockSessionBrokerWritesInProduction`
- * below — when that returns true, this function always returns false.
+ * Ignored when `shouldBlockSessionBrokerWritesInProduction` is true
+ * (Vercel Production), so a mis-set flag cannot re-open session writes.
  */
 export function allowSessionBrokerWrites(
   envGet: (key: string) => string = (key) => process.env[key] ?? "",
@@ -47,17 +47,13 @@ export function allowSessionBrokerWrites(
 /**
  * Security vs. local DX: should production ignore AXE_ALLOW_SESSION_BROKER_WRITES?
  *
- * Return true to refuse session broker writes in production even if the flag
- * is set (safer once SELECT-only RLS is live). Return false to honor the flag
- * in every environment (handy for staging clones that share prod NODE_ENV).
+ * Uses VERCEL_ENV (not NODE_ENV) so local `next start` / preview can still
+ * opt in. Only true Vercel Production refuses the escape hatch.
  */
 export function shouldBlockSessionBrokerWritesInProduction(
   envGet: (key: string) => string = (key) => process.env[key] ?? "",
 ): boolean {
-  // TODO(learning): implement production guard — see session prompt.
-  // Hint: check envGet("VERCEL_ENV") === "production" and/or NODE_ENV.
-  void envGet;
-  return false;
+  return envGet("VERCEL_ENV").trim().toLowerCase() === "production";
 }
 
 export type Mt5SyncWriteClientOk = {

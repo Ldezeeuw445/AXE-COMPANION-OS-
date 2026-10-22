@@ -24,10 +24,9 @@ function allowSessionBrokerWrites(env) {
   return flag === "1" || flag === "true" || flag === "yes" || flag === "on";
 }
 
-/** Mirror of the learning stub — keep in sync with resolveSyncWriteClient.ts */
+/** Mirror of resolveSyncWriteClient.ts — keep in sync. */
 function shouldBlockSessionBrokerWritesInProduction(env) {
-  void env;
-  return false;
+  return String(env.VERCEL_ENV ?? "").trim().toLowerCase() === "production";
 }
 
 function tryResolveMt5SyncWriteClient(sessionClient, serviceClient, env = {}) {
@@ -84,6 +83,42 @@ for (const truthy of ["1", "TRUE", "Yes", "on"]) {
   assert.equal(r.viaServiceRole, false);
 }
 
+// Production guard: VERCEL_ENV=production ignores the opt-in flag.
+assert.equal(
+  shouldBlockSessionBrokerWritesInProduction({ VERCEL_ENV: "production" }),
+  true,
+);
+assert.equal(
+  shouldBlockSessionBrokerWritesInProduction({ VERCEL_ENV: "preview" }),
+  false,
+);
+assert.equal(
+  shouldBlockSessionBrokerWritesInProduction({ NODE_ENV: "production" }),
+  false,
+  "NODE_ENV alone must not block (local next start / CI)",
+);
+
+const prodBlocksOptIn = tryResolveMt5SyncWriteClient(session, null, {
+  AXE_ALLOW_SESSION_BROKER_WRITES: "true",
+  VERCEL_ENV: "production",
+});
+assert.equal(prodBlocksOptIn.ok, false);
+assert.equal(prodBlocksOptIn.code, "service_role_required");
+
+const previewAllowsOptIn = tryResolveMt5SyncWriteClient(session, null, {
+  AXE_ALLOW_SESSION_BROKER_WRITES: "true",
+  VERCEL_ENV: "preview",
+});
+assert.equal(previewAllowsOptIn.ok, true);
+assert.equal(previewAllowsOptIn.viaServiceRole, false);
+
+// Service role still wins in production even when the flag is set.
+const prodWithService = resolveMt5SyncWriteClient(session, service, {
+  AXE_ALLOW_SESSION_BROKER_WRITES: "true",
+  VERCEL_ENV: "production",
+});
+assert.equal(prodWithService.viaServiceRole, true);
+
 const resolveSrc = readFileSync(
   join(root, "src/lib/mt5/resolveSyncWriteClient.ts"),
   "utf8",
@@ -92,6 +127,15 @@ assert.ok(resolveSrc.includes("createServiceRoleSupabaseClient"));
 assert.ok(resolveSrc.includes("viaServiceRole"));
 assert.ok(resolveSrc.includes("tryResolveMt5SyncWriteClient"));
 assert.ok(resolveSrc.includes("AXE_ALLOW_SESSION_BROKER_WRITES"));
+assert.ok(resolveSrc.includes("shouldBlockSessionBrokerWritesInProduction"));
+assert.ok(
+  /VERCEL_ENV.*production|production.*VERCEL_ENV/.test(resolveSrc),
+  "production guard must key off VERCEL_ENV === production",
+);
+assert.ok(
+  !resolveSrc.includes("TODO(learning)"),
+  "production guard stub must be implemented",
+);
 assert.ok(resolveSrc.includes("service_role_required"));
 assert.ok(
   resolveSrc.includes("Mt5SyncWriteClientUnavailableError"),
@@ -248,6 +292,7 @@ console.log(
       preferServiceRole: true,
       failClosedWithoutServiceRole: true,
       optInSessionWritesEnv: "AXE_ALLOW_SESSION_BROKER_WRITES",
+      productionIgnoresOptInVia: "VERCEL_ENV=production",
       ownershipStillViaUserIdFilter: true,
       noSessionWritesOnBrokerTables: true,
       selectOnlyMigration: rlsMigrationRel,
