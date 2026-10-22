@@ -1,10 +1,11 @@
 /**
  * Static MT5 broker / server support list.
  *
- * MetaApi only knows servers in its own registry, and this repo has no live
- * broker-search client. A name check that needs a login would be the thing we
- * are trying to avoid: the trader should see whether AXE even *knows* the
- * server before typing a password.
+ * This is the pre-Connect name check: no login is sent, unknown is not a
+ * refusal. The live MetaApi known-servers search is not duplicated here —
+ * `provisioningSearchKnownServers` in metaApiClient.ts is the one client
+ * call, and `chooseServer` in serverName.ts uses it at Connect time to map a
+ * dashboard name ("Upcomers") to the real MT5 server ("Upcomers-Server").
  *
  * Three verdicts, nothing in between:
  *   - known        — on this list, MetaApi typically accepts it as MT5
@@ -114,7 +115,7 @@ export const KNOWN_MT5_BROKERS: readonly KnownBroker[] = [
     id: "upcomers",
     name: "Upcomers",
     aliases: ["upcomers-oracle"],
-    servers: ["Upcomers"],
+    servers: ["Upcomers", "Upcomers-Server"],
     popular: true,
   },
   {

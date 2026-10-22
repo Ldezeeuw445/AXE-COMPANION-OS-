@@ -138,6 +138,20 @@ check("the profile id is remembered so nobody uploads it twice", () => {
   );
 });
 
+check("the connect action resolves a dashboard name against MetaApi's registry", () => {
+  // Static knownBrokers.ts is the pre-Connect UI only. The live lookup is
+  // one client call, used here so "Upcomers" becomes "Upcomers-Server"
+  // before the account is created — not a second copy of the search.
+  assert.ok(client.includes("/known-mt-servers/5/search"), "the documented MetaApi search");
+  assert.ok(client.includes("export async function provisioningSearchKnownServers"), "one client helper");
+  assert.ok(action.includes("provisioningSearchKnownServers("), "connect asks the registry");
+  assert.ok(action.includes("chooseServer("), "and maps the typed name");
+  const helper = read("src/lib/mt5/serverName.ts");
+  assert.ok(helper.includes("export function chooseServer"), "resolution rules live in one helper");
+  const lib = read("src/lib/mt5/knownBrokers.ts");
+  assert.ok(!lib.includes("known-mt-servers"), "the static list does not call MetaApi");
+});
+
 check("the connect wizard checks the server name before any login is typed", () => {
   const checkUi = read("src/components/accounts/BrokerSupportCheck.tsx");
   assert.ok(screen.includes("BrokerSupportCheck"), "the live wizard mounts the name check");

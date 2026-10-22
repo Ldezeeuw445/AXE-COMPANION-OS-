@@ -34,6 +34,7 @@ describe("lookupBrokerSupport", () => {
   it("recognises firms this repo has actually connected", () => {
     assert.equal(lookupBrokerSupport("FTMO-Server")?.kind, "known");
     assert.equal(lookupBrokerSupport("Upcomers")?.kind, "known");
+    assert.equal(lookupBrokerSupport("Upcomers-Server")?.kind, "known");
     assert.equal(lookupBrokerSupport("XM")?.kind, "known");
   });
 
