@@ -21,11 +21,17 @@ import type {
   PendingOrderRow,
   AccountSummary,
 } from "@/lib/broker/loadPositionsPageData";
+import { StaleAgeBadge } from "@/components/pwa/StaleAgeBadge";
+import { readLastAccountFigures, writeLastAccountFigures } from "@/lib/pwa/lastAccountCache";
+import { accountFreshness } from "@/lib/pwa/staleAge";
+import { useOnlineStatus } from "@/lib/pwa/useOnlineStatus";
 
 type Props = {
   positions: OpenPositionRow[];
   pendingOrders: PendingOrderRow[];
   accountSummary: AccountSummary | null;
+  lastSyncAt?: string | null;
+  figuresFromCache?: boolean;
   providerStatus: string | null;
   error: string | null;
   hint: string | null;
@@ -114,12 +120,17 @@ export function PositionsScreen({
   positions,
   pendingOrders,
   accountSummary,
+  lastSyncAt = null,
+  figuresFromCache = false,
   providerStatus,
   error,
   hint,
   brokerAccountId,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("positions");
+  const online = useOnlineStatus();
+  const [cachedFigures, setCachedFigures] = useState<AccountSummary | null>(null);
+  const [cachedSyncAt, setCachedSyncAt] = useState<string | null>(null);
   const [closeState, setCloseState] = useState<CloseState | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [orderActionState, setOrderActionState] = useState<OrderActionState | null>(null);
@@ -134,6 +145,33 @@ export function PositionsScreen({
       : providerStatus === "failed"
         ? false
         : null;
+
+  useEffect(() => {
+    if (!brokerAccountId) return;
+    if (accountSummary && (accountSummary.balance != null || accountSummary.equity != null)) {
+      writeLastAccountFigures({
+        accountId: brokerAccountId,
+        savedAt: Date.now(),
+        lastSyncAt,
+        summary: accountSummary,
+      });
+      return;
+    }
+    const cached = readLastAccountFigures(brokerAccountId);
+    if (cached) {
+      setCachedFigures(cached.summary);
+      setCachedSyncAt(cached.lastSyncAt);
+    }
+  }, [accountSummary, brokerAccountId, lastSyncAt]);
+
+  const figures = accountSummary ?? cachedFigures;
+  const figuresSyncAt = accountSummary ? lastSyncAt : cachedSyncAt ?? lastSyncAt;
+  const figuresOffline = figuresFromCache || (!accountSummary && cachedFigures != null);
+  const figuresFreshness = accountFreshness({
+    lastSyncAt: figuresSyncAt,
+    online,
+    fromCache: figuresOffline,
+  });
 
   /* ── Close trade handlers ─────────────────────────────────────── */
   const handleCloseRequest = useCallback(
@@ -421,13 +459,19 @@ export function PositionsScreen({
       )}
 
       {/* ── Account summary bar ────────────────────────────────────── */}
-      {accountSummary && (
-        <div className="mx-3 mb-2 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-          <AccountMetric label="Balance" value={fmtMoney(accountSummary.balance)} />
-          <AccountMetric label="Equity" value={fmtMoney(accountSummary.equity)} />
-          <AccountMetric label="Margin" value={fmtMoney(accountSummary.margin)} />
-          <AccountMetric label="Free Margin" value={fmtMoney(accountSummary.freeMargin)} />
-          <AccountMetric label="Margin Level" value={fmtPct(accountSummary.marginLevel)} />
+      {figures && (
+        <div
+          className="mx-3 mb-2 flex flex-wrap items-end gap-x-4 gap-y-1 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+          data-testid="account-figures"
+        >
+          <AccountMetric label="Balance" value={fmtMoney(figures.balance)} />
+          <AccountMetric label="Equity" value={fmtMoney(figures.equity)} />
+          <AccountMetric label="Margin" value={fmtMoney(figures.margin)} />
+          <AccountMetric label="Free Margin" value={fmtMoney(figures.freeMargin)} />
+          <AccountMetric label="Margin Level" value={fmtPct(figures.marginLevel)} />
+          <div className="ml-auto">
+            <StaleAgeBadge freshness={figuresFreshness} always testId="account-figures-stale" />
+          </div>
         </div>
       )}
 

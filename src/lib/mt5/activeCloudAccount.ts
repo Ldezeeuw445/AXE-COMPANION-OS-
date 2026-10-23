@@ -7,6 +7,8 @@ export type ActiveMetaApiCloud = {
   metaApiAccountId: string;
   /** MetaApi region the cloud terminal lives in (london / new-york / singapore). */
   metaApiRegion: string | null;
+  lastSyncAt: string | null;
+  metadata: Record<string, unknown>;
 };
 
 /** MetaApi cloud credentials for a specific broker account row. */
@@ -17,7 +19,7 @@ export async function getMetaApiCloudAccountById(
 ): Promise<ActiveMetaApiCloud | null> {
   const { data: row } = await supabase
     .from("user_broker_accounts")
-    .select("id,connection_method,external_connection_id,metadata")
+    .select("id,connection_method,external_connection_id,metadata,last_sync_at")
     .eq("user_id", userId)
     .eq("id", brokerAccountId)
     .maybeSingle();
@@ -25,17 +27,7 @@ export async function getMetaApiCloudAccountById(
   if (!row?.external_connection_id) return null;
   if (row.connection_method !== "cloud_mt5") return null;
 
-  const meta =
-    row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
-      ? (row.metadata as Record<string, unknown>)
-      : {};
-  const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
-
-  return {
-    brokerAccountId: row.id as string,
-    metaApiAccountId: row.external_connection_id as string,
-    metaApiRegion: region,
-  };
+  return mapCloudRow(row);
 }
 
 /** Active workspace account when it is a linked MetaApi cloud row. */
@@ -54,7 +46,7 @@ export async function getActiveMetaApiCloudAccount(
 
   const { data: row } = await supabase
     .from("user_broker_accounts")
-    .select("id,connection_method,external_connection_id,metadata")
+    .select("id,connection_method,external_connection_id,metadata,last_sync_at")
     .eq("user_id", userId)
     .eq("id", activeId)
     .maybeSingle();
@@ -62,15 +54,26 @@ export async function getActiveMetaApiCloudAccount(
   if (!row?.external_connection_id) return null;
   if (row.connection_method !== "cloud_mt5") return null;
 
+  return mapCloudRow(row);
+}
+
+function mapCloudRow(row: {
+  id: unknown;
+  external_connection_id: unknown;
+  metadata?: unknown;
+  last_sync_at?: unknown;
+}): ActiveMetaApiCloud {
   const meta =
     row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
       ? (row.metadata as Record<string, unknown>)
       : {};
   const region = typeof meta.metaapiRegion === "string" ? meta.metaapiRegion : null;
-
+  const lastSyncAt = typeof row.last_sync_at === "string" ? row.last_sync_at : null;
   return {
     brokerAccountId: row.id as string,
     metaApiAccountId: row.external_connection_id as string,
     metaApiRegion: region,
+    lastSyncAt,
+    metadata: meta,
   };
 }

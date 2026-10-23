@@ -127,7 +127,15 @@ check("cron smoke and crontab listings no longer probe Krater", () => {
   assert.ok(!/krater-feed-sync/.test(smoke), "smoke still hits the retired Krater path");
   assert.ok(!/hasKraterApiKey|generateProbe/.test(smoke), "smoke still reports the Krater probe");
   const crontab = readFileSync("scripts/vps.crontab", "utf8");
-  assert.ok(!/axe-companion-krater-feed-sync/.test(crontab), "host crontab still lists the paused Krater job");
+  const activeCrontab = crontab
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .join("\n");
+  assert.ok(
+    !/axe-companion-krater-feed-sync/.test(activeCrontab),
+    "pg_cron job name must stay off the host crontab — the local writer is scheduled as /api/cron/krater-feed-sync",
+  );
 });
 
 check("senateTrades is off Unusual Whales and onto a free source", () => {

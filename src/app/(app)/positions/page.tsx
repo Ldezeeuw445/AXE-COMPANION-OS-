@@ -8,6 +8,8 @@ export default async function PositionsPage() {
       positions={data.positions}
       pendingOrders={data.pendingOrders}
       accountSummary={data.accountSummary}
+      lastSyncAt={data.lastSyncAt}
+      figuresFromCache={data.figuresFromCache}
       providerStatus={data.providerStatus}
       error={data.error}
       hint={data.hint}

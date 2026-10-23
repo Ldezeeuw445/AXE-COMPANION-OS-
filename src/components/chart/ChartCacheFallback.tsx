@@ -15,7 +15,9 @@ import { ChartCanvas, type ChartCanvasHandle } from "@/components/chart/ChartCan
 import { readCachedChart, type CachedChartSnapshot } from "@/lib/chart/clientChartCache";
 import { CHART_TF_OPTIONS } from "@/lib/broker/chartTimeframes";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
-import { CHART_THEME } from "@/components/chart/chartTheme";
+import { StaleAgeBadge } from "@/components/pwa/StaleAgeBadge";
+import { candleFreshness, formatCompactAge } from "@/lib/pwa/staleAge";
+import { useOnlineStatus } from "@/lib/pwa/useOnlineStatus";
 
 type Props = {
   symbol?: string;
@@ -25,18 +27,16 @@ type Props = {
 export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf }: Props) {
   const [cache, setCache] = useState<CachedChartSnapshot | null>(null);
   const [checked, setChecked] = useState(false);
-  const [cacheAgeMinutes, setCacheAgeMinutes] = useState(0);
   const canvasRef = useRef<ChartCanvasHandle>(null);
   const displaySymbol = (symbol ?? "XAUUSD").toUpperCase();
   const tfKey = tf ?? "h1";
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === tfKey)?.label ?? tfKey.toUpperCase();
+  const online = useOnlineStatus();
+  const freshness = candleFreshness({ savedAt: cache?.savedAt, online });
 
   useEffect(() => {
     const cached = readCachedChart(displaySymbol, tfKey);
-    if (cached) {
-      setCache(cached);
-      setCacheAgeMinutes(Math.round((Date.now() - cached.savedAt) / 60_000));
-    }
+    if (cached) setCache(cached);
     setChecked(true);
   }, [displaySymbol, tfKey]);
 
@@ -46,7 +46,6 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
   if (cache && cache.candles.length > 0) {
 
     const lastPrice = cache.lastPrice ?? cache.candles.at(-1)?.close ?? null;
-    const age = cacheAgeMinutes;
 
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -57,6 +56,7 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
             <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-white/40">
               {tfLabel}
             </span>
+            <StaleAgeBadge freshness={freshness} always testId="chart-cache-stale" />
           </div>
           <div className="flex items-center gap-2">
             {lastPrice != null && (
@@ -64,7 +64,11 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
                 {formatBrokerPrice(cache.symbol, lastPrice)}
               </span>
             )}
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400/60" />
+            {freshness.kind === "live" ? (
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400/60" />
+            ) : (
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-300/80" />
+            )}
           </div>
         </div>
 
@@ -79,9 +83,17 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
           {/* Loading overlay */}
           <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/60 to-transparent pb-4 pt-8">
             <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/70 px-3 py-1.5 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  freshness.stale ? "bg-amber-300/80" : "animate-pulse bg-cyan-400"
+                }`}
+              />
               <span className="text-[10px] font-medium text-white/50">
-                Loading live data{age > 0 ? ` · cached ${age}m ago` : ""}…
+                {freshness.kind === "offline"
+                  ? `Showing last candles${freshness.ageMs != null ? ` · ${formatCompactAge(freshness.ageMs)} ago` : ""}`
+                  : freshness.stale
+                    ? `Last candles ${freshness.badge ?? "cached"} · loading live data…`
+                    : "Loading live data…"}
               </span>
             </div>
           </div>

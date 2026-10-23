@@ -35,7 +35,7 @@ function check(name, fn) {
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const client = read("src/lib/mt5/metaApiClient.ts");
 const action = read("src/app/actions/mt5Cloud.ts");
-const screen = read("src/components/accounts/AccountsScreen.tsx");
+const screen = read("src/components/accounts/BrokerConnectWizard.tsx");
 
 console.log("broker provisioning");
 
@@ -138,6 +138,31 @@ check("the profile id is remembered so nobody uploads it twice", () => {
   );
 });
 
+check("the connect action resolves a dashboard name against MetaApi's registry", () => {
+  // Static knownBrokers.ts is the pre-Connect UI only. The live lookup is
+  // one client call, used here so "Upcomers" becomes "Upcomers-Server"
+  // before the account is created — not a second copy of the search.
+  assert.ok(client.includes("/known-mt-servers/5/search"), "the documented MetaApi search");
+  assert.ok(client.includes("export async function provisioningSearchKnownServers"), "one client helper");
+  assert.ok(action.includes("provisioningSearchKnownServers("), "connect asks the registry");
+  assert.ok(action.includes("chooseServer("), "and maps the typed name");
+  const helper = read("src/lib/mt5/serverName.ts");
+  assert.ok(helper.includes("export function chooseServer"), "resolution rules live in one helper");
+  const lib = read("src/lib/mt5/knownBrokers.ts");
+  assert.ok(!lib.includes("known-mt-servers"), "the static list does not call MetaApi");
+});
+
+check("the connect wizard checks the server name before any login is typed", () => {
+  const checkUi = read("src/components/accounts/BrokerSupportCheck.tsx");
+  assert.ok(screen.includes("BrokerSupportCheck"), "the live wizard mounts the name check");
+  assert.ok(!/name="mt5Password"/.test(checkUi), "the check itself has no password field");
+  assert.ok(!/name="mt5Login"/.test(checkUi), "and no login field");
+  const lib = read("src/lib/mt5/knownBrokers.ts");
+  assert.ok(lib.includes('known: "Known broker — supported"'));
+  assert.ok(lib.includes('unknown: "Unknown — may still work"'));
+  assert.ok(lib.includes('unsupported: "Not supported"'));
+});
+
 check("the upload only appears once MetaApi has said it does not know the broker", () => {
   // A file picker on every connection makes the normal path look harder than
   // it is. Most brokers need nothing here.
@@ -154,9 +179,12 @@ check("it is in the form a visitor actually sees", () => {
   // There are two MT5 connect forms in this repo. Mt5CloudConnectForm.tsx is
   // imported by nothing — this block went in there first, and would have been
   // invisible. Pin the live one.
-  const sources = read("src/components/accounts/AccountsScreen.tsx");
-  assert.ok(sources.includes('name="mt5Password"'), "AccountsScreen is the live connect form");
-  assert.ok(sources.includes('name="serversDat"'), "and it is where the upload lives");
+  const accounts = read("src/components/accounts/AccountsScreen.tsx");
+  assert.ok(accounts.includes("BrokerConnectWizard"), "AccountsScreen still mounts the live wizard");
+  const connectPage = read("src/app/(app)/accounts/broker-connect/page.tsx");
+  assert.ok(connectPage.includes("BrokerConnectWizard"), "the dedicated /accounts/broker-connect page mounts it too");
+  assert.ok(screen.includes('name="mt5Password"'), "BrokerConnectWizard is the live connect form");
+  assert.ok(screen.includes('name="serversDat"'), "and it is where the upload lives");
 });
 
 check("the framework will accept a file this size", () => {

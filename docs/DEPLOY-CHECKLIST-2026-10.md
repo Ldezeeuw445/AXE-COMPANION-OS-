@@ -286,7 +286,7 @@ Chart, overlay badge should read **WS** not **SSE**.
 
 ## 7. PWA after deploy
 
-A new `sw.js` (`axe-v5`) does **not** auto-activate. Installed clients show
+A new `sw.js` (`axe-v6`) does **not** auto-activate. Installed clients show
 “A new AXE version is ready. Reload…”. Until they tap it they keep the old
 bundle — that is intentional so a deploy cannot mix chunks.
 

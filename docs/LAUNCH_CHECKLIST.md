@@ -30,7 +30,7 @@
 | B2 | Per-tab unread badges | [x] | |
 | B3 | Local broadcast generator upserts `axe_broadcast_feed` | [~] | Krater job `axe-companion-krater-feed-sync` is paused/retired; local writer remains at the historical route |
 | B4 | Feed shows items for authenticated users | [~] | Prod broadcast rows + feed code verified; needs browser auth spot-check |
-| B5 | Cron window 07:00 + 20:00 Amsterdam | [~] | Host crontab on IONOS (`scripts/vps.crontab`) is congress-trades only. Krater dashboard + `axe-companion-krater-feed-sync` stay paused |
+| B5 | Cron window 07:00 + 20:00 Amsterdam | [~] | Host crontab (`scripts/vps.crontab`) hits `/api/cron/krater-feed-sync` every 10 min 04:00–20:00 UTC; the route only writes 07:00–07:29 and 20:00–20:29 Europe/Amsterdam. One scheduler: host crontab, not pg_cron (unscheduled 2026-10-17 — do not re-enable). IONOS crontab is shared with AXE Core — append Companion lines, never replace wholesale. Krater dashboard stays paused |
 
 ---
 
