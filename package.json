@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start -p 5000 -H 0.0.0.0",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "capture:marketing": "node scripts/capture-marketing.mjs",
     "copy-logo": "node scripts/copy-logo.mjs",
     "seed:axe-knowledge": "node scripts/seed-axe-knowledge.mjs",

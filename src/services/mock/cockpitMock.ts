@@ -152,6 +152,21 @@ export const mockCockpitDashboard: CockpitDashboard = {
     lastCalculatedAt: "2026-03-29T06:30:00.000Z",
     message: "Mock dashboard only: real cockpit scores stay conservative until live user signals exist.",
   },
+  // Mirrors computeTier() in axeEngineService: 72 → medium / guided.
+  engine: {
+    name: "AXE One",
+    version: "v1",
+    confidenceScore: 72,
+    confidenceTier: "medium",
+    gateMode: "guided",
+    signalCount: 64,
+    tradeLabelCount: 28,
+    memoryCount: 37,
+    updatedAt: "2026-03-29T06:30:00.000Z",
+    rationale: {
+      note: "Mock rationale — invalidation language still calibrating, so the gate stays guided rather than proactive.",
+    },
+  },
   today: {
     chatMessages: 4,
     tradesClosed: 1,

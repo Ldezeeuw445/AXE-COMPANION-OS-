@@ -171,9 +171,22 @@ export function evaluateContextAwareExposure(
   return { fire: false, message: "" };
 }
 
-function toMathCandles(candles: Array<{ time: string | number; open: number; high: number; low: number; close: number; tickVolume?: number | null; volume?: number | null }>): IndicatorMathCandle[] {
+/**
+ * Candle feeds disagree on `time`: MetaApi sends ISO strings, Alpaca/demo send
+ * epoch seconds, and some rows omit it. Never emit NaN — `sessionVwap` keys
+ * sessions off this value, so an unknown time must collapse to one bucket (0)
+ * instead of poisoning the series.
+ */
+function normalizeCandleTime(time: string | number | undefined): number {
+  if (typeof time === "number") return Number.isFinite(time) ? time : 0;
+  if (!time) return 0;
+  const parsed = Math.floor(Date.parse(time) / 1000);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toMathCandles(candles: Array<{ time?: string | number; open: number; high: number; low: number; close: number; tickVolume?: number | null; volume?: number | null }>): IndicatorMathCandle[] {
   return candles.map((c) => ({
-    time: typeof c.time === "number" ? c.time : Math.floor(Date.parse(String(c.time)) / 1000),
+    time: normalizeCandleTime(c.time),
     open: c.open,
     high: c.high,
     low: c.low,

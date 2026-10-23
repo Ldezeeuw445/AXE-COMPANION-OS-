@@ -671,9 +671,13 @@ export async function streamChatMessage(
       .join("\n\n---\n");
   }
 
+  // Hoisted so the nested price-context closure below keeps the non-null
+  // narrowing from the `if (!conversation) return` guard.
+  const pinnedContext = conversation.pinnedContext;
+
   const contextWithCandles = {
     ...context,
-    candles_summary: conversation.pinnedContext || null,
+    candles_summary: pinnedContext || null,
     knowledge_layer: knowledgeBlock,
   };
   const priceContextBySymbol = new Map<string, Awaited<ReturnType<typeof fetchTradingOSContext>>>();
@@ -687,7 +691,7 @@ export async function streamChatMessage(
       supabase,
       requestedSymbol,
       tf ?? contextWithCandles.timeframe ?? null,
-      conversation.pinnedContext ?? null,
+      pinnedContext,
     );
     priceContextBySymbol.set(requestedSymbol, next);
     return next;

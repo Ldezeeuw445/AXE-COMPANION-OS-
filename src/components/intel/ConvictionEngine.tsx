@@ -96,11 +96,13 @@ export function ConvictionEngine() {
     }
     const run = () => void fetchConvictions(hasFreshCache);
     if (hasFreshCache) {
-      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-        const w = window as Window & {
-          requestIdleCallback: (cb: IdleRequestCallback) => number;
-          cancelIdleCallback?: (id: number) => void;
-        };
+      // Feature-detect on the function itself: `"requestIdleCallback" in window`
+      // narrows `window` to never on the fallthrough path (lib.dom declares it).
+      const w = window as Window & {
+        requestIdleCallback?: (cb: IdleRequestCallback) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (typeof w.requestIdleCallback === "function") {
         const idleId = w.requestIdleCallback(() => run());
         return () => w.cancelIdleCallback?.(idleId);
       }

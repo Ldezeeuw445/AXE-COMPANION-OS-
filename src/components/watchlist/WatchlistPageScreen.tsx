@@ -262,7 +262,7 @@ export function WatchlistPageScreen({
         setLocalItems((prev) => {
           const exists = prev.some((i) => i.symbol === symbol);
           if (exists) return prev;
-          const next = [
+          const next: QuoteRow[] = [
             ...prev,
             {
               id: `temp-${symbol}`,
