@@ -6,15 +6,10 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to complete even with type errors.
-    //
-    // `npm run typecheck` (tsc --noEmit over src/**) is now CLEAN — the original
-    // Ollama-era errors are fixed. This flag stays only because `next build`
-    // additionally type-checks the generated `.next/types/**` route types, which
-    // have never been verified against this codebase. Before removing it, run a
-    // full `next build` locally and fix any route-signature errors it surfaces.
-    ignoreBuildErrors: true,
+    // Type errors fail `next build`. `npm run typecheck` runs the same check
+    // (`next typegen` + `tsc --noEmit`, including the generated route
+    // validator in `.next/types/**`) without a full build.
+    ignoreBuildErrors: false,
   },
   webpack: (config) => {
     config.externals.push("pino-pretty", "lokijs", "encoding");

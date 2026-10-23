@@ -45,7 +45,7 @@ Add RLS policies on `storage.objects` scoped by `auth.uid()` path prefix.
 | `src/services/*` | Data façade — currently **mock**; swap for Supabase calls |
 | `src/lib/tradingos` | **`TradingOSClient`** contract + `MockTradingOSClient`** |
 | `src/lib/supabase` | Browser/server/middleware Supabase helpers |
-| `middleware.ts` | Session refresh + route guard + demo cookie |
+| `src/middleware.ts` | Session refresh + route guard + demo cookie (Edge; stays `middleware`, not `proxy`, for Cloudflare) |
 | `src/app/globals.css` | Design tokens (premium dark, warm accent) |
 
 ## Schema overview

@@ -48,6 +48,12 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+// Deliberately still `middleware.ts`, not Next 16's `proxy.ts`: proxy always
+// runs on the Node.js runtime, and @opennextjs/cloudflare refuses to build Node
+// middleware ("Node.js middleware is not currently supported"). This file
+// compiles to Edge, which the Cloudflare target accepts. Keep it here (src/ is
+// the only location Next loads) and don't add a `runtime` export.
+// Guarded by `npm run test:middleware-edge`.
 export async function middleware(request: NextRequest) {
   const pathEarly = request.nextUrl.pathname;
 
@@ -109,13 +115,13 @@ export async function middleware(request: NextRequest) {
     try {
       // Add 5-second timeout to prevent indefinite hangs
       const userPromise = supabase.auth.getUser();
-      const timeoutPromise = new Promise((_, reject) =>
+      const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Auth timeout")), 5000)
       );
 
       const {
         data: { user: u },
-      } = await Promise.race([userPromise, timeoutPromise]) as any;
+      } = await Promise.race([userPromise, timeoutPromise]);
       user = u;
     } catch (error) {
       // If auth check times out or fails, let the request through
