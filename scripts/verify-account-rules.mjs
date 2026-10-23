@@ -25,6 +25,7 @@ import {
   buildAccountProfile,
   detectFirm,
 } from "../src/lib/risk/accountProfile.ts";
+import { KNOWN_MT5_BROKERS } from "../src/lib/mt5/knownBrokers.ts";
 import {
   EMPTY_ACCOUNT_RULES,
   MAX_DAILY_LOSS_PCT_CEILING,
@@ -325,6 +326,75 @@ check("the panel asks which model instead of making the trader type the rules", 
   );
   // Total drawdown is the rule that ends an account, and it had no field.
   assert.ok(/Max total drawdown/.test(panel));
+});
+
+// ── the two broker lists have to agree ───────────────────────────────────
+//
+// `KNOWN_MT5_BROKERS` answers "can AXE connect this server at all", before a
+// login is sent. `FIRMS` answers "which prop firm is this, and what are its
+// rules". Different jobs, so not duplication — but they both match a firm's
+// name against the same server string, and a firm one list knows and the
+// other misses is silent: the account connects fine and every risk rail stays
+// off.
+//
+// Measured when this check was written: `GoatFundedTrader-Live` and
+// `GoatFundedTrader-Demo` — the real server names, straight out of
+// KNOWN_MT5_BROKERS — were not recognised as a prop firm at all, because the
+// pattern ended in `\b` and "funded" is followed by "Trader". Across every
+// firm, 40 realistic server names missed for the same reason.
+
+const PROP_FIRM_NAMES =
+  /ftmo|5ers|fundednext|fundingpips|e8|alpha capital|blue guardian|goat funded|upcomers|topstep|apex/i;
+
+check("every prop firm AXE can connect to is one it knows the rules of", () => {
+  for (const broker of KNOWN_MT5_BROKERS) {
+    if (!PROP_FIRM_NAMES.test(broker.name)) continue;
+    for (const server of broker.servers) {
+      const firm = detectFirm({ mt5Server: server });
+      assert.ok(
+        firm,
+        `${broker.name}: server "${server}" connects but is not read as a prop firm — every rail would be off`,
+      );
+    }
+  }
+});
+
+check("a firm pattern survives a server name with the words run together", () => {
+  // `AlphaCapitalGroup-Live`, `E8Markets-Live`, `SmartPropTrader-Live`: a
+  // trailing word boundary cannot match any of these, and brokers name their
+  // servers like this constantly.
+  for (const firm of FIRMS) {
+    const compact = firm.name.replace(/[^A-Za-z0-9]/g, "");
+    for (const shape of [`${compact}-Live`, `${compact}-Demo`, `${compact}Live`, `${firm.name}-Server`]) {
+      const hit = detectFirm({ mt5Server: shape });
+      assert.equal(hit?.id, firm.id, `"${shape}" should be read as ${firm.id}, got ${hit?.id ?? "nothing"}`);
+    }
+  }
+});
+
+check("a retail broker is never mistaken for a prop firm", () => {
+  // The other direction, and the more damaging one: rails switched on for an
+  // account that has no such rules would have AXE refusing trades the trader
+  // is perfectly entitled to take.
+  for (const broker of KNOWN_MT5_BROKERS) {
+    if (PROP_FIRM_NAMES.test(broker.name)) continue;
+    for (const server of broker.servers) {
+      const hit = detectFirm({ mt5Server: server });
+      assert.equal(hit, null, `${broker.name} / "${server}" was read as ${hit?.name}`);
+    }
+    assert.equal(detectFirm({ label: broker.name }), null, `${broker.name} by name`);
+  }
+});
+
+check("every firm name is the firm's own spelling", () => {
+  // A Cyrillic 'т' had slipped into one of these, which reads identically and
+  // matches nothing a trader would ever type.
+  for (const firm of FIRMS) {
+    assert.ok(
+      /^[\x20-\x7E]+$/.test(firm.name),
+      `${firm.id}: "${firm.name}" has a character outside plain ASCII`,
+    );
+  }
 });
 
 check("the route is classified for the tier gate", () => {
