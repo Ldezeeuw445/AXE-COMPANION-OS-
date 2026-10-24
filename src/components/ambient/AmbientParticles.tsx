@@ -52,7 +52,7 @@ export function AmbientParticles() {
   const rafRef = useRef<number>(0);
   const particlesRef = useRef<Particle[]>([]);
 
-  const draw = useCallback(() => {
+  const draw = useCallback(function frame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -107,7 +107,7 @@ export function AmbientParticles() {
       ctx.fill();
     }
 
-    rafRef.current = requestAnimationFrame(draw);
+    rafRef.current = requestAnimationFrame(frame);
   }, []);
 
   useEffect(() => {

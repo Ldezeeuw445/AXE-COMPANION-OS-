@@ -414,7 +414,7 @@ export function AxeAuraWave({
 
           const persp = 1 / (1 - z3d * 0.3);
           const radius = R * p.r * breathe * surfaceNoise * persp * profile.scale;
-          let px = cx + x3d * radius;
+          const px = cx + x3d * radius;
           let py = cy - y3d * radius;
           if (isComposer && y3d > 0.45) {
             py +=

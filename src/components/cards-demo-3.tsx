@@ -67,7 +67,7 @@ const Skeleton = () => {
 
   useEffect(() => {
     animate(sequence, {
-      // @ts-ignore
+      // @ts-expect-error -- sequence options typing omits repeat
       repeat: Infinity,
       repeatDelay: 1,
     });
@@ -100,30 +100,37 @@ const Skeleton = () => {
     </div>
   );
 };
+const randomMove = () => Math.random() * 2 - 1;
+const SPARKLES = [...Array(12)].map(() => ({
+  animateTop: `calc(${Math.random() * 100}% + ${randomMove()}px)`,
+  animateLeft: `calc(${Math.random() * 100}% + ${randomMove()}px)`,
+  opacity: Math.random(),
+  duration: Math.random() * 2 + 4,
+  top: `${Math.random() * 100}%`,
+  left: `${Math.random() * 100}%`,
+}));
+
 const Sparkles = () => {
-  const randomMove = () => Math.random() * 2 - 1;
-  const randomOpacity = () => Math.random();
-  const random = () => Math.random();
   return (
     <div className="absolute inset-0">
-      {[...Array(12)].map((_, i) => (
+      {SPARKLES.map((s, i) => (
         <motion.span
           key={`star-${i}`}
           animate={{
-            top: `calc(${random() * 100}% + ${randomMove()}px)`,
-            left: `calc(${random() * 100}% + ${randomMove()}px)`,
-            opacity: randomOpacity(),
+            top: s.animateTop,
+            left: s.animateLeft,
+            opacity: s.opacity,
             scale: [1, 1.2, 0],
           }}
           transition={{
-            duration: random() * 2 + 4,
+            duration: s.duration,
             repeat: Infinity,
             ease: "linear",
           }}
           style={{
             position: "absolute",
-            top: `${random() * 100}%`,
-            left: `${random() * 100}%`,
+            top: s.top,
+            left: s.left,
             width: `2px`,
             height: `2px`,
             borderRadius: "50%",

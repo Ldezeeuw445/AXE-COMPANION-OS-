@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   AdaptiveTradingProfile,
   AdaptiveUiDecisionSet,
@@ -6,11 +7,7 @@ import type {
 } from "@/types/adaptive";
 import { buildAdaptiveDecisionSet, preferredChartDefaults } from "@/lib/adaptive/profileEngine";
 
-type SupabaseLike = {
-  from: (table: string) => {
-    select: (query: string) => any;
-  };
-};
+type SupabaseLike = Pick<SupabaseClient, "from">;
 
 export async function loadAdaptiveProfile(
   supabase: SupabaseLike,

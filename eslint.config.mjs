@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "cloudflare/**",
     "node/**",
     "public/sw.js",
+    // Design-snapshot copies of adaptive UI files; the live code is under src/.
+    "AXE ADAPTIVENESS/**",
   ]),
   {
     // React 19 + eslint-plugin-react-hooks ships strict new rules ("ref access

@@ -177,7 +177,7 @@ export function FullScreenLoader({
   const [opacity, setOpacity] = useState(1);
 
   const draw = useCallback(
-    (particles: Particle[], orbs: Orb[], ctx: CanvasRenderingContext2D, W: number, H: number) => {
+    function frame(particles: Particle[], orbs: Orb[], ctx: CanvasRenderingContext2D, W: number, H: number) {
       const now = performance.now();
       if (!startRef.current) startRef.current = now;
       const elapsed = now - startRef.current;
@@ -274,7 +274,7 @@ export function FullScreenLoader({
       }
 
       ctx.globalAlpha = 1;
-      frameRef.current = requestAnimationFrame(() => draw(particles, orbs, ctx, W, H));
+      frameRef.current = requestAnimationFrame(() => frame(particles, orbs, ctx, W, H));
     },
     [onDone, autoFade],
   );

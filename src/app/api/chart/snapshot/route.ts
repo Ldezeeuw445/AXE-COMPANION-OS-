@@ -20,6 +20,13 @@ const THROTTLE_MS = 30_000; // 30 s server-side guard (increased from 15s)
 const TIMEOUT_MS = 2_000; // 2 s max response time
 const _lastWrite = new Map<string, number>();
 
+function withTimeout<T>(work: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
+  ]);
+}
+
 type SnapshotBody = {
   accountId: string;
   displaySymbol: string;
@@ -67,18 +74,19 @@ export async function POST(request: NextRequest) {
   _lastWrite.set(throttleKey, now);
 
   // --- Ownership check (with timeout) ---
-  let ownerCheck: any;
+  let ownerCheck: { data: { id: string } | null } | undefined;
   try {
     // Wrap in a timeout so we never wait >TIMEOUT_MS
-    ownerCheck = await Promise.race([
+    ownerCheck = await withTimeout(
       supabase
         .from("user_broker_accounts")
         .select("id")
         .eq("user_id", user.id)
         .eq("id", body.accountId)
-        .maybeSingle() as any,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS)),
-    ]);
+        .maybeSingle(),
+      TIMEOUT_MS,
+      "timeout",
+    );
   } catch (e) {
     // If ownership check times out or fails, still return 200 so client doesn't retry
     console.warn("[chart/snapshot] ownership check failed/timeout, skipping write", e);
@@ -111,16 +119,16 @@ export async function POST(request: NextRequest) {
 
   // --- Route through the deadlock-safe RPC with timeout ---
   try {
-    const result = await Promise.race([
+    const { error } = await withTimeout(
       supabase.rpc("upsert_chart_live_snapshots_safe", {
         p_rows: [row],
-      }) as any,
-      new Promise((_, reject) => setTimeout(() => reject(new Error("rpc_timeout")), TIMEOUT_MS)),
-    ]);
+      }),
+      TIMEOUT_MS,
+      "rpc_timeout",
+    );
 
-    const error = (result as any)?.error;
     if (error) {
-      const msg = (error as any)?.message || String(error);
+      const msg = error.message || String(error);
       console.warn("[chart/snapshot] RPC warning:", msg);
       // Silently return OK; don't make the client retry
       return Response.json({ ok: true, rpc_warn: msg.substring(0, 50) });
