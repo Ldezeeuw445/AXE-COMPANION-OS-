@@ -76,6 +76,14 @@ try {
     path: join(shotDir, "landing-pricing-1440x900.png"),
   });
 
+  const stage = page.locator("[data-hero-stage]");
+  await stage.scrollIntoViewIfNeeded();
+  await stage.hover();
+  await page.waitForTimeout(400);
+  await page.locator("[data-landing-hero]").screenshot({
+    path: join(shotDir, "hero-hover-1440.png"),
+  });
+
   await browser.close();
   console.log(`wrote screenshots to ${shotDir}`);
 } finally {

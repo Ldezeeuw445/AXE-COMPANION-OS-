@@ -76,22 +76,33 @@ function DeviceFrame({ device, eager }: { device: DeviceKey; eager: boolean }) {
   );
 }
 
-export function LandingHeroDevices() {
+type Props = {
+  /** Lifted so the hero background around the plate can light up with it. */
+  onLitChange?: (lit: boolean) => void;
+};
+
+export function LandingHeroDevices({ onLitChange }: Props) {
   const [lit, setLit] = useState(false);
+
+  const setStageLit = (next: boolean) => {
+    setLit(next);
+    onLitChange?.(next);
+  };
 
   // Pointer events rather than mouse events so a touch on the block lights it
   // too, and focus-within so a keyboard user reaching the frames gets the same
   // signal instead of a silently dead block.
   return (
-    <div className="relative mx-auto w-full max-w-[1180px]">
+    <div id="hero-devices" className="relative mx-auto w-full max-w-[1180px] scroll-mt-28">
       <div className={`axe-hero-dots ${lit ? "axe-hero-dots-active" : ""}`} aria-hidden />
 
       <div
         className={`axe-hero-stage ${lit ? "axe-hero-stage-active" : ""}`}
-        onPointerEnter={() => setLit(true)}
-        onPointerLeave={() => setLit(false)}
-        onFocusCapture={() => setLit(true)}
-        onBlurCapture={() => setLit(false)}
+        data-hero-stage="true"
+        onPointerEnter={() => setStageLit(true)}
+        onPointerLeave={() => setStageLit(false)}
+        onFocusCapture={() => setStageLit(true)}
+        onBlurCapture={() => setStageLit(false)}
       >
         {/* Below 640px the iPad frame is display:none (globals.css) — at that
             width its 1024px mock renders at 0.3 scale and reads as a smudge.
