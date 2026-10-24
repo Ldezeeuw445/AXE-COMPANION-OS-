@@ -1,0 +1,44 @@
+name: CI
+
+# Quality gate for AXE Companion. The repo already had deploy workflows but
+# nothing that ran the checks, so typecheck/lint/test regressions could reach
+# main unnoticed. No secrets and no deploys — this job only reads the code.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Typecheck · Lint · Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Warnings are expected today (React Compiler hints); errors are not.
+      - name: Lint
+        run: npm run lint -- --max-warnings=-1
+
+      # scripts/test-*.mjs — zero-dep, offline, no env or network required.
+      - name: Tests
+        run: npm test

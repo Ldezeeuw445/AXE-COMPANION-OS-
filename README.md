@@ -90,6 +90,11 @@ Core tables (all with **RLS** on `user_id` / ownership):
 - `npm run build` — production build
 - `npm run start` — serve production build
 - `npm run lint` — ESLint
+- `npm run typecheck` — route typegen + `tsc --noEmit`
+- `npm test` — whole suite (`scripts/test-*.mjs`, offline, zero-dep); filter with `npm test -- uw-gate`
+
+CI (`.github/workflows/ci.yml`) runs typecheck, lint and `npm test` on every push to
+`main` and on pull requests.
 
 ---
 
