@@ -2,12 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 import { verifyInternalPushRequest } from "@/lib/push/internalPushAuth";
-import {
-  buildPushNotificationPayload,
-  summarizePushDelivery,
-  type PushDeliveryRequest,
-  type PushSendResult,
-} from "@/lib/push/deliverPushPayload";
+import { sendPushToUser, type PushDeliveryRequest } from "@/lib/push/deliverPushPayload";
 
 function getServiceSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -55,48 +50,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Service client unavailable" }, { status: 500 });
   }
 
-  const { data: subs, error } = await supabase
-    .from("push_subscriptions")
-    .select("endpoint,p256dh,auth")
-    .eq("user_id", userId);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  if (!subs || subs.length === 0) {
-    return NextResponse.json({ ok: true, sent: 0, total: 0 });
-  }
-
-  const payload = buildPushNotificationPayload(body);
-
-  const settled = await Promise.allSettled(
-    subs.map((sub) =>
+  const outcome = await sendPushToUser(body, {
+    loadSubscriptions: async (uid) => {
+      const { data, error } = await supabase
+        .from("push_subscriptions")
+        .select("endpoint,p256dh,auth")
+        .eq("user_id", uid);
+      return { data, error: error?.message ?? null };
+    },
+    sendNotification: (sub, payload) =>
       webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         payload,
       ),
-    ),
-  );
-
-  const results: PushSendResult[] = settled.map((r) => {
-    if (r.status === "fulfilled") return { status: "fulfilled" };
-    const err = r.reason as { statusCode?: number };
-    return { status: "rejected", statusCode: err?.statusCode };
+    deleteExpired: async (uid, endpoints) =>
+      supabase.from("push_subscriptions").delete().in("endpoint", endpoints).eq("user_id", uid),
   });
 
-  const summary = summarizePushDelivery({ subscriptions: subs, results });
-  if (summary.expiredEndpoints.length > 0) {
-    await supabase
-      .from("push_subscriptions")
-      .delete()
-      .in("endpoint", summary.expiredEndpoints)
-      .eq("user_id", userId);
+  if (!outcome.ok) {
+    return NextResponse.json({ error: outcome.error }, { status: 500 });
   }
 
-  return NextResponse.json({
-    ok: true,
-    sent: summary.sent,
-    total: summary.total,
-  });
+  return NextResponse.json(outcome);
 }

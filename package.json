@@ -21,6 +21,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:ts-source-loadable": "node scripts/test-ts-source-loadable.mjs",
     "test:push-delivery": "node scripts/test-push-delivery.mjs",
+    "test:push-send-route": "node scripts/test-push-send-route.mjs",
     "test:finra-short-volume": "node scripts/test-finra-short-volume.mjs",
     "test:short-volume-ratio-ui": "node scripts/test-short-volume-ratio-ui.mjs",
     "test:congress-public": "node scripts/test-congress-public.mjs",

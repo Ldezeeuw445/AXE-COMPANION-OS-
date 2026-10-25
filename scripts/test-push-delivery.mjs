@@ -243,8 +243,9 @@ const sendSrc = readFileSync(
 assert.ok(watcherSrc.includes("buildWatcherAlertPushRequest"));
 assert.ok(watcherSrc.includes("pushSendHttpReachedDevice"));
 assert.ok(watcherSrc.includes("/api/push/send"));
-assert.ok(sendSrc.includes("buildPushNotificationPayload"));
-assert.ok(sendSrc.includes("summarizePushDelivery"));
+// Route delegates to sendPushToUser (payload + summary); behaviour is covered
+// end to end in test-push-send-route.mjs.
+assert.ok(sendSrc.includes("sendPushToUser"));
 
 const smartSrc = readFileSync(
   join(__dirname, "../src/services/smartAlertCronEvaluator.ts"),

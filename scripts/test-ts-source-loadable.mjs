@@ -35,6 +35,7 @@ const TARGETS = [
       "pushSendHttpReachedDevice",
       "buildWatcherAlertPushRequest",
       "evaluateWatcherAlertDelivery",
+      "sendPushToUser",
     ],
   },
   {

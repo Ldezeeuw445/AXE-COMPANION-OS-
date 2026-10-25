@@ -43,6 +43,49 @@ export function buildPushNotificationPayload(req: PushDeliveryRequest): string {
   });
 }
 
+/** I/O seams for {@link sendPushToUser}; the route wires Supabase + web-push. */
+export type PushSendDeps = {
+  loadSubscriptions: (
+    userId: string,
+  ) => Promise<{ data: PushSubscriptionRow[] | null; error: string | null }>;
+  sendNotification: (sub: PushSubscriptionRow, payload: string) => Promise<unknown>;
+  deleteExpired: (userId: string, endpoints: string[]) => Promise<unknown>;
+};
+
+export type PushSendOutcome =
+  | { ok: true; sent: number; total: number }
+  | { ok: false; error: string };
+
+/**
+ * C6 delivery core behind POST /api/push/send: load the user's devices,
+ * send one web-push per device, prune 404/410 endpoints, report counts.
+ * Auth, VAPID and request validation stay in the route.
+ */
+export async function sendPushToUser(
+  req: PushDeliveryRequest,
+  deps: PushSendDeps,
+): Promise<PushSendOutcome> {
+  const { data: subs, error } = await deps.loadSubscriptions(req.userId);
+  if (error) return { ok: false, error };
+  if (!subs || subs.length === 0) return { ok: true, sent: 0, total: 0 };
+
+  const payload = buildPushNotificationPayload(req);
+  const settled = await Promise.allSettled(
+    subs.map((sub) => deps.sendNotification(sub, payload)),
+  );
+  const results: PushSendResult[] = settled.map((r) => {
+    if (r.status === "fulfilled") return { status: "fulfilled" };
+    const err = r.reason as { statusCode?: number } | undefined;
+    return { status: "rejected", statusCode: err?.statusCode };
+  });
+
+  const summary = summarizePushDelivery({ subscriptions: subs, results });
+  if (summary.expiredEndpoints.length > 0) {
+    await deps.deleteExpired(req.userId, summary.expiredEndpoints);
+  }
+  return { ok: true, sent: summary.sent, total: summary.total };
+}
+
 /**
  * Watcher → device delivery accounting:
  * - no subscriptions → sent 0 (ok, not an error)
