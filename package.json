@@ -30,6 +30,7 @@
     "test:uw-gate": "node scripts/test-uw-gate.mjs",
     "test:intel-provider-envelope": "node scripts/test-intel-provider-envelope.mjs",
     "test:mt5-sync-write-client": "node scripts/test-mt5-sync-write-client.mjs",
+    "test:broker-write-guard": "node scripts/test-broker-write-guard.mjs",
     "test:middleware-edge": "node scripts/test-middleware-edge.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
