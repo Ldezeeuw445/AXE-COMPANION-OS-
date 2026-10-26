@@ -99,6 +99,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     buildDefaultMessage(existing.symbol, existing.condition, existing.threshold, body.price);
 
   const feedUrl = existing.symbol ? chartDeepLink(existing.symbol) : "/alerts";
+  // push:false — the push below is the single, counted device send (C6).
   await recordProactiveFeedEvent(
     supabase,
     user.id,
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     `Alert · ${existing.symbol ?? existing.type}`,
     message,
     feedUrl,
+    { push: false },
   );
 
   const autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);

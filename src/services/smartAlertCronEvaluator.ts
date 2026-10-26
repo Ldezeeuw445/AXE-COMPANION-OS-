@@ -102,6 +102,7 @@ async function triggerAlert(
   if (error) return { triggered: false, pushed: false };
 
   const feedUrl = alert.symbol ? chartDeepLink(alert.symbol) : "/alerts";
+  // push:false — firePush below is the single, counted device send (C6).
   await recordProactiveFeedEvent(
     supabase,
     userId,
@@ -109,6 +110,7 @@ async function triggerAlert(
     `Alert · ${alert.symbol ?? alert.type}`,
     message,
     feedUrl,
+    { push: false },
   );
 
   const title = `Alert · ${alert.symbol ?? alert.type}`;
