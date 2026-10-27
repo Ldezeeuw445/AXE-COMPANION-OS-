@@ -6,6 +6,12 @@ import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
 import { detectConcentration, weekendExposureWarning } from "@/lib/risk/positionRisk";
 import { detectWeakSpots } from "@/lib/journal/weakSpots";
+import {
+  derivePlaybookEdges,
+  edgeNoticeParts,
+  edgeOpenNow,
+} from "@/lib/journal/playbookEdge";
+import { getChartSetup } from "@/services/chartSetupService";
 import { loadWeakSpotTrades } from "@/services/weakSpotService";
 import { brokerHealthWarning } from "@/lib/risk/brokerHealth";
 import {
@@ -361,8 +367,14 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
   }
 
   /* ── Your own most expensive habit, once a week ─────────────────── */
+  // One load, two readings. `weakSpots` finds what is going wrong and says
+  // stop; `playbookEdge` finds the conditions this trader actually makes money
+  // in. The second was build-list item 3.4 and the thing Luka asked for most
+  // often: AXE that comes to you with something of its own accord instead of
+  // only ever applying a brake.
+  const edgeTrades = await loadWeakSpotTrades(supabase, userId, accountId);
   try {
-    const spots = detectWeakSpots(await loadWeakSpotTrades(supabase, userId, accountId));
+    const spots = detectWeakSpots(edgeTrades);
     const top = spots[0];
     if (top && top.severity >= 0.5) {
       // One key per ISO week: this is a pattern, not news. Saying it daily
@@ -392,6 +404,38 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     }
   } catch {
     /* weak spots are an extra, never a reason the watcher fails */
+  }
+
+  /* ── Your own best ground, while you are standing on it ─────────── */
+  try {
+    const edges = derivePlaybookEdges(edgeTrades);
+    // Their saved chart list: an edge on an instrument they are not even
+    // looking at today is not worth a notification. Empty means no filter,
+    // which is right for a trader who has never saved a chart.
+    const setup = await getChartSetup(supabase, userId);
+    const edge = edgeOpenNow(edges, new Date(), setup.symbols);
+    if (edge) {
+      // One per edge per day. The session comes round every day and the
+      // record behind it barely moves, so saying it twice in one session
+      // would be the fastest way to make a trader mute AXE.
+      const parts = edgeNoticeParts(edge);
+      const result = await announce(supabase, userId, {
+        eventKey: `playbook_edge:${edge.id}:${new Date().toISOString().slice(0, 10)}`,
+        category: "axe_finding",
+        hasPush,
+        extra: { symbol: edge.symbol },
+        notice: {
+          title: parts.title,
+          what: parts.what,
+          soWhat: parts.soWhat,
+          action: { label: `See those ${edge.trades} trades`, href: "/journal" },
+        },
+      });
+      created += result.created;
+      pushed += result.pushed;
+    }
+  } catch {
+    /* same rule: an extra, never a reason the watcher fails */
   }
 
   try {

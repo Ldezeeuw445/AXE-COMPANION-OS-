@@ -164,15 +164,35 @@ check("there is one writer, and the old one is gone", () => {
 });
 
 check("every notice the watcher sends names its next step", () => {
-  // Seven producers: trade closed, pending execution, news risk, broker
-  // health, concentration, weekend exposure, weak spots.
+  // Eight producers: trade closed, pending execution, news risk, broker
+  // health, concentration, weekend exposure, weak spots, and — since
+  // bouwlijst 3.4 — the trader's own playbook edge while its session is open.
+  //
+  // This count is the point of the check, not an inconvenience: it fired the
+  // moment the eighth was added, which is exactly when someone should be made
+  // to confirm the new one carries a next step too.
+  const EXPECTED_PRODUCERS = 8;
   const calls = watcherCode.match(/announce\(supabase, userId, \{/g) ?? [];
-  assert.equal(calls.length, 7, `expected 7 notice producers, found ${calls.length}`);
-  const actions = watcherCode.match(/action: *\{[^}]*href:/g) ?? [];
-  const ternaryActions = watcherCode.match(/action:\s*\n?\s*positions\.length > 0/g) ?? [];
+  assert.equal(
+    calls.length,
+    EXPECTED_PRODUCERS,
+    `expected ${EXPECTED_PRODUCERS} notice producers, found ${calls.length}`,
+  );
+  // Count the keys, not the shape of the object around them: an action label
+  // is a template literal in at least one producer, so `[^}]*href:` stops at
+  // the `}` of the interpolation and silently undercounts.
+  const actionKeys = watcherCode.match(/^\s*action:/gm) ?? [];
+  assert.equal(
+    actionKeys.length,
+    EXPECTED_PRODUCERS,
+    `every producer needs an action, found ${actionKeys.length}`,
+  );
+  // At least one per action, and more where a producer picks between two
+  // destinations — the news notice sends you to your positions or to the feed.
+  const hrefs = watcherCode.match(/href: /g) ?? [];
   assert.ok(
-    actions.length + ternaryActions.length >= 7,
-    `every producer needs an action, found ${actions.length + ternaryActions.length}`,
+    hrefs.length >= EXPECTED_PRODUCERS,
+    `every action needs a destination, found ${hrefs.length}`,
   );
 });
 

@@ -107,7 +107,14 @@ niet.
   dat ook**, een telling die mislukt wordt nul en geen schatting, en negatieve
   of onzinnige invoer kan de balk niet opblazen. Die vier staan als checks
 - [ ] **3.1** Arc valideren met echte data zodra er trades binnenkomen
-- [ ] **3.4** Vooruitdenken op strategie: de profileEngine kent gebruik, nog niet *strategie*. Playbook-herkenning uit trades → "jij traadt London open breakouts; vandaag is de range te smal"
+- [x] **3.4** Vooruitdenken op strategie: de profileEngine kent gebruik, nog niet *strategie*. Playbook-herkenning uit trades → "jij traadt London open breakouts; vandaag is de range te smal"
+      Af op 2026-10-27: `src/lib/journal/playbookEdge.ts` leidt uit je eigen
+      afgesloten trades af in welke sessie, welk instrument en welke richting je
+      werkelijk geld maakt, en de watcher meldt het terwijl die sessie open staat.
+      Bewust géén signaal: elke zin gaat over trades die al gesloten zijn. Een bucket
+      moet minstens 8 trades hebben én 1,5x je eigen gemiddelde halen, anders is het
+      een willekeurige snee uit een winstgevend account. 22 checks in
+      `scripts/verify-playbook-edge.mjs`.
 
 ---
 

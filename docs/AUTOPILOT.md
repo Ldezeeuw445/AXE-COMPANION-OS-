@@ -88,6 +88,23 @@ volgende. Niet eromheen bouwen.
 
 ---
 
+## Wat een autopilot-sessie níet heeft
+
+De terugkerende taak (`trig_0162bNCRWwUNB3KSTNgHocsx`, elke vier uur) is
+aangemaakt zonder connectors. De sessies die hij start hebben dus **geen**
+`mcp__Supabase__*` en **geen** `mcp__github__*`. Praktisch:
+
+- `git` werkt gewoon, dus pushen naar `main` en daarmee deployen kan.
+- De database is niet te bereiken. Een migratie kun je wel **schrijven** in
+  `supabase/migrations/`, maar niet toepassen. Doe dat dan ook in die volgorde:
+  schrijf het bestand, zet de code zo dat hij zonder de nieuwe kolom nog werkt,
+  en zet hier in één regel dat de migratie nog toegepast moet worden.
+- Kies bij voorkeur een punt uit de rij dat geen schemawijziging nodig heeft.
+  De eerste twee punten hieronder kunnen zonder.
+
+Luka kan dit oplossen door de routine opnieuw aan te maken vanuit de
+routines-UI op claude.ai; dan draagt hij de connectors wel mee.
+
 ## De rij, in deze volgorde
 
 Eén punt per keer, helemaal af volgens de lat hierboven, dan het volgende.
