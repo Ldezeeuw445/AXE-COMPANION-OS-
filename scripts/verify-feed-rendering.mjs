@@ -1,5 +1,6 @@
 /**
- * Guards for how the AXE feed renders the three briefs.
+ * Guards for how the AXE feed renders the three briefs, and that the
+ * broadcast writer still has a host crontab scheduler entry.
  *
  * The parser was never the problem — it already split a real morning brief into
  * six labelled sections. The feed threw that away and printed one <p>, and the
@@ -10,7 +11,7 @@
  * Run: node scripts/verify-feed-rendering.mjs
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { parseBriefSections, sectionDisplayLabel } from "../src/lib/briefing/briefBodyFormat.ts";
 import { feedKindStyle } from "../src/lib/feed/feedKindStyle.ts";
 
@@ -93,6 +94,64 @@ check("the feed no longer truncates a brief mid-sentence", () => {
   assert.ok(
     !kept.includes("action_items") && !kept.includes("watch"),
     "sanity: the old 480-char cut really did drop the closing sections",
+  );
+});
+
+console.log("feed cron scheduler");
+
+function cronRouteMentionsBroadcastFeed(name) {
+  const routeFile = `src/app/api/cron/${name}/route.ts`;
+  const src = readFileSync(routeFile, "utf8");
+  const blobs = [src];
+  for (const match of src.matchAll(/from\s+"@\/(services\/[^"]+)"/g)) {
+    const imported = `src/${match[1]}.ts`;
+    try {
+      blobs.push(readFileSync(imported, "utf8"));
+    } catch {
+      // Route imports that are not a single .ts file are not feed writers.
+    }
+  }
+  const text = blobs.join("\n");
+  return (
+    /axe_broadcast_feed/.test(text) ||
+    /runKraterFeedSync|kraterFeedSyncRunner|upsertBroadcastFeedItem/.test(text)
+  );
+}
+
+check("every /api/cron route the feed uses has a host crontab entry", () => {
+  const crontab = readFileSync("scripts/vps.crontab", "utf8");
+  const activeLines = crontab
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+
+  const cronNames = readdirSync("src/app/api/cron", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+
+  const feedRoutes = cronNames
+    .filter((name) => cronRouteMentionsBroadcastFeed(name))
+    .map((name) => `/api/cron/${name}`);
+
+  assert.ok(
+    feedRoutes.includes("/api/cron/krater-feed-sync"),
+    "the broadcast writer must be detected as a feed cron route",
+  );
+  assert.ok(feedRoutes.length >= 1, "the feed must have at least one cron writer");
+
+  for (const path of feedRoutes) {
+    const scheduled = activeLines.some((line) => line.includes(path));
+    assert.ok(
+      scheduled,
+      `${path} writes axe_broadcast_feed but has no scheduler entry in scripts/vps.crontab`,
+    );
+  }
+
+  const feedLine = activeLines.find((line) => line.includes("/api/cron/krater-feed-sync"));
+  assert.match(
+    feedLine,
+    /^\*\/10 4-20 \* \* \*/,
+    "krater-feed-sync must stay on */10 4-20 so the Amsterdam 07:00 and 20:00 windows are hit",
   );
 });
 

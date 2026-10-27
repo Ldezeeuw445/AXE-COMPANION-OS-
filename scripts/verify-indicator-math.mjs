@@ -22,6 +22,8 @@ import {
   sessionDayKey,
 } from "../src/lib/chart/sessionDay.ts";
 import {
+  adxSeries,
+  stochasticSeries,
   atrSeries,
   bollingerBands,
   emaSeries,
@@ -474,6 +476,252 @@ check("the broker timezone is stored for every account, not just new brokers", (
   assert.ok(/brokerTimezone: brokerTz/.test(loader), "and the chart has to be able to read it");
   const screen = readFileSync("src/components/chart/ChartScreen.tsx", "utf8");
   assert.ok(/brokerTimezone=\{data\.account\?\.brokerTimezone/.test(screen));
+});
+
+
+console.log("\nstochastic");
+
+check("%K is where price closed in its own range", () => {
+  // A window spanning 100 to 110 with a close at 105 is exactly mid-range.
+  const candles = Array.from({ length: 14 }, (_, i) =>
+    candle(i, 105, { high: 110, low: 100 }),
+  );
+  const stoch = stochasticSeries(candles, 14, 1, 3);
+  near(stoch[13].k, 50, 1e-9);
+
+  const atTop = [
+    ...Array.from({ length: 13 }, (_, i) => candle(i, 105, { high: 110, low: 100 })),
+    candle(13, 110, { high: 110, low: 100 }),
+  ];
+  near(stochasticSeries(atTop, 14, 1, 3)[13].k, 100, 1e-9, "a close on the high");
+
+  const atBottom = [
+    ...Array.from({ length: 13 }, (_, i) => candle(i, 105, { high: 110, low: 100 })),
+    candle(13, 100, { high: 110, low: 100 }),
+  ];
+  near(stochasticSeries(atBottom, 14, 1, 3)[13].k, 0, 1e-9, "a close on the low");
+});
+
+check("the range is the window's, not the bar's", () => {
+  // The last bar is tiny; what matters is where it closed inside the fourteen.
+  const candles = [
+    ...Array.from({ length: 13 }, (_, i) => candle(i, 105, { high: 110, low: 100 })),
+    candle(13, 109, { high: 109.1, low: 108.9 }),
+  ];
+  near(stochasticSeries(candles, 14, 1, 3)[13].k, 90, 1e-9);
+});
+
+check("a flat window has no answer, not a neutral one", () => {
+  // (close - low) / (high - low) is 0/0 here. 50 would claim "mid-range" and
+  // 100 would claim "at the top" about a price that has not moved at all.
+  // Deliberately unlike rsiSeries, where a flat series really is neutral.
+  const flat = Array.from({ length: 20 }, (_, i) => candle(i, 50, { high: 50, low: 50 }));
+  const stoch = stochasticSeries(flat, 14, 3, 3);
+  assert.equal(stoch[19].k, null);
+  assert.equal(stoch[19].d, null);
+});
+
+check("neither line exists before its window is full", () => {
+  const candles = Array.from({ length: 30 }, (_, i) =>
+    candle(i, 100 + i, { high: 101 + i, low: 99 + i }),
+  );
+  const stoch = stochasticSeries(candles, 14, 3, 3);
+  // %K needs 14 bars and then 3 to smooth; %D needs 3 of those.
+  assert.equal(stoch[14].k, null, "still smoothing %K");
+  assert.ok(stoch[15].k != null);
+  assert.equal(stoch[16].d, null, "still smoothing %D");
+  assert.ok(stoch[17].d != null);
+});
+
+check("%D is the plain average of %K, not an EMA", () => {
+  // Every published definition of this indicator uses simple averages.
+  const candles = Array.from({ length: 40 }, (_, i) =>
+    candle(i, 100 + (i % 7), { high: 108, low: 99 }),
+  );
+  const stoch = stochasticSeries(candles, 14, 1, 3);
+  for (let i = 18; i < candles.length; i += 1) {
+    const window = [stoch[i].k, stoch[i - 1].k, stoch[i - 2].k];
+    if (window.some((v) => v == null)) continue;
+    near(stoch[i].d, (window[0] + window[1] + window[2]) / 3, 1e-9, `bar ${i}`);
+  }
+});
+
+check("both lines stay inside the oscillator", () => {
+  const candles = Array.from({ length: 200 }, (_, i) => {
+    const mid = 100 + Math.sin(i / 5) * 8;
+    return candle(i, mid, { high: mid + 1.5, low: mid - 1.5 });
+  });
+  for (const point of stochasticSeries(candles, 14, 3, 3)) {
+    for (const v of [point.k, point.d]) {
+      if (v == null) continue;
+      assert.ok(v >= 0 && v <= 100, `out of range: ${v}`);
+    }
+  }
+});
+
+console.log("\nadx and the directional lines");
+
+/**
+ * Wilder's ADX written out longhand — a second implementation, so a typo in
+ * the first does not agree with itself. Shares no line of code with it.
+ */
+function adxLonghand(candles, period) {
+  const pdm = [0];
+  const mdm = [0];
+  const tr = [0];
+  for (let i = 1; i < candles.length; i += 1) {
+    const up = candles[i].high - candles[i - 1].high;
+    const dn = candles[i - 1].low - candles[i].low;
+    pdm.push(up > dn && up > 0 ? up : 0);
+    mdm.push(dn > up && dn > 0 ? dn : 0);
+    tr.push(
+      Math.max(
+        candles[i].high - candles[i].low,
+        Math.abs(candles[i].high - candles[i - 1].close),
+        Math.abs(candles[i].low - candles[i - 1].close),
+      ),
+    );
+  }
+  const wilder = (src) => {
+    const out = new Array(src.length).fill(null);
+    let acc = 0;
+    for (let i = 1; i <= period; i += 1) acc += src[i];
+    out[period] = acc;
+    for (let i = period + 1; i < src.length; i += 1) {
+      acc = acc - acc / period + src[i];
+      out[i] = acc;
+    }
+    return out;
+  };
+  const sp = wilder(pdm);
+  const sm = wilder(mdm);
+  const st = wilder(tr);
+  const plus = sp.map((v, i) => (v == null || !st[i] ? null : (v / st[i]) * 100));
+  const minus = sm.map((v, i) => (v == null || !st[i] ? null : (v / st[i]) * 100));
+  const dx = plus.map((p, i) => {
+    const m = minus[i];
+    if (p == null || m == null) return null;
+    return p + m === 0 ? null : (Math.abs(p - m) / (p + m)) * 100;
+  });
+  return { plus, minus, dx };
+}
+
+check("the DI lines match Wilder's recurrence computed independently", () => {
+  // Not a straight ramp: a straight ramp gives -DI exactly zero and would
+  // hide a sign error.
+  const candles = Array.from({ length: 60 }, (_, i) => {
+    const drift = i * 0.6;
+    const wobble = Math.sin(i / 3) * 1.2;
+    const mid = 100 + drift + wobble;
+    return candle(i, mid, { high: mid + 0.8, low: mid - 0.9 });
+  });
+  const mine = adxSeries(candles, 14);
+  const ref = adxLonghand(candles, 14);
+  for (let i = 14; i < candles.length; i += 1) {
+    if (ref.plus[i] == null) continue;
+    near(mine[i].plusDi, ref.plus[i], 1e-9, `+DI at ${i}`);
+    near(mine[i].minusDi, ref.minus[i], 1e-9, `-DI at ${i}`);
+  }
+});
+
+check("ADX waits a second full period after DX, not one", () => {
+  const candles = Array.from({ length: 60 }, (_, i) =>
+    candle(i, 100 + i, { high: 101 + i, low: 99 + i }),
+  );
+  const adx = adxSeries(candles, 14);
+  assert.ok(adx[14].plusDi != null, "the DI lines start at the period");
+  for (let i = 0; i < 27; i += 1) {
+    assert.equal(adx[i].adx, null, `bar ${i}: a half-smoothed ADX reads like a real one`);
+  }
+  assert.ok(adx[27].adx != null, "and lands at 2 * period - 1");
+});
+
+check("a one-way market puts all the ground on one side", () => {
+  // Note what +DI is *not*: a percentage of how strong the trend is. It is
+  // directional movement over true range, so a bar two wide that advances one
+  // gives exactly 50 even in a perfectly straight uptrend. This test asserted
+  // > 90 at first and the implementation was right — 50 is the correct answer
+  // for this candle shape, and the longhand reference above agreed with it.
+  // What has to hold is that one side has everything and the other has
+  // nothing, which is what ADX then reads as fully one-sided.
+  const up = adxSeries(
+    Array.from({ length: 60 }, (_, i) => candle(i, 100 + i, { high: 101 + i, low: 99 + i })),
+    14,
+  );
+  near(up[59].minusDi, 0, 1e-9, "nothing on the short side");
+  assert.ok(up[59].plusDi > 0, "and all of it on the long side");
+  near(up[59].adx, 100, 1e-6, "one side holding everything is ADX 100");
+
+  const down = adxSeries(
+    Array.from({ length: 60 }, (_, i) => candle(i, 200 - i, { high: 201 - i, low: 199 - i })),
+    14,
+  );
+  near(down[59].plusDi, 0, 1e-9, "and the other way round");
+  assert.ok(down[59].minusDi > 0);
+  near(down[59].adx, 100, 1e-6, "ADX says how one-sided, never which way");
+});
+
+check("+DI rises when price advances further relative to its own range", () => {
+  // Narrow bars covering a lot of ground: the same direction, more of it per
+  // unit of true range, so +DI is higher than in the two-wide case above.
+  const wide = adxSeries(
+    Array.from({ length: 60 }, (_, i) => candle(i, 100 + i, { high: 101 + i, low: 99 + i })),
+    14,
+  );
+  const tight = adxSeries(
+    Array.from({ length: 60 }, (_, i) => candle(i, 100 + 2 * i, { high: 100.4 + 2 * i, low: 99.6 + 2 * i })),
+    14,
+  );
+  assert.ok(
+    tight[59].plusDi > wide[59].plusDi,
+    `tight ${tight[59].plusDi} should exceed wide ${wide[59].plusDi}`,
+  );
+});
+
+check("a market going nowhere is a low ADX", () => {
+  // Same high and low every bar: no directional movement at all.
+  const candles = Array.from({ length: 80 }, (_, i) =>
+    candle(i, 100 + (i % 2), { high: 101, low: 99 }),
+  );
+  const adx = adxSeries(candles, 14);
+  near(adx[79].plusDi, 0, 1e-9);
+  near(adx[79].minusDi, 0, 1e-9);
+  assert.ok(adx[79].adx === null || adx[79].adx <= 1, `expected ~0, got ${adx[79].adx}`);
+});
+
+check("an inside bar is directional movement in neither direction", () => {
+  // The bar extends neither the high nor the low, so both +DM and -DM are 0.
+  // That must not become movement in whichever direction was checked first.
+  const candles = [
+    candle(0, 100, { high: 102, low: 98 }),
+    candle(1, 100, { high: 101, low: 99 }),
+  ];
+  const adx = adxSeries(candles, 1);
+  near(adx[1].plusDi, 0, 1e-9);
+  near(adx[1].minusDi, 0, 1e-9);
+});
+
+check("every value stays inside 0-100", () => {
+  const candles = Array.from({ length: 300 }, (_, i) => {
+    const mid = 100 + Math.sin(i / 11) * 20 + Math.cos(i / 3) * 2;
+    return candle(i, mid, { high: mid + 2, low: mid - 2.5 });
+  });
+  for (const p of adxSeries(candles, 14)) {
+    for (const v of [p.plusDi, p.minusDi, p.adx]) {
+      if (v == null) continue;
+      assert.ok(v >= 0 && v <= 100, `out of range: ${v}`);
+    }
+  }
+});
+
+check("too little history gives nothing rather than a warm-up value", () => {
+  const short = Array.from({ length: 10 }, (_, i) => candle(i, 100 + i, { high: 101 + i, low: 99 + i }));
+  for (const p of adxSeries(short, 14)) {
+    assert.equal(p.plusDi, null);
+    assert.equal(p.adx, null);
+  }
+  assert.deepEqual(stochasticSeries([], 14, 3, 3), []);
+  assert.deepEqual(adxSeries([], 14), []);
 });
 
 console.log("\nsingle source of truth");

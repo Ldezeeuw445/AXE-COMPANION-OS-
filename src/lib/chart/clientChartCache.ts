@@ -10,14 +10,25 @@
  *
  * Budget: ≤ 2 MB total. Each entry is capped at 500 candles (~80 KB JSON).
  * Old entries are evicted when total exceeds MAX_ENTRIES.
+ *
+ * Offline: the last snapshot per symbol+timeframe is kept even after the
+ * fresh window. Age is labelled in the UI; it is not deleted on TTL.
  */
 
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
-import type { ChartPageData } from "@/lib/broker/loadChartPageData";
+import { CANDLE_FRESH_MS } from "@/lib/pwa/staleAge";
+
+export type ChartCacheWriteInput = {
+  symbol: string;
+  brokerSymbol: string;
+  timeframeKey: string;
+  candles: MetaApiCandle[];
+  lastPrice: number | null;
+  source?: string | null;
+};
 
 const STORAGE_PREFIX = "axe.chartCache.";
 const MAX_ENTRIES = 20;
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min — stale but better than blank
 
 export type CachedChartSnapshot = {
   symbol: string;
@@ -28,25 +39,41 @@ export type CachedChartSnapshot = {
   savedAt: number;
 };
 
+function storage(): Storage | null {
+  try {
+    const store = (globalThis as { localStorage?: Storage }).localStorage;
+    if (!store) return null;
+    return store;
+  } catch {
+    return null;
+  }
+}
+
 function cacheKey(symbol: string, tf: string): string {
   return `${STORAGE_PREFIX}${symbol.toUpperCase()}.${tf}`;
 }
 
-/** Read cached candles for a symbol+timeframe. Returns null if missing or stale. */
+export function isCachedChartFresh(
+  snapshot: CachedChartSnapshot | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!snapshot) return false;
+  return now - snapshot.savedAt <= CANDLE_FRESH_MS;
+}
+
+/** Read last cached candles for a symbol+timeframe. Returns null only if missing. */
 export function readCachedChart(
   symbol: string,
   tf: string,
 ): CachedChartSnapshot | null {
-  if (typeof window === "undefined") return null;
+  const store = storage();
+  if (!store) return null;
   try {
-    const raw = localStorage.getItem(cacheKey(symbol, tf));
+    const raw = store.getItem(cacheKey(symbol, tf));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedChartSnapshot;
     if (!parsed.candles || parsed.candles.length === 0) return null;
-    if (Date.now() - parsed.savedAt > CACHE_TTL_MS) {
-      localStorage.removeItem(cacheKey(symbol, tf));
-      return null;
-    }
+    if (!Number.isFinite(parsed.savedAt)) return null;
     return parsed;
   } catch {
     return null;
@@ -54,8 +81,9 @@ export function readCachedChart(
 }
 
 /** Save chart data to localStorage cache. */
-export function writeCachedChart(data: ChartPageData): void {
-  if (typeof window === "undefined") return;
+export function writeCachedChart(data: ChartCacheWriteInput, savedAt = Date.now()): void {
+  const store = storage();
+  if (!store) return;
   if (data.candles.length === 0) return;
   if (data.source === "AXE Demo") return; // don't cache demo data
 
@@ -67,9 +95,9 @@ export function writeCachedChart(data: ChartPageData): void {
       timeframeKey: data.timeframeKey,
       candles: data.candles.slice(-500), // cap at 500
       lastPrice: data.lastPrice,
-      savedAt: Date.now(),
+      savedAt,
     };
-    localStorage.setItem(
+    store.setItem(
       cacheKey(data.symbol, data.timeframeKey),
       JSON.stringify(snapshot),
     );
@@ -78,10 +106,11 @@ export function writeCachedChart(data: ChartPageData): void {
   }
 }
 
-/** Prefetch adjacent timeframes in the background. */
+/** Prefetch adjacent timeframes that are missing or past the fresh window. */
 export function prefetchTimeframes(
   currentTf: string,
   symbol: string,
+  now = Date.now(),
 ): string[] {
   const TF_ADJACENCY: Record<string, string[]> = {
     m1: ["m5"],
@@ -94,29 +123,30 @@ export function prefetchTimeframes(
     mn: ["w1"],
   };
   const neighbors = TF_ADJACENCY[currentTf] ?? [];
-  // Return TFs that are NOT already cached (so the caller can request them)
-  return neighbors.filter((tf) => !readCachedChart(symbol, tf));
+  return neighbors.filter((tf) => !isCachedChartFresh(readCachedChart(symbol, tf), now));
 }
 
 function evictOldEntries(): void {
+  const store = storage();
+  if (!store) return;
   try {
     const entries: { key: string; savedAt: number }[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
       if (!key?.startsWith(STORAGE_PREFIX)) continue;
       try {
-        const raw = localStorage.getItem(key);
+        const raw = store.getItem(key);
         if (!raw) continue;
         const parsed = JSON.parse(raw) as { savedAt?: number };
         entries.push({ key, savedAt: parsed.savedAt ?? 0 });
       } catch {
-        localStorage.removeItem(key!);
+        store.removeItem(key!);
       }
     }
     if (entries.length <= MAX_ENTRIES) return;
     entries.sort((a, b) => a.savedAt - b.savedAt);
     const toRemove = entries.slice(0, entries.length - MAX_ENTRIES);
-    for (const { key } of toRemove) localStorage.removeItem(key);
+    for (const { key } of toRemove) store.removeItem(key);
   } catch {
     // Ignore
   }

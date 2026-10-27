@@ -5,6 +5,9 @@ import { describe, it } from "node:test";
 import {
   NEVER_CACHE_PREFIXES,
   PWA_CACHE_VERSION,
+  PWA_DATA_CACHE_VERSION,
+  PWA_FROM_CACHE_HEADER,
+  PWA_LEGACY_DATA_CACHES,
   PWA_OFFLINE_PATH,
   SAFE_API_PREFIXES,
   SAFE_NAV_PREFIXES,
@@ -52,7 +55,12 @@ describe("PWA cache policy", () => {
 describe("public/sw.js stays aligned with cachePolicy", () => {
   it("declares the same cache version and offline page", () => {
     assert.match(swSource, new RegExp(PWA_CACHE_VERSION));
+    assert.match(swSource, new RegExp(PWA_DATA_CACHE_VERSION));
     assert.match(swSource, new RegExp(`"${PWA_OFFLINE_PATH}"`));
+    assert.match(swSource, new RegExp(PWA_FROM_CACHE_HEADER));
+    for (const legacy of PWA_LEGACY_DATA_CACHES) {
+      assert.match(swSource, new RegExp(legacy));
+    }
   });
 
   it("implements fetch, last-viewed data cache, and an update handshake", () => {

@@ -11,8 +11,10 @@
  * Keep prefixes in sync with src/lib/pwa/cachePolicy.ts (enforced by tests).
  */
 
-const CACHE_NAME = "axe-v5";
-const DATA_CACHE = "axe-data-v5";
+const CACHE_NAME = "axe-v6";
+const DATA_CACHE = "axe-data-v6";
+const LEGACY_DATA_CACHES = ["axe-data-v5"];
+const FROM_CACHE_HEADER = "X-Axe-From-Cache";
 const OFFLINE_URL = "/offline";
 const LAST_VIEWED_KEY = "axe-last-viewed";
 const FALLBACK_ICON = "/axe-icon-512.png";
@@ -134,13 +136,10 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((k) => k !== CACHE_NAME && k !== DATA_CACHE)
-            .map((k) => caches.delete(k)),
-        ),
-      )
+      .then((keys) => {
+        const keep = new Set([CACHE_NAME, DATA_CACHE, ...LEGACY_DATA_CACHES]);
+        return Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)));
+      })
       .then(() => self.clients.claim()),
   );
 });
@@ -180,6 +179,31 @@ async function rememberLastViewed(url) {
   }
 }
 
+function markFromCache(response) {
+  const headers = new Headers(response.headers);
+  headers.set(FROM_CACHE_HEADER, "1");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function matchDataCache(request) {
+  const primary = await caches.open(DATA_CACHE);
+  const hit = await primary.match(request);
+  if (hit) return hit;
+  for (const name of LEGACY_DATA_CACHES) {
+    const legacy = await caches.open(name);
+    const cached = await legacy.match(request);
+    if (cached) {
+      await primary.put(request, cached.clone());
+      return cached;
+    }
+  }
+  return undefined;
+}
+
 async function networkFirst(request, cacheName, fallback) {
   const cache = await caches.open(cacheName);
   try {
@@ -189,8 +213,8 @@ async function networkFirst(request, cacheName, fallback) {
     }
     return res;
   } catch (err) {
-    const cached = await cache.match(request);
-    if (cached) return cached;
+    const cached = cacheName === DATA_CACHE ? await matchDataCache(request) : await cache.match(request);
+    if (cached) return markFromCache(cached);
     if (fallback) {
       const page = await caches.match(fallback);
       if (page) return page;

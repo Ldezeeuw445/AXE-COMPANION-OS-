@@ -1,10 +1,13 @@
-# Install on the IONOS host (replace APP_ROOT with the real repo path):
-#   crontab -e
+# Companion cron lines for the IONOS host.
 # Host cron for /api/cron/* via scripts/run-vps-cron.sh.
 #
-# ONE SCHEDULER PER JOB (inspected 2026-10-17, project pqnngpcgbdwxavbatbia).
-# Every Companion job below is already live in Supabase pg_cron — do NOT also
-# schedule it here. See docs/vps-deploy.md "Who owns cron".
+# The live crontab on this box is SHARED with AXE Core. Append the Companion
+# lines below (after substituting APP_ROOT if the line still has that token).
+# Never install this file with `crontab -` — that replaces the whole crontab
+# and drops AXE Core jobs.
+#
+# ONE SCHEDULER PER JOB. Do not also schedule a host line that is live in
+# Supabase pg_cron. See docs/vps-deploy.md "Who owns cron".
 #
 #   pg_cron (leave on Supabase; remove from this file if you ever add them):
 #     axe-companion-mt5-sync            */10 * * * *
@@ -18,8 +21,9 @@
 #     axe-companion-journal-sweep       25 * * * *
 #     axe-companion-user-knowledge-sync 40 5 * * *
 #
-#   host cron (this file) — only jobs that are NOT in cron.job:
+#   host cron (this file) — jobs that are NOT in cron.job:
 #     congress-trades-sync              20 6 * * *
+#     krater-feed-sync                  */10 4-20 * * *
 
 SHELL=/bin/bash
 PATH=/usr/bin:/bin
@@ -28,3 +32,10 @@ PATH=/usr/bin:/bin
 # Not registered in live pg_cron / axe_ops.cron_job as of 2026-10-17.
 # If you later schedule it via cron.schedule, delete this line the same day.
 20 6 * * * APP_ROOT/scripts/run-vps-cron.sh /api/cron/congress-trades-sync >> /tmp/axe-cron-congress-trades-sync.log 2>&1
+
+# AXE Feed broadcasts (Daily News + Market Recap) → axe_broadcast_feed.
+# Hits every 10 min 04:00–20:00 UTC; the route only writes 07:00–07:29 and
+# 20:00–20:29 Europe/Amsterdam. Host crontab is the only scheduler — the
+# pg_cron job axe-companion-krater-feed-sync was unscheduled on 2026-10-17
+# and must not be re-enabled (one scheduler, not both).
+*/10 4-20 * * * /root/AXE-COMPANION-OS-/scripts/run-vps-cron.sh /api/cron/krater-feed-sync >> /tmp/axe-cron-krater-feed-sync.log 2>&1

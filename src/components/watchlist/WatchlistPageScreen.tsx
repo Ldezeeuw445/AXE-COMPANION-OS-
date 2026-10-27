@@ -22,6 +22,11 @@ import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { GripVertical, Plus, Search, Trash2, X } from "lucide-react";
 import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
 import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
+import { StaleAgeBadge } from "@/components/pwa/StaleAgeBadge";
+import { PWA_FROM_CACHE_HEADER } from "@/lib/pwa/cachePolicy";
+import { mergeLastQuotes, readLastQuotes, writeLastQuotes } from "@/lib/pwa/lastQuotesCache";
+import { quoteFreshness } from "@/lib/pwa/staleAge";
+import { useOnlineStatus } from "@/lib/pwa/useOnlineStatus";
 
 /* ── Types ──────────────────────────────────────────────────────── */
 
@@ -142,6 +147,8 @@ export function WatchlistPageScreen({
   const [adding, setAdding] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const { bidDir, askDir } = useTickColors(localItems);
+  const online = useOnlineStatus();
+  const [quotesFromCache, setQuotesFromCache] = useState(false);
 
   const persistOrder = useCallback((rows: QuoteRow[]) => {
     const symbols = rows.map((item) => item.symbol);
@@ -149,19 +156,22 @@ export function WatchlistPageScreen({
     void saveWatchlistOrder(symbols);
   }, []);
 
-  /* ── Live price polling — fetches latest prices every 2s ────────── */
+  /* ── Live price polling — fetches latest prices every 30s ────────── */
   useEffect(() => {
     let active = true;
     const poll = async () => {
       try {
         const res = await fetch("/api/quotes/prices", { credentials: "include" });
-        if (!res.ok || !active) return;
+        if (!active) return;
+        if (!res.ok) return;
+        const fromCache = res.headers.get(PWA_FROM_CACHE_HEADER) === "1";
+        setQuotesFromCache(fromCache);
         const json = (await res.json()) as {
           prices: Record<string, { bid: number | null; ask: number | null; price: number | null; spread: number | null; tickAt: string | null; status: string | null }>;
         };
         if (!active || !json.prices) return;
-        setLocalItems((prev) =>
-          prev.map((item) => {
+        setLocalItems((prev) => {
+          const next = prev.map((item) => {
             const p = json.prices[item.symbol];
             if (!p) return item;
             return {
@@ -171,15 +181,20 @@ export function WatchlistPageScreen({
               runtimePrice: p.price ?? item.runtimePrice,
               spread: p.spread ?? item.spread,
               freshness: p.tickAt ?? item.freshness,
-              runtimeState: p.status === "live" ? "live" as const : item.runtimeState,
+              runtimeState: fromCache
+                ? item.runtimeState
+                : p.status === "live"
+                  ? ("live" as const)
+                  : item.runtimeState,
             };
-          }),
-        );
+          });
+          writeLastQuotes(next);
+          return next;
+        });
       } catch {
-        /* ignore fetch errors */
+        if (active) setQuotesFromCache(true);
       }
     };
-    // Initial fetch + interval
     void poll();
     const timer = setInterval(poll, 30_000);
     return () => {
@@ -188,20 +203,20 @@ export function WatchlistPageScreen({
     };
   }, []);
 
-  // Keep items in sync with server data (but preserve order)
+  // Keep items in sync with server data (but preserve order + last quotes)
   useEffect(() => {
     setLocalItems((prev) => {
       const prevOrder = prev.map((i) => i.symbol);
       const newMap = new Map(items.map((i) => [i.symbol, i]));
-      // Update existing items with fresh data, keep order
       const updated = prevOrder
         .map((sym) => newMap.get(sym))
         .filter((i): i is QuoteRow => i != null);
-      // Add new items not in current order
       for (const item of items) {
         if (!prevOrder.includes(item.symbol)) updated.push(item);
       }
-      return updated;
+      const merged = mergeLastQuotes(updated, readLastQuotes());
+      writeLastQuotes(merged);
+      return merged;
     });
   }, [items]);
 
@@ -522,6 +537,12 @@ export function WatchlistPageScreen({
           const digits = priceDigitsForSymbol(bs);
           const isRemoving = removing.has(sym);
           const isDragging = dragIdx === i;
+          const freshness = quoteFreshness({
+            asOf: item.freshness,
+            online,
+            fromCache: quotesFromCache,
+          });
+          const looksLive = item.runtimeState === "live" && !freshness.stale;
 
           return (
             <div
@@ -573,15 +594,24 @@ export function WatchlistPageScreen({
               >
                 {/* Symbol + status */}
                 <div className="min-w-0 flex-1">
-                  <span className="font-mono text-[13px] font-bold tracking-wide text-white">
-                    {sym}
-                  </span>
-                  {item.runtimeState === "live" && (
-                    <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
-                  )}
-                  {item.runtimeState === "warming" && (
-                    <span className="ml-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400/50" />
-                  )}
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="font-mono text-[13px] font-bold tracking-wide text-white">
+                      {sym}
+                    </span>
+                    {looksLive && (
+                      <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/70" />
+                    )}
+                    {item.runtimeState === "warming" && !freshness.stale && (
+                      <span className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400/50" />
+                    )}
+                  </div>
+                  {freshness.stale ? (
+                    <StaleAgeBadge
+                      freshness={freshness}
+                      className="mt-0.5"
+                      testId={`quote-stale-${sym}`}
+                    />
+                  ) : null}
                 </div>
 
                 {/* Bid */}

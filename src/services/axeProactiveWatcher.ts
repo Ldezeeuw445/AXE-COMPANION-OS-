@@ -6,8 +6,19 @@ import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
 import { detectConcentration, weekendExposureWarning } from "@/lib/risk/positionRisk";
 import { detectWeakSpots } from "@/lib/journal/weakSpots";
+import {
+  derivePlaybookEdges,
+  edgeNoticeParts,
+  edgeOpenNow,
+} from "@/lib/journal/playbookEdge";
+import { getChartSetup } from "@/services/chartSetupService";
 import { loadWeakSpotTrades } from "@/services/weakSpotService";
 import { brokerHealthWarning } from "@/lib/risk/brokerHealth";
+import {
+  renderNoticeBody,
+  signedAmount,
+  type ProactiveNotice,
+} from "@/lib/axe/notice";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -45,26 +56,58 @@ async function firePush(
   return result.ok && result.sent > 0;
 }
 
-async function recordProactiveEvent(
+/**
+ * Record one notice, and push it if the trader has push on.
+ *
+ * Both used to be done by hand at each of the seven producers below, with the
+ * title, body and URL repeated three times per notice and the push arguments
+ * drifting from the feed row's. Worse, every producer decided for itself
+ * whether to say anything beyond what had happened — and most did not, which
+ * is what this whole change is about. The notice type will not let a producer
+ * skip the next step now, and this is the only place that writes one.
+ */
+async function announce(
   supabase: SupabaseClient,
   userId: string,
-  eventKey: string,
-  title: string,
-  body: string,
-  url: string,
-): Promise<boolean> {
+  opts: {
+    eventKey: string;
+    notice: ProactiveNotice;
+    category: PushCategory;
+    hasPush: boolean;
+    extra?: { symbol?: string; timeframe?: string; threadId?: string };
+  },
+): Promise<{ created: number; pushed: number }> {
+  const body = renderNoticeBody(opts.notice);
   const { error } = await supabase.from("axe_proactive_events").insert({
     user_id: userId,
-    event_key: eventKey,
-    title,
+    event_key: opts.eventKey,
+    title: opts.notice.title,
     body,
-    url,
+    url: opts.notice.action.href,
   });
   if (error) {
-    if (error.code === "23505") return false;
+    // Duplicate event key: already said, and saying it twice is how a useful
+    // notice becomes one the trader swipes away without reading.
+    if (error.code === "23505") return { created: 0, pushed: 0 };
     throw error;
   }
-  return true;
+
+  const pushed =
+    opts.hasPush &&
+    (await firePush(
+      supabase,
+      userId,
+      `AXE · ${opts.notice.title}`,
+      body,
+      opts.notice.action.href,
+      opts.category,
+      opts.eventKey,
+      opts.extra,
+    ))
+      ? 1
+      : 0;
+
+  return { created: 1, pushed };
 }
 
 async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ created: number; pushed: number }> {
@@ -142,27 +185,45 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
 
   for (const trade of recentTradesRes.data ?? []) {
     const pnl = Number(trade.pnl ?? 0);
-    const eventKey = `trade_close:${trade.id}`;
-    const title = `Trade closed: ${trade.symbol}`;
-    const body = `${trade.side} ${pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} — cockpit & journal updated`;
-    const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/cockpit");
-    if (inserted) {
-      created += 1;
-      if (hasPush && (await firePush(supabase, userId, `AXE · ${title}`, body, "/cockpit", "axe_finding", eventKey, { symbol: String(trade.symbol ?? "") }))) pushed += 1;
-    }
+    const result = await announce(supabase, userId, {
+      eventKey: `trade_close:${trade.id}`,
+      category: "axe_finding",
+      hasPush,
+      extra: { symbol: String(trade.symbol ?? "") },
+      notice: {
+        title: `Trade closed: ${trade.symbol}`,
+        what: `${trade.side} ${signedAmount(pnl)}`,
+        // The old body said "cockpit & journal updated", which describes the
+        // app's housekeeping rather than anything about the trade. What a
+        // trader wants to know at this moment is whether AXE agreed with it.
+        soWhat: "AXE has scored it against your rules and playbooks.",
+        action: { label: "Read AXE's verdict on it", href: "/journal" },
+      },
+    });
+    created += result.created;
+    pushed += result.pushed;
   }
 
   for (const req of pendingExec) {
     const ageMs = Date.now() - new Date(req.created_at as string).getTime();
     if (ageMs < 5 * 60 * 1000) continue;
-    const eventKey = `exec_pending:${req.id}`;
-    const title = `Trade ready for review: ${req.instrument}`;
-    const body = `${String(req.direction ?? "").toUpperCase()} @ ${req.entry_price ?? "market"} — tap to approve`;
-    const inserted = await recordProactiveEvent(supabase, userId, eventKey, title, body, "/actions");
-    if (inserted) {
-      created += 1;
-      if (hasPush && (await firePush(supabase, userId, `AXE · ${title}`, body, "/actions", "axe_finding", eventKey))) pushed += 1;
-    }
+    const minutes = Math.round(ageMs / 60_000);
+    const result = await announce(supabase, userId, {
+      eventKey: `exec_pending:${req.id}`,
+      category: "axe_finding",
+      hasPush,
+      extra: { symbol: String(req.instrument ?? "") },
+      notice: {
+        title: `Trade ready for review: ${req.instrument}`,
+        what: `${String(req.direction ?? "").toUpperCase()} @ ${req.entry_price ?? "market"}`,
+        // The age is the point: a setup that was valid twenty minutes ago may
+        // not be now, and nothing has reached the broker either way.
+        soWhat: `Waiting ${minutes}m — nothing goes to your broker until you approve it.`,
+        action: { label: "Approve or discard it", href: "/actions" },
+      },
+    });
+    created += result.created;
+    pushed += result.pushed;
   }
 
   // News risk. Deliberately NOT gated on having open positions: on an account
@@ -188,20 +249,26 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
           currency: ev.currency ?? null,
         });
         if (warning) {
-          const eventKey = `news_risk:${ev.title.slice(0, 40)}:${ev.startsAt}`;
-          const url = positions.length > 0 ? "/positions" : "/feed";
-          const inserted = await recordProactiveEvent(
-            supabase,
-            userId,
-            eventKey,
-            warning.title,
-            warning.body,
-            url,
-          );
-          if (inserted) {
-            created += 1;
-            if (hasPush && (await firePush(supabase, userId, `AXE · ${warning.title}`, warning.body, url, "economic_event", eventKey, { symbol: focus, timeframe: "m15" }))) pushed += 1;
-          }
+          // `newsWarningFor` already names the account's rules and what they
+          // mean here — that is its whole job — so its body is the `soWhat`
+          // and the only thing missing was somewhere to go.
+          const result = await announce(supabase, userId, {
+            eventKey: `news_risk:${ev.title.slice(0, 40)}:${ev.startsAt}`,
+            category: "economic_event",
+            hasPush,
+            extra: { symbol: focus, timeframe: "m15" },
+            notice: {
+              title: warning.title,
+              what: warning.body,
+              soWhat: null,
+              action:
+                positions.length > 0
+                  ? { label: `Check your ${positions.length} open position${positions.length === 1 ? "" : "s"}`, href: "/positions" }
+                  : { label: "See what else is due today", href: "/feed" },
+            },
+          });
+          created += result.created;
+          pushed += result.pushed;
         }
       }
     } catch {
@@ -221,21 +288,22 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       // One per account per day: a broken connection stays broken, and
       // repeating it every fifteen minutes would train the trader to swipe
       // it away — which is how this went unnoticed for eight days.
-      const eventKey = `broker_health:${accountId ?? "none"}:${health.kind}:${new Date().toISOString().slice(0, 10)}`;
-      const inserted = await recordProactiveEvent(
-        supabase,
-        userId,
-        eventKey,
-        health.title,
-        health.body,
-        "/accounts",
-      );
-      if (inserted) {
-        created += 1;
-        if (hasPush && (await firePush(supabase, userId, `AXE · ${health.title}`, health.body, "/accounts", "broker_disconnect", eventKey))) {
-          pushed += 1;
-        }
-      }
+      const result = await announce(supabase, userId, {
+        eventKey: `broker_health:${accountId ?? "none"}:${health.kind}:${new Date().toISOString().slice(0, 10)}`,
+        category: "broker_disconnect",
+        hasPush,
+        notice: {
+          title: health.title,
+          what: health.body,
+          // The consequence is the part a trader cannot work out for
+          // themselves, and it is the one that matters: a dead feed means
+          // every other thing AXE says is running on stale prices.
+          soWhat: "Until this is back, AXE is working from stale prices and cannot place or close anything.",
+          action: { label: "Reconnect the account", href: "/accounts" },
+        },
+      });
+      created += result.created;
+      pushed += result.pushed;
     }
   }
 
@@ -252,19 +320,22 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     if (top && top.severity >= 0.4) {
       // Keyed on the cluster, not the clock: re-opening the same stack
       // tomorrow is worth saying again, nagging every 15 minutes is not.
-      const eventKey = `concentration:${top.id}:${top.symbols.join("+")}:${new Date().toISOString().slice(0, 10)}`;
-      const inserted = await recordProactiveEvent(
-        supabase,
-        userId,
-        eventKey,
-        top.title,
-        top.body,
-        "/positions",
-      );
-      if (inserted) {
-        created += 1;
-        if (hasPush && (await firePush(supabase, userId, `AXE · ${top.title}`, top.body, "/positions", "risk_alert", eventKey, { symbol: top.symbols[0] }))) pushed += 1;
-      }
+      const result = await announce(supabase, userId, {
+        eventKey: `concentration:${top.id}:${top.symbols.join("+")}:${new Date().toISOString().slice(0, 10)}`,
+        category: "risk_alert",
+        hasPush,
+        extra: { symbol: top.symbols[0] },
+        notice: {
+          title: top.title,
+          what: top.body,
+          // Several tickets feel like several decisions. The risk is that they
+          // move together, which is the thing the ticket count hides.
+          soWhat: `These move together, so your real exposure is one bet, not ${positions.length}.`,
+          action: { label: "See the stack", href: "/positions" },
+        },
+      });
+      created += result.created;
+      pushed += result.pushed;
     }
   }
 
@@ -275,24 +346,35 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     accountProfile.weekendHoldingAllowed,
   );
   if (weekend) {
-    const eventKey = `weekend:${new Date().toISOString().slice(0, 10)}`;
-    const inserted = await recordProactiveEvent(
-      supabase,
-      userId,
-      eventKey,
-      weekend.title,
-      weekend.body,
-      "/positions",
-    );
-    if (inserted) {
-      created += 1;
-      if (hasPush && (await firePush(supabase, userId, `AXE · ${weekend.title}`, weekend.body, "/positions", "risk_alert", eventKey))) pushed += 1;
-    }
+    const result = await announce(supabase, userId, {
+      eventKey: `weekend:${new Date().toISOString().slice(0, 10)}`,
+      category: "risk_alert",
+      hasPush,
+      notice: {
+        title: weekend.title,
+        what: weekend.body,
+        // Two different reasons depending on the account, and the trader
+        // should know which one applies to them — a rule they can breach is
+        // not the same risk as a gap they can only sit through.
+        soWhat: accountProfile.weekendHoldingAllowed
+          ? "The market reopens with a gap, and your stop cannot fill inside it."
+          : `This account's rules do not allow it — ${accountProfile.description}.`,
+        action: { label: "Review before the close", href: "/positions" },
+      },
+    });
+    created += result.created;
+    pushed += result.pushed;
   }
 
   /* ── Your own most expensive habit, once a week ─────────────────── */
+  // One load, two readings. `weakSpots` finds what is going wrong and says
+  // stop; `playbookEdge` finds the conditions this trader actually makes money
+  // in. The second was build-list item 3.4 and the thing Luka asked for most
+  // often: AXE that comes to you with something of its own accord instead of
+  // only ever applying a brake.
+  const edgeTrades = await loadWeakSpotTrades(supabase, userId, accountId);
   try {
-    const spots = detectWeakSpots(await loadWeakSpotTrades(supabase, userId, accountId));
+    const spots = detectWeakSpots(edgeTrades);
     const top = spots[0];
     if (top && top.severity >= 0.5) {
       // One key per ISO week: this is a pattern, not news. Saying it daily
@@ -303,23 +385,57 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
         monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
         return monday.toISOString().slice(0, 10);
       })();
-      const eventKey = `weakspot:${top.id}:${weekStamp}`;
-      const body = `${top.evidence} ${top.proposal}`;
-      const inserted = await recordProactiveEvent(
-        supabase,
-        userId,
-        eventKey,
-        top.title,
-        body,
-        "/journal",
-      );
-      if (inserted) {
-        created += 1;
-        if (hasPush && (await firePush(supabase, userId, `AXE · ${top.title}`, body, "/journal", "axe_finding", eventKey))) pushed += 1;
-      }
+      // `evidence` is the measurement and `proposal` is what to do about it,
+      // which is exactly the split the notice type wants — they used to be
+      // concatenated into one string and read as a single paragraph.
+      const result = await announce(supabase, userId, {
+        eventKey: `weakspot:${top.id}:${weekStamp}`,
+        category: "axe_finding",
+        hasPush,
+        notice: {
+          title: top.title,
+          what: top.evidence,
+          soWhat: top.proposal,
+          action: { label: "See the trades behind it", href: "/journal" },
+        },
+      });
+      created += result.created;
+      pushed += result.pushed;
     }
   } catch {
     /* weak spots are an extra, never a reason the watcher fails */
+  }
+
+  /* ── Your own best ground, while you are standing on it ─────────── */
+  try {
+    const edges = derivePlaybookEdges(edgeTrades);
+    // Their saved chart list: an edge on an instrument they are not even
+    // looking at today is not worth a notification. Empty means no filter,
+    // which is right for a trader who has never saved a chart.
+    const setup = await getChartSetup(supabase, userId);
+    const edge = edgeOpenNow(edges, new Date(), setup.symbols);
+    if (edge) {
+      // One per edge per day. The session comes round every day and the
+      // record behind it barely moves, so saying it twice in one session
+      // would be the fastest way to make a trader mute AXE.
+      const parts = edgeNoticeParts(edge);
+      const result = await announce(supabase, userId, {
+        eventKey: `playbook_edge:${edge.id}:${new Date().toISOString().slice(0, 10)}`,
+        category: "axe_finding",
+        hasPush,
+        extra: { symbol: edge.symbol },
+        notice: {
+          title: parts.title,
+          what: parts.what,
+          soWhat: parts.soWhat,
+          action: { label: `See those ${edge.trades} trades`, href: "/journal" },
+        },
+      });
+      created += result.created;
+      pushed += result.pushed;
+    }
+  } catch {
+    /* same rule: an extra, never a reason the watcher fails */
   }
 
   try {

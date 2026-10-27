@@ -290,3 +290,196 @@ export function pointOfControl(
     volume: bestVolume,
   };
 }
+
+/* ── Stochastic oscillator ────────────────────────────────────────────────
+ *
+ * Where in its recent range did price close? %K is that, as a percentage of
+ * the high-low range over `kPeriod`, then smoothed over `kSmooth` bars; %D is
+ * %K smoothed again over `dPeriod`. TradingView's defaults are 14/1/3 and the
+ * classic "slow stochastic" is 14/3/3, which is what this defaults to.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+export type StochasticPoint = {
+  k: number | null;
+  d: number | null;
+};
+
+/**
+ * A window whose high equals its low has no answer, not a neutral one.
+ *
+ * The formula is `(close - low) / (high - low)`, so a flat window is 0/0.
+ * Returning 50 there would say "mid-range" about a price that has not moved at
+ * all, and returning 100 would say "at the top of its range" — both are
+ * statements the data does not support. `null` draws a gap, which is the truth.
+ *
+ * This is deliberately different from `rsiSeries`, which does return 50 on a
+ * flat series: there the inputs are real (no gains and no losses is a measured
+ * fact, and MT5 agrees on 50), while here the denominator simply does not
+ * exist.
+ */
+export function stochasticSeries(
+  candles: IndicatorMathCandle[],
+  kPeriod = 14,
+  kSmooth = 3,
+  dPeriod = 3,
+): StochasticPoint[] {
+  const out: StochasticPoint[] = candles.map(() => ({ k: null, d: null }));
+  if (candles.length === 0 || kPeriod <= 0) return out;
+
+  const raw: Array<number | null> = candles.map((_, i) => {
+    if (i + 1 < kPeriod) return null;
+    let high = -Infinity;
+    let low = Infinity;
+    for (let j = i + 1 - kPeriod; j <= i; j += 1) {
+      const c = candles[j]!;
+      if (c.high > high) high = c.high;
+      if (c.low < low) low = c.low;
+    }
+    const range = high - low;
+    if (!Number.isFinite(range) || range <= 0) return null;
+    return ((candles[i]!.close - low) / range) * 100;
+  });
+
+  // `emaSeries` would be wrong here: both smoothings are simple averages in
+  // every published definition of this indicator.
+  const k = smoothNullable(raw, kSmooth);
+  const d = smoothNullable(k, dPeriod);
+
+  for (let i = 0; i < candles.length; i += 1) {
+    out[i] = { k: k[i] ?? null, d: d[i] ?? null };
+  }
+  return out;
+}
+
+/**
+ * Simple moving average over a series that has gaps in it.
+ *
+ * A window containing a null has no average — the same rule `smaSeries` holds
+ * for a gap in a price series. `period <= 1` passes the series straight
+ * through, which is what TradingView's default %K smoothing of 1 means.
+ */
+function smoothNullable(values: Array<number | null>, period: number): Array<number | null> {
+  if (period <= 1) return [...values];
+  const out: Array<number | null> = values.map(() => null);
+  for (let i = period - 1; i < values.length; i += 1) {
+    let sum = 0;
+    let ok = true;
+    for (let j = i + 1 - period; j <= i; j += 1) {
+      const v = values[j];
+      if (v == null || !Number.isFinite(v)) {
+        ok = false;
+        break;
+      }
+      sum += v;
+    }
+    out[i] = ok ? sum / period : null;
+  }
+  return out;
+}
+
+/* ── ADX and the directional indicators ──────────────────────────────────
+ *
+ * Wilder's. Is there a trend, and which way: +DI and -DI say which side is
+ * making the ground, ADX says how one-sided it is without saying which way.
+ * Period 14 everywhere, which is Wilder's own and TradingView's default.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+export type AdxPoint = {
+  plusDi: number | null;
+  minusDi: number | null;
+  /** 0-100. High means trending, either direction; low means ranging. */
+  adx: number | null;
+};
+
+/**
+ * Directional movement, Wilder-smoothed.
+ *
+ * Both DI lines need `period + 1` bars before they mean anything, and ADX
+ * needs another full period on top of that to smooth DX — so the first ADX
+ * value lands at bar `2 * period`, not at `period`. Anything earlier is null
+ * rather than a partially-warmed number, because a half-smoothed ADX reads
+ * like a real one and is the exact shape of a false "the trend is building"
+ * signal.
+ *
+ * A bar where both DI lines are zero has no direction at all (an inside bar
+ * after an inside bar), and `DX = |0-0| / (0+0)` is 0/0. DX carries its
+ * previous value there, which is what Wilder's own worked tables do.
+ */
+export function adxSeries(candles: IndicatorMathCandle[], period = 14): AdxPoint[] {
+  const out: AdxPoint[] = candles.map(() => ({ plusDi: null, minusDi: null, adx: null }));
+  if (candles.length <= period || period <= 0) return out;
+
+  const plusDm: number[] = [0];
+  const minusDm: number[] = [0];
+  const tr: number[] = [0];
+
+  for (let i = 1; i < candles.length; i += 1) {
+    const c = candles[i]!;
+    const p = candles[i - 1]!;
+    const up = c.high - p.high;
+    const down = p.low - c.low;
+    // Only the larger of the two counts, and only when it is positive: a bar
+    // that extends both ways is not directional movement in either.
+    plusDm.push(up > down && up > 0 ? up : 0);
+    minusDm.push(down > up && down > 0 ? down : 0);
+    tr.push(Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close)));
+  }
+
+  // Wilder's seed is the plain sum of the first `period` values, then
+  // `next = prev - prev/period + current`.
+  let smPlus = 0;
+  let smMinus = 0;
+  let smTr = 0;
+  for (let i = 1; i <= period; i += 1) {
+    smPlus += plusDm[i]!;
+    smMinus += minusDm[i]!;
+    smTr += tr[i]!;
+  }
+
+  const dx: Array<number | null> = candles.map(() => null);
+  let lastDx: number | null = null;
+
+  for (let i = period; i < candles.length; i += 1) {
+    if (i > period) {
+      smPlus = smPlus - smPlus / period + plusDm[i]!;
+      smMinus = smMinus - smMinus / period + minusDm[i]!;
+      smTr = smTr - smTr / period + tr[i]!;
+    }
+    if (smTr <= 0) continue;
+
+    const plusDi = (smPlus / smTr) * 100;
+    const minusDi = (smMinus / smTr) * 100;
+    out[i] = { plusDi, minusDi, adx: null };
+
+    const sum = plusDi + minusDi;
+    if (sum > 0) lastDx = (Math.abs(plusDi - minusDi) / sum) * 100;
+    dx[i] = lastDx;
+  }
+
+  // ADX is DX Wilder-smoothed over the same period, seeded with the mean of
+  // the first `period` DX values — so it starts a full period after DX does.
+  const firstDx = dx.findIndex((v) => v != null);
+  if (firstDx === -1) return out;
+  const adxStart = firstDx + period - 1;
+  if (adxStart >= candles.length) return out;
+
+  let seed = 0;
+  let seeded = 0;
+  for (let i = firstDx; i <= adxStart; i += 1) {
+    const v = dx[i];
+    if (v == null) return out;
+    seed += v;
+    seeded += 1;
+  }
+  let adx = seed / seeded;
+  out[adxStart] = { ...out[adxStart]!, adx };
+
+  for (let i = adxStart + 1; i < candles.length; i += 1) {
+    const v = dx[i];
+    if (v == null) continue;
+    adx = (adx * (period - 1) + v) / period;
+    out[i] = { ...out[i]!, adx };
+  }
+
+  return out;
+}

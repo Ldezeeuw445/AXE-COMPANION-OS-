@@ -7,12 +7,14 @@
  * The name is historical. Krater was removed on 2026-10-11: its API key had
  * never been set on this host, the local generator was already doing the work,
  * and the scheduled-task and conversation endpoints the old code polled did not
- * exist on the kr_live_ API. The path stays because a registered pg_cron job
- * and an axe_ops.cron_job row point at it, and renaming those out of step with
- * a deploy leaves the feed silent for a day. See services/broadcastSyncService.
+ * exist on the kr_live_ API. The path stays because the host crontab
+ * (`scripts/vps.crontab`) hits this route, and renaming it out of step with
+ * that line leaves the feed silent. See services/broadcastSyncService.
  *
- * Runs every 10 min; only writes during 07:00–07:29 and 20:00–20:29
- * Europe/Amsterdam. Secured with CRON_SECRET.
+ * Scheduled from the host crontab every 10 min (04:00–20:00 UTC), not pg_cron
+ * — that job was unscheduled on 2026-10-17 and must not be re-enabled. Only
+ * writes during 07:00–07:29 and 20:00–20:29 Europe/Amsterdam. Secured with
+ * CRON_SECRET.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { hasCronSecret } from "@/lib/auth/cronSecret";

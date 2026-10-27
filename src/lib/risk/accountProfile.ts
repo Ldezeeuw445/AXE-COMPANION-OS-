@@ -183,7 +183,7 @@ export const FIRMS: FirmDefinition[] = [
   {
     id: "ftmo",
     name: "FTMO",
-    pattern: /\bftmo\b/i,
+    pattern: /\bftmo/i,
     // Source: ftmo.com/en/trading-objectives, read 2026-10-21. The three
     // models genuinely differ; the static-vs-trailing split on the maximum
     // loss is the part a trader is most likely to get wrong, because all
@@ -233,7 +233,7 @@ export const FIRMS: FirmDefinition[] = [
   {
     id: "upcomers",
     name: "Upcomers",
-    pattern: /\bupcomers\b/i,
+    pattern: /\bupcomers/i,
     models: [
       {
         model: "Oracle",
@@ -256,30 +256,35 @@ export const FIRMS: FirmDefinition[] = [
      than `unknown`, where every rail was off. Adding real rules to one of
      these means reading that firm's own page and citing it, not copying a
      comparison table. */
-  { id: "goat_funded", name: "Goat Funded Trader", pattern: /\bgoat\s*funded\b/i, models: [] },
-  { id: "the5ers", name: "The5ers", pattern: /\bthe\s*5\s*ers\b|\bthe5ers\b/i, models: [] },
-  { id: "fundednext", name: "FundedNext", pattern: /\bfunded\s*next\b/i, models: [] },
-  { id: "fundingpips", name: "FundingPips", pattern: /\bfunding\s*pips\b/i, models: [] },
-  { id: "alpha_capital", name: "Alpha Capital Group", pattern: /\balpha\s*capital\b/i, models: [] },
-  { id: "e8", name: "E8 Markets", pattern: /\be8\b/i, models: [] },
-  { id: "blue_guardian", name: "Blue Guardian", pattern: /\bblue\s*guardian\b/i, models: [] },
-  { id: "instant_funding", name: "Instant Funding", pattern: /\binstant\s*funding\b/i, models: [] },
-  { id: "maven", name: "Maven Trading", pattern: /\bmaven\b/i, models: [] },
-  { id: "breakout", name: "Breakout Prop", pattern: /\bbreakout\s*prop\b/i, models: [] },
-  { id: "cti", name: "City Traders Imperium", pattern: /\bcity\s*traders\s*imperium\b|\bcti\b/i, models: [] },
-  { id: "funded_trading_plus", name: "Funded Trading Plus", pattern: /\bfunded\s*trading\s*plus\b/i, models: [] },
-  { id: "for_traders", name: "For Traders", pattern: /\bfor\s*traders\b/i, models: [] },
-  { id: "seacrest", name: "Seacrest Funded", pattern: /\bseacrest\b/i, models: [] },
-  { id: "aquafunded", name: "AquaFunded", pattern: /\baqua\s*funded\b/i, models: [] },
-  { id: "lark", name: "Lark Funding", pattern: /\blark\s*funding\b/i, models: [] },
-  { id: "ment", name: "Ment Funding", pattern: /\bment\s*funding\b/i, models: [] },
-  { id: "quanttekel", name: "Quantтekel", pattern: /\bquanttekel\b/i, models: [] },
-  { id: "myforexfunds", name: "MyForexFunds", pattern: /\bmy\s*forex\s*funds\b|\bmff\b/i, models: [] },
-  { id: "smart_prop", name: "Smart Prop Trader", pattern: /\bsmart\s*prop\b/i, models: [] },
-  { id: "fundingtraders", name: "Funding Traders", pattern: /\bfunding\s*traders\b/i, models: [] },
-  { id: "topstep", name: "Topstep", pattern: /\btopstep\b/i, models: [] },
-  { id: "apex", name: "Apex Trader Funding", pattern: /\bapex\b/i, models: [] },
-  { id: "alpha_futures", name: "Alpha Futures", pattern: /\balpha\s*futures\b/i, models: [] },
+  // No trailing \b: the real server names are `GoatFundedTrader-Live` and
+  // `GoatFundedTrader-Demo`, where "funded" is followed by a letter, so a
+  // word boundary there never matched. Cross-checked against
+  // KNOWN_MT5_BROKERS, which is where the real server strings live — on a
+  // Goat Funded Trader account this meant every risk rail stayed off.
+  { id: "goat_funded", name: "Goat Funded Trader", pattern: /\bgoat\s*funded/i, models: [] },
+  { id: "the5ers", name: "The5ers", pattern: /\bthe\s*5\s*ers|\bthe5ers/i, models: [] },
+  { id: "fundednext", name: "FundedNext", pattern: /\bfunded\s*next/i, models: [] },
+  { id: "fundingpips", name: "FundingPips", pattern: /\bfunding\s*pips/i, models: [] },
+  { id: "alpha_capital", name: "Alpha Capital Group", pattern: /\balpha\s*capital/i, models: [] },
+  { id: "e8", name: "E8 Markets", pattern: /\be8/i, models: [] },
+  { id: "blue_guardian", name: "Blue Guardian", pattern: /\bblue\s*guardian/i, models: [] },
+  { id: "instant_funding", name: "Instant Funding", pattern: /\binstant\s*funding/i, models: [] },
+  { id: "maven", name: "Maven Trading", pattern: /\bmaven/i, models: [] },
+  { id: "breakout", name: "Breakout Prop", pattern: /\bbreakout\s*prop/i, models: [] },
+  { id: "cti", name: "City Traders Imperium", pattern: /\bcity\s*traders\s*imperium|\bcti/i, models: [] },
+  { id: "funded_trading_plus", name: "Funded Trading Plus", pattern: /\bfunded\s*trading\s*plus/i, models: [] },
+  { id: "for_traders", name: "For Traders", pattern: /\bfor\s*traders/i, models: [] },
+  { id: "seacrest", name: "Seacrest Funded", pattern: /\bseacrest/i, models: [] },
+  { id: "aquafunded", name: "AquaFunded", pattern: /\baqua\s*funded/i, models: [] },
+  { id: "lark", name: "Lark Funding", pattern: /\blark\s*funding/i, models: [] },
+  { id: "ment", name: "Ment Funding", pattern: /\bment\s*funding/i, models: [] },
+  { id: "quanttekel", name: "Quanttekel", pattern: /\bquanttekel/i, models: [] },
+  { id: "myforexfunds", name: "MyForexFunds", pattern: /\bmy\s*forex\s*funds|\bmff/i, models: [] },
+  { id: "smart_prop", name: "Smart Prop Trader", pattern: /\bsmart\s*prop/i, models: [] },
+  { id: "fundingtraders", name: "Funding Traders", pattern: /\bfunding\s*traders/i, models: [] },
+  { id: "topstep", name: "Topstep", pattern: /\btopstep/i, models: [] },
+  { id: "apex", name: "Apex Trader Funding", pattern: /\bapex/i, models: [] },
+  { id: "alpha_futures", name: "Alpha Futures", pattern: /\balpha\s*futures/i, models: [] },
 ];
 
 /**

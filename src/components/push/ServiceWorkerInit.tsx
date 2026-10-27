@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ServiceWorkerUpdateBanner } from "@/components/pwa/ServiceWorkerUpdateBanner";
 import {
   SW_CACHE_LAST_VIEWED_MESSAGE,
   SW_SKIP_WAITING_MESSAGE,
@@ -91,19 +92,9 @@ export function ServiceWorkerInit() {
   if (!updateWaiting) return null;
 
   return (
-    <div
-      role="status"
-      className="fixed inset-x-0 top-0 z-[1000] flex items-center justify-center gap-3 bg-[#101013]/95 px-4 py-2 text-[12px] text-[#ededef] shadow-[0_8px_24px_-12px_rgba(0,0,0,0.8)] backdrop-blur-md"
-      style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
-    >
-      <span>A new AXE version is ready. Reload to drop the stale bundle.</span>
-      <button
-        type="button"
-        onClick={() => void reloadWithUpdate()}
-        className="rounded border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase"
-      >
-        Reload
-      </button>
-    </div>
+    <ServiceWorkerUpdateBanner
+      className="fixed inset-x-0 top-0 z-[1000]"
+      onReload={() => void reloadWithUpdate()}
+    />
   );
 }
