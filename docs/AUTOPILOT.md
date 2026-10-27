@@ -103,7 +103,14 @@ aangemaakt zonder connectors. De sessies die hij start hebben dus **geen**
   De eerste twee punten hieronder kunnen zonder.
 
 Luka kan dit oplossen door de routine opnieuw aan te maken vanuit de
-routines-UI op claude.ai; dan draagt hij de connectors wel mee.
+routines-UI op claude.ai; dan draagt hij de connectors wel mee. Via de API kan
+het niet — `create_trigger` weigert de `connectors`-parameter voor deze
+organisatie, geprobeerd op 27 oktober 2026. Het blokkeert niets: elk punt dat
+nu op de rij staat kan zonder database-toegang.
+
+Loopt er iets vast op iets wat alleen hij kan doen, zet het dan in
+`docs/VOOR-LUKA.md` met de exacte stappen erbij. Eén bestand, zodat hij het
+niet hoeft te reconstrueren.
 
 ## De rij, in deze volgorde
 
@@ -111,25 +118,39 @@ Eén punt per keer, helemaal af volgens de lat hierboven, dan het volgende.
 Zet een punt op `[x]` in `docs/BOUWLIJST-COMPANION-LAUNCH.md` zodra het af en
 gemeten is.
 
-1. **`3.4` AXE die uit zichzelf ideeën stuurt.** Dit is wat Luka het vaakst
-   gevraagd heeft en het kan nu pas: sinds `554347d` weet AXE welke
-   indicatoren iemand echt gebruikt, sinds `c904150` welke firm een account is
-   en wat de regels zijn, en sinds `186abd2` moet elk bericht al zeggen wat je
-   ermee kan. Nu stuurt de watcher alleen bij *gebeurtenissen* (trade dicht,
-   nieuws, verbinding weg) — geen ideeën. Wat er nog mist: playbook-herkenning
-   uit eigen trades, zodat hij kan zeggen "dit lijkt op jouw London-open
-   breakout, maar de range is vandaag te smal".
-   Begin bij `src/lib/journal/weakSpots.ts` en
-   `src/services/axeProactiveWatcher.ts`; de notice-vorm staat in
-   `src/lib/axe/notice.ts` en dwingt al een volgende stap af.
-2. **Meer indicators op Companion.** Er is nu MA, Bollinger, VWAP, POC, RSI,
-   MACD, ATR, Fibonacci en de SMC-suite, en die rekenen correct
-   (`scripts/verify-indicator-math.mjs`, 37 checks). Niet aanwezig:
-   Stochastic, ADX/DMI, Ichimoku, een echt Volume Profile (nu alleen de
-   POC-lijn), multi-timeframe overlays. Alle rekenkunde hoort in
-   `src/lib/chart/indicatorMath.ts` — nergens anders, daar is een check op.
-   Elke nieuwe indicator krijgt analytische testgevallen, geen onthouden
-   getallen.
+1. ~~`3.4` AXE die uit zichzelf ideeën stuurt.~~ **Af, `ce92289`,
+   27 oktober.** `src/lib/journal/playbookEdge.ts` leidt uit eigen afgesloten
+   trades af in welke sessie, welk instrument en welke richting een trader
+   werkelijk geld maakt, en de watcher meldt het terwijl die sessie open staat.
+   22 checks in `scripts/verify-playbook-edge.mjs`.
+
+2. **Stochastic en ADX op de chart tekenen.** De rekenkunde is af en bewezen
+   (`stochasticSeries` en `adxSeries` in `src/lib/chart/indicatorMath.ts`,
+   51 checks in `scripts/verify-indicator-math.mjs`, waaronder Wilder's
+   recurrence een tweede keer met de hand uitgeschreven). Wat nog mist is het
+   zichtbare deel, en dat is plumbing door vijf bestanden:
+
+   - `src/components/chart/indicators/IndicatorPane.tsx` — `Mode` uitbreiden
+     van `"volume" | "rsi" | "macd"` naar ook `"stoch"` en `"adx"`, met een
+     tak in de geometry-memo en een rendertak. Let op: de kleuren horen in
+     `chartTheme.ts` per preset, niet hardcoded, en de memo-dependencies
+     moeten compleet zijn — dat is eerder stilletjes fout gegaan.
+   - `src/lib/axeChartActions/indicatorMapping.ts` — `INDICATOR_FLAG_KEYS` en
+     de aliassen, zodat AXE ze op verzoek aan kan zetten.
+   - `src/components/chart/ChartScreen.tsx` — de toggle, de paneOrder en de
+     paneHeight-sleutel.
+   - `src/lib/chart/chartPrefs.ts` — de nieuwe paneHeight-sleutel in
+     `SYNCED_SYMBOL_KEYS`, anders synct hij niet. Er is een check die de twee
+     lijsten vergelijkt, dus dit valt om als je het vergeet.
+   - `src/lib/chart/chartPrefs.ts` opnieuw — `INDICATOR_LABELS`, zodat AXE ze
+     bij naam noemt in de ochtendbrief.
+
+   Daarna de rest: Ichimoku, een echt Volume Profile (nu alleen de POC-lijn),
+   multi-timeframe overlays. Alle rekenkunde hoort in `indicatorMath.ts` —
+   nergens anders, daar is een check op. Elke nieuwe indicator krijgt
+   analytische testgevallen, geen onthouden getallen, en bij Wilder-smoothing
+   een tweede implementatie met de hand zodat een typefout niet met zichzelf
+   instemt.
 3. **`L19.8`** `alert_auto_trade_enabled` en het autonomieniveau zijn nog twee
    aparte schakelaars voor hetzelfde. Eén maken.
 4. **`10.1`** Onboarding: tier kiezen → eigen MT5 koppelen, in één flow.
