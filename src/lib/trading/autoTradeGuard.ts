@@ -30,7 +30,7 @@ export type AutoTradeGuardInput = {
   openPositions: number;
   /** Auto-trades already placed today, this account. */
   autoTradesToday: number;
-  /** Realised result today as a percentage of balance; negative is a loss. */
+  /** Day equity result as a percentage of start-of-day equity; negative is a loss. */
   dayResultPct: number | null;
   /** Minutes until the next high-impact event, or null when none is near. */
   minutesToHighImpact: number | null;
@@ -81,6 +81,7 @@ export type AutoTradeDecision =
         | "risk_above_limit"
         | "risk_unknown"
         | "daily_loss_reached"
+        | "daily_loss_unknown"
         | "daily_trade_cap";
       /** One sentence the trader reads in the feed. Names the rule and the number. */
       detail: string;
@@ -164,6 +165,15 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
   }
 
   // 3. The day's damage. Trading on past a loss cap is how a funded account ends.
+  // Fail-closed: a configured daily limit with no measurable day result means
+  // refuse — never treat missing equity data as "fine".
+  if (profile.maxDailyLossPct !== null && dayResultPct === null) {
+    return {
+      allowed: false,
+      reason: "daily_loss_unknown",
+      detail: `Not placed: this account's daily loss limit is ${profile.maxDailyLossPct}% and AXE cannot measure today's equity path. Missing risk data means no new order.`,
+    };
+  }
   if (
     profile.maxDailyLossPct !== null &&
     dayResultPct !== null &&

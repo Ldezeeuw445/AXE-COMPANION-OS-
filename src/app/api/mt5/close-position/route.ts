@@ -21,7 +21,9 @@ export const dynamic = "force-dynamic";
  *   3. Account ownership
  *   4. Practice positions close here and return — nothing reaches a broker.
  *   5. MetaApi configured + cloud MT5 account required
- *   6. Live-trading flag
+ *
+ * Closing / reducing risk is always allowed once auth + ownership hold.
+ * The live-trading kill switch must never trap a trader in a position.
  */
 
 type CloseBody = {
@@ -120,23 +122,6 @@ export async function POST(request: NextRequest) {
       409,
       "account_not_connected",
       "Account is not linked to MetaApi.",
-    );
-  }
-
-  // Live-trading gate
-  const { data: prefs, error: prefsErr } = await supabase
-    .from("user_workspace_preferences")
-    .select("live_trading_enabled")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (prefsErr)
-    return errJson(500, "prefs_lookup_failed", prefsErr.message);
-  if (!prefs?.live_trading_enabled) {
-    return errJson(
-      403,
-      "live_trading_disabled",
-      "Live trading is not enabled for this workspace.",
     );
   }
 

@@ -9,7 +9,8 @@
  * Run: node scripts/verify-auto-trade-guard.mjs
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { buildAccountProfile } from "../src/lib/risk/accountProfile.ts";
 import { evaluateAutoTrade, MAX_AUTO_TRADES_PER_DAY } from "../src/lib/trading/autoTradeGuard.ts";
 
@@ -123,8 +124,12 @@ check("a loss below the cap still trades", () => {
   );
 });
 
-check("an unknown day result does not block — we do not guess", () => {
-  assert.equal(evaluateAutoTrade({ ...base, profile: funded, dayResultPct: null }).allowed, true);
+check("an unknown day result fails closed when a daily limit is set", () => {
+  const d = evaluateAutoTrade({ ...base, profile: funded, dayResultPct: null });
+  assert.equal(d.allowed, false);
+  assert.equal(d.reason, "daily_loss_unknown");
+  // A live account with no daily cap still may trade when the day result is unknown.
+  assert.equal(evaluateAutoTrade({ ...base, dayResultPct: null }).allowed, true);
 });
 
 check("the daily trade cap is a brake, not a cliff", () => {
@@ -281,6 +286,50 @@ check("a human tapping drops the daily cap and nothing else", () => {
     /decideAutoTradeAllowed\(supabase, userId, displaySymbol, volumeLots, true[,)]/.test(execService),
     "the draft path is attended — a human is looking at it",
   );
+});
+
+
+console.log("order-route wiring");
+
+function walk(dir, out = []) {
+  for (const name of readdirSync(dir)) {
+    if (name === "node_modules" || name === ".git" || name === ".next") continue;
+    const p = join(dir, name);
+    const st = statSync(p);
+    if (st.isDirectory()) walk(p, out);
+    else if (/\.(ts|tsx|mjs|js)$/.test(name)) out.push(p);
+  }
+  return out;
+}
+
+const placeCallers = walk("src").filter((p) => {
+  if (p.endsWith("metaApiClient.ts")) return false;
+  const src = readFileSync(p, "utf8");
+  return /clientPlaceOrder/.test(src) && /from ["']@\/lib\/mt5\/metaApiClient["']/.test(src);
+});
+
+check("every clientPlaceOrder caller asks the shared guard first", () => {
+  assert.ok(placeCallers.length >= 1, "expected at least one caller");
+  for (const file of placeCallers) {
+    const src = readFileSync(file, "utf8");
+    const guard = src.search(/await\s+decideAutoTradeAllowed\s*\(/);
+    const place = src.search(/await\s+clientPlaceOrder\s*\(/);
+    assert.ok(guard >= 0, `${file} imports clientPlaceOrder but never calls decideAutoTradeAllowed`);
+    assert.ok(place >= 0, `${file} no longer awaits clientPlaceOrder — rewrite this check`);
+    assert.ok(guard < place, `${file}: guard must run before clientPlaceOrder`);
+  }
+});
+
+check("the HTTP order route guards the request's brokerAccountId", () => {
+  const route = readFileSync("src/app/api/mt5/order/route.ts", "utf8");
+  assert.ok(/decideAutoTradeAllowed\(/.test(route));
+  const guardCall = route.slice(route.indexOf("decideAutoTradeAllowed("), route.indexOf("clientPlaceOrder("));
+  assert.ok(/brokerAccountId/.test(guardCall), "order route must pass brokerAccountId into the guard");
+});
+
+check("closing a position is not gated by live_trading_enabled", () => {
+  const close = readFileSync("src/app/api/mt5/close-position/route.ts", "utf8");
+  assert.ok(!/live_trading_enabled/.test(close), "kill switch must not block closes");
 });
 
 console.log(`\n${passed} checks passed`);
