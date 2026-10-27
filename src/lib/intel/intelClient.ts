@@ -4,6 +4,10 @@ import {
   intelProviderShowsLive,
   reasonFromIntelEnvelope,
 } from "@/lib/intel/freeSources/providerFromEnvelope";
+import {
+  mergeFailedSectionsFromCache,
+  type SectionCacheEntry,
+} from "@/lib/intel/freeSources/snapshotSectionFallback";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
 const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
@@ -265,10 +269,7 @@ type IntelEnvelope<T> =
   | { ok: true; data: T; source?: string; unavailable?: string[] }
   | { ok: false; error: string; unavailable?: string[] };
 
-type IntelSnapshotCacheEntry = {
-  snapshot: IntelSnapshot;
-  savedAt: number;
-};
+type IntelSnapshotCacheEntry = SectionCacheEntry<IntelSnapshot>;
 
 const intelSnapshotCache = globalThis as typeof globalThis & {
   __axeIntelSnapshotCache?: Map<string, IntelSnapshotCacheEntry>;
@@ -1138,15 +1139,6 @@ async function fetchIntelSnapshot(
       military.length,
   );
 
-  if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
-    return markCache(
-      cached.snapshot,
-      "stale",
-      cached.savedAt,
-      "AXE Intel is cooling down or rate-limited. Showing the last cached intel snapshot.",
-    );
-  }
-
   // INTEL-FREE free feeds first: preserve unavailable reasons from proxy/DB.
   const providers: IntelProviderStatus[] = [
     statusFromEnvelope(
@@ -1250,7 +1242,7 @@ async function fetchIntelSnapshot(
     ),
   ];
 
-  const snapshot: IntelSnapshot = {
+  const freshSnapshot: IntelSnapshot = {
     generatedAt: new Date().toISOString(),
     insiders,
     senate,
@@ -1275,13 +1267,51 @@ async function fetchIntelSnapshot(
     },
   };
 
-  if (hasLiveData) {
-    snapshotCache.set((opts?.symbol ?? "market").toUpperCase(), {
-      snapshot,
-      savedAt: Date.now(),
-    });
+  if (!hadError) {
+    if (hasLiveData) {
+      snapshotCache.set((opts?.symbol ?? "market").toUpperCase(), {
+        snapshot: freshSnapshot,
+        savedAt: Date.now(),
+      });
+    }
+    return freshSnapshot;
   }
 
+  // A failed source only falls back for its own section; healthy feeds stay fresh.
+  const now = Date.now();
+  const merged = mergeFailedSectionsFromCache({
+    fresh: freshSnapshot,
+    cached,
+    now,
+    maxAgeMs: SNAPSHOT_STALE_MS,
+  });
+  if (merged.carried.length === 0) {
+    if (hasLiveData) {
+      snapshotCache.set((opts?.symbol ?? "market").toUpperCase(), {
+        snapshot: freshSnapshot,
+        savedAt: now,
+        sectionSavedAt: merged.sectionSavedAt,
+      });
+    }
+    return freshSnapshot;
+  }
+
+  if (!hasLiveData) {
+    // Every live call failed: serve cached rows per section, keep the cache entry's age.
+    return markCache(
+      { ...merged.snapshot, hasLiveData: true },
+      "stale",
+      cached?.savedAt ?? now,
+      "AXE Intel is cooling down or rate-limited. Showing the last cached intel rows.",
+    );
+  }
+
+  const snapshot: IntelSnapshot = { ...merged.snapshot, hasLiveData: true };
+  snapshotCache.set((opts?.symbol ?? "market").toUpperCase(), {
+    snapshot,
+    savedAt: now,
+    sectionSavedAt: merged.sectionSavedAt,
+  });
   return snapshot;
 }
 
