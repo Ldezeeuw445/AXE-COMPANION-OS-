@@ -377,13 +377,26 @@ gemeten is.
     er niet. Het is een nieuwe tabel, dus niets breekt zolang hij wacht, en er
     is nog geen code die hem leest. Staat in `docs/VOOR-LUKA.md` punt 5.
 
-    **Wat nog moet:** de aansluiting. `/api/mt5/order` moet voor een
-    demo-account de paper-engine aanroepen in plaats van 409 te geven; open
-    posities hebben een bewaarplaats nodig (`mt5_positions` bestaat maar heeft
-    `account_id text` terwijl `user_broker_accounts.id` uuid is — liever een
-    eigen tabel dan die mismatch erven); en iets moet de stops bewaken, wat
-    past bij de cron die er al is. Afgesloten trades gaan naar
-    `broker_trades` met `external_trade_id` als `paper:<uuid>`.
+    **Ook af: de order-route.** `/api/mt5/order` vult een demo-account nu via
+    `placePaperOrder` in plaats van 409 te geven. De tabel bestaat (RLS aan,
+    vier policies, niets open voor anon). 10 checks in
+    `scripts/verify-paper-order-route.mjs`, waarvan de belangrijkste eist dat
+    de paper-tak *returnt* — valt hij ooit door, dan gaat een oefenorder naar
+    een echte broker. Een mutatie die dat doet valt om.
+
+    De MetaApi-check stond vóór de accountlookup, zodat ook een papieren order
+    strandde als er geen token was. Die staat nu ná de paper-tak: papier heeft
+    geen broker nodig. Pending orders worden op papier geweigerd in plaats van
+    voorgewend — een limiet waar niets op wacht zou eeuwig blijven staan
+    terwijl de UI hem als geplaatst toont.
+
+    **Wat nog moet:** de stopbewaking (een positie met SL/TP sluit nu nooit
+    vanzelf — `evaluatePaperStops` en `evaluatePaperStopsOnBar` staan klaar,
+    er is alleen nog niets dat ze aanroept; past bij de cron die er al is),
+    afgesloten posities naar `broker_trades` schrijven met
+    `external_trade_id` als `paper:<uuid>`, en de open posities tonen in de
+    UI — `loadPositionsPageData` haalt ze nu live bij MetaApi en kent
+    `paper_positions` niet.
 
     *Oorspronkelijke opdracht:* `/demo` leidt sinds de 182 anonieme
     accounts bewust naar `/login` en dat blijft zo — dit is geen anonieme

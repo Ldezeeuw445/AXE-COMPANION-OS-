@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { placePaperOrder } from "@/services/paperOrderService";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientPlaceOrder,
@@ -19,8 +20,9 @@ export const dynamic = "force-dynamic";
  *   2. MetaApi configured — without a token nothing goes anywhere.
  *   3. Body validation — symbol / volume / actionType + numeric sanity.
  *   4. Account ownership — the broker_account row must belong to this user.
- *   5. Demo refusal — AXE Demo Account never receives a real broker order.
- *   6. MetaApi link required — only `cloud_mt5` accounts with an external id.
+ *   5. Practice accounts fill here and return — nothing reaches a broker.
+ *   6. MetaApi configured + linked — only `cloud_mt5` accounts with an
+ *      external id, and only once we know a real order is being sent.
  *   7. Live-trading flag — user must have acknowledged risks server-side
  *      (mirror of the UI gate; required so a direct API call from a
  *      modified client cannot bypass the in-app disclaimer).
@@ -57,10 +59,6 @@ export async function POST(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return errJson(401, "unauthorized", "Sign in to place orders.");
-
-  if (!getMetaApiToken()) {
-    return errJson(503, "provider_not_configured", "MetaApi token is not configured on this server.");
-  }
 
   let body: OrderBody;
   try {
@@ -125,12 +123,50 @@ export async function POST(request: NextRequest) {
   if (accountErr) return errJson(500, "account_lookup_failed", accountErr.message);
   if (!account) return errJson(404, "account_not_found", "That broker account is not on your workspace.");
 
+  // Practice account: filled here, against a real spread where one is
+  // available, and never sent to a broker. This used to be a flat 409, which
+  // was true and made the account useless for practising. Build-list item 10.
+  //
+  // Pending order types are not simulated yet — a limit that has to wait for
+  // the market needs a watcher, and claiming to place one that never fills
+  // would be worse than saying so.
   if (account.connection_method === "demo_paper" || account.provider === "demo") {
-    return errJson(
-      409,
-      "demo_account",
-      "AXE Demo Account is virtual — paper trades never reach a broker. Switch to a connected MT5 account to send live orders.",
-    );
+    if (orderType !== "market") {
+      return errJson(
+        409,
+        "paper_market_only",
+        "Practice accounts fill market orders only — a pending order needs a live broker to sit on the book.",
+      );
+    }
+
+    const result = await placePaperOrder(supabase, user.id, {
+      accountId: account.id as string,
+      symbol: symbol.trim().toUpperCase(),
+      side,
+      volume,
+      stopLoss: stopLoss ?? null,
+      takeProfit: takeProfit ?? null,
+      comment: comment ?? null,
+    });
+
+    if (!result.ok) {
+      const status = result.code === "paper_table_missing" ? 503 : 400;
+      return errJson(status, result.code, result.message);
+    }
+
+    return Response.json({
+      ok: true,
+      paper: true,
+      positionId: result.positionId,
+      openPrice: result.openPrice,
+      quoteOrigin: result.quoteOrigin,
+      note: result.note,
+    });
+  }
+
+  // Everything below sends a real order, and needs the provider for it.
+  if (!getMetaApiToken()) {
+    return errJson(503, "provider_not_configured", "MetaApi token is not configured on this server.");
   }
 
   if (account.connection_method !== "cloud_mt5" || !account.external_connection_id) {
