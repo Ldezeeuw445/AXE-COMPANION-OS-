@@ -121,14 +121,42 @@ steeds te ruim. De volgende stap is per-gebruiker afschermen
 (`auth.uid() = user_id`), en daarvoor moet eerst duidelijk zijn wie AXE Core
 mag gebruiken — dat is een beslissing van jou, geen technische.
 
-## 4. Twee schakelaars in Supabase — 1 minuut
+## 4. De kwetsbaarheden die blijven staan — wallet-stack, geen haast
+
+Je vroeg ernaar op 28 oktober. `npm ci` meldde er veertig, waarvan 29 high.
+Zeven daarvan zijn weg zonder dat er iets veranderde aan hoe de app werkt
+(axios, undici, brace-expansion, js-yaml, browserslist en wat build-tooling
+binnen hun eigen semver bijgewerkt). Er staan er nu 33.
+
+**Waarom de rest blijft staan.** Negentien van de 33 zitten in de wallet-stack:
+`@reown/appkit`, `wagmi`, `viem`, `walletconnect`, `@coinbase/cdp-sdk`. Daar
+is geen patch voor binnen de huidige versies. `npm audit fix` lost ze wel op,
+maar ik heb dat geprobeerd en getest: het trekt `@reown/appkit` en
+`@reown/appkit-adapter-wagmi` uit elkaar, en dan faalt de typecheck op
+`WalletsAppKitProvider.tsx` omdat de twee een andere `ChainNamespace` kennen.
+Niet groen is niet pushen, dus die lockfile is teruggedraaid.
+
+**Wat het in de praktijk betekent.** Bijna alles is denial-of-service of
+prototype-pollution: iemand moet jouw app al kwaadaardige invoer kunnen
+voeren. Zes van de 33 zitten in build- en deploy-gereedschap
+(`@opennextjs/*`, `glob`, `@babel/core`) en draaien nooit bij een gebruiker —
+die staan in de buurt van jouw VPS, niet van hun telefoon. Er lekt geen
+sleutel en er staat geen deur open.
+
+**Wat eraan te doen is, als je wil.** De wallet-stack in één keer naar de
+nieuwste major tillen en de AppKit-provider daarop aanpassen. Dat is een uur
+werk plus echt uitproberen of verbinden met een wallet nog werkt, en dat
+laatste kan ik niet: daar hoort een portemonnee bij. Zeg het als je het wil,
+dan doe ik de code en kijk jij of het verbindt.
+
+## 5. Twee schakelaars in Supabase — 1 minuut
 
 Beide in de Supabase-console, ik kan er niet bij:
 
 - **Authentication → Sign In / Providers** (bouwlijst `L1.5b`).
 - **`auth_leaked_password_protection`** aanzetten. Staat nu uit.
 
-## 5. Optioneel: de autopilot ook bij de database laten
+## 6. Optioneel: de autopilot ook bij de database laten
 
 De terugkerende taak draait elke vier uur en bouwt door. Hij heeft geen
 database-tools, dus hij kan een migratie wel schrijven maar niet toepassen.
@@ -137,7 +165,7 @@ als je het netjes wilt: maak de routine opnieuw aan vanuit de routines-UI op
 claude.ai, dan draagt hij je connectors mee. Via de API kan het niet, dat heeft
 deze organisatie uitgezet.
 
-## 6. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
+## 7. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
 
 `scripts/watchdog.sh` kijkt gratis of productie draait wat er op main staat.
 Geen model, geen API, geen kosten. Nu doet de autopilot-sessie dat zelf, en dat
@@ -158,7 +186,7 @@ En als je de hele suite één keer per nacht wil laten draaien:
 Kijken wat hij zegt: `tail -20 /var/log/axe-watchdog.log`. Hij schrijft één
 regel per keer en eindigt met "niets te doen" of "er moet iemand kijken".
 
-## 7. Beslissingen die alleen jij kunt nemen
+## 8. Beslissingen die alleen jij kunt nemen
 
 Geen haast, maar ze staan open:
 
@@ -168,7 +196,7 @@ Geen haast, maar ze staan open:
 - **Eén echte testaankoop met een live kaart**, en narekenen dat de tier
   daadwerkelijk omklapt. Kan niet met een testkaart en niet door mij.
 
-## 8. Op je Mac, als je er weer zin in hebt
+## 9. Op je Mac, als je er weer zin in hebt
 
 - `ALPHAVANTAGE_API_KEY` op de host zetten (bouwlijst `L7.5c`).
 - `OLLAMA_BASIC_AUTH` op de Companion-host, zodat `ollama.axecompanion.com`

@@ -229,7 +229,18 @@ gemeten is.
    met een reden die niemand kan nalezen. Bouw het als één type dat elke bron
    invult, niet als een tekstje per bron. Hierna kan AXE Core hem ook lezen.
 
-8. **De 40 kwetsbaarheden in de dependencies.** `npm ci` meldt er 40, waarvan
+8. ~~**De 40 kwetsbaarheden in de dependencies.**~~ **Gedaan wat kon,
+   28 oktober.** Zeven weg binnen semver (axios, undici, brace-expansion,
+   js-yaml, browserslist, build-tooling); 33 blijven staan. `npm audit fix`
+   lost ze wél op maar trekt `@reown/appkit` en zijn wagmi-adapter uit elkaar,
+   waarna de typecheck faalt op `WalletsAppKitProvider.tsx` — geprobeerd,
+   gemeten, teruggedraaid. Negentien van de 33 zijn de wallet-stack zonder
+   patch, zes zijn build-gereedschap dat nooit bij een gebruiker draait.
+   Het volledige verhaal staat in `docs/VOOR-LUKA.md` punt 4; de major bump
+   van de wallet-stack vraagt dat iemand daarna echt verbindt met een wallet,
+   en dat kan een autopilot-sessie niet.
+
+   *Oorspronkelijke opdracht:* `npm ci` meldt er 40, waarvan
    29 high. Dat zit in packages, niet in onze code, en het blokkeert niets —
    maar het hoort niet te blijven staan in iets waar straks mensen voor
    betalen. Draai `npm audit`, los op wat zonder breaking change kan, en zet
