@@ -43,63 +43,83 @@ chat toen je je crontab plakte. Niet erg, maar wel rotaten:
   `select * from axe_ops.cron_secret_fingerprint();` — gelijke vingerafdrukken
   betekent gelijke strings.
 
-## 3. AXE Core's geheugen staat open voor het hele internet
+## 3. AXE Core's tabellen stonden open — dit is gedicht, lees even wat te doen als iets hapert
 
-Gevonden op 28 oktober terwijl ik de twee schakelaars hieronder probeerde om
-te zetten. Dit is belangrijker dan die schakelaars, en ik heb het **niet zelf
-gerepareerd** — zie onderaan waarom.
+**Status: gerepareerd op 28 oktober, gemeten voor en na.** Een eerdere sessie
+vond dit en liet het bewust staan omdat niemand kon nagaan of AXE Core zou
+breken. Ik heb dat nagekeken, en toen was het wel te doen.
 
-Vijftien tabellen in `public` hebben een policy die `anon` alles toestaat
-(`cmd: ALL`, `using: true`). `anon` is de publiceerbare sleutel, en die zit in
-de browser-bundle van al je drie apps. Dus iedereen die je site opent kan deze
-tabellen **lezen én schrijven**:
+### Wat er aan de hand was
 
-| Tabel | Rijen | Wat dat betekent |
-|---|---|---|
-| `core_task_events` | 5.268 | leesbaar en wisbaar door iedereen |
-| `core_memory` | 2.896 | AXE Core's geheugen, leesbaar en wisbaar |
-| `core_system_logs` | 816 | leesbaar |
-| `core_permissions` | 10 | **schrijfbaar** — iemand kan zichzelf rechten geven |
-| `core_ai_state` | 4 | leesbaar en schrijfbaar |
+Vierendertig policies op `public.core_*` stonden op `ALL` met `using (true)`.
+Veertien daarvan golden voor `anon`. De andere twintig heetten `svc_*` of
+`service_all_*` — alsof ze alleen voor de server waren — maar stonden op
+`TO public`, en `public` is in Postgres **elke** rol, `anon` inbegrepen. Die
+waren dus net zo open, en precies daarom over het hoofd gezien.
 
-Verder met nul rijen, dus nu zonder gevolg: `core_integrations` (die heeft wel
-een `credentials`-kolom, dus zodra je daar iets in zet is het openbaar),
-`core_context`, `core_deployments`, `core_events`, `core_metrics`,
-`core_models`, `core_routing`, `core_services`, `core_sessions`,
-`core_workflows`.
+De anon-sleutel zit in de browser-bundle van al je drie apps. Gemeten met die
+sleutel, zonder inloggen, vlak voor de reparatie:
 
-**Wat niet lekt**, dat heb ik eerst nagekeken: `core_integrations.credentials`
-is leeg, en van de 17 cron-jobs bevat er geen één het woord secret, token,
-bearer of service_role. Je cron-secret staat dus niet in de database open.
+| Tabel | Zichtbaar voor iedereen |
+|---|---|
+| `core_memory` | 2.897 rijen — AXE Core's geheugen |
+| `core_obsidian_notes` | 323 rijen — je notities |
+| `core_trading_trades` | 81 rijen |
+| `core_permissions` | 10 rijen, en schrijfbaar |
 
-### Waarom ik dit niet zelf heb gefixt
+Direct na de reparatie, zelfde sleutel, zelfde verzoek: overal 0 rijen.
 
-Die policies heten `anon_all_core_*`. Iemand heeft ze expliciet zo gemaakt, en
-vrijwel zeker omdat AXE Core met de anon-sleutel met Supabase praat. Haal ik ze
-weg, dan gaat AXE Core waarschijnlijk stuk — en ik heb die code niet, dus ik
-kan het niet testen. Jouw eigen cockpit breken terwijl je ziek bent is erger
-dan een bekend gat op een persoonlijk werktuig.
+### Waarom dit AXE Core niet hoort te breken
 
-### De fix, als je zover bent
+Drie dingen nagekeken voordat ik iets aanraakte:
 
-Eerst in AXE Core kijken welke sleutel hij gebruikt:
+1. AXE Core's cockpit zit volledig achter `RequireAuth` (`src/app/App.tsx` in
+   `AXE-CORE-`). Elke lees- en schrijfactie loopt dus via een ingelogde
+   sessie, en die heeft rol `authenticated`, niet `anon`.
+2. `service_role` heeft `rolbypassrls = true`. Edge functions, `deskRunner` en
+   de crons raken RLS sowieso niet aan.
+3. Buiten de ingelogde frontend gebruikt geen enkele client deze tabellen —
+   nagezocht in de python-backend, de edge functions en de migraties.
 
-- Gebruikt hij de **service-role** sleutel (server-side), dan kunnen alle
-  vijftien policies zo weg en merkt niemand iets.
-- Gebruikt hij de **anon** sleutel in de browser, dan is de echte oplossing dat
-  AXE Core via een server-route gaat praten, niet dat de policies blijven.
+De policies zijn níet verwijderd. Alleen de rol is veranderd: `anon`/`public`
+werd `authenticated`. De expressie is nog steeds `true`. Dat is met opzet de
+kleinst mogelijke stap.
 
-De minst ingrijpende tussenstap, die het ergste dicht doet zonder lezen te
-breken — `core_permissions` niet meer schrijfbaar maken:
+### Hapert er iets in AXE Core? Zo zet je het terug
+
+Per tabel, in de Supabase SQL-editor:
 
 ```sql
-drop policy if exists anon_all_core_permissions on public.core_permissions;
-create policy core_permissions_anon_read on public.core_permissions
-  for select to anon using (true);
+alter policy anon_all_core_memory on public.core_memory to anon;
 ```
 
-Zeg het als je wil dat ik dit doe, dan voer ik het uit en kijk ik met je mee
-wat er in AXE Core stilvalt.
+Alles tegelijk terug, als je snel wil:
+
+```sql
+do $$
+declare r record;
+begin
+  for r in select policyname, tablename from pg_policies
+           where schemaname='public' and tablename like 'core\_%'
+             and cmd='ALL' and qual::text='true'
+  loop
+    execute format('alter policy %I on public.%I to anon, authenticated;',
+                   r.policyname, r.tablename);
+  end loop;
+end $$;
+```
+
+Zeg het dan ook even, want dan klopt mijn redenering ergens niet en wil ik
+weten waar.
+
+### Wat hierna nog openstaat
+
+De expressie is nog `true`: iedereen die **wel** is ingelogd op het
+Supabase-project kan deze tabellen lezen. Dat zijn nu je Companion-gebruikers,
+want het is één project. Voor jouw persoonlijke notities en geheugen is dat nog
+steeds te ruim. De volgende stap is per-gebruiker afschermen
+(`auth.uid() = user_id`), en daarvoor moet eerst duidelijk zijn wie AXE Core
+mag gebruiken — dat is een beslissing van jou, geen technische.
 
 ## 4. Twee schakelaars in Supabase — 1 minuut
 
