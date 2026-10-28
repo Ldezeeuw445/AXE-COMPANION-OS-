@@ -419,12 +419,20 @@ gemeten is.
     geen verouderd getal. "Nu niet bekend" is waar; een oud getal zegt met
     volle overtuiging iets onwaars.
 
-    **Wat nog moet:** de cron-regel op de VPS (`/api/cron/paper-stops` draait
-    nergens vanzelf — `docs/VOOR-LUKA.md` punt 6) en handmatig sluiten vanuit
-    de UI: `/api/mt5/close-position` weigert een demo-account nog met dezelfde
-    409 die de order-route had. `closePaperPosition` staat klaar in
-    `paperBroker.ts` en de rij-opbouw in `toBrokerTradeRow`; het is dezelfde
-    vorm als de watcher, met `reason: "manual"`.
+    **Ook af: handmatig sluiten.** `closePaperPositionById` plus de tak in
+    `/api/mt5/close-position`, 6 checks erbij. Dezelfde prijsregel geldt ook
+    als de trader zelf op de knop drukt: een live positie waarvan de feed stil
+    is, kan niet gesloten worden — net zoals een broker dat weigert met een
+    dichte markt. Niet kunnen sluiten is vervelend en waar; een verzonnen
+    uitstapprijs is geen van beide.
+
+    **Hiermee is de keten rond:** order → positie → zichtbaar → stop of
+    handmatig → `broker_trades` → journal, playbookEdge, learning arc.
+
+    **Wat nog moet:** alleen de cron-regel op de VPS. `/api/cron/paper-stops`
+    draait nergens vanzelf, dus stops gaan pas af als die regel er staat —
+    `docs/VOOR-LUKA.md` punt 6. Handmatig sluiten werkt wel zonder.
+    Daarna is dit punt af.
 
     *Oorspronkelijke opdracht:* `/demo` leidt sinds de 182 anonieme
     accounts bewust naar `/login` en dat blijft zo — dit is geen anonieme

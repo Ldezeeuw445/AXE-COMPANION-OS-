@@ -129,4 +129,50 @@ check("a missing table is named, not reported as a generic failure", () => {
   );
 });
 
+console.log("\nclosing by hand");
+
+const closeRoute = read("src/app/api/mt5/close-position/route.ts");
+
+check("a practice position can be closed, where it used to be refused", () => {
+  assert.ok(
+    !/Demo accounts cannot close live positions/.test(closeRoute),
+    "the 409 was true of a live position and wrong about the only kind this account has",
+  );
+  assert.ok(closeRoute.includes("closePaperPositionById("), "the paper close must be wired in");
+});
+
+check("the practice branch returns before any broker call", () => {
+  const branch = closeRoute.indexOf('connection_method === "demo_paper"');
+  const broker = closeRoute.indexOf("clientClosePosition(");
+  assert.ok(branch > 0 && broker > branch, "paper first");
+  const between = closeRoute.slice(branch, broker);
+  assert.ok(/return Response\.json\(/.test(between), "and it must return");
+});
+
+check("closing a practice position needs no broker token", () => {
+  const branch = closeRoute.indexOf('connection_method === "demo_paper"');
+  const token = closeRoute.indexOf("getMetaApiToken()", branch);
+  assert.ok(token > branch, "the provider check belongs after the paper branch");
+});
+
+check("a hand close obeys the same price rule as the watcher", () => {
+  // A live position whose feed went quiet cannot be closed at a generated
+  // price just because someone pressed the button.
+  assert.ok(/mayJudgeWith\(/.test(service), "the rule must be applied here too");
+  assert.ok(/no_price/.test(service), "and refusing must be a named outcome");
+});
+
+check("the close is recorded before the position is removed", () => {
+  const insert = service.indexOf('.from("broker_trades")');
+  const remove = service.lastIndexOf('.from("paper_positions")');
+  assert.ok(insert > 0 && remove > insert, "record, then delete");
+  assert.ok(/onConflict: "id"/.test(service), "idempotent on the position id");
+});
+
+check("a close that recorded but did not clear says exactly that", () => {
+  // Reporting a generic failure here would have the trader close it twice.
+  assert.ok(/close_recorded_still_open/.test(service));
+  assert.ok(/recorded but the position is still listed/.test(service));
+});
+
 console.log(`\n${passed} checks passed`);

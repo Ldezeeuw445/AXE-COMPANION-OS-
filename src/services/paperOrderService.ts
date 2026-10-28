@@ -2,10 +2,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getDemoQuotePrice } from "@/lib/broker/demoAccount";
 import {
+  closePaperPosition,
   openPaperPosition,
   paperOrderRejections,
+  type PaperPosition,
   type PaperSide,
 } from "@/lib/trading/paperBroker";
+import {
+  mayJudgeWith,
+  toBrokerTradeRow,
+  type StoredQuoteOrigin,
+} from "@/lib/trading/paperStopRules";
 import {
   describeQuoteOrigin,
   quoteFromSnapshot,
@@ -160,5 +167,128 @@ export async function placePaperOrder(
     openPrice: position.openPrice,
     quoteOrigin: resolved.origin,
     note: describeQuoteOrigin(resolved),
+  };
+}
+
+/**
+ * Closing a practice position by hand.
+ *
+ * The same rule as the watcher: a position is closed against a price of the
+ * kind it opened on. If a live position's feed has gone quiet, this refuses
+ * rather than filling at a generated or stale price — which is what a broker
+ * does too when the market is shut. Being unable to close is annoying and
+ * true; a fabricated exit price is neither.
+ *
+ * The write order mirrors the watcher's, and for the same reason: record the
+ * closed trade first, then remove the open position. A crash in between
+ * leaves a trade that the next attempt writes into the same row, because the
+ * row's primary key is the position's id.
+ */
+export async function closePaperPositionById(
+  supabase: SupabaseClient,
+  userId: string,
+  positionId: string,
+): Promise<PaperOrderResult | { ok: true; closed: true; pnl: number; price: number; note: string }> {
+  const { data, error } = await supabase
+    .from("paper_positions")
+    .select("id,account_id,symbol,side,volume,open_price,stop_loss,take_profit,opened_at,quote_origin")
+    .eq("user_id", userId)
+    .eq("id", positionId)
+    .maybeSingle();
+
+  if (error) return { ok: false, code: "lookup_failed", message: error.message };
+  if (!data) {
+    return {
+      ok: false,
+      code: "position_not_found",
+      message: "That practice position is not open on your account.",
+    };
+  }
+
+  const row = data as Record<string, unknown>;
+  const side = row.side === "buy" || row.side === "sell" ? (row.side as PaperSide) : null;
+  const volume = Number(row.volume);
+  const openPrice = Number(row.open_price);
+  if (!side || !Number.isFinite(volume) || !Number.isFinite(openPrice)) {
+    return { ok: false, code: "position_unreadable", message: "That position has values that cannot be read." };
+  }
+
+  const origin: StoredQuoteOrigin = row.quote_origin === "live" ? "live" : "simulated";
+  const symbol = String(row.symbol);
+
+  const resolved =
+    origin === "simulated"
+      ? simulatedQuote(getDemoQuotePrice(symbol))
+      : await findLiveQuote(supabase, userId, symbol);
+
+  const allowed = mayJudgeWith(origin, resolved.origin);
+  if (!allowed.ok || resolved.origin === "none") {
+    return {
+      ok: false,
+      code: "no_price",
+      message:
+        resolved.origin === "none"
+          ? `Cannot close right now: ${"reason" in resolved ? resolved.reason : "no usable price"}.`
+          : allowed.ok
+            ? "Cannot close right now: no usable price."
+            : `Cannot close right now — ${allowed.detail}.`,
+    };
+  }
+
+  const position: PaperPosition = {
+    id: String(row.id),
+    symbol,
+    side,
+    volume,
+    openPrice,
+    stopLoss: row.stop_loss == null ? null : Number(row.stop_loss),
+    takeProfit: row.take_profit == null ? null : Number(row.take_profit),
+    openedAt: String(row.opened_at),
+  };
+
+  const close = closePaperPosition(position, resolved.quote);
+  const closedAt = new Date().toISOString();
+
+  const { error: insertErr } = await supabase
+    .from("broker_trades")
+    .upsert(
+      toBrokerTradeRow({
+        position,
+        positionOrigin: origin,
+        close,
+        userId,
+        accountId: String(row.account_id),
+        closedAt,
+      }),
+      { onConflict: "id" },
+    );
+
+  if (insertErr) {
+    return { ok: false, code: "close_record_failed", message: insertErr.message };
+  }
+
+  const { error: deleteErr } = await supabase
+    .from("paper_positions")
+    .delete()
+    .eq("id", position.id)
+    .eq("user_id", userId);
+
+  if (deleteErr) {
+    return {
+      ok: false,
+      code: "close_recorded_still_open",
+      message: `The trade was recorded but the position is still listed: ${deleteErr.message}`,
+    };
+  }
+
+  return {
+    ok: true,
+    closed: true,
+    pnl: close.pnl,
+    price: close.price,
+    note:
+      origin === "live"
+        ? "Closed at the live broker spread. Counts towards what AXE learns about you."
+        : "Closed at generated prices. Does not count towards what AXE learns about you.",
   };
 }
