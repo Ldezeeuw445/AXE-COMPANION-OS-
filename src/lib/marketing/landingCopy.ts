@@ -76,7 +76,7 @@ export const LANDING_DISCIPLINE = {
   body:
     "Cockpit (Pro) builds a behavior map from your MT5 fills — sessions, instruments, the rules you keep. Fills arrive on the ten-minute MetaApi sync, not tick by tick. Alignment is a Cockpit score, labelled as example chrome on this page.",
   aside:
-    "There is no live per-firm drawdown alert. Firm rule presets (FTMO models, Upcomers Oracle, and others by name) live in Settings, and AXE autonomy has a daily-limit guard before any automatic order.",
+    "There is no live per-firm drawdown alert. The background watcher is not firing alerts. Firm rule presets (FTMO models, Upcomers Oracle, and others by name) live in Settings, and AXE autonomy has a daily-limit guard before any automatic order.",
   quote:
     "The same dark canvas as Trading OS, the same MT5 execution dock, and a journal of fills you tag yourself — plus an intel layer that watches the board the app actually has keys for.",
   quoteBy: "AXE Companion · design principle",
@@ -393,7 +393,7 @@ export const COMPANION_FEATURES: ReadonlyArray<{
   },
   {
     title: "Price alerts in the app",
-    desc: "In-app price alerts on the chart. Push notification delivery is not live. There is no live per-firm drawdown alert.",
+    desc: "In-app price alerts on the chart. Push notification delivery is not live. The background watcher is not firing alerts. There is no live per-firm drawdown alert.",
     icon: "push",
   },
   {
@@ -408,7 +408,7 @@ export const COMPANION_FEATURES: ReadonlyArray<{
   },
   {
     title: "Learning Arc and Cockpit",
-    desc: "Pro and above: Cockpit, Learning Arc, trade prep, chart actions, account health, daily and weekly briefings. Alignment is a Cockpit score from your own workspace, not a generic FIT gauge.",
+    desc: "Pro and above: Cockpit, Learning Arc, trade prep, chart actions, daily and weekly briefings. Alignment is a Cockpit score from your own workspace, not a generic FIT gauge.",
     icon: "arc",
   },
   {
@@ -461,8 +461,8 @@ export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
     a: "Not inside this app. Put it in your MT5 Expert Advisor or bridge. After the first successful post, trades, equity and stats flow on the same ten-minute sync — see Accounts right after you create a token.",
   },
   {
-    q: "Do push notifications, auto-journal labels or AXE memory work?",
-    a: "Price alerts work in the app. Push notification delivery is not live. Journal rows come from broker fills; you tap the outcome — automatic labels are not running. A long-term AXE memory table is not in this deployment. Daily and weekly briefings, the AXE Feed, Cockpit and Learning Arc (Pro) are what remember you today.",
+    q: "Do push notifications, auto-journal labels, AXE memory or the watcher work?",
+    a: "Price alerts work in the app. Push notification delivery is not live. Journal rows come from broker fills; you tap the outcome — automatic labels are not running. A long-term AXE memory table is not in this deployment. The background watcher is not firing alerts. Daily and weekly briefings, the AXE Feed, Cockpit and Learning Arc (Pro) are what remember you today.",
   },
   {
     q: "Is my data private?",

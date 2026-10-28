@@ -72,7 +72,6 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
       "Multi-account support",
       "Daily + 1 weekly briefing",
       "Advanced news & intelligence",
-      "Account health monitoring",
     ],
   },
   {

@@ -47,6 +47,7 @@ test.describe("companion landing", () => {
     await phone.locator('button.tab[data-screen="home"]').click();
     await phone.locator('button.linkish[data-go="alerts"]').click();
     await expect(phone.getByText("Push notification delivery is not live")).toBeVisible();
+    await expect(phone.getByText("The background watcher is not firing alerts")).toBeVisible();
 
     const ipad = page.frameLocator('iframe[title*="iPad"]').first();
     await expect(ipad.getByText("NO LOGIN")).toBeVisible();

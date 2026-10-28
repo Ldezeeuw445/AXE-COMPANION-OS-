@@ -114,7 +114,7 @@ export function LandingHeroDevices({ onLitChange }: Props) {
       </div>
 
       <p className="relative z-10 mt-4 text-center text-[11px] uppercase tracking-[0.2em] text-white/38">
-        Tap around — these are live demos, no account needed
+        Tap around — these are interactive demos, no account needed
       </p>
     </div>
   );

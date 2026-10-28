@@ -337,6 +337,8 @@ check("the page does not claim systems that are not running", () => {
   assert.match(landing, /no live per-firm drawdown alert/i);
   assert.match(landing, /Automatic journal labels are not running|automatic labels are not running/i);
   assert.match(landing, /Push notification delivery is not live/);
+  assert.match(landing, /background watcher is not firing alerts/i);
+  assert.ok(!/Account health monitoring/i.test(tiersSrc), "do not sell watcher-style account monitoring");
   assert.ok(!/streams it live, right next to your chart/i.test(landing));
   assert.ok(!/visible in real time/i.test(landing));
 });
@@ -552,6 +554,7 @@ check("the mock walks the current five-tab shell plus the rest of the app", () =
   assert.ok(/Not configured/i.test(heroMock), "UW tiles in the mock must say not configured");
   assert.ok(/ten minutes/i.test(heroMock), "the mock must say MT5 syncs on the ten-minute cadence");
   assert.ok(/Push notification delivery is not live/i.test(heroMock));
+  assert.ok(/background watcher is not firing alerts/i.test(heroMock));
 });
 
 check("both devices are there, at real logical sizes", () => {
