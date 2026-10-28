@@ -116,6 +116,10 @@ describe("publish flush interval", () => {
     assert.ok(PUBLISH_FLUSH_INTERVAL_MS >= 250);
     assert.ok(PUBLISH_FLUSH_INTERVAL_MS <= 500);
   });
+
+  it("holds the circuit for 10 minutes", () => {
+    assert.equal(PUBLISH_CIRCUIT_MS, 10 * 60 * 1000);
+  });
 });
 
 describe("coalesced publish", () => {
@@ -147,6 +151,31 @@ describe("coalesced publish", () => {
 
     const types = calls.map((c) => c.body.event?.type).sort();
     assert.deepEqual(types, ["positions_update", "tick"]);
+  });
+
+  it("does not let a hung POST block a later flush of another room", async () => {
+    let release!: () => void;
+    const hung = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { fetchFn, calls } = createFetch(async (call) => {
+      if (call.body.roomKey === "slow") await hung;
+      return { status: 200 };
+    });
+    const pub = publisher({ fetch: fetchFn });
+
+    pub.publish(CFG, "slow", tick(1));
+    const slowFlush = pub.flush();
+    pub.publish(CFG, "fast", tick(2));
+    await pub.flush();
+
+    assert.equal(
+      calls.some((c) => c.body.roomKey === "fast"),
+      true,
+    );
+    release();
+    await slowFlush;
+    assert.equal(calls.length, 2);
   });
 
   it("posts the Cloudflare/VPS contract: /internal/publish, secret header, {roomKey,event}", async () => {

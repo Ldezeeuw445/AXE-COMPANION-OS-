@@ -4,6 +4,7 @@ export const PUBLISH_FLUSH_INTERVAL_MS = 400;
 export const PUBLISH_CIRCUIT_MS = 10 * 60 * 1000;
 export const PUBLISH_BACKOFF_INITIAL_MS = 1_000;
 export const PUBLISH_BACKOFF_MAX_MS = 5 * 60 * 1000;
+export const PUBLISH_FETCH_TIMEOUT_MS = 8_000;
 
 const MAX_INFLIGHT = 40;
 
@@ -95,7 +96,6 @@ export class ChartPublisher {
 
   private readonly pending = new Map<string, PendingPublish>();
   private timer: ReturnType<typeof setInterval> | null = null;
-  private flushing = false;
 
   private inflight = 0;
   private readonly pendingSlots: Array<() => void> = [];
@@ -160,21 +160,15 @@ export class ChartPublisher {
   }
 
   async flush(): Promise<void> {
-    if (this.flushing) return;
-    this.flushing = true;
-    try {
-      if (this.pending.size === 0) return;
-      const batch = [...this.pending.values()];
-      this.pending.clear();
-      this.refreshCircuitLogFlag();
-      if (this.isBlocked()) {
-        this.dropped += batch.length;
-        return;
-      }
-      await Promise.all(batch.map((item) => this.send(item)));
-    } finally {
-      this.flushing = false;
+    if (this.pending.size === 0) return;
+    const batch = [...this.pending.values()];
+    this.pending.clear();
+    this.refreshCircuitLogFlag();
+    if (this.isBlocked()) {
+      this.dropped += batch.length;
+      return;
     }
+    await Promise.all(batch.map((item) => this.send(item)));
   }
 
   private ensureTimer(): void {
@@ -260,6 +254,7 @@ export class ChartPublisher {
           "X-Streamer-Secret": item.config.streamerSecret,
         },
         body: JSON.stringify({ roomKey: item.roomKey, event: item.event }),
+        signal: AbortSignal.timeout(PUBLISH_FETCH_TIMEOUT_MS),
       });
       const body = await res.text();
       const kind = classifyPublishResponse(res.status, body);

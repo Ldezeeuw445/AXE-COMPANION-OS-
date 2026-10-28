@@ -944,9 +944,10 @@ async function main() {
     }));
     const pub = drainPublishStats();
     const circuit = pub.circuitOpen ? " | circuit open" : "";
+    const backoff = pub.backoffMs > 0 ? ` | backing off ${pub.backoffMs}ms` : "";
     log(
       "info",
-      `Heartbeat: ${activeStreams.size} stream(s) | RSS ${rss}MB | Heap ${heap}/${heapTotal}MB | Inflight ${pub.inflight} | Publish fail ${pub.failed} drop ${pub.dropped}${circuit}`,
+      `Heartbeat: ${activeStreams.size} stream(s) | RSS ${rss}MB | Heap ${heap}/${heapTotal}MB | Inflight ${pub.inflight} | Publish fail ${pub.failed} drop ${pub.dropped}${circuit}${backoff}`,
       stats,
     );
 
