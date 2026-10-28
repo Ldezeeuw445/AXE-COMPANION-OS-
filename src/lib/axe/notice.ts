@@ -26,8 +26,10 @@
  * already carries a URL, so there is always somewhere to go, and a notice
  * with nowhere to go should not have been sent.
  *
- * Dependency-free: the verify suite exercises it directly.
+ * Dependency-free at runtime: the one import below is a type and is stripped,
+ * so the verify suite still exercises this file directly.
  */
+import type { Provenance } from "./provenance";
 
 export type NoticeAction = {
   /** Imperative, in the trader's words. "Approve or discard", not "View". */
@@ -42,6 +44,18 @@ export type ProactiveNotice = {
   /** Null only when there is genuinely nothing honest to add. */
   soWhat: string | null;
   action: NoticeAction;
+  /**
+   * Where this came from, when the producer can say.
+   *
+   * Optional here and not in `provenance.ts`: a notice that a trade closed is
+   * a fact the broker reported, and inventing a "rule" behind it would be
+   * worse than leaving this null. What is not optional is the other
+   * direction — `provenanceBlocks` refuses to let AXE prepare or place an
+   * order on a notice whose reasoning is missing or hollow.
+   *
+   * Type-only import, so this file still pulls in nothing at runtime.
+   */
+  provenance?: Provenance | null;
 };
 
 /** Longest body a push notification shows before the OS truncates it. */
