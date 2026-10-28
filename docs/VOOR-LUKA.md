@@ -43,14 +43,72 @@ chat toen je je crontab plakte. Niet erg, maar wel rotaten:
   `select * from axe_ops.cron_secret_fingerprint();` — gelijke vingerafdrukken
   betekent gelijke strings.
 
-## 3. Twee schakelaars in Supabase — 1 minuut
+## 3. AXE Core's geheugen staat open voor het hele internet
+
+Gevonden op 28 oktober terwijl ik de twee schakelaars hieronder probeerde om
+te zetten. Dit is belangrijker dan die schakelaars, en ik heb het **niet zelf
+gerepareerd** — zie onderaan waarom.
+
+Vijftien tabellen in `public` hebben een policy die `anon` alles toestaat
+(`cmd: ALL`, `using: true`). `anon` is de publiceerbare sleutel, en die zit in
+de browser-bundle van al je drie apps. Dus iedereen die je site opent kan deze
+tabellen **lezen én schrijven**:
+
+| Tabel | Rijen | Wat dat betekent |
+|---|---|---|
+| `core_task_events` | 5.268 | leesbaar en wisbaar door iedereen |
+| `core_memory` | 2.896 | AXE Core's geheugen, leesbaar en wisbaar |
+| `core_system_logs` | 816 | leesbaar |
+| `core_permissions` | 10 | **schrijfbaar** — iemand kan zichzelf rechten geven |
+| `core_ai_state` | 4 | leesbaar en schrijfbaar |
+
+Verder met nul rijen, dus nu zonder gevolg: `core_integrations` (die heeft wel
+een `credentials`-kolom, dus zodra je daar iets in zet is het openbaar),
+`core_context`, `core_deployments`, `core_events`, `core_metrics`,
+`core_models`, `core_routing`, `core_services`, `core_sessions`,
+`core_workflows`.
+
+**Wat niet lekt**, dat heb ik eerst nagekeken: `core_integrations.credentials`
+is leeg, en van de 17 cron-jobs bevat er geen één het woord secret, token,
+bearer of service_role. Je cron-secret staat dus niet in de database open.
+
+### Waarom ik dit niet zelf heb gefixt
+
+Die policies heten `anon_all_core_*`. Iemand heeft ze expliciet zo gemaakt, en
+vrijwel zeker omdat AXE Core met de anon-sleutel met Supabase praat. Haal ik ze
+weg, dan gaat AXE Core waarschijnlijk stuk — en ik heb die code niet, dus ik
+kan het niet testen. Jouw eigen cockpit breken terwijl je ziek bent is erger
+dan een bekend gat op een persoonlijk werktuig.
+
+### De fix, als je zover bent
+
+Eerst in AXE Core kijken welke sleutel hij gebruikt:
+
+- Gebruikt hij de **service-role** sleutel (server-side), dan kunnen alle
+  vijftien policies zo weg en merkt niemand iets.
+- Gebruikt hij de **anon** sleutel in de browser, dan is de echte oplossing dat
+  AXE Core via een server-route gaat praten, niet dat de policies blijven.
+
+De minst ingrijpende tussenstap, die het ergste dicht doet zonder lezen te
+breken — `core_permissions` niet meer schrijfbaar maken:
+
+```sql
+drop policy if exists anon_all_core_permissions on public.core_permissions;
+create policy core_permissions_anon_read on public.core_permissions
+  for select to anon using (true);
+```
+
+Zeg het als je wil dat ik dit doe, dan voer ik het uit en kijk ik met je mee
+wat er in AXE Core stilvalt.
+
+## 4. Twee schakelaars in Supabase — 1 minuut
 
 Beide in de Supabase-console, ik kan er niet bij:
 
 - **Authentication → Sign In / Providers** (bouwlijst `L1.5b`).
 - **`auth_leaked_password_protection`** aanzetten. Staat nu uit.
 
-## 4. Optioneel: de autopilot ook bij de database laten
+## 5. Optioneel: de autopilot ook bij de database laten
 
 De terugkerende taak draait elke vier uur en bouwt door. Hij heeft geen
 database-tools, dus hij kan een migratie wel schrijven maar niet toepassen.
@@ -59,7 +117,7 @@ als je het netjes wilt: maak de routine opnieuw aan vanuit de routines-UI op
 claude.ai, dan draagt hij je connectors mee. Via de API kan het niet, dat heeft
 deze organisatie uitgezet.
 
-## 5. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
+## 6. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
 
 `scripts/watchdog.sh` kijkt gratis of productie draait wat er op main staat.
 Geen model, geen API, geen kosten. Nu doet de autopilot-sessie dat zelf, en dat
@@ -80,7 +138,7 @@ En als je de hele suite één keer per nacht wil laten draaien:
 Kijken wat hij zegt: `tail -20 /var/log/axe-watchdog.log`. Hij schrijft één
 regel per keer en eindigt met "niets te doen" of "er moet iemand kijken".
 
-## 6. Beslissingen die alleen jij kunt nemen
+## 7. Beslissingen die alleen jij kunt nemen
 
 Geen haast, maar ze staan open:
 
@@ -90,7 +148,7 @@ Geen haast, maar ze staan open:
 - **Eén echte testaankoop met een live kaart**, en narekenen dat de tier
   daadwerkelijk omklapt. Kan niet met een testkaart en niet door mij.
 
-## 7. Op je Mac, als je er weer zin in hebt
+## 8. Op je Mac, als je er weer zin in hebt
 
 - `ALPHAVANTAGE_API_KEY` op de host zetten (bouwlijst `L7.5c`).
 - `OLLAMA_BASIC_AUTH` op de Companion-host, zodat `ollama.axecompanion.com`
