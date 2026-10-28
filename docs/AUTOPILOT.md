@@ -306,7 +306,42 @@ gemeten is.
    onduidelijk, druk of dubbel is, en pas daarna aan. Rustiger maken betekent
    bijna altijd iets weghalen. Niet alle veertien secties in één commit.
 
-10. **Een paper-account om op te testen.** `/demo` leidt sinds de 182 anonieme
+10. **Een paper-account om op te testen — de kern staat, de aansluiting niet.**
+    Luka vroeg hier op 28 oktober expliciet om.
+
+    Wat nagekeken is: `demo_paper`-accounts bestaan al (175 stuks), maar
+    `/api/mt5/order` weigert ze met een 409 — het is iets om naar te kijken,
+    niet om op te oefenen. `broker_trades` is waar journal, `playbookEdge` en
+    de learning arc uit lezen, dus een paper-trade die daar landt laat de
+    hele keten vanzelf werken. Geen nieuwe tabel nodig voor afgesloten trades.
+
+    **Af en bewezen:** `src/lib/trading/paperBroker.ts`, 24 checks. De
+    ontwerpregel die het waard maakt: papier vult aan dezelfde kant van de
+    spread als echt geld. Een koop vult op de ask, een verkoop op de bid, en
+    sluiten kruist terug — wie op de mid vult laat elke scalp-strategie één
+    spread per trade beter lijken dan hij is, en dat is precies de marge die
+    live het verschil maakt. Verder: een long's stop wordt tegen de **bid**
+    gemeten, een gat door de stop vult op het gat en niet op de stop, en een
+    bar die stop én doel raakte neemt de stop — binnen één bar is er geen
+    bewijs welke eerst kwam, en je eigen onwetendheid in je voordeel
+    beslechten is hoe een simulator een verliesweek in een winstweek
+    verandert. `PAPER_LIMITS` noemt wat het niet modelleert (swap, commissie,
+    slippage, margin call), want alles daarvan maakt papier mooier dan live.
+
+    Onderweg een onbereikbare tak gevonden: de "stop wint"-regel kon met één
+    quote nooit afgaan, omdat een long altijd op de bid sluit. Daar staat nu
+    `evaluatePaperStopsOnBar` voor, waar de regel wél echt is — gevonden
+    doordat een mutatietest níet omviel.
+
+    **Wat nog moet:** de aansluiting. `/api/mt5/order` moet voor een
+    demo-account de paper-engine aanroepen in plaats van 409 te geven; open
+    posities hebben een bewaarplaats nodig (`mt5_positions` bestaat maar heeft
+    `account_id text` terwijl `user_broker_accounts.id` uuid is — liever een
+    eigen tabel dan die mismatch erven); en iets moet de stops bewaken, wat
+    past bij de cron die er al is. Afgesloten trades gaan naar
+    `broker_trades` met `external_trade_id` als `paper:<uuid>`.
+
+    *Oorspronkelijke opdracht:* `/demo` leidt sinds de 182 anonieme
     accounts bewust naar `/login` en dat blijft zo — dit is geen anonieme
     sessie maar een echt account met een MetaApi-demo eronder, zodat trades,
     journal en de learning arc met echte prijzen lopen zonder geld. Dit raakt
