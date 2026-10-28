@@ -37,20 +37,20 @@ test.describe("companion landing", () => {
     await page.locator("#hero-devices").scrollIntoViewIfNeeded();
     const phone = page.frameLocator('iframe[title*="iPhone"]').first();
     await expect(phone.getByText("NO LOGIN")).toBeVisible();
-    await phone.getByRole("button", { name: "Chart" }).click();
+    await phone.locator('button.tab[data-screen="chart"]').click();
     await expect(phone.getByText(/Demo candles/)).toBeVisible();
-    await phone.getByRole("button", { name: "Account" }).click();
+    await phone.locator('button.tab[data-screen="account"]').click();
     await expect(phone.getByText("Resolved → Upcomers-Server")).toBeVisible();
-    await phone.getByRole("button", { name: "Home" }).click();
-    await phone.getByRole("button", { name: "Intel" }).click();
+    await phone.locator('button.tab[data-screen="home"]').click();
+    await phone.locator('button[data-go="intel"]').click();
     await expect(phone.getByText("Not configured").first()).toBeVisible();
-    await phone.getByRole("button", { name: "Home" }).click();
-    await phone.getByRole("button", { name: "Price alerts" }).click();
+    await phone.locator('button.tab[data-screen="home"]').click();
+    await phone.locator('button[data-go="alerts"]').click();
     await expect(phone.getByText("Push notification delivery is not live")).toBeVisible();
 
     const ipad = page.frameLocator('iframe[title*="iPad"]').first();
     await expect(ipad.getByText("NO LOGIN")).toBeVisible();
-    await ipad.getByRole("button", { name: "Intel" }).click();
+    await ipad.locator('button.sbtn[data-screen="intel"]').click();
     await expect(ipad.getByText("Not configured").first()).toBeVisible();
   });
 
