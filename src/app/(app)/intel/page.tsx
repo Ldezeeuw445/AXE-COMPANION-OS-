@@ -247,6 +247,46 @@ export default async function IntelPage({ searchParams }: PageProps) {
         </GlassPanel>
       </div>
 
+      {/* SHORT VOLUME — FINRA (free) */}
+      <GlassPanel className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-3.5 w-3.5 text-emerald-300/85" aria-hidden />
+            <h2 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
+              AXE Short Volume
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-tos-dim">
+              {intel.shortVolume.length > 0 ? `${intel.shortVolume.length} symbols` : ""}
+            </span>
+            <InlineStatus providers={intel.providers} id="shortVolume" />
+          </div>
+        </div>
+        {intel.shortVolume.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {intel.shortVolume.slice(0, 8).map((row, i) => (
+              <li
+                key={`${row.symbol}-${row.date}-${i}`}
+                className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+              >
+                <span className="font-mono text-[11px] font-semibold text-tos-text">{row.symbol}</span>
+                <span className="font-mono text-[10px] text-tos-dim">
+                  short {formatCompactVolume(row.shortVolume)} / {formatCompactVolume(row.totalVolume)}
+                </span>
+                {/* TODO(learning): show shortRatio as a % and accent rows above a threshold you choose */}
+                <span className="ml-auto font-mono text-[10px] text-tos-muted">{row.date}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-tos-muted">
+            {intel.providers.find((p) => p.id === "shortVolume")?.description ??
+              "FINRA short volume unavailable."}
+          </p>
+        )}
+      </GlassPanel>
+
       {/* DARK POOL + OPTIONS */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <GlassPanel className="p-4">
@@ -884,11 +924,14 @@ function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id:
   const dot =
     p.state === "live" ? "bg-emerald-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25";
   const text =
-    p.state === "live" ? "live" : p.state === "error" ? "error" : "off";
+    p.state === "live" ? "live" : p.state === "error" ? "unavailable" : "off";
   const textColor =
     p.state === "live" ? "text-emerald-300/80" : p.state === "error" ? "text-amber-300/80" : "text-tos-dim";
   return (
-    <span className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}
+      title={p.reason ?? p.description}
+    >
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
       {text}
     </span>
@@ -900,6 +943,7 @@ function intelHealthLabel(id: string): string {
     marketTide: "AXE Intel Tide",
     insiderTrades: "AXE Insider Flow",
     senateTrades: "AXE Policy Flow",
+    shortVolume: "AXE Short Volume",
     darkPoolPrints: "AXE Dark Pool",
     unusualOptions: "AXE Options Flow",
     corporateJets: "AXE Jet Tracker",
@@ -948,6 +992,15 @@ function formatMoneyM(value: number): string {
 
 function formatMoneyShort(value: number): string {
   return formatMoneyM(value);
+}
+
+function formatCompactVolume(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(abs / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(abs / 1e3).toFixed(1)}K`;
+  return String(Math.round(abs));
 }
 
 function formatAge(seconds: number): string {
