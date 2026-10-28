@@ -333,6 +333,24 @@ gemeten is.
     `evaluatePaperStopsOnBar` voor, waar de regel wél echt is — gevonden
     doordat een mutatietest níet omviel.
 
+    **Ook af:** `src/lib/trading/paperQuoteSource.ts`, 12 checks. Dit beslecht
+    de vraag die punt 10 eigenlijk stelt. Het demo-account prijst zichzelf met
+    een seeded random walk (`getDemoQuotePrice`) — prima om de knoppen te
+    leren, waardeloos als meting. En die trades landen in dezelfde
+    `broker_trades`-rijen die `playbookEdge` leest, dat er zinnen van maakt
+    over de *trader*: "jouw London XAUUSD longs winnen 64% van de tijd". Zonder
+    markering wordt een toevalsgenerator aan iemand teruggegeven als zijn edge.
+
+    Dus draagt elke quote zijn herkomst mee: `live` (echte bid/ask uit
+    `chart_live_snapshots`, telt mee), `simulated` (gegenereerd, telt nooit
+    mee) of `none` (dan geen fill — een paper-trade op een verzonnen prijs is
+    erger dan geen paper-trade). Een tick ouder dan 90 seconden is geen live
+    prijs meer. `countsAsEvidence` is de poort naar de learning arc.
+
+    Onderweg een echte bug gevonden doordat een check omviel: `Number(null)`
+    is `0` en `Number.isFinite(0)` is waar, dus een ontbrekende bid kwam er
+    doorheen als een prijs van nul en zou een order op niets vullen.
+
     **Wat nog moet:** de aansluiting. `/api/mt5/order` moet voor een
     demo-account de paper-engine aanroepen in plaats van 409 te geven; open
     posities hebben een bewaarplaats nodig (`mt5_positions` bestaat maar heeft
