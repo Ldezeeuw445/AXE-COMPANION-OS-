@@ -59,7 +59,28 @@ als je het netjes wilt: maak de routine opnieuw aan vanuit de routines-UI op
 claude.ai, dan draagt hij je connectors mee. Via de API kan het niet, dat heeft
 deze organisatie uitgezet.
 
-## 5. Beslissingen die alleen jij kunt nemen
+## 5. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
+
+`scripts/watchdog.sh` kijkt gratis of productie draait wat er op main staat.
+Geen model, geen API, geen kosten. Nu doet de autopilot-sessie dat zelf, en dat
+kost een deel van je vijf-uurs limiet dat anders aan bouwen was besteed.
+
+Op de VPS:
+
+```bash
+( crontab -l 2>/dev/null; echo '*/10 * * * * /root/AXE-COMPANION-OS-/scripts/watchdog.sh >> /var/log/axe-watchdog.log 2>&1' ) | crontab -
+```
+
+En als je de hele suite één keer per nacht wil laten draaien:
+
+```bash
+( crontab -l 2>/dev/null; echo '40 4 * * * AXE_WATCHDOG_CHECKS=1 /root/AXE-COMPANION-OS-/scripts/watchdog.sh >> /var/log/axe-watchdog.log 2>&1' ) | crontab -
+```
+
+Kijken wat hij zegt: `tail -20 /var/log/axe-watchdog.log`. Hij schrijft één
+regel per keer en eindigt met "niets te doen" of "er moet iemand kijken".
+
+## 6. Beslissingen die alleen jij kunt nemen
 
 Geen haast, maar ze staan open:
 
@@ -69,7 +90,7 @@ Geen haast, maar ze staan open:
 - **Eén echte testaankoop met een live kaart**, en narekenen dat de tier
   daadwerkelijk omklapt. Kan niet met een testkaart en niet door mij.
 
-## 6. Op je Mac, als je er weer zin in hebt
+## 7. Op je Mac, als je er weer zin in hebt
 
 - `ALPHAVANTAGE_API_KEY` op de host zetten (bouwlijst `L7.5c`).
 - `OLLAMA_BASIC_AUTH` op de Companion-host, zodat `ollama.axecompanion.com`
