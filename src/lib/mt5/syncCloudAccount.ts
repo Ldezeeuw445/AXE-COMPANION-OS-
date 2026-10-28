@@ -28,9 +28,10 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { withActionBudget } from "@/lib/mt5/mt5ActionBudget";
 import { mapMetaApiActionError } from "@/lib/mt5/mapMetaApiActionError";
 import { renderNoticeBody, signedAmount } from "@/lib/axe/notice";
-import { tradeCloseEventKey } from "@/lib/axe/watcherCandidates";
+import { isAnnounceableTradeClose, tradeCloseEventKey } from "@/lib/axe/watcherCandidates";
 import { figuresFromAccountInfo, mapMetaApiPosition } from "@/lib/mt5/liveAccountSnapshot";
 import { persistLiveFiguresAndPositions } from "@/lib/mt5/persistLiveAccount";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 
 export type CloudMt5SyncResult =
   | { ok: true; data: { dealsFetched: number; dealsUpserted: number; tradesNormalized: number } }
@@ -130,12 +131,19 @@ export async function runCloudMt5Sync(
     return { ok: false, code: "validation", message: "Not a MetaApi cloud account." };
   }
 
+  // Past this point the account is known to belong to `userId`: the read above
+  // ran under the caller's own RLS and returned a row. Writes can now go
+  // through the elevated client, so the trader's own INSERT/UPDATE grants on
+  // broker_trades and user_broker_accounts become removable. Every write below
+  // still filters on user_id — see syncWriteClient for why that matters.
+  const db = syncWriteClient(supabase);
+
   let extId = row.external_connection_id as string;
   const prevMeta = (row.metadata ?? {}) as Record<string, unknown>;
   let accountRegion =
     typeof prevMeta.metaapiRegion === "string" ? prevMeta.metaapiRegion : null;
 
-  await supabase
+  await db
     .from("user_broker_accounts")
     .update({ provider_status: "syncing" })
     .eq("id", accountId)
@@ -210,7 +218,7 @@ export async function runCloudMt5Sync(
       SYNC_HISTORY_TIMEOUT_MS,
     );
   } catch (e) {
-    await supabase
+    await db
       .from("user_broker_accounts")
       .update({
         provider_status: "sync_failed",
@@ -247,15 +255,16 @@ export async function runCloudMt5Sync(
       raw: t.raw,
     };
 
-    const { data: existing, error: exErr } = await supabase
+    const { data: existing, error: exErr } = await db
       .from("broker_trades")
       .select("id,close_time")
+      .eq("user_id", userId)
       .eq("account_id", accountId)
       .eq("external_trade_id", t.external_trade_id)
       .maybeSingle();
 
     if (exErr) {
-      await supabase
+      await db
         .from("user_broker_accounts")
         .update({ provider_status: "sync_failed" })
         .eq("id", accountId)
@@ -265,7 +274,7 @@ export async function runCloudMt5Sync(
 
     const newlyClosed = Boolean(payload.close_time) && !existing?.close_time;
     if (existing?.id) {
-      const { error: upErr } = await supabase
+      const { error: upErr } = await db
         .from("broker_trades")
         .update({
           symbol: payload.symbol,
@@ -282,20 +291,35 @@ export async function runCloudMt5Sync(
         .eq("id", existing.id)
         .eq("user_id", userId);
       if (upErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
+        await db
+          .from("user_broker_accounts")
+          .update({ provider_status: "sync_failed" })
+          .eq("id", accountId)
+          .eq("user_id", userId);
         return { ok: false, code: "sync_failed", message: upErr.message };
       }
     } else {
-      const { error: inErr } = await supabase.from("broker_trades").insert(payload);
+      // payload carries user_id, so the insert is owner-scoped by construction.
+      const { error: inErr } = await db.from("broker_trades").insert(payload);
       if (inErr) {
-        await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
+        await db
+          .from("user_broker_accounts")
+          .update({ provider_status: "sync_failed" })
+          .eq("id", accountId)
+          .eq("user_id", userId);
         return { ok: false, code: "sync_failed", message: inErr.message };
       }
     }
-    if (newlyClosed) {
+    if (newlyClosed && isAnnounceableTradeClose(payload.close_time)) {
       const pnl = Number(payload.pnl ?? 0);
-      void recordProactiveFeedEvent(
-        supabase,
+      // Awaited: the sync runs in a cron route, and a push left pending when
+      // the handler returns can be dropped without a trace. A closed trade the
+      // trader never hears about is the alert that matters most.
+      // Written with `db`: axe_proactive_events has no INSERT policy for
+      // signed-in users, so on the server-action path the caller's client
+      // was rejected and the alert reached neither the feed nor the phone.
+      await recordProactiveFeedEvent(
+        db,
         userId,
         tradeCloseEventKey({ id: String(existing?.id ?? t.external_trade_id), external_trade_id: t.external_trade_id }),
         `Trade closed: ${payload.symbol}`,
@@ -389,6 +413,8 @@ export async function runCloudMt5Sync(
   const livePositions = (Array.isArray(positions) ? positions : [])
     .filter((p): p is Record<string, unknown> => !!p && typeof p === "object" && !Array.isArray(p))
     .map((p, i) => mapMetaApiPosition(p, i));
+  // Left on the caller's client on purpose: this helper proves ownership with
+  // its own RLS-scoped read before elevating its writes (see `writerFor`).
   await persistLiveFiguresAndPositions(supabase, {
     userId,
     accountId,
@@ -573,7 +599,8 @@ export async function refreshCloudAccountSymbolMap(
 
   const providerStatus = String(row.provider_status ?? "connected");
 
-  await supabase
+  // Ownership was proven by the RLS-scoped read at the top of this function.
+  await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update({
       connection_method: "cloud_mt5",

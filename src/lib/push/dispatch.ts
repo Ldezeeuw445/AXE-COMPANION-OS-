@@ -6,7 +6,7 @@ import { type PushCategory } from "@/lib/push/categories";
 import { buildPushPayload, serializePushPayload, type BuildPushPayloadInput } from "@/lib/push/payload";
 import { DEFAULT_PUSH_PREFS, prefsFromProfileRow, shouldSuppressForPrefs } from "@/lib/push/prefs";
 import { cooldownForCategory, decideDedup, normalizeEventKey } from "@/lib/push/dedup";
-import { deliverWebPushToUser, type DeliverWebPushResult } from "@/lib/push/deliver";
+import { deliverWebPushToUser, type DeliverWebPushResult, type PushSender } from "@/lib/push/deliver";
 
 export type DispatchPushInput = Omit<BuildPushPayloadInput, "category" | "eventKey" | "title"> & {
   userId: string;
@@ -20,6 +20,8 @@ export type DispatchPushInput = Omit<BuildPushPayloadInput, "category" | "eventK
   bypassDedup?: boolean;
   cooldownMs?: number;
   supabase?: SupabaseClient | null;
+  /** Test seam — see {@link PushSender}. Omit in production. */
+  send?: PushSender;
 };
 
 export type DispatchPushResult = DeliverWebPushResult & {
@@ -158,6 +160,7 @@ export async function dispatchPushEvent(input: DispatchPushInput): Promise<Dispa
     userId: input.userId,
     payload: serializePushPayload(payload),
     supabase,
+    send: input.send,
   });
 
   if (delivered.total === 0) {
