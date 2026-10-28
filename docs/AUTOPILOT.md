@@ -351,6 +351,12 @@ gemeten is.
     is `0` en `Number.isFinite(0)` is waar, dus een ontbrekende bid kwam er
     doorheen als een prijs van nul en zou een order op niets vullen.
 
+    **Migratie geschreven, nog niet toegepast:**
+    `supabase/migrations/20261028140000_paper_positions.sql`. De
+    Supabase-koppeling vroeg om Luka's bevestiging en kreeg die niet — hij was
+    er niet. Het is een nieuwe tabel, dus niets breekt zolang hij wacht, en er
+    is nog geen code die hem leest. Staat in `docs/VOOR-LUKA.md` punt 5.
+
     **Wat nog moet:** de aansluiting. `/api/mt5/order` moet voor een
     demo-account de paper-engine aanroepen in plaats van 409 te geven; open
     posities hebben een bewaarplaats nodig (`mt5_positions` bestaat maar heeft

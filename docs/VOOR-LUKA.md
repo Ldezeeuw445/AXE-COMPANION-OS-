@@ -149,14 +149,38 @@ werk plus echt uitproberen of verbinden met een wallet nog werkt, en dat
 laatste kan ik niet: daar hoort een portemonnee bij. Zeg het als je het wil,
 dan doe ik de code en kijk jij of het verbindt.
 
-## 5. Twee schakelaars in Supabase — 1 minuut
+## 5. Eén migratie toepassen — 30 seconden
+
+`supabase/migrations/20261028140000_paper_positions.sql` staat in de repo maar
+is **niet toegepast**. Ik wilde het zelf doen, maar de Supabase-koppeling
+vroeg om jouw bevestiging en die kwam niet — je was er niet, en terecht.
+
+Het is een nieuwe tabel, additief: er bestaat nog geen code die hem gebruikt,
+dus toepassen breekt niets en niet-toepassen ook niet. Hij is nodig voordat
+het oefenaccount echt orders kan aannemen.
+
+Toepassen kan op twee manieren:
+
+- Supabase dashboard → SQL Editor → inhoud van dat bestand plakken → Run.
+- Of zeg hier "pas die migratie toe", dan doe ik het en kun jij het
+  goedkeuren terwijl je meekijkt.
+
+Wat erin zit, zodat je niet hoeft te lezen: een tabel `paper_positions` voor
+open oefenposities, met RLS die alleen je eigen rijen toelaat (`auth.uid() =
+user_id`, aan beide kanten gecontroleerd — geen `using (true)` meer, na wat we
+vanochtend in de `core_*`-tabellen vonden). De kolom die ertoe doet is
+`quote_origin`: die legt vast of een oefentrade op een échte broker-prijs is
+gevuld of op gegenereerde demo-prijzen. Zonder die kolom telt een trade op
+nepprijzen straks gewoon mee in wat AXE over jouw handelen zegt.
+
+## 6. Twee schakelaars in Supabase — 1 minuut
 
 Beide in de Supabase-console, ik kan er niet bij:
 
 - **Authentication → Sign In / Providers** (bouwlijst `L1.5b`).
 - **`auth_leaked_password_protection`** aanzetten. Staat nu uit.
 
-## 6. Optioneel: de autopilot ook bij de database laten
+## 7. Optioneel: de autopilot ook bij de database laten
 
 De terugkerende taak draait elke vier uur en bouwt door. Hij heeft geen
 database-tools, dus hij kan een migratie wel schrijven maar niet toepassen.
@@ -165,7 +189,7 @@ als je het netjes wilt: maak de routine opnieuw aan vanuit de routines-UI op
 claude.ai, dan draagt hij je connectors mee. Via de API kan het niet, dat heeft
 deze organisatie uitgezet.
 
-## 7. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
+## 8. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
 
 `scripts/watchdog.sh` kijkt gratis of productie draait wat er op main staat.
 Geen model, geen API, geen kosten. Nu doet de autopilot-sessie dat zelf, en dat
@@ -186,7 +210,7 @@ En als je de hele suite één keer per nacht wil laten draaien:
 Kijken wat hij zegt: `tail -20 /var/log/axe-watchdog.log`. Hij schrijft één
 regel per keer en eindigt met "niets te doen" of "er moet iemand kijken".
 
-## 8. Beslissingen die alleen jij kunt nemen
+## 9. Beslissingen die alleen jij kunt nemen
 
 Geen haast, maar ze staan open:
 
@@ -196,7 +220,7 @@ Geen haast, maar ze staan open:
 - **Eén echte testaankoop met een live kaart**, en narekenen dat de tier
   daadwerkelijk omklapt. Kan niet met een testkaart en niet door mij.
 
-## 9. Op je Mac, als je er weer zin in hebt
+## 10. Op je Mac, als je er weer zin in hebt
 
 - `ALPHAVANTAGE_API_KEY` op de host zetten (bouwlijst `L7.5c`).
 - `OLLAMA_BASIC_AUTH` op de Companion-host, zodat `ollama.axecompanion.com`
