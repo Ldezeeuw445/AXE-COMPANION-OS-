@@ -159,8 +159,82 @@ gemeten is.
 6. **Live ticks voor elk MT5-account.** Nagaan wat er al staat
    (`chart_live_snapshots`, de SSE-route, de streamer) voor er iets bij komt.
 
+7. **Waarom deze trade — de herkomstregel.** Dit is wat Luka op 28 oktober
+   het hardst vroeg, en het gaat voor punt 2 tot en met 6. Op dit moment kan
+   AXE een idee sturen en een order voorbereiden (`autonomy.ts` niveau 2), maar
+   nergens staat in één leesbare regel waar dat idee vandaan komt. De bronnen
+   bestaan los van elkaar: `playbookEdge.ts` (je eigen afgesloten trades),
+   `src/lib/intel/` (correlatie, congress trades, de kennislaag),
+   `src/lib/market/` (nieuws, FRED, de kalender) en de alerts. Wat mist is een
+   herkomst-object dat met het idee meereist tot in de UI: welke bron, welke
+   regel, welk getal, en hoe vaak die regel eerder klopte. Zonder dat is
+   niveau 3 niet te verdedigen — je kunt een machine geen geld laten uitgeven
+   met een reden die niemand kan nalezen. Bouw het als één type dat elke bron
+   invult, niet als een tekstje per bron. Hierna kan AXE Core hem ook lezen.
+
+8. **De 40 kwetsbaarheden in de dependencies.** `npm ci` meldt er 40, waarvan
+   29 high. Dat zit in packages, niet in onze code, en het blokkeert niets —
+   maar het hoort niet te blijven staan in iets waar straks mensen voor
+   betalen. Draai `npm audit`, los op wat zonder breaking change kan, en zet
+   wat een major bump nodig heeft in `docs/VOOR-LUKA.md` met het risico erbij.
+   Lockfile mee committen, koude build erna, anders telt het niet.
+
+9. **De landing page één keer helemaal doorlopen met verse ogen.** Hij staat
+   er (veertien secties, `src/app/page.tsx`) en hij is af genoeg om te tonen.
+   Wat niet gemeten is: of iemand die AXE niet kent binnen tien seconden snapt
+   wat het doet. Doe het als lezer, niet als bouwer: schrijf eerst op wat er
+   onduidelijk, druk of dubbel is, en pas daarna aan. Rustiger maken betekent
+   bijna altijd iets weghalen. Niet alle veertien secties in één commit.
+
+10. **Een paper-account om op te testen.** `/demo` leidt sinds de 182 anonieme
+    accounts bewust naar `/login` en dat blijft zo — dit is geen anonieme
+    sessie maar een echt account met een MetaApi-demo eronder, zodat trades,
+    journal en de learning arc met echte prijzen lopen zonder geld. Dit raakt
+    het schema, dus een autopilot-sessie zonder database-toegang schrijft
+    hooguit de migratie en zet hier dat hij nog toegepast moet worden.
+
 Komt er iets tussendoor dat kapot is, dan gaat dat voor. Een gebroken ding is
 altijd belangrijker dan een nieuw ding.
+
+---
+
+## Wat Luka op 28 oktober vroeg
+
+Hij stuurde de Grok Bot-carrousel van @siddhantt.ai mee (zeven slides over een
+"trading floor zonder personeel") en vroeg: hoe ver is de landing page, hoe
+wordt dit beter dan MT5 en TradingView, waarom zet AXE een trade en waar komen
+die ideeen vandaan, wat kunnen we met meer en betere data, en kan zoiets als
+die bot-desk ook in Companion, Trading OS en AXE Core komen met een demo-account
+om op te testen.
+
+Drie dingen om te weten voordat iemand dit oppakt.
+
+**De carrousel belooft meer dan de bron.** Het bijgevoegde document
+(`GROKBOT-Build-by-siddhantt.ai.pdf`) zegt op zijn eigen titelblad
+"TRADES BY BOTS: Zero" en in de eerste alinea: *"This guide builds a research
+and alert desk. You make every call and place every order yourself."* De
+"350 bots" zijn zes Grok Bots plus 300 Kimi sub-agents, en het getal 350 komt
+in de bron nergens voor. Wat daar gebouwd is, is dus precies wat AXE al is: een
+desk die leest, filtert en meldt. Bouw de plaatjes niet na alsof het een
+auto-trader is.
+
+**AXE wordt geen betere MT5 of TradingView op hun eigen terrein.** Die hebben
+twintig jaar aan indicatoren, order types en depth. Daar winnen we niet, en
+proberen kost alleen tijd. Waar we wel winnen: MT5 vertelt je nooit waarom, en
+TradingView kent jouw trades niet. AXE heeft `playbookEdge.ts`, dat uit je eigen
+afgesloten trades afleidt waar jij werkelijk geld verdient. Dat kunnen zij niet
+bouwen en wij wel. Elk punt hieronder dient dat verschil, niet het inhalen van
+hun featurelijst.
+
+**AXE Core zit niet in deze repo.** De trading-tab, de algo en het
+demo-account dat Luka daar wil, horen bij `axeheadquarters`. Een
+autopilot-sessie hier kan daar niets aan doen. Wat hier wel kan is de
+herkomstlaag (punt 2 hieronder) zo bouwen dat Core hem later kan lezen.
+
+En de licentiegrens blijft staan: **geen LSE-data in Companion of Trading OS.**
+Dat is geen openstaande vraag, dat is al besloten. Betere data voor Companion
+loopt via de providers die er al zijn — MetaApi, Finnhub, Polygon,
+AlphaVantage, FRED en de ForexFactory-kalender.
 
 ---
 
