@@ -124,7 +124,28 @@ gemeten is.
    werkelijk geld maakt, en de watcher meldt het terwijl die sessie open staat.
    22 checks in `scripts/verify-playbook-edge.mjs`.
 
-2. **Stochastic en ADX op de chart tekenen.** De rekenkunde is af en bewezen
+2. ~~**Stochastic en ADX op de chart tekenen.**~~ **Af, `6815dec`, 28 oktober,
+   live gemeten.** Ze staan op de chart, met hun eigen asschaal (stoch tegen
+   80/20, ADX tegen 25 — niet 50, dat leest niemand op ADX) en met gaten waar
+   hun wiskunde geen antwoord heeft. Onderweg drie stille fouten gevonden en
+   gerepareerd: de paneHeight-sleutel staat in twee lijsten en ik vergat de
+   tweede; de opgeslagen panevolgorde werd gelezen met `parsed.length === 3`,
+   wat bij vijf panes elke oudere volgorde zou weggooien; en de pro-gate stond
+   op drie plekken hardgecodeerd op `m !== "macd"`, zodat stoch en ADX gratis
+   zouden zijn geweest. 15 checks in `scripts/verify-indicator-panes.mjs`,
+   vier mutaties bewezen dat ze omvallen. `normalizePaneOrder` en
+   `toSegmentedPath` staan nu in `src/lib/chart/` zodat ze toetsbaar zijn —
+   een regel in een component van 5.000 regels kan niemand controleren.
+
+   Wat hierna nog kan: Ichimoku, een echt Volume Profile (nu alleen de
+   POC-lijn), multi-timeframe overlays. Alle rekenkunde hoort in
+   `indicatorMath.ts` — daar is een check op. Elke nieuwe indicator krijgt
+   analytische testgevallen, geen onthouden getallen, en bij Wilder-smoothing
+   een tweede implementatie met de hand zodat een typefout niet met zichzelf
+   instemt. Een nieuwe pane toevoegen is nu: hem in `PANE_MODES` zetten en de
+   checks vertellen je de rest.
+
+   *Oorspronkelijke opdracht:* De rekenkunde is af en bewezen
    (`stochasticSeries` en `adxSeries` in `src/lib/chart/indicatorMath.ts`,
    51 checks in `scripts/verify-indicator-math.mjs`, waaronder Wilder's
    recurrence een tweede keer met de hand uitgeschreven). Wat nog mist is het
