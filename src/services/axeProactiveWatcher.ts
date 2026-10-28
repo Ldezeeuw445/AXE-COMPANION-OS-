@@ -10,6 +10,8 @@ import {
   derivePlaybookEdges,
   edgeNoticeParts,
   edgeOpenNow,
+  EDGE_MARGIN,
+  SESSION_LABELS,
 } from "@/lib/journal/playbookEdge";
 import { getChartSetup } from "@/services/chartSetupService";
 import { loadWeakSpotTrades } from "@/services/weakSpotService";
@@ -19,6 +21,7 @@ import {
   signedAmount,
   type ProactiveNotice,
 } from "@/lib/axe/notice";
+import { tradeHistoryProvenance } from "@/lib/axe/provenance";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -429,6 +432,18 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
           what: parts.what,
           soWhat: parts.soWhat,
           action: { label: `See those ${edge.trades} trades`, href: "/journal" },
+          // The first source wired through to the new provenance layer. The
+          // numbers are the same ones the sentence is built from, so the
+          // trader can check the claim against the trades rather than take
+          // the sentence on trust.
+          provenance: tradeHistoryProvenance({
+            rule: `Your ${SESSION_LABELS[edge.session]} ${edge.symbol} ${edge.direction}s beat your own average by at least ${EDGE_MARGIN}x`,
+            label: `Closed ${SESSION_LABELS[edge.session]} ${edge.symbol} ${edge.direction}s`,
+            value: edge.evidence,
+            trades: edge.trades,
+            wins: edge.wins,
+            observedAt: new Date().toISOString(),
+          }),
         },
       });
       created += result.created;
