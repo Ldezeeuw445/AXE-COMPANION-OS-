@@ -356,7 +356,12 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
           eventKey: alert.eventKey,
           category: "risk_alert",
           hasPush,
-          notice: alert.notice,
+          notice: {
+            title: alert.notice.title,
+            what: alert.notice.what,
+            soWhat: alert.notice.soWhat,
+            action: alert.notice.action,
+          },
         });
         created += result.created;
         pushed += result.pushed;
