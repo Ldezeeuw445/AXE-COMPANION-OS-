@@ -429,6 +429,24 @@ gemeten is.
     **Hiermee is de keten rond:** order → positie → zichtbaar → stop of
     handmatig → `broker_trades` → journal, playbookEdge, learning arc.
 
+    **En daarna meteen een gat gedicht dat ik zelf had gemaakt.** De markering
+    `raw.counts_as_evidence` werd vanaf dag één geschreven en door niemand
+    gelezen: tien services bevragen `broker_trades` en geen ervan kende het
+    veld. Een oefentrade op gegenereerde prijzen zou dus gewoon zijn
+    meegeteld, en `playbookEdge` had hem teruggegeven als "jouw London XAUUSD
+    longs winnen 64% van de tijd" — via het eigen journaal, waar een trader
+    alle reden heeft het te geloven. `src/lib/trading/tradeEvidence.ts` is nu
+    de enige plek die beslist, als PostgREST-filter zodat een service niet
+    duizend rijen kan ophalen en hem vergeten. Toegepast op weakSpots /
+    playbookEdge, de learning arc en wat AXE over de trader weet; níet op de
+    cockpit-tellingen, want "je sloot twaalf trades" is ook waar van
+    oefentrades. 10 checks in `scripts/verify-trade-evidence.mjs`.
+
+    Let op de richting van de standaardwaarde: **afwezig betekent telt mee.**
+    Elke rij van vóór het oefenaccount is een echte broker-fill, dus "onbekend
+    = uitsluiten" zou de hele handelshistorie van iedereen wissen. Een mutatie
+    die dat doet valt om.
+
     **Wat nog moet:** alleen de cron-regel op de VPS. `/api/cron/paper-stops`
     draait nergens vanzelf, dus stops gaan pas af als die regel er staat —
     `docs/VOOR-LUKA.md` punt 6. Handmatig sluiten werkt wel zonder.
