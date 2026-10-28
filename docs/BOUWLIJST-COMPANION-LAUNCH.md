@@ -281,7 +281,15 @@ Gemeten: `src/lib/billing/tiers.ts` + `features.ts` ✅, Stripe live-sleutels ge
 (`stripe_secret_set: true`, `stripe_webhook_secret_set: true`). MT5-koppeling via
 MetaApi ✅ gebouwd, maar het account is weg (0.2).
 
-- [ ] **10.1** Onboarding: tier kiezen → eigen MT5 koppelen, in één flow
+- [x] **10.1** Onboarding eindigde op `router.replace("/chart")` met de
+  voorkeuren opgeslagen en verder niets: geen broker, geen plan, en nergens
+  een woord dat die twee bestonden. Je landde op een lege chart en mocht zelf
+  uitzoeken waar de app op wachtte. Er is nu een laatste stap die zegt wat er
+  nog mist en wat het kost om het over te slaan — eerst het handelsaccount,
+  dan pas het plan, want zonder account heeft niets data terwijl op Free het
+  meeste gewoon werkt. De stap blokkeert niet; je kunt altijd door.
+  `src/lib/onboarding/setupState.ts` + 13 checks in
+  `scripts/verify-onboarding-setup.mjs`
 - [x] **10.2 — Opgelost in L6, deze regel was blijven staan.**
   `src/lib/risk/brokerHealth.ts` plus de watcher: na zes uur stilte of bij een
   `sync_failed` krijgt de trader een bericht met de léeftijd van de data

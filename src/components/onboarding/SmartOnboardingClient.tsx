@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, ExternalLink } from "lucide-react";
 import { ChartThemeSelector } from "@/components/settings/ChartThemeSelector";
 import { SquawkStationPicker } from "@/components/settings/SquawkStationPicker";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { cn } from "@/lib/utils";
 import { readSquawkStationIds } from "@/lib/squawk/prefs";
+import {
+  describeSetupGaps,
+  type SetupFacts,
+} from "@/lib/onboarding/setupState";
 
 const TIMEFRAMES = [
   { id: "m15", label: "15m" },
@@ -17,7 +21,7 @@ const TIMEFRAMES = [
   { id: "d1", label: "Daily" },
 ] as const;
 
-type Step = "welcome" | "pairs" | "terminal" | "risk" | "done";
+type Step = "welcome" | "pairs" | "terminal" | "risk" | "connect" | "done";
 
 export function SmartOnboardingClient() {
   const router = useRouter();
@@ -28,6 +32,11 @@ export function SmartOnboardingClient() {
   const [squawkIds, setSquawkIds] = useState<string[]>([]);
   const [defaultRisk, setDefaultRisk] = useState(1);
   const [maxRisk, setMaxRisk] = useState(5);
+  /**
+   * What the account still lacks. Null until the first fetch answers, so the
+   * last step never flashes "all set" at someone who has nothing connected.
+   */
+  const [setup, setSetup] = useState<SetupFacts | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,8 +46,10 @@ export function SmartOnboardingClient() {
       if (!res.ok) return;
       const json = (await res.json()) as {
         suggestedSymbols?: string[];
+        setup?: SetupFacts;
         prefs?: { squawkStationIds?: string[]; timeframe?: string; defaultRiskPercent?: number; maxAccountRiskPercent?: number };
       };
+      if (json.setup) setSetup(json.setup);
       const list = json.suggestedSymbols ?? [];
       setSuggested(list);
       setSymbols(list.slice(0, 4));
@@ -86,6 +97,16 @@ export function SmartOnboardingClient() {
       setSaving(false);
     }
   }, [symbols, timeframe, squawkIds, defaultRisk, maxRisk, router]);
+
+  /**
+   * Nothing is claimed until the facts are in.
+   *
+   * `setup` stays null while the fetch is in flight or if it failed, and the
+   * step renders a "checking" line for that case rather than falling through
+   * to the empty-gaps branch — telling someone with no broker connected that
+   * they are all set is the one answer that must never appear here.
+   */
+  const gaps = setup ? describeSetupGaps(setup) : [];
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-4 pb-8">
@@ -205,6 +226,60 @@ export function SmartOnboardingClient() {
           </div>
           <StepNav
             onBack={() => setStep("terminal")}
+            onNext={() => setStep("connect")}
+            nextLabel="Next"
+          />
+        </GlassPanel>
+      ) : null}
+
+      {step === "connect" ? (
+        <GlassPanel className="space-y-5 p-5">
+          {setup === null ? (
+            <div>
+              <p className="text-sm font-medium text-tos-text">Checking your account…</p>
+              <p className="axe-body mt-1">
+                One moment — reading which plan you are on and whether a broker is connected.
+              </p>
+            </div>
+          ) : gaps.length === 0 ? (
+            <div>
+              <p className="text-sm font-medium text-tos-text">You are set up</p>
+              <p className="axe-body mt-1">
+                An account is connected and your plan is active. Your preferences are saved when you
+                enter the terminal.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <p className="text-sm font-medium text-tos-text">Two more things, both optional</p>
+                <p className="axe-body mt-1">
+                  You can enter the terminal right now and do these later from Settings — but this
+                  is what is still missing, and what it means.
+                </p>
+              </div>
+
+              {gaps.map((gap) => (
+                <div
+                  key={gap.id}
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4"
+                >
+                  <p className="text-[13px] font-semibold text-tos-text">{gap.title}</p>
+                  <p className="axe-body mt-1.5 leading-relaxed">{gap.consequence}</p>
+                  <a
+                    href={gap.href}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-cyan-300/25 bg-cyan-300/[0.06] px-3.5 py-1.5 text-xs font-semibold text-cyan-100/90 transition hover:border-cyan-300/45"
+                  >
+                    {gap.cta}
+                    <ExternalLink className="h-3 w-3" aria-hidden />
+                  </a>
+                </div>
+              ))}
+            </>
+          )}
+
+          <StepNav
+            onBack={() => setStep("risk")}
             onNext={() => void finish()}
             nextLabel={saving ? "Saving…" : "Enter terminal"}
             nextDisabled={saving}

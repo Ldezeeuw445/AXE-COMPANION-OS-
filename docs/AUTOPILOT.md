@@ -172,9 +172,21 @@ gemeten is.
    analytische testgevallen, geen onthouden getallen, en bij Wilder-smoothing
    een tweede implementatie met de hand zodat een typefout niet met zichzelf
    instemt.
-3. **`L19.8`** `alert_auto_trade_enabled` en het autonomieniveau zijn nog twee
-   aparte schakelaars voor hetzelfde. Eén maken. Uitgezocht op 28 oktober, zodat
-   de volgende sessie niet opnieuw hoeft te graven:
+3. ~~**`L19.8`** `alert_auto_trade_enabled` en het autonomieniveau.~~ **Af,
+   `ab797f2`, 28 oktober, live gemeten.** Het waren er niet twee maar vier:
+   de voorkeur, de opt-in per alarm, het arm-venster en het autonomieniveau —
+   en twee ervan gaven helemaal geen signaal terug.
+   `evaluateAlertTradeGate` in `src/lib/trading/alertAutoTrade.ts` stelt de
+   vier vragen op één plek en noemt de poort die dicht zit, met het
+   autonomieniveau eerst: iemand met niveau 1 moet niet te horen krijgen dat
+   hij moet armen. Geen vijfde poort en geen enkele ruimer — een check loopt
+   alle zestien combinaties af en eist dat er precies één doorheen komt. Het
+   settings-scherm vraagt nu dezelfde functie als de server, dus scherm en
+   gedrag kunnen niet uit elkaar lopen. 11 checks in
+   `scripts/verify-alert-trade-gate.mjs`, drie mutaties bewijzen dat ze
+   omvallen.
+
+   *Oorspronkelijke opdracht en wat er toen uitgezocht is:*
 
    - `alert_auto_trade_enabled` (boolean) wordt gelezen in
      `src/services/alertAutoTradeService.ts` regel 30 en stopt daar alles.
@@ -198,7 +210,13 @@ gemeten is.
    En de herkomstregel hoort hier meteen aangesloten: `provenanceBlocks`
    weigert al een order zonder leesbare reden, maar `alertAutoTradeService`
    roept hem nog niet aan.
-4. **`10.1`** Onboarding: tier kiezen → eigen MT5 koppelen, in één flow.
+4. ~~**`10.1`** Onboarding: tier kiezen → eigen MT5 koppelen.~~ **Af,
+   28 oktober.** De flow eindigde op de chart met alleen voorkeuren opgeslagen.
+   Er is nu een laatste stap die de twee ontbrekende dingen noemt met hun
+   gevolg — account vóór plan, want dat is de eerlijke volgorde — en die niet
+   blokkeert. `describeSetupGaps` leest de chat-limiet uit `tiers.ts` in plaats
+   van hem over te typen, en een lopende fetch mag nooit als "je bent klaar"
+   lezen: dat was de bug die ik zelf maakte en die een check nu vastlegt.
 5. **`3.1`** De learning arc tegen echte data valideren zodra er trades
    binnenkomen.
 6. **Live ticks voor elk MT5-account.** Nagaan wat er al staat
