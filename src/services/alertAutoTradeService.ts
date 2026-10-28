@@ -5,6 +5,7 @@ import {
   resolveAlertAutoTradeStops,
 } from "@/lib/trading/alertTradeStops";
 import { readAlertAutoTradeEnabled } from "@/lib/trading/alertMetadata";
+import { evaluateAlertTradeGate } from "@/lib/trading/alertAutoTrade";
 import { isAlertAutoTradeArmed } from "@/lib/trading/alertAutoTradeArmed";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
 import { placeMt5QuickOrder } from "@/services/mt5QuickOrderService";
@@ -27,22 +28,35 @@ export async function maybeAutoTradeOnAlert(
   if (alert.condition !== "above" && alert.condition !== "below") return { traded: false };
 
   const prefs = await getTradeExecutionPrefsForUser(userId);
-  if (!prefs.alertAutoTradeEnabled) return { traded: false };
 
-  if (!readAlertAutoTradeEnabled(alert.metadata, true)) {
-    return { traded: false, message: "Auto-trade off for this alert." };
-  }
+  // One question instead of three, and it names the switch that is off. These
+  // used to be three separate early returns, two of them silent — so a trader
+  // who had set autonomy to level 3 and left the alert channel off saw an
+  // alert fire and nothing happen, with nothing anywhere saying why. See
+  // `alertAutoTrade.ts`; the gates themselves are unchanged and still ANDed.
+  const gate = evaluateAlertTradeGate({
+    autonomy: prefs.autonomy,
+    channelEnabled: prefs.alertAutoTradeEnabled,
+    alertEnabled: readAlertAutoTradeEnabled(alert.metadata, true),
+    armed: isAlertAutoTradeArmed(prefs.alertAutoTradeArmedAt),
+  });
 
-  if (!isAlertAutoTradeArmed(prefs.alertAutoTradeArmedAt)) {
-    await recordProactiveFeedEvent(
-      supabase,
-      userId,
-      `alert_trade_blocked:${alert.id}:${Date.now()}`,
-      `Alert auto-trade blocked: ${alert.symbol}`,
-      "Auto-trade is not armed — tap Arm on Alerts before the next fire.",
-      "/alerts",
-    );
-    return { traded: false, message: "Alert auto-trade not armed." };
+  if (!gate.ready) {
+    // "alert_off" stays quiet: the trader switched this one alert off on
+    // purpose and does not need a feed entry every time it fires. The other
+    // three are a surprise worth explaining — including the two that said
+    // nothing at all before.
+    if (gate.blocker !== "alert_off") {
+      await recordProactiveFeedEvent(
+        supabase,
+        userId,
+        `alert_trade_blocked:${alert.id}:${Date.now()}`,
+        `Alert auto-trade blocked: ${alert.symbol}`,
+        gate.detail,
+        gate.href ?? "/alerts",
+      );
+    }
+    return { traded: false, message: gate.detail };
   }
 
   const entry =

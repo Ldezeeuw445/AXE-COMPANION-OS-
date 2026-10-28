@@ -23,6 +23,7 @@
  * database.
  */
 
+import { EVIDENCE_ONLY_FILTER } from "@/lib/trading/tradeEvidence";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   arcHeadline,
@@ -105,6 +106,10 @@ export async function getTraderLearningArc(
         .eq("user_id", traderId)
         .not("close_time", "is", null)
         .gte("close_time", windowStart)
+        // Practice fills at generated prices are excluded: the arc describes
+        // what this trader is learning, and a lesson drawn from invented
+        // prices is not one. See src/lib/trading/tradeEvidence.ts.
+        .or(EVIDENCE_ONLY_FILTER)
         .order("close_time", { ascending: false })
         .limit(1000),
 

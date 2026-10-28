@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { closePaperPositionById } from "@/services/paperOrderService";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientClosePosition,
@@ -15,10 +16,10 @@ export const dynamic = "force-dynamic";
  *
  * Guards (same layering as /api/mt5/order):
  *   1. Supabase auth
- *   2. MetaApi configured
- *   3. Body validation — brokerAccountId + positionId required
- *   4. Account ownership
- *   5. Cloud MT5 account required (no demo)
+ *   2. Body validation — brokerAccountId + positionId required
+ *   3. Account ownership
+ *   4. Practice positions close here and return — nothing reaches a broker.
+ *   5. MetaApi configured + cloud MT5 account required
  *   6. Live-trading flag
  */
 
@@ -38,13 +39,7 @@ export async function POST(request: NextRequest) {
   if (!user)
     return errJson(401, "unauthorized", "Sign in to close positions.");
 
-  if (!getMetaApiToken()) {
-    return errJson(
-      503,
-      "provider_not_configured",
-      "MetaApi token is not configured on this server.",
-    );
-  }
+
 
   let body: CloseBody;
   try {
@@ -81,14 +76,27 @@ export async function POST(request: NextRequest) {
       "That broker account is not on your workspace.",
     );
 
+  // Practice position: closed here, against a price of the kind it opened on.
+  // This used to be a 409, which was true of a *live* position and wrong
+  // about the only kind this account has. Build-list item 10.
   if (
     account.connection_method === "demo_paper" ||
     account.provider === "demo"
   ) {
+    const result = await closePaperPositionById(supabase, user.id, positionId);
+    if (!result.ok) {
+      const status = result.code === "position_not_found" ? 404 : 400;
+      return errJson(status, result.code, result.message);
+    }
+    return Response.json({ ...result, paper: true });
+  }
+
+  // Everything below closes a real position and needs the provider for it.
+  if (!getMetaApiToken()) {
     return errJson(
-      409,
-      "demo_account",
-      "Demo accounts cannot close live positions.",
+      503,
+      "provider_not_configured",
+      "MetaApi token is not configured on this server.",
     );
   }
 
