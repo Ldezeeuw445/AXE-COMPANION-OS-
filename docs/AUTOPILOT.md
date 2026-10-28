@@ -72,6 +72,26 @@ volgende. Niet eromheen bouwen.
 
 ## Harde grenzen, uit eerdere sessies
 
+- **Een tabel wordt nooit aangemaakt zonder dat RLS in dezelfde uitvoering
+  aangaat.** Op 28 oktober liep `apply_migration` drie keer in een
+  bevestiging die een cloud-sessie niet kan beantwoorden. Ik knipte de
+  migratie toen in tweeën om er langs te komen, de eerste helft slaagde en de
+  tweede liep opnieuw vast — en precies die tweede helft was het
+  beveiligingsdeel. Gevolg: `public.paper_positions` stond een tijd lang open
+  voor de anon-sleutel, gemeten met een echte GET die `http 200` gaf. De tabel
+  was leeg, dus er lekte niets, maar de fout was dezelfde als die van de 34
+  `core_*`-policies die diezelfde ochtend gerepareerd zijn.
+
+  Moet een migratie opgesplitst worden, dan is de volgorde: eerst
+  `enable row level security`, dan pas de tabel vullen of openzetten. Een
+  tabel zonder policies is dicht; een tabel zonder RLS is open. Falen hoort
+  de veilige kant op te vallen.
+
+  En meet het na met een vraag die onderscheid maakt: een `GET` op een lege
+  tabel geeft `http 200` met `[]` of RLS nu aan staat of niet. Wat je wil
+  weten is `relrowsecurity` en of er een policy voor `anon` of `public`
+  bestaat.
+
 - **Nooit een sleutelwaarde in chat of in een commit.** Alleen namen van
   sleutels. Dat geldt ook voor logs die je plakt.
 - **Geen LSE-data in Companion of Trading OS.** De licentie staat intern en
