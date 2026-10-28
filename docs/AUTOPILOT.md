@@ -219,8 +219,30 @@ gemeten is.
    lezen: dat was de bug die ik zelf maakte en die een check nu vastlegt.
 5. **`3.1`** De learning arc tegen echte data valideren zodra er trades
    binnenkomen.
-6. **Live ticks voor elk MT5-account.** Nagaan wat er al staat
-   (`chart_live_snapshots`, de SSE-route, de streamer) voor er iets bij komt.
+6. ~~**Live ticks voor elk MT5-account.**~~ **Nagegaan op 28 oktober — het
+   staat er al en het draait. Geen code geschreven, met opzet.**
+
+   De opdracht was expliciet "nagaan voor er iets bij komt", en dat was
+   terecht: de streamer in `node/metaapi-streamer/` draait in dynamic mode,
+   leest zelf alle actieve `cloud_mt5`-accounts uit Supabase, start per
+   account een stream en heeft een reconciliation-loop die nieuwe accounts
+   oppikt. Daarnaast bestaan de websocket (Cloudflare `ChartLiveRoom`), de
+   SSE-fallback op `/api/chart/live` en een REST-poller die stilvalt zodra de
+   streamer echte ticks levert.
+
+   Gemeten tegen productie, niet aangenomen:
+
+   - `chart_live_snapshots`: nieuwste rij **0,35 seconden oud**, 340 rijen
+     over 54 accounts.
+   - Van de drie actieve `cloud_mt5`-accounts hebben er **drie** verse ticks
+     binnen tien minuten. Nul zonder.
+
+   Hier was dus niets te bouwen. Wat de meting wél liet zien, als losse
+   observatie en niet als dit punt: de 39 actieve `cloud_alpaca`-accounts
+   krijgen geen live ticks. Dat is geen bug maar een ontwerpkeuze — Alpaca
+   haalt bars via REST op (`src/lib/alpaca/bars.ts`) en de streamer is
+   MetaApi-only. Wil je daar ooit een live feed bij, dan is dat een eigen
+   punt met een eigen afweging over kosten.
 
 7. ~~**Waarom deze trade — de herkomstregel.**~~ **Af, `7964012`, 28 oktober,
    live gemeten.** `src/lib/axe/provenance.ts`: herkomst reist als data mee
