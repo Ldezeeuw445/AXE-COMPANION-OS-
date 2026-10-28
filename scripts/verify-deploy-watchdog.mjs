@@ -161,6 +161,19 @@ check("de zware checks staan standaard uit", () => {
   assert.ok(/RUN_CHECKS" = "1"/.test(sh));
 });
 
+check("één mislukte curl is geen alarm, want dat is elke deploy", () => {
+  // Hier shipte ik precies de fout waar de checks hierboven tegen geschreven
+  // zijn. Om 06:32 op 28 oktober meldde deze wachthond "productie antwoordde
+  // niet" terwijl de deploy van 5d3e0b9 op dat moment de service herstartte;
+  // negen seconden later antwoordde hij gewoon. Ik had de beslissing getest en
+  // het ophalen niet, en zonder deze check zou hij zes keer per dag valselijk
+  // blaffen tot niemand hem meer leest.
+  assert.ok(/for attempt in 1 2 3/.test(sh), "meerdere pogingen voor hij het opgeeft");
+  assert.ok(/sleep 8/.test(sh), "met tijd ertussen, want een herstart duurt tien tot dertig seconden");
+  const fetchBlock = sh.slice(sh.indexOf("BODY=\"\""), sh.indexOf("VERDICT="));
+  assert.ok(/break/.test(fetchBlock), "en het stopt zodra er antwoord is");
+});
+
 check("het zegt in zijn eigen kop hoe je het aanzet", () => {
   assert.ok(/crontab|\* \* \* \*/.test(sh), "een runbook dat je moet zoeken is geen runbook");
   assert.ok(/axe-watchdog\.log/.test(sh));

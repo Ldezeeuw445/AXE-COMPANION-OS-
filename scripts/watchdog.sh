@@ -29,7 +29,24 @@ EXPECTED="$(git rev-parse origin/main 2>/dev/null || true)"
 # Het moment van de laatste commit op main is de beste schatting van "wanneer
 # is er gepusht" die we zonder de GitHub API hebben.
 LAST_PUSH="$(git log -1 --format=%cI origin/main 2>/dev/null || true)"
-BODY="$(curl -sf -m 15 "$BUILD_URL" 2>/dev/null || true)"
+# Drie pogingen, acht seconden ertussen.
+#
+# Eén curl was niet genoeg en dat bleek meteen: om 06:32 op 28 oktober meldde
+# deze wachthond "productie antwoordde niet" terwijl de deploy van 5d3e0b9 juist
+# op dat moment de service herstartte. Negen seconden later antwoordde hij
+# gewoon. Een wachthond die bij elke deploy blaft — zes keer per dag — is binnen
+# een week een wachthond die niemand meer leest, en dat is precies de fout
+# waartegen de checks in verify-deploy-watchdog.mjs geschreven zijn.
+#
+# Het herstart-venster is tien tot dertig seconden, dus drie pogingen over
+# ongeveer twintig seconden dekken het. Blijft het daarna stil, dan is er echt
+# iets.
+BODY=""
+for attempt in 1 2 3; do
+  BODY="$(curl -sf -m 15 "$BUILD_URL" 2>/dev/null || true)"
+  [ -n "$BODY" ] && break
+  [ "$attempt" -lt 3 ] && sleep 8
+done
 
 VERDICT="$(
   AXE_EXPECTED="$EXPECTED" AXE_LAST_PUSH="$LAST_PUSH" AXE_BODY="$BODY" \
