@@ -410,10 +410,21 @@ gemeten is.
     sleutel (nagekeken tegen het echte schema, niet aangenomen), dus dat is
     wat de schrijfactie idempotent maakt als de sweep er tussenin uitvalt.
 
+    **Ook af: de posities zijn zichtbaar.** `loadPaperPositions` plus een tak
+    in `loadPositionsPageData`, 9 checks. De pagina eiste MetaApi en een
+    `cloud_mt5`-account, dus wie op papier handelde zag niets — orders gingen
+    erin en verdwenen, en dat is niet te onderscheiden van een kapotte app.
+    De waardering gebruikt dezelfde poort als de watcher
+    (`mayJudgeWith`): geen prijs van de eigen soort betekent een lege cel,
+    geen verouderd getal. "Nu niet bekend" is waar; een oud getal zegt met
+    volle overtuiging iets onwaars.
+
     **Wat nog moet:** de cron-regel op de VPS (`/api/cron/paper-stops` draait
-    nergens vanzelf — zie `docs/VOOR-LUKA.md`), handmatig sluiten vanuit de
-    UI, en de open posities tonen: `loadPositionsPageData` haalt ze live bij
-    MetaApi en kent `paper_positions` niet.
+    nergens vanzelf — `docs/VOOR-LUKA.md` punt 6) en handmatig sluiten vanuit
+    de UI: `/api/mt5/close-position` weigert een demo-account nog met dezelfde
+    409 die de order-route had. `closePaperPosition` staat klaar in
+    `paperBroker.ts` en de rij-opbouw in `toBrokerTradeRow`; het is dezelfde
+    vorm als de watcher, met `reason: "manual"`.
 
     *Oorspronkelijke opdracht:* `/demo` leidt sinds de 182 anonieme
     accounts bewust naar `/login` en dat blijft zo — dit is geen anonieme
