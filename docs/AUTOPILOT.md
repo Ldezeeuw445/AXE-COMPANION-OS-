@@ -247,7 +247,19 @@ gemeten is.
    wat een major bump nodig heeft in `docs/VOOR-LUKA.md` met het risico erbij.
    Lockfile mee committen, koude build erna, anders telt het niet.
 
-9. **De landing page één keer helemaal doorlopen met verse ogen.** Hij staat
+9. **De landing page — doorloop gedaan, aanpassen moet nog.** De bevindingen
+   staan in `docs/LANDING-DOORLOOP.md` (28 oktober): de hero verkoopt een
+   featurelijst in plaats van het ene verschil dat MT5 en TradingView niet
+   kunnen namaken, er staan vier knoppen in de hero, vier secties zeggen vier
+   keer "het is slim en het is één systeem", en er staan dertig claims onder
+   een kop die belooft dat er niets te veel op staat.
+
+   Daar staat ook de volgorde van aanpakken. Alleen stap 1 (de hero) vraagt
+   Luka's oordeel, want dat is zijn positionering; stap 2 tot 4 kan een
+   autopilot-sessie doen zodra die richting vaststaat. Niet alle veertien
+   secties in één commit.
+
+   *Oorspronkelijke opdracht:* Hij staat
    er (veertien secties, `src/app/page.tsx`) en hij is af genoeg om te tonen.
    Wat niet gemeten is: of iemand die AXE niet kent binnen tien seconden snapt
    wat het doet. Doe het als lezer, niet als bouwer: schrijf eerst op wat er
