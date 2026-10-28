@@ -40,7 +40,7 @@ test.describe("companion landing", () => {
     await phone.getByRole("button", { name: "Chart" }).click();
     await expect(phone.getByText(/Demo candles/)).toBeVisible();
     await phone.getByRole("button", { name: "Account" }).click();
-    await expect(phone.getByText("Upcomers-Server")).toBeVisible();
+    await expect(phone.getByText("Resolved → Upcomers-Server")).toBeVisible();
     await phone.getByRole("button", { name: "Home" }).click();
     await phone.getByRole("button", { name: "Intel" }).click();
     await expect(phone.getByText("Not configured").first()).toBeVisible();
