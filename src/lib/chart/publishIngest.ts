@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { publishChartEvent } from "@/lib/chart/attachChartWebSocket";
 import type { ChartLiveEvent } from "@/lib/chart/liveContract";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
+import { persistChartLiveEvent } from "@/lib/mt5/persistLiveAccount";
 
 /**
  * Shared handler for streamer pushes.
@@ -38,5 +40,19 @@ export async function handleChartPublish(req: NextRequest) {
   const reached = publishChartEvent(body.roomKey, body.event);
   // reached=0 is normal: the streamer publishes every subscribed symbol, and
   // most of them have no chart open at that moment.
+
+  if (body.event.type === "account_update") {
+    const supabase = createServiceRoleSupabaseClient();
+    if (supabase) {
+      const event = body.event.userId
+        ? body.event
+        : {
+            ...body.event,
+            userId: body.roomKey.split("|")[0],
+          };
+      void persistChartLiveEvent(supabase, event);
+    }
+  }
+
   return NextResponse.json({ ok: true, reached }, { headers: { "Cache-Control": "no-store" } });
 }

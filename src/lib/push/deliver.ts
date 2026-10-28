@@ -2,7 +2,7 @@ import "server-only";
 
 import webpush from "web-push";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getVapidPublicKey } from "@/lib/env";
+import { getVapidPublicKey, getVapidSubject } from "@/lib/env";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { expiredSubscriptionEndpoints } from "@/lib/push/deliverExpired";
 
@@ -20,10 +20,21 @@ export type DeliverWebPushResult = {
   expired: number;
 };
 
+export function vapidConfigStatus(): {
+  ok: boolean;
+  missing: string[];
+} {
+  const missing: string[] = [];
+  if (!getVapidSubject()) missing.push("VAPID_SUBJECT");
+  if (!getVapidPublicKey()) missing.push("NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+  if (!process.env.VAPID_PRIVATE_KEY?.trim()) missing.push("VAPID_PRIVATE_KEY");
+  return { ok: missing.length === 0, missing };
+}
+
 export function configureWebPushVapid(): boolean {
-  const subject = process.env.VAPID_SUBJECT;
+  const subject = getVapidSubject();
   const publicKey = getVapidPublicKey();
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
   if (!subject || !publicKey || !privateKey) return false;
   webpush.setVapidDetails(subject, publicKey, privateKey);
   return true;

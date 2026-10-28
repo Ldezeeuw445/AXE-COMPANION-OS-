@@ -27,6 +27,10 @@ import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { withActionBudget } from "@/lib/mt5/mt5ActionBudget";
 import { mapMetaApiActionError } from "@/lib/mt5/mapMetaApiActionError";
+import { renderNoticeBody, signedAmount } from "@/lib/axe/notice";
+import { tradeCloseEventKey } from "@/lib/axe/watcherCandidates";
+import { figuresFromAccountInfo, mapMetaApiPosition } from "@/lib/mt5/liveAccountSnapshot";
+import { persistLiveFiguresAndPositions } from "@/lib/mt5/persistLiveAccount";
 
 export type CloudMt5SyncResult =
   | { ok: true; data: { dealsFetched: number; dealsUpserted: number; tradesNormalized: number } }
@@ -245,7 +249,7 @@ export async function runCloudMt5Sync(
 
     const { data: existing, error: exErr } = await supabase
       .from("broker_trades")
-      .select("id")
+      .select("id,close_time")
       .eq("account_id", accountId)
       .eq("external_trade_id", t.external_trade_id)
       .maybeSingle();
@@ -259,6 +263,7 @@ export async function runCloudMt5Sync(
       return { ok: false, code: "sync_failed", message: exErr.message };
     }
 
+    const newlyClosed = Boolean(payload.close_time) && !existing?.close_time;
     if (existing?.id) {
       const { error: upErr } = await supabase
         .from("broker_trades")
@@ -286,18 +291,22 @@ export async function runCloudMt5Sync(
         await supabase.from("user_broker_accounts").update({ provider_status: "sync_failed" }).eq("id", accountId);
         return { ok: false, code: "sync_failed", message: inErr.message };
       }
-      if (payload.close_time) {
-        const pnl = Number(payload.pnl ?? 0);
-        const symbol = cleanDisplaySymbol(String(payload.symbol ?? ""));
-        void recordProactiveFeedEvent(
-          supabase,
-          userId,
-          `trade_close:${t.external_trade_id}`,
-          `Trade closed: ${payload.symbol}`,
-          `${payload.side} ${pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} — journal updated`,
-          "/cockpit",
-        );
-      }
+    }
+    if (newlyClosed) {
+      const pnl = Number(payload.pnl ?? 0);
+      void recordProactiveFeedEvent(
+        supabase,
+        userId,
+        tradeCloseEventKey({ id: String(existing?.id ?? t.external_trade_id), external_trade_id: t.external_trade_id }),
+        `Trade closed: ${payload.symbol}`,
+        renderNoticeBody({
+          title: `Trade closed: ${payload.symbol}`,
+          what: `${payload.side} ${signedAmount(pnl)}`,
+          soWhat: "AXE has scored it against your rules and playbooks.",
+          action: { label: "Read AXE's verdict on it", href: "/journal" },
+        }),
+        "/journal",
+      );
     }
     dealsUpserted += 1;
   }
@@ -376,6 +385,17 @@ export async function runCloudMt5Sync(
     })
     .eq("id", accountId)
     .eq("user_id", userId);
+
+  const livePositions = (Array.isArray(positions) ? positions : [])
+    .filter((p): p is Record<string, unknown> => !!p && typeof p === "object" && !Array.isArray(p))
+    .map((p, i) => mapMetaApiPosition(p, i));
+  await persistLiveFiguresAndPositions(supabase, {
+    userId,
+    accountId,
+    figures: figuresFromAccountInfo(info),
+    positions: livePositions,
+    force: true,
+  });
 
   if (opts.revalidate) {
     revalidatePath("/accounts");

@@ -1,4 +1,5 @@
 import type { ChartLiveEvent } from "./types.js";
+import { resolveStreamerPublishUrl } from "./publishUrl.js";
 
 export const PUBLISH_FLUSH_INTERVAL_MS = 400;
 export const PUBLISH_CIRCUIT_MS = 10 * 60 * 1000;
@@ -75,7 +76,7 @@ function coalesceKey(roomKey: string, event: ChartLiveEvent): string {
 }
 
 function publishUrl(workerUrl: string): string {
-  return `${workerUrl.replace(/\/$/, "")}/internal/publish`;
+  return resolveStreamerPublishUrl(workerUrl);
 }
 
 /**

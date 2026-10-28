@@ -25,6 +25,7 @@ import { StaleAgeBadge } from "@/components/pwa/StaleAgeBadge";
 import { readLastAccountFigures, writeLastAccountFigures } from "@/lib/pwa/lastAccountCache";
 import { accountFreshness } from "@/lib/pwa/staleAge";
 import { useOnlineStatus } from "@/lib/pwa/useOnlineStatus";
+import { useLiveAccount } from "@/components/positions/useLiveAccount";
 
 type Props = {
   positions: OpenPositionRow[];
@@ -138,6 +139,7 @@ export function PositionsScreen({
   const [cancelOrderState, setCancelOrderState] = useState<CancelOrderState | null>(null);
   const router = useRouter();
   const { playSound, vibrate } = useAmbient();
+  const liveAccount = useLiveAccount(brokerAccountId);
 
   const allLiveOverride: boolean | null =
     providerStatus === "connected"
@@ -164,9 +166,11 @@ export function PositionsScreen({
     }
   }, [accountSummary, brokerAccountId, lastSyncAt]);
 
-  const figures = accountSummary ?? cachedFigures;
-  const figuresSyncAt = accountSummary ? lastSyncAt : cachedSyncAt ?? lastSyncAt;
-  const figuresOffline = figuresFromCache || (!accountSummary && cachedFigures != null);
+  const figures = liveAccount.liveFigures ?? accountSummary ?? cachedFigures;
+  const displayPositions = liveAccount.livePositions ?? positions;
+  const figuresSyncAt = liveAccount.liveAt ?? (accountSummary ? lastSyncAt : cachedSyncAt ?? lastSyncAt);
+  const figuresOffline =
+    !liveAccount.liveFigures && (figuresFromCache || (!accountSummary && cachedFigures != null));
   const figuresFreshness = accountFreshness({
     lastSyncAt: figuresSyncAt,
     online,
@@ -475,7 +479,7 @@ export function PositionsScreen({
         </div>
       )}
 
-      {hint && !error && positions.length === 0 && pendingOrders.length === 0 && (
+      {hint && !error && displayPositions.length === 0 && pendingOrders.length === 0 && (
         <div className="mx-4 mb-2 text-xs text-white/30">
           {hint}{" "}
           <Link href="/accounts" className="text-white/50 hover:underline">
@@ -493,7 +497,7 @@ export function PositionsScreen({
         <TabButton
           active={activeTab === "positions"}
           onClick={() => setActiveTab("positions")}
-          label={`Positions${positions.length > 0 ? ` (${positions.length})` : ""}`}
+          label={`Positions${displayPositions.length > 0 ? ` (${displayPositions.length})` : ""}`}
         />
         <TabButton
           active={activeTab === "orders"}
@@ -504,9 +508,9 @@ export function PositionsScreen({
 
       {/* ── Positions tab ──────────────────────────────────────────── */}
       {activeTab === "positions" &&
-        (positions.length > 0 ? (
+        (displayPositions.length > 0 ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {positions.map((p, i) => (
+            {displayPositions.map((p, i) => (
               <PositionRow
                 key={p.id}
                 position={p}
@@ -544,7 +548,7 @@ export function PositionsScreen({
       {closeState && closeState.status !== "success" && (
         <CloseConfirmModal
           closeState={closeState}
-          position={positions.find((p) => p.id === closeState.positionId) ?? null}
+          position={displayPositions.find((p) => p.id === closeState.positionId) ?? null}
           onConfirm={handleCloseConfirm}
           onCancel={handleCloseCancel}
         />
@@ -553,7 +557,7 @@ export function PositionsScreen({
       {editState && (
         <EditSlTpModal
           editState={editState}
-          position={positions.find((p) => p.id === editState.positionId) ?? null}
+          position={displayPositions.find((p) => p.id === editState.positionId) ?? null}
           onSave={handleEditSave}
           onCancel={handleEditCancel}
           onChange={setEditState}

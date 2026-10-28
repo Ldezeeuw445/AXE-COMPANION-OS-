@@ -28,11 +28,24 @@ export type LiveUiStatus =
 export type LivePosition = LivePositionPayload;
 export type LivePendingOrder = LivePendingOrderPayload;
 
+export type LiveAccountUpdate = {
+  balance: number | null;
+  equity: number | null;
+  margin: number | null;
+  freeMargin: number | null;
+  marginLevel: number | null;
+  currency: string | null;
+  profit: number | null;
+  positions?: LivePosition[];
+  timestamp: string;
+};
+
 export type LiveChartHandlers = {
   onTick?: (tick: { mid: number | null; bid: number | null; ask: number | null; time: string | null }) => void;
   onCandleUpdate?: (candle: LiveCandle) => void;
   onPositions?: (p: { total: number; onSymbol: LivePosition[] }) => void;
   onOrders?: (p: { total: number; onSymbol: LivePendingOrder[] }) => void;
+  onAccount?: (update: LiveAccountUpdate) => void;
 };
 
 type Args = LiveChartHandlers & {
@@ -67,6 +80,7 @@ export function useLiveChart({
   onCandleUpdate,
   onPositions,
   onOrders,
+  onAccount,
 }: Args) {
   const [uiStatus, setUiStatus] = useState<LiveUiStatus>("idle");
   const [transport, setTransport] = useState<LiveTransport>("off");
@@ -76,8 +90,8 @@ export function useLiveChart({
 
   const handlersRef = useRef<LiveChartHandlers>({});
   useEffect(() => {
-    handlersRef.current = { onTick, onCandleUpdate, onPositions, onOrders };
-  }, [onTick, onCandleUpdate, onPositions, onOrders]);
+    handlersRef.current = { onTick, onCandleUpdate, onPositions, onOrders, onAccount };
+  }, [onTick, onCandleUpdate, onPositions, onOrders, onAccount]);
 
   useEffect(() => {
     if (!enabled || !accountId || !brokerSymbol || !displaySymbol) {
@@ -285,6 +299,20 @@ export function useLiveChart({
         }
         case "candle_update":
           handlersRef.current.onCandleUpdate?.(evt.candle);
+          markHealthy("connected");
+          return;
+        case "account_update":
+          handlersRef.current.onAccount?.({
+            balance: evt.balance,
+            equity: evt.equity,
+            margin: evt.margin,
+            freeMargin: evt.freeMargin,
+            marginLevel: evt.marginLevel,
+            currency: evt.currency,
+            profit: evt.profit,
+            positions: Array.isArray(evt.positions) ? evt.positions : undefined,
+            timestamp: evt.timestamp,
+          });
           markHealthy("connected");
           return;
         case "positions_update":
