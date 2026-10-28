@@ -23,6 +23,7 @@
     "test:push-delivery": "node scripts/test-push-delivery.mjs",
     "test:push-send-route": "node scripts/test-push-send-route.mjs",
     "test:push-service-worker": "node scripts/test-push-service-worker.mjs",
+    "test:feed-event-push": "node scripts/test-feed-event-push.mjs",
     "test:finra-short-volume": "node scripts/test-finra-short-volume.mjs",
     "test:short-volume-ratio-ui": "node scripts/test-short-volume-ratio-ui.mjs",
     "test:congress-public": "node scripts/test-congress-public.mjs",
