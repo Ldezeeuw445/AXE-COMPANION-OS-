@@ -1,4 +1,9 @@
-import { publishEvent, getInflightCount } from "./publish.js";
+import {
+  drainPublishStats,
+  getInflightCount,
+  publishEvent,
+  stopPublisher,
+} from "./publish.js";
 import { accountWildcardRoomKey } from "./publishUrl.js";
 import { SnapshotBuffer } from "./snapshotBuffer.js";
 import {
@@ -186,6 +191,18 @@ type OrderEvent = Record<string, unknown>;
 /*  Broadcast helpers — fan out to all TF rooms                        */
 /* ------------------------------------------------------------------ */
 
+function enqueuePublish(env: Env, key: string, event: ChartLiveEvent): boolean {
+  const accepted = publishEvent(
+    { workerUrl: env.WORKER_URL, streamerSecret: env.STREAMER_SECRET },
+    key,
+    event,
+  );
+  if (!accepted) {
+    log("debug", `publish dropped ${key} (${event.type})`);
+  }
+  return accepted;
+}
+
 function broadcastToAllTfRooms(
   env: Env,
   config: AccountConfig,
@@ -195,11 +212,7 @@ function broadcastToAllTfRooms(
 ): void {
   for (const tfKey of ALL_TF_KEYS) {
     const key = `${config.userId}|${config.accountId}|${brokerSymbol}|${tfKey}`;
-    void publishEvent(
-      { workerUrl: env.WORKER_URL, streamerSecret: env.STREAMER_SECRET },
-      key,
-      buildEvent(TF_MAP[tfKey] ?? "1h")
-    );
+    enqueuePublish(env, key, buildEvent(TF_MAP[tfKey] ?? "1h"));
   }
 }
 
@@ -403,11 +416,7 @@ class MultiSymbolListener {
         patch: true,
         source: "metaapi_mt5",
       };
-      void publishEvent(
-        { workerUrl: this.env.WORKER_URL, streamerSecret: this.env.STREAMER_SECRET },
-        key,
-        evt
-      );
+      enqueuePublish(this.env, key, evt);
     }
   }
 
@@ -1012,7 +1021,14 @@ async function main() {
       symbols: s.subscribedSymbols.size,
       connected: s.connection !== null,
     }));
-    log("info", `Heartbeat: ${activeStreams.size} stream(s) | RSS ${rss}MB | Heap ${heap}/${heapTotal}MB | Inflight ${getInflightCount()}`, stats);
+    const pub = drainPublishStats();
+    const circuit = pub.circuitOpen ? " | circuit open" : "";
+    const backoff = pub.backoffMs > 0 ? ` | backing off ${pub.backoffMs}ms` : "";
+    log(
+      "info",
+      `Heartbeat: ${activeStreams.size} stream(s) | RSS ${rss}MB | Heap ${heap}/${heapTotal}MB | Inflight ${pub.inflight} | Publish fail ${pub.failed} drop ${pub.dropped}${circuit}${backoff}`,
+      stats,
+    );
 
     // Force GC if available (Node --expose-gc)
     if (rss > 400 && typeof globalThis.gc === "function") {
@@ -1026,6 +1042,7 @@ async function main() {
     log("info", `${signal} received — shutting down`);
     clearInterval(reconcileTimer);
     clearInterval(heartbeatTimer);
+    stopPublisher();
 
     for (const [id, stream] of activeStreams) {
       await closeAccountStream(stream);

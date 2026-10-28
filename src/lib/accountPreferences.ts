@@ -42,6 +42,8 @@ export const SYMBOL_PREF_KEYS = [
   "axe.chart.paneHeight.volume",
   "axe.chart.paneHeight.rsi",
   "axe.chart.paneHeight.macd",
+  "axe.chart.paneHeight.stoch",
+  "axe.chart.paneHeight.adx",
   "axe.chart.paneOrder",
 ] as const;
 

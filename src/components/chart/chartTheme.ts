@@ -77,6 +77,26 @@ export interface IndicatorPalette {
   macdSignal: string;
   macdHistBull: string;
   macdHistBear: string;
+  /**
+   * Stochastic %K and %D.
+   *
+   * Violet and amber rather than the MACD's cyan and amber: the two panes are
+   * never open at once, but a trader switching between them should not have to
+   * check the title to know which one they are looking at.
+   */
+  stochK: string;
+  stochD: string;
+  /**
+   * ADX and the two directional lines.
+   *
+   * ADX is deliberately neutral — it says how strongly price trends, not which
+   * way, and colouring it green or red would suggest a direction it does not
+   * carry. +DI and -DI use the same teal and rose as the volume bars, because
+   * they mean the same thing there: buyers ahead, sellers ahead.
+   */
+  adxLine: string;
+  plusDiLine: string;
+  minusDiLine: string;
   levelLine: string;
   levelLineDim: string;
   separator: string;
@@ -95,6 +115,11 @@ const DARK_INDICATORS: IndicatorPalette = {
   macdSignal: "rgba(250,204,21,0.92)",
   macdHistBull: "rgba(45,212,191,0.72)",
   macdHistBear: "rgba(244,63,94,0.72)",
+  stochK: "rgba(167,139,250,0.95)",
+  stochD: "rgba(250,204,21,0.92)",
+  adxLine: "rgba(226,232,240,0.92)",
+  plusDiLine: "rgba(45,212,191,0.92)",
+  minusDiLine: "rgba(244,63,94,0.92)",
   levelLine: "rgba(255,255,255,0.16)",
   levelLineDim: "rgba(255,255,255,0.08)",
   separator: "rgba(255,255,255,0.04)",
@@ -125,6 +150,11 @@ const PAPER_INDICATORS: IndicatorPalette = {
   macdSignal: "rgba(160,110,0,1)" /* dark amber — same hue as the yellow signal */,
   macdHistBull: "rgba(0,100,85,0.92)" /* dark teal */,
   macdHistBear: "rgba(150,18,35,0.92)" /* dark rose */,
+  stochK: "rgba(76,29,149,1)" /* dark violet — the dark theme's violet, darkened */,
+  stochD: "rgba(160,110,0,1)" /* dark amber — same as the MACD signal */,
+  adxLine: "rgba(28,32,42,0.95)" /* near-black: neutral, and the strongest line in the pane */,
+  plusDiLine: "rgba(0,100,85,0.92)" /* dark teal */,
+  minusDiLine: "rgba(150,18,35,0.92)" /* dark rose */,
   levelLine: "rgba(0,0,0,0.22)",
   levelLineDim: "rgba(0,0,0,0.12)",
   separator: "rgba(0,0,0,0.10)",

@@ -8,7 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "node --enable-source-maps dist/index.js",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/publish.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

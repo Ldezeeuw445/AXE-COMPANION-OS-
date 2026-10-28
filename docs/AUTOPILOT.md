@@ -152,15 +152,51 @@ gemeten is.
    een tweede implementatie met de hand zodat een typefout niet met zichzelf
    instemt.
 3. **`L19.8`** `alert_auto_trade_enabled` en het autonomieniveau zijn nog twee
-   aparte schakelaars voor hetzelfde. Eén maken.
+   aparte schakelaars voor hetzelfde. Eén maken. Uitgezocht op 28 oktober, zodat
+   de volgende sessie niet opnieuw hoeft te graven:
+
+   - `alert_auto_trade_enabled` (boolean) wordt gelezen in
+     `src/services/alertAutoTradeService.ts` regel 30 en stopt daar alles.
+   - Het autonomieniveau wordt gewogen in
+     `src/services/tradeGuardService.ts` regel 182, via
+     `autonomyAllows("place", …)`.
+
+   Ze staan in AND, dus onveilig is het niet. Verwarrend wel: een trader kan
+   niveau 3 helemaal inrichten, drie limieten invullen, drie vinkjes zetten —
+   en er gebeurt niets, omdat er elders nog een schakelaar uit staat. Of
+   andersom, en dan denkt hij klaar te zijn terwijl de guard hem tegenhoudt.
+
+   De vorm die past bij de rest: één pure functie die zegt *of* een alert mag
+   handelen en **waarom niet**, met dezelfde opzet als `resolveAutonomy` en
+   `provenanceBlocks` — een lijst redenen, leeg betekent gaan. De UI toont dan
+   de ladder, en de losse toggle wordt wat hij werkelijk is: een per-alarm
+   uitzondering, geen tweede hoofdschakelaar. Let op dat de bestaande
+   `readAlertAutoTradeEnabled` op de alert-metadata (per alarm) iets anders is
+   dan de voorkeur op de gebruiker — die twee niet samenvoegen.
+
+   En de herkomstregel hoort hier meteen aangesloten: `provenanceBlocks`
+   weigert al een order zonder leesbare reden, maar `alertAutoTradeService`
+   roept hem nog niet aan.
 4. **`10.1`** Onboarding: tier kiezen → eigen MT5 koppelen, in één flow.
 5. **`3.1`** De learning arc tegen echte data valideren zodra er trades
    binnenkomen.
 6. **Live ticks voor elk MT5-account.** Nagaan wat er al staat
    (`chart_live_snapshots`, de SSE-route, de streamer) voor er iets bij komt.
 
-7. **Waarom deze trade — de herkomstregel.** Dit is wat Luka op 28 oktober
-   het hardst vroeg, en het gaat voor punt 2 tot en met 6. Op dit moment kan
+7. ~~**Waarom deze trade — de herkomstregel.**~~ **Af, `7964012`, 28 oktober,
+   live gemeten.** `src/lib/axe/provenance.ts`: herkomst reist als data mee
+   met het idee — bron, regel, getal, staat van dienst, en wanneer het
+   gemeten is. Een ongetoetste regel zegt dat hij ongetoetst is, een dunne
+   steekproef wordt in aantallen gemeld en nooit als percentage, en
+   `provenanceBlocks` weigert een order waarvan de redenering ontbreekt of
+   hol is — suggereren mag zonder, voorbereiden en plaatsen niet. 17 checks
+   in `scripts/verify-provenance.mjs`, waarvan twee de watcher lezen zodat
+   dit geen laag wordt die niemand invult. De playbook-edge is de eerste
+   bron die hem vult; `alertProvenance` staat klaar voor de tweede.
+   Wat nog mist: de regel zichtbaar maken in de UI onder het idee.
+   Oorspronkelijke opdracht hieronder, want de rest ervan staat nog open.
+
+   *Dit was wat Luka op 28 oktober het hardst vroeg.* Op dit moment kan
    AXE een idee sturen en een order voorbereiden (`autonomy.ts` niveau 2), maar
    nergens staat in één leesbare regel waar dat idee vandaan komt. De bronnen
    bestaan los van elkaar: `playbookEdge.ts` (je eigen afgesloten trades),
