@@ -1,4 +1,5 @@
 import { publishEvent, getInflightCount } from "./publish.js";
+import { accountWildcardRoomKey } from "./publishUrl.js";
 import { SnapshotBuffer } from "./snapshotBuffer.js";
 import {
   loadAccountConfigs,
@@ -215,7 +216,19 @@ class MultiSymbolListener {
   private lastTickBroadcast: Map<string, number> = new Map();
   private pendingOrdersById: Map<string, OrderEvent> = new Map();
   private pendingOrderTotal = 0;
+  private lastPositions: LivePositionPayload[] = [];
+  private positionsReady = false;
+  private lastAccount = {
+    balance: null as number | null,
+    equity: null as number | null,
+    margin: null as number | null,
+    freeMargin: null as number | null,
+    marginLevel: null as number | null,
+    currency: null as string | null,
+  };
+  private lastAccountBroadcast = 0;
   private static readonly TICK_THROTTLE_MS = 500; // max 2 ticks/sec/symbol
+  private static readonly ACCOUNT_THROTTLE_MS = 1000;
 
   constructor(
     private readonly env: Env,
@@ -245,6 +258,42 @@ class MultiSymbolListener {
     return this.brokerToDisplay.get(brokerSymbol) ?? brokerSymbol;
   }
 
+  private asNum(value: unknown): number | null {
+    if (value == null || value === "") return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  private publishAccountSnapshot() {
+    const now = Date.now();
+    if (now - this.lastAccountBroadcast < MultiSymbolListener.ACCOUNT_THROTTLE_MS) return;
+    this.lastAccountBroadcast = now;
+    const profit =
+      this.lastAccount.equity != null && this.lastAccount.balance != null
+        ? this.lastAccount.equity - this.lastAccount.balance
+        : null;
+    const evt: ChartLiveEvent = {
+      type: "account_update",
+      userId: this.config.userId,
+      accountId: this.config.accountId,
+      balance: this.lastAccount.balance,
+      equity: this.lastAccount.equity,
+      margin: this.lastAccount.margin,
+      freeMargin: this.lastAccount.freeMargin,
+      marginLevel: this.lastAccount.marginLevel,
+      currency: this.lastAccount.currency,
+      profit,
+      ...(this.positionsReady ? { positions: this.lastPositions } : {}),
+      timestamp: new Date().toISOString(),
+      source: "metaapi_mt5",
+    };
+    void publishEvent(
+      { workerUrl: this.env.WORKER_URL, streamerSecret: this.env.STREAMER_SECRET },
+      accountWildcardRoomKey(this.config.userId, this.config.accountId),
+      evt,
+    );
+  }
+
   // ── Tick events ──────────────────────────────────────────────────
 
   // SDK v29 calls BOTH singular and plural variants — implement both.
@@ -253,15 +302,27 @@ class MultiSymbolListener {
   async onSymbolPricesUpdated(
     _instanceIndex: unknown,
     prices: SymbolPriceEvent[],
-    _equity?: unknown,
-    _margin?: unknown,
-    _freeMargin?: unknown,
-    _marginLevel?: unknown,
+    equity?: unknown,
+    margin?: unknown,
+    freeMargin?: unknown,
+    marginLevel?: unknown,
     _accountCurrencyExchangeRate?: unknown
   ) {
-    if (!Array.isArray(prices)) return;
-    for (const p of prices) {
-      await this.handlePriceTick(p);
+    if (Array.isArray(prices)) {
+      for (const p of prices) {
+        await this.handlePriceTick(p);
+      }
+    }
+    const nextEquity = this.asNum(equity);
+    const nextMargin = this.asNum(margin);
+    const nextFree = this.asNum(freeMargin);
+    const nextLevel = this.asNum(marginLevel);
+    if (nextEquity != null || nextMargin != null || nextFree != null || nextLevel != null) {
+      if (nextEquity != null) this.lastAccount.equity = nextEquity;
+      if (nextMargin != null) this.lastAccount.margin = nextMargin;
+      if (nextFree != null) this.lastAccount.freeMargin = nextFree;
+      if (nextLevel != null) this.lastAccount.marginLevel = nextLevel;
+      this.publishAccountSnapshot();
     }
   }
 
@@ -412,6 +473,10 @@ class MultiSymbolListener {
         }));
       }
     }
+
+    this.lastPositions = [...bySymbol.values()].flat();
+    this.positionsReady = true;
+    this.publishAccountSnapshot();
   }
 
   // ── Pending order events ────────────────────────────────────────
@@ -542,7 +607,21 @@ class MultiSymbolListener {
 
   async onHealthStatus(..._a: unknown[]) { /* no-op */ }
   async onBrokerConnectionStatusChanged(..._a: unknown[]) { /* no-op */ }
-  async onAccountInformationUpdated(..._a: unknown[]) { /* no-op */ }
+  async onAccountInformationUpdated(_instanceIndex: unknown, info?: Record<string, unknown>) {
+    if (!info || typeof info !== "object") return;
+    const balance = this.asNum(info.balance);
+    const equity = this.asNum(info.equity);
+    const margin = this.asNum(info.margin);
+    const freeMargin = this.asNum(info.freeMargin ?? info.free_margin);
+    const marginLevel = this.asNum(info.marginLevel ?? info.margin_level);
+    if (balance != null) this.lastAccount.balance = balance;
+    if (equity != null) this.lastAccount.equity = equity;
+    if (margin != null) this.lastAccount.margin = margin;
+    if (freeMargin != null) this.lastAccount.freeMargin = freeMargin;
+    if (marginLevel != null) this.lastAccount.marginLevel = marginLevel;
+    if (typeof info.currency === "string") this.lastAccount.currency = info.currency;
+    this.publishAccountSnapshot();
+  }
   async onDealAdded(..._a: unknown[]) { /* no-op */ }
   async onDealSynchronizationFinished(..._a: unknown[]) { /* no-op */ }
   async onOrderSynchronizationFinished(..._a: unknown[]) { /* no-op */ }

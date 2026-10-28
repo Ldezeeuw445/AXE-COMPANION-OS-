@@ -5,6 +5,7 @@ import { scheduleCockpitRefresh } from "@/services/cockpitSnapshotService";
 import { llmSimpleChat } from "@/lib/llm/llmRouter";
 import { llmFailureAdvice, type LlmFailure } from "@/lib/ops/llmFailure";
 import { recordLlmFailure, recordLlmSuccess, type EngineSource } from "@/lib/ops/recordEngineRun";
+import { buildAxeJournalLabelRow } from "@/lib/journal/axeJournalLabelRow";
 
 /**
  * AXE auto-journaling — shared logic used by both the `/api/axe-journal`
@@ -202,26 +203,44 @@ async function journalTrades(
         .eq("trade_id", trade.id)
         .maybeSingle();
 
+      const row = buildAxeJournalLabelRow({
+        userId,
+        tradeId: trade.id,
+        accountId,
+        axeLabel: result.axe_label,
+        axeNote: result.axe_note,
+        alignmentScore: result.alignment_score,
+        breakdown: result.breakdown,
+      });
       const payload = {
-        axe_label: result.axe_label,
-        axe_note: result.axe_note,
-        alignment_score: result.alignment_score,
-        axe_journal: result.breakdown,
+        label: row.label,
+        axe_label: row.axe_label,
+        axe_note: row.axe_note,
+        alignment_score: row.alignment_score,
+        axe_journal: row.axe_journal,
       };
 
+      // Production `label` is NOT NULL. Inserting without it made every
+      // auto-journal look like a success in axe_engine_runs while
+      // trade_journal_labels stayed empty. Failures must count as failures.
       if (existing?.trade_id) {
-        await supabase
+        const { error: upErr } = await supabase
           .from("trade_journal_labels")
           .update(payload)
           .eq("user_id", userId)
           .eq("trade_id", trade.id);
+        if (upErr) {
+          failed += 1;
+          console.error(`[axe-journal] label update failed for ${trade.id}:`, upErr.message);
+          continue;
+        }
       } else {
-        await supabase.from("trade_journal_labels").insert({
-          user_id: userId,
-          trade_id: trade.id,
-          account_id: accountId,
-          ...payload,
-        });
+        const { error: inErr } = await supabase.from("trade_journal_labels").insert(row);
+        if (inErr) {
+          failed += 1;
+          console.error(`[axe-journal] label insert failed for ${trade.id}:`, inErr.message);
+          continue;
+        }
       }
 
       journaled++;
@@ -259,6 +278,14 @@ async function journalTrades(
       status: 503,
       reason: blockingFailure.reason,
       advice: llmFailureAdvice(blockingFailure.reason),
+    };
+  }
+
+  if (journaled === 0 && failed > 0) {
+    return {
+      ok: false,
+      error: "Could not write trade journal labels",
+      status: 500,
     };
   }
 

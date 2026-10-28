@@ -151,6 +151,12 @@ console.log("\nevery producer goes through it");
 const watcher = read("src/services/axeProactiveWatcher.ts");
 const watcherCode = codeOnly(watcher);
 
+check("the watcher checks people who just traded, not the first idle accounts", () => {
+  assert.ok(/collectWatcherCandidates/.test(watcherCode));
+  assert.ok(/TRADE_CLOSE_LOOKBACK_MS/.test(watcherCode));
+  assert.ok(/tradeCloseEventKey/.test(watcherCode));
+});
+
 check("there is one writer, and the old one is gone", () => {
   assert.ok(
     !/recordProactiveEvent/.test(watcherCode),
@@ -164,14 +170,9 @@ check("there is one writer, and the old one is gone", () => {
 });
 
 check("every notice the watcher sends names its next step", () => {
-  // Eight producers: trade closed, pending execution, news risk, broker
-  // health, concentration, weekend exposure, weak spots, and — since
-  // bouwlijst 3.4 — the trader's own playbook edge while its session is open.
-  //
-  // This count is the point of the check, not an inconvenience: it fired the
-  // moment the eighth was added, which is exactly when someone should be made
-  // to confirm the new one carries a next step too.
-  const EXPECTED_PRODUCERS = 8;
+  // Nine producers: the original eight plus the live drawdown / daily-limit
+  // warning, which has to name the next step the same way as the rest.
+  const EXPECTED_PRODUCERS = 9;
   const calls = watcherCode.match(/announce\(supabase, userId, \{/g) ?? [];
   assert.equal(
     calls.length,

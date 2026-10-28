@@ -1,4 +1,5 @@
 import type { ChartLiveEvent } from "./types.js";
+import { resolveStreamerPublishUrl } from "./publishUrl.js";
 
 type PublishConfig = {
   workerUrl: string;
@@ -44,7 +45,7 @@ export async function publishEvent(
 ): Promise<boolean> {
   await acquireSlot();
   try {
-    const url = `${config.workerUrl.replace(/\/$/, "")}/internal/publish`;
+    const url = resolveStreamerPublishUrl(config.workerUrl);
     const res = await fetch(url, {
       method: "POST",
       headers: {

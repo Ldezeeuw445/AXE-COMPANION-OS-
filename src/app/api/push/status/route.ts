@@ -1,14 +1,6 @@
 import { NextResponse } from "next/server";
-import { getVapidPublicKey } from "@/lib/env";
+import { vapidConfigStatus } from "@/lib/push/deliver";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-
-function vapidConfigured() {
-  return Boolean(
-    process.env.VAPID_SUBJECT &&
-      getVapidPublicKey() &&
-      process.env.VAPID_PRIVATE_KEY,
-  );
-}
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
@@ -27,7 +19,7 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({
-    vapidConfigured: vapidConfigured(),
+    vapidConfigured: vapidConfigStatus().ok,
     hasSubscription: (count ?? 0) > 0,
   });
 }

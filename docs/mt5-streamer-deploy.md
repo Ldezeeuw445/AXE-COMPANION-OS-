@@ -78,7 +78,7 @@ On Railway (`axe-metaapi-streamer`) set:
 
 | Variable | Value |
 |---|---|
-| `WORKER_URL` | `https://www.axecompanion.com` |
+| `WORKER_URL` | `https://www.axecompanion.com` (the streamer POSTs to `/api/internal/chart-publish`) |
 | `STREAMER_SECRET` | the same value as on the VPS |
 | `METAAPI_TOKEN` | the MetaApi token |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | as before |

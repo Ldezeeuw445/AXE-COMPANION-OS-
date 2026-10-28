@@ -92,11 +92,17 @@ check("410 cleanup deletes only that subscription row", () => {
   assert.match(deliver, /\.in\("endpoint", endpoints\)/);
 });
 
-check("test route is CRON_SECRET-protected and sends each type", () => {
-  assert.match(testRoute, /hasCronSecret/);
-  assert.match(testRoute, /CRON_SECRET required/);
+check("test route is signed-in only and sends each type", () => {
+  assert.match(testRoute, /export async function GET/);
+  assert.match(testRoute, /export async function POST/);
   assert.match(testRoute, /runPushTestSuite/);
   assert.match(testRoute, /getAuthedServiceSupabase/);
+  assert.match(testRoute, /vapidConfigStatus/);
+  assert.doesNotMatch(
+    testRoute,
+    /hasCronSecret/,
+    "a trader cannot test push if the route also demands the host cron secret",
+  );
 });
 
 check("dedup table is owner-only RLS with anon revoked", () => {
