@@ -135,6 +135,7 @@ import { TextAnnotationLayer } from "@/components/chart/annotations/TextAnnotati
 import { HorizontalLevelAnnotationLayer } from "@/components/chart/annotations/HorizontalLevelAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
+import { PANE_MODES, normalizePaneOrder, paneHeightKey, type PaneMode } from "@/lib/chart/panes";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
 import { ChartOrderBookDrawer } from "@/components/chart/ChartOrderBookDrawer";
 import { ChartNewsDrawer } from "@/components/chart/ChartNewsDrawer";
@@ -546,9 +547,8 @@ function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice:
  * to the finger even when it leaves the handle area.
  */
 /* ── Indicator pane ordering ──────────────────────────────────── */
-type PaneMode = "volume" | "rsi" | "macd";
-const PANE_MODE_DEFAULT: PaneMode[] = ["volume", "rsi", "macd"];
-const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc"]);
+const PANE_MODE_DEFAULT: PaneMode[] = [...PANE_MODES];
+const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc", "stoch", "adx"]);
 const PRO_ONLY_SMC_TOOLS = new Set(["structure", "orderBlocks", "fvg", "ifvg", "supplyDemand"]);
 
 function ResizablePane({
@@ -1218,16 +1218,18 @@ export function ChartScreen({
 
   // MT5-style resizable indicator panes. Defaults match what we previously
   // hard-coded; users can drag the divider on top of each pane to taste.
-  const [paneHeights, setPaneHeights] = useState<{ volume: number; rsi: number; macd: number }>({
+  const [paneHeights, setPaneHeights] = useState<Record<PaneMode, number>>({
     volume: 108,
     rsi: 120,
     macd: 112,
+    stoch: 120,
+    adx: 120,
   });
 
-  const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
+  const setPaneHeight = useCallback((mode: PaneMode, next: number) => {
     setPaneHeights((prev) => ({ ...prev, [mode]: next }));
     try {
-      savePref(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
+      savePref(paneHeightKey(mode), String(Math.round(next)));
     } catch {
       /* ignore — best-effort persistence */
     }
@@ -1238,20 +1240,20 @@ export function ChartScreen({
 
   useEffect(() => {
     try {
-      const v = Number(localStorage.getItem("axe.chart.paneHeight.volume") ?? "");
-      const r = Number(localStorage.getItem("axe.chart.paneHeight.rsi") ?? "");
-      const m = Number(localStorage.getItem("axe.chart.paneHeight.macd") ?? "");
-      setPaneHeights((prev) => ({
-        volume: Number.isFinite(v) && v >= 70 ? v : prev.volume,
-        rsi: Number.isFinite(r) && r >= 70 ? r : prev.rsi,
-        macd: Number.isFinite(m) && m >= 70 ? m : prev.macd,
-      }));
+      // One loop over the modes rather than a line per pane: the three-line
+      // version silently left a new pane unreadable from storage.
+      setPaneHeights((prev) => {
+        const next = { ...prev };
+        for (const mode of PANE_MODE_DEFAULT) {
+          const stored = Number(localStorage.getItem(paneHeightKey(mode)) ?? "");
+          if (Number.isFinite(stored) && stored >= 70) next[mode] = stored;
+        }
+        return next;
+      });
       const storedPaneOrder = localStorage.getItem("axe.chart.paneOrder");
       if (storedPaneOrder) {
-        const parsed: unknown = JSON.parse(storedPaneOrder);
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          setPaneOrder(parsed as PaneMode[]);
-        }
+        const order = normalizePaneOrder(JSON.parse(storedPaneOrder) as unknown);
+        if (order) setPaneOrder(order);
       }
     } catch {
       /* localStorage may be blocked */
@@ -3983,6 +3985,8 @@ export function ChartScreen({
                 { id: "macd", label: "MACD", icon: Activity },
                 { id: "bollinger", label: "BOL", icon: BarChart2 },
                 { id: "rsi", label: "RSI", icon: Activity },
+                { id: "stoch", label: "STOCH", icon: Activity },
+                { id: "adx", label: "ADX", icon: Activity },
                 { id: "vwap", label: "VWAP", icon: Landmark },
                 { id: "poc", label: "POC", icon: Crosshair },
               ].map((item) => {
@@ -4058,7 +4062,7 @@ export function ChartScreen({
           ) : null}
 
           {(() => {
-            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
+            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || !PRO_ONLY_INDICATORS.has(m)));
             if (enabledPanes.length < 2) return null;
             const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
             return (
@@ -4536,6 +4540,8 @@ export function ChartScreen({
                     { id: "macd", label: "MACD", icon: Activity },
                     { id: "bollinger", label: "BOL", icon: BarChart2 },
                     { id: "rsi", label: "RSI", icon: Activity },
+                    { id: "stoch", label: "STOCH", icon: Activity },
+                    { id: "adx", label: "ADX", icon: Activity },
                     { id: "vwap", label: "VWAP", icon: Landmark },
                     { id: "poc", label: "POC", icon: Crosshair },
                   ].map((item) => {
@@ -4611,7 +4617,7 @@ export function ChartScreen({
               ) : null}
 
               {(() => {
-                const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
+                const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || !PRO_ONLY_INDICATORS.has(m)));
                 if (enabledPanes.length < 2) return null;
                 const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
                 return (
@@ -4999,7 +5005,7 @@ export function ChartScreen({
       {/* Indicator panes hidden in landscape immersive — keeps room for dates + execution bar */}
       {!isFullscreen
         ? (() => {
-        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
+        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || !PRO_ONLY_INDICATORS.has(m)));
         const multiPane = enabledPanesList.length > 1;
         return enabledPanesList.map((mode, idx) => (
           <ResizablePane
