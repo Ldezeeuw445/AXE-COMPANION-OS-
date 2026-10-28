@@ -168,14 +168,35 @@ dezelfde uitvoering als de tabel, anders komt de tabel er niet.
 Wat dit betekent voor de toekomst: schema-wijzigingen via mij lopen vast op
 die bevestiging. Snelste weg blijft Supabase → SQL Editor → plakken → Run.
 
-## 6. Twee schakelaars in Supabase — 1 minuut
+## 6. Eén cron-regel erbij voor het oefenaccount — 1 minuut
+
+De stops van je oefenaccount worden gesloten door `/api/cron/paper-stops`,
+maar die draait nergens vanzelf. Zonder deze regel blijft een oefenpositie met
+een stop-loss open staan terwijl de prijs er allang doorheen is — en dan leert
+het oefenen je precies het verkeerde.
+
+Op de VPS, in dezelfde crontab waar de andere sweeps staan, met dezelfde
+`CRON_SECRET`:
+
+```
+*/2 * * * * curl -s -H "Authorization: Bearer $CRON_SECRET" https://www.axecompanion.com/api/cron/paper-stops >/dev/null
+```
+
+Elke twee minuten is genoeg: het is papier, en de regel "een positie sluit
+tegen dezelfde soort prijs als waarop hij opende" betekent toch al dat een
+stop soms iets later afgaat dan live. Vaker draaien maakt dat niet nauwkeuriger.
+
+Antwoordt hij `{"ok":true,"checked":0,...}` dan werkt hij en was er niets te
+doen.
+
+## 7. Twee schakelaars in Supabase — 1 minuut
 
 Beide in de Supabase-console, ik kan er niet bij:
 
 - **Authentication → Sign In / Providers** (bouwlijst `L1.5b`).
 - **`auth_leaked_password_protection`** aanzetten. Staat nu uit.
 
-## 7. Optioneel: de autopilot ook bij de database laten
+## 8. Optioneel: de autopilot ook bij de database laten
 
 De terugkerende taak draait elke vier uur en bouwt door. Hij heeft geen
 database-tools, dus hij kan een migratie wel schrijven maar niet toepassen.
@@ -184,7 +205,7 @@ als je het netjes wilt: maak de routine opnieuw aan vanuit de routines-UI op
 claude.ai, dan draagt hij je connectors mee. Via de API kan het niet, dat heeft
 deze organisatie uitgezet.
 
-## 8. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
+## 9. Eén cron-regel op de VPS — 1 minuut, en hij geeft je limiet terug
 
 `scripts/watchdog.sh` kijkt gratis of productie draait wat er op main staat.
 Geen model, geen API, geen kosten. Nu doet de autopilot-sessie dat zelf, en dat
@@ -205,7 +226,7 @@ En als je de hele suite één keer per nacht wil laten draaien:
 Kijken wat hij zegt: `tail -20 /var/log/axe-watchdog.log`. Hij schrijft één
 regel per keer en eindigt met "niets te doen" of "er moet iemand kijken".
 
-## 9. Beslissingen die alleen jij kunt nemen
+## 10. Beslissingen die alleen jij kunt nemen
 
 Geen haast, maar ze staan open:
 

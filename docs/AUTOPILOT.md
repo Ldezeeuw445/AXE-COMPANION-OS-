@@ -390,13 +390,30 @@ gemeten is.
     voorgewend — een limiet waar niets op wacht zou eeuwig blijven staan
     terwijl de UI hem als geplaatst toont.
 
-    **Wat nog moet:** de stopbewaking (een positie met SL/TP sluit nu nooit
-    vanzelf — `evaluatePaperStops` en `evaluatePaperStopsOnBar` staan klaar,
-    er is alleen nog niets dat ze aanroept; past bij de cron die er al is),
-    afgesloten posities naar `broker_trades` schrijven met
-    `external_trade_id` als `paper:<uuid>`, en de open posities tonen in de
-    UI — `loadPositionsPageData` haalt ze nu live bij MetaApi en kent
-    `paper_positions` niet.
+    **Ook af: de stopbewaking.** `src/services/paperStopWatcher.ts` plus
+    `/api/cron/paper-stops`, 15 checks. Een stop die nooit afgaat is erger dan
+    geen stop: de trader oefent het plaatsen ervan en leert dat ze niet
+    uitmaken. Afgesloten posities gaan naar `broker_trades` met
+    `external_trade_id` als `paper:<uuid>` en `raw.counts_as_evidence`.
+
+    De regel die hier het meest toe doet: **een positie sluit tegen dezelfde
+    soort prijs als waarop hij opende.** Een positie gevuld op demo-prijzen en
+    gesloten op een echte tick levert het verschil tussen een verzonnen en een
+    echt getal — dat is geen winst of verlies, en het zou in het journaal
+    precies als een echt resultaat staan. Gevolg, met opzet: een live positie
+    waarvan de feed stilvalt blijft open in plaats van te sluiten op een
+    verouderde prijs. Een stop die te laat afgaat is zichtbaar en bespreekbaar;
+    een fill op een prijs die nooit bestond is geen van beide.
+
+    De trade wordt weggeschreven vóór de positie verdwijnt, en de rij hergebruikt
+    de positie-id als primary key — `broker_trades` heeft geen andere unieke
+    sleutel (nagekeken tegen het echte schema, niet aangenomen), dus dat is
+    wat de schrijfactie idempotent maakt als de sweep er tussenin uitvalt.
+
+    **Wat nog moet:** de cron-regel op de VPS (`/api/cron/paper-stops` draait
+    nergens vanzelf — zie `docs/VOOR-LUKA.md`), handmatig sluiten vanuit de
+    UI, en de open posities tonen: `loadPositionsPageData` haalt ze live bij
+    MetaApi en kent `paper_positions` niet.
 
     *Oorspronkelijke opdracht:* `/demo` leidt sinds de 182 anonieme
     accounts bewust naar `/login` en dat blijft zo — dit is geen anonieme
