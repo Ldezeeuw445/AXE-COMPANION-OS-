@@ -10,17 +10,18 @@ export function LandingMt5() {
           <div className="flex items-start gap-3">
             <Radio className="mt-0.5 h-6 w-6 shrink-0 text-cyan-300/85" aria-hidden />
             <div>
-              <h3 className="text-base font-semibold text-white">MT5 link — safe, revocable, hashed</h3>
+              <h3 className="text-base font-semibold text-white">MT5 via MetaApi — cloud or hashed token</h3>
               <p className="mt-1 max-w-2xl text-sm text-tos-muted">
-                Recommended path: in-app cloud MT5 connection from{" "}
-                <span className="text-tos-text">Accounts</span>. Advanced: create a per-account link token
-                and paste it into your EA / bridge — only a hash is stored server-side, you can revoke any
-                time.
+                Recommended path: in-app cloud MT5 from{" "}
+                <span className="text-tos-text">Accounts</span>. Type the server the way your firm shows
+                it — Upcomers resolves to Upcomers-Server when MetaApi knows that name. Positions and
+                fills sync about every ten minutes. Advanced: a per-account link token in your EA /
+                bridge — only a hash is stored, you can revoke any time.
               </p>
             </div>
           </div>
           <Link
-            href="/login"
+            href="/login?next=/accounts"
             className="shrink-0 rounded-full border border-cyan-300/25 bg-cyan-300/[0.06] px-4 py-2 text-center text-xs font-medium text-cyan-100/95 transition hover:border-cyan-300/45 hover:bg-cyan-300/[0.10]"
           >
             Open Accounts after login

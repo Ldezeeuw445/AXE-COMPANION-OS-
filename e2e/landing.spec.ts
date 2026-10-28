@@ -11,8 +11,8 @@ test.describe("companion landing", () => {
 
     await expect(page.getByRole("heading", { level: 1 })).toContainText("The trader's phone OS");
     await expect(page.getByText("Your Second Brain For Trading")).toBeVisible();
-    await expect(page.getByText(/19 live AXE feeds/)).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Execution discipline, visible in real time." }).first()).toBeVisible();
+    await expect(page.getByText(/19 AXE intel feeds/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Execution discipline, from your fills." }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Try the live demo" }).first()).toHaveAttribute(
       "href",
       "#hero-devices",
@@ -25,6 +25,43 @@ test.describe("companion landing", () => {
       "/signup",
     );
     await expect(page.getByRole("button", { name: /switch app/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Choose Pro" })).toHaveAttribute(
+      "href",
+      "/login?next=/upgrade",
+    );
+  });
+
+  test("hero mock is a no-login walkthrough of the current app", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.locator("#hero-devices").scrollIntoViewIfNeeded();
+    const phone = page.frameLocator('iframe[title*="iPhone"]').first();
+    await expect(phone.getByText("NO LOGIN")).toBeVisible();
+    await phone.getByRole("button", { name: "Chart" }).click();
+    await expect(phone.getByText(/Demo candles/)).toBeVisible();
+    await phone.getByRole("button", { name: "Account" }).click();
+    await expect(phone.getByText("Upcomers-Server")).toBeVisible();
+    await phone.getByRole("button", { name: "Home" }).click();
+    await phone.getByRole("button", { name: "Intel" }).click();
+    await expect(phone.getByText("Not configured").first()).toBeVisible();
+    await phone.getByRole("button", { name: "Home" }).click();
+    await phone.getByRole("button", { name: "Price alerts" }).click();
+    await expect(phone.getByText("Push notification delivery is not live")).toBeVisible();
+
+    const ipad = page.frameLocator('iframe[title*="iPad"]').first();
+    await expect(ipad.getByText("NO LOGIN")).toBeVisible();
+    await ipad.getByRole("button", { name: "Intel" }).click();
+    await expect(ipad.getByText("Not configured").first()).toBeVisible();
+  });
+
+  test("paid checkout starts on login with next=/upgrade", async ({ page }) => {
+    await page.goto("/login?next=/upgrade", { waitUntil: "domcontentloaded" });
+    const next = page.locator('input[name="next"]');
+    if ((await next.count()) > 0) {
+      await expect(next).toHaveValue("/upgrade");
+    } else {
+      await expect(page.getByText(/Supabase is not configured|Sign in|Create account/i).first()).toBeVisible();
+    }
   });
 
   test("header actions stay on one line at 390px", async ({ page }) => {

@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * The landing hero: an iPhone and an iPad on one block, with the dot grid
  * behind it lighting up when the pointer is on the block.
  *
- * Both screens run `/hero-demo/app.html` — a self-contained mock with no
- * account, no Supabase and no network calls. The earlier version of this hero
- * iframed `/demo/embed`, which signed the visitor into a shared anonymous
- * account. Those are gone, so that hero now shows a sign-in form inside the
- * phone. A landing page has to work for a stranger who is not signed in, so
- * the mock is the honest engine here — and it says "NO LOGIN · DEMO" on itself
- * rather than passing for a live account.
+ * Both screens run `/hero-demo/app.html` — a self-contained walkthrough of the
+ * current five-tab shell (Home, Markets, Chart, AXE, Account) plus Intel,
+ * Feed, alerts, journal, positions and autonomy. No account, no network
+ * calls. The earlier version iframed `/demo/embed`, which signed the visitor
+ * into a shared anonymous account. Those are gone. A landing page has to work
+ * for a stranger who is not signed in, so the mock is the honest engine here
+ * — and it says "NO LOGIN · DEMO" on itself rather than passing for a live
+ * account.
  *
  * Each frame renders the mock at a real device's logical size and scales the
  * whole iframe down to fit. Letting the iframe take the bezel's own width

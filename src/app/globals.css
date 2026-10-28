@@ -2949,11 +2949,28 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
 .axe-launch-feed-card h3 {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin: 18px 0 0;
   font-size: 16px;
   line-height: 1.2;
   letter-spacing: -0.03em;
   color: #fff;
+}
+
+.axe-launch-feed-status {
+  display: inline-flex;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.1);
+  padding: 2px 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(253, 230, 138, 0.92);
 }
 
 .axe-launch-feed-card p {

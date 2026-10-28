@@ -24,7 +24,10 @@ import {
 } from "../src/lib/ecosystem/apps.ts";
 import {
   COMPANION_FEATURES,
+  LANDING_CHECKOUT_HREF,
+  LANDING_DISCIPLINE,
   LANDING_FAQ,
+  LANDING_FEEDS_BAND,
   LANDING_HERO,
   LANDING_INTEL_FEED_COUNT,
   LANDING_INTEL_FEEDS,
@@ -36,6 +39,7 @@ import {
   LANDING_TESTIMONIALS,
   landingTestimonialsEnabled,
 } from "../src/lib/marketing/landingCopy.ts";
+import { DEFAULT_AFTER_LOGIN, safeAppPath } from "../src/lib/auth/safeAppPath.ts";
 
 let passed = 0;
 function check(name, fn) {
@@ -77,7 +81,8 @@ check("the homepage is the finallaunch Companion landing Luka asked for", () => 
   assert.equal(LANDING_REVEAL_CARDS[2].title, "Premium motion cues.");
   assert.match(landing, /Try the live demo/);
   assert.match(landing, /See pricing/);
-  assert.match(landing, /Execution discipline, visible in real time/);
+  assert.equal(LANDING_DISCIPLINE.title, "Execution discipline, from your fills.");
+  assert.equal(LANDING_FEEDS_BAND.titleLead, "AXE intel feeds");
   assert.match(landing, /LaunchHeroExperience/);
   assert.match(landing, /LandingHeroDevices/);
   assert.match(landing, /LandingShowcase/);
@@ -124,7 +129,11 @@ check("the intel feed headline uses the real count from this repo", () => {
   // 13 intelClient providers + Macro, Calendar, News, Correlation, Conviction, Déjà Vu
   assert.equal(LANDING_INTEL_FEED_COUNT, 13 + 6);
   assert.equal(LANDING_INTEL_FEEDS.length, LANDING_INTEL_FEED_COUNT);
-  assert.match(landing, /live AXE feeds/);
+  assert.match(landing, /AXE intel feeds/);
+  assert.equal(LANDING_INTEL_FEEDS.filter((feed) => feed.notConfigured).length, 3);
+  for (const feed of LANDING_INTEL_FEEDS.filter((row) => row.notConfigured)) {
+    assert.match(feed.desc, /not configured/i);
+  }
   assert.match(
     read("src/components/marketing/landing/LandingIntelFeeds.tsx"),
     /\{LANDING_INTEL_FEED_COUNT\}/,
@@ -293,9 +302,37 @@ check("no fabricated testimonials ship", () => {
   assert.ok(landing.includes("data-landing-testimonials"), "keep the flagged slot");
 });
 
-check("the FIT panel is labelled as example chrome, not live account data", () => {
+check("the alignment panel is labelled as example chrome, not live account data", () => {
   assert.match(landing, /Example cockpit chrome/);
   assert.ok(!landing.includes('data-landing-cockpit-example="true"'));
+  assert.ok(!/FIT score/.test(landing), "FIT is not a product metric; Cockpit uses alignment");
+});
+
+check("paid checkout CTAs go through login to /upgrade, not a bare Stripe guess", () => {
+  assert.equal(LANDING_CHECKOUT_HREF, "/login?next=/upgrade");
+  assert.ok(landing.includes(LANDING_CHECKOUT_HREF), "Choose Pro/Founder/Elite must use the checkout href");
+  assert.equal(safeAppPath("/upgrade"), "/upgrade");
+  assert.equal(safeAppPath("https://evil.example"), DEFAULT_AFTER_LOGIN);
+  assert.equal(safeAppPath("//evil.example"), DEFAULT_AFTER_LOGIN);
+  assert.equal(safeAppPath("/login"), DEFAULT_AFTER_LOGIN);
+});
+
+check("the page does not claim systems that are not running", () => {
+  const tiersSrc = read("src/lib/billing/tiers.ts");
+  assert.match(landing, /ten minutes|10-minute|every ten minutes/);
+  assert.match(landing, /Price alerts in the app/);
+  assert.ok(!/Push alerts with deep links/i.test(landing));
+  assert.ok(!/Server-triggered push that opens the right screen/i.test(landing));
+  assert.ok(!/Persistent memory|Vector RAG memory|axe_memories/i.test(landing));
+  assert.ok(!/Persistent memory|Vector RAG memory/i.test(tiersSrc));
+  assert.ok(!/Full auto journal/i.test(landing));
+  assert.ok(!/Full auto journal/i.test(tiersSrc));
+  assert.ok(!/"Push notifications"/.test(tiersSrc));
+  assert.match(landing, /no live per-firm drawdown alert/i);
+  assert.match(landing, /Automatic journal labels are not running|automatic labels are not running/i);
+  assert.match(landing, /Push notification delivery is not live/);
+  assert.ok(!/streams it live, right next to your chart/i.test(landing));
+  assert.ok(!/visible in real time/i.test(landing));
 });
 
 check("Try the live demo opens the no-login device mock", () => {
@@ -497,6 +534,18 @@ check("the hero mock needs no account and makes no network call", () => {
 check("the mock says it is a demo rather than passing for an account", () => {
   assert.ok(/NO LOGIN/i.test(heroMock), "the mock labels itself");
   assert.ok(/no account needed/i.test(hero), "and the hero says so underneath");
+});
+
+check("the mock walks the current five-tab shell plus the rest of the app", () => {
+  for (const screen of ["home", "markets", "chart", "axe", "account", "intel", "feed", "alerts", "journal", "positions", "settings"]) {
+    assert.ok(heroMock.includes(`data-screen="${screen}"`), `mock missing screen ${screen}`);
+  }
+  assert.ok(heroMock.includes("Home") && heroMock.includes("Markets") && heroMock.includes("Account"));
+  assert.ok(!/\$1\.71B/.test(heroMock), "do not ship fabricated tide notionals in the mock");
+  assert.ok(!/SPY 1\.2M/.test(heroMock), "do not ship fabricated dark-pool prints in the mock");
+  assert.ok(/Not configured/i.test(heroMock), "UW tiles in the mock must say not configured");
+  assert.ok(/ten minutes/i.test(heroMock), "the mock must say MT5 syncs on the ten-minute cadence");
+  assert.ok(/Push notification delivery is not live/i.test(heroMock));
 });
 
 check("both devices are there, at real logical sizes", () => {

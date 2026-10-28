@@ -19,7 +19,7 @@ import { loadLandingCatalog } from "@/lib/marketing/loadLandingCatalog";
 export const metadata: Metadata = {
   title: "AXE Companion — the trader's phone OS",
   description:
-    "AXE Companion is the trader phone OS: live chart, market depth, news, one-tap execution, quick journal, push alerts and AXE chat — synced with Trading OS on your desktop.",
+    "AXE Companion is the trader phone OS: chart, market depth, news, intel, one-tap execution, journal, AXE Feed and AXE chat. MT5 via MetaApi. Same login as Trading OS on the desk.",
 };
 
 /** Founder seats are read from the database on each request — do not bake 0. */

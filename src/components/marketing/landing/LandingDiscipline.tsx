@@ -22,13 +22,13 @@ export function LandingDiscipline() {
             <p className="mt-4 max-w-xl text-[15px] font-medium leading-relaxed text-cyan-100/90">
               {LANDING_DISCIPLINE.aside}
             </p>
-            <a href="/login" className="axe-launch-btn-primary mt-8">
+            <a href="/login?next=/cockpit" className="axe-launch-btn-primary mt-8">
               See your Cockpit
             </a>
           </div>
 
-          <aside className="axe-launch-fit" aria-label="Alignment FIT example">
-            <p className="axe-launch-fit-kicker">Alignment FIT</p>
+          <aside className="axe-launch-fit" aria-label="Alignment example">
+            <p className="axe-launch-fit-kicker">Alignment</p>
             <div className="axe-launch-gauge" aria-hidden>
               <svg width="230" height="230" viewBox="0 0 230 230">
                 <circle
@@ -60,7 +60,7 @@ export function LandingDiscipline() {
               </svg>
               <div className="axe-launch-gauge-val">
                 <span>75</span>
-                <small>FIT · alignment</small>
+                <small>alignment / 100</small>
               </div>
             </div>
             <p className="text-[12px] leading-relaxed text-white/45">
@@ -71,7 +71,7 @@ export function LandingDiscipline() {
               How often the assistant&apos;s proposals feel like your book — not a generic playbook.
             </p>
             <p className="mt-2 text-[11px] leading-relaxed text-white/35">
-              Example cockpit chrome — live FIT uses your own workspace signals, not this sample.
+              Example cockpit chrome — live alignment uses your own workspace signals, not this sample.
             </p>
 
             <div className="axe-launch-kp">
@@ -97,7 +97,7 @@ export function LandingDiscipline() {
         <div className="axe-launch-stats mx-auto mt-12">
           <div>
             <p className="axe-launch-stat-num">{LANDING_INTEL_FEED_COUNT}</p>
-            <p className="axe-launch-stat-lbl">Live AXE intel streams</p>
+            <p className="axe-launch-stat-lbl">AXE intel feeds</p>
           </div>
           <div>
             <p className="axe-launch-stat-num">1 tap</p>

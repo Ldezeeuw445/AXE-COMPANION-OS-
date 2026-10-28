@@ -76,6 +76,15 @@ try {
     path: join(shotDir, "landing-pricing-1440x900.png"),
   });
 
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto(baseURL, { waitUntil: "networkidle" });
+  await page.screenshot({ path: join(shotDir, "landing-1024x768.png"), fullPage: true });
+  await page.locator("[data-landing-hero]").screenshot({
+    path: join(shotDir, "hero-ipad-1024.png"),
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(baseURL, { waitUntil: "networkidle" });
   const stage = page.locator("[data-hero-stage]");
   await stage.scrollIntoViewIfNeeded();
   await stage.hover();
@@ -83,6 +92,19 @@ try {
   await page.locator("[data-landing-hero]").screenshot({
     path: join(shotDir, "hero-hover-1440.png"),
   });
+
+  const phoneFrame = page.frameLocator('iframe[title*="iPhone"]').first();
+  await phoneFrame.getByRole("button", { name: "Chart" }).click();
+  await page.waitForTimeout(300);
+  await page.locator("[data-landing-hero]").screenshot({
+    path: join(shotDir, "hero-mock-chart-1440.png"),
+  });
+
+  await page.goto(`${baseURL}/login?next=/upgrade`, { waitUntil: "networkidle" });
+  await page.screenshot({ path: join(shotDir, "checkout-start-1440.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseURL}/login?next=/upgrade`, { waitUntil: "networkidle" });
+  await page.screenshot({ path: join(shotDir, "checkout-start-390.png") });
 
   await browser.close();
   console.log(`wrote screenshots to ${shotDir}`);

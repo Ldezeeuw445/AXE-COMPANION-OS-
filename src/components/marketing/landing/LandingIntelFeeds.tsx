@@ -70,7 +70,10 @@ function FeedCard({ feed }: { feed: LandingIntelFeed }) {
       <div className="axe-launch-feed-icon">
         <Icon className="h-6 w-6" aria-hidden />
       </div>
-      <h3>{feed.title}</h3>
+      <h3>
+        {feed.title}
+        {feed.notConfigured ? <span className="axe-launch-feed-status">Not configured</span> : null}
+      </h3>
       <p>{feed.desc}</p>
     </article>
   );
