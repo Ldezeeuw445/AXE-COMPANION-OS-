@@ -42,10 +42,10 @@ test.describe("companion landing", () => {
     await phone.locator('button.tab[data-screen="account"]').click();
     await expect(phone.getByText("Resolved → Upcomers-Server")).toBeVisible();
     await phone.locator('button.tab[data-screen="home"]').click();
-    await phone.locator('button[data-go="intel"]').click();
+    await phone.locator('button.linkish[data-go="intel"]').click();
     await expect(phone.getByText("Not configured").first()).toBeVisible();
     await phone.locator('button.tab[data-screen="home"]').click();
-    await phone.locator('button[data-go="alerts"]').click();
+    await phone.locator('button.linkish[data-go="alerts"]').click();
     await expect(phone.getByText("Push notification delivery is not live")).toBeVisible();
 
     const ipad = page.frameLocator('iframe[title*="iPad"]').first();
