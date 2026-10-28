@@ -325,6 +325,12 @@ check("the page does not claim systems that are not running", () => {
   assert.ok(!/Server-triggered push that opens the right screen/i.test(landing));
   assert.ok(!/Persistent memory|Vector RAG memory|axe_memories/i.test(landing));
   assert.ok(!/Persistent memory|Vector RAG memory/i.test(tiersSrc));
+  assert.ok(!/same AXE memory/i.test(landing), "do not sell AXE memory as live");
+  assert.ok(!/same AXE memory/i.test(switcher), "the switcher must not sell AXE memory either");
+  assert.ok(
+    !/account and\s+memory/i.test(landing),
+    "waitlist must not promise memory on Trading OS",
+  );
   assert.ok(!/Full auto journal/i.test(landing));
   assert.ok(!/Full auto journal/i.test(tiersSrc));
   assert.ok(!/"Push notifications"/.test(tiersSrc));

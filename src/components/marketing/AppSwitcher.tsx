@@ -161,7 +161,7 @@ export function AppSwitcher({ current, className }: Props) {
           })}
 
           <p className="border-t border-white/[0.06] px-3 py-2.5 text-[11px] leading-snug text-white/40">
-            Same login, same broker accounts, same AXE memory on both.
+            Same login, same broker accounts on both.
           </p>
         </div>
       ) : null}
