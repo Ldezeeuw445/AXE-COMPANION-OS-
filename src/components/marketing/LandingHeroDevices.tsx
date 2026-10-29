@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * The landing hero: an iPhone and an iPad on one block, with the dot grid
  * behind it lighting up when the pointer is on the block.
  *
- * Both screens run `/hero-demo/app.html` — a self-contained mock with no
- * account, no Supabase and no network calls. The earlier version of this hero
- * iframed `/demo/embed`, which signed the visitor into a shared anonymous
- * account. Those are gone, so that hero now shows a sign-in form inside the
- * phone. A landing page has to work for a stranger who is not signed in, so
- * the mock is the honest engine here — and it says "NO LOGIN · DEMO" on itself
- * rather than passing for a live account.
+ * Both screens run `/hero-demo/app.html` — a self-contained walkthrough of the
+ * current five-tab shell (Home, Markets, Chart, AXE, Account) plus Intel,
+ * Feed, alerts, journal, positions and autonomy. No account, no network
+ * calls. The earlier version iframed `/demo/embed`, which signed the visitor
+ * into a shared anonymous account. Those are gone. A landing page has to work
+ * for a stranger who is not signed in, so the mock is the honest engine here
+ * — and it says "NO LOGIN · DEMO" on itself rather than passing for a live
+ * account.
  *
  * Each frame renders the mock at a real device's logical size and scales the
  * whole iframe down to fit. Letting the iframe take the bezel's own width
@@ -76,22 +77,33 @@ function DeviceFrame({ device, eager }: { device: DeviceKey; eager: boolean }) {
   );
 }
 
-export function LandingHeroDevices() {
+type Props = {
+  /** Lifted so the hero background around the plate can light up with it. */
+  onLitChange?: (lit: boolean) => void;
+};
+
+export function LandingHeroDevices({ onLitChange }: Props) {
   const [lit, setLit] = useState(false);
+
+  const setStageLit = (next: boolean) => {
+    setLit(next);
+    onLitChange?.(next);
+  };
 
   // Pointer events rather than mouse events so a touch on the block lights it
   // too, and focus-within so a keyboard user reaching the frames gets the same
   // signal instead of a silently dead block.
   return (
-    <div className="relative mx-auto w-full max-w-[1180px]">
+    <div id="hero-devices" className="relative mx-auto w-full max-w-[1180px] scroll-mt-28">
       <div className={`axe-hero-dots ${lit ? "axe-hero-dots-active" : ""}`} aria-hidden />
 
       <div
         className={`axe-hero-stage ${lit ? "axe-hero-stage-active" : ""}`}
-        onPointerEnter={() => setLit(true)}
-        onPointerLeave={() => setLit(false)}
-        onFocusCapture={() => setLit(true)}
-        onBlurCapture={() => setLit(false)}
+        data-hero-stage="true"
+        onPointerEnter={() => setStageLit(true)}
+        onPointerLeave={() => setStageLit(false)}
+        onFocusCapture={() => setStageLit(true)}
+        onBlurCapture={() => setStageLit(false)}
       >
         {/* Below 640px the iPad frame is display:none (globals.css) — at that
             width its 1024px mock renders at 0.3 scale and reads as a smudge.
@@ -102,7 +114,7 @@ export function LandingHeroDevices() {
       </div>
 
       <p className="relative z-10 mt-4 text-center text-[11px] uppercase tracking-[0.2em] text-white/38">
-        Tap around — these are live demos, no account needed
+        Tap around — these are interactive demos, no account needed
       </p>
     </div>
   );

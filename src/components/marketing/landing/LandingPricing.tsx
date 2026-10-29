@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP } from "@/lib/billing/tiers";
+import { LANDING_CHECKOUT_HREF } from "@/lib/marketing/landingCopy";
 import type { BillingCatalogState } from "@/lib/billing/types";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
@@ -82,7 +83,8 @@ export function LandingPricing({ catalog }: Props) {
                 ))}
 
                 <Link
-                  href={tier.priceEurMonthly ? "/login" : "/signup"}
+                  href={tier.priceEurMonthly ? LANDING_CHECKOUT_HREF : "/signup"}
+                  data-landing-checkout={tier.id}
                   className={
                     highlight
                       ? "axe-landing-cta mt-5 inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-5 text-xs font-semibold text-[#04161B] shadow-[0_10px_30px_-10px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"

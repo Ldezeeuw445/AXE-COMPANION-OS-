@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AXE App Demo</title>
+  <title>AXE Companion demo</title>
   <style>
     :root {
-      --bg: #04070b;
-      --card: #0a1119;
+      --bg: #06070a;
+      --card: #101014;
       --line: rgba(255,255,255,.1);
-      --text: #eaf4ff;
-      --muted: rgba(214,227,240,.62);
-      --cyan: #41dcff;
+      --text: #eef2f6;
+      --muted: rgba(214,227,240,.58);
+      --cyan: #00d4f5;
       --green: #32d6a1;
       --red: #ec5f73;
       --amber: #f6c253;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: radial-gradient(circle at 10% 0%, #0b1a2e, #04070b 45%); color: var(--text); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    html, body { margin: 0; height: 100%; background: #06070a; color: var(--text); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { display: grid; place-items: center; padding: 18px; }
 
     .device {
@@ -25,19 +25,15 @@
       height: min(860px, 94vh);
       border: 1px solid rgba(255,255,255,.16);
       border-radius: 28px;
-      background: linear-gradient(180deg, rgba(8,12,18,.95), rgba(4,7,12,.98));
-      box-shadow: 0 32px 72px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.06);
+      background: #06070a;
+      box-shadow: 0 32px 72px rgba(0,0,0,.48);
       overflow: hidden;
       position: relative;
       display: flex;
       flex-direction: column;
     }
-
     .device.mobile { width: min(440px, 96vw); height: min(880px, 95vh); border-radius: 36px; }
 
-    /* ?chrome=off — the landing hero puts this inside its own bezel, so the
-       mock must not draw a second device frame and a second notch inside the
-       first one. Set by the query string, see the script at the bottom. */
     .device.bare,
     .device.bare.mobile,
     .device.bare.tablet {
@@ -49,11 +45,7 @@
       border-radius: 0;
       box-shadow: none;
     }
-
     .device.bare::before { display: none; }
-
-    /* The hero's own bezel draws the notch, so the mock's top bar has to start
-       below it — otherwise the notch sits on top of "AXE MOBILE DEMO". */
     .device.bare.mobile .topbar {
       height: 96px;
       padding-top: 28px;
@@ -80,57 +72,43 @@
       display: flex;
       align-items: center;
       padding: 0 16px;
-      gap: 14px;
-      background: rgba(6,10,16,.9);
-      backdrop-filter: blur(10px);
+      gap: 10px;
+      background: rgba(8,9,12,.94);
     }
-
     .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--green); box-shadow: 0 0 12px rgba(50,214,161,.7); }
-    .brand { font-size: 13px; letter-spacing: .2em; text-transform: uppercase; color: rgba(232,244,255,.9); }
-    .status { margin-left: auto; font-size: 11px; border: 1px solid rgba(65,220,255,.35); color: rgba(65,220,255,.95); border-radius: 999px; padding: 6px 10px; background: rgba(65,220,255,.08); }
+    .brand { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: rgba(232,244,255,.9); }
+    .status { margin-left: auto; font-size: 10px; border: 1px solid rgba(0,212,245,.35); color: rgba(0,212,245,.95); border-radius: 999px; padding: 6px 10px; background: rgba(0,212,245,.08); letter-spacing: .08em; }
 
-    /* Measured 2026-10-17 in the hero: this used to be
-       `height: calc(100% - 68px)`, the default top bar's height. In the hero's
-       phone frame the top bar is 96px (it has to clear the bezel's notch), so
-       the mock came out 28px taller than the screen it sits in and the bottom
-       tab row was sliced in half. Filling the leftover space instead of
-       subtracting a guess means the top bar can be any height. */
     .layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr; }
-    .device.tablet .layout { grid-template-columns: 74px 1fr; }
-
+    .device.tablet .layout { grid-template-columns: 88px 1fr; }
     .sidebar {
       border-right: 1px solid var(--line);
-      padding: 12px 8px;
+      padding: 10px 8px;
       display: none;
-      gap: 8px;
-      background: rgba(7,10,16,.92);
+      gap: 6px;
+      background: #0b0b0e;
+      overflow: auto;
     }
     .device.tablet .sidebar { display: grid; align-content: start; }
-
     .sbtn {
       border: 1px solid var(--line);
       background: rgba(255,255,255,.02);
       color: rgba(221,236,250,.8);
       border-radius: 12px;
-      height: 44px;
+      min-height: 44px;
       display: grid;
       place-items: center;
-      font-size: 11px;
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
       cursor: pointer;
     }
-    .sbtn.active { border-color: rgba(65,220,255,.5); color: #c9f7ff; background: rgba(65,220,255,.12); }
+    .sbtn.active { border-color: rgba(0,212,245,.5); color: #c9f7ff; background: rgba(0,212,245,.12); }
 
     .main { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
-
-    .screen-wrap { min-height: 0; overflow: auto; display: grid; }
-    .screen { display: none; padding: 14px; }
-    .screen.active { display: flex; flex-direction: column; min-height: 0; }
-
-    /* The hero hands each frame a real device's full height (390x844, 1024x768),
-       which is taller than the chart screen's content — so the first thing a
-       visitor saw under the BUY button was a dead black band a third of the
-       phone high. The chart takes that space instead; it is the one element on
-       the screen that is better for being bigger. */
+    .screen-wrap { min-height: 0; overflow: auto; }
+    .screen { display: none; padding: 12px 14px 18px; gap: 10px; }
+    .screen.active { display: flex; flex-direction: column; min-height: 100%; }
     .screen.active[data-screen="chart"] .chart-card {
       flex: 1 1 auto;
       min-height: 0;
@@ -144,126 +122,93 @@
       min-height: 180px;
     }
 
-    .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-    .chip {
+    .chip-row, .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip, .linkish {
       border: 1px solid var(--line);
       background: rgba(255,255,255,.03);
       color: rgba(226,238,248,.86);
       border-radius: 10px;
       padding: 7px 10px;
       font-size: 12px;
+      cursor: pointer;
     }
+    .linkish { color: #9ae6f5; border-color: rgba(0,212,245,.28); }
 
-    .chart-card {
+    .chart-card, .card {
       border: 1px solid var(--line);
       border-radius: 16px;
-      background: linear-gradient(180deg, rgba(2,5,8,.95), rgba(5,8,12,.98));
-      padding: 10px;
-      min-height: 420px;
+      background: linear-gradient(180deg, rgba(16,16,20,.95), rgba(10,10,14,.98));
+      padding: 12px;
     }
-    .chart-head { display:flex; align-items:center; justify-content:space-between; font-size:12px; margin-bottom:8px; color: var(--muted); }
-    .chart-canvas { width: 100%; height: 320px; border: 1px solid rgba(255,255,255,.06); border-radius: 10px; display:block; background:#020508; }
-    .exec {
-      margin-top: 8px;
-      display: grid;
-      grid-template-columns: 1fr 110px 1fr;
-      gap: 8px;
-    }
+    .chart-head { display:flex; align-items:center; justify-content:space-between; font-size:12px; color: var(--muted); }
+    .chart-canvas { width: 100%; height: 280px; border: 1px solid rgba(255,255,255,.06); border-radius: 10px; display:block; background:#020508; }
+    .exec { margin-top: 8px; display: grid; grid-template-columns: 1fr 88px 1fr; gap: 8px; }
     .exec .sell, .exec .buy, .exec .lot {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 10px;
-      text-align: center;
-      font-weight: 700;
-      font-size: 13px;
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; font-weight: 700; font-size: 13px;
     }
     .exec .sell { background: linear-gradient(180deg, #b4293f, #7b1f2f); }
-    .exec .buy { background: linear-gradient(180deg, #1e98af, #136d7f); }
+    .exec .buy { background: linear-gradient(180deg, #0e8a9c, #0a5f6c); }
     .exec .lot { background: rgba(9,12,18,.95); }
 
     .grid { display:grid; gap:10px; }
     .grid.two { grid-template-columns: repeat(2,minmax(0,1fr)); }
-    .grid.three { grid-template-columns: repeat(3,minmax(0,1fr)); }
-
-    .card {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: linear-gradient(180deg, rgba(8,14,22,.92), rgba(7,10,16,.96));
-      padding: 12px;
-    }
     .card h4 { margin: 0 0 6px; font-size: 14px; }
-    .card p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
-
-    .kpi { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:10px; margin-bottom: 10px; }
+    .card p, .muted { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .kpi { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:10px; }
     .kpi .item { border:1px solid var(--line); border-radius: 12px; background: rgba(6,11,17,.92); padding:10px; }
-    .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .kpi .label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
     .kpi .value { margin-top: 6px; font-size: 18px; font-weight: 700; }
+    .badge {
+      display: inline-flex; border-radius: 999px; padding: 2px 8px; font-size: 9px; letter-spacing: .08em;
+      text-transform: uppercase; border: 1px solid rgba(251,191,36,.3); color: #fde68a; background: rgba(251,191,36,.1);
+    }
+    .row { display:flex; justify-content:space-between; gap:8px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+    .row:last-child { border-bottom: 0; }
 
     .chat-log {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: rgba(4,8,13,.9);
-      min-height: 320px;
-      max-height: 54vh;
-      overflow: auto;
-      padding: 12px;
-      display: grid;
-      gap: 8px;
+      border: 1px solid var(--line); border-radius: 14px; background: rgba(4,8,13,.9);
+      min-height: 240px; flex: 1 1 auto; overflow: auto; padding: 12px; display: grid; gap: 8px;
     }
     .bubble { max-width: 84%; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.45; }
     .bubble.ai { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); }
-    .bubble.user { background: rgba(65,220,255,.18); border: 1px solid rgba(65,220,255,.35); margin-left: auto; }
-
-    .chat-input { margin-top: 10px; display: grid; grid-template-columns: 1fr 110px; gap: 8px; }
-    .chat-input input {
-      width: 100%;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      padding: 11px 12px;
-      background: rgba(5,10,16,.96);
-      color: var(--text);
-      font-size: 13px;
+    .bubble.user { background: rgba(0,212,245,.16); border: 1px solid rgba(0,212,245,.32); margin-left: auto; }
+    .chat-input { margin-top: 10px; display: grid; grid-template-columns: 1fr 88px; gap: 8px; }
+    .chat-input input, .field {
+      width: 100%; border-radius: 10px; border: 1px solid var(--line); padding: 11px 12px;
+      background: rgba(5,10,16,.96); color: var(--text); font-size: 13px;
     }
-    .chat-input button {
-      border-radius: 10px;
-      border: 1px solid rgba(65,220,255,.42);
-      background: rgba(65,220,255,.16);
-      color: #d8f8ff;
-      font-weight: 700;
-      cursor: pointer;
+    .chat-input button, .primary {
+      border-radius: 10px; border: 1px solid rgba(0,212,245,.42); background: rgba(0,212,245,.16);
+      color: #d8f8ff; font-weight: 700; cursor: pointer; padding: 10px;
     }
 
     .bottom-nav {
       border-top: 1px solid var(--line);
-      padding: 10px;
+      padding: 8px 10px 12px;
       display: grid;
-      grid-template-columns: repeat(6,minmax(0,1fr));
-      gap: 8px;
-      background: rgba(6,10,16,.94);
+      grid-template-columns: repeat(5,minmax(0,1fr));
+      gap: 6px;
+      background: linear-gradient(180deg, #131317 0%, #0b0b0e 100%);
     }
+    .device.tablet .bottom-nav { display: none; }
     .tab {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      font-size: 11px;
-      color: rgba(217,232,246,.8);
-      cursor: pointer;
-      user-select: none;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      background: rgba(255,255,255,.02);
+      border: 0; background: transparent; border-radius: 12px; height: 46px;
+      display: grid; place-items: center; font-size: 10px; color: rgba(217,232,246,.72);
+      cursor: pointer; text-transform: uppercase; letter-spacing: .06em;
     }
-    .tab.active { border-color: rgba(65,220,255,.5); color: #c9f7ff; background: rgba(65,220,255,.14); }
+    .tab.active { color: #c9f7ff; background: rgba(0,212,245,.12); }
+
+    .depth {
+      display: none; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 8px; font-size: 11px;
+    }
+    .depth.open { display: block; }
+    .depth .lvl { display:grid; grid-template-columns: 1fr auto 1fr; gap: 8px; padding: 3px 0; }
+    .bid { color: var(--green); } .ask { color: var(--red); text-align: right; }
 
     @media (max-width: 860px) {
       .device { width: 100vw; height: 100vh; border-radius: 0; border: 0; }
       body { padding: 0; }
-      .kpi { grid-template-columns: repeat(2,minmax(0,1fr)); }
-      .grid.two, .grid.three { grid-template-columns: 1fr; }
-      .chart-canvas { height: 280px; }
-      .exec { grid-template-columns: 1fr; }
+      .grid.two { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -271,191 +216,279 @@
   <div id="device" class="device mobile">
     <div class="topbar">
       <span class="dot"></span>
-      <span class="brand" id="brand">AXE Mobile Demo</span>
+      <span class="brand" id="brand">AXE Companion</span>
       <span class="status">NO LOGIN · DEMO</span>
     </div>
     <div class="layout">
-      <aside class="sidebar">
-        <button class="sbtn active" data-screen="chart">Chart</button>
-        <button class="sbtn" data-screen="intel">Intel</button>
-        <button class="sbtn" data-screen="cockpit">Fit</button>
-        <button class="sbtn" data-screen="trade">Trade</button>
-        <button class="sbtn" data-screen="history">History</button>
-        <button class="sbtn" data-screen="chat">AXE</button>
-      </aside>
+      <aside class="sidebar" id="sidebar"></aside>
       <div class="main">
         <div class="screen-wrap">
-          <section class="screen active" data-screen="chart">
+          <section class="screen active" data-screen="home">
+            <p class="muted">Home · Cockpit</p>
+            <div class="kpi">
+              <div class="item"><div class="label">Alignment</div><div class="value">—</div><p class="muted">Example chrome · live score needs your fills</p></div>
+              <div class="item"><div class="label">Sync</div><div class="value">10m</div><p class="muted">MetaApi account cadence</p></div>
+            </div>
+            <article class="card">
+              <h4>Morning brief</h4>
+              <p>XAUUSD H1 holds above 2648. London overlap in 40 minutes. This demo does not call a model.</p>
+            </article>
+            <div class="chip-row">
+              <button class="linkish" data-go="feed">AXE Feed</button>
+              <button class="linkish" data-go="intel">Intel</button>
+              <button class="linkish" data-go="alerts">Price alerts</button>
+              <button class="linkish" data-go="journal">Journal</button>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="markets">
+            <p class="muted">Markets · Watchlist</p>
+            <div class="card">
+              <div class="row"><span>XAUUSD</span><span>2,651.40</span></div>
+              <div class="row"><span>EURUSD</span><span>1.0842</span></div>
+              <div class="row"><span>NAS100</span><span>20,114</span></div>
+              <p class="muted" style="margin-top:8px">Quotes in this demo are local. Offline, the PWA marks stale age instead of pretending they are live.</p>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="chart">
             <div class="toolbar">
               <div class="chip">XAUUSD</div>
               <div class="chip">H1</div>
-              <div class="chip">London + NY</div>
-              <div class="chip">Demo FTMO 100K</div>
+              <div class="chip">Fib · RSI · MA</div>
+              <button class="chip" id="depthToggle" type="button">Depth</button>
+              <button class="chip" data-go="alerts" type="button">Alert</button>
             </div>
             <div class="chart-card">
-              <div class="chart-head"><span>Live-style demo chart</span><span id="price">4215.15</span></div>
+              <div class="chart-head"><span>Demo candles · not a live account</span><span id="price">2651.40</span></div>
               <canvas id="chartCanvas" class="chart-canvas" width="1200" height="640"></canvas>
-              <div class="exec">
-                <div class="sell">SELL 4215.15</div>
-                <div class="lot">0.10</div>
-                <div class="buy">BUY 4215.15</div>
+              <div class="depth" id="depthPanel">
+                <div class="lvl"><span class="bid">2651.18</span><span>spread 0.22</span><span class="ask">2651.40</span></div>
+                <div class="lvl"><span class="bid">2651.10</span><span>L1 + synthetic ladder</span><span class="ask">2651.48</span></div>
+                <p class="muted">Real L1 from the broker when connected. This ladder is labelled synthetic.</p>
               </div>
+              <div class="exec">
+                <div class="sell">SELL</div>
+                <div class="lot">0.10</div>
+                <div class="buy">BUY</div>
+              </div>
+              <p class="muted">Live orders need a linked MT5 account, Live Trading on, and a confirm banner. Drawings: trendline, rectangle, text, horizontal.</p>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="axe">
+            <div id="chatLog" class="chat-log">
+              <div class="bubble ai">AXE: This is a no-login walkthrough. I can talk about the chart, intel we actually have, and your fills after you connect MT5.</div>
+              <div class="bubble user">What is on XAUUSD H1?</div>
+              <div class="bubble ai">Demo read only: structure above 2648. No Unusual Whales tape. No stored AXE memory table in this deployment.</div>
+            </div>
+            <div class="chat-input">
+              <input id="chatInput" value="Give me a 3-bullet plan" />
+              <button id="chatSend" type="button">Send</button>
+            </div>
+          </section>
+
+          <section class="screen" data-screen="account">
+            <p class="muted">Account · MetaApi</p>
+            <article class="card">
+              <h4>Cloud MT5</h4>
+              <p>Type the server the way the firm shows it. Upcomers resolves to Upcomers-Server when MetaApi knows that name. Fills sync about every ten minutes.</p>
+              <input class="field" style="margin-top:8px" value="Upcomers" readonly />
+              <p class="muted" style="margin-top:8px">Resolved → Upcomers-Server · known broker</p>
+            </article>
+            <article class="card">
+              <h4>Firm rules</h4>
+              <p>Presets from the server name: FTMO 2-Step / 1-Step / Instant, Upcomers Oracle. Goat Funded Trader and FundedNext are recognised by name. No live drawdown alert.</p>
+            </article>
+            <div class="chip-row">
+              <button class="linkish" data-go="settings">Autonomy</button>
+              <button class="linkish" data-go="positions">Positions</button>
+              <button class="linkish" data-go="journal">Journal</button>
             </div>
           </section>
 
           <section class="screen" data-screen="intel">
+            <p class="muted">Intel</p>
             <div class="grid two">
-              <article class="card"><h4>AXE Intel Tide</h4><p>Net call premium $1.71B vs net put premium $2.29B. Bias: selective bullish while 4208 holds.</p></article>
-              <article class="card"><h4>AXE Macro</h4><p>Rates hold bias. USD mixed. Gold volatility expected near NY open.</p></article>
-              <article class="card"><h4>AXE Policy Flow</h4><p>Two congressional buy disclosures and one defense-sector add in 24h.</p></article>
-              <article class="card"><h4>AXE Dark Pool</h4><p>Clustered prints around 4209-4213 suggest support liquidity zone.</p></article>
+              <article class="card"><h4>Insider flow</h4><p>SEC EDGAR Form-4. Free source.</p></article>
+              <article class="card"><h4>Policy flow</h4><p>STOCK Act trades from Alpha Vantage.</p></article>
+              <article class="card"><h4>Chokepoints</h4><p>Hormuz, Suez, Malacca — ship counts when the feed has a row.</p></article>
+              <article class="card"><h4>Market tide <span class="badge">Not configured</span></h4><p>Paid tape not bought. The app says so instead of failing.</p></article>
             </div>
+            <button class="linkish" data-go="home" type="button">Back to Home</button>
           </section>
 
-          <section class="screen" data-screen="cockpit">
-            <div class="kpi">
-              <div class="item"><div class="label">FIT</div><div class="value">84</div></div>
-              <div class="item"><div class="label">Rules kept</div><div class="value">18</div></div>
-              <div class="item"><div class="label">Rules passed</div><div class="value">6</div></div>
-              <div class="item"><div class="label">Session</div><div class="value">LDN+NY</div></div>
+          <section class="screen" data-screen="feed">
+            <p class="muted">AXE Feed · last 7 days</p>
+            <div class="chip-row">
+              <div class="chip">Morning brief</div>
+              <div class="chip">Daily news</div>
+              <div class="chip">Market recap</div>
             </div>
-            <div class="grid three">
-              <article class="card"><h4>Planning</h4><p>Strong. Most winners align with pre-session narrative and session timing.</p></article>
-              <article class="card"><h4>Execution</h4><p>Stable. Better pullback entries when NY overlap starts.</p></article>
-              <article class="card"><h4>Discipline</h4><p>Calibrating. Avoid late chase after second impulse candle.</p></article>
-            </div>
+            <article class="card"><h4>Morning brief</h4><p>Session plan from your book when you are signed in. This demo is static.</p></article>
+            <article class="card"><h4>Daily news</h4><p>Broadcast lane on the AXE Feed, not a social timeline.</p></article>
+            <button class="linkish" data-go="home" type="button">Back to Home</button>
           </section>
 
-          <section class="screen" data-screen="trade">
-            <div class="grid two">
-              <article class="card"><h4>Execution Dock</h4><p>Market, limit and stop style flow like in app. Demo orders are local and safe.</p></article>
-              <article class="card"><h4>Pending</h4><p>Buy limit 4209.85 · TP 4248.67 · SL 4090.56</p></article>
-            </div>
+          <section class="screen" data-screen="alerts">
+            <p class="muted">Price alerts · in the app</p>
+            <article class="card">
+              <h4>XAUUSD above 2660</h4>
+              <p>Price alerts evaluate in the app. Push notification delivery is not live.</p>
+            </article>
+            <article class="card">
+              <h4>Not here</h4>
+              <p>No live per-firm drawdown alert. The background watcher is not firing alerts. Firm presets live under Account → Autonomy.</p>
+            </article>
+            <button class="linkish" data-go="chart" type="button">Back to Chart</button>
           </section>
 
-          <section class="screen" data-screen="history">
-            <div class="grid two">
-              <article class="card"><h4>XAUUSD +450.00</h4><p>Tag: Perfect · Session: London · Rule match 92%</p></article>
-              <article class="card"><h4>NAS100 -120.00</h4><p>Tag: Early Entry · Lesson: wait for reclaim close</p></article>
-              <article class="card"><h4>XAUUSD +210.00</h4><p>Tag: Good Patience · Followed execution checklist</p></article>
-              <article class="card"><h4>Journal Insight</h4><p>Best outcomes occur when Intel + chart structure agree pre-entry.</p></article>
-            </div>
+          <section class="screen" data-screen="journal">
+            <p class="muted">Journal · you tap the outcome</p>
+            <article class="card"><h4>XAUUSD</h4><p>Fill from MT5 on the ten-minute sync. Outcome: you tag it. Automatic labels are not running.</p></article>
+            <article class="card"><h4>Voice / photo / snapshot</h4><p>Attachments you add. Win rate comes from those rows, never a guess.</p></article>
+            <button class="linkish" data-go="home" type="button">Back to Home</button>
           </section>
 
-          <section class="screen" data-screen="chat">
-            <div id="chatLog" class="chat-log">
-              <div class="bubble ai">AXE: I can summarize chart + intel + risk context in one message.</div>
-              <div class="bubble user">What is the setup on XAUUSD?</div>
-              <div class="bubble ai">Bias mildly bullish above 4208. If NY reclaims 4222 with volume, target 4240-4248. Invalidate below 4202 close.</div>
-            </div>
-            <div class="chat-input">
-              <input id="chatInput" value="Give me a 3-bullet plan for next 2 hours" />
-              <button id="chatSend">Send</button>
-            </div>
+          <section class="screen" data-screen="positions">
+            <p class="muted">Positions · last sync ~10 min</p>
+            <article class="card">
+              <div class="row"><span>XAUUSD buy 0.10</span><span>+42.60</span></div>
+              <p class="muted" style="margin-top:8px">Demo figures. Live positions come from MetaApi, not this page.</p>
+            </article>
+            <button class="linkish" data-go="account" type="button">Back to Account</button>
+          </section>
+
+          <section class="screen" data-screen="settings">
+            <p class="muted">Autonomy</p>
+            <article class="card">
+              <h4>1 · Suggest only</h4>
+              <p>AXE tells you what it would do. It prepares nothing.</p>
+            </article>
+            <article class="card">
+              <h4>2 · Prepare, I approve</h4>
+              <p>Default. AXE builds the order. You press the button.</p>
+            </article>
+            <article class="card">
+              <h4>3 · Place within my limits</h4>
+              <p>Needs max lot, max risk, max trades per day, and three acknowledgements. Daily-limit guard. Never a quiet downsize.</p>
+            </article>
+            <button class="linkish" data-go="account" type="button">Back to Account</button>
           </section>
         </div>
-
-        <nav class="bottom-nav">
-          <div class="tab active" data-screen="chart">Chart</div>
-          <div class="tab" data-screen="intel">Intel</div>
-          <div class="tab" data-screen="cockpit">Cockpit</div>
-          <div class="tab" data-screen="trade">Trade</div>
-          <div class="tab" data-screen="history">History</div>
-          <div class="tab" data-screen="chat">AXE</div>
-        </nav>
+        <nav class="bottom-nav" id="tabs"></nav>
       </div>
     </div>
   </div>
 
   <script>
     const qs = new URLSearchParams(window.location.search);
-    const mode = qs.get('device') === 'tablet' ? 'tablet' : 'mobile';
-    const device = document.getElementById('device');
-    device.classList.remove('mobile');
+    const mode = qs.get("device") === "tablet" ? "tablet" : "mobile";
+    const device = document.getElementById("device");
+    device.classList.remove("mobile");
     device.classList.add(mode);
-    if (qs.get('chrome') === 'off') device.classList.add('bare');
-    document.getElementById('brand').textContent = mode === 'tablet' ? 'AXE Tablet Demo' : 'AXE Mobile Demo';
+    if (qs.get("chrome") === "off") device.classList.add("bare");
+    document.getElementById("brand").textContent = mode === "tablet" ? "AXE Companion · iPad" : "AXE Companion";
 
-    const tabs = [...document.querySelectorAll('.tab')];
-    const side = [...document.querySelectorAll('.sbtn')];
-    const screens = [...document.querySelectorAll('.screen')];
+    const CORE = [
+      { id: "home", label: "Home" },
+      { id: "markets", label: "Markets" },
+      { id: "chart", label: "Chart" },
+      { id: "axe", label: "AXE" },
+      { id: "account", label: "Account" },
+    ];
+    const MORE = [
+      { id: "intel", label: "Intel" },
+      { id: "feed", label: "Feed" },
+      { id: "alerts", label: "Alerts" },
+      { id: "journal", label: "Journal" },
+      { id: "positions", label: "Pos" },
+      { id: "settings", label: "Rules" },
+    ];
 
+    const tabsEl = document.getElementById("tabs");
+    const sideEl = document.getElementById("sidebar");
+    CORE.forEach((t) => {
+      const b = document.createElement("button");
+      b.className = "tab" + (t.id === "home" ? " active" : "");
+      b.dataset.screen = t.id;
+      b.textContent = t.label;
+      b.type = "button";
+      tabsEl.appendChild(b);
+    });
+    [...CORE, ...MORE].forEach((t) => {
+      const b = document.createElement("button");
+      b.className = "sbtn" + (t.id === "home" ? " active" : "");
+      b.dataset.screen = t.id;
+      b.textContent = t.label;
+      b.type = "button";
+      sideEl.appendChild(b);
+    });
+
+    const screens = [...document.querySelectorAll(".screen")];
     const setScreen = (key) => {
-      screens.forEach((s) => s.classList.toggle('active', s.dataset.screen === key));
-      tabs.forEach((t) => t.classList.toggle('active', t.dataset.screen === key));
-      side.forEach((b) => b.classList.toggle('active', b.dataset.screen === key));
+      screens.forEach((s) => s.classList.toggle("active", s.dataset.screen === key));
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.screen === key));
+      document.querySelectorAll(".sbtn").forEach((b) => b.classList.toggle("active", b.dataset.screen === key));
     };
+    document.querySelectorAll(".tab, .sbtn, [data-go]").forEach((el) => {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setScreen(el.dataset.screen || el.dataset.go);
+      });
+    });
 
-    tabs.forEach((t) => t.addEventListener('click', () => setScreen(t.dataset.screen)));
-    side.forEach((b) => b.addEventListener('click', () => setScreen(b.dataset.screen)));
+    document.getElementById("depthToggle").addEventListener("click", () => {
+      document.getElementById("depthPanel").classList.toggle("open");
+    });
 
-    const chatLog = document.getElementById('chatLog');
-    const chatInput = document.getElementById('chatInput');
-    const chatSend = document.getElementById('chatSend');
+    const chatLog = document.getElementById("chatLog");
+    const chatInput = document.getElementById("chatInput");
     const replies = [
-      'Session read: wait for a pullback to VWAP and confirm with Intel Tide before adding.',
-      'Risk-first: max 0.5R until NY confirms direction above 4222.',
-      'If 4208 breaks on closing candle, pause longs and wait for reclaim.',
-      'Confluence strong when structure + dark-pool zone + tide bias all align.'
+      "Wait for a pullback. This demo does not place an order.",
+      "Risk-first: autonomy stays on Prepare unless you set limits.",
+      "Intel tide is not configured. Use SEC, calendar and the chart.",
+      "Fills sync about every ten minutes after you connect MT5.",
     ];
     let r = 0;
-
     const bubble = (txt, cls) => {
-      const el = document.createElement('div');
-      el.className = 'bubble ' + cls;
+      const el = document.createElement("div");
+      el.className = "bubble " + cls;
       el.textContent = txt;
       chatLog.appendChild(el);
       chatLog.scrollTop = chatLog.scrollHeight;
     };
-
     const send = () => {
       const value = chatInput.value.trim();
       if (!value) return;
-      bubble(value, 'user');
-      chatInput.value = '';
-      setTimeout(() => bubble('AXE: ' + replies[r++ % replies.length], 'ai'), 300);
+      bubble(value, "user");
+      chatInput.value = "";
+      setTimeout(() => bubble("AXE: " + replies[r++ % replies.length], "ai"), 280);
     };
+    document.getElementById("chatSend").addEventListener("click", send);
+    chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
 
-    chatSend.addEventListener('click', send);
-    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
-
-    const canvas = document.getElementById('chartCanvas');
-    const ctx = canvas.getContext('2d');
-    const priceEl = document.getElementById('price');
+    const canvas = document.getElementById("chartCanvas");
+    const ctx = canvas.getContext("2d");
+    const priceEl = document.getElementById("price");
     const candles = [];
-    const seed = () => {
-      let p = 4210;
-      for (let i = 0; i < 70; i++) {
-        const drift = (Math.random() - 0.48) * 9;
-        const open = p;
-        const close = p + drift;
-        const high = Math.max(open, close) + Math.random() * 4;
-        const low = Math.min(open, close) - Math.random() * 4;
-        candles.push({ open, close, high, low });
-        p = close;
-      }
-    };
-
+    let p = 2650;
+    for (let i = 0; i < 70; i++) {
+      const drift = (Math.random() - 0.48) * 6;
+      const open = p, close = p + drift;
+      candles.push({ open, close, high: Math.max(open, close) + Math.random() * 3, low: Math.min(open, close) - Math.random() * 3 });
+      p = close;
+    }
     const draw = () => {
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.fillStyle = '#020508';
+      const w = canvas.width, h = canvas.height;
+      ctx.fillStyle = "#020508";
       ctx.fillRect(0, 0, w, h);
-
-      ctx.strokeStyle = 'rgba(255,255,255,.06)';
-      ctx.lineWidth = 1;
-      for (let y = 40; y < h; y += 60) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-      }
-      for (let x = 40; x < w; x += 72) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-      }
-
-      const min = Math.min(...candles.map(c => c.low)) - 4;
-      const max = Math.max(...candles.map(c => c.high)) + 4;
+      ctx.strokeStyle = "rgba(255,255,255,.06)";
+      for (let y = 40; y < h; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+      const min = Math.min(...candles.map((c) => c.low)) - 4;
+      const max = Math.max(...candles.map((c) => c.high)) + 4;
       const span = max - min || 1;
       const step = w / candles.length;
-
       candles.forEach((c, i) => {
         const x = i * step + step * 0.5;
         const yo = h - ((c.open - min) / span) * h;
@@ -463,39 +496,21 @@
         const yh = h - ((c.high - min) / span) * h;
         const yl = h - ((c.low - min) / span) * h;
         const up = c.close >= c.open;
-
-        ctx.strokeStyle = up ? '#2fd3ea' : '#e0636f';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = up ? "#2fd3ea" : "#e0636f";
         ctx.beginPath(); ctx.moveTo(x, yh); ctx.lineTo(x, yl); ctx.stroke();
-
-        ctx.fillStyle = up ? '#2fd3ea' : '#e0636f';
-        const bodyY = Math.min(yo, yc);
-        const bodyH = Math.max(2, Math.abs(yc - yo));
-        ctx.fillRect(x - step * 0.28, bodyY, step * 0.56, bodyH);
+        ctx.fillStyle = up ? "#2fd3ea" : "#e0636f";
+        ctx.fillRect(x - step * 0.28, Math.min(yo, yc), step * 0.56, Math.max(2, Math.abs(yc - yo)));
       });
-
-      const last = candles[candles.length - 1].close;
-      priceEl.textContent = last.toFixed(2);
+      priceEl.textContent = candles[candles.length - 1].close.toFixed(2);
     };
-
-    const tick = () => {
+    draw();
+    setInterval(() => {
       const prev = candles[candles.length - 1].close;
-      const drift = (Math.random() - 0.5) * 10;
-      const open = prev;
-      const close = prev + drift;
-      candles.push({
-        open,
-        close,
-        high: Math.max(open, close) + Math.random() * 3.6,
-        low: Math.min(open, close) - Math.random() * 3.6,
-      });
+      const close = prev + (Math.random() - 0.5) * 4;
+      candles.push({ open: prev, close, high: Math.max(prev, close) + Math.random() * 2, low: Math.min(prev, close) - Math.random() * 2 });
       if (candles.length > 86) candles.shift();
       draw();
-    };
-
-    seed();
-    draw();
-    setInterval(tick, 1200);
+    }, 1400);
   </script>
 </body>
 </html>

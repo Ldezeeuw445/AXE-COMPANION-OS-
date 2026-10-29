@@ -5,16 +5,18 @@ import { expect, test } from "playwright/test";
 const shotDir = process.env.LANDING_SHOT_DIR ?? join(process.cwd(), "e2e/artifacts");
 
 test.describe("companion landing", () => {
-  test("renders the new homepage and hides sample testimonials", async ({ page }) => {
+  test("renders the restored Companion homepage and hides sample testimonials", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("your intelligence");
-    await expect(page.getByText("Same stack · two surfaces")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "The brain behind every decision." })).toBeVisible();
-    await expect(page.getByText("Example — sample cockpit, not live data")).toBeVisible();
-    await expect(page.getByText("Floating desk chat · Terminal")).toBeVisible();
-    await expect(page.getByText(/Drag to explore/)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("The trader's phone OS");
+    await expect(page.getByText("Your Second Brain For Trading")).toBeVisible();
+    await expect(page.getByText(/19 AXE intel feeds/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Execution discipline, from your fills." }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Try the live demo" }).first()).toHaveAttribute(
+      "href",
+      "#hero-devices",
+    );
     await expect(page.getByText("Freya H.")).toHaveCount(0);
     await expect(page.getByText("Verified quotes")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");
@@ -23,6 +25,44 @@ test.describe("companion landing", () => {
       "/signup",
     );
     await expect(page.getByRole("button", { name: /switch app/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Choose Pro" })).toHaveAttribute(
+      "href",
+      "/login?next=/upgrade",
+    );
+  });
+
+  test("hero mock is a no-login walkthrough of the current app", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.locator("#hero-devices").scrollIntoViewIfNeeded();
+    const phone = page.frameLocator('iframe[title*="iPhone"]').first();
+    await expect(phone.getByText("NO LOGIN")).toBeVisible();
+    await phone.locator('button.tab[data-screen="chart"]').click();
+    await expect(phone.getByText(/Demo candles/)).toBeVisible();
+    await phone.locator('button.tab[data-screen="account"]').click();
+    await expect(phone.getByText("Resolved → Upcomers-Server")).toBeVisible();
+    await phone.locator('button.tab[data-screen="home"]').click();
+    await phone.locator('button.linkish[data-go="intel"]').click();
+    await expect(phone.getByText("Not configured").first()).toBeVisible();
+    await phone.locator('button.tab[data-screen="home"]').click();
+    await phone.locator('button.linkish[data-go="alerts"]').click();
+    await expect(phone.getByText("Push notification delivery is not live")).toBeVisible();
+    await expect(phone.getByText("The background watcher is not firing alerts")).toBeVisible();
+
+    const ipad = page.frameLocator('iframe[title*="iPad"]').first();
+    await expect(ipad.getByText("NO LOGIN")).toBeVisible();
+    await ipad.locator('button.sbtn[data-screen="intel"]').click();
+    await expect(ipad.getByText("Not configured").first()).toBeVisible();
+  });
+
+  test("paid checkout starts on login with next=/upgrade", async ({ page }) => {
+    await page.goto("/login?next=/upgrade", { waitUntil: "domcontentloaded" });
+    const next = page.locator('input[name="next"]');
+    if ((await next.count()) > 0) {
+      await expect(next).toHaveValue("/upgrade");
+    } else {
+      await expect(page.getByText(/Supabase is not configured|Sign in|Create account/i).first()).toBeVisible();
+    }
   });
 
   test("header actions stay on one line at 390px", async ({ page }) => {

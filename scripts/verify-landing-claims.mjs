@@ -1,10 +1,11 @@
 /**
  * The landing page is a promise. These checks keep it one we keep.
  *
- * The public homepage is the Trading OS companion layout, rebuilt for
- * Companion: hero, same-stack, ENGINE / ONE / Adaptive, example cockpit,
- * Companion-only feature grid, Trading OS bridge, billing-backed pricing,
- * FAQ, waitlist, legal. Claims must stay true as the app moves.
+ * The public homepage is the finallaunch / Trading-OS-twin Companion landing:
+ * "The trader's phone OS", device plate, hover-reveal cards, second brain,
+ * intel feed grid, execution discipline, Companion-only feature grid,
+ * Trading OS bridge, billing-backed pricing, FAQ, waitlist, legal.
+ * Claims must stay true as the app moves.
  *
  * Run: node scripts/verify-landing-claims.mjs
  */
@@ -23,13 +24,22 @@ import {
 } from "../src/lib/ecosystem/apps.ts";
 import {
   COMPANION_FEATURES,
+  LANDING_CHECKOUT_HREF,
+  LANDING_DISCIPLINE,
   LANDING_FAQ,
+  LANDING_FEEDS_BAND,
   LANDING_HERO,
-  LANDING_SURFACES,
+  LANDING_INTEL_FEED_COUNT,
+  LANDING_INTEL_FEEDS,
+  LANDING_INTRO,
+  LANDING_REVEAL_CARDS,
+  LANDING_SECOND_BRAIN,
+  LANDING_SHOWCASE,
   LANDING_TOS_BRIDGE,
   LANDING_TESTIMONIALS,
   landingTestimonialsEnabled,
 } from "../src/lib/marketing/landingCopy.ts";
+import { DEFAULT_AFTER_LOGIN, safeAppPath } from "../src/lib/auth/safeAppPath.ts";
 
 let passed = 0;
 function check(name, fn) {
@@ -48,6 +58,7 @@ const landing = [
   read("src/lib/marketing/landingCopy.ts"),
   read("src/lib/marketing/loadLandingCatalog.ts"),
   read("src/components/marketing/LandingWaitlist.tsx"),
+  read("src/components/marketing/LaunchHeroExperience.tsx"),
   ...landingFiles,
 ].join("\n");
 const switcher = read("src/components/marketing/AppSwitcher.tsx");
@@ -60,25 +71,78 @@ const nextConfig = read("next.config.ts");
 
 console.log("landing claims");
 
-check("the new homepage keeps the companion layout Luka asked for", () => {
-  assert.equal(LANDING_HERO.titleAccent, "your intelligence.");
-  assert.match(LANDING_HERO.titleLead, /Your trades, your journal/);
-  assert.equal(LANDING_SURFACES.kicker, "Same stack · two surfaces");
-  assert.match(landing, /AXE ENGINE/);
-  assert.match(landing, /AXE ONE/);
-  assert.match(landing, /Adaptive Intelligence/);
-  assert.match(landing, /LandingCockpitExample/);
-  assert.match(landing, /LandingDeskChat/);
-  assert.match(landing, /LandingCube/);
+check("the homepage is the finallaunch Companion landing Luka asked for", () => {
+  assert.equal(LANDING_HERO.titleLead, "AXE Companion.");
+  assert.equal(LANDING_HERO.titleAccent, "The trader's phone OS.");
+  assert.match(LANDING_HERO.badge, /AXE Companion OS/i);
+  assert.equal(LANDING_SECOND_BRAIN.titleAccent, "Your Second Brain For Trading.");
+  assert.equal(LANDING_REVEAL_CARDS[0].title, "Surface the signal.");
+  assert.equal(LANDING_REVEAL_CARDS[1].title, "Quiet, but not flat.");
+  assert.equal(LANDING_REVEAL_CARDS[2].title, "Premium motion cues.");
+  assert.match(landing, /Try the live demo/);
+  assert.match(landing, /See pricing/);
+  assert.equal(LANDING_DISCIPLINE.title, "Execution discipline, from your fills.");
+  assert.equal(LANDING_FEEDS_BAND.titleLead, "AXE intel feeds");
+  assert.match(landing, /LaunchHeroExperience/);
+  assert.match(landing, /LandingHeroDevices/);
+  assert.match(landing, /LandingShowcase/);
   assert.match(landing, /LandingFeatureGrid/);
   assert.match(landing, /LandingPricing/);
   assert.match(landing, /LandingFaq/);
   assert.match(landing, /LandingFinalCta/);
-  assert.match(LANDING_HERO.body, /synced with Trading OS on your desktop/);
+  assert.ok(!/LandingCockpitExample/.test(landing));
+  assert.ok(!/LandingDeskChat/.test(landing));
+  assert.ok(!/LandingEngine/.test(landing));
+  assert.ok(!/LandingSurfaces/.test(landing));
+  assert.equal(LANDING_INTRO.loginBody.includes("Supabase"), false);
+  assert.equal(LANDING_SHOWCASE.length, 8);
+  for (const row of LANDING_SHOWCASE) {
+    assert.notEqual(row.href, "#", `${row.step} must not use href='#'`);
+  }
   const copy = read("src/lib/marketing/landingCopy.ts");
   assert.ok(!/same Supabase account/i.test(copy), "marketing copy must not mention a Supabase account");
   assert.ok(!/Supabase/i.test(copy), "marketing copy must not name Supabase");
   assert.ok(!/Row-Level Security/i.test(copy), "marketing copy must not use database jargon");
+});
+
+check("the intel feed headline uses the real count from this repo", () => {
+  const providerIds = [
+    "insiderTrades",
+    "senateTrades",
+    "darkPoolPrints",
+    "unusualOptions",
+    "marketTide",
+    "corporateJets",
+    "vesselTracking",
+    "chokepoints",
+    "conflictEvents",
+    "energyFlows",
+    "cyberThreats",
+    "militaryRadar",
+    "emergencyMonitor",
+  ];
+  const intelClient = read("src/lib/intel/intelClient.ts");
+  for (const id of providerIds) {
+    assert.ok(intelClient.includes(`"${id}"`), `intelClient must still expose ${id}`);
+  }
+  assert.equal(providerIds.length, 13);
+  // 13 intelClient providers + Macro, Calendar, News, Correlation, Conviction, Déjà Vu
+  assert.equal(LANDING_INTEL_FEED_COUNT, 13 + 6);
+  assert.equal(LANDING_INTEL_FEEDS.length, LANDING_INTEL_FEED_COUNT);
+  assert.match(landing, /AXE intel feeds/);
+  assert.equal(LANDING_INTEL_FEEDS.filter((feed) => feed.notConfigured).length, 3);
+  for (const feed of LANDING_INTEL_FEEDS.filter((row) => row.notConfigured)) {
+    assert.match(feed.desc, /not configured/i);
+  }
+  assert.match(
+    read("src/components/marketing/landing/LandingIntelFeeds.tsx"),
+    /\{LANDING_INTEL_FEED_COUNT\}/,
+    "the headline must print the counted constant, not a retyped 19",
+  );
+  assert.equal(LANDING_INTEL_FEEDS.filter((feed) => feed.span === 2).length, 3);
+  assert.ok(!/\$1\.71B/.test(landing), "do not ship fabricated tide notionals");
+  assert.ok(!/SPY 1\.2M/.test(landing), "do not ship fabricated dark-pool prints");
+  assert.ok(!/200 aircraft/.test(landing), "do not ship an unverified aircraft count");
 });
 
 check("Unusual Whales is only ever disclosed, never advertised", () => {
@@ -238,30 +302,51 @@ check("no fabricated testimonials ship", () => {
   assert.ok(landing.includes("data-landing-testimonials"), "keep the flagged slot");
 });
 
-check("the cockpit mock is labelled as an example", () => {
-  assert.ok(/Example — sample cockpit, not live data/.test(landing));
-  assert.ok(landing.includes('data-landing-cockpit-example="true"'));
+check("the alignment panel is labelled as example chrome, not live account data", () => {
+  assert.match(landing, /Example cockpit chrome/);
+  assert.ok(!landing.includes('data-landing-cockpit-example="true"'));
+  assert.ok(!/FIT score/.test(landing), "FIT is not a product metric; Cockpit uses alignment");
 });
 
-check("desk chat is demo chrome with a snap slot, not a fake live session", () => {
-  const desk = read("src/components/marketing/landing/LandingDeskChat.tsx");
-  assert.ok(desk.includes('data-landing-desk-chat="true"'));
-  assert.ok(desk.includes('id="desk-chat-slot"'));
-  assert.ok(/snap back|Minimize with/.test(desk));
-  assert.ok(desk.includes('href="/login"'));
-  assert.ok(!/BTC|NASDAQ|buy now|live reply from AXE/i.test(desk));
-  assert.match(desk, /not a live session/i);
+check("paid checkout CTAs go through login to /upgrade, not a bare Stripe guess", () => {
+  assert.equal(LANDING_CHECKOUT_HREF, "/login?next=/upgrade");
+  assert.ok(landing.includes(LANDING_CHECKOUT_HREF), "Choose Pro/Founder/Elite must use the checkout href");
+  assert.equal(safeAppPath("/upgrade"), "/upgrade");
+  assert.equal(safeAppPath("https://evil.example"), DEFAULT_AFTER_LOGIN);
+  assert.equal(safeAppPath("//evil.example"), DEFAULT_AFTER_LOGIN);
+  assert.equal(safeAppPath("/login"), DEFAULT_AFTER_LOGIN);
 });
 
-check("ENGINE / ONE / Adaptive use CSS 3D cubes, not a flat tile", () => {
-  const cubes = read("src/components/marketing/landing/LandingCubes.tsx");
-  const css = read("src/app/globals.css");
-  assert.ok(cubes.includes("axe-landing-cube3d-face"));
-  assert.ok(cubes.includes("LandingPyramid"));
-  assert.ok(css.includes("axe-landing-cube3d-face--front"));
-  assert.ok(css.includes("axe-landing-cube3d-face--back"));
-  assert.ok(css.includes("transform-style: preserve-3d"));
-  assert.ok(css.includes("axe-cube-spin"));
+check("the page does not claim systems that are not running", () => {
+  const tiersSrc = read("src/lib/billing/tiers.ts");
+  assert.match(landing, /ten minutes|10-minute|every ten minutes/);
+  assert.match(landing, /Price alerts in the app/);
+  assert.ok(!/Push alerts with deep links/i.test(landing));
+  assert.ok(!/Server-triggered push that opens the right screen/i.test(landing));
+  assert.ok(!/Persistent memory|Vector RAG memory|axe_memories/i.test(landing));
+  assert.ok(!/Persistent memory|Vector RAG memory/i.test(tiersSrc));
+  assert.ok(!/same AXE memory/i.test(landing), "do not sell AXE memory as live");
+  assert.ok(!/same AXE memory/i.test(switcher), "the switcher must not sell AXE memory either");
+  assert.ok(
+    !/account and\s+memory/i.test(landing),
+    "waitlist must not promise memory on Trading OS",
+  );
+  assert.ok(!/Full auto journal/i.test(landing));
+  assert.ok(!/Full auto journal/i.test(tiersSrc));
+  assert.ok(!/"Push notifications"/.test(tiersSrc));
+  assert.match(landing, /no live per-firm drawdown alert/i);
+  assert.match(landing, /Automatic journal labels are not running|automatic labels are not running/i);
+  assert.match(landing, /Push notification delivery is not live/);
+  assert.match(landing, /background watcher is not firing alerts/i);
+  assert.ok(!/Account health monitoring/i.test(tiersSrc), "do not sell watcher-style account monitoring");
+  assert.ok(!/streams it live, right next to your chart/i.test(landing));
+  assert.ok(!/visible in real time/i.test(landing));
+});
+
+check("Try the live demo opens the no-login device mock", () => {
+  assert.match(landing, /href="#hero-devices"/);
+  assert.ok(hero.includes('id="hero-devices"'));
+  assert.ok(hero.includes("/hero-demo/app.html"));
 });
 
 check("no href='#' and no bare social domains", () => {
@@ -301,6 +386,8 @@ check("the stray /landing page is a real redirect, not a client hop", () => {
     /source:\s*"\/landing\/index\.html"[\s\S]{0,80}destination:\s*"\/"[\s\S]{0,40}permanent:\s*true/.test(nextConfig),
     "/landing/index.html must be a permanent redirect to /",
   );
+  const landingRedirects = [...nextConfig.matchAll(/source:\s*"\/landing\/index\.html"/g)];
+  assert.equal(landingRedirects.length, 1, "do not duplicate the /landing/index.html redirect");
 });
 
 check("no retired draft is advertised in the sitemap", () => {
@@ -455,6 +542,19 @@ check("the hero mock needs no account and makes no network call", () => {
 check("the mock says it is a demo rather than passing for an account", () => {
   assert.ok(/NO LOGIN/i.test(heroMock), "the mock labels itself");
   assert.ok(/no account needed/i.test(hero), "and the hero says so underneath");
+});
+
+check("the mock walks the current five-tab shell plus the rest of the app", () => {
+  for (const screen of ["home", "markets", "chart", "axe", "account", "intel", "feed", "alerts", "journal", "positions", "settings"]) {
+    assert.ok(heroMock.includes(`data-screen="${screen}"`), `mock missing screen ${screen}`);
+  }
+  assert.ok(heroMock.includes("Home") && heroMock.includes("Markets") && heroMock.includes("Account"));
+  assert.ok(!/\$1\.71B/.test(heroMock), "do not ship fabricated tide notionals in the mock");
+  assert.ok(!/SPY 1\.2M/.test(heroMock), "do not ship fabricated dark-pool prints in the mock");
+  assert.ok(/Not configured/i.test(heroMock), "UW tiles in the mock must say not configured");
+  assert.ok(/ten minutes/i.test(heroMock), "the mock must say MT5 syncs on the ten-minute cadence");
+  assert.ok(/Push notification delivery is not live/i.test(heroMock));
+  assert.ok(/background watcher is not firing alerts/i.test(heroMock));
 });
 
 check("both devices are there, at real logical sizes", () => {

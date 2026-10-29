@@ -19,6 +19,8 @@ export default async function LoginPage({
   const rawMode = params?.mode;
   const modeParam = Array.isArray(rawMode) ? rawMode[0] : rawMode;
   const initialMode = modeParam === "signup" ? "signup" : "signin";
+  const rawNext = params?.next;
+  const nextParam = Array.isArray(rawNext) ? rawNext[0] : rawNext;
 
   return (
     <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden overscroll-none bg-[#050608]">
@@ -92,7 +94,7 @@ export default async function LoginPage({
         ) : null}
 
         {/* Auth form */}
-        <LoginForm initialMode={initialMode} />
+        <LoginForm initialMode={initialMode} next={nextParam} />
 
         <div className="mt-6">
           <ComplianceRiskNotice compact className="text-center" />
