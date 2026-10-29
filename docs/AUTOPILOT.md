@@ -35,8 +35,16 @@ Niet "de code staat er". Af is:
    ```
 
    `shortCommit` moet gelijk zijn aan `git rev-parse --short HEAD`. Reken op
-   zes tot tien minuten. Een oude `builtAt` bij een nieuwe commit op `main`
-   betekent dat de build faalt — lees dan `/var/log/axe-autodeploy.log`.
+   zes tot tien minuten.
+
+   Een oude `builtAt` is op zichzelf géén alarm — hij betekent net zo goed dat
+   er sinds die build niets te bouwen viel. Op 29 oktober stond er een
+   `builtAt` van drie uur oud en was alles in orde: de laatste commit ervoor
+   wás de laatste commit. Controleer het verschil met
+   `git log --oneline <live-commit>..HEAD`: komt daar niets uit, dan loopt de
+   deploy gewoon achter op jouw push van zojuist en moet je wachten. Staan er
+   wél commits in die ouder zijn dan een kwartier, dan faalt de build en lees
+   je `/var/log/axe-autodeploy.log`.
 
    Dit endpoint bestaat omdat er twee keer verkeerd over de deploy geredeneerd
    is in plaats van hem te meten. Vertrouw de runbook niet, vraag het
