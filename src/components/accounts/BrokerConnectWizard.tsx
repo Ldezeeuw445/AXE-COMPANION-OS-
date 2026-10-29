@@ -21,7 +21,18 @@ const REGION_OPTIONS = [
   { value: "singapore" as const, label: "Singapore", hint: "Asia-Pacific" },
 ];
 
-export function BrokerConnectWizard({ defaultRegion }: { defaultRegion: string }) {
+export function BrokerConnectWizard({
+  defaultRegion,
+  liveAccountsNotice,
+  liveCapBlocked,
+  liveCapMessage,
+}: {
+  defaultRegion: string;
+  liveAccountsNotice?: string;
+  /** When true, new live connects are blocked (already at plan cap). */
+  liveCapBlocked?: boolean;
+  liveCapMessage?: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(1);
   const [server, setServer] = useState("");
@@ -80,7 +91,24 @@ export function BrokerConnectWizard({ defaultRegion }: { defaultRegion: string }
         </span>
       </div>
 
-      {step === 1 && (
+      {liveAccountsNotice ? (
+        <p data-testid="live-accounts-plan-notice" className="mb-4 text-[11px] text-white/45">
+          {liveAccountsNotice}
+        </p>
+      ) : null}
+      {liveCapBlocked && liveCapMessage ? (
+        <div
+          data-testid="live-accounts-cap-blocked"
+          className="mb-4 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-[12px] leading-snug text-amber-100/90"
+        >
+          {liveCapMessage}{" "}
+          <a href="/pricing" className="font-semibold text-cyan-300/90 underline-offset-2 hover:underline">
+            View plans
+          </a>
+        </div>
+      ) : null}
+
+      {step === 1 && !liveCapBlocked && (
         <div className="space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-white">Which MT5 server?</h3>
@@ -126,7 +154,7 @@ export function BrokerConnectWizard({ defaultRegion }: { defaultRegion: string }
         </div>
       )}
 
-      {step === 2 && (
+      {step === 2 && !liveCapBlocked && (
         <form action={action} className="space-y-4">
           <div className="flex items-center gap-2">
             <button

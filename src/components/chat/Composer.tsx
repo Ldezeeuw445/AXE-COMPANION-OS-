@@ -349,7 +349,12 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
                 router.refresh();
               } else if (eventType === "error" || currentEvent === "error") {
                 sseError = data.message ?? "AXE encountered an error.";
-                if (sseError.includes("limit reached") || sseError.includes("Upgrade")) {
+                if (
+                  sseError.includes("limit") ||
+                  sseError.includes("Upgrade") ||
+                  sseError.includes("fair-use") ||
+                  sseError.includes("midnight UTC")
+                ) {
                   void loadQuota();
                 }
               }
@@ -472,6 +477,24 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
 
   return (
     <div className="mt-auto shrink-0 overflow-visible pb-1 pt-0">
+      {/* Friendly daily chat ceiling notice */}
+      {showQuota && quota?.ok && quota.remaining === 0 && quota.limit && quota.limit > 0 ? (
+        <div
+          data-testid="chat-quota-notice"
+          className="mb-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-[12px] leading-snug text-amber-100/90"
+        >
+          <p>{quota.notice ?? `You've reached today's AXE chat allowance (${quota.limit}). Resets at midnight UTC.`}</p>
+          {quota.offerUpgrade ? (
+            <a
+              href="/pricing"
+              className="mt-1 inline-block font-semibold text-cyan-300/90 underline-offset-2 hover:underline"
+            >
+              Upgrade for a higher daily allowance
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* ── Image preview ────────────────────────────────────────────── */}
       {image ? (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">
@@ -626,7 +649,15 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       />
 
       {error ? (
-        <p className="mt-2 text-center text-[10px] text-red-400/90">{error}</p>
+        <p
+          className={`mt-2 text-center text-[10px] ${
+            error.includes("midnight UTC") || error.includes("fair-use") || error.includes("Upgrade for a higher")
+              ? "text-amber-200/90"
+              : "text-red-400/90"
+          }`}
+        >
+          {error}
+        </p>
       ) : null}
       {listening ? (
         <p className="mt-2 text-center text-[10px] text-[#00d4f5] animate-pulse">

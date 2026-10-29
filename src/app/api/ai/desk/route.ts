@@ -55,7 +55,11 @@ export async function POST(request: Request) {
         {
           ok: false,
           code: "CHAT_QUOTA",
-          error: "Daily free message limit reached. Upgrade to Pro for unlimited chat.",
+          error: result.quotaNotice ?? "You've reached today's AXE chat allowance. Resets at midnight UTC.",
+          notice: result.quotaNotice,
+          offerUpgrade: result.offerUpgrade ?? false,
+          resetsAt: result.resetsAt,
+          friendly: true,
         },
         { status: 429 }
       );

@@ -82,7 +82,15 @@ export async function POST(request: Request) {
 
       if (!result.ok) {
         if (result.quotaExceeded) {
-          send({ type: "error", message: "Daily message limit reached. Upgrade for unlimited access." });
+          send({
+            type: "error",
+            message:
+              result.quotaNotice ??
+              "You've reached today's AXE chat allowance. Resets at midnight UTC.",
+            code: "CHAT_QUOTA",
+            offerUpgrade: result.offerUpgrade ?? false,
+            resetsAt: result.resetsAt,
+          });
         } else if (result.aiFailed) {
           const detail = result.errorDetail ?? "Unknown AI error";
           send({
