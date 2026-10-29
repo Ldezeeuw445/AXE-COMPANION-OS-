@@ -3576,8 +3576,10 @@ export function ChartScreen({
 
         {/* Tablet — compact toolbar: left meta, centered depth/news | squawk | exec, right account */}
         <div
-          className={`tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 bg-black/72 px-2 py-1.5 backdrop-blur-lg ${
-            chartTheme.isDark ? "border-b border-white/[0.06]" : ""
+          className={`tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 py-1.5 ${
+            chartTheme.isDark
+              ? "border-b border-white/[0.06] bg-black/72 backdrop-blur-lg"
+              : "border-b border-black/[0.08] bg-[#0c0c0e]/97"
           }`}
         >
           <div className="flex min-w-0 items-center justify-self-start gap-1">
@@ -3668,17 +3670,27 @@ export function ChartScreen({
             />
           </div>
           {data.accountChoices.length > 0 ? (
-            <div className="relative shrink-0 justify-self-end">
+            <div className="relative min-w-0 max-w-[9rem] shrink-0 justify-self-end">
               <select
                 value={accountId ?? ""}
                 onChange={(e) => goAccount(e.target.value)}
-                className="max-w-[9rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2 py-0.5 pr-5 text-[9px] font-semibold text-emerald-100/90 outline-none"
+                className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 aria-label="Account"
               >
                 {data.accountChoices.map((a) => (
                   <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
                 ))}
               </select>
+              <div
+                className="pointer-events-none flex min-w-0 items-center rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2 py-0.5 pr-5"
+                aria-hidden
+              >
+                <span className="block min-w-0 truncate text-[9px] font-semibold text-emerald-100/90">
+                  {data.accountChoices.find((a) => a.brokerAccountId === accountId)?.label
+                    ?? accountLabel
+                    ?? "Account"}
+                </span>
+              </div>
               <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
             </div>
           ) : (
@@ -3687,9 +3699,15 @@ export function ChartScreen({
         </div>
 
         {/* Phone — two-row toolbar (unchanged layout) */}
-        <div className="tos-chart-phone-header absolute left-0 right-0 top-0 z-30 border-b border-white/[0.06] bg-black/72 px-2.5 py-1.5 backdrop-blur-lg">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
+        <div
+          className={`tos-chart-phone-header absolute left-0 right-0 top-0 z-30 border-b px-2.5 py-1.5 ${
+            chartTheme.isDark
+              ? "border-white/[0.06] bg-black/72 backdrop-blur-lg"
+              : "border-black/[0.08] bg-[#0c0c0e]/97"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <div className="relative">
                 <select
                   value={data.symbol}
@@ -3735,7 +3753,7 @@ export function ChartScreen({
                 askText={askText}
                 dayPct={dayPct}
                 dayText={dayText}
-                className="ml-auto shrink-0 sm:ml-0.5"
+                className="ml-auto min-w-0 overflow-hidden sm:ml-0.5"
               />
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
@@ -3750,17 +3768,27 @@ export function ChartScreen({
                 {sessionCopy()}
               </span>
               {data.accountChoices.length > 1 ? (
-                <div className="relative shrink-0">
+                <div className="relative min-w-0 max-w-[9.5rem] shrink-0">
                   <select
                     value={accountId ?? ""}
                     onChange={(e) => goAccount(e.target.value)}
-                    className="max-w-[10.4rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2.5 py-1 pr-6 text-[10px] font-semibold text-emerald-100/90 outline-none transition-colors hover:bg-emerald-400/[0.15]"
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     aria-label="Account"
                   >
                     {data.accountChoices.map((a) => (
                       <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
                     ))}
                   </select>
+                  <div
+                    className="pointer-events-none flex min-w-0 items-center rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2.5 py-1 pr-6"
+                    aria-hidden
+                  >
+                    <span className="block min-w-0 truncate text-[10px] font-semibold text-emerald-100/90">
+                      {data.accountChoices.find((a) => a.brokerAccountId === accountId)?.label
+                        ?? accountLabel
+                        ?? "Account"}
+                    </span>
+                  </div>
                   <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
                 </div>
               ) : null}
