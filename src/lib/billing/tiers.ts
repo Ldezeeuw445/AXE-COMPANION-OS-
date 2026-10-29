@@ -6,32 +6,41 @@
  * - Translate internal tech (RAG, vector, provider names) into customer value.
  * - Mark Elite items that are not shipping today as Roadmap.
  *
- * TODO(Luka): Confirm concrete fair-use soft ceiling for paid chat
- *   (proposal below uses 500 AXE sends/day — advise only until signed off).
- * TODO(Luka): Confirm Pro/Founder/Elite live-account caps beyond Free's "1".
- *   Code gates Free to one live account and Pro+ as "multi-account" without a hard number.
- * TODO(Luka): Confirm whether MetaApi cloud resource slots ever bill the customer
- *   separately; landing currently says the AXE plan includes the cloud link.
- * TODO(Luka): Confirm exact meaning of "permanent Founder status" on cancel/return
- *   (badge + price lock retained after cancel? only while seats remain?).
+ * Signed off by Luka (2026-10-29):
+ * - Fair-use soft ceilings: Pro 200/day, Founder & Elite 500/day (friendly notice, not a hard surprise block).
+ * - Live broker accounts: Free 1, Pro 3, Founder 5, Elite 10.
+ * - MetaApi cloud connection is included in the subscription (no AXE surcharge).
+ * - Founder: keep €40 forever while continuously subscribed; badge survives cancel;
+ *   returning later pays the normal rate (not the Founder lock).
+ * - Demo session: honest placeholder until a 60–90s recording lands in public/marketing/.
+ *
+ * Enforcement note: paid chat remains unlimited (-1) in the Supabase RPCs today; the
+ * soft ceilings below are the product promise for UI/copy. Live-account counts are
+ * the product caps; the runtime gate is still the boolean `multi_account` feature
+ * (Free = 1 live, Pro+ = multi) — numeric caps are not hard-enforced yet so we do
+ * not silently cut existing Pro+ users who already connected more accounts.
  */
 
 export type AxePlanId = "free" | "pro" | "founder" | "elite";
 
 export const FOUNDER_SEAT_CAP = 100;
 
-/**
- * Soft ceiling shown for paid "unlimited — fair use" chat.
- * TODO(Luka): replace 500 once you pick the real number; keep Free at 20.
- */
+/** @deprecated Prefer fairUseSoftCapForPlan(plan) — kept for older imports. */
 export const PAID_CHAT_FAIR_USE_SOFT_CAP_PER_DAY = 500;
 
 export type AxeBillingTier = {
   id: AxePlanId;
   label: string;
   priceEurMonthly: number | null;
-  /** Daily AXE chat sends; null = unlimited (fair use soft cap). */
+  /**
+   * Hard daily AXE chat sends in product copy / Free enforcement.
+   * null = no hard daily cap (paid fair-use soft ceiling applies instead).
+   */
   dailyChatCap: number | null;
+  /** Soft fair-use ceiling (sends/day). Friendly notice at the limit — not a hard surprise block. */
+  fairUseSoftCapPerDay: number | null;
+  /** Max live broker accounts (demo/paper unlimited on every plan). */
+  liveAccountsCap: number;
   stripePriceIdEnv?: string;
   /** Public Stripe Payment Link env var (legacy Pro uses NEXT_PUBLIC_STRIPE_PAYMENT_LINK). */
   stripePaymentLinkEnv?: string;
@@ -49,6 +58,8 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     label: "Free",
     priceEurMonthly: 0,
     dailyChatCap: 20,
+    fairUseSoftCapPerDay: null,
+    liveAccountsCap: 1,
     headline: "Start with the full mobile OS — capped chat and core tools.",
     includes: [
       "1 live broker account (MT5 via MetaApi, or Alpaca when configured)",
@@ -75,14 +86,15 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     label: "Pro",
     priceEurMonthly: 20,
     dailyChatCap: null,
+    fairUseSoftCapPerDay: 200,
+    liveAccountsCap: 3,
     stripePriceIdEnv: "STRIPE_PRICE_PRO",
     stripePaymentLinkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_PRO",
     badge: "Recommended",
     headline: "Full AXE Companion — unlimited chat and the complete workflow stack.",
     includes: [
       "Everything in Free",
-      // TODO(Luka): confirm 500/day soft cap for fair use
-      "Unlimited AXE queries — fair use soft cap ~500 sends/day",
+      "Unlimited AXE queries — fair use soft ceiling 200 sends/day (plenty for daily trading; friendly notice at the limit)",
       "Full Cockpit access",
       "Learning Arc",
       "Trade preparation",
@@ -92,8 +104,7 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
       "Push notifications",
       "Full auto journal",
       "Full indicator suite",
-      // TODO(Luka): exact live-account count for Pro
-      "Multi-account support (several live broker accounts)",
+      "Up to 3 live broker accounts",
       "Daily + 1 weekly briefing",
       "Persistent memory of your journal, rules and chat",
       "AXE remembers your trading context across sessions",
@@ -106,28 +117,32 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     label: "Founder",
     priceEurMonthly: 40,
     dailyChatCap: null,
+    fairUseSoftCapPerDay: 500,
+    liveAccountsCap: 5,
     stripePriceIdEnv: "STRIPE_PRICE_FOUNDER",
     stripePaymentLinkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_FOUNDER",
     badge: "100 spots",
     headline: "Everything in Pro — plus permanent Founder status (limited to 100).",
-    includes: ["Everything in Pro"],
+    includes: [
+      "Everything in Pro",
+      "Up to 5 live broker accounts",
+      "Fair use soft ceiling 500 AXE sends/day (plenty for daily trading; friendly notice at the limit)",
+    ],
     extraBenefits: [
-      "Founder badge (kept even if you cancel and later return)",
-      "Permanent Founder status — same badge + locked Founder price on return",
+      "Founder badge (kept even if you cancel)",
+      "Keep your Founder price (€40/mo) forever while you stay subscribed",
       "Priority support",
       "Early access features",
       "Founder Discord access",
       "Direct product feedback channel",
       "Roadmap voting access",
       "Closed beta feature access",
-      "Lifetime Founder pricing lock (€40/mo while Founder exists)",
-      "Trading OS Founder pricing eligibility (€69/mo vs €79/mo)",
+      "Trading OS Founder pricing eligibility (€69/mo vs €79/mo) while subscribed",
     ],
     notes: [
       "Maximum 100 Founder memberships.",
       "Once sold out, Founder is permanently removed and Elite opens for new upgrades.",
-      // TODO(Luka): confirm cancel/return semantics in Stripe + entitlements.
-      "Cancel keeps your Founder badge; resubscribing restores the locked Founder price while seats still exist.",
+      "Cancel keeps your Founder badge. If you return later you pay the normal rate — the price lock only holds while you stay subscribed.",
     ],
   },
   {
@@ -135,10 +150,16 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     label: "Elite",
     priceEurMonthly: 50,
     dailyChatCap: null,
+    fairUseSoftCapPerDay: 500,
+    liveAccountsCap: 10,
     stripePriceIdEnv: "STRIPE_PRICE_ELITE",
     stripePaymentLinkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_ELITE",
     headline: "Everything in Pro — premium support and early access (no Founder perks).",
-    includes: ["Everything in Pro"],
+    includes: [
+      "Everything in Pro",
+      "Up to 10 live broker accounts",
+      "Fair use soft ceiling 500 AXE sends/day (plenty for daily trading; friendly notice at the limit)",
+    ],
     extraBenefits: [
       "Priority support",
       "Early feature access",
@@ -172,6 +193,20 @@ export const TRADING_OS_FOUNDER_TIER = {
 
 export function tierById(id: AxePlanId): AxeBillingTier {
   return AXE_BILLING_TIERS.find((t) => t.id === id) ?? AXE_BILLING_TIERS[0];
+}
+
+export function fairUseSoftCapForPlan(plan: AxePlanId | string | null | undefined): number | null {
+  if (plan === "pro" || plan === "founder" || plan === "elite") {
+    return tierById(plan).fairUseSoftCapPerDay;
+  }
+  return null;
+}
+
+export function liveAccountsCapForPlan(plan: AxePlanId | string | null | undefined): number {
+  if (plan === "pro" || plan === "founder" || plan === "elite") {
+    return tierById(plan).liveAccountsCap;
+  }
+  return tierById("free").liveAccountsCap;
 }
 
 export const PAID_AXE_PLANS = new Set<AxePlanId>(["pro", "founder", "elite"]);

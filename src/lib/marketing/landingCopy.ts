@@ -169,7 +169,7 @@ export const COMPANION_FEATURES: ReadonlyArray<{
   },
   {
     title: "Multi-account, private workspaces",
-    desc: "Funded, demo, live — one active account at a time, analytics scoped per account. Free: 1 live broker account. Pro and above: multi-account. Each workspace stays private to your login.",
+    desc: "Funded, demo, live — one active account at a time, analytics scoped per account. Live caps: Free 1, Pro 3, Founder 5, Elite 10 — demo/paper unlimited. Each workspace stays private to your login.",
     icon: "accounts",
     status: "available",
   },

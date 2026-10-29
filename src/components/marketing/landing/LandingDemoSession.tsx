@@ -1,7 +1,7 @@
 /**
  * Placeholder for a recorded real session.
- * Needs Luka to record: connect account → pull trade → ask AXE → journal → notification.
- * Do not fake demo footage here.
+ * Luka records a 60–90s demo-account video later into public/marketing/ and we wire the player here.
+ * Do not fake demo footage.
  */
 export function LandingDemoSession() {
   return (
@@ -25,11 +25,12 @@ export function LandingDemoSession() {
         <div className="axe-landing-card-glow mt-8 overflow-hidden">
           <div className="flex aspect-video flex-col items-center justify-center gap-3 bg-[#08080c] px-6 text-center">
             <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100">
-              Recording slot — needs Luka
+              Recording slot — 60–90s coming
             </span>
             <p className="max-w-md text-sm text-white/70">
-              Placeholder for an embedded recording of a real AXE Companion session. Until that file
-              exists, this section stays empty on purpose — no staged demo data.
+              Placeholder for an embedded recording of a real AXE Companion session on a demo account.
+              Until that file lands in <span className="font-mono text-white/55">public/marketing/</span>,
+              this section stays empty on purpose — no staged demo data.
             </p>
             <ol className="mt-2 max-w-lg list-decimal space-y-1 pl-5 text-left text-[12px] text-tos-dim">
               <li>Connect MT5 (MetaApi) or Alpaca</li>
@@ -38,11 +39,6 @@ export function LandingDemoSession() {
               <li>Label the journal row</li>
               <li>Show the push / in-app notification</li>
             </ol>
-            <p className="mt-3 text-[11px] text-white/35">
-              {/* TODO(Luka): drop the recorded file (mp4/webm) into public/marketing/ and wire the
-                  player here. */}
-              TODO for Luka: record the session and wire the media here.
-            </p>
           </div>
         </div>
       </div>

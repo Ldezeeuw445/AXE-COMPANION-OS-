@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   AXE_BILLING_TIERS,
   FOUNDER_SEAT_CAP,
-  PAID_CHAT_FAIR_USE_SOFT_CAP_PER_DAY,
 } from "@/lib/billing/tiers";
 import type { BillingCatalogState } from "@/lib/billing/types";
 import { LEGAL_COPY } from "@/lib/legal/constants";
@@ -69,7 +68,7 @@ export function LandingPricing({ catalog }: Props) {
                 <p className="mt-1.5 text-[11.5px] leading-snug text-tos-dim">{tier.headline}</p>
                 <p className="mt-1 text-[11.5px] leading-snug text-tos-dim">
                   {tier.dailyChatCap === null
-                    ? `Unlimited AXE chat — fair use soft cap ~${PAID_CHAT_FAIR_USE_SOFT_CAP_PER_DAY}/day`
+                    ? `Unlimited AXE chat — fair use soft ceiling ${tier.fairUseSoftCapPerDay}/day (plenty for daily trading)`
                     : `${tier.dailyChatCap} AXE sends per day`}
                 </p>
 
@@ -100,18 +99,19 @@ export function LandingPricing({ catalog }: Props) {
           })}
         </div>
 
-        {/* Explicit pricing facts — customer feedback 2026-10-29 */}
+        {/* Explicit pricing facts — customer feedback 2026-10-29 (Luka signed off) */}
         <div className="axe-landing-card-glow mx-auto mt-8 max-w-3xl p-5 text-left text-[12.5px] leading-relaxed text-tos-muted">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
             What the plan includes — plain facts
           </p>
           <ul className="mt-3 list-disc space-y-1.5 pl-4">
             <li>
-              <strong className="font-medium text-white/85">Broker accounts:</strong> Free includes{" "}
-              <strong className="font-medium text-white/85">1 live</strong> broker account plus unlimited
-              demo/paper. Pro / Founder / Elite unlock multi-account (exact live cap TBD
-              {/* TODO(Luka): set the Pro+ live-account number */}
-              ).
+              <strong className="font-medium text-white/85">Broker accounts:</strong> Free{" "}
+              <strong className="font-medium text-white/85">1</strong> live, Pro{" "}
+              <strong className="font-medium text-white/85">3</strong>, Founder{" "}
+              <strong className="font-medium text-white/85">5</strong>, Elite{" "}
+              <strong className="font-medium text-white/85">10</strong> — plus unlimited demo/paper on
+              every plan.
             </li>
             <li>
               <strong className="font-medium text-white/85">Brokers that work today:</strong> MT5 via
@@ -120,24 +120,20 @@ export function LandingPricing({ catalog }: Props) {
             </li>
             <li>
               <strong className="font-medium text-white/85">Cloud connection cost:</strong> the MetaApi /
-              Alpaca link is included in your AXE plan — no separate AXE surcharge for the connection
-              itself. Your broker may still charge its own fees.
-              {/* TODO(Luka): confirm MetaApi resource-slot billing never hits the customer */}
+              Alpaca link is included in your AXE subscription — no separate AXE charge for the
+              connection. Your broker may still charge its own fees.
             </li>
             <li>
               <strong className="font-medium text-white/85">Unlimited — fair use:</strong> paid plans have
-              no hard daily chat cap; soft ceiling about{" "}
-              <strong className="font-medium text-white/85">
-                {PAID_CHAT_FAIR_USE_SOFT_CAP_PER_DAY} AXE sends/day
-              </strong>
-              . Above that we may ask you to slow down. Free stays at 20/day.
-              {/* TODO(Luka): confirm 500 */}
+              no hard daily chat cut-off. Soft ceilings: Pro{" "}
+              <strong className="font-medium text-white/85">200</strong> AXE sends/day, Founder &amp; Elite{" "}
+              <strong className="font-medium text-white/85">500</strong>/day — plenty for daily trading. At
+              the limit we show a friendly notice, not a hard surprise block. Free stays at 20/day.
             </li>
             <li>
-              <strong className="font-medium text-white/85">Permanent Founder status:</strong> if you
-              cancel, you keep the Founder badge. If you return later, the locked Founder price applies
-              again while Founder seats still exist. Elite never gets Founder perks.
-              {/* TODO(Luka): confirm Stripe + entitlement behaviour on cancel/return */}
+              <strong className="font-medium text-white/85">Permanent Founder status:</strong> keep your
+              Founder price forever as long as you stay subscribed. Cancel and you keep the Founder
+              badge; if you return later you pay the normal rate. Elite never gets Founder perks.
             </li>
             <li>
               <strong className="font-medium text-white/85">Elite Roadmap items</strong> (advanced models,
@@ -154,13 +150,13 @@ export function LandingPricing({ catalog }: Props) {
           {typeof founderUsed === "number" ? (
             <>
               Founder · {founderUsed}/{founderCap} spots claimed — Elite unlocks when Founder sells out.
-              Founder members keep their badge and their price.
+              Founder members keep their badge; the Founder price holds while they stay subscribed.
             </>
           ) : (
             <>
               Founder is capped at {FOUNDER_SEAT_CAP} seats. When they are gone Founder closes permanently
-              and Elite takes its place for new upgrades — Founder members keep their badge and their
-              price.
+              and Elite takes its place for new upgrades — Founder members keep their badge; the Founder
+              price holds while they stay subscribed.
             </>
           )}{" "}
           You pick a plan inside the app after signing in; checkout runs on Stripe.
