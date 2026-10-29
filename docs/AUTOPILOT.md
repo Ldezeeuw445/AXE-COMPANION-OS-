@@ -586,7 +586,32 @@ wat zij niet zijn.
 Wat blijft staan: Companion haalt hun **desktop**-featurelijst niet in en moet
 dat niet proberen. 21 timeframes en Depth of Market horen niet op een telefoon.
 
-11. **Deel van een positie sluiten.** `src/app/api/mt5/close-position/route.ts`
+11. ~~**Deel van een positie sluiten.**~~ **Af, 29 oktober.** De route neemt
+    nu een `volume`; MetaApi krijgt het mee op `POSITION_CLOSE_ID` (de sleutel
+    wordt weggelaten bij een volledige sluiting, want een aanwezige `volume`
+    ís de deelsluiting-instructie). Papier kan het ook, met dezelfde regel —
+    anders leert het oefenaccount een gewoonte die het echte account niet
+    toestaat.
+
+    Het werk zat niet in de rekenkunde maar in het restant.
+    `src/lib/trading/partialClose.ts`: sluit 0,095 van 0,10 en er blijft 0,005
+    over, kleiner dan wat een broker verhandelt — de trader houdt iets over dat
+    hij niet meer kan sluiten, wijzigen of vergroten. Dat wordt hier geweigerd
+    met de twee uitwegen erbij (alles sluiten, of hoogstans zoveel), in plaats
+    van drie seconden later als brokerfout terug te komen.
+
+    `MIN_LOT` en `LOT_STEP` staan apart, ook al zijn ze allebei 0,01: zolang
+    ze hetzelfde getal zijn kan een restant alleen nul of minstens het minimum
+    zijn, en dan is de restantregel onbereikbaar — een regel die niet kan
+    vuren is er niet. Sommige brokers hebben stap 0,01 met minimum 0,10, en
+    daar is hij wél nodig.
+
+    20 checks in `scripts/verify-partial-close.mjs`, waarvan twee met een
+    nep-database die het echte gedrag uitvoeren. Dat was nodig: de versie die
+    alleen de broncode las liet een mutatie door die bij een deelsluiting de
+    hele positie verwijderde — de duurste fout die deze functie kan maken.
+
+    *Oorspronkelijke opdracht:* `src/app/api/mt5/close-position/route.ts`
     neemt geen volume aan, dus een positie gaat heel dicht of niet. Dit is wat
     een trader het vaakst doet na een winnende beweging: de helft eruit, de
     rest laten lopen. Zonder dit moet hij naar MT5 om iets te doen wat hij

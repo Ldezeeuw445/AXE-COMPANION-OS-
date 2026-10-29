@@ -169,10 +169,16 @@ check("the close is recorded before the position is removed", () => {
   assert.ok(/onConflict: "id"/.test(service), "idempotent on the position id");
 });
 
-check("a close that recorded but did not clear says exactly that", () => {
+check("a close that recorded but did not land says exactly that", () => {
   // Reporting a generic failure here would have the trader close it twice.
+  // Since partial closes exist the position may be shrunk rather than
+  // removed, so the wording covers both — "still listed" was only ever true
+  // of a full close.
   assert.ok(/close_recorded_still_open/.test(service));
-  assert.ok(/recorded but the position is still listed/.test(service));
+  assert.ok(
+    /recorded but the position was not updated/.test(service),
+    "the message must cover a failed shrink as well as a failed delete",
+  );
 });
 
 console.log(`\n${passed} checks passed`);

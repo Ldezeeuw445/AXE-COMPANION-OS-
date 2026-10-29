@@ -972,6 +972,15 @@ export type ClosePositionInput = {
   positionId: string;
   /** MetaApi region (london / new-york / singapore). */
   region?: string | null;
+  /**
+   * Lots to close. Omit to close the whole position.
+   *
+   * MetaApi takes a `volume` on POSITION_CLOSE_ID and closes partially when
+   * it is smaller than the position. Build-list item 11: without this the app
+   * could only close all of it, and taking half off after a winning move is
+   * the most common thing a trader does.
+   */
+  volume?: number | null;
 };
 
 /**
@@ -983,10 +992,16 @@ export async function clientClosePosition(
 ): Promise<PlaceOrderResult> {
   const base = getMetaApiClientBaseUrl(input.region);
   const url = `${base}/users/current/accounts/${encodeURIComponent(input.accountId)}/trade`;
-  const body = {
+  // The key is omitted entirely for a full close rather than sent as null:
+  // MetaApi reads a present `volume` as a partial-close instruction, and a
+  // null there is a different request from no key at all.
+  const body: Record<string, unknown> = {
     actionType: "POSITION_CLOSE_ID",
     positionId: input.positionId,
   };
+  if (input.volume != null && Number.isFinite(input.volume) && input.volume > 0) {
+    body.volume = input.volume;
+  }
 
   const res = await fetchWithTimeout(url, {
     method: "POST",

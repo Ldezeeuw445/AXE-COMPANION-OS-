@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { closePaperPositionById } from "@/services/paperOrderService";
+import { rejectRequestedVolume } from "@/lib/trading/partialClose";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientClosePosition,
@@ -26,6 +27,8 @@ export const dynamic = "force-dynamic";
 type CloseBody = {
   brokerAccountId: string;
   positionId: string;
+  /** Lots to close. Omit for the whole position. Build-list item 11. */
+  volume?: number | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
     return errJson(400, "invalid_body", "Payload must be JSON.");
   }
 
-  const { brokerAccountId, positionId } = body ?? {};
+  const { brokerAccountId, positionId, volume } = body ?? {};
 
   if (typeof brokerAccountId !== "string" || !brokerAccountId) {
     return errJson(400, "missing_account", "brokerAccountId is required.");
@@ -58,6 +61,15 @@ export async function POST(request: NextRequest) {
   }
 
   // Account ownership
+  // A requested size is checked here for the things the server can know —
+  // zero, off-step, under the broker minimum. Whether it fits this particular
+  // position is MetaApi's answer for a live account, and ours for a practice
+  // one, because there we hold the volume.
+  if (volume != null) {
+    const bad = rejectRequestedVolume(Number(volume));
+    if (bad) return errJson(400, "invalid_volume", bad);
+  }
+
   const { data: account, error: accountErr } = await supabase
     .from("user_broker_accounts")
     .select(
@@ -83,7 +95,7 @@ export async function POST(request: NextRequest) {
     account.connection_method === "demo_paper" ||
     account.provider === "demo"
   ) {
-    const result = await closePaperPositionById(supabase, user.id, positionId);
+    const result = await closePaperPositionById(supabase, user.id, positionId, volume ?? null);
     if (!result.ok) {
       const status = result.code === "position_not_found" ? 404 : 400;
       return errJson(status, result.code, result.message);
@@ -144,6 +156,7 @@ export async function POST(request: NextRequest) {
     accountId: account.external_connection_id,
     positionId,
     region: accountRegion,
+    volume: volume ?? null,
   };
 
   try {

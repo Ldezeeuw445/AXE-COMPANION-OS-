@@ -13,6 +13,7 @@ import {
   toBrokerTradeRow,
   type StoredQuoteOrigin,
 } from "@/lib/trading/paperStopRules";
+import { decidePartialClose } from "@/lib/trading/partialClose";
 import {
   describeQuoteOrigin,
   quoteFromSnapshot,
@@ -188,7 +189,21 @@ export async function closePaperPositionById(
   supabase: SupabaseClient,
   userId: string,
   positionId: string,
-): Promise<PaperOrderResult | { ok: true; closed: true; pnl: number; price: number; note: string }> {
+  requestedVolume: number | null = null,
+): Promise<
+  | PaperOrderResult
+  | {
+      ok: true;
+      closed: true;
+      pnl: number;
+      price: number;
+      note: string;
+      /** Lots actually closed. */
+      volume: number;
+      /** What is left open, 0 when the position is gone. */
+      remaining: number;
+    }
+> {
   const { data, error } = await supabase
     .from("paper_positions")
     .select("id,account_id,symbol,side,volume,open_price,stop_loss,take_profit,opened_at,quote_origin")
@@ -246,49 +261,92 @@ export async function closePaperPositionById(
     openedAt: String(row.opened_at),
   };
 
-  const close = closePaperPosition(position, resolved.quote);
+  // Build-list item 11: closing part of it. `decidePartialClose` owns the
+  // remainder rule — a close that would leave less than a broker will trade
+  // is refused here rather than leaving the trader holding an unclosable
+  // sliver.
+  const decision =
+    requestedVolume == null
+      ? ({ kind: "full", volume: position.volume } as const)
+      : decidePartialClose({ positionVolume: position.volume, requested: requestedVolume });
+
+  if (decision.kind === "rejected") {
+    return { ok: false, code: "invalid_volume", message: decision.reason };
+  }
+
+  const closingVolume = decision.volume;
+  const remaining = decision.kind === "partial" ? decision.remainder : 0;
+
+  // P/L is over the slice being closed, so the position passed to the broker
+  // maths carries that volume rather than the whole.
+  const slice: PaperPosition = { ...position, volume: closingVolume };
+  const close = closePaperPosition(slice, resolved.quote);
   const closedAt = new Date().toISOString();
+
+  // A full close reuses the position id, which keeps the write idempotent for
+  // the watcher. A partial cannot: the position lives on and may be closed
+  // again, so each slice is its own row.
+  const tradeRow = toBrokerTradeRow({
+    position: slice,
+    positionOrigin: origin,
+    close,
+    userId,
+    accountId: String(row.account_id),
+    closedAt,
+  });
+  if (decision.kind === "partial") {
+    tradeRow.id = crypto.randomUUID();
+    tradeRow.external_trade_id = `paper:${position.id}:${closedAt}`;
+    (tradeRow.raw as Record<string, unknown>).partial_of = position.id;
+    (tradeRow.raw as Record<string, unknown>).remaining_after = remaining;
+  }
 
   const { error: insertErr } = await supabase
     .from("broker_trades")
-    .upsert(
-      toBrokerTradeRow({
-        position,
-        positionOrigin: origin,
-        close,
-        userId,
-        accountId: String(row.account_id),
-        closedAt,
-      }),
-      { onConflict: "id" },
-    );
+    .upsert(tradeRow, { onConflict: "id" });
 
   if (insertErr) {
     return { ok: false, code: "close_record_failed", message: insertErr.message };
   }
 
-  const { error: deleteErr } = await supabase
-    .from("paper_positions")
-    .delete()
-    .eq("id", position.id)
-    .eq("user_id", userId);
+  // Shrink or remove, after the trade is safely recorded. The other order
+  // loses the trade if the process dies in between.
+  const { error: writeErr } =
+    decision.kind === "partial"
+      ? await supabase
+          .from("paper_positions")
+          .update({ volume: remaining, updated_at: closedAt })
+          .eq("id", position.id)
+          .eq("user_id", userId)
+      : await supabase
+          .from("paper_positions")
+          .delete()
+          .eq("id", position.id)
+          .eq("user_id", userId);
 
-  if (deleteErr) {
+  if (writeErr) {
     return {
       ok: false,
       code: "close_recorded_still_open",
-      message: `The trade was recorded but the position is still listed: ${deleteErr.message}`,
+      message: `The trade was recorded but the position was not updated: ${writeErr.message}`,
     };
   }
+
+  const evidence =
+    origin === "live"
+      ? "Counts towards what AXE learns about you."
+      : "Does not count towards what AXE learns about you.";
 
   return {
     ok: true,
     closed: true,
     pnl: close.pnl,
     price: close.price,
+    volume: closingVolume,
+    remaining,
     note:
-      origin === "live"
-        ? "Closed at the live broker spread. Counts towards what AXE learns about you."
-        : "Closed at generated prices. Does not count towards what AXE learns about you.",
+      decision.kind === "partial"
+        ? `Closed ${closingVolume} of ${position.volume} lots at ${origin === "live" ? "the live broker spread" : "generated prices"}; ${remaining} still open. ${evidence}`
+        : `Closed at ${origin === "live" ? "the live broker spread" : "generated prices"}. ${evidence}`,
   };
 }
