@@ -190,6 +190,46 @@ describe("PR131 order path cases (mocked)", () => {
     assert.equal(d.allowed, true);
   });
 
+
+  it("TC2c: 0.5% buffer blocks before hard daily loss limit", () => {
+    assert.ok(propProfile.maxDailyLossPct != null);
+    const cap = propProfile.maxDailyLossPct as number;
+    // Just under the hard cap but past effective (cap - 0.5)
+    const dayResultPct = -(cap - 0.3);
+    assert.ok(dayResultPct > -cap, "must still be under hard published limit");
+    const d = evaluateAutoTrade({
+      profile: propProfile,
+      volumeLots: 0.01,
+      openPositions: 0,
+      autoTradesToday: 0,
+      dayResultPct,
+      minutesToHighImpact: null,
+      now: new Date("2026-10-14T10:00:00Z"),
+      attended: true,
+    });
+    assert.equal(d.allowed, false);
+    assert.equal(d.reason, "daily_loss_reached");
+    assert.match(d.detail, /buffer/i);
+  });
+
+  it("TC2d: attended manual order still blocked by daily-loss risk rule only", () => {
+    // attended skips the automation trade-count brake, not account risk rules.
+    assert.ok(propProfile.maxDailyLossPct != null);
+    const cap = propProfile.maxDailyLossPct as number;
+    const d = evaluateAutoTrade({
+      profile: propProfile,
+      volumeLots: 0.01,
+      openPositions: 0,
+      autoTradesToday: 99, // would trip daily_trade_cap if unattended
+      dayResultPct: -(cap - 0.3),
+      minutesToHighImpact: null,
+      now: new Date("2026-10-14T10:00:00Z"),
+      attended: true,
+    });
+    assert.equal(d.allowed, false);
+    assert.equal(d.reason, "daily_loss_reached");
+  });
+
   it("TC3: paper market order returns before guard; MetaApi never called", () => {
     let paperHits = 0;
     let metaApiHits = 0;

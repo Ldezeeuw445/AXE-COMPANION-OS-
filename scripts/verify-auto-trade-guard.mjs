@@ -124,6 +124,35 @@ check("a loss below the cap still trades", () => {
   );
 });
 
+check("the 0.5% buffer blocks before the hard daily loss limit", () => {
+  // Cap 3% → effective 2.5%. At -2.7% the hard check would still allow; buffer must refuse.
+  const cap = funded.maxDailyLossPct;
+  assert.ok(cap !== null && cap > 0.5, "funded daily cap must leave room for the buffer");
+  const insideHardOutsideBuffer = -(cap - 0.3); // e.g. -2.7 on a 3% cap
+  assert.ok(
+    insideHardOutsideBuffer > -cap,
+    "fixture must still be under the published hard limit",
+  );
+  const d = evaluateAutoTrade({
+    ...base,
+    profile: funded,
+    dayResultPct: insideHardOutsideBuffer,
+  });
+  assert.equal(d.allowed, false);
+  assert.equal(d.reason, "daily_loss_reached");
+  assert.match(d.detail, /buffer/i);
+});
+
+check("a loss well under the buffered limit still trades", () => {
+  const cap = funded.maxDailyLossPct;
+  assert.ok(cap !== null);
+  // e.g. cap 3 → effective 2.5; -1.0 is clearly under
+  assert.equal(
+    evaluateAutoTrade({ ...base, profile: funded, dayResultPct: -1.0 }).allowed,
+    true,
+  );
+});
+
 check("an unknown day result fails closed when a daily limit is set", () => {
   const d = evaluateAutoTrade({ ...base, profile: funded, dayResultPct: null });
   assert.equal(d.allowed, false);

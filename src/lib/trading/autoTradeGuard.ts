@@ -1,4 +1,5 @@
 import type { AccountProfile } from "@/lib/risk/accountProfile";
+import { evaluateDailyLoss } from "../risk/dailyLoss";
 
 /**
  * The last thing that runs before AXE places an order nobody is watching.
@@ -18,8 +19,8 @@ import type { AccountProfile } from "@/lib/risk/accountProfile";
  * Every rule here blocks rather than adjusts. Silently shrinking someone's
  * position is its own kind of lie; refusing and saying why is honest.
  *
- * Dependency-free apart from a type, so it can be exercised with
- * `node --experimental-strip-types`.
+ * Runtime import is only the pure daily-loss helper (same strip-types
+ * constraint). Apart from a type import, nothing else.
  */
 
 export type AutoTradeGuardInput = {
@@ -165,24 +166,28 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
   }
 
   // 3. The day's damage. Trading on past a loss cap is how a funded account ends.
-  // Fail-closed: a configured daily limit with no measurable day result means
-  // refuse — never treat missing equity data as "fine".
-  if (profile.maxDailyLossPct !== null && dayResultPct === null) {
+  // Single source of truth: evaluateDailyLoss applies the 0.5% buffer under the
+  // published cap and fails closed when equity is missing but a limit is set.
+  // Reconstruct start/current from the already-computed dayResultPct so callers
+  // keep the same input shape (service still owns snapshot math).
+  const lossDecision = evaluateDailyLoss({
+    startEquity: dayResultPct === null ? null : 100,
+    currentEquity:
+      dayResultPct === null ? null : 100 * (1 + dayResultPct / 100),
+    maxDailyLossPct: profile.maxDailyLossPct,
+  });
+  if (lossDecision.status === "unknown") {
     return {
       allowed: false,
-      reason: "daily_loss_unknown",
-      detail: `Not placed: this account's daily loss limit is ${profile.maxDailyLossPct}% and AXE cannot measure today's equity path. Missing risk data means no new order.`,
+      reason: lossDecision.reason,
+      detail: lossDecision.detail,
     };
   }
-  if (
-    profile.maxDailyLossPct !== null &&
-    dayResultPct !== null &&
-    dayResultPct <= -profile.maxDailyLossPct
-  ) {
+  if (lossDecision.status === "blocked") {
     return {
       allowed: false,
-      reason: "daily_loss_reached",
-      detail: `Not placed: you are ${Math.abs(dayResultPct).toFixed(2)}% down today and this account's limit is ${profile.maxDailyLossPct}%. The day is over for automation.`,
+      reason: lossDecision.reason,
+      detail: lossDecision.detail,
     };
   }
 
