@@ -100,6 +100,18 @@ volgende. Niet eromheen bouwen.
   weten is `relrowsecurity` en of er een policy voor `anon` of `public`
   bestaat.
 
+- **Nooit een branch in zijn geheel mergen.** Elke oude branch draagt een
+  oudere `package.json` mee, en de `test`- en `verify`-ketens in main zijn
+  alleen maar gegroeid. Een hele merge gooit er dus checks uit zonder dat er
+  iets rood wordt: `cursor/realtime-companion-automation-merged` zou in één
+  keer negen verify-scripts wissen, de hele paper-trading-suite. Neem per
+  branch alleen wat echt nieuw is en laat `package.json` staan.
+
+  En meet of een branch nog werk heeft met een vraag die onderscheid maakt.
+  `git log main..branch` telt commits, en na een squash-merge staan die er
+  nog terwijl de inhoud al binnen is. Vergelijk de bomen rechtstreeks, over
+  alleen de bestanden die de branch zelf aanraakt — zie `docs/BRANCHES.md`.
+
 - **Nooit een sleutelwaarde in chat of in een commit.** Alleen namen van
   sleutels. Dat geldt ook voor logs die je plakt.
 - **Geen LSE-data in Companion of Trading OS.** De licentie staat intern en
