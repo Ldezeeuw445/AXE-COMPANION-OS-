@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
+import { getMetadataMt5QuotesSymbols } from "@/lib/mt5/accountQuotesSync";
 import { getDemoQuotePrice, isDemoAccount } from "@/lib/broker/demoAccount";
 import { isAlpacaAccount } from "@/lib/alpaca/provision";
 import { isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
@@ -41,6 +42,19 @@ export default async function WatchlistPage() {
   const demoMode = isDemoAccount(account);
   const alpacaMode = isAlpacaAccount(account);
 
+  // One-way MT5 → AXE: when sync stored activity quotes for this account, show those
+  // broker symbols (with suffixes) instead of the manual watchlist. Exact Market Watch
+  // is not readable via MetaApi — see metadata.mt5_quotes_note.
+  const syncedQuotes = !demoMode && !alpacaMode ? getMetadataMt5QuotesSymbols(metadata) : [];
+  const baseItems =
+    syncedQuotes.length > 0
+      ? syncedQuotes.map((symbol, idx) => ({
+          id: `mt5-sync-${idx}-${symbol}`,
+          symbol,
+          message: null as string | null,
+        }))
+      : items;
+
   const { data: snapshots } = demoMode
     ? { data: null }
     : await supabase
@@ -50,20 +64,34 @@ export default async function WatchlistPage() {
         .eq("account_id", activeId)
         .order("updated_at", { ascending: false })
         .limit(50);
-  const snapshotByDisplay = new Map(
-    (snapshots ?? []).map((s) => [String(s.display_symbol ?? "").toUpperCase(), s as Record<string, unknown>]),
-  );
+  const snapshotByDisplay = new Map<string, Record<string, unknown>>();
+  for (const s of snapshots ?? []) {
+    const row = s as Record<string, unknown>;
+    const displayKey = String(s.display_symbol ?? "").toUpperCase();
+    const brokerKey = String(s.broker_symbol ?? "").toUpperCase();
+    if (displayKey) snapshotByDisplay.set(displayKey, row);
+    if (brokerKey) snapshotByDisplay.set(brokerKey, row);
+  }
 
-  const enriched = items.map((item) => {
-    const display = cleanDisplaySymbol(item.symbol) || item.symbol.toUpperCase();
-    const cached = map[display] ?? map[item.symbol.toUpperCase()];
-    const resolved = cached ? { brokerSymbol: cached } : resolveBrokerSymbol(display, universe);
+  const enriched = baseItems.map((item) => {
+    const rawSymbol = item.symbol.trim().toUpperCase();
+    const display = cleanDisplaySymbol(item.symbol) || rawSymbol;
+    const cached =
+      map[rawSymbol] ?? map[display] ?? map[item.symbol.toUpperCase()];
+    const resolved = cached
+      ? { brokerSymbol: cached }
+      : resolveBrokerSymbol(display, universe);
+    // Prefer broker name on synced MT5 quotes so the list matches the terminal (XAUUSD.x).
+    const listSymbol = syncedQuotes.length > 0 ? (resolved.brokerSymbol || rawSymbol) : display;
     const symbolReport = report[display];
     const supported =
       Boolean(symbolReport?.resolved) ||
       (Boolean(cached) && symbolReport?.resolved !== false) ||
       (universe.length > 0 && universe.some((s) => s === resolved.brokerSymbol));
-    const snap = snapshotByDisplay.get(display);
+    const snap =
+      snapshotByDisplay.get(display) ??
+      snapshotByDisplay.get(rawSymbol) ??
+      snapshotByDisplay.get(String(resolved.brokerSymbol ?? "").toUpperCase());
     const demoQuote = demoMode ? getDemoQuotePrice(display) : null;
     const freshness =
       demoQuote != null
@@ -91,7 +119,7 @@ export default async function WatchlistPage() {
         : symbolReport?.spread ?? null);
     return {
       ...item,
-      symbol: display,
+      symbol: listSymbol,
       brokerSymbol: resolved.brokerSymbol,
       runtimePrice: demoQuote?.price ?? (snap?.last_price != null ? Number(snap.last_price) : null),
       bid,

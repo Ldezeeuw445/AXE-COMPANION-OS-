@@ -11,12 +11,18 @@ import {
   clientGetHistoryDealsRange,
   clientListSymbols,
   clientGetPositions,
+  clientGetOrders,
   metaApiTradingAccountId,
   MetaApiRequestError,
   provisioningFindMt5CloudAccount,
   provisioningGetAccount,
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
+import {
+  buildMt5QuotesSyncMeta,
+  deriveMt5ActivityQuotesSymbols,
+  mergeBrokerSymbolsIntoSymbolMap,
+} from "@/lib/mt5/accountQuotesSync";
 import {
   buildBrokerSymbolRuntimeMetadata,
   CANONICAL_BROKER_SYMBOLS,
@@ -143,6 +149,7 @@ export async function runCloudMt5Sync(
 
   let dealsRaw: unknown[] = [];
   let positions: unknown[] = [];
+  let pendingOrders: unknown[] = [];
   let info: Record<string, unknown> = {};
   let brokerSymbols: string[] = [];
   let relinked = false;
@@ -193,6 +200,15 @@ export async function runCloudMt5Sync(
       clientGetPositions(extId, false, accountRegion),
       SYNC_POSITIONS_TIMEOUT_MS,
     );
+    try {
+      pendingOrders = await withActionBudget(
+        "sync_orders",
+        clientGetOrders(extId, false, accountRegion),
+        SYNC_POSITIONS_TIMEOUT_MS,
+      );
+    } catch {
+      pendingOrders = [];
+    }
     try {
       brokerSymbols = await withActionBudget(
         "sync_symbols",
@@ -347,6 +363,19 @@ export async function runCloudMt5Sync(
         }).catch(() => symbolRuntime.symbol_resolution_report)
       : null;
 
+  const activityQuotes = deriveMt5ActivityQuotesSymbols({
+    positions,
+    orders: pendingOrders,
+    deals: dealsRaw,
+  });
+  const quotesMeta = buildMt5QuotesSyncMeta(activityQuotes);
+  const mergedSymbolMap = mergeBrokerSymbolsIntoSymbolMap(
+    (symbolRuntime?.symbol_map as Record<string, string> | undefined) ??
+      ((prevMeta.symbol_map as Record<string, string> | undefined) ?? {}),
+    activityQuotes,
+    cleanDisplaySymbol,
+  );
+
   const metadata = {
     ...prevMeta,
     accountSummary: {
@@ -361,12 +390,17 @@ export async function runCloudMt5Sync(
     dealsFetched,
     dealsUpserted,
     lastSyncAt: new Date().toISOString(),
+    ...quotesMeta,
     ...(symbolRuntime
       ? {
           ...symbolRuntime,
+          symbol_map: mergedSymbolMap,
           ...(symbolResolutionReport ? { symbol_resolution_report: symbolResolutionReport } : {}),
         }
-      : {}),
+      : {
+          symbol_map: mergedSymbolMap,
+          symbol_map_updated_at: quotesMeta.mt5_quotes_synced_at,
+        }),
   };
 
   await supabase
@@ -402,6 +436,7 @@ export async function runCloudMt5Sync(
     revalidatePath("/history");
     revalidatePath("/journal");
     revalidatePath("/chat");
+    revalidatePath("/watchlist");
   }
 
   const shouldJournal = opts.autoJournal !== false;
@@ -468,6 +503,7 @@ export async function refreshCloudAccountSymbolMap(
 
   let brokerSymbols: string[] = [];
   let positions: unknown[] = [];
+  let pendingOrders: unknown[] = [];
   let relinked = false;
 
   try {
@@ -533,6 +569,15 @@ export async function refreshCloudAccountSymbolMap(
     } catch {
       positions = [];
     }
+    try {
+      pendingOrders = await withActionBudget(
+        "symbol_map_orders",
+        clientGetOrders(extId, false, accountRegion),
+        SYNC_POSITIONS_TIMEOUT_MS,
+      );
+    } catch {
+      pendingOrders = [];
+    }
   } catch (e) {
     const m = mapMetaApiActionError(e);
     if (m.code === "unknown") {
@@ -562,7 +607,18 @@ export async function refreshCloudAccountSymbolMap(
       }).catch(() => symbolRuntime.symbol_resolution_report)
     : symbolRuntime.symbol_resolution_report;
 
-  const mappedCount = Object.keys(symbolRuntime.symbol_map).length;
+  const activityQuotes = deriveMt5ActivityQuotesSymbols({
+    positions,
+    orders: pendingOrders,
+    deals: [],
+  });
+  const quotesMeta = buildMt5QuotesSyncMeta(activityQuotes);
+  const mergedSymbolMap = mergeBrokerSymbolsIntoSymbolMap(
+    symbolRuntime.symbol_map,
+    activityQuotes,
+    cleanDisplaySymbol,
+  );
+  const mappedCount = Object.keys(mergedSymbolMap).length;
   if (mappedCount === 0) {
     return {
       ok: false,
@@ -583,6 +639,8 @@ export async function refreshCloudAccountSymbolMap(
       metadata: {
         ...prevMeta,
         ...symbolRuntime,
+        ...quotesMeta,
+        symbol_map: mergedSymbolMap,
         symbol_resolution_report: symbolResolutionReport,
         lastSymbolMapRefreshAt: new Date().toISOString(),
         ...(accountRegion ? { metaapiRegion: accountRegion } : {}),

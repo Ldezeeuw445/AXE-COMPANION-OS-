@@ -86,9 +86,25 @@ function normalizeWatchlistSymbol(raw: string): string | null {
   const key = raw.toUpperCase().trim();
   if (!key) return null;
   if (key === "AAPLE") return null;
-  if (key.includes(".") || key.includes("/")) return null;
-  if (!/^[A-Z0-9._-]{2,12}$/.test(key)) return null;
+  // Allow broker suffixes like XAUUSD.x — reject path-like "/" only.
+  if (key.includes("/")) return null;
+  if (!/^[A-Z0-9][A-Z0-9._-]{1,20}$/.test(key)) return null;
   return key;
+}
+
+function extractMt5QuotesSymbols(metadata: Record<string, unknown> | null): string[] {
+  const raw = metadata?.mt5_quotes_symbols;
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const key = item.trim().toUpperCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item.trim());
+  }
+  return out;
 }
 
 /**
@@ -98,8 +114,28 @@ function normalizeWatchlistSymbol(raw: string): string | null {
 function resolveWatchlistSymbols(
   symbolMap: Record<string, string>,
   userWatchlist: string[],
+  mt5Quotes: string[] = [],
 ): string[] {
-  if (Object.keys(symbolMap).length === 0) return [];
+  if (Object.keys(symbolMap).length === 0 && mt5Quotes.length === 0) return [];
+
+  // Prefer per-account MT5 activity quotes (broker names) when present.
+  if (mt5Quotes.length > 0) {
+    const resolved: string[] = [];
+    const seen = new Set<string>();
+    for (const broker of mt5Quotes) {
+      const key = broker.trim().toUpperCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      // Use display key that exists in symbolMap when possible; else broker itself.
+      const displayHit = Object.entries(symbolMap).find(([, v]) => v.toUpperCase() === key)?.[0];
+      resolved.push(displayHit ?? key);
+      if (!(key in symbolMap)) {
+        // Ensure map lookup works for broker-as-key during subscribe.
+        symbolMap[key] = broker.trim();
+      }
+    }
+    return resolved;
+  }
 
   const candidates = new Set<string>([
     ...CORE_SYMBOLS,
@@ -173,7 +209,8 @@ export async function loadAccountConfigs(): Promise<AccountConfig[]> {
 
     const symbolMap = extractSymbolMap(acc.metadata);
     const userWatchlist = watchlistByUser.get(acc.user_id) ?? [];
-    const watchlistSymbols = resolveWatchlistSymbols(symbolMap, userWatchlist);
+    const mt5Quotes = extractMt5QuotesSymbols(acc.metadata);
+    const watchlistSymbols = resolveWatchlistSymbols(symbolMap, userWatchlist, mt5Quotes);
 
     if (watchlistSymbols.length === 0) {
       console.warn(
