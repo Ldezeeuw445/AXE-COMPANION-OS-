@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
+import { canAccessBeta } from "@/lib/beta/flags";
+import { normalizeAxePlan } from "@/lib/billing/features";
+import { getUserAxeEntitlement } from "@/services/billingService";
 import { vapidConfigStatus } from "@/lib/push/deliver";
 import { runPushTestSuite } from "@/lib/push/runTestSuite";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
@@ -23,6 +26,15 @@ async function authedWriter() {
   if (!gate.ok) {
     return {
       error: NextResponse.json({ error: gate.error, upgradeRequired: true }, { status: gate.status }),
+    };
+  }
+  const ent = await getUserAxeEntitlement(authed.supabase, authed.user.id);
+  if (!canAccessBeta("push_alerts", normalizeAxePlan(ent.plan))) {
+    return {
+      error: NextResponse.json(
+        { error: "Push alerts beta is not on for your plan.", upgradeRequired: true, beta: "push_alerts" },
+        { status: 403 },
+      ),
     };
   }
   const writer = createServiceRoleSupabaseClient() ?? authed.supabase;

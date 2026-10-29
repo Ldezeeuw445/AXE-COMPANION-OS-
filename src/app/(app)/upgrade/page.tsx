@@ -17,6 +17,10 @@ import {
   isBillingConfiguredForTier,
   paymentLinkForTier,
 } from "@/services/billingService";
+import {
+  FOUNDER_RETURN_PRICE_NOTICE,
+  isEligibleForFounderPrice,
+} from "@/lib/billing/founderPrice";
 
 const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
   plan: "free",
@@ -54,12 +58,22 @@ export default async function SubscriptionsPage() {
   }
 
   const paidTiers: AxePlanId[] = ["pro", "founder", "elite"];
+  const founderPriceOk = isEligibleForFounderPrice(entitlement);
   const checkoutLinks = Object.fromEntries(
-    paidTiers.map((id) => [id, paymentLinkForTier(id, userId)]),
+    paidTiers.map((id) => {
+      if (id === "founder" && !founderPriceOk) return [id, null];
+      return [id, paymentLinkForTier(id, userId)];
+    }),
   ) as Partial<Record<AxePlanId, string | null>>;
   const billingReady = Object.fromEntries(
-    paidTiers.map((id) => [id, isBillingConfiguredForTier(id)]),
+    paidTiers.map((id) => {
+      if (id === "founder" && !founderPriceOk) return [id, false];
+      return [id, isBillingConfiguredForTier(id)];
+    }),
   ) as Partial<Record<AxePlanId, boolean>>;
+  const founderReturnNotice = entitlement.founderBadge && entitlement.plan !== "founder"
+    ? FOUNDER_RETURN_PRICE_NOTICE
+    : null;
 
   const anyBillingReady = paidTiers.some((id) => billingReady[id]);
   const upgradeReady = Boolean(supabase) && anyBillingReady;
@@ -156,6 +170,7 @@ export default async function SubscriptionsPage() {
         userId={userId}
         checkoutLinks={checkoutLinks}
         billingReady={billingReady}
+        founderReturnNotice={founderReturnNotice}
       />
 
       <p className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-center text-[10px] leading-relaxed text-tos-dim">
