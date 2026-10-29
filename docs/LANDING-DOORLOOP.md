@@ -104,8 +104,17 @@ Niet alles in één commit; de bouwlijst zegt dat ook over deze pagina.
    het grootste effect en raakt twee bestanden.
 2. **De vier slimme secties naar twee.** Mechanisch werk zodra besloten is
    welke twee.
-3. **Jargon vervangen of uitleggen**, in de volgorde waarin een bezoeker het
-   tegenkomt.
+3. ~~**Jargon vervangen of uitleggen.**~~ **Gedaan, 29 oktober.** "depth"
+   wordt nu uitgelegd waar een bezoeker het tegenkomt (*de orders die boven en
+   onder de prijs wachten*), GDELT heet *world events from GDELT* in plaats
+   van een kale databasenaam, en de kop "Order Blocks, FVG, iFVG that extend"
+   — een afkorting van een afkorting, drie lagen diep — is *"Order blocks and
+   fair value gaps, drawn forward"* geworden. Een check in
+   `verify-landing-claims.mjs` houdt het zo.
+
+   **"phone OS" staat er nog, met opzet.** Het is Luka's term en hij staat in
+   de hero; hem alleen in de onderliggende secties vervangen zou de pagina
+   met zichzelf in tegenspraak brengen. Hij hoort bij stap 1.
 4. **De featurelijst inkorten** of achter een "alles zien"-opening zetten.
 
 Punt 1 is het enige dat echt om Luka's oordeel vraagt, want het is zijn

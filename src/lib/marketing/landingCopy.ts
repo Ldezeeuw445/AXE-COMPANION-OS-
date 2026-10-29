@@ -49,9 +49,9 @@ export const LANDING_ONE = {
   body: "One account, one memory, one set of broker rows — phone and desk stay aligned.",
   items: [
     { label: "Trading Data", body: "Trades, positions, orders and fills from the linked broker." },
-    { label: "Market Data", body: "Live ticks and a depth drawer anchored on your broker bid / ask." },
-    { label: "News & Intel", body: "Cached news plus free intel: SEC EDGAR, congressional STOCK Act trades, GDELT, flights and vessels." },
-    { label: "Unified View", body: "Chart, depth, news, execute, journal and AXE — one phone OS." },
+    { label: "Market Data", body: "Live ticks, plus market depth — the orders waiting above and below the price — anchored on your broker's own bid and ask." },
+    { label: "News & Intel", body: "Cached news plus free intel: company filings from SEC EDGAR, congressional STOCK Act trades, world events from GDELT, flights and vessels." },
+    { label: "Unified View", body: "Chart, depth, news, execute, journal and AXE in one app on your phone — the whole desk, pocket-sized." },
     { label: "Consistent Data", body: "The same rows Trading OS reads. Each workspace stays private to your login." },
     { label: "Smarter Insights", body: "Context from what you actually traded, not a generic feed." },
   ],
@@ -97,13 +97,13 @@ export const COMPANION_FEATURES: ReadonlyArray<{
     icon: "chart",
   },
   {
-    title: "Order Blocks, FVG, iFVG that extend",
+    title: "Order blocks and fair value gaps, drawn forward",
     desc: "Volumetric order blocks, fair-value gaps and inverse FVGs that keep extending until they are mitigated. Pick 1, 2 or 3 per side.",
     icon: "chart",
   },
   {
     title: "Market depth drawer",
-    desc: "Slide out depth from the top bar. Real L1 bid/ask from your broker plus a labelled synthetic ladder — spread, mid, uptick / downtick.",
+    desc: "Slide out market depth from the top bar — the resting orders either side of the price. Real bid/ask from your broker plus a labelled synthetic ladder: spread, mid, uptick / downtick.",
     icon: "depth",
   },
   {

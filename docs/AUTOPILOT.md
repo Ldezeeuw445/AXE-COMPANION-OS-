@@ -332,6 +332,16 @@ gemeten is.
    autopilot-sessie doen zodra die richting vaststaat. Niet alle veertien
    secties in één commit.
 
+   **Stap 3 (jargon) is af, 29 oktober.** "depth" en GDELT worden nu uitgelegd
+   waar een bezoeker ze tegenkomt, en de iFVG-kop is uitgeschreven. De hero is
+   bewust niet aangeraakt: die hoort bij stap 1 en is Luka's keuze. "phone OS"
+   blijft daarom ook staan — hem alleen in de lagere secties vervangen zou de
+   pagina met zichzelf in tegenspraak brengen.
+
+   **Stap 2 en 4 wachten nog op die ene keuze.** Welke twee van de vier
+   "slim"-secties blijven, en hoe kort de featurelijst mag, volgt uit wat de
+   hero belooft. Vooruitlopen levert werk op dat weer weg moet.
+
    *Oorspronkelijke opdracht:* Hij staat
    er (veertien secties, `src/app/page.tsx`) en hij is af genoeg om te tonen.
    Wat niet gemeten is: of iemand die AXE niet kent binnen tien seconden snapt
