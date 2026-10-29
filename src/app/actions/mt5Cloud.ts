@@ -755,6 +755,77 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
   });
 }
 
+/**
+ * Quotes tab: re-run the AXE watchlist → broker symbol registry mapping for the
+ * active MT5 cloud account. Does not place/modify/close orders. Alpaca/demo
+ * accounts are no-ops (current Quotes behaviour unchanged).
+ */
+export async function syncQuotesWithWatchlist(): Promise<
+  | { ok: true; mappedCount: number; unavailableCount: number; universeSize: number }
+  | { ok: false; code: Mt5CloudErrorCode; message: string }
+> {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "validation", message: "Not signed in." };
+
+  const { data: prefs } = await supabase
+    .from("user_workspace_preferences")
+    .select("active_account_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const activeId = (prefs?.active_account_id as string | null | undefined) ?? null;
+  if (!activeId) {
+    return { ok: false, code: "validation", message: "No active account selected." };
+  }
+
+  const { data: account } = await supabase
+    .from("user_broker_accounts")
+    .select("id,connection_method")
+    .eq("user_id", user.id)
+    .eq("id", activeId)
+    .maybeSingle();
+
+  if (!account || account.connection_method !== "cloud_mt5") {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Sync with watchlist applies to MT5 cloud accounts only.",
+    };
+  }
+
+  const result = await refreshCloudAccountSymbolMap(supabase, user.id, activeId, { probe: true });
+  if (!result.ok) return result;
+
+  revalidatePath("/watchlist");
+  revalidatePath("/chart");
+
+  const { data: refreshed } = await supabase
+    .from("user_broker_accounts")
+    .select("metadata")
+    .eq("id", activeId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const meta = ((refreshed?.metadata ?? {}) as Record<string, unknown>) ?? {};
+  const unavailable = Array.isArray(meta.mt5_quotes_unavailable)
+    ? meta.mt5_quotes_unavailable.filter((s): s is string => typeof s === "string")
+    : [];
+  const mapped = Array.isArray(meta.mt5_quotes_symbols)
+    ? meta.mt5_quotes_symbols.filter((s): s is string => typeof s === "string")
+    : [];
+
+  return {
+    ok: true,
+    mappedCount: mapped.length || result.data.mappedCount,
+    unavailableCount: unavailable.length,
+    universeSize: result.data.universeSize,
+  };
+}
+
+
 // ── MT5 Doctor helpers ───────────────────────────────────────────────────────
 // runCloudMt5DoctorAction referenced these but they were never written, so the
 // action threw a ReferenceError the moment the Accounts screen's Doctor button

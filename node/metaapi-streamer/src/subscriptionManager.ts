@@ -86,70 +86,42 @@ function normalizeWatchlistSymbol(raw: string): string | null {
   const key = raw.toUpperCase().trim();
   if (!key) return null;
   if (key === "AAPLE") return null;
-  // Allow broker suffixes like XAUUSD.x — reject path-like "/" only.
+  // Allow broker-looking keys; watchlist entries are usually canonical (XAUUSD).
   if (key.includes("/")) return null;
   if (!/^[A-Z0-9][A-Z0-9._-]{1,20}$/.test(key)) return null;
   return key;
 }
 
-function extractMt5QuotesSymbols(metadata: Record<string, unknown> | null): string[] {
-  const raw = metadata?.mt5_quotes_symbols;
-  if (!Array.isArray(raw)) return [];
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const item of raw) {
-    if (typeof item !== "string") continue;
-    const key = item.trim().toUpperCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(item.trim());
-  }
-  return out;
-}
-
 /**
  * Only return display symbols that have a broker mapping.
- * Never fall back to raw CORE_SYMBOLS — that causes hundreds of failed subscriptions.
+ * Prefer the user's AXE watchlist (canonical) resolved via symbol_map; also
+ * keep CORE symbols that are mapped. Never fall back to raw CORE_SYMBOLS —
+ * that causes hundreds of failed subscriptions on brokers that use suffixes.
  */
 function resolveWatchlistSymbols(
   symbolMap: Record<string, string>,
   userWatchlist: string[],
-  mt5Quotes: string[] = [],
 ): string[] {
-  if (Object.keys(symbolMap).length === 0 && mt5Quotes.length === 0) return [];
-
-  // Prefer per-account MT5 activity quotes (broker names) when present.
-  if (mt5Quotes.length > 0) {
-    const resolved: string[] = [];
-    const seen = new Set<string>();
-    for (const broker of mt5Quotes) {
-      const key = broker.trim().toUpperCase();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      // Use display key that exists in symbolMap when possible; else broker itself.
-      const displayHit = Object.entries(symbolMap).find(([, v]) => v.toUpperCase() === key)?.[0];
-      resolved.push(displayHit ?? key);
-      if (!(key in symbolMap)) {
-        // Ensure map lookup works for broker-as-key during subscribe.
-        symbolMap[key] = broker.trim();
-      }
-    }
-    return resolved;
-  }
-
-  const candidates = new Set<string>([
-    ...CORE_SYMBOLS,
-    ...Object.keys(symbolMap),
-  ]);
-  for (const raw of userWatchlist) {
-    const normalized = normalizeWatchlistSymbol(raw);
-    if (normalized) candidates.add(normalized);
-  }
+  if (Object.keys(symbolMap).length === 0) return [];
 
   const resolved: string[] = [];
-  for (const display of candidates) {
-    if (symbolMap[display]) resolved.push(display);
+  const seen = new Set<string>();
+
+  function pushDisplay(display: string) {
+    const key = display.toUpperCase();
+    if (!key || seen.has(key)) return;
+    if (!symbolMap[key] && !symbolMap[display]) return;
+    seen.add(key);
+    resolved.push(symbolMap[key] ? key : display);
   }
+
+  // Watchlist first (user order), then core symbols that are mapped.
+  for (const raw of userWatchlist) {
+    const normalized = normalizeWatchlistSymbol(raw);
+    if (normalized) pushDisplay(normalized);
+  }
+  for (const core of CORE_SYMBOLS) pushDisplay(core);
+
   return resolved;
 }
 
@@ -209,8 +181,7 @@ export async function loadAccountConfigs(): Promise<AccountConfig[]> {
 
     const symbolMap = extractSymbolMap(acc.metadata);
     const userWatchlist = watchlistByUser.get(acc.user_id) ?? [];
-    const mt5Quotes = extractMt5QuotesSymbols(acc.metadata);
-    const watchlistSymbols = resolveWatchlistSymbols(symbolMap, userWatchlist, mt5Quotes);
+    const watchlistSymbols = resolveWatchlistSymbols(symbolMap, userWatchlist);
 
     if (watchlistSymbols.length === 0) {
       console.warn(

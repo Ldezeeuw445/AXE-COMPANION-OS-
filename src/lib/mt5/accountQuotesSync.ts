@@ -1,99 +1,142 @@
 /**
- * Closest honest MT5 → AXE Quotes sync.
+ * Per-account Quotes = AXE watchlist mapped through the broker symbol registry.
  *
- * MetaApi does NOT expose the desktop Market Watch list or its order
- * (GET /symbols = broker universe; subscribeToMarketData = MetaApi's own
- * cloud subscriptions). We derive a per-account quotes list from live
- * activity: open positions → pending orders → recent deal symbols, keeping
- * broker suffixes (e.g. XAUUSD.x) so prices match the terminal.
+ * The AXE watchlist is canonical and never changes when switching accounts.
+ * Each MT5 cloud account has a symbol registry (metadata.symbol_map +
+ * symbol_universe from MetaApi GET /symbols). Quotes shows the watchlist in
+ * the same order, resolved to that account's real broker names (suffixes like
+ * .x / .pro / m, aliases like GOLD→XAUUSD). Symbols the account does not offer
+ * are omitted.
  */
 
-export const MT5_QUOTES_SOURCE = "activity_positions_orders_deals" as const;
+import {
+  cleanDisplaySymbol,
+  resolveBrokerSymbol,
+} from "@/lib/broker/symbolResolution";
+
+export const MT5_QUOTES_SOURCE = "watchlist_symbol_registry" as const;
 
 export type Mt5QuotesSyncMeta = {
   mt5_quotes_symbols: string[];
+  mt5_quotes_unavailable: string[];
   mt5_quotes_synced_at: string;
   mt5_quotes_source: typeof MT5_QUOTES_SOURCE;
-  /** Honest limitation note stored for UI/debug. */
   mt5_quotes_note: string;
 };
 
 export const MT5_QUOTES_LIMITATION_NOTE =
-  "MetaApi cannot read the desktop Market Watch list or order. Quotes are synced from open positions, pending orders, and recent deal history with broker symbol names (incl. suffixes like .x).";
+  "Quotes follow your AXE watchlist, mapped to this account's broker symbol names via the symbol registry (MetaApi symbol universe). Symbols this broker does not offer are omitted.";
 
-function extractSymbol(row: unknown): string {
-  if (!row || typeof row !== "object" || Array.isArray(row)) return "";
-  const sym = (row as Record<string, unknown>).symbol;
-  return typeof sym === "string" ? sym.trim() : "";
-}
+export type MappedWatchlistQuote = {
+  /** Canonical AXE watchlist symbol (e.g. XAUUSD). */
+  canonical: string;
+  /** Broker-facing symbol for the active account (e.g. XAUUSD.x). */
+  broker: string;
+};
 
-/** Stable unique push preserving first-seen order. */
-function pushUnique(out: string[], seen: Set<string>, raw: string): void {
-  const symbol = raw.trim();
-  if (!symbol) return;
-  const key = symbol.toUpperCase();
+export type WatchlistQuotesMapping = {
+  available: MappedWatchlistQuote[];
+  unavailable: string[];
+};
+
+function pushUniqueCanonical(out: string[], seen: Set<string>, raw: string): void {
+  const cleaned = cleanDisplaySymbol(raw) || raw.trim().toUpperCase();
+  if (!cleaned) return;
+  const key = cleaned.toUpperCase();
   if (seen.has(key)) return;
   seen.add(key);
-  out.push(symbol);
+  out.push(cleaned);
 }
 
-/**
- * Derive broker symbols for the Quotes list from MT5 activity.
- * Order: positions (as returned) → pending orders → deals (most recent first when timed).
- */
-export function deriveMt5ActivityQuotesSymbols(input: {
-  positions?: unknown[] | null;
-  orders?: unknown[] | null;
-  deals?: unknown[] | null;
-  /** Optional hard cap (default 40). */
-  max?: number;
-}): string[] {
-  const max = Math.max(1, input.max ?? 40);
+/** Normalize a watchlist to unique canonical symbols, preserving first-seen order. */
+export function normalizeWatchlistSymbols(watchlist: string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-
-  for (const row of input.positions ?? []) {
-    pushUnique(out, seen, extractSymbol(row));
-    if (out.length >= max) return out;
+  for (const raw of watchlist) {
+    if (typeof raw !== "string") continue;
+    pushUniqueCanonical(out, seen, raw);
   }
-  for (const row of input.orders ?? []) {
-    pushUnique(out, seen, extractSymbol(row));
-    if (out.length >= max) return out;
-  }
-
-  const deals = [...(input.deals ?? [])];
-  deals.sort((a, b) => {
-    const ta = dealTimeMs(a);
-    const tb = dealTimeMs(b);
-    return tb - ta;
-  });
-  for (const row of deals) {
-    pushUnique(out, seen, extractSymbol(row));
-    if (out.length >= max) return out;
-  }
-
   return out;
 }
 
-function dealTimeMs(row: unknown): number {
-  if (!row || typeof row !== "object") return 0;
-  const r = row as Record<string, unknown>;
-  const candidates = [r.time, r.brokerTime, r.closeTime, r.openTime];
-  for (const c of candidates) {
-    if (typeof c === "string" || typeof c === "number") {
-      const ms = new Date(c).getTime();
-      if (Number.isFinite(ms)) return ms;
+function lookupSymbolMap(
+  symbolMap: Record<string, string>,
+  canonical: string,
+): string | undefined {
+  const direct = symbolMap[canonical] ?? symbolMap[canonical.toUpperCase()];
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  // Case-insensitive fallback
+  const upper = canonical.toUpperCase();
+  for (const [k, v] of Object.entries(symbolMap)) {
+    if (k.toUpperCase() === upper && typeof v === "string" && v.trim()) return v.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Map the canonical AXE watchlist onto an account's broker symbol registry.
+ * Prefer exact symbol_map hit, then resolveBrokerSymbol against the universe
+ * (exact → suffix variants → aliases). Deterministic; preserves watchlist order.
+ */
+export function mapWatchlistToAccountQuotes(
+  watchlist: string[],
+  symbolMap: Record<string, string>,
+  universe: string[] = [],
+): WatchlistQuotesMapping {
+  const canonicals = normalizeWatchlistSymbols(watchlist);
+  const available: MappedWatchlistQuote[] = [];
+  const unavailable: string[] = [];
+  const universeUpper = new Set(universe.map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const hasUniverse = universeUpper.size > 0;
+
+  for (const canonical of canonicals) {
+    const mapped = lookupSymbolMap(symbolMap, canonical);
+    if (mapped) {
+      if (!hasUniverse || universeUpper.has(mapped.toUpperCase())) {
+        available.push({ canonical, broker: mapped });
+        continue;
+      }
+      // Stale map entry not in current universe — try fresh resolve.
+    }
+
+    if (!hasUniverse) {
+      // No universe yet (still warming): keep row with map/fallback so Quotes
+      // can show "Resolving" rather than silently dropping the whole list.
+      if (mapped) {
+        available.push({ canonical, broker: mapped });
+      } else {
+        unavailable.push(canonical);
+      }
+      continue;
+    }
+
+    const resolution = resolveBrokerSymbol(canonical, universe);
+    const broker = resolution.brokerSymbol?.trim() ?? "";
+    const ok =
+      Boolean(broker) &&
+      resolution.reason !== "fallback_request" &&
+      universeUpper.has(broker.toUpperCase());
+
+    if (ok) {
+      // Prefer the casing from the universe list when available.
+      const universeHit =
+        universe.find((s) => s.trim().toUpperCase() === broker.toUpperCase()) ?? broker;
+      available.push({ canonical, broker: universeHit });
+    } else {
+      unavailable.push(canonical);
     }
   }
-  return 0;
+
+  return { available, unavailable };
 }
 
 export function buildMt5QuotesSyncMeta(
-  symbols: string[],
+  mapping: WatchlistQuotesMapping,
   syncedAt: string = new Date().toISOString(),
 ): Mt5QuotesSyncMeta {
   return {
-    mt5_quotes_symbols: symbols.map((s) => s.trim()).filter(Boolean),
+    mt5_quotes_symbols: mapping.available.map((row) => row.broker),
+    mt5_quotes_unavailable: mapping.unavailable,
     mt5_quotes_synced_at: syncedAt,
     mt5_quotes_source: MT5_QUOTES_SOURCE,
     mt5_quotes_note: MT5_QUOTES_LIMITATION_NOTE,
@@ -109,30 +152,45 @@ export function getMetadataMt5QuotesSymbols(
   const seen = new Set<string>();
   for (const item of raw) {
     if (typeof item !== "string") continue;
-    pushUnique(out, seen, item);
+    const symbol = item.trim();
+    if (!symbol) continue;
+    const key = symbol.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(symbol);
+  }
+  return out;
+}
+
+export function getMetadataMt5QuotesUnavailable(
+  meta: Record<string, unknown> | null | undefined,
+): string[] {
+  const raw = meta?.mt5_quotes_unavailable;
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    pushUniqueCanonical(out, seen, item);
   }
   return out;
 }
 
 /**
  * Ensure symbol_map can resolve both clean display (XAUUSD) and broker name
- * (XAUUSD.x) to the broker symbol, so Quotes prices match MT5.
+ * (XAUUSD.x) to the broker symbol used for prices/orders.
  */
-export function mergeBrokerSymbolsIntoSymbolMap(
+export function mergeMappedQuotesIntoSymbolMap(
   existing: Record<string, string>,
-  brokerSymbols: string[],
-  cleanDisplay: (symbol: string) => string,
+  mapping: WatchlistQuotesMapping,
 ): Record<string, string> {
   const next = { ...existing };
-  for (const broker of brokerSymbols) {
-    const b = broker.trim();
-    if (!b) continue;
-    const upper = b.toUpperCase();
-    next[upper] = b;
-    const display = cleanDisplay(b) || upper;
-    if (display && !next[display]) next[display] = b;
-    // Prefer exact broker for the cleaned display when we know it from activity.
-    if (display) next[display] = b;
+  for (const row of mapping.available) {
+    const broker = row.broker.trim();
+    const canonical = row.canonical.trim().toUpperCase();
+    if (!broker || !canonical) continue;
+    next[canonical] = broker;
+    next[broker.toUpperCase()] = broker;
   }
   return next;
 }

@@ -2,64 +2,120 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildMt5QuotesSyncMeta,
-  deriveMt5ActivityQuotesSymbols,
   getMetadataMt5QuotesSymbols,
-  mergeBrokerSymbolsIntoSymbolMap,
+  getMetadataMt5QuotesUnavailable,
+  mapWatchlistToAccountQuotes,
+  mergeMappedQuotesIntoSymbolMap,
   MT5_QUOTES_SOURCE,
+  normalizeWatchlistSymbols,
 } from "./accountQuotesSync";
 
-describe("deriveMt5ActivityQuotesSymbols", () => {
-  it("keeps broker suffixes and position→order→deal order", () => {
-    const symbols = deriveMt5ActivityQuotesSymbols({
-      positions: [{ symbol: "XAUUSD.x" }, { symbol: "NAS100.x" }],
-      orders: [{ symbol: "AUDCAD.x" }, { symbol: "XAUUSD.x" }],
-      deals: [
-        { symbol: "BTCUSD.x", time: "2026-10-28T10:00:00.000Z" },
-        { symbol: "US30.x", time: "2026-10-29T10:00:00.000Z" },
-        { symbol: "XAGUSD.x", time: "2026-10-27T10:00:00.000Z" },
-      ],
-    });
-    assert.deepEqual(symbols, [
-      "XAUUSD.x",
-      "NAS100.x",
-      "AUDCAD.x",
-      "US30.x",
-      "BTCUSD.x",
-      "XAGUSD.x",
-    ]);
+describe("normalizeWatchlistSymbols", () => {
+  it("dedupes and cleans, preserving order", () => {
+    assert.deepEqual(
+      normalizeWatchlistSymbols(["xauusd.x", "XAUUSD", "NAS100", "BTCUSD"]),
+      ["XAUUSD", "NAS100", "BTCUSD"],
+    );
+  });
+});
+
+describe("mapWatchlistToAccountQuotes", () => {
+  it("prefers exact symbol_map hits and preserves watchlist order", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD", "NAS100", "BTCUSD", "AUDCAD"],
+      {
+        XAUUSD: "XAUUSD.x",
+        NAS100: "NAS100.x",
+        BTCUSD: "BTCUSD.x",
+        AUDCAD: "AUDCAD.x",
+      },
+      ["XAUUSD.x", "NAS100.x", "BTCUSD.x", "AUDCAD.x", "EURUSD.x"],
+    );
+    assert.deepEqual(
+      mapping.available.map((r) => r.broker),
+      ["XAUUSD.x", "NAS100.x", "BTCUSD.x", "AUDCAD.x"],
+    );
+    assert.deepEqual(mapping.unavailable, []);
   });
 
-  it("dedupes case-insensitively but preserves first casing", () => {
-    const symbols = deriveMt5ActivityQuotesSymbols({
-      positions: [{ symbol: "eurusd.x" }],
-      orders: [{ symbol: "EURUSD.x" }],
-      deals: [{ symbol: "EurUsd.x" }],
-    });
-    assert.deepEqual(symbols, ["eurusd.x"]);
+  it("resolves suffix variants from the broker universe when map misses", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD", "EURUSD"],
+      {},
+      ["XAUUSD.pro", "EURUSDm", "GBPUSD.pro"],
+    );
+    assert.equal(mapping.available[0]?.canonical, "XAUUSD");
+    assert.equal(mapping.available[0]?.broker, "XAUUSD.pro");
+    assert.equal(mapping.available[1]?.canonical, "EURUSD");
+    assert.equal(mapping.available[1]?.broker, "EURUSDm");
+    assert.deepEqual(mapping.unavailable, []);
   });
 
-  it("respects max and ignores empty rows", () => {
-    const symbols = deriveMt5ActivityQuotesSymbols({
-      positions: [{ symbol: "A.x" }, { symbol: "" }, null, { symbol: "B.x" }, { symbol: "C.x" }],
-      max: 2,
-    });
-    assert.deepEqual(symbols, ["A.x", "B.x"]);
+  it("resolves common aliases (GOLD, US100, DJ30)", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD", "NAS100", "US30"],
+      {},
+      ["GOLD", "US100.x", "DJ30", "EURUSD"],
+    );
+    assert.equal(mapping.available.find((r) => r.canonical === "XAUUSD")?.broker, "GOLD");
+    assert.equal(mapping.available.find((r) => r.canonical === "NAS100")?.broker, "US100.x");
+    assert.equal(mapping.available.find((r) => r.canonical === "US30")?.broker, "DJ30");
+  });
+
+  it("lists missing symbols as unavailable and omits them from available", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD", "PLTR", "BTCUSD"],
+      { XAUUSD: "XAUUSD.x" },
+      ["XAUUSD.x", "EURUSD.x"],
+    );
+    assert.deepEqual(
+      mapping.available.map((r) => r.canonical),
+      ["XAUUSD"],
+    );
+    assert.deepEqual(mapping.unavailable.sort(), ["BTCUSD", "PLTR"]);
+  });
+
+  it("keeps mapped rows when universe is still empty (warming)", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD", "NAS100"],
+      { XAUUSD: "XAUUSD.x" },
+      [],
+    );
+    assert.deepEqual(mapping.available, [{ canonical: "XAUUSD", broker: "XAUUSD.x" }]);
+    assert.deepEqual(mapping.unavailable, ["NAS100"]);
+  });
+
+  it("evicts stale map entries that are no longer in the universe", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD"],
+      { XAUUSD: "XAUUSD.old" },
+      ["XAUUSD.x"],
+    );
+    assert.equal(mapping.available[0]?.broker, "XAUUSD.x");
+    assert.deepEqual(mapping.unavailable, []);
   });
 });
 
 describe("mt5 quotes metadata helpers", () => {
-  it("build/read round-trip", () => {
-    const meta = buildMt5QuotesSyncMeta(["XAUUSD.x", "BTCUSD.x"], "2026-10-29T12:00:00.000Z");
+  it("build/read round-trip including unavailable", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD", "PLTR"],
+      { XAUUSD: "XAUUSD.x" },
+      ["XAUUSD.x"],
+    );
+    const meta = buildMt5QuotesSyncMeta(mapping, "2026-10-29T12:00:00.000Z");
     assert.equal(meta.mt5_quotes_source, MT5_QUOTES_SOURCE);
-    assert.deepEqual(getMetadataMt5QuotesSymbols(meta), ["XAUUSD.x", "BTCUSD.x"]);
+    assert.deepEqual(getMetadataMt5QuotesSymbols(meta), ["XAUUSD.x"]);
+    assert.deepEqual(getMetadataMt5QuotesUnavailable(meta), ["PLTR"]);
   });
 
-  it("mergeBrokerSymbolsIntoSymbolMap maps display and broker keys", () => {
-    const map = mergeBrokerSymbolsIntoSymbolMap(
-      { EURUSD: "EURUSD.x" },
+  it("mergeMappedQuotesIntoSymbolMap writes canonical and broker keys", () => {
+    const mapping = mapWatchlistToAccountQuotes(
+      ["XAUUSD", "NAS100"],
+      {},
       ["XAUUSD.x", "NAS100.x"],
-      (s) => s.replace(/\.x$/i, "").toUpperCase(),
     );
+    const map = mergeMappedQuotesIntoSymbolMap({ EURUSD: "EURUSD.x" }, mapping);
     assert.equal(map["XAUUSD"], "XAUUSD.x");
     assert.equal(map["XAUUSD.X"], "XAUUSD.x");
     assert.equal(map["NAS100"], "NAS100.x");

@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
-import { getMetadataMt5QuotesSymbols } from "@/lib/mt5/accountQuotesSync";
+import { mapWatchlistToAccountQuotes } from "@/lib/mt5/accountQuotesSync";
 import { getDemoQuotePrice, isDemoAccount } from "@/lib/broker/demoAccount";
 import { isAlpacaAccount } from "@/lib/alpaca/provision";
 import { isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
@@ -41,19 +41,40 @@ export default async function WatchlistPage() {
   const connected = ["connected", "provisioned"].includes(String(account?.provider_status ?? "").toLowerCase());
   const demoMode = isDemoAccount(account);
   const alpacaMode = isAlpacaAccount(account);
+  const mt5Mode = !demoMode && !alpacaMode && account?.connection_method === "cloud_mt5";
 
-  // One-way MT5 → AXE: when sync stored activity quotes for this account, show those
-  // broker symbols (with suffixes) instead of the manual watchlist. Exact Market Watch
-  // is not readable via MetaApi — see metadata.mt5_quotes_note.
-  const syncedQuotes = !demoMode && !alpacaMode ? getMetadataMt5QuotesSymbols(metadata) : [];
-  const baseItems =
-    syncedQuotes.length > 0
-      ? syncedQuotes.map((symbol, idx) => ({
-          id: `mt5-sync-${idx}-${symbol}`,
-          symbol,
-          message: null as string | null,
-        }))
-      : items;
+  // Canonical AXE watchlist never changes with the account. Quotes = watchlist
+  // mapped to this account's broker symbols (omit what the broker doesn't offer).
+  const watchlistSymbols = items.map((i) => i.symbol);
+  const quotesMapping = mt5Mode
+    ? mapWatchlistToAccountQuotes(watchlistSymbols, map, universe)
+    : {
+        available: items.map((i) => {
+          const canonical = cleanDisplaySymbol(i.symbol) || i.symbol.trim().toUpperCase();
+          return { canonical, broker: canonical };
+        }),
+        unavailable: [] as string[],
+      };
+
+  const unavailableNote =
+    mt5Mode && quotesMapping.unavailable.length > 0 ? quotesMapping.unavailable : [];
+
+  const itemByCanonical = new Map(
+    items.map((item) => {
+      const key = (cleanDisplaySymbol(item.symbol) || item.symbol.trim().toUpperCase()).toUpperCase();
+      return [key, item] as const;
+    }),
+  );
+
+  const baseItems = quotesMapping.available.map((row, idx) => {
+    const source = itemByCanonical.get(row.canonical.toUpperCase());
+    return {
+      id: source?.id ?? `mapped-${idx}-${row.canonical}`,
+      symbol: row.canonical,
+      message: source?.message ?? null,
+      brokerSymbol: row.broker,
+    };
+  });
 
   const { data: snapshots } = demoMode
     ? { data: null }
@@ -74,24 +95,23 @@ export default async function WatchlistPage() {
   }
 
   const enriched = baseItems.map((item) => {
-    const rawSymbol = item.symbol.trim().toUpperCase();
-    const display = cleanDisplaySymbol(item.symbol) || rawSymbol;
-    const cached =
-      map[rawSymbol] ?? map[display] ?? map[item.symbol.toUpperCase()];
-    const resolved = cached
-      ? { brokerSymbol: cached }
-      : resolveBrokerSymbol(display, universe);
-    // Prefer broker name on synced MT5 quotes so the list matches the terminal (XAUUSD.x).
-    const listSymbol = syncedQuotes.length > 0 ? (resolved.brokerSymbol || rawSymbol) : display;
+    const display = cleanDisplaySymbol(item.symbol) || item.symbol.trim().toUpperCase();
+    const broker =
+      item.brokerSymbol?.trim() ||
+      map[display] ||
+      resolveBrokerSymbol(display, universe).brokerSymbol ||
+      display;
     const symbolReport = report[display];
     const supported =
+      demoMode ||
+      alpacaMode ||
       Boolean(symbolReport?.resolved) ||
-      (Boolean(cached) && symbolReport?.resolved !== false) ||
-      (universe.length > 0 && universe.some((s) => s === resolved.brokerSymbol));
+      (Boolean(map[display]) && symbolReport?.resolved !== false) ||
+      (universe.length > 0 && universe.some((s) => s === broker));
     const snap =
       snapshotByDisplay.get(display) ??
-      snapshotByDisplay.get(rawSymbol) ??
-      snapshotByDisplay.get(String(resolved.brokerSymbol ?? "").toUpperCase());
+      snapshotByDisplay.get(String(broker).toUpperCase()) ??
+      snapshotByDisplay.get(item.symbol.trim().toUpperCase());
     const demoQuote = demoMode ? getDemoQuotePrice(display) : null;
     const freshness =
       demoQuote != null
@@ -119,8 +139,10 @@ export default async function WatchlistPage() {
         : symbolReport?.spread ?? null);
     return {
       ...item,
-      symbol: listSymbol,
-      brokerSymbol: resolved.brokerSymbol,
+      // Show broker name as MT5 does; keep canonical in `displaySymbol` for watchlist identity.
+      symbol: mt5Mode ? broker : display,
+      displaySymbol: display,
+      brokerSymbol: broker,
       runtimePrice: demoQuote?.price ?? (snap?.last_price != null ? Number(snap.last_price) : null),
       bid,
       ask,
@@ -152,7 +174,7 @@ export default async function WatchlistPage() {
 
   const visible = enriched.filter((row) => {
     if (demoMode) return true;
-    if (alpacaMode) return isAlpacaSupportedSymbol(row.symbol);
+    if (alpacaMode) return isAlpacaSupportedSymbol(row.displaySymbol || row.symbol);
     if (universe.length === 0) return true;
     return row.runtimeState !== "unavailable";
   });
@@ -166,6 +188,8 @@ export default async function WatchlistPage() {
         (account?.label as string | null) ??
         (demoMode ? "AXE Demo Account" : alpacaMode ? "AXE Alpaca Paper" : "Active account")
       }
+      unavailableSymbols={unavailableNote}
+      showSyncWithWatchlist={mt5Mode}
     />
   );
 }
