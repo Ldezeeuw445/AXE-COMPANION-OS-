@@ -191,14 +191,23 @@ async function validatePlanAvailability(
   plan: AxePlanId,
   existingUserId?: string,
 ): Promise<AxePlanId> {
-  if (existingUserId) {
+  // Founder lock-in: founder price only while subscription is continuous
+  // (current plan already founder). Badge alone after cancel does NOT re-qualify.
+  if (plan === "founder" && existingUserId) {
     const { data: existing } = await supabase
       .from("axe_user_entitlements")
-      .select("founder_badge, chat_quota_exempt")
+      .select("plan, founder_badge, chat_quota_exempt")
       .eq("user_id", existingUserId)
       .maybeSingle();
-    if (existing?.founder_badge === true && plan === "founder") {
+    if (existing?.plan === "founder") {
       return "founder";
+    }
+    if (existing?.founder_badge === true) {
+      console.warn(
+        "[stripe webhook] returning Founder blocked from founder price — remapping to elite",
+        { userId: existingUserId },
+      );
+      return "elite";
     }
   }
 

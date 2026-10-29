@@ -118,6 +118,11 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "push/status": "Reading whether push is on",
   "push/vapid": "The public VAPID key",
   "stripe/portal": "Managing your subscription must never need a subscription",
+  "support": "In-app support form; priority flag is plan-derived inside the route",
+  "feedback": "Product feedback form; Founder tag is plan-derived inside the route",
+  "roadmap": "Roadmap list; vote eligibility enforced inside the vote route",
+  "roadmap/vote": "Vote eligibility enforced inside the route (Founder)",
+  "admin/inbox": "Admin-only inbox; gated by AXE_ADMIN_EMAILS / full-access IDs",
   "ai/desk": "Internal desk endpoint",
   "tools/call": "Tool dispatch; each tool enforces its own feature",
 };
