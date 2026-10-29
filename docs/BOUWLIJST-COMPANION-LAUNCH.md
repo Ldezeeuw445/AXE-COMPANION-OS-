@@ -106,7 +106,19 @@ niet.
   punt is een rij die je kunt opzoeken, een maand waarin niets gebeurde **zegt
   dat ook**, een telling die mislukt wordt nul en geen schatting, en negatieve
   of onzinnige invoer kan de balk niet opblazen. Die vier staan als checks
-- [ ] **3.1** Arc valideren met echte data zodra er trades binnenkomen
+- [x] **3.1** Arc gevalideerd tegen de productiedatabase op 29 oktober. Er
+      staan 501 afgesloten trades van 3 traders; de arc is gedraaid op de 16
+      echte trades van één van hen en naast een onafhankelijke SQL-telling
+      gelegd. Alles klopte: XAUUSD 15 trades / −1565,80, BTCUSD 1 / +681,67,
+      sessies London 5 · New York 7 · Azië 4. De suffix-normalisatie deed
+      precies zijn werk op de spellingen die er echt staan (`XAUUSD.x`,
+      `BTCUSD.nx`) zonder `US30` of `SPX500` te raken.
+      Wél een fout gevonden die alleen bij echte data opvalt: de kop zei
+      "in the last 90 days" als vaste tekst, terwijl het venster als
+      `ARC_WINDOW_DAYS` in de service stond. Twee plekken voor één feit —
+      zet het venster op 30 en de zin blijft 90 beweren over een telling van
+      30 dagen. Nu één bron, en de zin noemt het echte venster. 3 checks erbij
+      in `scripts/verify-learning-arc.mjs`
 - [x] **3.4** Vooruitdenken op strategie: de profileEngine kent gebruik, nog niet *strategie*. Playbook-herkenning uit trades → "jij traadt London open breakouts; vandaag is de range te smal"
       Af op 2026-10-27: `src/lib/journal/playbookEdge.ts` leidt uit je eigen
       afgesloten trades af in welke sessie, welk instrument en welke richting je

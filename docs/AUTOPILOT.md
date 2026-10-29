@@ -237,8 +237,21 @@ gemeten is.
    blokkeert. `describeSetupGaps` leest de chat-limiet uit `tiers.ts` in plaats
    van hem over te typen, en een lopende fetch mag nooit als "je bent klaar"
    lezen: dat was de bug die ik zelf maakte en die een check nu vastlegt.
-5. **`3.1`** De learning arc tegen echte data valideren zodra er trades
-   binnenkomen.
+5. ~~**`3.1`** De learning arc tegen echte data valideren.~~ **Af,
+   29 oktober.** Er staan 501 afgesloten trades van 3 traders in productie.
+   De arc is op de 16 echte trades van één trader gedraaid en naast een
+   onafhankelijke SQL-telling gelegd: symbolen, P/L en sessieverdeling kwamen
+   exact overeen, en de suffix-normalisatie deed zijn werk op `XAUUSD.x` en
+   `BTCUSD.nx` zonder `US30` te raken.
+
+   De fout die alleen bij echte data opvalt: de kop zei "in the last 90 days"
+   als vaste tekst terwijl het venster als `ARC_WINDOW_DAYS` in de service
+   stond. Eén feit op twee plekken drift stil. Nu één bron.
+
+   De validatie zelf draaide in de scratchpad, niet in de repo: het is
+   handelsdata van echte gebruikers en die hoort niet in een publieke
+   geschiedenis. Wat ervan terugkomt zijn de checks met de spellingen erin
+   die er werkelijk staan.
 6. ~~**Live ticks voor elk MT5-account.**~~ **Nagegaan op 28 oktober — het
    staat er al en het draait. Geen code geschreven, met opzet.**
 
