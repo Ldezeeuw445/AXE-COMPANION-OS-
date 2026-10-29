@@ -487,4 +487,44 @@ check("the hero placeholder mockup line is gone", () => {
   assert.ok(!/Interactive dashboard mockup loading in future builds/.test(landing));
 });
 
+check("the words only we know are explained where a visitor meets them", () => {
+  // From the read-through in docs/LANDING-DOORLOOP.md: the page used terms
+  // that make sense to whoever built it and to nobody arriving cold. A
+  // beginner who hits three of them in the first screen concludes the product
+  // is not for them, which is the opposite of what the page is for.
+  //
+  // The rule is explain, not remove. "Order blocks" is a real selling point
+  // for the trader who knows it; it just cannot be the first thing an
+  // outsider reads with no handhold.
+  const copy = readFileSync(
+    new URL("../src/lib/marketing/landingCopy.ts", import.meta.url),
+    "utf8",
+  );
+
+  const jargon = [
+    {
+      term: "GDELT",
+      explained: /world events from GDELT|GDELT[^."]{0,40}(event|news)/i,
+      why: "a database name says nothing on its own",
+    },
+    {
+      term: "depth",
+      explained: /orders waiting (above and below|either side)|resting orders/i,
+      why: "market depth is not a word a new retail trader has met",
+    },
+  ];
+
+  for (const { term, explained, why } of jargon) {
+    if (!new RegExp(term, "i").test(copy)) continue;
+    assert.ok(explained.test(copy), `"${term}" appears unexplained — ${why}`);
+  }
+
+  // iFVG in a headline was the sharpest case: an abbreviation of an
+  // abbreviation, three levels deep, above the fold of a feature list.
+  assert.ok(
+    !/title: "[^"]*iFVG/.test(copy),
+    "an abbreviation of an abbreviation should not carry a headline",
+  );
+});
+
 console.log(`\n${passed} checks passed`);

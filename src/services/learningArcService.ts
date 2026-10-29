@@ -23,6 +23,7 @@
  * database.
  */
 
+import { ARC_WINDOW_DAYS } from "@/lib/axe/learningArc";
 import { EVIDENCE_ONLY_FILTER } from "@/lib/trading/tradeEvidence";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -37,7 +38,9 @@ import {
 } from "@/lib/axe/learningArc";
 
 /** How far back closed trades are counted. */
-export const ARC_WINDOW_DAYS = 90;
+// Re-exported so existing importers keep working; the number itself lives in
+// `learningArc.ts`, next to the sentence that says it out loud.
+export { ARC_WINDOW_DAYS };
 
 export interface TraderLearningArc {
   traderId: string;
