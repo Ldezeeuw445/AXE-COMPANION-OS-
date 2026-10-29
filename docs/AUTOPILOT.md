@@ -545,13 +545,46 @@ horizontaal niveau. Orders: market, buy/sell limit, buy/sell stop, plus
 chart. Smart alerts, journaal met AXE-score, learning arc, playbook-edge, de
 herkomstregel, en sinds deze week een paper-account.
 
-**Eerst de eerlijke grens.** Companion gaat MT5 niet verslaan op 21
-timeframes en Depth of Market, en TradingView niet op honderd
-teken-gereedschappen en een screener. Die lijst inhalen kost maanden en levert
-niets wat iemand overhaalt. Waar Companion wel wint, en zij niet kunnen
-volgen: MT5 vertelt nooit waarom, TradingView kent jouw trades niet. Elk punt
-hieronder is er omdat het een trader in zijn dagelijkse werk tegenhoudt — niet
-omdat het op hun featurelijst staat.
+**De juiste maatstaf, en ik had hem eerst mis.** Ik vergeleek met MT5 en
+TradingView op de desktop. Luka corrigeerde dat op 29 oktober en hij heeft
+gelijk: Companion is een telefoon-app, dus de tegenstander is **MT5 mobile en
+TradingView mobile**. Dat is een heel ander gevecht, en wel te winnen.
+
+Wat die twee op een telefoon zijn:
+
+- **MT5 mobile** kan uitvoeren — alle timeframes, deelsluitingen, elk
+  ordertype — en is verder kaal. Geen journaal, geen uitleg, een chart waar
+  niemand vrijwillig naar kijkt.
+- **TradingView mobile** heeft de chart en het tekenen, en kan voor bijna
+  niemand een order naar zijn eigen broker sturen. Geen journaal, en het weet
+  niet wat je ooit verhandeld hebt.
+
+Dus de punten hieronder vallen in twee soorten, en dat verschil bepaalt de
+volgorde:
+
+**Inhaalwerk — dit hebben die apps al, dus het ontbreken valt op.** Punt 11
+(deel van een positie sluiten) en punt 12 (M1, W1, MN1) staan niet op deze
+lijst omdat ze indruk maken, maar omdat MT5 mobile ze heeft en wij niet. Een
+trader die hier zijn weekchart mist, gaat terug naar de app die hem wel heeft,
+en dan is de rest van wat wij bouwen niet meer relevant. Dit gaat voor.
+
+**Voorsprong — dit heeft geen van beide.** Het journaal met AXE's oordeel, de
+playbook-edge uit je eigen trades, de firm-regels die meebeslissen, de
+herkomstregel. Dat staat er al. Punt 13 (replay naast het paper-account) en
+punt 14 (het positie-gereedschap dat je dag-limiet kent) horen hier: dat kan
+TradingView niet bouwen, want zij kennen je account niet, en MT5 niet, want
+die vertelt nooit waarom.
+
+En de echte ambitie is niet Companion alleen. Companion plus Trading OS op één
+Supabase-project is waar dit heen gaat: alles van TradingView aan charts, plus
+een terminal die op jouw manier van handelen is gebouwd, plus een telefoon die
+precies daarvoor gemaakt is zodat je het altijd bij je hebt. Geen van beide
+concurrenten heeft die combinatie, en dat is het antwoord op "hoe wordt dit
+beter dan die twee" — niet door hun lijst in te halen, maar door iets te zijn
+wat zij niet zijn.
+
+Wat blijft staan: Companion haalt hun **desktop**-featurelijst niet in en moet
+dat niet proberen. 21 timeframes en Depth of Market horen niet op een telefoon.
 
 11. **Deel van een positie sluiten.** `src/app/api/mt5/close-position/route.ts`
     neemt geen volume aan, dus een positie gaat heel dicht of niet. Dit is wat
