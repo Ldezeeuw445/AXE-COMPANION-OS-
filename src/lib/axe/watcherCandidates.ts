@@ -65,6 +65,22 @@ export function tradeCloseEventKey(trade: { id: string; external_trade_id?: stri
   return `trade_close:${ext || trade.id}`;
 }
 
+/**
+ * Whether a close is recent enough to announce. The deal sync pulls 90 days of
+ * history, so on an account's first sync every one of those trades looks
+ * "newly closed"; without this gate the trader's phone gets a buzz per
+ * historical trade. Same window the watcher uses, so both producers agree.
+ */
+export function isAnnounceableTradeClose(
+  closeTime: string | null | undefined,
+  nowMs = Date.now(),
+): boolean {
+  if (!closeTime) return false;
+  const t = Date.parse(closeTime);
+  if (!Number.isFinite(t)) return false;
+  return nowMs - t <= TRADE_CLOSE_LOOKBACK_MS;
+}
+
 export function isBrokerConnectionStale(lastSyncAt: string | null | undefined, nowMs = Date.now()): boolean {
   if (!lastSyncAt) return true;
   const t = Date.parse(lastSyncAt);

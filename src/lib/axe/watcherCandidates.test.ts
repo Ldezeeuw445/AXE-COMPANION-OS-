@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   collectWatcherCandidates,
+  isAnnounceableTradeClose,
   rotateList,
   tradeCloseEventKey,
   TRADE_CLOSE_LOOKBACK_MS,
@@ -69,5 +70,27 @@ describe("rotateList", () => {
 describe("TRADE_CLOSE_LOOKBACK_MS", () => {
   it("is wider than the 15-minute cron plus the 10-minute sync", () => {
     assert.ok(TRADE_CLOSE_LOOKBACK_MS >= 6 * 60 * 60 * 1000);
+  });
+});
+
+describe("isAnnounceableTradeClose", () => {
+  const now = Date.parse("2026-10-28T12:00:00.000Z");
+
+  it("announces a trade that closed since the last sync", () => {
+    assert.equal(isAnnounceableTradeClose("2026-10-28T11:50:00.000Z", now), true);
+  });
+
+  it("does not announce history pulled in by a first sync", () => {
+    // 90 days of deals arrive at once; none of them is news.
+    assert.equal(isAnnounceableTradeClose("2026-08-01T09:00:00.000Z", now), false);
+    assert.equal(
+      isAnnounceableTradeClose(new Date(now - TRADE_CLOSE_LOOKBACK_MS - 1).toISOString(), now),
+      false,
+    );
+  });
+
+  it("ignores a missing or unreadable close time", () => {
+    assert.equal(isAnnounceableTradeClose(null, now), false);
+    assert.equal(isAnnounceableTradeClose("not a date", now), false);
   });
 });
