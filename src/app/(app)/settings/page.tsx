@@ -123,6 +123,9 @@ export default async function SettingsPage() {
         { id: "accounts", label: "Accounts", description: "MT5 connect + sync", href: "/accounts" },
         { id: "alerts", label: "Alerts", description: "Saved rules", href: "/alerts" },
         { id: "subscription", label: "Subscription", description: "Manage plan", href: "/upgrade" },
+        { id: "support", label: "Support", description: "Priority for Founder & Elite", href: "/support" },
+        { id: "feedback", label: "Feedback", description: "Direct product channel", href: "/feedback" },
+        { id: "roadmap", label: "Roadmap", description: "Vote (Founder)", href: "/roadmap" },
       ],
     },
   ];

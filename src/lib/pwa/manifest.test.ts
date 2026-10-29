@@ -41,7 +41,7 @@ describe("PWA manifest", () => {
     assert.equal(has("512x512", "maskable"), true);
 
     for (const icon of icons) {
-      assert.equal(existsSync(resolve(root, "public", icon.src.replace(/^\//, ""))), true);
+      assert.equal(existsSync(resolve(root, "public", icon.src.replace(/^\//, "").split("?")[0])), true);
       assert.equal((icon.purpose ?? "").includes("any") && (icon.purpose ?? "").includes("maskable"), false);
     }
   });

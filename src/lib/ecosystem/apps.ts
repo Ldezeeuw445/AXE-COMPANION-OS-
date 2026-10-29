@@ -63,6 +63,7 @@ export const ECOSYSTEM_APPS: EcosystemApp[] = [
     // 2026-10-17, after the DNS moved to our own Cloudflare Tunnel: apex and
     // www both answer 200. "beta" rather than "live" because signup is still
     // invite-only — the switcher links out, the badge says so.
+    // Closed beta: Companion gates via canAccessBeta("trading_os_bridge") for Founder/Elite.
     availability: "beta",
   },
   {

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
+import { canAccessBeta } from "@/lib/beta/flags";
+import { normalizeAxePlan } from "@/lib/billing/features";
+import { getUserAxeEntitlement } from "@/services/billingService";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
 export async function POST(req: NextRequest) {
@@ -12,6 +15,14 @@ export async function POST(req: NextRequest) {
   const gate = await requireEntitlementFeature(supabase, user.id, "push_notifications");
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error, upgradeRequired: true }, { status: gate.status });
+  }
+
+  const ent = await getUserAxeEntitlement(supabase, user.id);
+  if (!canAccessBeta("push_alerts", normalizeAxePlan(ent.plan))) {
+    return NextResponse.json(
+      { error: "Push alerts beta is not on for your plan.", upgradeRequired: true, beta: "push_alerts" },
+      { status: 403 },
+    );
   }
 
   let body: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
