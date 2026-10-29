@@ -349,7 +349,8 @@ gemeten is.
    onduidelijk, druk of dubbel is, en pas daarna aan. Rustiger maken betekent
    bijna altijd iets weghalen. Niet alle veertien secties in één commit.
 
-10. **Een paper-account om op te testen — de kern staat, de aansluiting niet.**
+10. ~~**Een paper-account om op te testen.**~~ **Af op één cron-regel na,**
+    die alleen Luka kan zetten (`docs/VOOR-LUKA.md` punt 6).
     Luka vroeg hier op 28 oktober expliciet om.
 
     Wat nagekeken is: `demo_paper`-accounts bestaan al (175 stuks), maar
@@ -524,6 +525,54 @@ En de licentiegrens blijft staan: **geen LSE-data in Companion of Trading OS.**
 Dat is geen openstaande vraag, dat is al besloten. Betere data voor Companion
 loopt via de providers die er al zijn — MetaApi, Finnhub, Polygon,
 AlphaVantage, FRED en de ForexFactory-kalender.
+
+---
+
+## De rij is leeg. Wat nu?
+
+Stand op 29 oktober: alles hierboven is af en live gemeten, behalve twee
+dingen die op Luka wachten — de hero-regel van de landing (waar stap 2 en 4
+uit volgen) en de cron-regel voor de paper-stops.
+
+**Een cyclus die niets te doen vindt, hoort niets te doen.** Dat staat
+onderaan al, maar het is makkelijk te negeren met een opdracht in de hand die
+zegt "pak het bovenste punt". Dus expliciet: als de checks groen zijn en er
+staat niets open, is "niets gepusht, want de rij is leeg en dit wacht op
+Luka" het juiste verslag. Een verzonnen taak kost zijn limiet en kan iets
+breken dat werkte.
+
+Wel altijd eerst: `npx tsc --noEmit`, `npm test`, `npm run verify`, en kijken
+of de laatste commit live staat. Kapot gaat voor nieuw, ook als nieuw er niet
+is. En een regressie van iemand anders is echt werk.
+
+### Observaties, geen opdrachten
+
+Deze zijn onderweg gemeten en bewust niet opgepakt. Ze staan hier zodat ze
+niet verloren gaan, **niet** om zonder Luka aan te beginnen — elk kost meer
+dan het oplevert zolang hij er niet is, of vraagt een afweging die niet aan
+een autopilot is.
+
+- **33 kwetsbaarheden in de wallet-stack.** `npm audit fix` lost ze op en
+  breekt dan de typecheck op `WalletsAppKitProvider.tsx`, omdat
+  `@reown/appkit` en zijn wagmi-adapter uit elkaar lopen. De echte weg is een
+  major bump en daarna met een wallet verbinden om te zien of het nog werkt.
+  Dat laatste kan hier niemand.
+- **`axeContextBuilder` filtert niet op `counts_as_evidence`.** Bewust: dat is
+  de laatste 25 trades als gespreksstof, en wie net drie oefentrades deed moet
+  ze kunnen bespreken. Maar AXE baseert er wél uitspraken op. De nette
+  oplossing is de herkomst meegeven in de context, niet de rijen weglaten.
+- **De cockpit telt oefentrades mee in "je sloot N trades".** Ook bewust —
+  dat is waar. Zodra iemand veel op papier handelt wordt die telling wel
+  misleidend naast de echte cijfers ernaast.
+- **Alpaca-accounts krijgen geen live ticks.** De streamer is MetaApi-only en
+  Alpaca gaat via REST-bars. 39 actieve accounts. Een eigen punt met een eigen
+  kostenafweging.
+- **Chart: Ichimoku, een echt Volume Profile (nu alleen de POC-lijn),
+  multi-timeframe overlays.** De rekenkunde hoort in `indicatorMath.ts`, er is
+  een check op, en een nieuwe pane is sinds 28 oktober: opnemen in
+  `PANE_MODES` en de checks vertellen je de rest.
+
+Komt Luka terug met een nieuwe richting, dan gaat die boven alles hier.
 
 ---
 
