@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP } from "@/lib/billing/tiers";
+import {
+  AXE_BILLING_TIERS,
+  FOUNDER_SEAT_CAP,
+  PAID_CHAT_FAIR_USE_SOFT_CAP_PER_DAY,
+} from "@/lib/billing/tiers";
 import type { BillingCatalogState } from "@/lib/billing/types";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
@@ -65,7 +69,7 @@ export function LandingPricing({ catalog }: Props) {
                 <p className="mt-1.5 text-[11.5px] leading-snug text-tos-dim">{tier.headline}</p>
                 <p className="mt-1 text-[11.5px] leading-snug text-tos-dim">
                   {tier.dailyChatCap === null
-                    ? "Unlimited AXE chat (fair use)"
+                    ? `Unlimited AXE chat — fair use soft cap ~${PAID_CHAT_FAIR_USE_SOFT_CAP_PER_DAY}/day`
                     : `${tier.dailyChatCap} AXE sends per day`}
                 </p>
 
@@ -96,6 +100,53 @@ export function LandingPricing({ catalog }: Props) {
           })}
         </div>
 
+        {/* Explicit pricing facts — customer feedback 2026-10-29 */}
+        <div className="axe-landing-card-glow mx-auto mt-8 max-w-3xl p-5 text-left text-[12.5px] leading-relaxed text-tos-muted">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
+            What the plan includes — plain facts
+          </p>
+          <ul className="mt-3 list-disc space-y-1.5 pl-4">
+            <li>
+              <strong className="font-medium text-white/85">Broker accounts:</strong> Free includes{" "}
+              <strong className="font-medium text-white/85">1 live</strong> broker account plus unlimited
+              demo/paper. Pro / Founder / Elite unlock multi-account (exact live cap TBD
+              {/* TODO(Luka): set the Pro+ live-account number */}
+              ).
+            </li>
+            <li>
+              <strong className="font-medium text-white/85">Brokers that work today:</strong> MT5 via
+              MetaApi cloud (or hashed EA/bridge token), and Alpaca (US equities paper/live when
+              configured).
+            </li>
+            <li>
+              <strong className="font-medium text-white/85">Cloud connection cost:</strong> the MetaApi /
+              Alpaca link is included in your AXE plan — no separate AXE surcharge for the connection
+              itself. Your broker may still charge its own fees.
+              {/* TODO(Luka): confirm MetaApi resource-slot billing never hits the customer */}
+            </li>
+            <li>
+              <strong className="font-medium text-white/85">Unlimited — fair use:</strong> paid plans have
+              no hard daily chat cap; soft ceiling about{" "}
+              <strong className="font-medium text-white/85">
+                {PAID_CHAT_FAIR_USE_SOFT_CAP_PER_DAY} AXE sends/day
+              </strong>
+              . Above that we may ask you to slow down. Free stays at 20/day.
+              {/* TODO(Luka): confirm 500 */}
+            </li>
+            <li>
+              <strong className="font-medium text-white/85">Permanent Founder status:</strong> if you
+              cancel, you keep the Founder badge. If you return later, the locked Founder price applies
+              again while Founder seats still exist. Elite never gets Founder perks.
+              {/* TODO(Luka): confirm Stripe + entitlement behaviour on cancel/return */}
+            </li>
+            <li>
+              <strong className="font-medium text-white/85">Elite Roadmap items</strong> (advanced models,
+              premium voice, higher AI limits) are labelled Roadmap on the card — they are not current
+              benefits.
+            </li>
+          </ul>
+        </div>
+
         <p
           className="mx-auto mt-5 max-w-2xl text-center text-[11.5px] leading-relaxed text-tos-dim"
           data-testid="founder-seats"
@@ -120,6 +171,10 @@ export function LandingPricing({ catalog }: Props) {
         </p>
 
         <div className="mx-auto mt-14 max-w-2xl" id="waitlist">
+          <p className="mb-3 text-center text-xs text-tos-dim">
+            Waitlist is for <strong className="font-medium text-white/70">Trading OS</strong> (desktop
+            terminal) and other coming-soon surfaces — Companion itself is available now via Start free.
+          </p>
           <LandingWaitlist />
         </div>
 

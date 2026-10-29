@@ -59,10 +59,11 @@ export function LandingCockpitExample() {
               <ExampleCard title="Learning Arc · Live">
                 <p className="text-[12px] text-white/70">
                   Last 30 days: 24 helpful vs 0 off-target AXE replies — the arc follows real teaching
-                  moments.
+                  moments (closed trades, journal labels, chat feedback), not a vanity streak.
                 </p>
                 <p className="mt-2 text-[11px] text-white/40">
-                  Trade alignment 362 · Chat quality 24 · Journal 14 — sample counts.
+                  Trade alignment 362 · Chat quality 24 · Journal 14 — sample counts. Below a small
+                  sample the app shows “not enough data yet”.
                 </p>
               </ExampleCard>
               <ExampleCard title="Four-week rhythm">
@@ -84,7 +85,8 @@ export function LandingCockpitExample() {
                   48<span className="text-sm text-white/40">/100</span>
                 </p>
                 <p className="mt-1 text-[11px] text-white/45">
-                  100 = fully aligned with how you trade — sample score.
+                  How well AXE proposals match your book (scored trades + feedback). 100 = fully
+                  aligned — sample score, separate from trader score.
                 </p>
               </ExampleCard>
               <ExampleCard title="What You Taught It">

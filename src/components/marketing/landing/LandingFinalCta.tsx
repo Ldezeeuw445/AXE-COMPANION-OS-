@@ -8,7 +8,7 @@ export function LandingFinalCta() {
       <div className="axe-landing-card-glow mx-auto max-w-3xl p-10 text-center">
         <div className="mx-auto mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/22 bg-cyan-400/[0.06] px-3 py-1 text-[11px] font-medium text-cyan-100/95">
           <Target className="h-3 w-3 text-cyan-300" aria-hidden />
-          Ready to trade
+          Ready when you are
         </div>
         <p className="text-lg font-semibold text-white md:text-xl">
           {LANDING_FINAL_CTA.titleLead}{" "}
@@ -24,20 +24,14 @@ export function LandingFinalCta() {
             <ChevronRight className="h-4 w-4" aria-hidden />
           </Link>
           <Link
-            href="/chat"
+            href="/login"
             className="inline-flex h-11 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] px-8 text-sm font-medium text-white transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.06]"
           >
-            Open app
-          </Link>
-          <Link
-            href="/welcome"
-            className="inline-flex h-11 items-center justify-center rounded-full border border-cyan-300/22 bg-cyan-300/[0.04] px-8 text-sm font-medium text-cyan-100/90 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.08]"
-          >
-            PWA install
+            Log in
           </Link>
         </div>
         <a href="#waitlist" className="mt-5 inline-block text-xs text-white/40 transition hover:text-white/65">
-          Join the AXE Companion waitlist
+          Waitlist for Trading OS (desktop) — coming soon
         </a>
       </div>
     </section>
