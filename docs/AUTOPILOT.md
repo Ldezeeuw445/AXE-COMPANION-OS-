@@ -100,6 +100,22 @@ volgende. Niet eromheen bouwen.
   weten is `relrowsecurity` en of er een policy voor `anon` of `public`
   bestaat.
 
+- **`REVOKE ... FROM PUBLIC` sluit `anon` niet buiten.** Supabase geeft elke
+  nieuwe functie in `public` een eigen grant aan `anon` via
+  `ALTER DEFAULT PRIVILEGES`, en die overleeft een revoke op `PUBLIC`. Een
+  migratie die netjes `REVOKE ALL ... FROM PUBLIC` doet en daarna aan
+  `authenticated` en `service_role` grant, laat `anon` dus gewoon staan.
+
+  Op 29 oktober kwam zo `axe_chat_daily_limit(uuid)` binnen: SECURITY DEFINER,
+  neemt een willekeurige user-id, en met de publieke anon-sleutel was van elk
+  account het abonnement af te lezen. In dezelfde sweep stonden ook drie
+  AXE Core-functies open — dáár was de grant wél `PUBLIC` (`=X/postgres` in
+  `proacl`), dus daar moest juist `FROM PUBLIC` eraf.
+
+  Lees daarom `proacl` in plaats van te gokken welke van de twee het is, en
+  meet achteraf met `has_function_privilege('anon', oid, 'EXECUTE')`. Die
+  vraag maakt onderscheid; "de revoke gaf geen fout" niet.
+
 - **Nooit een branch in zijn geheel mergen.** Elke oude branch draagt een
   oudere `package.json` mee, en de `test`- en `verify`-ketens in main zijn
   alleen maar gegroeid. Een hele merge gooit er dus checks uit zonder dat er

@@ -310,3 +310,28 @@ GRANT EXECUTE ON FUNCTION public.axe_chat_daily_limit(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.axe_chat_try_consume() TO service_role;
 GRANT EXECUTE ON FUNCTION public.axe_chat_quota_status() TO service_role;
 GRANT EXECUTE ON FUNCTION public.axe_chat_refund() TO service_role;
+
+-- ── Nagekomen bij het toepassen, 29 oktober ───────────────────────────────
+--
+-- Twee dingen die hierboven ontbraken en die op een verse database een gat
+-- zouden laten. Beide staan nu ook echt op de productie-database.
+--
+-- 1. `axe_chat_usage_daily` werd aangemaakt zonder RLS. Op productie bestond
+--    de tabel al mét RLS, dus daar viel het niet op, maar `CREATE TABLE IF
+--    NOT EXISTS` zonder `ENABLE ROW LEVEL SECURITY` betekent dat dezelfde
+--    migratie op een lege database een open tabel achterlaat. Een tabel
+--    zonder policies is dicht; een tabel zonder RLS is open. Zie de harde
+--    grens hierover in docs/AUTOPILOT.md.
+ALTER TABLE public.axe_chat_usage_daily ENABLE ROW LEVEL SECURITY;
+
+-- 2. `REVOKE ALL ... FROM PUBLIC` haalt de rechten van `anon` er niet af.
+--    Supabase geeft elke nieuwe functie in `public` een eigen grant aan anon
+--    via ALTER DEFAULT PRIVILEGES, en die overleeft een revoke op PUBLIC.
+--    Gemeten na het toepassen: anon kon `axe_chat_daily_limit(uuid)` nog
+--    aanroepen. Dat is SECURITY DEFINER en neemt een willekeurige user-id,
+--    dus met de publieke anon-sleutel was van elk account het abonnement af
+--    te lezen (20 / 200 / 500 / -1).
+REVOKE EXECUTE ON FUNCTION public.axe_chat_daily_limit(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.axe_chat_try_consume() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.axe_chat_quota_status() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.axe_chat_refund() FROM anon;
