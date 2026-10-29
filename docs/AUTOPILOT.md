@@ -528,11 +528,99 @@ AlphaVantage, FRED en de ForexFactory-kalender.
 
 ---
 
+## Zo goed als MT5 en TradingView samen — gemeten, 29 oktober
+
+Luka's vraag: wat moet er nog gebeuren zodat Companion net zo goed is als MT5
+en TradingView bij elkaar. Hieronder staat wat er nu echt is en wat er echt
+mist, geteld in de code en niet geschat.
+
+**Wat Companion nu heeft.** Zes timeframes (M5, M15, M30, H1, H4, D1 —
+`chartTimeframes.ts`). Negen indicatoren: volume, MA, MACD, Bollinger, RSI,
+VWAP, POC, Stochastic, ADX, alle negen met analytische tests in
+`verify-indicator-math.mjs`. Tien SMC-lagen: structuur, order blocks, FVG,
+iFVG, PDH, PDL, PDQ, session open, swing points, supply/demand. Vijf
+teken-gereedschappen: fib retracement, trendlijn, rechthoek, tekst,
+horizontaal niveau. Orders: market, buy/sell limit, buy/sell stop, plus
+`modify-position`, `modify-order` en `cancel-order`, en SL/TP slepen op de
+chart. Smart alerts, journaal met AXE-score, learning arc, playbook-edge, de
+herkomstregel, en sinds deze week een paper-account.
+
+**Eerst de eerlijke grens.** Companion gaat MT5 niet verslaan op 21
+timeframes en Depth of Market, en TradingView niet op honderd
+teken-gereedschappen en een screener. Die lijst inhalen kost maanden en levert
+niets wat iemand overhaalt. Waar Companion wel wint, en zij niet kunnen
+volgen: MT5 vertelt nooit waarom, TradingView kent jouw trades niet. Elk punt
+hieronder is er omdat het een trader in zijn dagelijkse werk tegenhoudt — niet
+omdat het op hun featurelijst staat.
+
+11. **Deel van een positie sluiten.** `src/app/api/mt5/close-position/route.ts`
+    neemt geen volume aan, dus een positie gaat heel dicht of niet. Dit is wat
+    een trader het vaakst doet na een winnende beweging: de helft eruit, de
+    rest laten lopen. Zonder dit moet hij naar MT5 om iets te doen wat hij
+    hier wilde doen, en dan komt hij niet terug. Dit is het grootste gat van
+    allemaal en het is klein werk: MetaApi neemt een volume mee bij close.
+    Let op de guard — een deelsluiting is geen nieuwe order, dus hij hoort
+    niet langs `autoTradeGuard` maar wel in het journaal, en de learning arc
+    moet twee fills op één trade kunnen lezen zonder dubbel te tellen.
+
+12. **M1, W1 en MN1.** Er zijn zes timeframes en er is geen weekchart en geen
+    maandchart. Top-down kijken — bias op weekbasis, uitvoering op M15 — kan
+    dus niet, en dat is precies hoe de meeste traders werken. M1 is er ook
+    niet, waardoor scalpers afvallen. `CHART_TF_MAP` uitbreiden is één regel;
+    het werk zit in de candle-aggregatie en in nagaan of MetaApi `1m`, `1w`
+    en `1mn` voor de aangesloten brokers teruggeeft. Meet dat eerst op het
+    demo-account voor je de knop toevoegt — een timeframe die leeg blijft is
+    erger dan geen knop.
+
+13. **Bar replay.** Nul bestanden. Dit is hoe mensen op TradingView leren, en
+    sinds deze week staat er een paper-account naast: replay plus paper is een
+    oefenlus zonder geld en zonder wachten op de markt. Van alle punten hier
+    is dit het enige dat Companion iets geeft wat MT5 niet heeft én wat mensen
+    daadwerkelijk gebruiken. Begin klein: een candle-index die terugloopt over
+    de gecachte candles (`clientChartCache`), en de indicatoren alleen tot die
+    index laten rekenen. De rekenkunde in `indicatorMath.ts` is al puur, dus
+    dat kan zonder iets te veranderen.
+
+14. **Het positie-gereedschap.** In TradingView het meest gebruikte
+    teken-gereedschap: sleep een entry, een stop en een target, en zie meteen
+    R:R en wat het kost. Companion heeft de risicorekenkunde al
+    (`autonomyRisk.ts`, `accountProfile.ts` met de firm-limieten), dus dit is
+    het ene punt waar wij het beter kunnen dan TradingView: daar staat een
+    percentage, hier kan staan "dit is 0,8% van je dag-limiet van 4%, en je
+    hebt vandaag al 1,2% gebruikt". Bouw het als teken-gereedschap, en laat
+    het de bestaande `maxDailyLossPct` en `maxTotalLossPct` lezen.
+
+15. **Trailing stop en stop-limit.** MetaApi ondersteunt beide; de app kent
+    alleen market, limit en stop. Trailing is wat een trader aanzet als hij
+    weg moet, en dat is precies het moment waarop Companion zijn waarde
+    bewijst. Stop-limit is minder dringend maar hoort erbij.
+
+16. **Twee timeframes naast elkaar.** Niet een volledige multi-chart layout —
+    dat is Trading OS' werk, en op een telefoon past het niet. Wel: dezelfde
+    pair op twee timeframes boven elkaar, zodat de bias en de uitvoering in
+    één blik zitten. Dit is de telefoon-versie van wat een desk met vier
+    schermen doet.
+
+Wat hier bewust **niet** op staat, met de reden erbij:
+
+- **Depth of Market.** Nul bestanden, en dat blijft zo. MetaApi geeft geen
+  echte order book voor de meeste retail-brokers, en een DOM met verzonnen
+  diepte is erger dan geen DOM.
+- **Een screener.** Dat is Trading OS. Op een telefoon scan je niet
+  vijfduizend instrumenten; daar kijk je naar de vier die je volgt.
+- **Honderd teken-gereedschappen.** Vijf plus het positie-gereedschap dekt
+  wat mensen echt tekenen. Elk extra gereedschap maakt de werkbalk op een
+  telefoon slechter voor iedereen die het niet gebruikt.
+
 ## De rij is leeg. Wat nu?
 
-Stand op 29 oktober: alles hierboven is af en live gemeten, behalve twee
+Stand op 29 oktober: punt 1 tot 10 is af en live gemeten, behalve twee
 dingen die op Luka wachten — de hero-regel van de landing (waar stap 2 en 4
 uit volgen) en de cron-regel voor de paper-stops.
+
+**Punt 11 tot 16 hierboven is nieuw** en komt uit Luka's vraag van 29 oktober
+over MT5 en TradingView. De rij is dus niet leeg. Begin bij 11: een positie
+half kunnen sluiten is het grootste gat en het kleinste werk.
 
 **Een cyclus die niets te doen vindt, hoort niets te doen.** Dat staat
 onderaan al, maar het is makkelijk te negeren met een opdracht in de hand die
