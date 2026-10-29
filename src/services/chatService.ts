@@ -574,13 +574,27 @@ export async function getIntelThreadSummary(userId: string): Promise<{
 
 export type SendChatMessageResult =
   | { ok: true }
-  | { ok: false; quotaExceeded?: boolean; aiFailed?: boolean; errorDetail?: string };
+  | {
+      ok: false;
+      quotaExceeded?: boolean;
+      aiFailed?: boolean;
+      errorDetail?: string;
+      quotaNotice?: string;
+      offerUpgrade?: boolean;
+      resetsAt?: string;
+    };
 
 export type StreamEvent =
   | { type: "token"; text: string }
   | { type: "status"; phase: "tools" | "responding"; tools?: string[] }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | {
+      type: "error";
+      message: string;
+      code?: string;
+      offerUpgrade?: boolean;
+      resetsAt?: string;
+    };
 
 const INTEL_CHAT_PREFIX = `You are AXE Intelligence — the intel analysis mode of AXE Companion.
 Focus on correlations, smart money flow, macro connections, cross-market reads, jets, vessels, chokepoints, and geopolitical context.
@@ -628,7 +642,13 @@ export async function streamChatMessage(
   if (!quota.ok) {
     if (quota.quotaExceeded) {
       markChatLatency("quota");
-      return { ok: false, quotaExceeded: true };
+      return {
+        ok: false,
+        quotaExceeded: true,
+        quotaNotice: quota.notice,
+        offerUpgrade: quota.offerUpgrade,
+        resetsAt: quota.resetsAt,
+      };
     }
     markChatLatency("error");
     return { ok: false };

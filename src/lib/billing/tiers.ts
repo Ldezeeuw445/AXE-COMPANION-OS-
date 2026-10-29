@@ -14,11 +14,11 @@
  *   returning later pays the normal rate (not the Founder lock).
  * - Demo session: honest placeholder until a 60–90s recording lands in public/marketing/.
  *
- * Enforcement note: paid chat remains unlimited (-1) in the Supabase RPCs today; the
- * soft ceilings below are the product promise for UI/copy. Live-account counts are
- * the product caps; the runtime gate is still the boolean `multi_account` feature
- * (Free = 1 live, Pro+ = multi) — numeric caps are not hard-enforced yet so we do
- * not silently cut existing Pro+ users who already connected more accounts.
+ * Enforcement (2026-10-29): chat soft ceilings and live-account caps are hard-gated
+ * in Supabase RPCs + connect actions. Chat day boundary is UTC. At the chat limit
+ * the API returns a friendly notice (reset time + upgrade where relevant), not a
+ * hard scare error. Live caps apply only when CONNECTING a *new* live account;
+ * existing accounts above the cap are grandfathered (never disconnected / blocked).
  */
 
 export type AxePlanId = "free" | "pro" | "founder" | "elite";
