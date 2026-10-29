@@ -2,42 +2,46 @@
   "id": "/",
   "name": "AXE Companion",
   "short_name": "AXE",
-  "description": "Private AI trading companion — alerts, chat, and market intelligence.",
+  "description": "Private AI trading companion \u2014 alerts, chat, and market intelligence.",
   "start_url": "/chat",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "orientation": "portrait",
   "theme_color": "#06070a",
   "background_color": "#06070a",
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/axe-icon-192.png",
+      "src": "/axe-icon-192.png?v=3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/axe-icon-512.png",
+      "src": "/axe-icon-512.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/axe-icon-maskable-192.png",
+      "src": "/axe-icon-maskable-192.png?v=3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/axe-icon-maskable-512.png",
+      "src": "/axe-icon-maskable-512.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/apple-touch-icon.png",
+      "src": "/apple-touch-icon.png?v=3",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any"
@@ -59,7 +63,10 @@
       "label": "Live chart"
     }
   ],
-  "categories": ["finance", "productivity"],
+  "categories": [
+    "finance",
+    "productivity"
+  ],
   "lang": "en",
   "dir": "ltr"
 }

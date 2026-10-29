@@ -17,18 +17,18 @@ const LEGACY_DATA_CACHES = ["axe-data-v5"];
 const FROM_CACHE_HEADER = "X-Axe-From-Cache";
 const OFFLINE_URL = "/offline";
 const LAST_VIEWED_KEY = "axe-last-viewed";
-const FALLBACK_ICON = "/axe-icon-512.png";
+const FALLBACK_ICON = "/axe-icon-512.png?v=3";
 const FALLBACK_BADGE = "/axe-icon.png";
 
 const PRECACHE_URLS = [
   OFFLINE_URL,
   "/manifest.json",
   "/chat",
-  "/axe-icon-192.png",
-  "/axe-icon-512.png",
-  "/axe-icon-maskable-192.png",
-  "/axe-icon-maskable-512.png",
-  "/apple-touch-icon.png",
+  "/axe-icon-192.png?v=3",
+  "/axe-icon-512.png?v=3",
+  "/axe-icon-maskable-192.png?v=3",
+  "/axe-icon-maskable-512.png?v=3",
+  "/apple-touch-icon.png?v=3",
 ];
 
 const SAFE_NAV_PREFIXES = [
