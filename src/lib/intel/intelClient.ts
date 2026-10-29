@@ -630,6 +630,7 @@ async function loadIntelFromDb<T>(
             "symbol,trade_date,short_volume,short_exempt_volume,total_volume,short_ratio,market",
           )
           .order("trade_date", { ascending: false })
+          .order("short_ratio", { ascending: false, nullsFirst: false })
           .limit(40);
         if (typeof args.symbol === "string" && args.symbol.trim()) {
           q = q.eq("symbol", String(args.symbol).toUpperCase());

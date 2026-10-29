@@ -2748,6 +2748,8 @@ async function readShortVolumeFromDb(symbol?: string): Promise<FreeShortVolume[]
       .from("intel_short_volume")
       .select("*")
       .order("trade_date", { ascending: false })
+      // Same ranking as the live FINRA list, so a DB hit isn't a shuffled one.
+      .order("short_ratio", { ascending: false, nullsFirst: false })
       .limit(40);
     if (symbol) query = query.eq("symbol", symbol);
     const { data } = await query;

@@ -42,12 +42,25 @@ function candidateDates(count = 6): string[] {
   return out;
 }
 
+/**
+ * Market-wide ranking ignores names that traded fewer shares than this. Without
+ * a floor, a ticker that printed 200 shares — all short — ranks 100% and pushes
+ * every liquid name off the list. A requested symbol is never filtered.
+ * Mirrors src/lib/intel/freeSources/finraShortVolume.ts (that copy is tested).
+ */
+export const FINRA_TOP_MIN_TOTAL_VOLUME = 500_000;
+
+/**
+ * The file is alphabetical, so the market-wide list has to read every row
+ * before ranking — cutting at `limit` first would rank only the A-names.
+ */
 export function parseFinraShortVolumeText(
   text: string,
-  opts?: { symbol?: string; limit?: number },
+  opts?: { symbol?: string; limit?: number; minTotalVolume?: number },
 ): FreeShortVolume[] {
   const symbolFilter = opts?.symbol?.trim().toUpperCase();
   const limit = opts?.limit ?? 40;
+  const minTotalVolume = symbolFilter ? 0 : (opts?.minTotalVolume ?? FINRA_TOP_MIN_TOTAL_VOLUME);
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const rows: FreeShortVolume[] = [];
 
@@ -66,6 +79,7 @@ export function parseFinraShortVolumeText(
     const totalVolume = Number(parts[4]);
     const market = (parts[5] ?? "CNMS").trim() || "CNMS";
     if (![shortVolume, shortExemptVolume, totalVolume].every((n) => Number.isFinite(n))) continue;
+    if (totalVolume < minTotalVolume) continue;
 
     const shortRatio = totalVolume > 0 ? shortVolume / totalVolume : 0;
     rows.push({
@@ -77,7 +91,6 @@ export function parseFinraShortVolumeText(
       shortRatio,
       market,
     });
-    if (!symbolFilter && rows.length >= limit) break;
   }
 
   if (symbolFilter) return rows.slice(0, limit);
