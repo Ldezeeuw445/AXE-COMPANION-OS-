@@ -138,6 +138,7 @@ export async function maybeAutoTradeOnAlert(
     takeProfit: stops.takeProfit,
     comment: `AXE alert ${alert.id.slice(0, 8)}`,
     magic: 700004,
+    attended: false,
   });
 
   const priceText = ` @ ${entry}`;

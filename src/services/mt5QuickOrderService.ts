@@ -13,6 +13,8 @@ import {
   type PlaceOrderInput,
 } from "@/lib/mt5/metaApiClient";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
+import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
+import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import {
   MAX_TRADE_VOLUME_LOTS,
   MIN_TRADE_VOLUME_LOTS,
@@ -64,6 +66,12 @@ export async function placeMt5QuickOrder(
     takeProfit?: number | null;
     comment?: string;
     magic?: number;
+    /**
+     * When false, this is unattended automation (alert fire). Must match the
+     * attended flag the caller already used on decideAutoTradeAllowed so a
+     * second check here cannot quietly lift the daily automation cap.
+     */
+    attended?: boolean;
   },
 ): Promise<Mt5QuickOrderResult> {
   if (!getMetaApiToken()) {
@@ -128,6 +136,35 @@ export async function placeMt5QuickOrder(
     if (openPrice == null || !Number.isFinite(openPrice) || openPrice <= 0) {
       return { ok: false, message: "Pending orders need a valid entry price.", code: "missing_open_price" };
     }
+  }
+
+  // Guard against the same account we are about to place on — never the
+  // workspace active_account_id alone. Callers may already have asked; asking
+  // again is cheap and keeps a forgotten caller from skipping the rules.
+  const attended = args.attended !== false;
+  const guard = await decideAutoTradeAllowed(
+    supabase,
+    userId,
+    displaySymbol,
+    volume,
+    attended,
+    {
+      entryPrice: args.orderType === "market" ? null : openPrice,
+      stopLoss: args.stopLoss ?? null,
+      brokerAccountId: cloud.brokerAccountId,
+    },
+  );
+  if (!guard.allowed) {
+    await recordProactiveFeedEvent(
+      supabase,
+      userId,
+      `order_blocked:${Date.now()}:${guard.reason}`,
+      `Order blocked: ${displaySymbol}`,
+      guard.detail,
+      "/chart",
+      { push: false },
+    );
+    return { ok: false, message: guard.detail, code: guard.reason };
   }
 
   const input: PlaceOrderInput = {

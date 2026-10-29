@@ -1,4 +1,5 @@
 import type { AccountProfile } from "@/lib/risk/accountProfile";
+import { evaluateDailyLoss } from "../risk/dailyLoss";
 
 /**
  * The last thing that runs before AXE places an order nobody is watching.
@@ -18,8 +19,8 @@ import type { AccountProfile } from "@/lib/risk/accountProfile";
  * Every rule here blocks rather than adjusts. Silently shrinking someone's
  * position is its own kind of lie; refusing and saying why is honest.
  *
- * Dependency-free apart from a type, so it can be exercised with
- * `node --experimental-strip-types`.
+ * Runtime import is only the pure daily-loss helper (same strip-types
+ * constraint). Apart from a type import, nothing else.
  */
 
 export type AutoTradeGuardInput = {
@@ -30,7 +31,7 @@ export type AutoTradeGuardInput = {
   openPositions: number;
   /** Auto-trades already placed today, this account. */
   autoTradesToday: number;
-  /** Realised result today as a percentage of balance; negative is a loss. */
+  /** Day equity result as a percentage of start-of-day equity; negative is a loss. */
   dayResultPct: number | null;
   /** Minutes until the next high-impact event, or null when none is near. */
   minutesToHighImpact: number | null;
@@ -81,6 +82,7 @@ export type AutoTradeDecision =
         | "risk_above_limit"
         | "risk_unknown"
         | "daily_loss_reached"
+        | "daily_loss_unknown"
         | "daily_trade_cap";
       /** One sentence the trader reads in the feed. Names the rule and the number. */
       detail: string;
@@ -164,15 +166,28 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
   }
 
   // 3. The day's damage. Trading on past a loss cap is how a funded account ends.
-  if (
-    profile.maxDailyLossPct !== null &&
-    dayResultPct !== null &&
-    dayResultPct <= -profile.maxDailyLossPct
-  ) {
+  // Single source of truth: evaluateDailyLoss applies the 0.5% buffer under the
+  // published cap and fails closed when equity is missing but a limit is set.
+  // Reconstruct start/current from the already-computed dayResultPct so callers
+  // keep the same input shape (service still owns snapshot math).
+  const lossDecision = evaluateDailyLoss({
+    startEquity: dayResultPct === null ? null : 100,
+    currentEquity:
+      dayResultPct === null ? null : 100 * (1 + dayResultPct / 100),
+    maxDailyLossPct: profile.maxDailyLossPct,
+  });
+  if (lossDecision.status === "unknown") {
     return {
       allowed: false,
-      reason: "daily_loss_reached",
-      detail: `Not placed: you are ${Math.abs(dayResultPct).toFixed(2)}% down today and this account's limit is ${profile.maxDailyLossPct}%. The day is over for automation.`,
+      reason: lossDecision.reason,
+      detail: lossDecision.detail,
+    };
+  }
+  if (lossDecision.status === "blocked") {
+    return {
+      allowed: false,
+      reason: lossDecision.reason,
+      detail: lossDecision.detail,
     };
   }
 

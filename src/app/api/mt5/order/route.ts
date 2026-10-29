@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { placePaperOrder } from "@/services/paperOrderService";
+import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
+import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientPlaceOrder,
@@ -26,7 +28,9 @@ export const dynamic = "force-dynamic";
  *   7. Live-trading flag — user must have acknowledged risks server-side
  *      (mirror of the UI gate; required so a direct API call from a
  *      modified client cannot bypass the in-app disclaimer).
- *   8. Volume cap — server-side ceiling so a UI bug can't send 100 lots.
+ *   8. Trade guard — account rules / daily loss / news / autonomy, evaluated
+ *      against *this* brokerAccountId (not active_account_id). Fail-closed.
+ *   9. Volume cap — server-side ceiling so a UI bug can't send 100 lots.
  *
  * The client is also responsible for the 30-min arming window and the
  * per-order final-confirm modal, but those are UX safeguards. This route is
@@ -197,6 +201,35 @@ export async function POST(request: NextRequest) {
       "live_trading_disabled",
       "Live trading is not enabled for this workspace. Go to Settings → Live Trading and accept the risks before placing real orders.",
     );
+  }
+
+
+  // Prop-firm / risk guard. Must run before MetaApi sees the order. Uses the
+  // request's brokerAccountId so a trader with two books cannot bypass the
+  // funded account's rules by keeping a live account active in prefs.
+  const guard = await decideAutoTradeAllowed(
+    supabase,
+    user.id,
+    symbol.trim(),
+    volume,
+    /* attended */ true,
+    {
+      entryPrice: orderType === "market" ? null : openPrice ?? null,
+      stopLoss: stopLoss ?? null,
+      brokerAccountId,
+    },
+  );
+  if (!guard.allowed) {
+    await recordProactiveFeedEvent(
+      supabase,
+      user.id,
+      `order_blocked:${Date.now()}:${guard.reason}`,
+      `Order blocked: ${symbol.trim()}`,
+      guard.detail,
+      "/chart",
+      { push: false },
+    );
+    return errJson(403, guard.reason, guard.detail);
   }
 
   const actionType: MetaApiOrderType = mapActionType(side, orderType);
