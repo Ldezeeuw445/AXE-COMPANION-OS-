@@ -20,6 +20,7 @@
 #     axe-companion-intel-correlate     5 * * * *
 #     axe-companion-journal-sweep       25 * * * *
 #     axe-companion-user-knowledge-sync 40 5 * * *
+#     axe-companion-paper-stops         */2 * * * *
 #
 #   host cron (this file) — jobs that are NOT in cron.job:
 #     congress-trades-sync              20 6 * * *

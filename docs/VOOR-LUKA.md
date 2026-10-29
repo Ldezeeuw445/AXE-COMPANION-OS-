@@ -168,26 +168,24 @@ dezelfde uitvoering als de tabel, anders komt de tabel er niet.
 Wat dit betekent voor de toekomst: schema-wijzigingen via mij lopen vast op
 die bevestiging. Snelste weg blijft Supabase → SQL Editor → plakken → Run.
 
-## 6. Eén cron-regel erbij voor het oefenaccount — 1 minuut
+## 6. ~~Cron-regel voor het oefenaccount~~ — gedaan, 29 oktober
 
-De stops van je oefenaccount worden gesloten door `/api/cron/paper-stops`,
-maar die draait nergens vanzelf. Zonder deze regel blijft een oefenpositie met
-een stop-loss open staan terwijl de prijs er allang doorheen is — en dan leert
-het oefenen je precies het verkeerde.
+Hier stond dat jij een crontab-regel moest toevoegen voor
+`/api/cron/paper-stops`. Dat hoeft niet meer.
 
-Op de VPS, in dezelfde crontab waar de andere sweeps staan, met dezelfde
-`CRON_SECRET`:
+Tien Companion-sweeps liepen al via pg_cron in Supabase, en daar kan ik wél
+bij. `axe-companion-paper-stops` draait daar nu ook, elke twee minuten, via
+dezelfde `axe_ops.dispatch_cron` als de rest — dus met dezelfde `CRON_SECRET`
+uit de vault, niet met een tweede kopie ergens.
 
-```
-*/2 * * * * curl -s -H "Authorization: Bearer $CRON_SECRET" https://www.axecompanion.com/api/cron/paper-stops >/dev/null
-```
+Eerst één keer met de hand aangeroepen om te zien of de route het deed:
+`200`, met `{"ok":true,"checked":0,"closed":0,"skipped":{},"errors":[]}`.
+Pas daarna ingepland.
 
-Elke twee minuten is genoeg: het is papier, en de regel "een positie sluit
-tegen dezelfde soort prijs als waarop hij opende" betekent toch al dat een
-stop soms iets later afgaat dan live. Vaker draaien maakt dat niet nauwkeuriger.
-
-Antwoordt hij `{"ok":true,"checked":0,...}` dan werkt hij en was er niets te
-doen.
+**Zet hem niet óók in de crontab op de VPS.** Eén planner per job; twee
+planners betekent dat elke stop twee keer beoordeeld wordt. Hij staat nu in
+`scripts/vps.crontab` in de pg_cron-lijst bovenaan, juist om dat te
+voorkomen.
 
 ## 7. Twee schakelaars in Supabase — 1 minuut
 
