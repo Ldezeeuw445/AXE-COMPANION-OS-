@@ -509,8 +509,8 @@ check("the words only we know are explained where a visitor meets them", () => {
     },
     {
       term: "depth",
-      explained: /orders waiting (above and below|either side)|resting orders/i,
-      why: "market depth is not a word a new retail trader has met",
+      explained: /estimated depth|synthetic|live bid\/ask|calculated|measured/i,
+      why: "depth must say what is measured vs calculated, never imply a real order book",
     },
   ];
 

@@ -37,8 +37,8 @@ export function LoginForm({ initialMode = "signin" }: { initialMode?: "signin" |
         <h2 className="text-sm font-bold text-tos-text">{mode === "signin" ? "Sign in" : "Create account"}</h2>
         <p className="mt-1 text-xs text-tos-muted">
           {mode === "signin"
-            ? "Use the email and password for your AXE Companion Supabase user."
-            : "Create a new user in the same Supabase project. If email confirmation is on, check your inbox then sign in."}
+            ? "Log in with your AXE account."
+            : "Create your AXE account with email and password. If email confirmation is on, check your inbox then sign in."}
         </p>
       </div>
 
@@ -171,7 +171,7 @@ export function LoginForm({ initialMode = "signin" }: { initialMode?: "signin" |
       ) : (
         <div className="mt-4 space-y-2 text-xs text-tos-muted">
           <p>
-            Supabase is not configured. Copy{" "}
+            Sign-in is not configured on this server yet. For local setup, copy{" "}
             <code className="rounded bg-white/5 px-1 font-mono text-[10px]">.env.local.example</code> to{" "}
             <code className="rounded bg-white/5 px-1 font-mono text-[10px]">.env.local</code> and set{" "}
             <code className="rounded bg-white/5 px-1 font-mono text-[10px]">NEXT_PUBLIC_SUPABASE_URL</code>,{" "}

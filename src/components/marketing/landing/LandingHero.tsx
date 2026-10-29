@@ -50,25 +50,27 @@ export function LandingHero() {
               <ChevronRight className="h-4 w-4" aria-hidden />
             </Link>
             <Link
-              href="/chat"
-              className="inline-flex h-12 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-300/[0.04] px-5 text-sm font-medium text-cyan-100/90 transition hover:border-cyan-300/40 hover:bg-cyan-300/[0.08]"
-            >
-              Open app
-            </Link>
-            <Link
               href="/welcome"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-5 text-sm font-medium text-white/75 transition hover:border-white/20 hover:text-white"
             >
               <Smartphone className="h-4 w-4 text-cyan-300/90" aria-hidden />
               Install as PWA
             </Link>
-            <a
-              href="#waitlist"
-              className="text-center text-xs text-white/40 transition hover:text-white/65"
-            >
-              Join waitlist
-            </a>
           </div>
+          <p className="mt-4 text-center text-xs text-white/40">
+            Already have an account?{" "}
+            <Link href="/login" className="text-white/65 underline-offset-2 hover:text-white hover:underline">
+              Log in
+            </Link>
+            {" · "}
+            <Link href="/chat" className="text-white/65 underline-offset-2 hover:text-white hover:underline">
+              Open app
+            </Link>
+            {" · "}
+            <a href="#waitlist" className="text-white/40 underline-offset-2 hover:text-white/65 hover:underline">
+              Waitlist for Trading OS (desktop)
+            </a>
+          </p>
         </div>
 
         <div className="mt-14">
