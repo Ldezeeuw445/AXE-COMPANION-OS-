@@ -86,14 +86,17 @@ function normalizeWatchlistSymbol(raw: string): string | null {
   const key = raw.toUpperCase().trim();
   if (!key) return null;
   if (key === "AAPLE") return null;
-  if (key.includes(".") || key.includes("/")) return null;
-  if (!/^[A-Z0-9._-]{2,12}$/.test(key)) return null;
+  // Allow broker-looking keys; watchlist entries are usually canonical (XAUUSD).
+  if (key.includes("/")) return null;
+  if (!/^[A-Z0-9][A-Z0-9._-]{1,20}$/.test(key)) return null;
   return key;
 }
 
 /**
  * Only return display symbols that have a broker mapping.
- * Never fall back to raw CORE_SYMBOLS — that causes hundreds of failed subscriptions.
+ * Prefer the user's AXE watchlist (canonical) resolved via symbol_map; also
+ * keep CORE symbols that are mapped. Never fall back to raw CORE_SYMBOLS —
+ * that causes hundreds of failed subscriptions on brokers that use suffixes.
  */
 function resolveWatchlistSymbols(
   symbolMap: Record<string, string>,
@@ -101,19 +104,24 @@ function resolveWatchlistSymbols(
 ): string[] {
   if (Object.keys(symbolMap).length === 0) return [];
 
-  const candidates = new Set<string>([
-    ...CORE_SYMBOLS,
-    ...Object.keys(symbolMap),
-  ]);
-  for (const raw of userWatchlist) {
-    const normalized = normalizeWatchlistSymbol(raw);
-    if (normalized) candidates.add(normalized);
+  const resolved: string[] = [];
+  const seen = new Set<string>();
+
+  function pushDisplay(display: string) {
+    const key = display.toUpperCase();
+    if (!key || seen.has(key)) return;
+    if (!symbolMap[key] && !symbolMap[display]) return;
+    seen.add(key);
+    resolved.push(symbolMap[key] ? key : display);
   }
 
-  const resolved: string[] = [];
-  for (const display of candidates) {
-    if (symbolMap[display]) resolved.push(display);
+  // Watchlist first (user order), then core symbols that are mapped.
+  for (const raw of userWatchlist) {
+    const normalized = normalizeWatchlistSymbol(raw);
+    if (normalized) pushDisplay(normalized);
   }
+  for (const core of CORE_SYMBOLS) pushDisplay(core);
+
   return resolved;
 }
 

@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { brokerPricingState } from "@/lib/runtime/runtimeTruth";
 import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUniverse } from "@/lib/broker/brokerSymbolRuntime";
+import { mapWatchlistToAccountQuotes } from "@/lib/mt5/accountQuotesSync";
 import { getDemoQuotePrice, isDemoAccount } from "@/lib/broker/demoAccount";
 import { isAlpacaAccount } from "@/lib/alpaca/provision";
 import { isAlpacaSupportedSymbol } from "@/lib/alpaca/symbols";
@@ -40,6 +41,40 @@ export default async function WatchlistPage() {
   const connected = ["connected", "provisioned"].includes(String(account?.provider_status ?? "").toLowerCase());
   const demoMode = isDemoAccount(account);
   const alpacaMode = isAlpacaAccount(account);
+  const mt5Mode = !demoMode && !alpacaMode && account?.connection_method === "cloud_mt5";
+
+  // Canonical AXE watchlist never changes with the account. Quotes = watchlist
+  // mapped to this account's broker symbols (omit what the broker doesn't offer).
+  const watchlistSymbols = items.map((i) => i.symbol);
+  const quotesMapping = mt5Mode
+    ? mapWatchlistToAccountQuotes(watchlistSymbols, map, universe)
+    : {
+        available: items.map((i) => {
+          const canonical = cleanDisplaySymbol(i.symbol) || i.symbol.trim().toUpperCase();
+          return { canonical, broker: canonical };
+        }),
+        unavailable: [] as string[],
+      };
+
+  const unavailableNote =
+    mt5Mode && quotesMapping.unavailable.length > 0 ? quotesMapping.unavailable : [];
+
+  const itemByCanonical = new Map(
+    items.map((item) => {
+      const key = (cleanDisplaySymbol(item.symbol) || item.symbol.trim().toUpperCase()).toUpperCase();
+      return [key, item] as const;
+    }),
+  );
+
+  const baseItems = quotesMapping.available.map((row, idx) => {
+    const source = itemByCanonical.get(row.canonical.toUpperCase());
+    return {
+      id: source?.id ?? `mapped-${idx}-${row.canonical}`,
+      symbol: row.canonical,
+      message: source?.message ?? null,
+      brokerSymbol: row.broker,
+    };
+  });
 
   const { data: snapshots } = demoMode
     ? { data: null }
@@ -50,20 +85,33 @@ export default async function WatchlistPage() {
         .eq("account_id", activeId)
         .order("updated_at", { ascending: false })
         .limit(50);
-  const snapshotByDisplay = new Map(
-    (snapshots ?? []).map((s) => [String(s.display_symbol ?? "").toUpperCase(), s as Record<string, unknown>]),
-  );
+  const snapshotByDisplay = new Map<string, Record<string, unknown>>();
+  for (const s of snapshots ?? []) {
+    const row = s as Record<string, unknown>;
+    const displayKey = String(s.display_symbol ?? "").toUpperCase();
+    const brokerKey = String(s.broker_symbol ?? "").toUpperCase();
+    if (displayKey) snapshotByDisplay.set(displayKey, row);
+    if (brokerKey) snapshotByDisplay.set(brokerKey, row);
+  }
 
-  const enriched = items.map((item) => {
-    const display = cleanDisplaySymbol(item.symbol) || item.symbol.toUpperCase();
-    const cached = map[display] ?? map[item.symbol.toUpperCase()];
-    const resolved = cached ? { brokerSymbol: cached } : resolveBrokerSymbol(display, universe);
+  const enriched = baseItems.map((item) => {
+    const display = cleanDisplaySymbol(item.symbol) || item.symbol.trim().toUpperCase();
+    const broker =
+      item.brokerSymbol?.trim() ||
+      map[display] ||
+      resolveBrokerSymbol(display, universe).brokerSymbol ||
+      display;
     const symbolReport = report[display];
     const supported =
+      demoMode ||
+      alpacaMode ||
       Boolean(symbolReport?.resolved) ||
-      (Boolean(cached) && symbolReport?.resolved !== false) ||
-      (universe.length > 0 && universe.some((s) => s === resolved.brokerSymbol));
-    const snap = snapshotByDisplay.get(display);
+      (Boolean(map[display]) && symbolReport?.resolved !== false) ||
+      (universe.length > 0 && universe.some((s) => s === broker));
+    const snap =
+      snapshotByDisplay.get(display) ??
+      snapshotByDisplay.get(String(broker).toUpperCase()) ??
+      snapshotByDisplay.get(item.symbol.trim().toUpperCase());
     const demoQuote = demoMode ? getDemoQuotePrice(display) : null;
     const freshness =
       demoQuote != null
@@ -91,8 +139,10 @@ export default async function WatchlistPage() {
         : symbolReport?.spread ?? null);
     return {
       ...item,
-      symbol: display,
-      brokerSymbol: resolved.brokerSymbol,
+      // Show broker name as MT5 does; keep canonical in `displaySymbol` for watchlist identity.
+      symbol: mt5Mode ? broker : display,
+      displaySymbol: display,
+      brokerSymbol: broker,
       runtimePrice: demoQuote?.price ?? (snap?.last_price != null ? Number(snap.last_price) : null),
       bid,
       ask,
@@ -124,7 +174,7 @@ export default async function WatchlistPage() {
 
   const visible = enriched.filter((row) => {
     if (demoMode) return true;
-    if (alpacaMode) return isAlpacaSupportedSymbol(row.symbol);
+    if (alpacaMode) return isAlpacaSupportedSymbol(row.displaySymbol || row.symbol);
     if (universe.length === 0) return true;
     return row.runtimeState !== "unavailable";
   });
@@ -138,6 +188,8 @@ export default async function WatchlistPage() {
         (account?.label as string | null) ??
         (demoMode ? "AXE Demo Account" : alpacaMode ? "AXE Alpaca Paper" : "Active account")
       }
+      unavailableSymbols={unavailableNote}
+      showSyncWithWatchlist={mt5Mode}
     />
   );
 }

@@ -18,8 +18,15 @@ import {
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
 import {
+  buildMt5QuotesSyncMeta,
+  mapWatchlistToAccountQuotes,
+  mergeMappedQuotesIntoSymbolMap,
+  normalizeWatchlistSymbols,
+} from "@/lib/mt5/accountQuotesSync";
+import {
   buildBrokerSymbolRuntimeMetadata,
   CANONICAL_BROKER_SYMBOLS,
+  getMetadataSymbolMap,
   metadataHasSymbolMap,
   probeBrokerSymbolReport,
 } from "@/lib/broker/brokerSymbolRuntime";
@@ -93,6 +100,51 @@ function mapConnectionToProviderStatus(
   const s = (state ?? "").toUpperCase();
   if (s === "DEPLOYED") return "provisioned";
   return (connectionStatus ?? state ?? "unknown").toLowerCase();
+}
+
+
+async function loadUserWatchlistSymbols(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string[]> {
+  const [{ data: rows }, orderRes] = await Promise.all([
+    supabase
+      .from("assistant_memory_entries")
+      .select("entry_key")
+      .eq("user_id", userId)
+      .eq("scope", "watchlist")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("assistant_memory_entries")
+      .select("content")
+      .eq("user_id", userId)
+      .eq("scope", "watchlist_order")
+      .eq("entry_key", "symbols")
+      .maybeSingle(),
+  ]);
+  const symbols = (rows ?? [])
+    .map((row) => String((row as { entry_key?: unknown }).entry_key ?? "").trim())
+    .filter(Boolean);
+  let savedOrder: string[] = [];
+  try {
+    const parsed = JSON.parse(String(orderRes.data?.content ?? "[]")) as unknown;
+    if (Array.isArray(parsed)) {
+      savedOrder = parsed.map((value) => String(value).trim()).filter(Boolean);
+    }
+  } catch {
+    savedOrder = [];
+  }
+  if (savedOrder.length === 0) return normalizeWatchlistSymbols(symbols);
+  const bySymbol = new Map(normalizeWatchlistSymbols(symbols).map((s) => [s.toUpperCase(), s]));
+  const ordered: string[] = [];
+  for (const raw of savedOrder) {
+    const key = (normalizeWatchlistSymbols([raw])[0] ?? raw).toUpperCase();
+    const hit = bySymbol.get(key);
+    if (!hit) continue;
+    ordered.push(hit);
+    bySymbol.delete(key);
+  }
+  return [...ordered, ...bySymbol.values()];
 }
 
 export type RunCloudMt5SyncOptions = {
@@ -324,15 +376,21 @@ export async function runCloudMt5Sync(
 
   const provider_status = mapConnectionToProviderStatus(accSnap.connectionStatus, accSnap.state) || "connected";
 
+  const watchlistSymbols = await loadUserWatchlistSymbols(supabase, userId);
   const positionSymbols = positions
     .map((p) => (p && typeof p === "object" ? String((p as Record<string, unknown>).symbol ?? "") : ""))
     .filter(Boolean);
+  const displaySymbols = [
+    ...CANONICAL_BROKER_SYMBOLS,
+    ...watchlistSymbols,
+    ...positionSymbols.map(cleanDisplaySymbol).filter(Boolean),
+  ];
   const symbolRuntime =
     brokerSymbols.length > 0
       ? buildBrokerSymbolRuntimeMetadata({
           existingMetadata: prevMeta,
           knownSymbols: [...brokerSymbols, ...positionSymbols],
-          displaySymbols: [...CANONICAL_BROKER_SYMBOLS, ...positionSymbols.map(cleanDisplaySymbol).filter(Boolean)],
+          displaySymbols,
         })
       : null;
   const symbolResolutionReport =
@@ -342,10 +400,20 @@ export async function runCloudMt5Sync(
           region: accountRegion,
           report: symbolRuntime.symbol_resolution_report,
           timeframe: "1h",
-          displays: [...CANONICAL_BROKER_SYMBOLS],
+          displays: Array.from(new Set([...CANONICAL_BROKER_SYMBOLS, ...watchlistSymbols])).slice(0, 24),
           timeoutMs: 1_800,
         }).catch(() => symbolRuntime.symbol_resolution_report)
       : null;
+
+  const baseMap =
+    (symbolRuntime?.symbol_map as Record<string, string> | undefined) ??
+    getMetadataSymbolMap(prevMeta);
+  const universeForQuotes =
+    (symbolRuntime?.symbol_universe?.symbols as string[] | undefined) ??
+    brokerSymbols;
+  const quotesMapping = mapWatchlistToAccountQuotes(watchlistSymbols, baseMap, universeForQuotes);
+  const quotesMeta = buildMt5QuotesSyncMeta(quotesMapping);
+  const mergedSymbolMap = mergeMappedQuotesIntoSymbolMap(baseMap, quotesMapping);
 
   const metadata = {
     ...prevMeta,
@@ -361,12 +429,17 @@ export async function runCloudMt5Sync(
     dealsFetched,
     dealsUpserted,
     lastSyncAt: new Date().toISOString(),
+    ...quotesMeta,
     ...(symbolRuntime
       ? {
           ...symbolRuntime,
+          symbol_map: mergedSymbolMap,
           ...(symbolResolutionReport ? { symbol_resolution_report: symbolResolutionReport } : {}),
         }
-      : {}),
+      : {
+          symbol_map: mergedSymbolMap,
+          symbol_map_updated_at: quotesMeta.mt5_quotes_synced_at,
+        }),
   };
 
   await supabase
@@ -402,6 +475,7 @@ export async function runCloudMt5Sync(
     revalidatePath("/history");
     revalidatePath("/journal");
     revalidatePath("/chat");
+    revalidatePath("/watchlist");
   }
 
   const shouldJournal = opts.autoJournal !== false;
@@ -541,13 +615,19 @@ export async function refreshCloudAccountSymbolMap(
     return m;
   }
 
+  const watchlistSymbols = await loadUserWatchlistSymbols(supabase, userId);
   const positionSymbols = positions
     .map((p) => (p && typeof p === "object" ? String((p as Record<string, unknown>).symbol ?? "") : ""))
     .filter(Boolean);
+  const displaySymbols = [
+    ...CANONICAL_BROKER_SYMBOLS,
+    ...watchlistSymbols,
+    ...positionSymbols.map(cleanDisplaySymbol).filter(Boolean),
+  ];
   const symbolRuntime = buildBrokerSymbolRuntimeMetadata({
     existingMetadata: prevMeta,
     knownSymbols: [...brokerSymbols, ...positionSymbols],
-    displaySymbols: [...CANONICAL_BROKER_SYMBOLS, ...positionSymbols.map(cleanDisplaySymbol).filter(Boolean)],
+    displaySymbols,
   });
 
   const shouldProbe = opts.probe !== false;
@@ -557,12 +637,19 @@ export async function refreshCloudAccountSymbolMap(
         region: accountRegion,
         report: symbolRuntime.symbol_resolution_report,
         timeframe: "1h",
-        displays: [...CANONICAL_BROKER_SYMBOLS],
+        displays: Array.from(new Set([...CANONICAL_BROKER_SYMBOLS, ...watchlistSymbols])).slice(0, 24),
         timeoutMs: SYMBOL_PROBE_TIMEOUT_MS,
       }).catch(() => symbolRuntime.symbol_resolution_report)
     : symbolRuntime.symbol_resolution_report;
 
-  const mappedCount = Object.keys(symbolRuntime.symbol_map).length;
+  const quotesMapping = mapWatchlistToAccountQuotes(
+    watchlistSymbols,
+    symbolRuntime.symbol_map,
+    brokerSymbols,
+  );
+  const quotesMeta = buildMt5QuotesSyncMeta(quotesMapping);
+  const mergedSymbolMap = mergeMappedQuotesIntoSymbolMap(symbolRuntime.symbol_map, quotesMapping);
+  const mappedCount = Object.keys(mergedSymbolMap).length;
   if (mappedCount === 0) {
     return {
       ok: false,
@@ -583,6 +670,8 @@ export async function refreshCloudAccountSymbolMap(
       metadata: {
         ...prevMeta,
         ...symbolRuntime,
+        ...quotesMeta,
+        symbol_map: mergedSymbolMap,
         symbol_resolution_report: symbolResolutionReport,
         lastSymbolMapRefreshAt: new Date().toISOString(),
         ...(accountRegion ? { metaapiRegion: accountRegion } : {}),
