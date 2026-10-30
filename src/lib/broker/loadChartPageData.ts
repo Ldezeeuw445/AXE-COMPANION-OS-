@@ -10,7 +10,13 @@ import {
   MetaApiRequestError,
   type MetaApiCandle,
 } from "@/lib/mt5/metaApiClient";
-import { metaApiTimeframeFromKey, normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
+import {
+  fetchTimeframeFromKey,
+  isFoldedTimeframe,
+  normalizeChartTfKey,
+} from "@/lib/broker/chartTimeframes";
+import { foldIsoCandles } from "@/lib/chart/aggregateCandles";
+import { resolveSessionZone } from "@/lib/chart/sessionDay";
 import {
   DEMO_EXTERNAL_ID,
   ensureActiveDemoWhenEmpty,
@@ -424,6 +430,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Vouw dagcandles tot week- of maandcandles, als de gekozen knop dat vraagt. */
+function foldForTimeframe(
+  candles: MetaApiCandle[],
+  timeframeKey: string,
+  brokerTimezone: string | null | undefined,
+): MetaApiCandle[] {
+  if (!isFoldedTimeframe(timeframeKey)) return candles;
+  const period = timeframeKey === "mn1" ? "mn1" : "w1";
+  return foldIsoCandles(candles, resolveSessionZone(brokerTimezone), period);
+}
+
 async function loadCandlesWithRetry(input: {
   accountId: string;
   candidate: string;
@@ -524,7 +541,10 @@ export async function loadChartPageData(
   accountParam: string | undefined,
 ): Promise<ChartPageData> {
   let timeframeKey = normalizeChartTfKey(tfParam);
-  let metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
+  // Voor W1 en MN1 halen we dagcandles op en vouwen die daarna. Dat
+  // betekent ook dat ze de dag-cache delen: één ophaalactie bedient D1,
+  // W1 en MN1.
+  let metaApiTimeframe = fetchTimeframeFromKey(timeframeKey);
 
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
@@ -554,7 +574,7 @@ export async function loadChartPageData(
 
   if (!tfParam && typeof prefs?.default_chart_timeframe === "string") {
     timeframeKey = normalizeChartTfKey(prefs.default_chart_timeframe);
-    metaApiTimeframe = metaApiTimeframeFromKey(timeframeKey);
+    metaApiTimeframe = fetchTimeframeFromKey(timeframeKey);
   }
 
   const rawAccountsFromDb = ((accountsRows ?? []) as BrokerAccountRow[]).filter(isAccountOffered);
@@ -1020,7 +1040,7 @@ export async function loadChartPageData(
         CANDLES_RENDER_BUDGET_MS,
       );
     }
-    const candles = loaded.candles;
+    const candles = foldForTimeframe(loaded.candles, timeframeKey, account.brokerTimezone);
     const brokerSymbol = loaded.brokerSymbol || resolution.brokerSymbol;
     const attemptedSymbols = Array.from(new Set([...resolution.attempted, ...loaded.attempted]));
     const last = candles.length > 0 ? candles[candles.length - 1]?.close ?? null : null;
@@ -1120,18 +1140,27 @@ export async function loadChartPageData(
         .map((candidate) => getStaleCachedCandles(account.metaApiAccountId, candidate, metaApiTimeframe))
         .find((entry): entry is CandleCacheEntry => Boolean(entry));
       if (cached) {
+        // Eén keer vouwen en daarna hergebruiken: `lastPrice` hieronder las uit
+        // de ongevouwen cache. Dat geeft toevallig hetzelfde getal — een
+        // weekclose ís de laatste dagclose — maar dat is geen reden om twee
+        // bronnen naast elkaar te houden.
+        const cachedCandlesForTf = foldForTimeframe(
+          cached.candles,
+          timeframeKey,
+          account.brokerTimezone,
+        );
         return {
           symbol: requested,
           brokerSymbol: cached.brokerSymbol,
           timeframeKey,
           metaApiTimeframe,
-          candles: cached.candles,
+          candles: cachedCandlesForTf,
           positionsOnSymbol,
           positionsOnSymbolCount: positionsOnSymbol.length,
           totalPositions: allPositions.length,
           pendingOrdersOnSymbol,
           totalPendingOrders: allPendingOrders.length,
-          lastPrice: cached.candles.at(-1)?.close ?? null,
+          lastPrice: cachedCandlesForTf.at(-1)?.close ?? null,
           lastBid: null,
           lastAsk: null,
           lastTickAt: null,

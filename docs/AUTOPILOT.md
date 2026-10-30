@@ -385,9 +385,18 @@ gemeten is.
    onduidelijk, druk of dubbel is, en pas daarna aan. Rustiger maken betekent
    bijna altijd iets weghalen. Niet alle veertien secties in één commit.
 
-10. ~~**Een paper-account om op te testen.**~~ **Af op één cron-regel na,**
-    die alleen Luka kan zetten (`docs/VOOR-LUKA.md` punt 6).
+10. ~~**Een paper-account om op te testen.**~~ **Helemaal af, 30 oktober.**
     Luka vroeg hier op 28 oktober expliciet om.
+
+    De cron die hier nog aan ontbrak hoefde niet van Luka te komen. Tien
+    Companion-sweeps liepen al via pg_cron in Supabase, en daar kan een
+    sessie zelf bij: `axe-companion-paper-stops` draait nu elke twee minuten
+    via dezelfde `axe_ops.dispatch_cron` als de rest, dus met dezelfde
+    `CRON_SECRET` uit de vault. Eerst één keer met de hand aangeroepen om te
+    zien of de route het deed (`200`, `{"ok":true,"checked":0,...}`), pas
+    daarna ingepland; de eerste geplande run om 14:48 deed hetzelfde.
+    `scripts/vps.crontab` noemt hem nu in de pg_cron-lijst, zodat niemand
+    hem er later ook als host-cron bij zet.
 
     Wat nagekeken is: `demo_paper`-accounts bestaan al (175 stuks), maar
     `/api/mt5/order` weigert ze met een 409 — het is iets om naar te kijken,
@@ -657,14 +666,43 @@ dat niet proberen. 21 timeframes en Depth of Market horen niet op een telefoon.
     niet langs `autoTradeGuard` maar wel in het journaal, en de learning arc
     moet twee fills op één trade kunnen lezen zonder dubbel te tellen.
 
-12. **M1, W1 en MN1.** Er zijn zes timeframes en er is geen weekchart en geen
-    maandchart. Top-down kijken — bias op weekbasis, uitvoering op M15 — kan
-    dus niet, en dat is precies hoe de meeste traders werken. M1 is er ook
-    niet, waardoor scalpers afvallen. `CHART_TF_MAP` uitbreiden is één regel;
-    het werk zit in de candle-aggregatie en in nagaan of MetaApi `1m`, `1w`
-    en `1mn` voor de aangesloten brokers teruggeeft. Meet dat eerst op het
-    demo-account voor je de knop toevoegt — een timeframe die leeg blijft is
-    erger dan geen knop.
+12. **~~W1 en MN1~~ af, 30 oktober. M1 wacht op een meting.**
+
+    De waarschuwing hierboven — meet eerst of de broker de timeframe
+    teruggeeft — bleek het antwoord in zich te dragen. Een weekcandle is geen
+    eigen meting; het is dezelfde prijs, grover bekeken. Dus komen W1 en MN1
+    niet van MetaApi maar worden ze uit de dagcandles gevouwen die de app al
+    ophaalt. Dan kan W1 niet leeg zijn als D1 werkt, hoeft geen enkele broker
+    `1w` te ondersteunen, en is er niets te meten dat mis kan gaan. Ze delen
+    daardoor ook de dag-cache: één ophaalactie bedient D1, W1 en MN1.
+
+    `src/lib/chart/aggregateCandles.ts`, 19 checks. De regel die het verschil
+    maakt is de weekgrens: die volgt de **brokerdag**, niet UTC. FX opent
+    zondagavond, en op een UTC-sleutel is dat een eigen dag van twee uur —
+    die zou als zijn eigen week eindigen, en dan ziet de trader op maandag
+    een weekcandle die alleen zondagavond bevat. `sessionDay.ts` had die
+    redenering al staan voor PDH/PDL; hier geldt hij opnieuw.
+
+    Drie mutaties getoetst en alle drie gevangen: de slotkoers uit de hoogste
+    close in plaats van de laatste (tekent een week die altijd sterk sluit),
+    de weekgrens op UTC, en de lopende week als voldragen candle. Die laatste
+    is geen detail: een halve week als afgeronde candle laat iemand een
+    omkeerpatroon zien dat vrijdag nog kan verdwijnen, dus draagt elke
+    gevouwen candle `complete`.
+
+    Onderweg ving een check een fout in mijn eigen code (`dailyCandlesNeeded`
+    telde een feestdagenmarge op bij D1, waar niets gevouwen wordt) en een in
+    het oefenaccount: `timeframeMs` kende `w1` niet en viel terug op een uur,
+    dus het demo-account tekende uurcandles met W1 erboven.
+
+    **M1 is bewust niet toegevoegd.** Dat is wél een eigen meting en kan
+    alleen van de broker komen. Die meting vraagt een MetaApi-token, en dat
+    staat op de host en niet in een sessie — niet in de Supabase-kluis
+    (daar staan alleen `axe_companion_cron_secret` en `axe_uptime_webhook`)
+    en niet in deze container. `timeframeMs` in `demoAccount.ts` kent `m1`
+    al, dus zodra iemand met het token kan meten of `1m` candles teruggeeft
+    voor de aangesloten brokers, is het toevoegen één regel in
+    `CHART_TF_MAP` en één in `CHART_TF_OPTIONS`.
 
 13. **Bar replay.** Nul bestanden. Dit is hoe mensen op TradingView leren, en
     sinds deze week staat er een paper-account naast: replay plus paper is een
