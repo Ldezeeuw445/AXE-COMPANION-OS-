@@ -704,14 +704,54 @@ dat niet proberen. 21 timeframes en Depth of Market horen niet op een telefoon.
     voor de aangesloten brokers, is het toevoegen één regel in
     `CHART_TF_MAP` en één in `CHART_TF_OPTIONS`.
 
-13. **Bar replay.** Nul bestanden. Dit is hoe mensen op TradingView leren, en
-    sinds deze week staat er een paper-account naast: replay plus paper is een
-    oefenlus zonder geld en zonder wachten op de markt. Van alle punten hier
-    is dit het enige dat Companion iets geeft wat MT5 niet heeft én wat mensen
-    daadwerkelijk gebruiken. Begin klein: een candle-index die terugloopt over
-    de gecachte candles (`clientChartCache`), en de indicatoren alleen tot die
-    index laten rekenen. De rekenkunde in `indicatorMath.ts` is al puur, dus
-    dat kan zonder iets te veranderen.
+13. **Bar replay — de kern staat, de knop niet.** 30 oktober.
+
+    `src/lib/chart/replay.ts`, 14 checks. Het snijden is één regel; alles
+    eromheen gaat over vooruitkijken, en dat is een fout die zichzelf nooit
+    meldt. Een replay die ergens de toekomst doorlaat leert het
+    tegenovergestelde van wat hij belooft, en de trader merkt niets — zijn
+    resultaten worden er alleen maar beter van.
+
+    Drie regels maken het verschil:
+
+    - **De beslissing valt op een koers die je nog niet kende.** De laatste
+      zichtbare candle is dicht; zijn slotkoers staat er al. Wie daarop laat
+      vullen handelt op wat hij kende, en dat maakt elke oefening
+      winstgevend. Een order besloten op bar i vult op zijn vroegst op bar
+      i+1, en op de laatste bar kan er niet gehandeld worden.
+    - **De opwarmtijd.** Beginnen bij candle 3 met een EMA over 200 tekent
+      ruis die er als een signaal uitziet. De replay begint niet vóór de
+      langste periode die aanstaat.
+    - **Vier dingen komen uit het heden** en moeten weg: de live quote, de
+      tick-stroom, de dag-niveaus (die vertellen in één lijn waar de prijs
+      nog heen gaat) en de open posities. Ze staan in `REPLAY_SUPPRESSES`,
+      zodat er één plek is waar het staat en één plek waar het nagemeten
+      wordt.
+
+    De zwaarste check meet niet of het snijden klopt maar of de toekomst
+    écht niet lekt: zet een candle ver vooruit volledig op zijn kop, en geen
+    enkele zichtbare indicatorwaarde mag veranderen. Met een tweede check
+    ernaast dat een candle die wél zichtbaar is de indicator juist moet
+    verzetten — anders zou een functie die altijd dezelfde array teruggeeft
+    de eerste ook halen.
+
+    Vier mutaties getoetst en alle vier gevangen: de hele reeks teruggeven,
+    snijden op `index` in plaats van `index + 1`, vullen op de bar die al
+    dicht was, en de opwarmtijd overslaan.
+
+    **Wat er nog moet gebeuren, en waarom het niet in deze cyclus paste.**
+    `ChartScreen.tsx` is 5700 regels en raakt `data.candles` op vijftien
+    plekken aan — de live spiegel, de afstand tot het plan, de tekenlaag.
+    Replay inhangen betekent op elk van die plekken de zichtbare snede
+    gebruiken, de vier dingen uit `REPLAY_SUPPRESSES` uitzetten, en een
+    bediening (afspelen, stap, stoppen) neerzetten. Dat vraagt iemand die
+    het scherm kan zien. Half aansluiten is hier erger dan niet aansluiten:
+    dan is er een replay die op één plek alsnog het heden toont, en dat is
+    precies waar dit bestand tegen bestaat.
+
+    Daarna is de oefenlus rond, want `paperBroker.ts` kan al vullen op een
+    bar in plaats van op een quote (`evaluatePaperStopsOnBar`), en
+    `fillIndexFor` zegt welke bar dat moet zijn.
 
 14. **Het positie-gereedschap.** In TradingView het meest gebruikte
     teken-gereedschap: sleep een entry, een stop en een target, en zie meteen
