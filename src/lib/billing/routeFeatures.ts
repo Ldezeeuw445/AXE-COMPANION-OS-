@@ -123,6 +123,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "roadmap": "Roadmap list; vote eligibility enforced inside the vote route",
   "roadmap/vote": "Vote eligibility enforced inside the route (Founder)",
   "admin/inbox": "Admin-only inbox; gated by AXE_ADMIN_EMAILS / full-access IDs",
+  "trading-team/runs": "Owner-only read of Core's TEST log; gated on the owner's user id, not on a plan",
   "ai/desk": "Internal desk endpoint",
   "tools/call": "Tool dispatch; each tool enforces its own feature",
 };

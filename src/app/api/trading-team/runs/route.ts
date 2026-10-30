@@ -30,7 +30,14 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "40") || 40));
 
-  // Service role: table is written by Core with the same project; RLS is open like core_trading_trades.
+  // Service role omdat de tabel door Core geschreven wordt in hetzelfde
+  // project. Hier stond dat RLS op deze tabel "open" zou zijn, zoals bij
+  // core_trading_trades — dat klopt niet, en het is een gevaarlijke opmerking
+  // om te laten staan. Gemeten op 30 oktober: beide tabellen hebben precies
+  // één policy, `TO authenticated USING (core_owner())`. Er is dus geen
+  // policy voor anon, en RLS geeft een anonieme lezer nul rijen. De
+  // service-role is hier nodig omdat `core_owner()` op Core's eigen
+  // eigenaarsbegrip slaat, niet omdat de tabel openstaat.
   const admin = createServiceRoleSupabaseClient() ?? supabase;
   const { data, error } = await admin
     .from("core_trading_team_runs")

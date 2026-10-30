@@ -75,6 +75,32 @@ check("every free route states a real reason", () => {
   }
 });
 
+check("a free route that leans on an owner gate actually has one", () => {
+  // Sommige routes staan niet als "free" in de lijst omdat ze voor iedereen
+  // zijn, maar omdat ze achter een poort zitten die niets met een abonnement
+  // te maken heeft — de eigenaar, of een admin-lijst. Die reden is dan het
+  // enige dat de route beschermt.
+  //
+  // Verdwijnt die poort ooit uit de code, dan blijft de regel in deze lijst
+  // keurig staan en leest de volgende lezer dat het bewust gratis is. Niets
+  // wordt rood. Daarom wordt de belofte hier nagemeten in plaats van geloofd.
+  const ongated = [];
+  for (const [route, reason] of Object.entries(FREE_ROUTE_REASONS)) {
+    if (!/owner-only|admin-only/i.test(reason)) continue;
+    const src = readFileSync(`src/app/api/${route}/route.ts`, "utf8");
+    const resolvesUser = AUTH_MARKERS.test(src);
+    const refuses = /\b403\b/.test(src);
+    if (!resolvesUser || !refuses) {
+      ongated.push(`${route} (${!resolvesUser ? "resolves no user" : "never answers 403"})`);
+    }
+  }
+  assert.deepEqual(
+    ongated,
+    [],
+    `free because of an owner/admin gate, but the gate is not in the route:\n  ${ongated.join("\n  ")}`,
+  );
+});
+
 check("both maps only name routes that exist", () => {
   const known = new Set(routes);
   const ghosts = [...Object.keys(PAID_ROUTE_FEATURES), ...Object.keys(FREE_ROUTE_REASONS)].filter(
