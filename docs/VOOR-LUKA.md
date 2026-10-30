@@ -9,6 +9,66 @@ kwijt was. Dus: je hoeft dit niet te onthouden, het staat hier.
 
 ---
 
+## 0. GitHub Actions draait niet — dit is de grootste van allemaal
+
+Nieuw, 30 oktober. Dit verklaart een hoop.
+
+Er staan drie workflows in `.github/workflows/`: migraties toepassen, de
+MetaApi-streamer deployen, en de edge functions deployen. Ze zijn alle drie
+goed geschreven. Ze draaien alleen niet.
+
+Gemeten: 93 runs van de migratie-workflow, **elke run mislukt**, elke keer
+binnen 3 tot 5 seconden, zonder dat er ook maar één stap is uitgevoerd. Dat is
+geen fout in het script — een script dat faalt, faalt ín een stap. Dit is de
+runner die niet start. De gebruikelijke oorzaak is een bestedingslimiet op
+Actions, of Actions dat voor de repo uitstaat.
+
+Wat dat al die tijd gekost heeft:
+
+- **Geen enkele migratie is ooit vanzelf toegepast.** Daarom moest elke
+  migratie met de hand, en daarom stonden die van #136 en #139 er nog niet op
+  toen ik vanavond keek — terwijl de code die ze nodig heeft wél live stond.
+- **De MetaApi-streamer deployt niet** bij een push.
+- **De edge functions deployen niet** bij een push.
+
+Waar je moet zijn: github.com → je profiel → Settings → Billing and plans →
+spending limits, en Settings → Actions van de repo zelf om te zien of Actions
+aan staat. Zet je het aan, dan loopt de rest vanzelf weer: de workflows
+hebben `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_REF` en
+`SUPABASE_DB_PASSWORD` nodig, en slaan netjes over als die ontbreken in
+plaats van te ontploffen.
+
+Tot die tijd blijft het handwerk, en dan moet iemand er elke keer aan denken.
+
+---
+
+## 0b. De bouw op de VPS viel om en niemand merkte het
+
+Ook 30 oktober. Opgelost, maar het hoort hier omdat het weer kan gebeuren.
+
+`src/app/favicon.ico` kwam uit #138 met een PNG in 8-bit RGB. De ICO-decoder
+van Turbopack eist RGBA en stopte de build. De VPS trok elke vijf minuten
+binnen, faalde elke keer, en productie bleef ondertussen de commit van die
+ochtend serveren: **8 uur en 48 minuten stilstand**, met drie gemergede PR's
+die niet live stonden.
+
+Niemand zag het, en dat is het echte punt:
+
+- Types, tests en de hele verify-keten waren groen. Alleen `next build` viel
+  om, en die draait op de host.
+- De uptime-wacht in Supabase draait wél, elke twee minuten, met alarm naar
+  ntfy. Maar die vraagt "antwoordt de site?" en een oude build antwoordt
+  gewoon met 200. De vraag maakte geen onderscheid.
+- `scripts/watchdog.sh` stelt de juiste vraag — die vergelijkt productie met
+  main — maar staat alleen als suggestie in dit document. Hij draait nergens.
+
+Er staat nu een check (`scripts/verify-favicon.mjs`) die deze precieze fout
+vangt vóór een push. Maar de algemene les blijft open: er is geen alarm dat
+afgaat als productie achterloopt. Zet die watchdog-regel erin (punt verderop
+in dit document), dan is dat wel geregeld.
+
+---
+
 ## 1. Upcomers verbinden — 5 minuten, en daarna voor al je gebruikers geregeld
 
 Alleen jij hebt het wachtwoord.
