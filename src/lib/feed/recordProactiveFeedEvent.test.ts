@@ -15,7 +15,8 @@
  *
  * These tests pin the ordering, which is the only thing that was wrong.
  *
- * Run: npx tsx --import ./scripts/test-server-only.mjs --test src/lib/feed/recordProactiveFeedEvent.test.ts
+ * Whole suite: npm test
+ * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/feed/recordProactiveFeedEvent.test.ts
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";

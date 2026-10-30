@@ -7,7 +7,7 @@
  * no test at all. It could not have one: `dispatch.ts` and `deliver.ts` both
  * declare `import "server-only"`, a marker package Next aliases away in its own
  * bundler and which is not in node_modules, so no test runner could import
- * them. `scripts/test-server-only.mjs` resolves it to an empty module, which is
+ * them. `scripts/bundler-resolve.mjs` resolves it to an empty module, which is
  * what it compiles to on the server anyway.
  *
  * So this file drives the real production orchestrator over a fake Supabase and
@@ -19,7 +19,8 @@
  * The two seams this needs (`supabase`, `send`) are both injection points on
  * the real functions; nothing is re-implemented here.
  *
- * Run: npx tsx --import ./scripts/test-server-only.mjs --test src/lib/push/pushDelivery.test.ts
+ * Whole suite: npm test
+ * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/push/pushDelivery.test.ts
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";

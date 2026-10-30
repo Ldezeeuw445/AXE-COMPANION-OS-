@@ -21,7 +21,8 @@
  * and refuses that shape. It is deliberately a source-level check — there is no
  * runtime seam that could observe a missing filter.
  *
- * Run: npx tsx --test src/lib/mt5/syncWriteScope.test.ts
+ * Whole suite: npm test
+ * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/mt5/syncWriteScope.test.ts
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
