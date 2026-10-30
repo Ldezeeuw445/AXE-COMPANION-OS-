@@ -60,6 +60,7 @@ const NAV: NavItem[] = [
   { href: "/alerts", label: "Alerts", Icon: Bell },
   { href: "/vault", label: "Vault", Icon: Vault },
   { href: "/actions", label: "Actions", Icon: Briefcase },
+  { href: "/trading-team", label: "Team", Icon: Briefcase },
   { href: "/cockpit", label: "Cockpit", Icon: Brain },
   { href: "/upgrade", label: "Subscriptions", Icon: CreditCard },
   { href: "/settings", label: "Settings", Icon: Settings },
