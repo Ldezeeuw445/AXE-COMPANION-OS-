@@ -335,3 +335,13 @@ REVOKE EXECUTE ON FUNCTION public.axe_chat_daily_limit(uuid) FROM anon;
 REVOKE EXECUTE ON FUNCTION public.axe_chat_try_consume() FROM anon;
 REVOKE EXECUTE ON FUNCTION public.axe_chat_quota_status() FROM anon;
 REVOKE EXECUTE ON FUNCTION public.axe_chat_refund() FROM anon;
+
+-- 3. Ook op tabelniveau stond `anon` erop, via dezelfde standaard-rechten.
+--    RLS hield de rijen al tegen (`auth.uid()` is null voor een anonieme
+--    beller, dus `user_id = auth.uid()` levert niets op), maar een grant die
+--    nergens voor nodig is hoort er niet te staan. De migratie van #139 doet
+--    dit wél per tabel; deze deed het niet.
+REVOKE ALL ON TABLE public.axe_chat_quota FROM anon;
+REVOKE ALL ON TABLE public.axe_chat_quota FROM public;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.axe_chat_quota TO authenticated;
+GRANT ALL ON TABLE public.axe_chat_quota TO service_role;
