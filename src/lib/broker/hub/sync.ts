@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import {
   accountConnectionToDbPatch,
   dbRowToAccountConnection,
@@ -12,6 +13,12 @@ import type { BrokerPermissionState } from "./contract";
 /**
  * Sync hub columns on user_broker_accounts after MT5 connect/sync/disconnect.
  * Called from mt5Cloud actions — no frontend changes required.
+ *
+ * TOS-SEC-2: those actions pass the trader's own client, so the write here has
+ * to elevate itself, or every connect breaks the day the UPDATE grant comes
+ * off. The read stays on `supabase`: RLS returns nothing for someone else's
+ * account, and then nothing is written. The elevated write filters on the
+ * owner that read returned (accountWriteSurface.test.ts).
  */
 export async function syncBrokerHubFromAccountRow(
   supabase: SupabaseClient,
@@ -63,10 +70,11 @@ export async function syncBrokerHubFromAccountRow(
     hub_permissions: permissions as unknown as Record<string, unknown>,
   });
 
-  await supabase
+  await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update(accountConnectionToDbPatch(connection))
-    .eq("id", accountId);
+    .eq("id", accountId)
+    .eq("user_id", row.user_id);
   } catch {
     /* hub columns / tables may not be migrated yet */
   }

@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import {
   checkServersDat,
   findProfileForServer,
@@ -490,7 +491,11 @@ export async function createCloudMt5ConnectionAction(
       existingLocalRow.metadata && typeof existingLocalRow.metadata === "object" && !Array.isArray(existingLocalRow.metadata)
         ? (existingLocalRow.metadata as Record<string, unknown>)
         : {};
-    const { error: updateExistingErr } = await supabase
+    // TOS-SEC-2: account writes go through the server-side client so the
+    // trader's own UPDATE/INSERT grants on user_broker_accounts can be revoked.
+    // Ownership: the row came back from the RLS-scoped read just above, and
+    // every write in this file still filters on user_id (syncWriteScope.test.ts).
+    const { error: updateExistingErr } = await syncWriteClient(supabase)
       .from("user_broker_accounts")
       .update({
         label,
@@ -527,7 +532,8 @@ export async function createCloudMt5ConnectionAction(
     return { ok: true, data: { accountId: existingLocalRow.id as string } };
   }
 
-  const { data: inserted, error } = await supabase
+  // user_id is the signed-in user from auth.getUser(), never a form field.
+  const { data: inserted, error } = await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .insert({
       user_id: user.id,
@@ -641,7 +647,7 @@ export async function probeCloudMt5StatusAction(accountId: string): Promise<
     if (shouldBackfillRegion) {
       patch.metadata = { ...currentMeta, metaapiRegion: newRegion };
     }
-  await supabase
+  await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update(patch)
     .eq("id", accountId)
@@ -751,7 +757,7 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
       lastTerminalProbeAt: new Date().toISOString(),
     };
 
-    await supabase
+    await syncWriteClient(supabase)
       .from("user_broker_accounts")
       .update({
         connection_method: "cloud_mt5",
@@ -767,7 +773,7 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
   } catch (e) {
     const mapped = mapMetaError(e);
     const failStatus = mapped.code === "mt5_invalid_credentials" ? "invalid_credentials" : "failed";
-    await supabase
+    await syncWriteClient(supabase)
       .from("user_broker_accounts")
       .update({ provider_status: failStatus })
       .eq("id", accountId)
@@ -1109,7 +1115,7 @@ export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5Clo
         `State ${acc.state ?? "unknown"} · terminal ${acc.connectionStatus ?? "unknown"}.`,
       ),
     );
-    await supabase
+    await syncWriteClient(supabase)
       .from("user_broker_accounts")
       .update({
         provider_status,
@@ -1363,7 +1369,7 @@ export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5Clo
     steps,
   };
 
-  await supabase
+  await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update({ metadata: { ...prevMeta, ...(resolvedRegion ? { metaapiRegion: resolvedRegion } : {}), lastDoctor: report } })
     .eq("id", accountId)
@@ -1408,7 +1414,7 @@ export async function disconnectCloudMt5AccountAction(accountId: string): Promis
     metaapiAccountPreserved: true,
   };
 
-  const { error: upErr } = await supabase
+  const { error: upErr } = await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update({
       connection_method: "cloud_mt5_disconnected",
@@ -1466,7 +1472,7 @@ export async function recoverCloudMt5AccountAction(accountId: string): Promise<M
       : {};
   const recoveryStartedAt = new Date().toISOString();
 
-  await supabase
+  await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update({
       provider_status: "recovering",
@@ -1539,7 +1545,7 @@ export async function recoverCloudMt5AccountAction(accountId: string): Promise<M
           ? prevMeta.metaapiRegion
           : null;
 
-    await supabase
+    await syncWriteClient(supabase)
       .from("user_broker_accounts")
       .update({
         connection_method: "cloud_mt5",
@@ -1611,7 +1617,7 @@ export async function recoverCloudMt5AccountAction(accountId: string): Promise<M
             },
           };
 
-    await supabase
+    await syncWriteClient(supabase)
       .from("user_broker_accounts")
       .update(orphanPatch)
       .eq("id", accountId)

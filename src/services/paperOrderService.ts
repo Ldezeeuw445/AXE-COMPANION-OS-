@@ -20,6 +20,7 @@ import {
   simulatedQuote,
   type ResolvedQuote,
 } from "@/lib/trading/paperQuoteSource";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 
 /**
  * Placing an order on a practice account.
@@ -301,7 +302,15 @@ export async function closePaperPositionById(
     (tradeRow.raw as Record<string, unknown>).remaining_after = remaining;
   }
 
-  const { error: insertErr } = await supabase
+  // TOS-SEC-2: the ledger write goes out elevated, like every other write to
+  // `broker_trades`. The cron that closes the same position on a stop already
+  // does (`/api/cron/paper-stops` hands this service a service-role client), so
+  // until now the identical event was revocable when the stop fired and not
+  // when the trader tapped Close. Both rules the elevated path depends on hold
+  // here: ownership was proven by the `paper_positions` read above, which
+  // filters `user_id` and returns `position_not_found` when it comes back
+  // empty, and `tradeRow` carries `user_id` in its payload.
+  const { error: insertErr } = await syncWriteClient(supabase)
     .from("broker_trades")
     .upsert(tradeRow, { onConflict: "id" });
 

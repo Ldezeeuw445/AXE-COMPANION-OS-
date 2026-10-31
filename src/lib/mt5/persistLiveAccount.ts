@@ -6,7 +6,7 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { buildAccountProfile } from "@/lib/risk/accountProfile";
 import { evaluateDrawdownAlerts } from "@/lib/risk/drawdownAlert";
 import { renderNoticeBody } from "@/lib/axe/notice";
-import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import {
   figuresFromAccountInfo,
   liveEquitySnapshotFromMetadata,
@@ -15,10 +15,13 @@ import {
   type LiveAccountFigures,
 } from "@/lib/mt5/liveAccountSnapshot";
 
-/** mt5_positions and axe_proactive_events have no INSERT policy for signed-in users. */
-function writerFor(supabase: SupabaseClient): SupabaseClient {
-  return createServiceRoleSupabaseClient() ?? supabase;
-}
+/**
+ * mt5_positions and axe_proactive_events have no INSERT policy for signed-in
+ * users, so these writes have always needed the elevated client. Shared with
+ * the deal-history sync now — see `syncWriteClient` for the two rules that
+ * keep an RLS-bypassing write owner-scoped.
+ */
+const writerFor = syncWriteClient;
 
 const persistAt = new Map<string, number>();
 const PERSIST_MIN_MS = 2_000;
@@ -30,13 +33,14 @@ export function shouldPersistAccount(accountId: string, now = Date.now()): boole
   return true;
 }
 
+/** `writer` must be the elevated client from `writerFor` — mt5_positions has no user write policy. */
 export async function replaceMt5Positions(
-  supabase: SupabaseClient,
+  writer: SupabaseClient,
   userId: string,
   accountId: string,
   positions: LivePositionPayload[],
 ): Promise<void> {
-  const { error: delErr } = await supabase
+  const { error: delErr } = await writer
     .from("mt5_positions")
     .delete()
     .eq("user_id", userId)
@@ -47,7 +51,7 @@ export async function replaceMt5Positions(
   }
   if (positions.length === 0) return;
   const rows = positions.map((p) => toMt5PositionRow(userId, accountId, p));
-  const { error: inErr } = await supabase.from("mt5_positions").insert(rows);
+  const { error: inErr } = await writer.from("mt5_positions").insert(rows);
   if (inErr) console.warn("[live-account] position insert failed:", inErr.message);
 }
 
