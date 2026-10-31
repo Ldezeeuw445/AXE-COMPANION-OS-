@@ -86,6 +86,10 @@ const SCOPED_FILES = [
   // The connect / probe / test / doctor / disconnect / recover actions write
   // the same account rows, so the same two rules apply to them.
   "src/app/actions/mt5Cloud.ts",
+  // Writes the MT5 actions and the chart page hand off to. They elevate too,
+  // so they need the same user_id filter (accountWriteSurface.test.ts).
+  "src/lib/broker/hub/sync.ts",
+  "src/lib/broker/loadChartPageData.ts",
 ];
 
 describe("MT5 sync write scoping", () => {

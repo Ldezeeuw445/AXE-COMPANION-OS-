@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
@@ -881,7 +882,11 @@ export async function loadChartPageData(
     symbolMap = runtimeMeta.symbol_map;
     knownAccountSymbols = Array.from(new Set([...knownAccountSymbols, ...Object.values(symbolMap)]));
     const nextMetadata = { ...accountMetadata, ...runtimeMeta };
-    void supabase
+    // TOS-SEC-2: symbol resolution is sync-owned metadata, written elevated so
+    // the trader's UPDATE grant can come off. The account came from the
+    // user_id-filtered read above, and both writes keep that filter.
+    const accountWriter = syncWriteClient(supabase);
+    void accountWriter
       .from("user_broker_accounts")
       .update({ metadata: nextMetadata })
       .eq("id", account.brokerAccountId)
@@ -894,7 +899,7 @@ export async function loadChartPageData(
       displays: [requested, ...CANONICAL_BROKER_SYMBOLS],
       timeoutMs: 2_000,
     }).then((symbol_resolution_report) => {
-      void supabase
+      void accountWriter
         .from("user_broker_accounts")
         .update({
           metadata: {
