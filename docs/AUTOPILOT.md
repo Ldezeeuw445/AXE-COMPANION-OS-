@@ -753,14 +753,64 @@ dat niet proberen. 21 timeframes en Depth of Market horen niet op een telefoon.
     bar in plaats van op een quote (`evaluatePaperStopsOnBar`), en
     `fillIndexFor` zegt welke bar dat moet zijn.
 
-14. **Het positie-gereedschap.** In TradingView het meest gebruikte
-    teken-gereedschap: sleep een entry, een stop en een target, en zie meteen
-    R:R en wat het kost. Companion heeft de risicorekenkunde al
-    (`autonomyRisk.ts`, `accountProfile.ts` met de firm-limieten), dus dit is
-    het ene punt waar wij het beter kunnen dan TradingView: daar staat een
-    percentage, hier kan staan "dit is 0,8% van je dag-limiet van 4%, en je
-    hebt vandaag al 1,2% gebruikt". Bouw het als teken-gereedschap, en laat
-    het de bestaande `maxDailyLossPct` en `maxTotalLossPct` lezen.
+14. **Het positie-gereedschap — de rekenkern staat, het scherm niet.**
+    31 oktober.
+
+    `src/lib/trading/positionPlan.ts`, 19 checks. De R:R uitrekenen kan
+    iedereen; de waarde zit in de regel erna. Niet "dit is 1,2% van je
+    account" maar "dit is 30% van wat je vandaag nog mag verliezen, en je
+    hebt al de helft op".
+
+    Daar zit ook de fout die dit stil scheeftrekt: **een firm-limiet hangt
+    niet aan je huidige equity maar aan een basis** — het startkapitaal, de
+    balans bij dagopening, een meelopende piek. Reken 4% over de equity van
+    nu en het klopt alleen op een dag dat er nog niets af is. Sta je 300 in
+    de min op een dagstart van 10.000, dan komt die fout op 388 uit in
+    plaats van 400 en houdt de trader zich in terwijl het niet hoeft. Sta je
+    in de plus, dan rekent hij de ruimte te groot en keurt hij de trade goed
+    die de trader eruit gooit. `amountForBasis` haalt elke basis uit zijn
+    eigen bedrag.
+
+    Verder: het aandeel is van wat er nog *over* is en niet van de hele
+    limiet (bij 400 toegestaan en 395 op is een risico van 10 niet 2,5% maar
+    meer dan de hele rest); al over de limiet geeft geen negatieve ruimte en
+    geen percentage, want "nog -20 over" is geen budget; een onbekende
+    limiet is niet onbeperkt en wordt onderscheiden van een bekende limiet
+    zonder basisbedrag, omdat dat tweede op te lossen is door de trader om
+    zijn dagstart te vragen; en de bindende limiet is die met de mínste
+    ruimte, niet die met het laagste percentage — een totale limiet van 10%
+    waar al 950 vanaf is, is krapper dan een daglimiet van 4%.
+
+    Een plan dat geen plan is wordt geweigerd in plaats van berekend. Een
+    long met de stop boven de entry is geen trade met een rare R:R, en er
+    een getal bij zetten is hoe een gereedschap onzin aanleert.
+
+    Vier mutaties getoetst en alle vier gevangen: rekenen over de equity in
+    plaats van de basis (388), het aandeel over de hele limiet (2,5% in
+    plaats van 10%), negatieve ruimte, en de bindende limiet op percentage
+    in plaats van op ruimte.
+
+    **Wat er nog moet gebeuren.** Het sleepbare plan bestáát al in
+    `ChartScreen.tsx`: `pendingOrderPrice`, `pendingStopLossPrice` en
+    `pendingTakeProfitPrice` zijn entry, stop en target. Wat ontbreekt is de
+    uitleesregel — en die kan nog niet, want de chart-pagina laadt het
+    account-profiel helemaal niet. Nergens in `loadChartPageData.ts` komt
+    `maxDailyLossPct` of het dagverlies voor. Aansluiten is dus eerst
+    serverwerk (profiel en dagverlies mee laden), dan pas de regel tekenen.
+
+### Twee kernen op rij zonder scherm — iets om op te merken
+
+Punt 13 en 14 zijn allebei geëindigd als een geverifieerde rekenkern zonder
+aansluiting. Dat is geen toeval: wat er nog ligt in de rij is grotendeels
+chart-UI, en `ChartScreen.tsx` is 5700 regels die een sessie niet kan zien
+draaien. Half aansluiten is daar erger dan niet aansluiten — bij replay
+levert het een replay op die de toekomst lekt, bij dit punt een risicoregel
+die het verkeerde getal toont.
+
+De kernen zijn echt werk en de checks vangen echte fouten, maar ze worden pas
+iets voor Luka als iemand ze aan het scherm hangt. Dat is het goede moment om
+te vragen of de autopilot hiermee door moet, of dat het scherm-werk iemand
+nodig heeft die het kan zien. Staat ook in `docs/VOOR-LUKA.md`.
 
 15. **Trailing stop en stop-limit.** MetaApi ondersteunt beide; de app kent
     alleen market, limit en stop. Trailing is wat een trader aanzet als hij

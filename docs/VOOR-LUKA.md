@@ -42,6 +42,44 @@ Tot die tijd blijft het handwerk, en dan moet iemand er elke keer aan denken.
 
 ---
 
+## 0c. Een vraag: moet de autopilot door met chart-werk?
+
+31 oktober. Geen taak, een keuze die aan jou is.
+
+Punt 13 (bar replay) en punt 14 (het positie-gereedschap) zijn allebei
+geëindigd als een geverifieerde rekenkern zonder aansluiting aan het scherm.
+Dat is geen slordigheid: wat er nog in de rij staat is vooral chart-UI, en
+`ChartScreen.tsx` is 5700 regels die een sessie hier niet kan zien draaien.
+
+Half aansluiten is daar erger dan niet aansluiten. Bij replay levert het een
+replay op die ergens alsnog de toekomst toont — precies waar die module tegen
+bestaat. Bij het positie-gereedschap een risicoregel die het verkeerde getal
+laat zien, en dat is een getal waar iemand zijn positiegrootte op baseert.
+
+Wat er nu ligt, klaar om aangesloten te worden:
+
+- **Replay** (`src/lib/chart/replay.ts`): de zichtbare snede, de opwarmtijd,
+  de regel dat je vult op bar i+1 en niet op de bar die al dicht was, en de
+  lijst van vier dingen die tijdens replay weg moeten. Aansluiten = op
+  vijftien plekken in ChartScreen de snede gebruiken plus een bediening.
+- **Positie-gereedschap** (`src/lib/trading/positionPlan.ts`): R:R, risico,
+  en wat de trade met je firm-limiet doet. Het sleepbare plan bestaat al in
+  de chart; wat ontbreekt is dat `loadChartPageData.ts` het account-profiel
+  en het dagverlies niet meelaadt. Dus eerst serverwerk, dan de regel.
+
+Drie wegen, en je hoeft nu niets te kiezen:
+
+1. Iemand met een scherm hangt ze aan (jij, of een sessie die de app kan
+   draaien en screenshots kan maken).
+2. De autopilot pakt punt 15 (trailing stop) en 16 (twee timeframes) — 15 is
+   grotendeels serverwerk en wél af te maken zonder scherm.
+3. De autopilot stopt met de chart-rij en pakt iets anders op.
+
+Zonder antwoord pak ik de volgende cyclus punt 15, want dat is het enige
+overgebleven punt dat zonder scherm echt af kan.
+
+---
+
 ## 0b. De bouw op de VPS viel om en niemand merkte het
 
 Ook 30 oktober. Opgelost, maar het hoort hier omdat het weer kan gebeuren.
