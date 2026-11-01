@@ -812,10 +812,58 @@ iets voor Luka als iemand ze aan het scherm hangt. Dat is het goede moment om
 te vragen of de autopilot hiermee door moet, of dat het scherm-werk iemand
 nodig heeft die het kan zien. Staat ook in `docs/VOOR-LUKA.md`.
 
-15. **Trailing stop en stop-limit.** MetaApi ondersteunt beide; de app kent
-    alleen market, limit en stop. Trailing is wat een trader aanzet als hij
-    weg moet, en dat is precies het moment waarop Companion zijn waarde
-    bewijst. Stop-limit is minder dringend maar hoort erbij.
+15. **Stop-limit af en aangesloten; trailing stop gebouwd, bewaker nog niet.**
+    1 november.
+
+    `src/lib/trading/advancedOrders.ts`, 19 checks. Beide ordervormen falen
+    op een manier die de trader niet ziet, en dat is waar het werk in zit.
+
+    **Stop-limit — aangesloten, end-to-end.** MT5 plaatst bij het raken van
+    de stopprijs een gewone limietorder. Een koop-limiet hoort onder de
+    markt, dus moet de limietprijs *onder* de stopprijs liggen bij een koop
+    en erboven bij een verkoop. Andersom weigert de broker. Het stillere
+    geval is de limiet die wél goed staat maar zo ver weg dat hij na het
+    triggeren nooit vult: de order is uit het boek, er ligt niets, en de
+    trader denkt dat hij in de markt zit. Dat weigert niet maar waarschuwt,
+    want de retest kopen is een geldige strategie — alleen zelden wat iemand
+    denkt in te stellen.
+
+    `ORDER_TYPE_BUY_STOP_LIMIT` en `ORDER_TYPE_SELL_STOP_LIMIT` zitten nu in
+    de MetaApi-client, `stopLimitPrice` gaat mee in de payload, en
+    `/api/mt5/order` accepteert `buy_stop_limit` en `sell_stop_limit` en
+    toetst de prijzen vóór ze naar de broker gaan. Zonder die toets krijgt de
+    trader een algemene brokerfout in plaats van te horen wat er mis is aan
+    zijn opzet. De marktprijs heeft de route niet, dus de stopkant blijft daar
+    ongetoetst; daarom is `market` in `validateStopLimit` optioneel en wordt
+    alleen de limietkant afgedwongen — de regel die ertoe doet.
+
+    **Trailing stop — de rekenkern staat, de bewaker niet.** De enige regel
+    die telt is dat hij nooit de verkeerde kant op beweegt. Een stop die met
+    een dalende markt meezakt is geen trailing stop maar een stop die zich
+    laat wegduwen, en die geeft de bescherming weg op het moment dat de markt
+    tegen de positie in loopt. Dat is ook precies het moment waarop niemand
+    meekijkt: een trailing stop zet je aan als je wég moet.
+
+    Daarom wordt die eigenschap niet met één aanroep getoetst maar over een
+    hele reeks: na elke stap mag de stop nooit teruggaan. Een fout die pas bij
+    de derde stap omslaat glipt anders door. Verder: een afstand onder de
+    `stopsLevel` van de broker beweegt niets en meldt dat, want een stop die
+    geweigerd wordt loopt niet mee terwijl er op het scherm niets verandert.
+
+    Zes mutaties getoetst en alle zes gevangen: trailing die beide kanten op
+    mag, de limietkant omgedraaid, de ondergrens genegeerd, kapotte invoer die
+    de bestaande stop weggooit, de route-validatie eruit, en de limietprijs
+    die niet meegestuurd wordt.
+
+    **Wat er nog moet gebeuren voor trailing.** Er is geen bewaker die open
+    posities langsloopt en de stop verzet. Dat is dezelfde vorm als
+    `paperStopWatcher.ts` plus `/api/cron/paper-stops`: een service die per
+    positie `trailingStopUpdate` aanroept en bij `moved` een modify naar
+    MetaApi stuurt, en een cron-regel ernaast. De pg_cron-weg is er al
+    (`axe_ops.dispatch_cron`), dus dat kan zonder Luka. Twee dingen eerst
+    uitzoeken: waar de trailing-afstand per positie wordt opgeslagen, en of
+    MetaApi's `stopsLevel` per symbool op te vragen is — zonder dat is
+    `minDistance` een gok.
 
 16. **Twee timeframes naast elkaar.** Niet een volledige multi-chart layout —
     dat is Trading OS' werk, en op een telefoon past het niet. Wel: dezelfde

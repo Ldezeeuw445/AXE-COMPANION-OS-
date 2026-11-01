@@ -677,7 +677,12 @@ export type MetaApiOrderType =
   | "ORDER_TYPE_BUY_LIMIT"
   | "ORDER_TYPE_SELL_LIMIT"
   | "ORDER_TYPE_BUY_STOP"
-  | "ORDER_TYPE_SELL_STOP";
+  | "ORDER_TYPE_SELL_STOP"
+  // Stop-limit: `openPrice` is de trigger, `stopLimitPrice` de limietorder
+  // die daarna in het boek komt. Zie src/lib/trading/advancedOrders.ts voor
+  // waarom die twee niet aan dezelfde kant mogen staan.
+  | "ORDER_TYPE_BUY_STOP_LIMIT"
+  | "ORDER_TYPE_SELL_STOP_LIMIT";
 
 export type PlaceOrderInput = {
   accountId: string;
@@ -690,6 +695,11 @@ export type PlaceOrderInput = {
   openPrice?: number | null;
   stopLoss?: number | null;
   takeProfit?: number | null;
+  /**
+   * Alleen voor *_STOP_LIMIT: de prijs van de limietorder die geplaatst wordt
+   * zodra `openPrice` geraakt is.
+   */
+  stopLimitPrice?: number | null;
   /** Slippage in points (deviation in MT5). */
   slippage?: number | null;
   /** Optional MT5 magic number — used by the EA to tag AXE-originated orders. */
@@ -738,6 +748,9 @@ export async function clientPlaceOrder(input: PlaceOrderInput): Promise<PlaceOrd
   }
   if (input.takeProfit != null && Number.isFinite(input.takeProfit)) {
     body.takeProfit = input.takeProfit;
+  }
+  if (input.stopLimitPrice != null && Number.isFinite(input.stopLimitPrice)) {
+    body.stopLimitPrice = input.stopLimitPrice;
   }
   if (input.slippage != null && Number.isFinite(input.slippage)) {
     body.slippage = input.slippage;
