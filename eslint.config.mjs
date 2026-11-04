@@ -18,6 +18,10 @@ const eslintConfig = defineConfig([
     "cloudflare/**",
     "node/**",
     "public/sw.js",
+    // Playwright writes and deletes these during e2e; scanning them races lint.
+    "test-results/**",
+    "playwright-report/**",
+    "e2e/artifacts/**",
   ]),
   {
     // React 19 + eslint-plugin-react-hooks ships strict new rules ("ref access

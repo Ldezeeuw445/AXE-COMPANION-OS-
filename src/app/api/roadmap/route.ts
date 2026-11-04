@@ -29,8 +29,8 @@ export async function GET() {
   }
 
   const ids = (items ?? []).map((i) => i.id as string);
-  let voteCounts: Record<string, number> = {};
-  let myVotes = new Set<string>();
+  const voteCounts: Record<string, number> = {};
+  const myVotes = new Set<string>();
 
   if (ids.length) {
     const { data: votes } = await supabase
