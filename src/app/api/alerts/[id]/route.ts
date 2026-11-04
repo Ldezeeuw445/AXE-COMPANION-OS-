@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TABLES } from "@/lib/datamodel/tables";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 type Params = { params: Promise<{ id: string }> };
@@ -54,7 +55,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if ("metadata" in body) patch.metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
 
   const { data, error } = await supabase
-    .from("user_alerts")
+    .from(TABLES.alerts)
     .update(patch)
     .eq("id", id)
     .eq("user_id", user.id)
@@ -77,7 +78,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { error } = await supabase
-    .from("user_alerts")
+    .from(TABLES.alerts)
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);

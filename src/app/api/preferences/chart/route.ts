@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { CHART_PREFS_MARKER, TABLES } from "@/lib/datamodel/tables";
 import {
   MAX_PREF_VALUE_LENGTH,
   accountScope,
@@ -17,7 +18,7 @@ import {
  * and what that cost.
  *
  * Reads and writes as the signed-in user, never with the service role: RLS on
- * `user_chart_preferences` is then the thing enforcing that a chart setup is
+ * `user_chart_states` (prefs marker rows) is then the thing enforcing that a chart setup is
  * personal, rather than a `.eq("user_id", ...)` somebody can forget.
  */
 
@@ -38,8 +39,11 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { data, error } = await supabase
-    .from("user_chart_preferences")
-    .select("account_key, symbol_key, prefs, updated_at")
+    .from(TABLES.chartStates)
+    .select("account_key, symbol, prefs, updated_at")
+    .eq("layout_id", CHART_PREFS_MARKER.layoutId)
+    .eq("workspace_id", CHART_PREFS_MARKER.workspaceId)
+    .eq("timeframe", CHART_PREFS_MARKER.timeframe)
     .order("updated_at", { ascending: false })
     .limit(MAX_ROWS);
 
@@ -51,15 +55,16 @@ export async function GET() {
     return NextResponse.json({ error: "Could not read your chart setup." }, { status: 500 });
   }
 
-  const scopes: ChartPrefRow[] = (data ?? []).map((row) => ({
-    accountKey: String(row.account_key),
-    symbolKey: String(row.symbol_key),
-    prefs: sanitisePrefs(row.prefs, {
-      accountKey: String(row.account_key),
-      symbolKey: String(row.symbol_key),
-    }),
-    updatedAt: String(row.updated_at),
-  }));
+  const scopes: ChartPrefRow[] = (data ?? []).map((row) => {
+    const accountKey = String(row.account_key ?? "*");
+    const symbolKey = String(row.symbol ?? "*");
+    return {
+      accountKey,
+      symbolKey,
+      prefs: sanitisePrefs(row.prefs, { accountKey, symbolKey }),
+      updatedAt: String(row.updated_at),
+    };
+  });
 
   return NextResponse.json({ scopes }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -99,8 +104,12 @@ export async function POST(request: NextRequest) {
     rows.push({
       user_id: user.id,
       account_key: accountKey,
-      symbol_key: symbolKey,
+      symbol: symbolKey,
+      timeframe: CHART_PREFS_MARKER.timeframe,
+      layout_id: CHART_PREFS_MARKER.layoutId,
+      workspace_id: CHART_PREFS_MARKER.workspaceId,
       prefs,
+      state: { prefs },
       updated_at: now,
     });
   }
@@ -116,8 +125,8 @@ export async function POST(request: NextRequest) {
   }
 
   const { error } = await supabase
-    .from("user_chart_preferences")
-    .upsert(rows, { onConflict: "user_id,account_key,symbol_key" });
+    .from(TABLES.chartStates)
+    .upsert(rows, { onConflict: "user_id,symbol,timeframe,layout_id,workspace_id,account_key" });
 
   if (error) {
     console.error("[chart-prefs] write failed:", error.message);

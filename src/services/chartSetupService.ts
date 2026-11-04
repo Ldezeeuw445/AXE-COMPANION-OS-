@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CHART_PREFS_MARKER, TABLES } from "@/lib/datamodel/tables";
 import {
   sanitisePrefs,
   summariseChartSetup,
@@ -16,7 +17,7 @@ import {
  * model a fabrication, which left AXE knowing nothing at all about how
  * someone looks at a chart.
  *
- * Now the toggles live in `user_chart_preferences`, so there is a real answer:
+ * Now the toggles live in `user_chart_states` (prefs markers), so there is a real answer:
  * the indicators and SMC overlays the trader has switched on, counted across
  * their own saved charts. Still empty for someone who has never changed a
  * default, and the caller has to say so instead of reaching for three
@@ -31,9 +32,12 @@ export async function getChartSetup(
 ): Promise<ChartSetupSummary> {
   try {
     const { data, error } = await supabase
-      .from("user_chart_preferences")
-      .select("account_key, symbol_key, prefs, updated_at")
+      .from(TABLES.chartStates)
+      .select("account_key, symbol, prefs, updated_at")
       .eq("user_id", userId)
+      .eq("layout_id", CHART_PREFS_MARKER.layoutId)
+      .eq("workspace_id", CHART_PREFS_MARKER.workspaceId)
+      .eq("timeframe", CHART_PREFS_MARKER.timeframe)
       .order("updated_at", { ascending: false })
       .limit(200);
 
@@ -44,7 +48,7 @@ export async function getChartSetup(
 
     const rows: ChartPrefRow[] = (data ?? []).map((row) => {
       const accountKey = String(row.account_key);
-      const symbolKey = String(row.symbol_key);
+      const symbolKey = String(row.symbol ?? "*");
       return {
         accountKey,
         symbolKey,

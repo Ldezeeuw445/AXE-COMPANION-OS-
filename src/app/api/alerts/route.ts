@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { TABLES } from "@/lib/datamodel/tables";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
@@ -34,7 +35,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data, error } = await supabase
-    .from("user_alerts")
+    .from(TABLES.alerts)
     .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at,metadata")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data, error } = await supabase
-    .from("user_alerts")
+    .from(TABLES.alerts)
     .insert({
       user_id: user.id,
       symbol,

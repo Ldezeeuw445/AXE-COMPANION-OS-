@@ -6,6 +6,7 @@ import { llmSimpleChat } from "@/lib/llm/llmRouter";
 import { llmFailureAdvice, type LlmFailure } from "@/lib/ops/llmFailure";
 import { recordLlmFailure, recordLlmSuccess, type EngineSource } from "@/lib/ops/recordEngineRun";
 import { buildAxeJournalLabelRow } from "@/lib/journal/axeJournalLabelRow";
+import { TABLES } from "@/lib/datamodel/tables";
 
 /**
  * AXE auto-journaling — shared logic used by both the `/api/axe-journal`
@@ -331,7 +332,7 @@ async function loadPlaybooks(supabase: SupabaseClient, userId: string): Promise<
 
 async function loadRules(supabase: SupabaseClient, userId: string): Promise<string> {
   const { data } = await supabase
-    .from("axe_user_rules")
+    .from(TABLES.userRules)
     .select("rule_type,severity,rule_text")
     .eq("user_id", userId)
     .eq("active", true)
