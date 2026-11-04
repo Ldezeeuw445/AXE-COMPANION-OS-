@@ -931,24 +931,61 @@ Wat hier bewust **niet** op staat, met de reden erbij:
 
 ## De rij is leeg. Wat nu?
 
-Stand op 29 oktober: punt 1 tot 10 is af en live gemeten, behalve twee
-dingen die op Luka wachten — de hero-regel van de landing (waar stap 2 en 4
-uit volgen) en de cron-regel voor de paper-stops.
+**Stand op 4 november: punt 1 tot en met 16 is af en live gemeten.** De rij
+is nu echt leeg. Wie hier komt met een opdracht die zegt "pak het bovenste
+punt": er is er geen.
 
-**Punt 11 tot 16 hierboven is nieuw** en komt uit Luka's vraag van 29 oktober
-over MT5 en TradingView. De rij is dus niet leeg. Begin bij 11: een positie
-half kunnen sluiten is het grootste gat en het kleinste werk.
-
-**Een cyclus die niets te doen vindt, hoort niets te doen.** Dat staat
-onderaan al, maar het is makkelijk te negeren met een opdracht in de hand die
-zegt "pak het bovenste punt". Dus expliciet: als de checks groen zijn en er
-staat niets open, is "niets gepusht, want de rij is leeg en dit wacht op
-Luka" het juiste verslag. Een verzonnen taak kost zijn limiet en kan iets
-breken dat werkte.
+**Een cyclus die niets te doen vindt, hoort niets te doen.** Dat is geen
+slappe uitweg maar de regel. Een verzonnen taak kost zijn limiet en kan iets
+breken dat werkte. "Niets gepusht, want de rij is leeg" is dan het juiste
+verslag.
 
 Wel altijd eerst: `npx tsc --noEmit`, `npm test`, `npm run verify`, en kijken
 of de laatste commit live staat. Kapot gaat voor nieuw, ook als nieuw er niet
-is. En een regressie van iemand anders is echt werk.
+is. **Een regressie van iemand anders is wél echt werk** — de Manager Twin
+pusht door, en twee keer bleek zijn migratie niet toegepast en één keer brak
+een favicon de build acht uur lang. Dat vinden is waardevoller dan iets
+nieuws beginnen.
+
+### Wat er nog ligt, en waarom het hier niet als taak staat
+
+Drie bakjes. Geen ervan is op te pakken door een sessie die alleen deze
+container heeft.
+
+**Wacht op Luka.** De hero-regel van de landing (punt 9, stap 2 en 4 volgen
+daaruit). En bovenaan alles: `docs/VOOR-LUKA.md` punt 0 — GitHub Actions
+draait niet, 93 runs mislukt binnen drie seconden zonder één uitgevoerde
+stap. Daardoor past geen enkele migratie zichzelf toe en deployen de
+streamer en de edge functions niet. Dat is inmiddels twee keer handwerk
+geworden dat vanzelf had moeten gaan.
+
+**Vraagt iemand die het scherm kan zien.** Bar replay (punt 13) en het
+positie-gereedschap (punt 14) zijn geverifieerde rekenkernen zonder
+aansluiting; punt 16 hangt er wel in maar heeft nog geen knop en staat
+achter `axe.chart.stackedBias`. `ChartScreen.tsx` is 5700 regels en een
+sessie hier kan de app niet draaien — er is geen `.env.local`, dus de
+chart-pagina redirect naar login. Half aansluiten is daar erger dan niet
+aansluiten: bij replay levert het een replay op die de toekomst lekt.
+De vraag hierover staat als punt 0c in `docs/VOOR-LUKA.md`.
+
+**Vraagt een meting die hier niet kan.** M1 als timeframe (punt 12): of
+MetaApi `1m` teruggeeft voor de aangesloten brokers is alleen met een
+MetaApi-token te meten, en dat staat op de host — niet in de Supabase-kluis,
+niet hier. Hetzelfde voor `stopsLevel` per symbool, dat `minDistance` van de
+trailing stop nu een gok zou maken en daarom op null staat.
+
+### Het gat dat nog open staat en niemand ziet
+
+Er is **geen alarm als productie achterloopt**. De uptime-wacht draait elke
+twee minuten met ntfy, maar die vraagt "antwoordt de site?" — en een build
+van acht uur oud antwoordt gewoon met 200. Op 30 oktober stond productie
+8 uur en 48 minuten stil op een favicon die de build brak, en niets ging af.
+
+`scripts/watchdog.sh` stelt wél de goede vraag: hij vergelijkt productie met
+main. Hij draait alleen nergens. Vanuit pg_cron is het niet op te lossen —
+de database weet niet wat main's laatste commit is, en zonder dat is
+"de build is oud" op een rustig weekend vals alarm. Zet de regel uit
+`docs/VOOR-LUKA.md` op de VPS en dit gat is dicht.
 
 ### Observaties, geen opdrachten
 
