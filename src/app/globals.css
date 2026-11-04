@@ -1323,6 +1323,83 @@ select {
   z-index: 2;
 }
 
+/**
+ * De gloed onder de navigatiebalk, uit final-landing-v2-enhanced.html.
+ *
+ * Twee lagen: een scherpe lijn van 3px op de rand zelf en een wazige band van
+ * 54px erboven. Allebei volgen ze `--nav-x` en allebei staan ze op 0 tot de
+ * muis in de balk komt.
+ *
+ * Luka's versie zet `overflow: hidden` op de `nav` zelf. Dat kan hier niet:
+ * het paneel van de AppSwitcher hangt op `sm:` en groter ónder de header
+ * (`top: calc(100% + 0.5rem)`), dus dat zou het paneel volledig wegknippen —
+ * precies de bug die op 12 oktober gerepareerd is. Daarom zit de gloed in een
+ * eigen laag die zelf klipt, en blijft de header onbeperkt.
+ */
+.axe-nav-glow {
+  --nav-x: 50%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 54px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.axe-nav-glow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 54px;
+  background: radial-gradient(
+    420px 28px at var(--nav-x) 100%,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgba(72, 222, 246, 0.58) 16%,
+    rgba(125, 131, 255, 0.38) 38%,
+    rgba(72, 222, 246, 0.18) 56%,
+    rgba(72, 222, 246, 0) 78%
+  );
+  filter: blur(12px);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.axe-nav-glow::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: radial-gradient(
+    300px 3px at var(--nav-x) 100%,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(72, 222, 246, 1) 18%,
+    rgba(125, 131, 255, 0.78) 44%,
+    rgba(72, 222, 246, 0.22) 66%,
+    rgba(72, 222, 246, 0) 82%
+  );
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.axe-nav-glow-active::before,
+.axe-nav-glow-active::after {
+  opacity: 1;
+}
+
+/* Een aanraakscherm heeft geen muis om te volgen. Daar zou de gloed aangaan
+   bij de eerste tik en blijven staan, want er komt geen pointerleave. */
+@media (hover: none) {
+  .axe-nav-glow {
+    display: none;
+  }
+}
+
 .axe-landing-card {
   border-radius: 1rem;
   border: 1px solid transparent;

@@ -102,6 +102,25 @@ check("de basisplaat is licht, zodat de apparaten erop liggen in plaats van erin
   assert.ok(h >= 55, `de plaat is ${h.toFixed(0)}/255 — dan is het geen plaat maar een gat`);
 });
 
+check("de navigatiebalk heeft een gloed die de muis volgt", () => {
+  assert.match(rule(".axe-nav-glow::after"), /var\(--nav-x\)/, "de lijn onder de balk staat vast");
+  assert.match(rule(".axe-nav-glow::before"), /var\(--nav-x\)/, "de wazige band staat vast");
+  const header = readFileSync("src/components/marketing/landing/LandingHeader.tsx", "utf8");
+  assert.ok(header.includes("<LandingNavGlow"), "de header gebruikt de gloed niet");
+});
+
+check("en knipt het switcher-paneel niet af", () => {
+  // Luka's bestand zet `overflow: hidden` op de nav zelf. Het paneel van de
+  // AppSwitcher hangt op sm: en groter ónder de header, dus dat zou het
+  // volledig wegknippen — de bug die op 12 oktober gerepareerd is. De gloed
+  // hoort in een eigen laag te klippen, niet in de header.
+  const header = readFileSync("src/components/marketing/landing/LandingHeader.tsx", "utf8");
+  const glow = readFileSync("src/components/marketing/landing/LandingNavGlow.tsx", "utf8");
+  assert.ok(!/overflow-hidden/.test(header), "de header klipt, en dan is het switcher-paneel weg");
+  assert.ok(!/<header[^>]*overflow/.test(glow), "de header klipt via LandingNavGlow");
+  assert.match(rule(".axe-nav-glow"), /overflow:\s*hidden/, "de gloedlaag klipt zichzelf niet");
+});
+
 check("de gloedbanden volgen de muis en staan op de pagina", () => {
   const band = rule(".axe-glow-band::before");
   assert.ok(band.includes("var(--glow-x)") && band.includes("var(--glow-y)"), "de gloed staat vast");
