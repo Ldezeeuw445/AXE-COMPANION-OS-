@@ -60,10 +60,56 @@ check("er ligt geen donkere sluier over de hero", () => {
   assert.ok(hero.includes("axe-hero-light"), "de hero heeft geen eigen lichtbron");
 });
 
-check("het achtergrondcyaan staat niet lager dan op tradingosapp.com", () => {
-  const m = rule(".axe-landing-matte-bg").match(/rgba\(0,\s*212,\s*245,\s*([\d.]+)\)/);
-  assert.ok(m, "het cyaan in .axe-landing-matte-bg is niet te vinden");
-  assert.ok(Number(m[1]) >= 0.08, `cyaan ${m[1]} — tradingosapp.com staat op 0.08`);
+/**
+ * Hieronder: de pagina loopt van licht naar donker.
+ *
+ * Dit is waar "minder donker" vandaan kwam, en niet uit het cyaan. Luka's
+ * final-landing-v2-enhanced.html begint op #3a3940 en zakt naar #07080a. Een
+ * vlakke donkere achtergrond met wat cyaan erop geeft dat nooit.
+ */
+
+function helderheid(hex) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  // Ongewogen gemiddelde volstaat: we vergelijken grijstinten met elkaar, niet
+  // kleuren met verschillende tinten.
+  return (((n >> 16) & 255) + ((n >> 8) & 255) + (n & 255)) / 3;
+}
+
+check("de pagina begint licht en eindigt zwart", () => {
+  const stops = [...rule(".axe-landing-matte-bg").matchAll(/#([0-9a-f]{6})\s+(\d+)%/gi)];
+  assert.ok(stops.length >= 4, `maar ${stops.length} kleurstops — dit is geen verloop`);
+
+  const eerste = helderheid(stops[0][1]);
+  const laatste = helderheid(stops[stops.length - 1][1]);
+  assert.ok(eerste >= 48, `de bovenkant is ${eerste.toFixed(0)}/255 — te donker om licht te heten`);
+  assert.ok(laatste <= 16, `de onderkant is ${laatste.toFixed(0)}/255 — hoort zwart te zijn`);
+});
+
+check("en wordt onderweg alleen maar donkerder", () => {
+  // Eén stop die lichter is dan de vorige levert een band op die je ziet.
+  const stops = [...rule(".axe-landing-matte-bg").matchAll(/#([0-9a-f]{6})\s+(\d+)%/gi)];
+  for (let i = 1; i < stops.length; i += 1) {
+    const vorige = helderheid(stops[i - 1][1]);
+    const deze = helderheid(stops[i][1]);
+    assert.ok(deze <= vorige, `stop ${stops[i][2]}% (#${stops[i][1]}) is lichter dan de vorige`);
+  }
+});
+
+check("de basisplaat is licht, zodat de apparaten erop liggen in plaats van erin", () => {
+  const m = rule(".axe-hero-stage").match(/background:\s*#([0-9a-f]{6})/i);
+  assert.ok(m, ".axe-hero-stage heeft geen effen achtergrondkleur");
+  const h = helderheid(m[1]);
+  assert.ok(h >= 55, `de plaat is ${h.toFixed(0)}/255 — dan is het geen plaat maar een gat`);
+});
+
+check("de gloedbanden volgen de muis en staan op de pagina", () => {
+  const band = rule(".axe-glow-band::before");
+  assert.ok(band.includes("var(--glow-x)") && band.includes("var(--glow-y)"), "de gloed staat vast");
+  // Een standaardwaarde in de CSS, zodat de band ook zonder JS een band is.
+  assert.match(rule(".axe-glow-band"), /--glow-x:\s*50%/);
+  const page = readFileSync("src/app/page.tsx", "utf8");
+  const n = (page.match(/<LandingGlowBand>/g) ?? []).length;
+  assert.ok(n >= 4, `${n} gloedbanden op de pagina — final-landing-v2-enhanced heeft er vier`);
 });
 
 console.log("");

@@ -1220,10 +1220,13 @@ select {
 .axe-landing-heading-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.96) 0%,
-    rgba(0, 212, 245, 0.90) 42%,
-    rgba(34, 211, 238, 0.82) 58%,
-    rgba(255, 255, 255, 0.94) 100%
+    /* Wit → lavendel → cyaan → paarsblauw, uit final-landing-v2-enhanced.html.
+       De oude liep van wit naar cyaan en terug naar wit; het paars dat de kop
+       zijn kleur gaf ontbrak. */
+    #f5f7ff 0%,
+    #b9b7ff 28%,
+    #63e7fb 68%,
+    #7d83ff 100%
   );
   background-size: 220% auto;
   -webkit-background-clip: text;
@@ -1232,11 +1235,92 @@ select {
   animation: axe-landing-shimmer 9s ease-in-out infinite;
 }
 
+/**
+ * Licht boven, zwart onder.
+ *
+ * Dit is waar "minder donker" vandaan komt, en het zit niet in het cyaan: de
+ * pagina begint op #3a3940, een warm lichtgrijs, en zakt over de hele lengte
+ * naar #07080a. Daardoor staat de hero in het licht en wordt het donker
+ * naarmate je naar beneden leest. Een vlakke #060608 met een beetje cyaan
+ * erop, wat hier stond, geeft dat nooit — hoe hard je het cyaan ook zet.
+ *
+ * De waarden komen uit Luka's final-landing-v2-enhanced.html, de versie
+ * waarvan hij zei dat de kleur exact klopte.
+ */
 .axe-landing-matte-bg {
-  background-color: #060608;
-  background-image:
-    radial-gradient(800px circle at 50% 12%, rgba(0, 212, 245, 0.08), transparent 34%),
-    linear-gradient(180deg, #060608 0%, #080810 38%, #0a0a0e 72%, #060608 100%);
+  background-color: #07080a;
+  background-image: linear-gradient(
+    180deg,
+    #3a3940 0%,
+    #34353b 10%,
+    #2a2b31 24%,
+    #1f2026 42%,
+    #15161b 64%,
+    #0d0e12 82%,
+    #07080a 100%
+  );
+}
+
+/**
+ * Een sectie met een gloed die de muis volgt.
+ *
+ * `--glow-x` / `--glow-y` worden door LandingGlowBand gezet; zonder JS staat
+ * de gloed in het midden en is de band nog steeds een band. Dat is de reden
+ * dat de standaardwaarden hier staan en niet alleen in de component.
+ */
+.axe-glow-band {
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid rgba(47, 211, 234, 0.24);
+  border-bottom: 1px solid rgba(47, 211, 234, 0.24);
+  background: rgba(2, 3, 4, 0.36);
+  --glow-x: 50%;
+  --glow-y: 50%;
+}
+
+.axe-glow-band::before {
+  content: "";
+  position: absolute;
+  inset: -80% -8%;
+  background:
+    radial-gradient(
+      34% 180% at var(--glow-x) var(--glow-y),
+      rgba(220, 250, 255, 0.22) 0%,
+      rgba(6, 182, 212, 0.32) 18%,
+      rgba(6, 182, 212, 0.16) 40%,
+      rgba(6, 182, 212, 0.06) 58%,
+      rgba(6, 182, 212, 0) 74%
+    ),
+    radial-gradient(52% 120% at 12% 50%, rgba(6, 182, 212, 0.12) 0%, rgba(6, 182, 212, 0) 65%),
+    radial-gradient(46% 130% at 88% 50%, rgba(99, 102, 241, 0.12) 0%, rgba(99, 102, 241, 0) 65%);
+  filter: blur(22px);
+  opacity: 0.66;
+  transition:
+    opacity 220ms ease,
+    filter 220ms ease,
+    transform 220ms ease;
+  pointer-events: none;
+}
+
+.axe-glow-band::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01) 30%, rgba(255, 255, 255, 0.04));
+  opacity: 0.24;
+  pointer-events: none;
+}
+
+.axe-glow-band:hover::before {
+  opacity: 0.9;
+  filter: blur(18px);
+  transform: scale(1.03);
+}
+
+/** De inhoud moet boven beide pseudo-lagen staan, anders ligt de gloed erover. */
+.axe-glow-band > * {
+  position: relative;
+  z-index: 2;
 }
 
 .axe-landing-card {
@@ -2370,14 +2454,17 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
   justify-content: center;
   gap: clamp(14px, 2vw, 30px);
   padding: clamp(14px, 2vw, 22px);
-  border: 1px solid rgba(34, 211, 238, 0.22);
-  border-radius: 30px;
-  background:
-    radial-gradient(780px circle at 50% -16%, rgba(34, 211, 238, 0.16), transparent 56%),
-    linear-gradient(180deg, rgba(18, 24, 34, 0.94), rgba(10, 13, 19, 0.97));
+  /* De grote basisplaat: lichtgrijs, niet donker. De apparaten liggen erop in
+     plaats van erin te verdwijnen — dat is het hele punt van een plaat. #44454d
+     komt uit final-landing-v2-enhanced.html. */
+  border: 1px solid rgba(22, 24, 30, 0.78);
+  border-radius: 34px;
+  background: #44454d;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 24px 48px rgba(0, 0, 0, 0.34);
+    0 -10px 16px rgba(255, 255, 255, 0.03),
+    0 26px 42px rgba(5, 6, 8, 0.24),
+    0 12px 20px rgba(5, 6, 8, 0.12);
   transition:
     border-color 320ms ease,
     box-shadow 320ms ease;
@@ -2432,10 +2519,15 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
  * en cyaan achter de kop. Dit is wat de pagina "minder donker" maakt — de
  * achtergrondkleur blijft #060608, het verschil zit in het licht erop.
  */
+/**
+ * Het licht op de hero is wít, niet cyaan.
+ *
+ * Met een cyaan gloed hierboven krijgt het grijs een groenblauwe waas en
+ * klopt de kleur niet meer met final-landing-v2-enhanced.html, waar het
+ * grijs neutraal-warm is. Het cyaan op de hero komt alleen van het dot-grid.
+ */
 .axe-hero-light {
-  background:
-    radial-gradient(1100px circle at 50% -8%, rgba(255, 255, 255, 0.06), transparent 42%),
-    radial-gradient(760px circle at 50% 30%, rgba(34, 211, 238, 0.11), transparent 58%);
+  background: radial-gradient(1100px circle at 50% 0%, rgba(255, 255, 255, 0.08), transparent 42%);
 }
 
 /** Het dot-grid achter de kop, alleen in een plek rond de tekst. */
