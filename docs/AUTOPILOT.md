@@ -855,7 +855,16 @@ nodig heeft die het kan zien. Staat ook in `docs/VOOR-LUKA.md`.
     de bestaande stop weggooit, de route-validatie eruit, en de limietprijs
     die niet meegestuurd wordt.
 
-    **Wat er nog moet gebeuren voor trailing.** Er is geen bewaker die open
+    **Stand 4 november: de bewaker staat live, de tabel niet.** De code is
+    gepusht en gemeten (`fc0e519`), maar
+    `20261101160000_position_trailing_stops.sql` kon niet worden toegepast:
+    de Supabase-koppeling vroeg om een bevestiging die een cloud-sessie niet
+    kan geven en liep af. De cron is daarom bewust **niet** ingepland — een
+    bewaker die elke ronde faalt op een ontbrekende tabel maakt de
+    foutmeldingen waardeloos. Zie `docs/VOOR-LUKA.md` punt 0d. Zodra de
+    tabel er is: één keer met de hand aanroepen, meten, dan pas inplannen.
+
+    **Wat er daarna nog ligt voor trailing.** Er is geen bewaker die open
     posities langsloopt en de stop verzet. Dat is dezelfde vorm als
     `paperStopWatcher.ts` plus `/api/cron/paper-stops`: een service die per
     positie `trailingStopUpdate` aanroept en bij `moved` een modify naar

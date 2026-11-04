@@ -80,6 +80,35 @@ overgebleven punt dat zonder scherm echt af kan.
 
 ---
 
+## 0d. Eén migratie toepassen — 2 minuten, en dan werkt de trailing stop
+
+4 november. De code staat live (`fc0e519`), de tabel niet.
+
+`supabase/migrations/20261101160000_position_trailing_stops.sql` is geschreven
+en nagekeken, maar de Supabase-koppeling vroeg hier om een bevestiging die een
+cloud-sessie niet kan beantwoorden — dezelfde muur als bij de paper-positions
+in oktober. Hij liep na vier minuten af zonder iets te doen.
+
+**Er is nu niets stuk.** De bewaker draait nergens: ik heb de cron bewust
+*niet* ingepland, want zonder tabel zou die elke ronde een fout geven en dan
+leest niemand de foutmeldingen nog. Trailing stops werken dus nog niet, maar
+er gaat ook niets mis.
+
+Wat jij doet: Supabase → SQL Editor → de inhoud van dat bestand plakken → Run.
+Het is één tabel met RLS en vier policies, allemaal eigenaar-only, plus het
+intrekken van de rechten van `anon`.
+
+Zeg daarna even dat het gedraaid heeft, dan plan ik de cron in via pg_cron —
+net als bij `axe-companion-paper-stops` — en meet ik of hij draait. Eerst één
+keer met de hand aanroepen, dan pas inplannen.
+
+**Dit is de tweede keer dat dit gebeurt**, en het hangt aan punt 0: zolang
+GitHub Actions niet draait, past geen enkele migratie zichzelf toe. Zet je
+Actions weer aan, dan is deze stap er ook niet meer, want de workflow
+`apply-supabase-migrations.yml` doet precies dit bij elke push.
+
+---
+
 ## 0b. De bouw op de VPS viel om en niemand merkte het
 
 Ook 30 oktober. Opgelost, maar het hoort hier omdat het weer kan gebeuren.
