@@ -23,6 +23,8 @@ export type ActiveSessionState = {
   accountLabel: string | null;
   symbol: string;
   timeframe: string;
+  /** ISO timestamp of the last intentional symbol/TF pill touch. Null = never. */
+  symbolTouchedAt: string | null;
   lastTab: ShellTab;
 };
 
@@ -33,6 +35,7 @@ export const DEFAULT_ACTIVE_SESSION: ActiveSessionState = {
   accountLabel: null,
   symbol: "XAUUSD",
   timeframe: "h1",
+  symbolTouchedAt: null,
   lastTab: "axe",
 };
 
@@ -113,6 +116,22 @@ export function pathForTab(tab: ShellTab): string {
   return SHELL_TAB_PATHS[tab];
 }
 
+
+export function normalizeSymbolTouchedAt(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return new Date(raw).toISOString();
+  }
+  if (raw instanceof Date && Number.isFinite(raw.getTime())) {
+    return raw.toISOString();
+  }
+  if (typeof raw === "string") {
+    const t = Date.parse(raw);
+    if (Number.isFinite(t)) return new Date(t).toISOString();
+  }
+  return null;
+}
+
 export function sanitizeActiveSession(
   input: Partial<ActiveSessionState> | null | undefined,
   fallback: ActiveSessionState = DEFAULT_ACTIVE_SESSION,
@@ -129,6 +148,10 @@ export function sanitizeActiveSession(
         : fallback.accountLabel,
     symbol: src.symbol != null ? normalizeSessionSymbol(src.symbol) : fallback.symbol,
     timeframe: src.timeframe != null ? normalizeSessionTimeframe(src.timeframe) : fallback.timeframe,
+    symbolTouchedAt:
+      "symbolTouchedAt" in src
+        ? normalizeSymbolTouchedAt(src.symbolTouchedAt)
+        : fallback.symbolTouchedAt,
     lastTab: isShellTab(src.lastTab) ? src.lastTab : fallback.lastTab,
   };
 }
@@ -137,7 +160,19 @@ export function mergeActiveSession(
   current: ActiveSessionState,
   patch: Partial<ActiveSessionState>,
 ): ActiveSessionState {
-  return sanitizeActiveSession({ ...current, ...patch }, current);
+  const nextPatch: Partial<ActiveSessionState> = { ...patch };
+  const symbolChanging =
+    patch.symbol != null &&
+    normalizeSessionSymbol(patch.symbol) !== current.symbol;
+  const tfChanging =
+    patch.timeframe != null &&
+    normalizeSessionTimeframe(patch.timeframe) !== current.timeframe;
+  // Intentional pill edits bump freshness unless the caller set it explicitly
+  // (e.g. restore-from-cookie must not invent a touch time).
+  if ((symbolChanging || tfChanging) && patch.symbolTouchedAt === undefined) {
+    nextPatch.symbolTouchedAt = new Date().toISOString();
+  }
+  return sanitizeActiveSession({ ...current, ...nextPatch }, current);
 }
 
 export function serializeActiveSession(state: ActiveSessionState): string {

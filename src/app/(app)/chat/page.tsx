@@ -5,6 +5,7 @@ import { PinnedContext } from "@/components/chat/PinnedContext";
 import { ChatMorningBrief } from "@/components/chat/ChatMorningBrief";
 import { CHAT_USES_MOCK_DATA, getChatThread } from "@/services/chatService";
 import { ChatFeedStrip } from "@/components/feed/ChatFeedStrip";
+import { ChatStickyPanel } from "@/components/chat/ChatStickyPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -78,8 +79,10 @@ export default async function ChatPage({
             Live chat persistence is not wired to the database yet.
           </p>
         ) : null}
-        <PinnedContext text={conversation.pinnedContext} />
-        <ChatFeedStrip />
+        <ChatStickyPanel>
+          <PinnedContext text={conversation.pinnedContext} />
+          <ChatFeedStrip />
+        </ChatStickyPanel>
         <ChatMorningBrief />
         <ChatThread
           conversationId={conversation.id}
