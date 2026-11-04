@@ -972,15 +972,16 @@ nieuws beginnen.
 Drie bakjes. Geen ervan is op te pakken door een sessie die alleen deze
 container heeft.
 
-**Wacht op Luka.** De landing is op 4 november grotendeels opgelost: hij
-leverde `launch-v2.html` en `final-landing-v2-enhanced.html`, en daaruit zijn
-de achtergrond (#3a3940 → #07080a), de lichte basisplaat (#44454d), de
-kopgradient en de vier gloedbanden overgenomen (42ef0fa, live gemeten). Wat
-nog openstaat is zijn keuze uit vier secties die wél in zijn bestand staan en
-niet op de echte pagina: de reveal-cards, de behavior-map, de
-metric-cockpit-dial en de gloed onder de navigatiebalk. De eerste drie hebben
-eigen inhoud nodig die nergens bestaat — niet zelf verzinnen. **De vraag
-staat bij hem uit; begin er niet aan voordat hij kiest.**
+**Wacht op Luka.** De landing-kleuren (42ef0fa) staan live. Op main staat
+inmiddels ook `82d5c5e` (gloed onder de navigatiebalk volgt de muis) — **nog
+niet gedeployed**; live build is `cda8fc7`. De andere drie secties uit zijn
+bestand (reveal-cards, behavior-map, metric-cockpit-dial) vragen inhoud die
+nergens bestaat — **niet zelf verzinnen, niet deployen zonder zijn keuze.**
+
+Gemeten 2026-11-04 naast die keuze: Supabase anon-uit + HIBP-aan; Trading OS
+serve+tunnel+`availability: beta`; Ollama-API niet meer open (401 /
+SPA-fallback); Companion live-check in AXE Core leest `/api/debug/build`.
+Open in de bouwlijst: 12 punten die echt Luka nodig hebben.
 
 En bovenaan alles: `docs/VOOR-LUKA.md` punt 0 — GitHub Actions draait niet.
 Op 4 november is de datum vastgepind: tot en met **3 juli** was alles groen,
