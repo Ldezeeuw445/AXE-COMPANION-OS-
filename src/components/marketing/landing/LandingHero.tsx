@@ -6,13 +6,11 @@ import { LANDING_HERO } from "@/lib/marketing/landingCopy";
 export function LandingHero() {
   return (
     <section className="relative overflow-hidden" style={{ minHeight: "min(100svh, 920px)" }}>
-      <div
-        className="pointer-events-none absolute inset-0 z-[1]"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(5,5,8,0.18) 0%, rgba(5,5,8,0.04) 45%, rgba(5,5,8,0.02) 100%)",
-        }}
-      />
+      {/* Licht op de hero, geen sluier eroverheen. Hier lag een donkere
+          gradient (rgba 5,5,8 · 0.18) óver de kop van de pagina, die het
+          enige deel van het scherm dat licht moest zijn juist dimde. */}
+      <div aria-hidden className="axe-hero-light pointer-events-none absolute inset-0 z-[1]" />
+      <div aria-hidden className="axe-hero-headline-dots pointer-events-none absolute inset-x-0 top-0 z-[1] h-[640px]" />
 
       <div className="relative z-10 mx-auto max-w-6xl px-5 pb-16 pt-12 md:pt-16">
         <div className="mx-auto max-w-3xl text-center">

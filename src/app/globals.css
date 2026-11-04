@@ -1235,7 +1235,7 @@ select {
 .axe-landing-matte-bg {
   background-color: #060608;
   background-image:
-    radial-gradient(800px circle at 50% 12%, rgba(0, 212, 245, 0.03), transparent 34%),
+    radial-gradient(800px circle at 50% 12%, rgba(0, 212, 245, 0.08), transparent 34%),
     linear-gradient(180deg, #060608 0%, #080810 38%, #0a0a0e 72%, #060608 100%);
 }
 
@@ -2370,11 +2370,11 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
   justify-content: center;
   gap: clamp(14px, 2vw, 30px);
   padding: clamp(14px, 2vw, 22px);
-  border: 1px solid rgba(34, 211, 238, 0.16);
+  border: 1px solid rgba(34, 211, 238, 0.22);
   border-radius: 30px;
   background:
-    radial-gradient(780px circle at 50% -16%, rgba(34, 211, 238, 0.1), transparent 52%),
-    linear-gradient(180deg, rgba(10, 14, 21, 0.96), rgba(6, 8, 12, 0.98));
+    radial-gradient(780px circle at 50% -16%, rgba(34, 211, 238, 0.16), transparent 56%),
+    linear-gradient(180deg, rgba(18, 24, 34, 0.94), rgba(10, 13, 19, 0.97));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 24px 48px rgba(0, 0, 0, 0.34);
@@ -2392,29 +2392,66 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
 }
 
 /* The dots sit behind the block and brighten when the pointer is on it. */
+/**
+ * Het cyan dot-grid achter de plaat.
+ *
+ * De `mask-image` is het hele punt en stond er niet meer in. Zonder masker
+ * loopt het raster door tot de rand van zijn eigen vierkant en houdt daar
+ * abrupt op — een zichtbare rechthoek die eruitziet als een fout. De enige
+ * manier om dat te verbergen is de dekking zo laag zetten dat je het raster
+ * niet meer ziet, en dat is precies wat er gebeurd was: 0.3 over bijna zwart
+ * is onzichtbaar. Het masker laat het raster in het midden staan en naar
+ * buiten toe oplossen, zodat het een lichtplek is in plaats van een vlak — en
+ * dán mag het helder genoeg zijn om de hero te verlichten.
+ *
+ * Dezelfde maskerwaarde als in de /final-hero van 14 juni (42e8380, e6da55a),
+ * waar dit effect vandaan komt.
+ */
 .axe-hero-dots {
   pointer-events: none;
   position: absolute;
   inset: -2.2rem;
   z-index: 0;
   border-radius: 3.6rem;
-  opacity: 0.3;
+  opacity: 0.52;
   background:
-    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.14), transparent 48%),
-    radial-gradient(rgba(119, 236, 255, 0.2) 1px, transparent 1px);
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.2), transparent 50%),
+    radial-gradient(rgba(119, 236, 255, 0.26) 1px, transparent 1px);
   background-size:
     100% 100%,
     18px 18px;
+  mask-image: radial-gradient(circle at center, black 48%, transparent 92%);
+  -webkit-mask-image: radial-gradient(circle at center, black 48%, transparent 92%);
   transition:
     opacity 320ms ease,
     background 320ms ease;
 }
 
-.axe-hero-dots-active {
-  opacity: 0.72;
+/**
+ * Het licht op de hero zelf: een witte gloed van boven (uit de /final-hero)
+ * en cyaan achter de kop. Dit is wat de pagina "minder donker" maakt — de
+ * achtergrondkleur blijft #060608, het verschil zit in het licht erop.
+ */
+.axe-hero-light {
   background:
-    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.26), transparent 52%),
-    radial-gradient(rgba(119, 236, 255, 0.34) 1px, transparent 1px);
+    radial-gradient(1100px circle at 50% -8%, rgba(255, 255, 255, 0.06), transparent 42%),
+    radial-gradient(760px circle at 50% 30%, rgba(34, 211, 238, 0.11), transparent 58%);
+}
+
+/** Het dot-grid achter de kop, alleen in een plek rond de tekst. */
+.axe-hero-headline-dots {
+  opacity: 0.42;
+  background-image: radial-gradient(rgba(119, 236, 255, 0.3) 1px, transparent 1px);
+  background-size: 18px 18px;
+  mask-image: radial-gradient(ellipse 46% 52% at 50% 46%, black 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 46% 52% at 50% 46%, black 30%, transparent 100%);
+}
+
+.axe-hero-dots-active {
+  opacity: 0.86;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(95, 237, 255, 0.3), transparent 54%),
+    radial-gradient(rgba(119, 236, 255, 0.38) 1px, transparent 1px);
   background-size:
     100% 100%,
     18px 18px;
