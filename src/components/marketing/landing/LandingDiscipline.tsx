@@ -11,15 +11,13 @@ export function LandingDiscipline() {
 
       <div className="px-5 py-10 md:py-14">
         <div className="axe-launch-split mx-auto">
+          {/* Hier stonden de kicker, de kop en de body nog een tweede keer,
+              woordelijk gelijk aan de band hierboven. Met de behavior map
+              eronder, die dezelfde kop draagt, stond "Execution discipline,
+              from your fills." drie keer op één pagina. De band is de kop van
+              dit blok; hier begint de tekst. */}
           <div>
-            <p className="axe-launch-eyebrow">{LANDING_DISCIPLINE.kicker}</p>
-            <h3 className="mt-3 max-w-xl text-[1.7rem] font-extrabold tracking-[-0.04em] text-white sm:text-[2.2rem]">
-              {LANDING_DISCIPLINE.title}
-            </h3>
-            <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-white/55">
-              {LANDING_DISCIPLINE.body}
-            </p>
-            <p className="mt-4 max-w-xl text-[15px] font-medium leading-relaxed text-cyan-100/90">
+            <p className="max-w-xl text-[15px] font-medium leading-relaxed text-cyan-100/90">
               {LANDING_DISCIPLINE.aside}
             </p>
             <a href="/login?next=/cockpit" className="axe-launch-btn-primary mt-8">
@@ -29,49 +27,15 @@ export function LandingDiscipline() {
 
           <aside className="axe-launch-fit" aria-label="Alignment example">
             <p className="axe-launch-fit-kicker">Alignment</p>
-            <div className="axe-launch-gauge" aria-hidden>
-              <svg width="230" height="230" viewBox="0 0 230 230">
-                <circle
-                  cx="115"
-                  cy="115"
-                  r="100"
-                  fill="none"
-                  stroke="rgba(255,255,255,.06)"
-                  strokeWidth="14"
-                />
-                <circle
-                  cx="115"
-                  cy="115"
-                  r="100"
-                  fill="none"
-                  stroke="url(#axe-fit-gg)"
-                  strokeWidth="14"
-                  strokeLinecap="round"
-                  strokeDasharray="628"
-                  strokeDashoffset="157"
-                  transform="rotate(-90 115 115)"
-                />
-                <defs>
-                  <linearGradient id="axe-fit-gg" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#22d3ee" />
-                    <stop offset="100%" stopColor="#34d399" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="axe-launch-gauge-val">
-                <span>75</span>
-                <small>alignment / 100</small>
-              </div>
-            </div>
+            {/* De 75-meter stond hier én in de behavior map hieronder. Eén
+                getal dat twee keer op het scherm staat leest als twee
+                metingen. Hij staat nu alleen in de map, samen met de sessies,
+                instrumenten en patronen waar hij uit volgt. Wat hieronder
+                blijft is juist wat die map niet toont. */}
             <p className="text-[12px] leading-relaxed text-white/45">
-              Alignment is based on current saved context, messages, journal patterns and account
-              history.
-            </p>
-            <p className="mt-3 text-sm font-medium leading-snug text-white/85">
-              How often the assistant&apos;s proposals feel like your book — not a generic playbook.
-            </p>
-            <p className="mt-2 text-[11px] leading-relaxed text-white/35">
-              Example cockpit chrome — live alignment uses your own workspace signals, not this sample.
+              The alignment score and what it is built from are in the behavior map below. What
+              follows is what that map does not show: the rules you held, and where AXE is still
+              calibrating.
             </p>
 
             <div className="axe-launch-kp">

@@ -75,19 +75,12 @@ export function LandingBehaviorMap() {
   return (
     <section className="relative px-5 py-16 md:py-20">
       <div className="mx-auto max-w-6xl">
-        <div className="mx-auto max-w-2xl text-center">
-          <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#48def6]">Behavior Map</div>
-          <h2 className="mt-4 text-[clamp(30px,5vw,46px)] font-extrabold leading-none tracking-[-0.05em] text-white">
-            Execution discipline, from your fills.
-          </h2>
-          <p className="mx-auto mt-5 max-w-[52ch] text-[15px] leading-[1.8] text-white/50">
-            AXE builds a behavior map from your own MT5 fills — which sessions you trade, which instruments you
-            keep coming back to, and which of your own rules you keep or break. Fills arrive on the ten-minute
-            MetaApi sync, not tick by tick.
-          </p>
-        </div>
-
-        <div className="axe-behavior-plate mt-12">
+        {/* Geen eigen kop meer. LandingDiscipline staat er direct boven met
+            exact dezelfde kicker en kop ("Behavior map" / "Execution
+            discipline, from your fills."), dus die stond na PR #124 drie keer
+            op de pagina. Deze sectie is het beeld bij dat blok, niet een
+            tweede blok. */}
+        <div className="axe-behavior-plate">
           <div className="axe-behavior-uitleg">
             {BOUWSTENEN.map((steen) => (
               <div key={steen.titel}>
@@ -109,6 +102,12 @@ export function LandingBehaviorMap() {
             <p className="mt-4 text-[11px] leading-[1.6] text-white/38">
               How often AXE&apos;s proposals look like your book rather than a generic playbook. Built from your saved
               context, your messages, your journal and your account history.
+            </p>
+            {/* Dit bijschrift hing aan de meter in LandingDiscipline. De meter
+                staat nu hier, dus het bijschrift ook — anders staat het getal
+                op de ene plek en de waarschuwing erbij op de andere. */}
+            <p className="mt-2 text-[11px] leading-[1.6] text-white/35">
+              Example cockpit chrome — live alignment uses your own workspace signals, not this sample.
             </p>
 
             <div className="mt-6 space-y-5 border-t border-white/[0.06] pt-5">
