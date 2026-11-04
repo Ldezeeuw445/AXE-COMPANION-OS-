@@ -136,6 +136,8 @@ import { HorizontalLevelAnnotationLayer } from "@/components/chart/annotations/H
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
 import { PANE_MODES, normalizePaneOrder, paneHeightKey, type PaneMode } from "@/lib/chart/panes";
+import { stackLayout } from "@/lib/chart/stackedTimeframes";
+import { ChartBiasPane } from "./ChartBiasPane";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
 import { ChartOrderBookDrawer } from "@/components/chart/ChartOrderBookDrawer";
 import { ChartNewsDrawer } from "@/components/chart/ChartNewsDrawer";
@@ -664,6 +666,36 @@ export function ChartScreen({
   const drawingTf = data.timeframeKey || session.timeframe;
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
+
+  /**
+   * Twee charts boven elkaar: de richting boven, het moment onder. Punt 16.
+   *
+   * Standaard uit. De voorkeur staat onder `axe.chart.stackedBias`; er is nog
+   * geen knop voor, omdat de chart-drawer een navigatiemenu is en geen
+   * instellingenpaneel — daar hoort dit niet zonder die drawer te
+   * herontwerpen, en dat vraagt iemand die het scherm kan zien.
+   */
+  const [stackedBias, setStackedBias] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  useEffect(() => {
+    try {
+      setStackedBias(window.localStorage.getItem("axe.chart.stackedBias") === "1");
+    } catch {
+      /* private window of geblokkeerde opslag: dan gewoon uit */
+    }
+    const meet = () => setViewportHeight(window.innerHeight);
+    meet();
+    window.addEventListener("resize", meet);
+    return () => window.removeEventListener("resize", meet);
+  }, []);
+
+  // De hoogte die voor de twee charts overblijft, los van werkbalk en
+  // koersregel. Onder de drempel beslist stackLayout zelf dat één chart beter
+  // is dan twee vegen.
+  const biasLayout = stackedBias
+    ? stackLayout(data.timeframeKey, Math.max(0, viewportHeight - 260))
+    : ({ stacked: false, reason: "te_weinig_hoogte" } as const);
   const trackChartPreference = useCallback(
     (eventType: Parameters<typeof chartPreferenceEvent>[0], payload: Record<string, unknown>) => {
       void trackAdaptiveEvent(
@@ -3385,6 +3417,17 @@ export function ChartScreen({
             Cancel
           </button>
         </div>
+      ) : null}
+
+      {biasLayout.stacked ? (
+        <ChartBiasPane
+          accountId={accountId}
+          brokerSymbol={data.brokerSymbol}
+          executionKey={data.timeframeKey}
+          height={biasLayout.biasHeight}
+          background={chartTheme.background}
+          isDark={chartTheme.isDark}
+        />
       ) : null}
 
       {/* Chart frame — flat, edge-attached trading canvas */}

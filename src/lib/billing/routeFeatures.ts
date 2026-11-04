@@ -88,6 +88,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "alerts/[id]": "Editing an alert you already own",
   "alerts/[id]/trigger": "Firing an alert you already own",
   "chart/live": "Live price data — the chart must work for everyone",
+  "chart/bias-candles": "The same candles one timeframe up — charging for a coarser look at prices the chart already shows free would be charging twice",
   "chart/session": "Chart session state",
   "chart/snapshot": "Saving a chart image",
   "chart/drawings": "Manual chart drawings are basic charting on Free; chart_actions gates AI-routed overlays only",

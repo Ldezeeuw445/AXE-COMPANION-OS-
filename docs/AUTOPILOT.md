@@ -876,11 +876,47 @@ nodig heeft die het kan zien. Staat ook in `docs/VOOR-LUKA.md`.
     MetaApi's `stopsLevel` per symbool op te vragen is — zonder dat is
     `minDistance` een gok.
 
-16. **Twee timeframes naast elkaar.** Niet een volledige multi-chart layout —
-    dat is Trading OS' werk, en op een telefoon past het niet. Wel: dezelfde
-    pair op twee timeframes boven elkaar, zodat de bias en de uitvoering in
-    één blik zitten. Dit is de telefoon-versie van wat een desk met vier
-    schermen doet.
+16. **Twee timeframes boven elkaar — gebouwd, knop nog niet geplaatst.**
+    4 november.
+
+    `src/lib/chart/stackedTimeframes.ts`, 18 checks. De vraag die ertoe doet
+    is niet hóé je stapelt maar **welke** timeframe erboven hoort, en daar
+    gaat de voor de hand liggende keuze mis: "de volgende in de lijst" zet
+    boven M15 een M30, en dat is dezelfde swing met een halve dag verschil.
+    Het kost schermruimte en levert niets op — maar erger, het ziet eruit als
+    bevestiging. Twee charts die hetzelfde zeggen omdat ze hetzelfde kijken,
+    leest een trader als twee onafhankelijke signalen.
+
+    De regel is dus een verhouding en geen plek in een lijst: de bias moet
+    minstens vier keer zo grof zijn. Daar rolt vanzelf de indeling uit die
+    traders met de hand maken — M15 onder H1, H1 onder H4, H4 onder D1, D1
+    onder W1 — zonder dat iemand een tabel heeft ingetikt. Boven MN1 ligt
+    niets, en dan staat er één chart in plaats van een lege tweede.
+
+    Verder: de uitvoerings-chart krijgt 62% van de hoogte en niet de helft
+    (onder kijk en handel je, boven is een blik), en onder 420px wordt er
+    niet gestapeld omdat twee vegen minder waard zijn dan één leesbare chart.
+
+    Vijf mutaties getoetst en alle vijf gevangen: de volgende-in-de-lijst,
+    een gelijke hoogteverdeling, geen ondergrens voor de hoogte, een
+    zelfgekozen bias die niet getoetst wordt, en de eigendomscheck ná de
+    MetaApi-aanroep in plaats van ervoor.
+
+    **Aangesloten, op de knop na.** `/api/chart/bias-candles` haalt de candles
+    op — een eigen route en geen tweede fetch in `loadChartPageData`, want
+    die heeft acht returnpaden en elk pad een veld erbij geven is acht kansen
+    om de hoofdchart te breken voor een paneel dat erbovenop komt. Dit is
+    additief: gaat de route stuk, dan is er geen bias-chart en werkt de rest.
+    `ChartBiasPane.tsx` haalt zijn eigen candles en verdwijnt bij een fout.
+    ChartScreen tekent hem boven het chart-frame als `stackLayout` zegt dat
+    het past.
+
+    **Wat er nog ligt: één knop.** Het staat standaard uit achter de voorkeur
+    `axe.chart.stackedBias`. Er is nog geen schakelaar, omdat de enige plek
+    die zich aanbiedt — `ChartLandscapeDrawer` — een navigatiemenu is en geen
+    instellingenpaneel. Daar een optie in proppen vraagt om die drawer te
+    herontwerpen, en dat vraagt iemand die het scherm kan zien. Tot die tijd
+    is hij te testen door de sleutel op `"1"` te zetten.
 
 Wat hier bewust **niet** op staat, met de reden erbij:
 
