@@ -80,32 +80,24 @@ overgebleven punt dat zonder scherm echt af kan.
 
 ---
 
-## 0d. Eén migratie toepassen — 2 minuten, en dan werkt de trailing stop
+## 0d. ~~Migratie voor de trailing stop~~ — gedaan, 4 november
 
-4 november. De code staat live (`fc0e519`), de tabel niet.
+Je hebt hem gedraaid en hij staat goed. Gemeten in plaats van aangenomen:
+RLS aan, vier policies, geen enkele zonder voorwaarde, `anon` kan er niet bij,
+`authenticated` en `service_role` wel.
 
-`supabase/migrations/20261101160000_position_trailing_stops.sql` is geschreven
-en nagekeken, maar de Supabase-koppeling vroeg hier om een bevestiging die een
-cloud-sessie niet kan beantwoorden — dezelfde muur als bij de paper-positions
-in oktober. Hij liep na vier minuten af zonder iets te doen.
+Daarna in deze volgorde: de route één keer met de hand aangeroepen (`200`,
+met `{"ok":true,"checked":0,...}`), en pas toen ingepland als
+`axe-companion-trailing-stops`, elke twee minuten via pg_cron. Twee geplande
+runs nagekeken, allebei `200`. Inplannen zonder eerst te meten is hoe je een
+bewaker krijgt die stil faalt.
 
-**Er is nu niets stuk.** De bewaker draait nergens: ik heb de cron bewust
-*niet* ingepland, want zonder tabel zou die elke ronde een fout geven en dan
-leest niemand de foutmeldingen nog. Trailing stops werken dus nog niet, maar
-er gaat ook niets mis.
+**Zet hem niet óók in de crontab op de VPS.** Eén planner per job; hij staat
+nu in de pg_cron-lijst bovenaan `scripts/vps.crontab`, juist om dat te
+voorkomen.
 
-Wat jij doet: Supabase → SQL Editor → de inhoud van dat bestand plakken → Run.
-Het is één tabel met RLS en vier policies, allemaal eigenaar-only, plus het
-intrekken van de rechten van `anon`.
-
-Zeg daarna even dat het gedraaid heeft, dan plan ik de cron in via pg_cron —
-net als bij `axe-companion-paper-stops` — en meet ik of hij draait. Eerst één
-keer met de hand aanroepen, dan pas inplannen.
-
-**Dit is de tweede keer dat dit gebeurt**, en het hangt aan punt 0: zolang
-GitHub Actions niet draait, past geen enkele migratie zichzelf toe. Zet je
-Actions weer aan, dan is deze stap er ook niet meer, want de workflow
-`apply-supabase-migrations.yml` doet precies dit bij elke push.
+Kost niets zolang niemand een trailing stop gebruikt: de bewaker stopt
+meteen als er geen rijen zijn en raakt MetaApi dan niet aan.
 
 ---
 

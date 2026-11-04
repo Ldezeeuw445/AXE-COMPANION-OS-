@@ -855,14 +855,16 @@ nodig heeft die het kan zien. Staat ook in `docs/VOOR-LUKA.md`.
     de bestaande stop weggooit, de route-validatie eruit, en de limietprijs
     die niet meegestuurd wordt.
 
-    **Stand 4 november: de bewaker staat live, de tabel niet.** De code is
-    gepusht en gemeten (`fc0e519`), maar
-    `20261101160000_position_trailing_stops.sql` kon niet worden toegepast:
-    de Supabase-koppeling vroeg om een bevestiging die een cloud-sessie niet
-    kan geven en liep af. De cron is daarom bewust **niet** ingepland — een
-    bewaker die elke ronde faalt op een ontbrekende tabel maakt de
-    foutmeldingen waardeloos. Zie `docs/VOOR-LUKA.md` punt 0d. Zodra de
-    tabel er is: één keer met de hand aanroepen, meten, dan pas inplannen.
+    **Compleet op 4 november.** Luka draaide de migratie; daarna is in deze
+    volgorde gewerkt: de tabel nagemeten (RLS aan, vier policies, geen enkele
+    zonder voorwaarde, `anon` eraf), de route één keer met de hand aangeroepen
+    (`200`, `{"ok":true,"checked":0,...}`), en pas toen ingepland als
+    `axe-companion-trailing-stops`, elke twee minuten via pg_cron. Twee
+    geplande runs nagekeken, allebei `200`. Inplannen zonder eerst te meten
+    is hoe je een bewaker krijgt die stil faalt.
+
+    Kost niets zolang niemand een trailing stop gebruikt: de bewaker stopt
+    meteen als er geen rijen zijn en raakt MetaApi dan niet aan.
 
     **Wat er daarna nog ligt voor trailing.** Er is geen bewaker die open
     posities langsloopt en de stop verzet. Dat is dezelfde vorm als
