@@ -65,8 +65,7 @@ export function ChatFeedStrip() {
 
     void load();
     const onSeen = () => {
-      setUnread(0);
-      setBadgeClass("bg-cyan-400");
+      void load();
     };
     window.addEventListener("axe:feed-seen", onSeen);
     const id = setInterval(load, 45_000);
@@ -81,6 +80,10 @@ export function ChatFeedStrip() {
     markAllFeedTabsRead(allItems);
     setUnread(0);
     setBadgeClass("bg-cyan-400");
+  };
+
+  const handleOpenFeed = () => {
+    if (allItems.length > 0) markAllFeedTabsRead(allItems);
   };
 
   if (intelMode) return null;
@@ -123,6 +126,7 @@ export function ChatFeedStrip() {
           ) : null}
           <Link
             href="/feed"
+            onClick={handleOpenFeed}
             className={`font-semibold uppercase tracking-wider text-cyan-400/80 hover:text-cyan-300 ${
               isTablet ? "text-[8px]" : "text-[9px]"
             }`}

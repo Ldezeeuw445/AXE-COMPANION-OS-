@@ -30,7 +30,11 @@ import { useChatIntelMode } from "@/components/chat/ChatHeaderSwitch";
 import type { ChatQuotaPayload } from "@/lib/chatQuota";
 import { detectFallbackChartActionIntent } from "@/lib/axeChartActions/chartIntent";
 import { useAmbient } from "@/components/ambient/AmbientProvider";
-import { getActiveSession } from "@/lib/session/activeSessionStore";
+import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
+import {
+  detectSymbolsInText,
+  resolveChatSymbolContext,
+} from "@/lib/chat/resolveChatSymbolContext";
 
 declare global {
   interface Window {
@@ -139,8 +143,6 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     [focusDraft],
   );
 
-  const getSymbol = useCallback(() => getActiveSession().symbol, []);
-  const getTf = useCallback(() => getActiveSession().timeframe, []);
 
   const resolvePrefillDraft = useCallback((): string | null => {
     const staged = readStagedChatPrefill();
@@ -222,9 +224,6 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
     const text = value.trim();
     if ((!text && !image) || sending) return;
 
-    const symbol = getSymbol();
-    const tf = getTf();
-
     // Chart intent is remembered, NOT acted on yet. It used to short-circuit
     // here — navigate to the chart and `return` — which meant a message that
     // happened to match one of sixteen literal phrases never reached AXE at
@@ -257,6 +256,26 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       );
     }
 
+    const session = getActiveSession();
+    let symbol = session.symbol;
+    const tf = session.timeframe;
+    const mentioned = detectSymbolsInText(text)[0] ?? null;
+    if (mentioned) {
+      // Message wins — auto-switch the pill so the UI matches what AXE answers.
+      patchActiveSession({
+        symbol: mentioned,
+        symbolTouchedAt: new Date().toISOString(),
+      });
+      symbol = mentioned;
+    }
+    const resolution = resolveChatSymbolContext({
+      messageText: text,
+      pillSymbol: symbol,
+      symbolTouchedAt: mentioned
+        ? new Date().toISOString()
+        : session.symbolTouchedAt,
+    });
+
     const body: Record<string, unknown> = {
       text: text || "(chart attached)",
       type: intelMode ? "intel" : "axe",
@@ -265,8 +284,13 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
       body.imageBase64 = image.base64;
       body.imageType = image.type;
     }
-    if (symbol) body.symbol = symbol;
+    if (resolution.effectiveSymbol) body.symbol = resolution.effectiveSymbol;
+    else if (symbol) body.symbol = symbol;
     if (tf) body.tf = tf;
+    body.symbolTouchedAt = mentioned
+      ? new Date().toISOString()
+      : session.symbolTouchedAt;
+    body.chartContextStale = resolution.chartContextStale;
 
     // Clear input immediately
     const inputText = value;
