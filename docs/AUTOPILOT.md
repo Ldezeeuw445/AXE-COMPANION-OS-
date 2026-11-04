@@ -80,6 +80,26 @@ volgende. Niet eromheen bouwen.
 
 ## Harde grenzen, uit eerdere sessies
 
+- **Bij een klacht over uiterlijk: kijk naar het scherm voordat je aan CSS
+  draait.** Op 4 november zei Luka dat de landing "te donker" was. Ik las de
+  CSS, vond dat het cyaan op 0.03 stond waar een oudere versie 0.08 had, en
+  draaide dat terug — een hele ronde, met een eigen check eromheen, gepusht en
+  live. Het klopte alleen niet: toen hij zijn eigen bestand stuurde, bleek
+  "minder donker" te zitten in een verloop van `#3a3940` bovenaan naar
+  `#07080a` onderaan. Het accent was niet het probleem. Op een zwarte
+  achtergrond is het accent het enige licht, dus daar kijk je naar — en dan
+  vind je het verkeerde.
+
+  De les is niet "cyaan is fout". De les is dat de oorzaak van een klacht over
+  licht of donker bijna nooit in het accent zit maar in het grondvlak, en dat
+  één screenshot dat meteen laat zien. Playwright draait hier:
+  `executablePath: "/opt/pw-browsers/chromium"` met `--no-sandbox`, en de
+  landing rendert lokaal zonder `.env.local`. Dat kost twee minuten en had de
+  hele verkeerde ronde bespaard.
+
+  En: vraag om het bronbestand voordat je een ontwerp reconstrueert. Luka had
+  het, en het beantwoordde in één keer wat ik uit git aan het afleiden was.
+
 - **Een tabel wordt nooit aangemaakt zonder dat RLS in dezelfde uitvoering
   aangaat.** Op 28 oktober liep `apply_migration` drie keer in een
   bevestiging die een cloud-sessie niet kan beantwoorden. Ik knipte de
@@ -952,12 +972,26 @@ nieuws beginnen.
 Drie bakjes. Geen ervan is op te pakken door een sessie die alleen deze
 container heeft.
 
-**Wacht op Luka.** De hero-regel van de landing (punt 9, stap 2 en 4 volgen
-daaruit). En bovenaan alles: `docs/VOOR-LUKA.md` punt 0 — GitHub Actions
-draait niet, 93 runs mislukt binnen drie seconden zonder één uitgevoerde
-stap. Daardoor past geen enkele migratie zichzelf toe en deployen de
-streamer en de edge functions niet. Dat is inmiddels twee keer handwerk
-geworden dat vanzelf had moeten gaan.
+**Wacht op Luka.** De landing is op 4 november grotendeels opgelost: hij
+leverde `launch-v2.html` en `final-landing-v2-enhanced.html`, en daaruit zijn
+de achtergrond (#3a3940 → #07080a), de lichte basisplaat (#44454d), de
+kopgradient en de vier gloedbanden overgenomen (42ef0fa, live gemeten). Wat
+nog openstaat is zijn keuze uit vier secties die wél in zijn bestand staan en
+niet op de echte pagina: de reveal-cards, de behavior-map, de
+metric-cockpit-dial en de gloed onder de navigatiebalk. De eerste drie hebben
+eigen inhoud nodig die nergens bestaat — niet zelf verzinnen. **De vraag
+staat bij hem uit; begin er niet aan voordat hij kiest.**
+
+En bovenaan alles: `docs/VOOR-LUKA.md` punt 0 — GitHub Actions draait niet.
+Op 4 november is de datum vastgepind: tot en met **3 juli** was alles groen,
+vanaf **29 september 19:18 UTC** valt élke workflow om in 3–6 seconden, zonder
+één stap en zonder logbestand (de log-URL geeft 404). Dezelfde workflows,
+dezelfde secrets, op één dag allemaal dood. **Het zijn dus niet zijn
+sleutels** — een job leest secrets pas ín een stap, en hier begint er geen.
+Het zit op accountniveau (Actions-minuten of bestedingslimiet; de repo is
+privé dus de minuten tellen). Deze sessie mag geen billing lezen. Daardoor
+past geen enkele migratie zichzelf toe en deployen de streamer en de edge
+functions niet — inmiddels drie keer handwerk dat vanzelf had moeten gaan.
 
 **Vraagt iemand die het scherm kan zien.** Bar replay (punt 13) en het
 positie-gereedschap (punt 14) zijn geverifieerde rekenkernen zonder
