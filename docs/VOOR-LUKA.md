@@ -17,6 +17,20 @@ Er staan drie workflows in `.github/workflows/`: migraties toepassen, de
 MetaApi-streamer deployen, en de edge functions deployen. Ze zijn alle drie
 goed geschreven. Ze draaien alleen niet.
 
+**Update 4 november — de datum staat nu vast, en het zijn niet je sleutels.**
+Alle 94 runs op een rij gezet: tot en met **3 juli 2026** is alles groen (migraties,
+streamer, edge functions). Daarna drie maanden geen runs. Vanaf **29 september
+19:18 UTC** valt élke workflow om in 3–6 seconden, zonder één stap en zonder
+logbestand (de log-URL geeft 404 — er is nooit een runner gestart). Dezelfde
+workflows, dezelfde secrets, op één dag allemaal dood. Een ontbrekende sleutel
+kan dat niet zijn: een job leest secrets pas ín een stap, en hier begint geen
+enkele stap. Het zit dus op accountniveau. Waar te kijken (alleen jij kunt
+erbij, deze sessie mag geen billing lezen):
+github.com → Settings → **Billing and plans** → Actions-minuten en
+"Spending limit", en of de betaalmethode nog geldig is. De repo is privé, dus
+Actions-minuten tellen. Daarna één run opnieuw starten (Actions → Apply
+Supabase Migrations → Re-run) — als die stappen laat zien, is het opgelost.
+
 Gemeten: 93 runs van de migratie-workflow, **elke run mislukt**, elke keer
 binnen 3 tot 5 seconden, zonder dat er ook maar één stap is uitgevoerd. Dat is
 geen fout in het script — een script dat faalt, faalt ín een stap. Dit is de
