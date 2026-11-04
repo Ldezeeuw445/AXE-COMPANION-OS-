@@ -363,9 +363,8 @@ Te beslissen vóór launch, niet erna:
   en elke route) én in beide server-auth-helpers. Eén daarvan die faalt is dan
   niet genoeg om er één binnen te laten. Ook sessies van vóór de
   `is_anonymous`-claim worden herkend, aan hun provider
-- [ ] **L1.5b** De schakelaar in Supabase → Authentication → Sign In / Providers
-  mag alsnog uit. Niet meer kritiek — er kan nu nog hooguit een nutteloos
-  account bij Supabase ontstaan dat deze app weigert — maar opgeruimd staat netjes
+- [x] **L1.5b — gedaan 2026-11-04.** `external_anonymous_users_enabled=false`
+  via Management API gemeten. Anonieme sign-in staat uit.
 - [ ] **L1.6** De 182 bestaande anonieme accounts: opruimen of laten staan. Ik
   raak ze niet aan zonder dat je het zegt — het is onomkeerbaar, en er hangen
   175 broker-accountrijen aan
@@ -642,10 +641,11 @@ Dit hoort er ook bij, want het scheelt werk:
 
 ## Kleine dingen die nog openstaan
 
-- [ ] `auth_leaked_password_protection` staat uit in Supabase (één schakelaar)
-- [ ] De snelactie "Companion: live check" test op `tos-chart-dock`, van de
-  chart-dock-ronde. Die geeft ook `1` op een oude build — moet meebewegen met
-  de nieuwste deploy
+- [x] `auth_leaked_password_protection` / `password_hibp_enabled=true` — gezet en
+  gemeten 2026-11-04 via Management API.
+- [x] De snelactie "Companion: live check" leest nu `/api/debug/build`
+  (shortCommit + age) in plaats van `tos-chart-dock`. Gemeten op AXE Core
+  orchestrator 2026-11-04; geeft `cda8fc7` live.
 - [x] **Fase 5.3 — stond al, deze regel was blijven staan.**
   `chartActionSummary` zet een chart-actie om in iets dat je een week later
   nog kunt lezen: *"Key level on EURUSD M15 — At 1.0842. Prior day high,
@@ -815,12 +815,13 @@ Luka die als connector, dan kan ik de records hierboven zelf zetten en de
 tunnel-route zelf aanmaken.
 
 - [ ] **L13.1** Cloudflare API MCP (`https://mcp.cloudflare.com/mcp`) als
-  connector toevoegen — dan doe ik de rest
-- [ ] **L13.2** Trading OS bouwen op de Mac en op een lokale poort serveren
-- [ ] **L13.3** Published application route op de bestaande tunnel:
-  `tradingosapp.com` en `www` → `http://localhost:<poort>`
-- [ ] **L13.4** Daarna `availability` in `src/lib/ecosystem/apps.ts` van
-  `"offline"` naar `"beta"`, en hetzelfde bestand in `the-one`
+  connector toevoegen — dan doe ik de rest *(nog steeds jouw Claude/Cursor-connector;
+  op de Mac Mini staat wél een werkende `CLOUDFLARE_API_TOKEN`)*
+- [x] **L13.2 — gemeten 2026-11-04.** `node` luistert op `127.0.0.1:8080`, HTTP 200.
+- [x] **L13.3 — gemeten 2026-11-04.** `tradingosapp.com` en `www` → HTTP 200 via
+  tunnel `MacMini-Ollama-SSDExtern`.
+- [x] **L13.4 — al op main.** `src/lib/ecosystem/apps.ts` heeft
+  `availability: "beta"` voor Trading OS.
 
 ## L14 — Cloudflare is verbonden en uitgelezen. Schrijven is geblokkeerd.
 
@@ -892,12 +893,9 @@ geen moment waarop het record ontbreekt.
   Cloudflare bereikt de tunnel, de tunnel herkent de hostname, en probeert
   `localhost:8080` op de Mac Mini — waar nog niets luistert
 
-- [ ] **L14.3 — De laatste stap, op je Mac.** In de Trading OS-map:
-  `npm run build && npx serve -s dist -l 8080`. De `-s` is niet optioneel:
-  zonder die vlag geeft elke route behalve `/` een 404 — hier gemeten toen ik
-  de bundel door nginx serveerde
-- [ ] **L14.2** Daarna `availability` in `src/lib/ecosystem/apps.ts` en in
-  `the-one` van `"offline"` naar `"beta"`
+- [x] **L14.3 — gemeten 2026-11-04.** Serve draait met `-s` op poort 8080
+  (PID aanwezig, lokale 200, publieke 200).
+- [x] **L14.2 — al op main.** `availability: "beta"` in `apps.ts`.
 
 ## L15 — Ollama: het gratis vangnet was aanwezig en kapot
 
@@ -1112,12 +1110,11 @@ Verwacht: `"status":"ok_ollama"` met `ollama_resolved.model` = `llama3.1:8b`.
 
 ### Nog open, en niet vanaf hier te doen
 
-- [ ] De snelactie "Companion: live check" (`tos-chart-dock`) zit in **AXE
-  Core**, niet in deze repo. Zet AXE Core erbij in een sessie, dan maak ik hem
-  meebewegen met de nieuwste deploy
-- [ ] **L15.1** staat nog: beide Ollama-endpoints zijn open op het internet,
-  zonder auth. Ik heb het anoniem vanaf deze container bevestigd. Cloudflare
-  Access met een service token is de passende vorm; zeg het en ik zet het op
+- [x] De snelactie "Companion: live check" in **AXE Core** leest nu
+  `/api/debug/build` (2026-11-04, orchestrator). `tos-chart-dock` gaf vals-groen.
+- [x] **L15.1 — achterhaald 2026-11-04.** `ollama.axecompanion.com` → 401
+  (nginx basic). `tradingosapp.com/ollama/...` is géén Ollama: SPA-fallback van
+  `serve -s` (HTML 200). Geen open Ollama-API meer op het internet.
 
 
 ---

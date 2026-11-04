@@ -320,12 +320,12 @@ planners betekent dat elke stop twee keer beoordeeld wordt. Hij staat nu in
 `scripts/vps.crontab` in de pg_cron-lijst bovenaan, juist om dat te
 voorkomen.
 
-## 7. Twee schakelaars in Supabase — 1 minuut
+## 7. ~~Twee schakelaars in Supabase~~ — gedaan, 4 november
 
-Beide in de Supabase-console, ik kan er niet bij:
+Beide gezet via Management API en nagemeten:
 
-- **Authentication → Sign In / Providers** (bouwlijst `L1.5b`).
-- **`auth_leaked_password_protection`** aanzetten. Staat nu uit.
+- **`external_anonymous_users_enabled=false`** (bouwlijst `L1.5b`).
+- **`password_hibp_enabled=true`** (`auth_leaked_password_protection`).
 
 ## 8. Optioneel: de autopilot ook bij de database laten
 
