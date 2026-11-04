@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
 import { siteUrl } from "@/lib/siteUrl";
+import { safeAppPath } from "@/lib/auth/safeAppPath";
 
 export async function signInAction(_prevState: unknown, formData: FormData) {
   const email = formData.get("email") as string;
@@ -38,7 +39,7 @@ export async function signInAction(_prevState: unknown, formData: FormData) {
     return { error: error.message };
   }
 
-  redirect("/chat");
+  redirect(safeAppPath(formData.get("next") as string | null));
 }
 
 export async function signUpAction(_prevState: unknown, formData: FormData) {

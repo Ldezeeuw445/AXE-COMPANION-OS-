@@ -20,7 +20,13 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-export function LoginForm({ initialMode = "signin" }: { initialMode?: "signin" | "signup" }) {
+export function LoginForm({
+  initialMode = "signin",
+  next,
+}: {
+  initialMode?: "signin" | "signup";
+  next?: string;
+}) {
   const supabaseConfigured = hasSupabaseConfig();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [signInState, signInFormAction] = useActionState<ActionResult, FormData>(signInAction, undefined);
@@ -46,6 +52,7 @@ export function LoginForm({ initialMode = "signin" }: { initialMode?: "signin" |
         <>
           {mode === "signin" ? (
             <form action={signInFormAction} className="mt-5 space-y-3">
+              {next ? <input type="hidden" name="next" value={next} /> : null}
               <div>
                 <label htmlFor="email" className="text-[10px] font-medium uppercase tracking-wider text-tos-dim">
                   Email
@@ -81,6 +88,7 @@ export function LoginForm({ initialMode = "signin" }: { initialMode?: "signin" |
             </form>
           ) : (
             <form action={signUpFormAction} className="mt-5 space-y-3">
+              {next ? <input type="hidden" name="next" value={next} /> : null}
               <div>
                 <label htmlFor="su-email" className="text-[10px] font-medium uppercase tracking-wider text-tos-dim">
                   Email

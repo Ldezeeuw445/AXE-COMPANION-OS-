@@ -78,11 +78,12 @@ export function LandingBehaviorMap() {
         <div className="mx-auto max-w-2xl text-center">
           <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-[#48def6]">Behavior Map</div>
           <h2 className="mt-4 text-[clamp(30px,5vw,46px)] font-extrabold leading-none tracking-[-0.05em] text-white">
-            Execution discipline, visible in real time.
+            Execution discipline, from your fills.
           </h2>
           <p className="mx-auto mt-5 max-w-[52ch] text-[15px] leading-[1.8] text-white/50">
             AXE builds a behavior map from your own MT5 fills — which sessions you trade, which instruments you
-            keep coming back to, and which of your own rules you keep or break.
+            keep coming back to, and which of your own rules you keep or break. Fills arrive on the ten-minute
+            MetaApi sync, not tick by tick.
           </p>
         </div>
 

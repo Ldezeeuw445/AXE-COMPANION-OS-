@@ -1,8 +1,6 @@
 import Link from "next/link";
-import {
-  AXE_BILLING_TIERS,
-  FOUNDER_SEAT_CAP,
-} from "@/lib/billing/tiers";
+import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP } from "@/lib/billing/tiers";
+import { LANDING_CHECKOUT_HREF } from "@/lib/marketing/landingCopy";
 import type { BillingCatalogState } from "@/lib/billing/types";
 import { LEGAL_COPY } from "@/lib/legal/constants";
 import { LandingWaitlist } from "@/components/marketing/LandingWaitlist";
@@ -15,6 +13,8 @@ type Props = {
 export function LandingPricing({ catalog }: Props) {
   const founderUsed = catalog?.founderSeatsUsed;
   const founderCap = catalog?.founderSeatsCap ?? FOUNDER_SEAT_CAP;
+  const founderTier = AXE_BILLING_TIERS.find((tier) => tier.id === "founder");
+  const founderPrice = founderTier?.priceEurMonthly ?? 40;
 
   return (
     <section id="pricing" className="relative z-10 scroll-mt-24 border-t border-white/[0.04] px-5 py-14 md:py-20">
@@ -85,7 +85,8 @@ export function LandingPricing({ catalog }: Props) {
                 ))}
 
                 <Link
-                  href={tier.priceEurMonthly ? "/login" : "/signup"}
+                  href={tier.priceEurMonthly ? LANDING_CHECKOUT_HREF : "/signup"}
+                  data-landing-checkout={tier.id}
                   className={
                     highlight
                       ? "axe-landing-cta mt-5 inline-flex h-10 items-center justify-center rounded-full bg-gradient-to-r from-cyan-400 to-teal-400 px-5 text-xs font-semibold text-[#04161B] shadow-[0_10px_30px_-10px_rgba(34,211,238,0.55)] transition hover:from-cyan-300 hover:to-teal-300"
@@ -131,9 +132,10 @@ export function LandingPricing({ catalog }: Props) {
               the limit we show a friendly notice, not a hard surprise block. Free stays at 20/day.
             </li>
             <li>
-              <strong className="font-medium text-white/85">Permanent Founder status:</strong> keep your
-              Founder price forever as long as you stay subscribed. Cancel and you keep the Founder
-              badge; if you return later you pay the normal rate. Elite never gets Founder perks.
+              <strong className="font-medium text-white/85">Founder:</strong> €{founderPrice}/mo, limited
+              to {FOUNDER_SEAT_CAP}. Keep that Founder price forever as long as you stay subscribed.
+              Cancel and you keep the Founder badge; if you return later you pay the normal rate.
+              Elite never gets Founder perks.
             </li>
             <li>
               <strong className="font-medium text-white/85">Elite Roadmap items</strong> (advanced models,

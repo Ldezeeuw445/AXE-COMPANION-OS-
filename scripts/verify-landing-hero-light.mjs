@@ -20,7 +20,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const css = readFileSync("src/app/globals.css", "utf8");
-const hero = readFileSync("src/components/marketing/landing/LandingHero.tsx", "utf8");
+const hero = readFileSync("src/components/marketing/LaunchHeroExperience.tsx", "utf8");
 
 /**
  * De body van één CSS-regel.
