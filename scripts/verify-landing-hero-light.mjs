@@ -22,10 +22,36 @@ import { readFileSync } from "node:fs";
 const css = readFileSync("src/app/globals.css", "utf8");
 const hero = readFileSync("src/components/marketing/LaunchHeroExperience.tsx", "utf8");
 
+/**
+ * De body van één CSS-regel.
+ *
+ * Aan het begin van een regel zoeken en niet zomaar in de tekst: een losse
+ * `indexOf(".axe-reveal-back {")` vindt óók de gecombineerde regel
+ * `.axe-reveal-front,\n.axe-reveal-back {`, en die staat eerder in het
+ * bestand. Dan toetst de check een heel ander blok dan hij bedoelt — en hij
+ * faalt op code die klopt, wat erger is dan niet toetsen.
+ */
 function rule(selector) {
-  const start = css.indexOf(`${selector} {`);
-  assert.ok(start >= 0, `${selector} bestaat niet meer in globals.css`);
-  return css.slice(start, css.indexOf("}", start));
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const zoeker = new RegExp(`^${escaped}\\s*\\{`, "gm");
+
+  // Een regelbegin is niet genoeg. In
+  //
+  //   .axe-reveal-front,
+  //   .axe-reveal-back {
+  //
+  // begint `.axe-reveal-back {` óók op een eigen regel, en die staat eerder
+  // in het bestand. Dan leest de check een heel ander blok dan hij bedoelt en
+  // faalt hij op code die klopt — erger dan niet toetsen. Een eigen regel
+  // herken je eraan dat er géén komma voor staat.
+  for (const match of css.matchAll(zoeker)) {
+    const ervoor = css.slice(0, match.index).trimEnd();
+    if (!ervoor.endsWith(",")) {
+      return css.slice(match.index, css.indexOf("}", match.index));
+    }
+  }
+
+  assert.fail(`${selector} bestaat niet meer als eigen regel in globals.css`);
 }
 
 let passed = 0;
@@ -129,6 +155,70 @@ check("de gloedbanden volgen de muis en staan op de pagina", () => {
   const page = readFileSync("src/app/page.tsx", "utf8");
   const n = (page.match(/<LandingGlowBand>/g) ?? []).length;
   assert.ok(n >= 4, `${n} gloedbanden op de pagina — final-landing-v2-enhanced heeft er vier`);
+});
+
+console.log("");
+console.log("de reveal-kaarten en de behavior map");
+
+const kaarten = readFileSync("src/components/marketing/landing/LandingRevealCards.tsx", "utf8");
+const map = readFileSync("src/components/marketing/landing/LandingBehaviorMap.tsx", "utf8");
+const pagina = readFileSync("src/app/page.tsx", "utf8");
+
+check("de drie kaarten spellen A, X en E", () => {
+  const letters = [...kaarten.matchAll(/letter:\s*"([A-Z])"/g)].map((m) => m[1]);
+  assert.deepEqual(letters, ["A", "X", "E"], `kreeg ${letters.join("")}`);
+  assert.ok(pagina.includes("<LandingRevealCards"), "de kaarten staan niet op de pagina");
+});
+
+check("de achterkant bepaalt de hoogte, niet een vast getal", () => {
+  // Hier ging het mis: met beide kanten absoluut onder een vaste min-height
+  // liep de langste tekst er bovenuit — gemeten -8px op 1440, -59px op 1024
+  // en -137px op 820. In flexbox telt overloop aan de bovenkant niet mee in
+  // scrollHeight, dus niets verraadt het behalve het scherm zelf. Staat de
+  // achterkant in de stroom, dan kan het niet meer gebeuren, hoeveel tekst
+  // iemand er later ook bij zet.
+  const achter = rule(".axe-reveal-back");
+  assert.match(achter, /position:\s*relative/, ".axe-reveal-back staat weer absoluut");
+  assert.match(rule(".axe-reveal-front"), /position:\s*absolute/, "de voorkant hoort erover te liggen");
+});
+
+check("zonder hover is de achterkant alsnog te lezen", () => {
+  // Op een telefoon bestaat hover niet. Dan zou de hele inhoud onbereikbaar
+  // zijn en staan er drie kaarten met alleen een letter erop.
+  // Er staan er meerdere in het bestand (de nav-gloed heeft er ook een), dus
+  // het eerste blok pakken levert een check op die het verkeerde leest.
+  const blokken = [...css.matchAll(/@media \(hover: none\)\s*\{/g)]
+    .map((m) => css.slice(m.index, m.index + 600))
+    .filter((b) => b.includes(".axe-reveal-back"));
+  assert.equal(blokken.length, 1, `${blokken.length} regels voor schermen zonder hover die de kaarten noemen`);
+  assert.match(blokken[0], /\.axe-reveal-back\s*\{[^}]*opacity:\s*1/, "de achterkant blijft verborgen");
+});
+
+check("de behavior map noemt zichzelf een voorbeeld", () => {
+  // Dezelfde haak als de cockpit, zodat één check beide dekt en een nieuwe
+  // sectie met verzonnen cijfers er niet langs glipt.
+  assert.ok(map.includes('data-landing-cockpit-example="true"'), "geen voorbeeld-haak");
+  assert.match(map, /Example — sample behavior map, not live data/, "het label staat niet op het scherm");
+  assert.ok(pagina.includes("<LandingBehaviorMap"), "de map staat niet op de pagina");
+});
+
+check("geen mockup die een bron toont die niet betaald is", () => {
+  // behavior-phone-left-transparent.png heeft "Market Tide" in zijn eigen
+  // screenshot gebakken, en marketTide is een Unusual Whales-bron die nooit
+  // gekocht is. verify-landing-claims leest de paginatekst en ziet dat niet:
+  // een claim in een PNG glipt erlangs. Rechts staan zes verbeteringen die
+  // AXE zichzelf voorstelt en die geen van alle bestaan.
+  const bronnen = readFileSync("src/lib/intel/intelSources.ts", "utf8");
+  assert.match(bronnen, /marketTide:\s*"unusual_whales"/, "marketTide is van bron veranderd — kijk de mockups opnieuw na");
+
+  // Zonder commentaar, anders valt deze check om over de uitleg waarin de
+  // bestandsnamen staan juist omdat ze er niet mogen staan. Een check die
+  // faalt op zijn eigen verantwoording leert niemand iets.
+  const zonderUitleg = (bron) => bron.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const bestand of ["behavior-phone-left-transparent", "behavior-phone-right-transparent"]) {
+    assert.ok(!zonderUitleg(map).includes(bestand), `${bestand} staat weer op de landing`);
+    assert.ok(!zonderUitleg(pagina).includes(bestand), `${bestand} staat weer op de landing`);
+  }
 });
 
 console.log("");

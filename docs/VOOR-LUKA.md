@@ -395,3 +395,35 @@ Daar kan ik niets mee, en het is beter dat je weet waarom:
 
 Wat wél helpt als je ooit krap zit op modellen: credit op de OpenAI **API**
 (platform.openai.com, niet chatgpt.com), of niets doen en op Ollama leunen.
+
+## De twee telefoon-mockups van de behavior map kunnen niet live
+
+Nieuw, 4 november. De behavior map staat sinds vandaag op de landing, maar
+**zonder** de twee telefoons uit `final-landing-v2-enhanced.html`. Niet omdat
+ze niet passen — ze kunnen niet mee zonder de pagina iets te laten beloven
+dat er niet is.
+
+**`behavior-phone-left-transparent.png`** heeft in zijn eigen screenshot een
+blok staan: *"Market Tide: Bearish sentiment with a net put premium ...
+(Data Basis: Market Tide)"*. `marketTide` staat in `INTEL_ACTION_SOURCE` als
+`unusual_whales`, en dat abonnement is nooit gekocht. Dat is precies de claim
+die op 12 oktober van de pagina is gehaald. `verify-landing-claims` leest de
+paginatekst en ziet dit niet: een claim die in een PNG gebakken zit glipt
+erlangs.
+
+**`behavior-phone-right-transparent.png`** somt zes verbeteringen op die AXE
+zichzelf voorstelt: *Advanced Sentiment Analysis (including social media
+trends)*, *Machine Learning Insights (predictive analytics)*, *Broader Asset
+Coverage*, en nog drie. Als appscherm op een verkooppagina leest een bezoeker
+dat als functielijst. Geen van de zes bestaat.
+
+**Wat ik nodig heb om ze alsnog te plaatsen:** twee schermafbeeldingen van
+schermen die alleen tonen wat er is. Voor links werkt bijvoorbeeld hetzelfde
+intel-paneel met Insider Transactions (SEC EDGAR) en Corporate Jet Tracking —
+die twee zijn gratis en werken echt — en zonder het Market Tide-blok. Voor
+rechts een gewoon gesprek of het journaal, niet de lijst met wensen.
+
+Lever je ze aan als PNG, dan zet ik ze erin en haal ik de regel in
+`scripts/verify-landing-hero-light.mjs` weg die de oude twee tegenhoudt. In de
+tussentijd staat er links een kolom met drie regels over waar de map op
+gebouwd is; dat is waar en het houdt de plaat in balans.

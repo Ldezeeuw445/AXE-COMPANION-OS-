@@ -3651,3 +3651,329 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
     transform: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Reveal-kaarten (A / X / E) — uit final-landing-v2-enhanced.html
+ * ------------------------------------------------------------------------- */
+
+.axe-reveal-card {
+  position: relative;
+  min-height: 320px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(9, 10, 14, 0.94), rgba(5, 6, 8, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02),
+    0 18px 36px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+  isolation: isolate;
+  --card-x: 50%;
+  --card-y: 50%;
+}
+
+/* De buitenste twee staan iets hoger dan de middelste, zoals in Luka's
+   bestand. Alleen waar ze naast elkaar staan; gestapeld is het een hik. */
+@media (min-width: 768px) {
+  .axe-reveal-card:nth-child(1),
+  .axe-reveal-card:nth-child(3) {
+    transform: translateY(-10px);
+  }
+}
+
+/* Het dot-grid dat bij hover opkomt. */
+.axe-reveal-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(103, 232, 249, 0.9) 1px, transparent 1.55px);
+  background-size: 16px 16px;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  z-index: 0;
+}
+
+.axe-reveal-card-paars::before {
+  background-image: radial-gradient(circle, rgba(173, 136, 255, 0.82) 1px, transparent 1.55px);
+}
+
+/* De gloed onder de cursor. */
+.axe-reveal-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    240px circle at var(--card-x) var(--card-y),
+    rgba(67, 215, 255, 0.3) 0%,
+    rgba(103, 232, 249, 0.16) 28%,
+    rgba(67, 215, 255, 0.07) 48%,
+    rgba(67, 215, 255, 0) 72%
+  );
+  opacity: 0;
+  transition: opacity 220ms ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.axe-reveal-card-paars::after {
+  background: radial-gradient(
+    240px circle at var(--card-x) var(--card-y),
+    rgba(169, 124, 248, 0.28) 0%,
+    rgba(111, 185, 255, 0.16) 24%,
+    rgba(103, 232, 249, 0.12) 46%,
+    rgba(103, 232, 249, 0) 72%
+  );
+}
+
+.axe-reveal-card:hover::before,
+.axe-reveal-card:hover::after,
+.axe-reveal-card:focus-within::before,
+.axe-reveal-card:focus-within::after {
+  opacity: 1;
+}
+
+/**
+ * De achterkant staat in de stroom en bepaalt de hoogte; de voorkant ligt
+ * erover.
+ *
+ * Andersom — zoals in Luka's bestand, waar beide absoluut staan onder een
+ * vaste `min-height: 320px` — klopt het alleen bij die ene tekstlengte en die
+ * ene schermbreedte. Gemeten met de teksten hieronder: op 1440 begon de
+ * inhoud op -8px, op 1024 op -59px en op 820 op -137px. Dat wil zeggen dat
+ * "EXECUTE." er boven weg liep, en in flexbox telt overloop aan de bovenkant
+ * niet mee in `scrollHeight`, dus geen enkele scrollbalk of meting verraadt
+ * het. Je ziet het alleen op het scherm.
+ *
+ * Zo bepaalt de langste tekst de hoogte en kan dat niet meer gebeuren,
+ * ongeacht wat iemand later bijschrijft.
+ */
+.axe-reveal-front,
+.axe-reveal-back {
+  z-index: 1;
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+}
+
+.axe-reveal-front {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(9, 10, 14, 0.94), rgba(5, 6, 8, 0.98));
+  border-radius: inherit;
+}
+
+.axe-reveal-front-inner {
+  transition:
+    transform 260ms ease,
+    opacity 260ms ease;
+}
+
+.axe-reveal-orb {
+  width: 66px;
+  height: 66px;
+  margin: 0 auto 16px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: rgba(111, 220, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(47, 211, 234, 0.12), rgba(47, 211, 234, 0.05));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.axe-reveal-card-paars .axe-reveal-orb {
+  color: rgba(198, 191, 255, 0.98);
+  background: linear-gradient(180deg, rgba(169, 124, 248, 0.14), rgba(103, 232, 249, 0.05));
+}
+
+.axe-reveal-back {
+  position: relative;
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.axe-reveal-back-inner {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 320px;
+  padding: 28px;
+  background: linear-gradient(180deg, rgba(5, 6, 8, 0.12) 0%, rgba(5, 6, 8, 0.56) 48%, rgba(5, 6, 8, 0.94) 100%);
+}
+
+.axe-reveal-letter {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: rgba(111, 220, 255, 0.96);
+}
+
+.axe-reveal-card-paars .axe-reveal-letter {
+  color: rgba(198, 191, 255, 0.98);
+}
+
+.axe-reveal-belofte {
+  font-size: 14px;
+  font-weight: 700;
+  background: linear-gradient(90deg, #ffd98e, #e2b45a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.axe-reveal-card:hover .axe-reveal-front,
+.axe-reveal-card:focus-within .axe-reveal-front {
+  opacity: 0;
+}
+
+.axe-reveal-card:hover .axe-reveal-front-inner,
+.axe-reveal-card:focus-within .axe-reveal-front-inner {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+.axe-reveal-card:hover .axe-reveal-back,
+.axe-reveal-card:focus-within .axe-reveal-back {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/**
+ * Zonder hover is de achterkant onbereikbaar, en daar staat de hele inhoud.
+ * Dan drie kaarten met alleen een letter erop. Op zo'n scherm staat de
+ * achterkant dus gewoon open.
+ */
+@media (hover: none) {
+  .axe-reveal-front {
+    display: none;
+  }
+
+  .axe-reveal-back {
+    opacity: 1;
+    transform: none;
+  }
+
+  .axe-reveal-card::before,
+  .axe-reveal-card::after {
+    opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Behavior map — uit final-landing-v2-enhanced.html
+ * ------------------------------------------------------------------------- */
+
+.axe-behavior-plate {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  padding: clamp(20px, 3vw, 40px);
+  border-radius: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: linear-gradient(180deg, rgba(5, 6, 8, 0.98), rgba(3, 4, 6, 0.99));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.018),
+    0 22px 46px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+/* Luka's versie zet de telefoons absoluut op vaste pixelposities (left: 86px,
+   top: 74px). Dat klopt op één schermbreedte en schuift op elke andere over
+   de kaart heen. Hier doet een grid het werk: naast elkaar als er plaats is,
+   onder elkaar als die er niet is. */
+@media (min-width: 1024px) {
+  .axe-behavior-plate {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: center;
+  }
+}
+
+.axe-behavior-plate::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 78%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(58, 57, 64, 0.12) 0%,
+    rgba(52, 53, 59, 0.22) 18%,
+    rgba(44, 45, 52, 0.2) 32%,
+    rgba(28, 29, 34, 0.14) 58%,
+    rgba(10, 11, 14, 0) 100%
+  );
+  z-index: 0;
+}
+
+.axe-behavior-uitleg {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(20px, 2.4vw, 30px);
+  padding: clamp(4px, 1vw, 16px);
+}
+
+.axe-behavior-card {
+  position: relative;
+  z-index: 1;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: linear-gradient(180deg, rgba(3, 4, 6, 0.99), rgba(2, 3, 5, 1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.018),
+    0 18px 34px rgba(0, 0, 0, 0.18);
+  padding: clamp(20px, 2.4vw, 30px);
+}
+
+.axe-behavior-ring {
+  --fit: 0;
+  position: relative;
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(7, 8, 11, 1) 61%, transparent 62%),
+    conic-gradient(from -90deg, rgba(103, 186, 255, 0.98) calc(var(--fit) * 1%), rgba(255, 255, 255, 0.08) 0);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(95, 190, 255, 0.08),
+    0 0 28px rgba(92, 175, 255, 0.12);
+}
+
+.axe-behavior-ring-getal {
+  font-size: 58px;
+  line-height: 0.9;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  color: rgba(244, 248, 255, 0.98);
+  font-variant-numeric: tabular-nums;
+}
+
+.axe-behavior-rail {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.axe-behavior-rail > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(214, 223, 239, 0.92), rgba(118, 166, 255, 0.96));
+  box-shadow: 0 0 16px rgba(118, 166, 255, 0.16);
+}

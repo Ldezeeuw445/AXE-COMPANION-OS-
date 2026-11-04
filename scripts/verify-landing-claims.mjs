@@ -304,7 +304,9 @@ check("no fabricated testimonials ship", () => {
 
 check("the alignment panel is labelled as example chrome, not live account data", () => {
   assert.match(landing, /Example cockpit chrome/);
-  assert.ok(!landing.includes('data-landing-cockpit-example="true"'));
+  assert.match(landing, /Example — sample behavior map, not live data/);
+  assert.ok(landing.includes('data-landing-cockpit-example="true"'), "BehaviorMap sample hook");
+  assert.ok(!/LandingCockpitExample/.test(landing), "do not revive the fake cockpit mock");
   assert.ok(!/FIT score/.test(landing), "FIT is not a product metric; Cockpit uses alignment");
 });
 
@@ -339,6 +341,7 @@ check("the page claims the systems that actually run", () => {
   assert.ok(!/Vector RAG memory|axe_memories/i.test(landing));
   assert.ok(!/streams it live, right next to your chart/i.test(landing));
   assert.ok(!/visible in real time/i.test(landing));
+  assert.match(landing, /LandingBehaviorMap/);
 });
 
 check("Founder is €40/mo limited to the seat cap, in copy and checkout", () => {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
+import { LandingBehaviorMap } from "@/components/marketing/landing/LandingBehaviorMap";
 import { LandingDiscipline } from "@/components/marketing/landing/LandingDiscipline";
 import { LandingDemoSession } from "@/components/marketing/landing/LandingDemoSession";
 import { LandingFaq } from "@/components/marketing/landing/LandingFaq";
@@ -46,6 +47,9 @@ export default async function HomeLandingPage() {
       </LandingGlowBand>
       <LandingGlowBand>
         <LandingDiscipline />
+      </LandingGlowBand>
+      <LandingGlowBand>
+        <LandingBehaviorMap />
       </LandingGlowBand>
       <LandingFeatureGrid />
       <LandingDemoSession />
