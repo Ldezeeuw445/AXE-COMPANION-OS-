@@ -29,6 +29,7 @@ import { AxeWordmark } from "@/components/brand/AxeWordmark";
 import { AxeTriangle } from "@/components/brand/AxeTriangle";
 import Image from "next/image";
 import { QuickActionMenu } from "@/components/shell/QuickActionMenu";
+import { FeedLaneBadges } from "@/components/feed/FeedLaneBadges";
 
 /* ── Wrapper so AxeTriangle fits the same slot as Lucide icons ──── */
 function IntelTriangleIcon({ className }: { className?: string; strokeWidth?: number }) {
@@ -110,15 +111,18 @@ function NavLink({
       {!compact ? (
         <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
           <span>{item.label}</span>
-          {item.comingSoon ? (
-            <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-tos-dim">
-              soon
-            </span>
-          ) : premium ? (
-            <span className="rounded border border-cyan-400/20 bg-cyan-400/[0.08] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-300/80">
-              PRO
-            </span>
-          ) : null}
+          <span className="flex items-center gap-1.5">
+            {item.href === "/feed" ? <FeedLaneBadges /> : null}
+            {item.comingSoon ? (
+              <span className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-tos-dim">
+                soon
+              </span>
+            ) : premium ? (
+              <span className="rounded border border-cyan-400/20 bg-cyan-400/[0.08] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-300/80">
+                PRO
+              </span>
+            ) : null}
+          </span>
         </span>
       ) : null}
     </Link>

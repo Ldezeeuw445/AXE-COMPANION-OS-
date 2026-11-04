@@ -47,6 +47,12 @@ import { logLatencyIfDue, recordLatencySample } from "@/lib/perf/latencyStats";
 import { buildAxeEngineSystemGate, getAxeEngineProfile } from "@/services/axeEngineService";
 import { isForexPairSymbol, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
+import {
+  detectSymbolsInText,
+  loggingSymbolForResolution,
+  resolveChatSymbolContext,
+  type ChatSymbolResolution,
+} from "@/lib/chat/resolveChatSymbolContext";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -290,15 +296,7 @@ function extractFirstLink(text: string | null | undefined): string | null {
 }
 
 function inferRequestedSymbols(text: string): string[] {
-  const upper = text.toUpperCase();
-  const out = new Set<string>();
-  // 6-letter FX/metal pairs (XAUUSD, EURUSD, etc.)
-  for (const m of upper.matchAll(/\b[A-Z]{6}\b/g)) out.add(m[0]);
-  // Common alias: GOLD -> XAUUSD
-  if (/\bGOLD\b/.test(upper)) out.add("XAUUSD");
-  // Common typo seen on mobile keyboards.
-  if (/\bXAAUSD\b/.test(upper)) out.add("XAUUSD");
-  return Array.from(out);
+  return detectSymbolsInText(text);
 }
 
 function isLivePriceIntent(text: string): boolean {
@@ -611,6 +609,7 @@ export async function streamChatMessage(
   tf?: string,
   edgeAuth?: { supabase: SupabaseClient; user: User } | null,
   type: "axe" | "intel" = "axe",
+  symbolTouchedAt?: string | null,
 ): Promise<SendChatMessageResult> {
   const chatStartedAt = Date.now();
   const markChatLatency = (status: "ok" | "error" | "quota" | "no_reply") => {
@@ -629,6 +628,14 @@ export async function streamChatMessage(
 
   const trimmed = text.trim();
   if (!trimmed && !imageBase64) return { ok: false };
+
+  const symbolResolution: ChatSymbolResolution = resolveChatSymbolContext({
+    messageText: trimmed || "",
+    pillSymbol: symbol,
+    symbolTouchedAt,
+  });
+  const effectiveSymbol = symbolResolution.effectiveSymbol ?? undefined;
+  const loggingSymbol = loggingSymbolForResolution(symbolResolution);
 
   const authed = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
@@ -683,7 +690,7 @@ export async function streamChatMessage(
   // 3. Fetch message history + central TradingOS context in parallel
   const intelSnapshotPromise =
     type === "intel"
-      ? loadIntelSnapshot({ symbol: symbol ?? undefined }).catch(() => null)
+      ? loadIntelSnapshot({ symbol: effectiveSymbol }).catch(() => null)
       : Promise.resolve(null);
 
   const [historyResult, context, knowledgeLayer, intelSnapshot, engineProfile] = await Promise.all([
@@ -695,10 +702,10 @@ export async function streamChatMessage(
       .order("created_at", { ascending: false })
       .limit(40),
 
-    fetchTradingOSContext(user.id, supabase, symbol, tf),
+    fetchTradingOSContext(user.id, supabase, effectiveSymbol, tf),
     type === "intel"
-      ? buildIntelKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null)
-      : buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, symbol ?? null),
+      ? buildIntelKnowledgeLayerBlock(supabase, user.id, trimmed, effectiveSymbol ?? null)
+      : buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, effectiveSymbol ?? null),
     intelSnapshotPromise,
     getAxeEngineProfile(supabase, user.id, { source: "chat_turn" }).catch(() => null),
   ]);
@@ -721,7 +728,7 @@ export async function streamChatMessage(
         confidence: correction.confidence,
         detector: "heuristic",
         chat_type: type,
-        symbol: symbol ?? null,
+        symbol: loggingSymbol,
         corrected_reply: history[history.length - 1].content.slice(0, 1200),
       });
     }
@@ -730,7 +737,7 @@ export async function streamChatMessage(
   // 4. Inject candles_summary from pinned_context (+ intel snapshot when in intel mode)
   let knowledgeBlock = knowledgeLayer;
   if (type === "intel" && intelSnapshot) {
-    const liveContext = truncateIntelContext(buildIntelContext(intelSnapshot, symbol ?? undefined));
+    const liveContext = truncateIntelContext(buildIntelContext(intelSnapshot, effectiveSymbol));
     knowledgeBlock = [knowledgeLayer, liveContext ? `LIVE INTEL SNAPSHOT\n${liveContext}` : null]
       .filter(Boolean)
       .join("\n\n---\n");
@@ -738,6 +745,8 @@ export async function streamChatMessage(
 
   const contextWithCandles = {
     ...context,
+    // Pill is a weak hint — never force a stale selection into the session lock.
+    symbol: effectiveSymbol ?? (symbolResolution.chartContextStale ? null : context.symbol),
     candles_summary: conversation.pinnedContext || null,
     knowledge_layer: knowledgeBlock,
   };
@@ -766,6 +775,13 @@ export async function streamChatMessage(
     imageBase64,
     imageType
   ) as LLMMessage[];
+
+  if (symbolResolution.promptHint && aiMessages[0]?.role === "system") {
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${String(aiMessages[0].content ?? "")}\n\n${symbolResolution.promptHint}`,
+    };
+  }
 
   if (type === "intel" && aiMessages[0]?.role === "system") {
     aiMessages[0] = {
@@ -832,7 +848,7 @@ export async function streamChatMessage(
       return commitError ? "Failed to record commitment." : "Commitment tracked — I'll follow up on this.";
 
     } else if (toolCall.tool === "get_live_price") {
-      const requested = String(toolCall.args.symbol ?? symbol ?? contextWithCandles.symbol ?? "").trim();
+      const requested = String(toolCall.args.symbol ?? effectiveSymbol ?? contextWithCandles.symbol ?? "").trim();
       const requestedContext = await getPriceContextForSymbol(requested);
       return formatBrokerPriceForChat(requestedContext);
 
@@ -851,7 +867,7 @@ export async function streamChatMessage(
 
     } else if (toolCall.tool === "get_news_headlines") {
       const limit = Math.max(1, Math.min(15, Number(toolCall.args.limit ?? 8)));
-      const requested = (toolCall.args.symbol ?? symbol ?? "").toString().toUpperCase().trim();
+      const requested = (toolCall.args.symbol ?? effectiveSymbol ?? "").toString().toUpperCase().trim();
       if (!requested) return "No symbol provided and no active pair on this session.";
       try {
         const items = await loadNews({ symbol: requested, watchlist: [], limit });
@@ -1216,8 +1232,15 @@ export async function streamChatMessage(
   if (livePriceIntent) {
     const requestedSymbol =
       inferRequestedSymbols(trimmed)[0]
-      ?? (symbol ?? contextWithCandles.symbol ?? contextWithCandles.axe_context?.chart?.symbol ?? "XAUUSD");
+      ?? effectiveSymbol
+      ?? contextWithCandles.symbol
+      ?? contextWithCandles.axe_context?.chart?.symbol
+      ?? undefined;
 
+    if (!requestedSymbol) {
+      finalReply =
+        "Which market should I price? Your chart pill may be stale — name the symbol (e.g. XAUUSD or gold) and I'll pull the live broker quote.";
+    } else {
     const alreadyUsedLivePrice = executedToolResults.some(({ tc }) => tc.tool === "get_live_price");
     if (!alreadyUsedLivePrice) {
       const forcedTc: AxeToolCall = {
@@ -1268,6 +1291,7 @@ export async function streamChatMessage(
       finalReply =
         `I can see your ${accountLabel}, but live broker pricing for ${requestedUpper || activeSymbol} (${brokerSymbol}) is currently unavailable (${state}). ` +
         `I won't guess prices. If this symbol is enabled on your broker, sync the account and ask again in a few seconds. [[link:/chart|Open chart]]`;
+    }
     }
   }
 
@@ -1325,7 +1349,7 @@ export async function streamChatMessage(
   runPostTurnPrecompute({
     userId: user.id,
     supabase,
-    symbol: symbol ?? contextWithCandles.symbol ?? undefined,
+    symbol: effectiveSymbol ?? contextWithCandles.symbol ?? undefined,
     tf: tf ?? contextWithCandles.timeframe ?? undefined,
     pinnedContext: conversation.pinnedContext,
     type,
@@ -1344,8 +1368,9 @@ export async function sendChatMessage(
   tf?: string,
   edgeAuth?: { supabase: SupabaseClient; user: User } | null,
   type: "axe" | "intel" = "axe",
+  symbolTouchedAt?: string | null,
 ): Promise<SendChatMessageResult> {
-  return streamChatMessage(text, () => {}, imageBase64, imageType, symbol, tf, edgeAuth, type);
+  return streamChatMessage(text, () => {}, imageBase64, imageType, symbol, tf, edgeAuth, type, symbolTouchedAt);
 }
 
 /**
