@@ -23,6 +23,8 @@
  * database.
  */
 
+import { ARC_WINDOW_DAYS } from "@/lib/axe/learningArc";
+import { EVIDENCE_ONLY_FILTER } from "@/lib/trading/tradeEvidence";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   arcHeadline,
@@ -36,7 +38,9 @@ import {
 } from "@/lib/axe/learningArc";
 
 /** How far back closed trades are counted. */
-export const ARC_WINDOW_DAYS = 90;
+// Re-exported so existing importers keep working; the number itself lives in
+// `learningArc.ts`, next to the sentence that says it out loud.
+export { ARC_WINDOW_DAYS };
 
 export interface TraderLearningArc {
   traderId: string;
@@ -105,6 +109,10 @@ export async function getTraderLearningArc(
         .eq("user_id", traderId)
         .not("close_time", "is", null)
         .gte("close_time", windowStart)
+        // Practice fills at generated prices are excluded: the arc describes
+        // what this trader is learning, and a lesson drawn from invented
+        // prices is not one. See src/lib/trading/tradeEvidence.ts.
+        .or(EVIDENCE_ONLY_FILTER)
         .order("close_time", { ascending: false })
         .limit(1000),
 

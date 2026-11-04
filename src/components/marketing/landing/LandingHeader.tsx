@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { AppSwitcher } from "@/components/marketing/AppSwitcher";
+import { LandingNavGlow } from "@/components/marketing/landing/LandingNavGlow";
 
 const NAV = [
   { href: "#product", label: "Product" },
@@ -11,8 +12,8 @@ const NAV = [
 
 export function LandingHeader() {
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020406]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl flex-nowrap items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-5 sm:py-3.5">
+    <LandingNavGlow className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#020406]/90 backdrop-blur-md">
+      <div className="relative z-[1] mx-auto flex max-w-6xl flex-nowrap items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-5 sm:py-3.5">
         <div className="flex min-w-0 items-center gap-1">
           <Link href="/" className="flex min-w-0 items-center gap-2">
             <Image
@@ -54,6 +55,6 @@ export function LandingHeader() {
           </Link>
         </div>
       </div>
-    </header>
+    </LandingNavGlow>
   );
 }

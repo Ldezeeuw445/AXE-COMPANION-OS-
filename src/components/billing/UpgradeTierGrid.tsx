@@ -18,6 +18,8 @@ type Props = {
   userId: string | null;
   checkoutLinks: Partial<Record<AxePlanId, string | null>>;
   billingReady: Partial<Record<AxePlanId, boolean>>;
+  /** Returning Founders: badge stays, founder payment link withheld. */
+  founderReturnNotice?: string | null;
 };
 
 function tierVisible(tier: AxeBillingTier, catalog: BillingCatalogState): boolean {
@@ -34,11 +36,17 @@ export function UpgradeTierGrid({
   userId,
   checkoutLinks,
   billingReady,
+  founderReturnNotice = null,
 }: Props) {
   const visibleTiers = AXE_BILLING_TIERS.filter((t) => tierVisible(t, catalog));
 
   return (
     <div className="space-y-4">
+      {founderReturnNotice ? (
+        <p className="rounded-lg border border-tos-gold/25 bg-tos-gold/5 px-3 py-2 text-center text-[11px] text-tos-muted">
+          {founderReturnNotice}
+        </p>
+      ) : null}
       <div className="grid gap-3 lg:grid-cols-2">
         {visibleTiers.map((tier) => (
           <TierCard
@@ -48,6 +56,9 @@ export function UpgradeTierGrid({
             checkoutHref={checkoutLinks[tier.id] ?? null}
             billingReady={billingReady[tier.id] ?? false}
             userId={userId}
+            founderPriceLocked={
+              tier.id === "founder" && Boolean(founderReturnNotice)
+            }
             founderRemaining={
               tier.id === "founder"
                 ? Math.max(0, catalog.founderSeatsCap - catalog.founderSeatsUsed)
@@ -92,6 +103,7 @@ function TierCard({
   billingReady,
   userId,
   founderRemaining,
+  founderPriceLocked = false,
 }: {
   tier: AxeBillingTier;
   isCurrent: boolean;
@@ -99,6 +111,7 @@ function TierCard({
   billingReady: boolean;
   userId: string | null;
   founderRemaining: number | null;
+  founderPriceLocked?: boolean;
 }) {
   const isPaidTier = tier.id !== "free";
   const highlighted = tier.badge === "Recommended";
@@ -161,7 +174,15 @@ function TierCard({
       ) : null}
 
       {isPaidTier && !isCurrent ? (
-        billingReady && checkoutHref && userId ? (
+        founderPriceLocked ? (
+          <div className="tos-matte-banner mt-5">
+            <span className="tos-accent-dot tos-accent-dot--amber mt-0.5 shrink-0" aria-hidden />
+            <p className="text-[11px] text-white/78">
+              Founder pricing is for continuous Founder subscriptions. Your badge stays — choose Elite
+              (or Pro) at the normal rate to return.
+            </p>
+          </div>
+        ) : billingReady && checkoutHref && userId ? (
           <a
             href={checkoutHref}
             target="_blank"

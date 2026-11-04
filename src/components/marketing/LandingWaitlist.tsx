@@ -50,8 +50,9 @@ export function LandingWaitlist() {
   return (
     <div id="waitlist" className="scroll-mt-28">
       <p className="text-center text-sm text-white/55">
-        Join the AXE Companion waitlist for early access and product updates. Same login on
-        Trading OS when you want the desk.
+        Join the AXE Companion waitlist for Trading OS (desktop) and other coming-soon surfaces.
+        Companion itself is available now — use Start free above. Same login and broker accounts
+        when you want the desk.
       </p>
       {state === "done" ? (
         <p className="mt-4 text-center text-sm font-medium text-emerald-400/95" role="status">

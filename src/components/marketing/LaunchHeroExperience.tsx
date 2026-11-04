@@ -21,6 +21,11 @@ export function LaunchHeroExperience() {
       data-landing-hero="true"
       aria-label="AXE Companion hero"
     >
+      <div aria-hidden className="axe-hero-light pointer-events-none absolute inset-0 z-[1]" />
+      <div
+        aria-hidden
+        className="axe-hero-headline-dots pointer-events-none absolute inset-x-0 top-0 z-[1] h-[640px]"
+      />
       <div className="axe-launch-hero-grid" aria-hidden />
       <div className="axe-launch-hero-grid-hot" aria-hidden />
 
@@ -48,7 +53,20 @@ export function LaunchHeroExperience() {
             <a href="#pricing" className="axe-launch-btn-secondary">
               See pricing
             </a>
+            <a href="/welcome" className="axe-launch-btn-secondary">
+              Install as PWA
+            </a>
           </div>
+          <p className="mt-4 text-center text-xs text-white/40">
+            Already have an account?{" "}
+            <a href="/login" className="text-white/65 underline-offset-2 hover:text-white hover:underline">
+              Log in
+            </a>
+            {" · "}
+            <a href="/chat" className="text-white/65 underline-offset-2 hover:text-white hover:underline">
+              Open app
+            </a>
+          </p>
         </div>
 
         <div className="mt-12">

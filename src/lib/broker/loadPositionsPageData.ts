@@ -3,6 +3,7 @@ import { getActiveMetaApiCloudAccount } from "@/lib/mt5/activeCloudAccount";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import { clientGetPositions, clientGetOrders, clientGetAccountInformation } from "@/lib/mt5/metaApiClient";
 import { asFiniteNumber } from "@/lib/journal/tradePnl";
+import { loadPaperPositions } from "@/lib/broker/loadPaperPositions";
 
 export type OpenPositionRow = {
   id: string;
@@ -117,6 +118,43 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
   } = await supabase.auth.getUser();
   if (!user) {
     return emptyPositions({ error: "Not signed in." });
+  }
+
+  // Practice account first: its positions live in our own table, need no
+  // broker token, and used to be invisible here — orders went in and
+  // disappeared, which is the worst thing a practice account can do.
+  const { data: prefsRow } = await supabase
+    .from("user_workspace_preferences")
+    .select("active_account_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const activeId = (prefsRow?.active_account_id as string | null) ?? null;
+  if (activeId) {
+    const { data: activeAccount } = await supabase
+      .from("user_broker_accounts")
+      .select("id,connection_method,provider")
+      .eq("user_id", user.id)
+      .eq("id", activeId)
+      .maybeSingle();
+
+    const isPaper =
+      activeAccount?.connection_method === "demo_paper" || activeAccount?.provider === "demo";
+
+    if (isPaper) {
+      const paper = await loadPaperPositions(supabase, user.id, activeId);
+      return emptyPositions({
+        positions: paper.map(({ quoteOrigin: _origin, ...row }) => row),
+        brokerAccountId: activeId,
+        providerStatus: "paper",
+        hint:
+          paper.length === 0
+            ? "Practice account. Place an order from the chart and it appears here."
+            : paper.some((p) => p.quoteOrigin === "simulated")
+              ? "Practice account. Positions marked from generated prices do not count towards what AXE learns about you."
+              : "Practice account, filled at live broker spreads.",
+      });
+    }
   }
 
   if (!getMetaApiToken()) {

@@ -104,7 +104,7 @@ export default async function LoginPage({
         <div className="mt-8 flex items-center justify-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-tos-warm/50" />
           <p className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
-            Encrypted · Direct channel
+            Private workspace · Direct channel
           </p>
           <span className="h-1.5 w-1.5 rounded-full bg-tos-warm/50" />
         </div>

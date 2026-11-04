@@ -4,6 +4,8 @@ import { useCallback, useState } from "react";
 import { Zap } from "lucide-react";
 import { TosMatteBanner } from "@/components/ui/TosNotice";
 import { RiskConfirmationModal } from "@/components/risk/RiskConfirmationModal";
+import { alertTradeSetupGaps } from "@/lib/trading/alertAutoTrade";
+import type { AutonomySettings } from "@/lib/trading/autonomy";
 import {
   DEFAULT_TRADE_VOLUME_LOTS,
   MAX_TRADE_VOLUME_LOTS,
@@ -19,12 +21,21 @@ export function TradeExecutionPrefsPanel({
   initialAlertSlOffset,
   initialAlertTpOffset,
   liveTradingEnabled = false,
+  autonomy,
 }: {
   initialVolume: number;
   initialAlertAutoTrade: boolean;
   initialAlertSlOffset: number | null;
   initialAlertTpOffset: number | null;
   liveTradingEnabled?: boolean;
+  /**
+   * What AXE is allowed to do on its own, from the panel above this one.
+   *
+   * This switch alone has never been enough: the autonomy level has to permit
+   * unattended placing too. Until now neither screen said so, so a trader
+   * could finish one and wait forever on the other.
+   */
+  autonomy: AutonomySettings;
 }) {
   const [volume, setVolume] = useState(() => normalizeTradeVolume(initialVolume));
   const [alertAutoTrade, setAlertAutoTrade] = useState(initialAlertAutoTrade);
@@ -104,6 +115,19 @@ export function TradeExecutionPrefsPanel({
     setAlertAutoTrade(next);
     void persist({ volume, auto: next, sl: slOffset, tp: tpOffset });
   };
+
+  /**
+   * Why this switch being on may still not be enough.
+   *
+   * Same function the server asks when an alert actually fires, so the screen
+   * cannot drift from the behaviour. Arming is deliberately not counted — see
+   * `alertTradeSetupGaps`.
+   */
+  const setupGaps = alertTradeSetupGaps({
+    autonomy,
+    channelEnabled: alertAutoTrade,
+    alertEnabled: true,
+  });
 
   const toggleAuto = () => {
     const next = !alertAutoTrade;
@@ -201,6 +225,13 @@ export function TradeExecutionPrefsPanel({
           </span>
         </span>
       </label>
+
+      {alertAutoTrade && setupGaps.length > 0 ? (
+        <TosMatteBanner accent="amber" className="mt-2">
+          <span className="font-semibold">This switch is on, but AXE still will not trade.</span>{" "}
+          {setupGaps[0]}
+        </TosMatteBanner>
+      ) : null}
 
       {error ? (
         <TosMatteBanner accent="amber" className="mt-2">

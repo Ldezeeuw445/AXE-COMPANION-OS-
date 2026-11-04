@@ -1,3 +1,4 @@
+import { EVIDENCE_ONLY_FILTER } from "@/lib/trading/tradeEvidence";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -87,6 +88,9 @@ async function gatherTradingProfile(
       .select("symbol,side,volume,pnl,open_time,close_time")
       .eq("user_id", userId)
       .gte("close_time", since)
+      // Same rule as weakSpots and the learning arc: this becomes what AXE
+      // believes about the trader, so generated-price fills stay out.
+      .or(EVIDENCE_ONLY_FILTER)
       .order("close_time", { ascending: false })
       .limit(200),
     supabase

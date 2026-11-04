@@ -22,7 +22,7 @@ export const LANDING_HERO = {
   titleLead: "AXE Companion.",
   titleAccent: "The trader's phone OS.",
   body:
-    "AXE Companion is an MT5-native phone OS: chart with indicators and drawings, market depth, news, intel, execution, journal, AXE Feed and AXE chat — on one dark surface. Positions and fills sync from MetaApi about every ten minutes.",
+    "AXE Companion is an MT5-native phone OS: chart with indicators and drawings, market depth, news, intel, execution, journal, push alerts, AXE Feed and AXE chat — on one dark surface. Positions and fills sync from MetaApi about every ten minutes.",
 } as const;
 
 export const LANDING_RAIL = [
@@ -30,7 +30,7 @@ export const LANDING_RAIL = [
   "Market depth drawer",
   "News, intel and AXE Feed",
   "One-tap execution dock",
-  "Price alerts in the app",
+  "Price alerts, push and drawdown alerts",
 ] as const;
 
 export const LANDING_REVEAL_CARDS = [
@@ -76,7 +76,7 @@ export const LANDING_DISCIPLINE = {
   body:
     "Cockpit (Pro) builds a behavior map from your MT5 fills — sessions, instruments, the rules you keep. Fills arrive on the ten-minute MetaApi sync, not tick by tick. Alignment is a Cockpit score, labelled as example chrome on this page.",
   aside:
-    "There is no live per-firm drawdown alert. The background watcher is not firing alerts. Firm rule presets (FTMO models, Upcomers Oracle, and others by name) live in Settings, and AXE autonomy has a daily-limit guard before any automatic order.",
+    "The background watcher fires price, drawdown and trailing-stop alerts. Firm rule presets (FTMO models, Upcomers Oracle, and others by name) live in Settings, and AXE autonomy has a daily-limit guard before any automatic order.",
   quote:
     "The same dark canvas as Trading OS, the same MT5 execution dock, and a journal of fills you tag yourself — plus an intel layer that watches the board the app actually has keys for.",
   quoteBy: "AXE Companion · design principle",
@@ -84,9 +84,9 @@ export const LANDING_DISCIPLINE = {
 
 export const LANDING_INTRO = {
   kicker: "First impression",
-  titleLead: "Secure. Intelligent.",
-  titleAccent: "Encrypted.",
-  body: "From the login screen — the particle triangle, a private command channel, one tap to enter.",
+  titleLead: "Private. Intelligent.",
+  titleAccent: "Yours.",
+  body: "From the login screen — the particle triangle, a private command channel, one tap to enter. AXE Companion is analytical software, not a licensed adviser or a regulated venue.",
   loginTitle: "Private command channel",
   loginBody: "Signed-in workspace · not a social feed · your data stays yours",
   splashTitle: "Boot sequence",
@@ -113,7 +113,7 @@ export const LANDING_SHOWCASE: ReadonlyArray<{
   {
     step: "01 · Chart",
     title: "Read the candle, not the noise.",
-    body: "MT5 candles on a calm dark canvas — Auto-Fib, BOS/CHoCH structure, order blocks and FVGs that extend until mitigated. Lightweight Charts, with drawings (trendline, rectangle, text, horizontal). Stochastic and ADX math is in the repo; they are not on the chart toggles yet.",
+    body: "MT5 candles on a calm dark canvas — Auto-Fib, BOS/CHoCH structure, order blocks and FVGs that extend until mitigated. Lightweight Charts, with drawings (trendline, rectangle, text, horizontal). Volume, RSI, MACD, Stochastic and ADX sit in their own panes.",
     href: "#hero-devices",
     cta: "Open the chart",
     image: "/landing/photos/809_1x_shots_so.png",
@@ -179,7 +179,7 @@ export const LANDING_SHOWCASE: ReadonlyArray<{
   {
     step: "08 · Chart Tools",
     title: "Every tool, one drawer.",
-    body: "Volume, MA, MACD, Bollinger, RSI, VWAP, POC, Fib, trendlines, rectangles, text, horizontal levels and S&D zones. Drag on, configure, toggle. No clutter, no hunting through menus.",
+    body: "Volume, MA, MACD, Bollinger, RSI, Stochastic, ADX, VWAP, POC, Fib, trendlines, rectangles, text, horizontal levels and S&D zones. Drag on, configure, toggle. No clutter, no hunting through menus.",
     href: "#hero-devices",
     cta: "Browse Tools",
     image: "/landing/photos/423_1x_shots_so-2.png",
@@ -358,11 +358,11 @@ export const COMPANION_FEATURES: ReadonlyArray<{
 }> = [
   {
     title: "Chart, indicators and drawings",
-    desc: "Candles, Auto-Fib (Auto / Swing / Day), Auto-Trend, swing points, BOS/CHoCH, Volume, MA, MACD, Bollinger, RSI, VWAP, POC — plus trendline, rectangle, text and horizontal drawings.",
+    desc: "Candles, Auto-Fib (Auto / Swing / Day), Auto-Trend, swing points, BOS/CHoCH, Volume, MA, MACD, Bollinger, RSI, Stochastic, ADX, VWAP, POC — plus trendline, rectangle, text and horizontal drawings.",
     icon: "chart",
   },
   {
-    title: "Order Blocks, FVG, iFVG that extend",
+    title: "Order blocks and fair value gaps, drawn forward",
     desc: "Volumetric order blocks, fair-value gaps and inverse FVGs that keep extending until they are mitigated. Pick 1, 2 or 3 per side.",
     icon: "chart",
   },
@@ -388,22 +388,22 @@ export const COMPANION_FEATURES: ReadonlyArray<{
   },
   {
     title: "Journal from your fills",
-    desc: "Trades land from the broker on the ten-minute sync; you tap an outcome. Attach a voice note, a photo or a chart snapshot. Automatic journal labels are not running. Win rate and calendar come from the rows you tag.",
+    desc: "Trades land from the broker on the ten-minute sync. You tap an outcome, attach a voice note, a photo or a chart snapshot. Pro also runs AXE auto-journal labels on closed trades. Win rate and calendar come from those rows.",
     icon: "journal",
   },
   {
-    title: "Price alerts in the app",
-    desc: "In-app price alerts on the chart. Push notification delivery is not live. The background watcher is not firing alerts. There is no live per-firm drawdown alert.",
+    title: "Price alerts, push and drawdown",
+    desc: "In-app price alerts on the chart, plus web-push delivery. The background watcher fires those alerts, live per-firm drawdown bands from last-known equity, and the trailing-stop sweep.",
     icon: "push",
   },
   {
     title: "MT5 via MetaApi",
-    desc: "Multiple cloud MT5 accounts from Accounts. Known brokers include FTMO, Goat Funded Trader, FundedNext and Upcomers. Dashboard names such as Upcomers resolve to the real server before Connect. Positions and fills sync about every ten minutes. Advanced: a hashed per-account link token in your EA / bridge.",
+    desc: "Multiple cloud MT5 accounts from Accounts. Known brokers include FTMO, Goat Funded Trader, FundedNext and Upcomers. Dashboard names such as Upcomers resolve to the real server before Connect. Positions and fills sync about every ten minutes. Alpaca paper/live is available when configured. Advanced: a hashed per-account link token in your EA / bridge.",
     icon: "mt5",
   },
   {
     title: "Firm rules and autonomy guard",
-    desc: "Per-firm rule presets from the MT5 server name (FTMO 2-Step / 1-Step / Instant, Upcomers Oracle, others by name). AXE autonomy has three levels; unattended orders need your limits and a daily-trade cap. It blocks and names the rule. It never quietly shrinks the trade. It does not fire a live drawdown alert.",
+    desc: "Per-firm rule presets from the MT5 server name (FTMO 2-Step / 1-Step / Instant, Upcomers Oracle, others by name). AXE autonomy has three levels; unattended orders need your limits and a daily-trade cap. It blocks and names the rule. It never quietly shrinks the trade. Drawdown and daily-loss alerts fire from live equity.",
     icon: "risk",
   },
   {
@@ -438,7 +438,7 @@ export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: "Can AXE place a trade without me pressing anything?",
-    a: "Only if you set autonomy to place-within-limits, build an alert that says so, and stay inside limits you set. Before any automatic order AXE checks the account: is this a news window the account forbids, is it the weekend, is the lot above your cap, has the daily loss limit already been hit, have we already fired the day's maximum of automatic trades. If any of those is true it blocks the order and names the rule that stopped it. It will not quietly place a smaller trade instead. Prop and evaluation accounts keep their own rule presets — those win over anything AXE would otherwise do. There is no live per-firm drawdown alert.",
+    a: "Only if you set autonomy to place-within-limits, build an alert that says so, and stay inside limits you set. Before any automatic order AXE checks the account: is this a news window the account forbids, is it the weekend, is the lot above your cap, has the daily loss limit already been hit, have we already fired the day's maximum of automatic trades. If any of those is true it blocks the order and names the rule that stopped it. It will not quietly place a smaller trade instead. Prop and evaluation accounts keep their own rule presets — those win over anything AXE would otherwise do. Live per-firm drawdown alerts fire from last-known equity.",
   },
   {
     q: "Does Companion have News?",
@@ -462,7 +462,7 @@ export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: "Do push notifications, auto-journal labels, AXE memory or the watcher work?",
-    a: "Price alerts work in the app. Push notification delivery is not live. Journal rows come from broker fills; you tap the outcome — automatic labels are not running. A long-term AXE memory table is not in this deployment. The background watcher is not firing alerts. Daily and weekly briefings, the AXE Feed, Cockpit and Learning Arc (Pro) are what remember you today.",
+    a: "Yes. Price alerts evaluate in the app. Push notification delivery is live. Pro auto-journals closed trades. AXE memory, journal, rules and chat context persist across sessions on paid plans. The background watcher fires price, drawdown and trailing-stop alerts. Daily and weekly briefings, the AXE Feed, Cockpit and Learning Arc (Pro) run on that same stack.",
   },
   {
     q: "Is my data private?",

@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { isUnlimitedChatUserId, skipChatQuota } from "@/lib/chatQuota";
+import {
+  enrichChatQuotaPayload,
+  isUnlimitedChatUserId,
+  skipChatQuota,
+  type ChatQuotaPayload,
+} from "@/lib/chatQuota";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -15,25 +20,29 @@ export async function GET() {
   }
 
   if (skipChatQuota()) {
-    return NextResponse.json({
-      ok: true,
-      plan: "pro",
-      limit: 20,
-      used: 0,
-      remaining: -1,
-      skipped: true,
-    });
+    return NextResponse.json(
+      enrichChatQuotaPayload({
+        ok: true,
+        plan: "pro",
+        limit: 20,
+        used: 0,
+        remaining: -1,
+        skipped: true,
+      }),
+    );
   }
 
   if (isUnlimitedChatUserId(user.id)) {
-    return NextResponse.json({
-      ok: true,
-      plan: "exempt",
-      limit: 20,
-      used: 0,
-      remaining: -1,
-      skipped: true,
-    });
+    return NextResponse.json(
+      enrichChatQuotaPayload({
+        ok: true,
+        plan: "exempt",
+        limit: 20,
+        used: 0,
+        remaining: -1,
+        skipped: true,
+      }),
+    );
   }
 
   const { data, error } = await supabase.rpc("axe_chat_quota_status");
@@ -42,5 +51,5 @@ export async function GET() {
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json(enrichChatQuotaPayload(data as ChatQuotaPayload));
 }

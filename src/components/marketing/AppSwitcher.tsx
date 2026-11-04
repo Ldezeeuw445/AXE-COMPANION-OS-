@@ -1,5 +1,8 @@
 "use client";
 
+import { openWithHandoff } from "@/lib/auth/handoffClient";
+import { TRADING_OS_ORIGIN } from "@/lib/auth/handoffCore";
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, Monitor, Smartphone } from "lucide-react";
@@ -152,7 +155,13 @@ export function AppSwitcher({ current, className }: Props) {
                 key={app.id}
                 href={app.url}
                 role="menuitem"
-                onClick={() => setOpen(false)}
+                onClick={(e) => {
+                  setOpen(false);
+                  if (app.id === "trading-os") {
+                    e.preventDefault();
+                    void openWithHandoff(TRADING_OS_ORIGIN, "/");
+                  }
+                }}
                 className="flex gap-2.5 rounded-xl px-2.5 py-2.5 transition hover:bg-white/[0.05]"
               >
                 {inner}

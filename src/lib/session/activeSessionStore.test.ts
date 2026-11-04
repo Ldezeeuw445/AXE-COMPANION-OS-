@@ -88,6 +88,17 @@ describe("activeSession parse / sanitize", () => {
     assert.equal(next.symbol, "EURUSD");
     assert.equal(next.lastTab, "markets");
     assert.equal(next.timeframe, "h1");
+    assert.ok(next.symbolTouchedAt, "pill edit should stamp symbolTouchedAt");
+  });
+
+  it("preserves an explicit symbolTouchedAt and leaves untouched pills null", () => {
+    const stamped = sanitizeActiveSession({
+      symbol: "AAPL",
+      symbolTouchedAt: "2026-11-04T07:00:00.000Z",
+    });
+    assert.equal(stamped.symbolTouchedAt, "2026-11-04T07:00:00.000Z");
+    const untouched = sanitizeActiveSession({ symbol: "AAPL" });
+    assert.equal(untouched.symbolTouchedAt, null);
   });
 });
 

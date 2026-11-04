@@ -45,6 +45,9 @@ type Props = {
   ledgers: Record<string, AccountLedger>;
   loadError: string | null;
   defaultMetaApiRegion: string;
+  liveAccountsNotice?: string;
+  liveCapBlocked?: boolean;
+  liveCapMessage?: string;
 };
 
 function statusDot(a: BrokerAccountRow): { color: string; label: string } {
@@ -418,6 +421,9 @@ export function AccountsScreen({
   ledgers,
   loadError,
   defaultMetaApiRegion,
+  liveAccountsNotice,
+  liveCapBlocked,
+  liveCapMessage,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -552,7 +558,12 @@ export function AccountsScreen({
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/20">
           Connect MT5 account
         </p>
-        <BrokerConnectWizard defaultRegion={defaultMetaApiRegion} />
+        <BrokerConnectWizard
+          defaultRegion={defaultMetaApiRegion}
+          liveAccountsNotice={liveAccountsNotice}
+          liveCapBlocked={liveCapBlocked}
+          liveCapMessage={liveCapMessage}
+        />
       </div>
     </div>
   );

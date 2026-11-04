@@ -176,14 +176,28 @@ export function normaliseAlignment(raw: unknown): number | null {
  * headline was `Top pair: ${pair} · ${timeframe ?? ""}`, which rendered as
  * "Top pair: EURUSD · " whenever the timeframe was missing.
  */
+/**
+ * How far back the arc counts, in days.
+ *
+ * It lives here rather than in the service because `arcHeadline` says the
+ * number out loud. It used to be defined in `learningArcService` and written
+ * as the literal "90 days" in the sentence below — two places for one fact,
+ * and the kind that drifts silently: change the window to 30 and the headline
+ * keeps telling the trader 90, with a count that is really over 30. Every
+ * number here is supposed to be checkable against their own journal, and that
+ * one would not have been.
+ */
+export const ARC_WINDOW_DAYS = 90;
+
 export function arcHeadline(
   top: SymbolTally | null,
   totalTrades: number,
   watchedCount: number,
+  windowDays: number = ARC_WINDOW_DAYS,
 ): string | null {
   if (top && totalTrades > 0) {
     const share = `${top.trades} of your ${totalTrades} closed trade${totalTrades === 1 ? "" : "s"}`;
-    return `Most traded: ${top.symbol} — ${share} in the last 90 days.`;
+    return `Most traded: ${top.symbol} — ${share} in the last ${windowDays} days.`;
   }
   if (watchedCount > 0) {
     return `No closed trades yet. AXE is watching ${watchedCount} symbol${watchedCount === 1 ? "" : "s"} on your charts.`;

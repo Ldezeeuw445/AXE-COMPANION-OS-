@@ -35,6 +35,7 @@ const ACTIONS = [
   { href: "/intel", label: "Intel", Icon: IntelIcon as typeof MessageSquare },
   { href: "/alerts", label: "Alerts", Icon: Bell },
   { href: "/actions", label: "Actions", Icon: Briefcase },
+  { href: "/trading-team", label: "Team", Icon: Briefcase },
   { href: "/journal", label: "Journal", Icon: BookOpen },
   { href: "/market", label: "Market", Icon: Sparkles },
   { href: "/vault", label: "Vault", Icon: Vault },

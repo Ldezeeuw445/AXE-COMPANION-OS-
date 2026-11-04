@@ -32,9 +32,9 @@ export function FeedNavBadge() {
     }
 
     void refresh();
+    // Re-summarize from storage — opening one lane must not zero every badge.
     const onSeen = () => {
-      setUnread(0);
-      setBadgeClass("bg-cyan-400");
+      void refresh();
     };
     window.addEventListener("axe:feed-seen", onSeen);
     const id = setInterval(refresh, 60_000);

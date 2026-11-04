@@ -206,7 +206,7 @@ export function ChartOrderBookDrawer({
       {open ? (
         <button
           type="button"
-          aria-label="Close order book"
+          aria-label="Close estimated depth"
           onClick={onClose}
           className="fixed inset-0 z-[44] bg-black/45 backdrop-blur-[2px]"
         />
@@ -227,10 +227,10 @@ export function ChartOrderBookDrawer({
             </span>
             <div className="min-w-0">
               <p className="truncate font-mono text-[12px] font-bold uppercase tracking-wider text-tos-text">
-                {symbol} · Depth
+                {symbol} · Estimated depth
               </p>
-              <p className="text-[9px] uppercase tracking-[0.2em] text-tos-dim">
-                Live spread · L2 estimated
+              <p className="text-[9px] uppercase tracking-[0.14em] text-tos-dim">
+                Synthetic · from live bid/ask
               </p>
             </div>
           </div>
@@ -366,11 +366,11 @@ export function ChartOrderBookDrawer({
 
         {/* Footnote */}
         <div className="shrink-0 border-t border-white/[0.05] px-3 py-2 text-[9.5px] leading-relaxed text-tos-dim">
-          The L1 row (top bid + top ask) is the live quote from your MT5 broker
-          — same one the chart prices fills against. Surrounding levels are an
-          estimated falloff for visual context; MT5 retail accounts do not
-          expose true Level 2 depth, so use those rows as a spread-shape cue,
-          not as resting liquidity.
+          Estimated depth (synthetic, from live bid/ask). The L1 row is the
+          measured live quote from your broker — the same one the chart prices
+          fills against. Surrounding sizes are calculated for visual context,
+          not pending orders in a real Level-2 book. Retail MT5 via MetaApi
+          does not expose true DOM.
         </div>
       </aside>
     </>

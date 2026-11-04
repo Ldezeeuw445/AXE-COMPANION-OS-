@@ -24,6 +24,7 @@ import {
   sessionSplit,
   summariseFeedback,
   SESSION_MIN_TRADES,
+  ARC_WINDOW_DAYS,
 } from "../src/lib/axe/learningArc.ts";
 
 let passed = 0;
@@ -379,6 +380,52 @@ check("the model may rewrite the words but not the numbers", () => {
     "every progress bar under 'AXE will not show fake progress' was the model's to change",
   );
   assert.ok(/keepsOurNumbers/.test(snapshots));
+});
+
+check("the headline quotes the window it actually counted over", () => {
+  // Validated against the live database on 29 October: 16 closed trades for
+  // one trader, 15 XAUUSD and 1 BTCUSD, matching an independent SQL count
+  // exactly. What did not match was the sentence: the window lived in
+  // learningArcService as ARC_WINDOW_DAYS while the headline said the literal
+  // "90 days". Two places for one fact. Set the window to 30 and the headline
+  // keeps saying 90 over a count that is really 30 days long — and every
+  // number here is meant to be checkable against the trader's own journal.
+  const top = { symbol: "XAUUSD", trades: 15, netPnl: -1565.8 };
+
+  const asShipped = arcHeadline(top, 16, 0);
+  assert.ok(
+    asShipped.includes(`${ARC_WINDOW_DAYS} days`),
+    `the default must name the real window: "${asShipped}"`,
+  );
+
+  const narrowed = arcHeadline(top, 16, 0, 30);
+  assert.ok(narrowed.includes("30 days"), `a different window must change the sentence: "${narrowed}"`);
+  assert.ok(!narrowed.includes("90 days"), "and must not still claim 90");
+});
+
+check("the window is defined once, not copied into the service", () => {
+  const service = readFileSync(
+    new URL("../src/services/learningArcService.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    !/const ARC_WINDOW_DAYS = \d+/.test(service),
+    "a second definition is how the headline and the query drift apart",
+  );
+  assert.ok(/ARC_WINDOW_DAYS/.test(service), "the service still uses it for the query");
+});
+
+check("real-world symbol suffixes normalise the way the live data needs", () => {
+  // These exact spellings are in the production table: one broker writes
+  // XAUUSD and XAUUSD.x for the same instrument, and BTCUSD.nx for another.
+  // Without stripping, one trader's gold shows up as two instruments and the
+  // "most traded" line is wrong about what they actually trade.
+  assert.equal(normaliseSymbol("XAUUSD.x"), "XAUUSD");
+  assert.equal(normaliseSymbol("BTCUSD.nx"), "BTCUSD");
+  assert.equal(normaliseSymbol("XAUUSD"), "XAUUSD");
+  // And the ones that must survive, because the digits are part of the name.
+  assert.equal(normaliseSymbol("US30"), "US30");
+  assert.equal(normaliseSymbol("SPX500"), "SPX500");
 });
 
 console.log(`\n${passed} checks passed`);

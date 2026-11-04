@@ -5,6 +5,7 @@ import { getMetadataSymbolMap } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 import { runPushTestSuite, type PushTestSuiteResult } from "@/lib/push/runTestSuite";
+import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 
 export async function sendPushTestSuiteAction(): Promise<
@@ -14,7 +15,8 @@ export async function sendPushTestSuiteAction(): Promise<
   if (!authed) return { ok: false, error: "Unauthorized" };
   const gate = await requireEntitlementFeature(authed.supabase, authed.user.id, "push_notifications");
   if (!gate.ok) return { ok: false, error: gate.error };
-  return runPushTestSuite(authed.user.id, authed.supabase);
+  const writer = createServiceRoleSupabaseClient() ?? authed.supabase;
+  return runPushTestSuite(authed.user.id, writer);
 }
 
 export async function updatePinnedContext(

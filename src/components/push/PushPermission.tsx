@@ -12,14 +12,19 @@ function urlBase64ToUint8Array(base64String: string) {
   return output;
 }
 
-async function subscribeUser(): Promise<boolean> {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+async function subscribeUser(): Promise<{ ok: boolean; error?: string }> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return { ok: false, error: "This browser does not support web push." };
+  }
 
   const reg = await navigator.serviceWorker.ready;
 
   const vapidRes = await fetch("/api/push/vapid");
-  if (!vapidRes.ok) return false;
+  if (!vapidRes.ok) {
+    return { ok: false, error: "Push is not configured on the server (VAPID key missing)." };
+  }
   const { publicKey } = await vapidRes.json();
+  if (!publicKey) return { ok: false, error: "Push is not configured on the server (VAPID key missing)." };
 
   const existing = await reg.pushManager.getSubscription();
   if (existing) await existing.unsubscribe();
@@ -37,7 +42,11 @@ async function subscribeUser(): Promise<boolean> {
     body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys }),
   });
 
-  return res.ok;
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: body.error ?? "Could not save the push subscription." };
+  }
+  return { ok: true };
 }
 
 type Status = "unknown" | "granted" | "denied" | "requesting";
@@ -129,10 +138,12 @@ export function PushPermission() {
     try {
       const perm = await Notification.requestPermission();
       if (perm === "granted") {
-        const ok = await subscribeUser();
+        const result = await subscribeUser();
         if (!mounted.current) return;
         setStatus("granted");
-        setSubscribed(ok);
+        setSubscribed(result.ok);
+        setTestMessage(result.ok ? null : result.error ?? "Subscribe failed.");
+        setTestState(result.ok ? "idle" : "fail");
       } else {
         if (!mounted.current) return;
         setStatus("denied");
@@ -286,20 +297,23 @@ export function PushPermission() {
   // ── Granted but not subscribed (cleared cache, new install) ──────────────
   if (status === "granted" && subscribed === false) {
     return (
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-tos-text">Push notifications</p>
-          <p className="mt-0.5 text-[10px] text-tos-muted">
-            Permission granted — re-subscribe to receive alerts on this device.
-          </p>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-tos-text">Push notifications</p>
+            <p className="mt-0.5 text-[10px] text-tos-muted">
+              Permission granted — re-subscribe to receive alerts on this device.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleEnable}
+            className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
+          >
+            Subscribe
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={handleEnable}
-          className="rounded border border-white/[0.10] bg-white/[0.05] px-3 py-1.5 text-[11px] font-semibold text-white/90 transition-colors hover:bg-white/[0.08]"
-        >
-          Subscribe
-        </button>
+        {testMessage ? <p className="text-[10px] text-amber-200/85">{testMessage}</p> : null}
       </div>
     );
   }

@@ -1,4 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  chatQuotaFriendlyNotice,
+  nextUtcMidnightIso,
+  shouldOfferChatUpgrade,
+  CHAT_QUOTA_TIMEZONE,
+} from "@/lib/billing/chatLimits";
 
 /** Server-only skip for local dev without migration applied. */
 export function skipChatQuota(): boolean {
@@ -26,25 +32,46 @@ export type ChatQuotaPayload = {
   used?: number;
   remaining?: number;
   skipped?: boolean;
+  timezone?: string;
+  resetsAt?: string;
+  notice?: string;
+  offerUpgrade?: boolean;
 };
 
 type TryConsumeRow = {
   allowed?: boolean;
   reason?: string;
   remaining?: number;
+  plan?: string;
+  limit?: number;
+  used?: number;
+  timezone?: string;
 };
+
+export type TryConsumeResult =
+  | { ok: true; consumed: boolean }
+  | {
+      ok: false;
+      quotaExceeded: boolean;
+      plan?: string;
+      limit?: number;
+      used?: number;
+      notice: string;
+      offerUpgrade: boolean;
+      resetsAt: string;
+      timezone: string;
+    };
 
 /**
  * Atomically reserves one user send for today (UTC). Call before inserting the user message.
  *
- * `consumed` is true only when a free-tier daily slot was actually decremented
- * (i.e. not pro / exempt / skipped). Use it to decide whether a later failure
- * should refund the slot via `refundChatQuota`.
+ * `consumed` is true when a finite daily slot was decremented (remaining !== -1).
+ * Use it to decide whether a later failure should refund via `refundChatQuota`.
  */
 export async function tryConsumeChatQuota(
   supabase: SupabaseClient,
   userId: string
-): Promise<{ ok: true; consumed: boolean } | { ok: false; quotaExceeded: boolean }> {
+): Promise<TryConsumeResult> {
   if (skipChatQuota()) return { ok: true, consumed: false };
   if (isUnlimitedChatUserId(userId)) return { ok: true, consumed: false };
 
@@ -52,30 +79,35 @@ export async function tryConsumeChatQuota(
 
   if (error) {
     // RPC missing (migration not applied) — degrade gracefully, allow chat through.
-    // This prevents silent empty responses when quota DB functions don't exist yet.
     console.warn("[chatQuota] axe_chat_try_consume failed — allowing chat (quota skipped):", error.message);
     return { ok: true, consumed: false };
   }
 
   const row = data as TryConsumeRow;
   if (row?.allowed === false) {
+    const limit = typeof row.limit === "number" ? row.limit : 20;
+    const plan = row.plan ?? "free";
     return {
       ok: false,
       quotaExceeded: row.reason === "daily_limit",
+      plan,
+      limit,
+      used: row.used,
+      notice: chatQuotaFriendlyNotice({ plan, limit, used: row.used }),
+      offerUpgrade: shouldOfferChatUpgrade(plan),
+      resetsAt: nextUtcMidnightIso(),
+      timezone: CHAT_QUOTA_TIMEZONE,
     };
   }
 
-  // remaining === -1 means unlimited (pro/exempt) — nothing was decremented.
+  // remaining === -1 means unlimited (exempt) — nothing was decremented.
   const consumed = (row?.remaining ?? -1) !== -1;
   return { ok: true, consumed };
 }
 
 /**
- * Gives back one previously-reserved free-tier slot for today (UTC). Call when a
- * send was reserved but ultimately produced no AXE reply (e.g. the AI call
- * failed), so the user isn't charged for a message they never received.
- *
- * Best-effort: failures are logged, never thrown.
+ * Gives back one previously-reserved slot for today (UTC). Call when a
+ * send was reserved but ultimately produced no AXE reply.
  */
 export async function refundChatQuota(
   supabase: SupabaseClient,
@@ -90,4 +122,21 @@ export async function refundChatQuota(
   } catch (e) {
     console.error("[chatQuota] axe_chat_refund threw", e);
   }
+}
+
+/** Enrich a status payload with friendly reset/upgrade fields. */
+export function enrichChatQuotaPayload(raw: ChatQuotaPayload | null | undefined): ChatQuotaPayload {
+  if (!raw || !raw.ok) return raw ?? { ok: false };
+  const limit = raw.limit ?? 0;
+  const remaining = raw.remaining ?? 0;
+  const atLimit = limit > 0 && remaining === 0;
+  return {
+    ...raw,
+    timezone: raw.timezone ?? CHAT_QUOTA_TIMEZONE,
+    resetsAt: nextUtcMidnightIso(),
+    notice: atLimit
+      ? chatQuotaFriendlyNotice({ plan: raw.plan, limit, used: raw.used })
+      : undefined,
+    offerUpgrade: atLimit ? shouldOfferChatUpgrade(raw.plan) : false,
+  };
 }

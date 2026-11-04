@@ -317,30 +317,43 @@ check("paid checkout CTAs go through login to /upgrade, not a bare Stripe guess"
   assert.equal(safeAppPath("/login"), DEFAULT_AFTER_LOGIN);
 });
 
-check("the page does not claim systems that are not running", () => {
+check("the page claims the systems that actually run", () => {
   const tiersSrc = read("src/lib/billing/tiers.ts");
   assert.match(landing, /ten minutes|10-minute|every ten minutes/);
-  assert.match(landing, /Price alerts in the app/);
-  assert.ok(!/Push alerts with deep links/i.test(landing));
-  assert.ok(!/Server-triggered push that opens the right screen/i.test(landing));
-  assert.ok(!/Persistent memory|Vector RAG memory|axe_memories/i.test(landing));
-  assert.ok(!/Persistent memory|Vector RAG memory/i.test(tiersSrc));
-  assert.ok(!/same AXE memory/i.test(landing), "do not sell AXE memory as live");
+  assert.match(landing, /Price alerts/);
+  assert.match(tiersSrc, /"Push notifications"/);
+  assert.match(tiersSrc, /Full auto journal/);
+  assert.match(tiersSrc, /Account health monitoring/);
+  assert.match(landing, /Push notification delivery is live/);
+  assert.match(landing, /background watcher fires/i);
+  assert.match(landing, /live per-firm drawdown/i);
+  assert.match(landing, /auto-journal/i);
+  assert.ok(!/Push notification delivery is not live/i.test(landing));
+  assert.ok(!/background watcher is not firing alerts/i.test(landing));
+  assert.ok(!/no live per-firm drawdown alert/i.test(landing));
+  assert.ok(!/Automatic journal labels are not running/i.test(landing));
+  assert.ok(!/\bEncrypted\b/.test(landing), "do not sell encryption as a regulatory claim");
+  assert.ok(!/AFM-licensed|MiFID|CySEC|NFA registered/i.test(landing));
+  assert.ok(!/same AXE memory/i.test(landing), "do not sell a shared AXE memory slogan");
   assert.ok(!/same AXE memory/i.test(switcher), "the switcher must not sell AXE memory either");
-  assert.ok(
-    !/account and\s+memory/i.test(landing),
-    "waitlist must not promise memory on Trading OS",
-  );
-  assert.ok(!/Full auto journal/i.test(landing));
-  assert.ok(!/Full auto journal/i.test(tiersSrc));
-  assert.ok(!/"Push notifications"/.test(tiersSrc));
-  assert.match(landing, /no live per-firm drawdown alert/i);
-  assert.match(landing, /Automatic journal labels are not running|automatic labels are not running/i);
-  assert.match(landing, /Push notification delivery is not live/);
-  assert.match(landing, /background watcher is not firing alerts/i);
-  assert.ok(!/Account health monitoring/i.test(tiersSrc), "do not sell watcher-style account monitoring");
+  assert.ok(!/Vector RAG memory|axe_memories/i.test(landing));
   assert.ok(!/streams it live, right next to your chart/i.test(landing));
   assert.ok(!/visible in real time/i.test(landing));
+});
+
+check("Founder is €40/mo limited to the seat cap, in copy and checkout", () => {
+  const founder = AXE_BILLING_TIERS.find((t) => t.id === "founder");
+  assert.equal(founder?.priceEurMonthly, 40);
+  assert.equal(FOUNDER_SEAT_CAP, 100);
+  assert.equal(founder?.badge, "100 spots");
+  assert.match(founder?.headline ?? "", /limited to 100/);
+  assert.ok(
+    (founder?.extraBenefits ?? []).some((line) => /€40\/mo/.test(line)),
+    "checkout/tier copy must name €40/mo",
+  );
+  assert.ok(landing.includes("LANDING_CHECKOUT_HREF"), "paid CTAs must use the checkout href");
+  assert.match(landing, /founderPrice/);
+  assert.match(landing, /\{FOUNDER_SEAT_CAP\}/);
 });
 
 check("Try the live demo opens the no-login device mock", () => {
@@ -553,8 +566,11 @@ check("the mock walks the current five-tab shell plus the rest of the app", () =
   assert.ok(!/SPY 1\.2M/.test(heroMock), "do not ship fabricated dark-pool prints in the mock");
   assert.ok(/Not configured/i.test(heroMock), "UW tiles in the mock must say not configured");
   assert.ok(/ten minutes/i.test(heroMock), "the mock must say MT5 syncs on the ten-minute cadence");
-  assert.ok(/Push notification delivery is not live/i.test(heroMock));
-  assert.ok(/background watcher is not firing alerts/i.test(heroMock));
+  assert.ok(/Push notification delivery is live/i.test(heroMock));
+  assert.ok(/background watcher fires/i.test(heroMock));
+  assert.ok(/Live per-firm drawdown alert/i.test(heroMock));
+  assert.ok(!/Push notification delivery is not live/i.test(heroMock));
+  assert.ok(!/background watcher is not firing alerts/i.test(heroMock));
 });
 
 check("both devices are there, at real logical sizes", () => {
@@ -585,6 +601,46 @@ check("the block lights its dot grid on hover, touch and focus", () => {
 
 check("the hero placeholder mockup line is gone", () => {
   assert.ok(!/Interactive dashboard mockup loading in future builds/.test(landing));
+});
+
+check("the words only we know are explained where a visitor meets them", () => {
+  // From the read-through in docs/LANDING-DOORLOOP.md: the page used terms
+  // that make sense to whoever built it and to nobody arriving cold. A
+  // beginner who hits three of them in the first screen concludes the product
+  // is not for them, which is the opposite of what the page is for.
+  //
+  // The rule is explain, not remove. "Order blocks" is a real selling point
+  // for the trader who knows it; it just cannot be the first thing an
+  // outsider reads with no handhold.
+  const copy = readFileSync(
+    new URL("../src/lib/marketing/landingCopy.ts", import.meta.url),
+    "utf8",
+  );
+
+  const jargon = [
+    {
+      term: "GDELT",
+      explained: /world events from GDELT|GDELT[^."]{0,40}(event|news)/i,
+      why: "a database name says nothing on its own",
+    },
+    {
+      term: "depth",
+      explained: /estimated depth|synthetic|live bid\/ask|calculated|measured/i,
+      why: "depth must say what is measured vs calculated, never imply a real order book",
+    },
+  ];
+
+  for (const { term, explained, why } of jargon) {
+    if (!new RegExp(term, "i").test(copy)) continue;
+    assert.ok(explained.test(copy), `"${term}" appears unexplained — ${why}`);
+  }
+
+  // iFVG in a headline was the sharpest case: an abbreviation of an
+  // abbreviation, three levels deep, above the fold of a feature list.
+  assert.ok(
+    !/title: "[^"]*iFVG/.test(copy),
+    "an abbreviation of an abbreviation should not carry a headline",
+  );
 });
 
 console.log(`\n${passed} checks passed`);

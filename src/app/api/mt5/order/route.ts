@@ -1,6 +1,10 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { placePaperOrder } from "@/services/paperOrderService";
+import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
+import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
+import { validateStopLimit } from "@/lib/trading/advancedOrders";
 import {
   clientPlaceOrder,
   MetaApiRequestError,
@@ -19,12 +23,15 @@ export const dynamic = "force-dynamic";
  *   2. MetaApi configured — without a token nothing goes anywhere.
  *   3. Body validation — symbol / volume / actionType + numeric sanity.
  *   4. Account ownership — the broker_account row must belong to this user.
- *   5. Demo refusal — AXE Demo Account never receives a real broker order.
- *   6. MetaApi link required — only `cloud_mt5` accounts with an external id.
+ *   5. Practice accounts fill here and return — nothing reaches a broker.
+ *   6. MetaApi configured + linked — only `cloud_mt5` accounts with an
+ *      external id, and only once we know a real order is being sent.
  *   7. Live-trading flag — user must have acknowledged risks server-side
  *      (mirror of the UI gate; required so a direct API call from a
  *      modified client cannot bypass the in-app disclaimer).
- *   8. Volume cap — server-side ceiling so a UI bug can't send 100 lots.
+ *   8. Trade guard — account rules / daily loss / news / autonomy, evaluated
+ *      against *this* brokerAccountId (not active_account_id). Fail-closed.
+ *   9. Volume cap — server-side ceiling so a UI bug can't send 100 lots.
  *
  * The client is also responsible for the 30-min arming window and the
  * per-order final-confirm modal, but those are UX safeguards. This route is
@@ -35,10 +42,19 @@ type OrderBody = {
   brokerAccountId: string;
   symbol: string;
   side: "buy" | "sell";
-  orderType: "market" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop";
+  orderType:
+    | "market"
+    | "buy_limit"
+    | "sell_limit"
+    | "buy_stop"
+    | "sell_stop"
+    | "buy_stop_limit"
+    | "sell_stop_limit";
   /** Lots, e.g. 0.10. */
   volume: number;
   openPrice?: number | null;
+  /** Alleen voor *_stop_limit: de limietorder die na de trigger in het boek komt. */
+  stopLimitPrice?: number | null;
   stopLoss?: number | null;
   takeProfit?: number | null;
   /** Slippage in points. */
@@ -58,10 +74,6 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return errJson(401, "unauthorized", "Sign in to place orders.");
 
-  if (!getMetaApiToken()) {
-    return errJson(503, "provider_not_configured", "MetaApi token is not configured on this server.");
-  }
-
   let body: OrderBody;
   try {
     body = (await request.json()) as OrderBody;
@@ -76,6 +88,7 @@ export async function POST(request: NextRequest) {
     orderType,
     volume,
     openPrice,
+    stopLimitPrice,
     stopLoss,
     takeProfit,
     slippage,
@@ -96,13 +109,40 @@ export async function POST(request: NextRequest) {
     orderType !== "buy_limit" &&
     orderType !== "sell_limit" &&
     orderType !== "buy_stop" &&
-    orderType !== "sell_stop"
+    orderType !== "sell_stop" &&
+    orderType !== "buy_stop_limit" &&
+    orderType !== "sell_stop_limit"
   ) {
-    return errJson(400, "invalid_order_type", "orderType must be market/buy_limit/sell_limit/buy_stop/sell_stop.");
+    return errJson(
+      400,
+      "invalid_order_type",
+      "orderType must be market/buy_limit/sell_limit/buy_stop/sell_stop/buy_stop_limit/sell_stop_limit.",
+    );
   }
   if (typeof volume !== "number" || !Number.isFinite(volume) || volume < MIN_VOLUME_LOTS || volume > MAX_VOLUME_LOTS) {
     return errJson(400, "invalid_volume", `volume must be between ${MIN_VOLUME_LOTS} and ${MAX_VOLUME_LOTS} lots.`);
   }
+  const isStopLimit = orderType === "buy_stop_limit" || orderType === "sell_stop_limit";
+  if (isStopLimit) {
+    // De limietprijs hoort aan de goede kant van de stop: na het triggeren
+    // komt er een gewone limietorder in het boek, en een koop-limiet hoort
+    // onder de markt. Staat hij verkeerd, dan weigert de broker — en staat
+    // hij goed maar te ver weg, dan triggert de order en ligt er niets,
+    // terwijl de trader denkt dat hij in de markt zit. De marktprijs hebben
+    // we hier niet, dus de stopkant blijft ongetoetst; de limietkant is de
+    // regel die ertoe doet. Zie src/lib/trading/advancedOrders.ts.
+    if (typeof openPrice !== "number" || typeof stopLimitPrice !== "number") {
+      return errJson(400, "missing_stop_limit_price", "A stop-limit order needs both openPrice and stopLimitPrice.");
+    }
+    const verdict = validateStopLimit({
+      side,
+      stopPrice: openPrice,
+      limitPrice: stopLimitPrice,
+      market: null,
+    });
+    if (!verdict.ok) return errJson(400, verdict.reason, "The stop-limit prices do not form a placeable order.");
+  }
+
   if (orderType !== "market") {
     if (typeof openPrice !== "number" || !Number.isFinite(openPrice) || openPrice <= 0) {
       return errJson(400, "missing_open_price", "Pending orders require a valid openPrice.");
@@ -125,12 +165,50 @@ export async function POST(request: NextRequest) {
   if (accountErr) return errJson(500, "account_lookup_failed", accountErr.message);
   if (!account) return errJson(404, "account_not_found", "That broker account is not on your workspace.");
 
+  // Practice account: filled here, against a real spread where one is
+  // available, and never sent to a broker. This used to be a flat 409, which
+  // was true and made the account useless for practising. Build-list item 10.
+  //
+  // Pending order types are not simulated yet — a limit that has to wait for
+  // the market needs a watcher, and claiming to place one that never fills
+  // would be worse than saying so.
   if (account.connection_method === "demo_paper" || account.provider === "demo") {
-    return errJson(
-      409,
-      "demo_account",
-      "AXE Demo Account is virtual — paper trades never reach a broker. Switch to a connected MT5 account to send live orders.",
-    );
+    if (orderType !== "market") {
+      return errJson(
+        409,
+        "paper_market_only",
+        "Practice accounts fill market orders only — a pending order needs a live broker to sit on the book.",
+      );
+    }
+
+    const result = await placePaperOrder(supabase, user.id, {
+      accountId: account.id as string,
+      symbol: symbol.trim().toUpperCase(),
+      side,
+      volume,
+      stopLoss: stopLoss ?? null,
+      takeProfit: takeProfit ?? null,
+      comment: comment ?? null,
+    });
+
+    if (!result.ok) {
+      const status = result.code === "paper_table_missing" ? 503 : 400;
+      return errJson(status, result.code, result.message);
+    }
+
+    return Response.json({
+      ok: true,
+      paper: true,
+      positionId: result.positionId,
+      openPrice: result.openPrice,
+      quoteOrigin: result.quoteOrigin,
+      note: result.note,
+    });
+  }
+
+  // Everything below sends a real order, and needs the provider for it.
+  if (!getMetaApiToken()) {
+    return errJson(503, "provider_not_configured", "MetaApi token is not configured on this server.");
   }
 
   if (account.connection_method !== "cloud_mt5" || !account.external_connection_id) {
@@ -163,6 +241,35 @@ export async function POST(request: NextRequest) {
     );
   }
 
+
+  // Prop-firm / risk guard. Must run before MetaApi sees the order. Uses the
+  // request's brokerAccountId so a trader with two books cannot bypass the
+  // funded account's rules by keeping a live account active in prefs.
+  const guard = await decideAutoTradeAllowed(
+    supabase,
+    user.id,
+    symbol.trim(),
+    volume,
+    /* attended */ true,
+    {
+      entryPrice: orderType === "market" ? null : openPrice ?? null,
+      stopLoss: stopLoss ?? null,
+      brokerAccountId,
+    },
+  );
+  if (!guard.allowed) {
+    await recordProactiveFeedEvent(
+      supabase,
+      user.id,
+      `order_blocked:${Date.now()}:${guard.reason}`,
+      `Order blocked: ${symbol.trim()}`,
+      guard.detail,
+      "/chart",
+      { push: false },
+    );
+    return errJson(403, guard.reason, guard.detail);
+  }
+
   const actionType: MetaApiOrderType = mapActionType(side, orderType);
   // Resolve the account's MetaApi region so the trade POST hits the right
   // host. Stored at connect time in metadata.metaapiRegion. Falls back to
@@ -181,6 +288,7 @@ export async function POST(request: NextRequest) {
     actionType,
     volume,
     openPrice: orderType === "market" ? null : openPrice ?? null,
+    stopLimitPrice: isStopLimit ? stopLimitPrice ?? null : null,
     stopLoss: stopLoss ?? null,
     takeProfit: takeProfit ?? null,
     slippage: slippage ?? null,
@@ -218,6 +326,8 @@ function mapActionType(side: "buy" | "sell", type: OrderBody["orderType"]): Meta
   if (type === "buy_limit") return "ORDER_TYPE_BUY_LIMIT";
   if (type === "sell_limit") return "ORDER_TYPE_SELL_LIMIT";
   if (type === "buy_stop") return "ORDER_TYPE_BUY_STOP";
+  if (type === "buy_stop_limit") return "ORDER_TYPE_BUY_STOP_LIMIT";
+  if (type === "sell_stop_limit") return "ORDER_TYPE_SELL_STOP_LIMIT";
   return "ORDER_TYPE_SELL_STOP";
 }
 

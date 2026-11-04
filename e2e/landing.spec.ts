@@ -19,8 +19,11 @@ test.describe("companion landing", () => {
     );
     await expect(page.getByText("Freya H.")).toHaveCount(0);
     await expect(page.getByText("Verified quotes")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");
-    await expect(page.getByRole("link", { name: /^(Start|Get started)$/ })).toHaveAttribute(
+    await expect(page.getByRole("banner").getByRole("link", { name: "Log in" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
+    await expect(page.getByRole("banner").getByRole("link", { name: /^(Start|Get started)$/ })).toHaveAttribute(
       "href",
       "/signup",
     );
@@ -46,8 +49,8 @@ test.describe("companion landing", () => {
     await expect(phone.getByText("Not configured").first()).toBeVisible();
     await phone.locator('button.tab[data-screen="home"]').click();
     await phone.locator('button.linkish[data-go="alerts"]').click();
-    await expect(phone.getByText("Push notification delivery is not live")).toBeVisible();
-    await expect(phone.getByText("The background watcher is not firing alerts")).toBeVisible();
+    await expect(phone.getByText("Push notification delivery is live")).toBeVisible();
+    await expect(phone.getByText("The background watcher fires price, drawdown and trailing-stop alerts")).toBeVisible();
 
     const ipad = page.frameLocator('iframe[title*="iPad"]').first();
     await expect(ipad.getByText("NO LOGIN")).toBeVisible();
@@ -68,8 +71,8 @@ test.describe("companion landing", () => {
   test("header actions stay on one line at 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const login = page.getByRole("link", { name: "Log in" });
-    const start = page.getByRole("link", { name: /^(Start|Get started)$/ });
+    const login = page.getByRole("banner").getByRole("link", { name: "Log in" });
+    const start = page.getByRole("banner").getByRole("link", { name: /^(Start|Get started)$/ });
     const loginBox = await login.boundingBox();
     const startBox = await start.boundingBox();
     expect(loginBox).toBeTruthy();

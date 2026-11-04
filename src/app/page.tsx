@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { ComplianceSiteFooter } from "@/components/legal/ComplianceSiteFooter";
 import { LandingDiscipline } from "@/components/marketing/landing/LandingDiscipline";
+import { LandingDemoSession } from "@/components/marketing/landing/LandingDemoSession";
 import { LandingFaq } from "@/components/marketing/landing/LandingFaq";
 import { LandingFeatureGrid } from "@/components/marketing/landing/LandingFeatureGrid";
+import { LandingGlowBand } from "@/components/marketing/landing/LandingGlowBand";
 import { LandingFinalCta } from "@/components/marketing/landing/LandingFinalCta";
 import { LandingHeader } from "@/components/marketing/landing/LandingHeader";
 import { LaunchHeroExperience } from "@/components/marketing/LaunchHeroExperience";
@@ -19,7 +21,7 @@ import { loadLandingCatalog } from "@/lib/marketing/loadLandingCatalog";
 export const metadata: Metadata = {
   title: "AXE Companion — the trader's phone OS",
   description:
-    "AXE Companion is the trader phone OS: chart, market depth, news, intel, one-tap execution, journal, AXE Feed and AXE chat. MT5 via MetaApi. Same login as Trading OS on the desk.",
+    "AXE Companion is the trader phone OS: chart, market depth, news, intel, one-tap execution, journal, push alerts and AXE chat. MT5 via MetaApi. Same login as Trading OS on the desk.",
 };
 
 /** Founder seats are read from the database on each request — do not bake 0. */
@@ -33,11 +35,20 @@ export default async function HomeLandingPage() {
       <LandingHeader />
       <LaunchHeroExperience />
       <LandingRevealCards />
-      <LandingSecondBrain />
-      <LandingShowcase />
-      <LandingIntelFeeds />
-      <LandingDiscipline />
+      <LandingGlowBand>
+        <LandingSecondBrain />
+      </LandingGlowBand>
+      <LandingGlowBand>
+        <LandingShowcase />
+      </LandingGlowBand>
+      <LandingGlowBand>
+        <LandingIntelFeeds />
+      </LandingGlowBand>
+      <LandingGlowBand>
+        <LandingDiscipline />
+      </LandingGlowBand>
       <LandingFeatureGrid />
+      <LandingDemoSession />
       <LandingTosBridge />
       <LandingMt5 />
       <LandingPricing catalog={catalog} />

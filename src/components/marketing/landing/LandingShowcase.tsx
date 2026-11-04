@@ -31,7 +31,7 @@ export function LandingShowcase() {
         <div className="axe-launch-intro-card axe-launch-intro-fg">
           <Image
             src="/landing/photos/axe_splash.jpg"
-            alt="AXE splash — secure, intelligent, encrypted"
+            alt="AXE splash — private command channel"
             width={1206}
             height={2190}
             className="h-full w-full object-cover object-top"

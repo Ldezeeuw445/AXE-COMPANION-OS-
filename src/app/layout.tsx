@@ -22,13 +22,13 @@ export const metadata: Metadata = {
     capable: true,
     title: "AXE Companion",
     statusBarStyle: "black-translucent",
-    startupImage: "/axe-icon-512.png",
+    startupImage: "/axe-icon-512.png?v=3",
   },
   icons: {
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [{ url: "/apple-touch-icon.png?v=3", sizes: "180x180", type: "image/png" }],
     icon: [
-      { url: "/axe-icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/axe-icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/axe-icon-192.png?v=3", sizes: "192x192", type: "image/png" },
+      { url: "/axe-icon-512.png?v=3", sizes: "512x512", type: "image/png" },
     ],
   },
   formatDetection: {

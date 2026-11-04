@@ -35,8 +35,16 @@ Niet "de code staat er". Af is:
    ```
 
    `shortCommit` moet gelijk zijn aan `git rev-parse --short HEAD`. Reken op
-   zes tot tien minuten. Een oude `builtAt` bij een nieuwe commit op `main`
-   betekent dat de build faalt — lees dan `/var/log/axe-autodeploy.log`.
+   zes tot tien minuten.
+
+   Een oude `builtAt` is op zichzelf géén alarm — hij betekent net zo goed dat
+   er sinds die build niets te bouwen viel. Op 29 oktober stond er een
+   `builtAt` van drie uur oud en was alles in orde: de laatste commit ervoor
+   wás de laatste commit. Controleer het verschil met
+   `git log --oneline <live-commit>..HEAD`: komt daar niets uit, dan loopt de
+   deploy gewoon achter op jouw push van zojuist en moet je wachten. Staan er
+   wél commits in die ouder zijn dan een kwartier, dan faalt de build en lees
+   je `/var/log/axe-autodeploy.log`.
 
    Dit endpoint bestaat omdat er twee keer verkeerd over de deploy geredeneerd
    is in plaats van hem te meten. Vertrouw de runbook niet, vraag het
@@ -71,6 +79,74 @@ Staat zo'n punt in de weg, schrijf dan op wat er van hem nodig is en pak het
 volgende. Niet eromheen bouwen.
 
 ## Harde grenzen, uit eerdere sessies
+
+- **Bij een klacht over uiterlijk: kijk naar het scherm voordat je aan CSS
+  draait.** Op 4 november zei Luka dat de landing "te donker" was. Ik las de
+  CSS, vond dat het cyaan op 0.03 stond waar een oudere versie 0.08 had, en
+  draaide dat terug — een hele ronde, met een eigen check eromheen, gepusht en
+  live. Het klopte alleen niet: toen hij zijn eigen bestand stuurde, bleek
+  "minder donker" te zitten in een verloop van `#3a3940` bovenaan naar
+  `#07080a` onderaan. Het accent was niet het probleem. Op een zwarte
+  achtergrond is het accent het enige licht, dus daar kijk je naar — en dan
+  vind je het verkeerde.
+
+  De les is niet "cyaan is fout". De les is dat de oorzaak van een klacht over
+  licht of donker bijna nooit in het accent zit maar in het grondvlak, en dat
+  één screenshot dat meteen laat zien. Playwright draait hier:
+  `executablePath: "/opt/pw-browsers/chromium"` met `--no-sandbox`, en de
+  landing rendert lokaal zonder `.env.local`. Dat kost twee minuten en had de
+  hele verkeerde ronde bespaard.
+
+  En: vraag om het bronbestand voordat je een ontwerp reconstrueert. Luka had
+  het, en het beantwoordde in één keer wat ik uit git aan het afleiden was.
+
+- **Een tabel wordt nooit aangemaakt zonder dat RLS in dezelfde uitvoering
+  aangaat.** Op 28 oktober liep `apply_migration` drie keer in een
+  bevestiging die een cloud-sessie niet kan beantwoorden. Ik knipte de
+  migratie toen in tweeën om er langs te komen, de eerste helft slaagde en de
+  tweede liep opnieuw vast — en precies die tweede helft was het
+  beveiligingsdeel. Gevolg: `public.paper_positions` stond een tijd lang open
+  voor de anon-sleutel, gemeten met een echte GET die `http 200` gaf. De tabel
+  was leeg, dus er lekte niets, maar de fout was dezelfde als die van de 34
+  `core_*`-policies die diezelfde ochtend gerepareerd zijn.
+
+  Moet een migratie opgesplitst worden, dan is de volgorde: eerst
+  `enable row level security`, dan pas de tabel vullen of openzetten. Een
+  tabel zonder policies is dicht; een tabel zonder RLS is open. Falen hoort
+  de veilige kant op te vallen.
+
+  En meet het na met een vraag die onderscheid maakt: een `GET` op een lege
+  tabel geeft `http 200` met `[]` of RLS nu aan staat of niet. Wat je wil
+  weten is `relrowsecurity` en of er een policy voor `anon` of `public`
+  bestaat.
+
+- **`REVOKE ... FROM PUBLIC` sluit `anon` niet buiten.** Supabase geeft elke
+  nieuwe functie in `public` een eigen grant aan `anon` via
+  `ALTER DEFAULT PRIVILEGES`, en die overleeft een revoke op `PUBLIC`. Een
+  migratie die netjes `REVOKE ALL ... FROM PUBLIC` doet en daarna aan
+  `authenticated` en `service_role` grant, laat `anon` dus gewoon staan.
+
+  Op 29 oktober kwam zo `axe_chat_daily_limit(uuid)` binnen: SECURITY DEFINER,
+  neemt een willekeurige user-id, en met de publieke anon-sleutel was van elk
+  account het abonnement af te lezen. In dezelfde sweep stonden ook drie
+  AXE Core-functies open — dáár was de grant wél `PUBLIC` (`=X/postgres` in
+  `proacl`), dus daar moest juist `FROM PUBLIC` eraf.
+
+  Lees daarom `proacl` in plaats van te gokken welke van de twee het is, en
+  meet achteraf met `has_function_privilege('anon', oid, 'EXECUTE')`. Die
+  vraag maakt onderscheid; "de revoke gaf geen fout" niet.
+
+- **Nooit een branch in zijn geheel mergen.** Elke oude branch draagt een
+  oudere `package.json` mee, en de `test`- en `verify`-ketens in main zijn
+  alleen maar gegroeid. Een hele merge gooit er dus checks uit zonder dat er
+  iets rood wordt: `cursor/realtime-companion-automation-merged` zou in één
+  keer negen verify-scripts wissen, de hele paper-trading-suite. Neem per
+  branch alleen wat echt nieuw is en laat `package.json` staan.
+
+  En meet of een branch nog werk heeft met een vraag die onderscheid maakt.
+  `git log main..branch` telt commits, en na een squash-merge staan die er
+  nog terwijl de inhoud al binnen is. Vergelijk de bomen rechtstreeks, over
+  alleen de bestanden die de branch zelf aanraakt — zie `docs/BRANCHES.md`.
 
 - **Nooit een sleutelwaarde in chat of in een commit.** Alleen namen van
   sleutels. Dat geldt ook voor logs die je plakt.
@@ -124,7 +200,28 @@ gemeten is.
    werkelijk geld maakt, en de watcher meldt het terwijl die sessie open staat.
    22 checks in `scripts/verify-playbook-edge.mjs`.
 
-2. **Stochastic en ADX op de chart tekenen.** De rekenkunde is af en bewezen
+2. ~~**Stochastic en ADX op de chart tekenen.**~~ **Af, `6815dec`, 28 oktober,
+   live gemeten.** Ze staan op de chart, met hun eigen asschaal (stoch tegen
+   80/20, ADX tegen 25 — niet 50, dat leest niemand op ADX) en met gaten waar
+   hun wiskunde geen antwoord heeft. Onderweg drie stille fouten gevonden en
+   gerepareerd: de paneHeight-sleutel staat in twee lijsten en ik vergat de
+   tweede; de opgeslagen panevolgorde werd gelezen met `parsed.length === 3`,
+   wat bij vijf panes elke oudere volgorde zou weggooien; en de pro-gate stond
+   op drie plekken hardgecodeerd op `m !== "macd"`, zodat stoch en ADX gratis
+   zouden zijn geweest. 15 checks in `scripts/verify-indicator-panes.mjs`,
+   vier mutaties bewezen dat ze omvallen. `normalizePaneOrder` en
+   `toSegmentedPath` staan nu in `src/lib/chart/` zodat ze toetsbaar zijn —
+   een regel in een component van 5.000 regels kan niemand controleren.
+
+   Wat hierna nog kan: Ichimoku, een echt Volume Profile (nu alleen de
+   POC-lijn), multi-timeframe overlays. Alle rekenkunde hoort in
+   `indicatorMath.ts` — daar is een check op. Elke nieuwe indicator krijgt
+   analytische testgevallen, geen onthouden getallen, en bij Wilder-smoothing
+   een tweede implementatie met de hand zodat een typefout niet met zichzelf
+   instemt. Een nieuwe pane toevoegen is nu: hem in `PANE_MODES` zetten en de
+   checks vertellen je de rest.
+
+   *Oorspronkelijke opdracht:* De rekenkunde is af en bewezen
    (`stochasticSeries` en `adxSeries` in `src/lib/chart/indicatorMath.ts`,
    51 checks in `scripts/verify-indicator-math.mjs`, waaronder Wilder's
    recurrence een tweede keer met de hand uitgeschreven). Wat nog mist is het
@@ -151,16 +248,105 @@ gemeten is.
    analytische testgevallen, geen onthouden getallen, en bij Wilder-smoothing
    een tweede implementatie met de hand zodat een typefout niet met zichzelf
    instemt.
-3. **`L19.8`** `alert_auto_trade_enabled` en het autonomieniveau zijn nog twee
-   aparte schakelaars voor hetzelfde. Eén maken.
-4. **`10.1`** Onboarding: tier kiezen → eigen MT5 koppelen, in één flow.
-5. **`3.1`** De learning arc tegen echte data valideren zodra er trades
-   binnenkomen.
-6. **Live ticks voor elk MT5-account.** Nagaan wat er al staat
-   (`chart_live_snapshots`, de SSE-route, de streamer) voor er iets bij komt.
+3. ~~**`L19.8`** `alert_auto_trade_enabled` en het autonomieniveau.~~ **Af,
+   `ab797f2`, 28 oktober, live gemeten.** Het waren er niet twee maar vier:
+   de voorkeur, de opt-in per alarm, het arm-venster en het autonomieniveau —
+   en twee ervan gaven helemaal geen signaal terug.
+   `evaluateAlertTradeGate` in `src/lib/trading/alertAutoTrade.ts` stelt de
+   vier vragen op één plek en noemt de poort die dicht zit, met het
+   autonomieniveau eerst: iemand met niveau 1 moet niet te horen krijgen dat
+   hij moet armen. Geen vijfde poort en geen enkele ruimer — een check loopt
+   alle zestien combinaties af en eist dat er precies één doorheen komt. Het
+   settings-scherm vraagt nu dezelfde functie als de server, dus scherm en
+   gedrag kunnen niet uit elkaar lopen. 11 checks in
+   `scripts/verify-alert-trade-gate.mjs`, drie mutaties bewijzen dat ze
+   omvallen.
 
-7. **Waarom deze trade — de herkomstregel.** Dit is wat Luka op 28 oktober
-   het hardst vroeg, en het gaat voor punt 2 tot en met 6. Op dit moment kan
+   *Oorspronkelijke opdracht en wat er toen uitgezocht is:*
+
+   - `alert_auto_trade_enabled` (boolean) wordt gelezen in
+     `src/services/alertAutoTradeService.ts` regel 30 en stopt daar alles.
+   - Het autonomieniveau wordt gewogen in
+     `src/services/tradeGuardService.ts` regel 182, via
+     `autonomyAllows("place", …)`.
+
+   Ze staan in AND, dus onveilig is het niet. Verwarrend wel: een trader kan
+   niveau 3 helemaal inrichten, drie limieten invullen, drie vinkjes zetten —
+   en er gebeurt niets, omdat er elders nog een schakelaar uit staat. Of
+   andersom, en dan denkt hij klaar te zijn terwijl de guard hem tegenhoudt.
+
+   De vorm die past bij de rest: één pure functie die zegt *of* een alert mag
+   handelen en **waarom niet**, met dezelfde opzet als `resolveAutonomy` en
+   `provenanceBlocks` — een lijst redenen, leeg betekent gaan. De UI toont dan
+   de ladder, en de losse toggle wordt wat hij werkelijk is: een per-alarm
+   uitzondering, geen tweede hoofdschakelaar. Let op dat de bestaande
+   `readAlertAutoTradeEnabled` op de alert-metadata (per alarm) iets anders is
+   dan de voorkeur op de gebruiker — die twee niet samenvoegen.
+
+   En de herkomstregel hoort hier meteen aangesloten: `provenanceBlocks`
+   weigert al een order zonder leesbare reden, maar `alertAutoTradeService`
+   roept hem nog niet aan.
+4. ~~**`10.1`** Onboarding: tier kiezen → eigen MT5 koppelen.~~ **Af,
+   28 oktober.** De flow eindigde op de chart met alleen voorkeuren opgeslagen.
+   Er is nu een laatste stap die de twee ontbrekende dingen noemt met hun
+   gevolg — account vóór plan, want dat is de eerlijke volgorde — en die niet
+   blokkeert. `describeSetupGaps` leest de chat-limiet uit `tiers.ts` in plaats
+   van hem over te typen, en een lopende fetch mag nooit als "je bent klaar"
+   lezen: dat was de bug die ik zelf maakte en die een check nu vastlegt.
+5. ~~**`3.1`** De learning arc tegen echte data valideren.~~ **Af,
+   29 oktober.** Er staan 501 afgesloten trades van 3 traders in productie.
+   De arc is op de 16 echte trades van één trader gedraaid en naast een
+   onafhankelijke SQL-telling gelegd: symbolen, P/L en sessieverdeling kwamen
+   exact overeen, en de suffix-normalisatie deed zijn werk op `XAUUSD.x` en
+   `BTCUSD.nx` zonder `US30` te raken.
+
+   De fout die alleen bij echte data opvalt: de kop zei "in the last 90 days"
+   als vaste tekst terwijl het venster als `ARC_WINDOW_DAYS` in de service
+   stond. Eén feit op twee plekken drift stil. Nu één bron.
+
+   De validatie zelf draaide in de scratchpad, niet in de repo: het is
+   handelsdata van echte gebruikers en die hoort niet in een publieke
+   geschiedenis. Wat ervan terugkomt zijn de checks met de spellingen erin
+   die er werkelijk staan.
+6. ~~**Live ticks voor elk MT5-account.**~~ **Nagegaan op 28 oktober — het
+   staat er al en het draait. Geen code geschreven, met opzet.**
+
+   De opdracht was expliciet "nagaan voor er iets bij komt", en dat was
+   terecht: de streamer in `node/metaapi-streamer/` draait in dynamic mode,
+   leest zelf alle actieve `cloud_mt5`-accounts uit Supabase, start per
+   account een stream en heeft een reconciliation-loop die nieuwe accounts
+   oppikt. Daarnaast bestaan de websocket (Cloudflare `ChartLiveRoom`), de
+   SSE-fallback op `/api/chart/live` en een REST-poller die stilvalt zodra de
+   streamer echte ticks levert.
+
+   Gemeten tegen productie, niet aangenomen:
+
+   - `chart_live_snapshots`: nieuwste rij **0,35 seconden oud**, 340 rijen
+     over 54 accounts.
+   - Van de drie actieve `cloud_mt5`-accounts hebben er **drie** verse ticks
+     binnen tien minuten. Nul zonder.
+
+   Hier was dus niets te bouwen. Wat de meting wél liet zien, als losse
+   observatie en niet als dit punt: de 39 actieve `cloud_alpaca`-accounts
+   krijgen geen live ticks. Dat is geen bug maar een ontwerpkeuze — Alpaca
+   haalt bars via REST op (`src/lib/alpaca/bars.ts`) en de streamer is
+   MetaApi-only. Wil je daar ooit een live feed bij, dan is dat een eigen
+   punt met een eigen afweging over kosten.
+
+7. ~~**Waarom deze trade — de herkomstregel.**~~ **Af, `7964012`, 28 oktober,
+   live gemeten.** `src/lib/axe/provenance.ts`: herkomst reist als data mee
+   met het idee — bron, regel, getal, staat van dienst, en wanneer het
+   gemeten is. Een ongetoetste regel zegt dat hij ongetoetst is, een dunne
+   steekproef wordt in aantallen gemeld en nooit als percentage, en
+   `provenanceBlocks` weigert een order waarvan de redenering ontbreekt of
+   hol is — suggereren mag zonder, voorbereiden en plaatsen niet. 17 checks
+   in `scripts/verify-provenance.mjs`, waarvan twee de watcher lezen zodat
+   dit geen laag wordt die niemand invult. De playbook-edge is de eerste
+   bron die hem vult; `alertProvenance` staat klaar voor de tweede.
+   Wat nog mist: de regel zichtbaar maken in de UI onder het idee.
+   Oorspronkelijke opdracht hieronder, want de rest ervan staat nog open.
+
+   *Dit was wat Luka op 28 oktober het hardst vroeg.* Op dit moment kan
    AXE een idee sturen en een order voorbereiden (`autonomy.ts` niveau 2), maar
    nergens staat in één leesbare regel waar dat idee vandaan komt. De bronnen
    bestaan los van elkaar: `playbookEdge.ts` (je eigen afgesloten trades),
@@ -172,21 +358,190 @@ gemeten is.
    met een reden die niemand kan nalezen. Bouw het als één type dat elke bron
    invult, niet als een tekstje per bron. Hierna kan AXE Core hem ook lezen.
 
-8. **De 40 kwetsbaarheden in de dependencies.** `npm ci` meldt er 40, waarvan
+8. ~~**De 40 kwetsbaarheden in de dependencies.**~~ **Gedaan wat kon,
+   28 oktober.** Zeven weg binnen semver (axios, undici, brace-expansion,
+   js-yaml, browserslist, build-tooling); 33 blijven staan. `npm audit fix`
+   lost ze wél op maar trekt `@reown/appkit` en zijn wagmi-adapter uit elkaar,
+   waarna de typecheck faalt op `WalletsAppKitProvider.tsx` — geprobeerd,
+   gemeten, teruggedraaid. Negentien van de 33 zijn de wallet-stack zonder
+   patch, zes zijn build-gereedschap dat nooit bij een gebruiker draait.
+   Het volledige verhaal staat in `docs/VOOR-LUKA.md` punt 4; de major bump
+   van de wallet-stack vraagt dat iemand daarna echt verbindt met een wallet,
+   en dat kan een autopilot-sessie niet.
+
+   *Oorspronkelijke opdracht:* `npm ci` meldt er 40, waarvan
    29 high. Dat zit in packages, niet in onze code, en het blokkeert niets —
    maar het hoort niet te blijven staan in iets waar straks mensen voor
    betalen. Draai `npm audit`, los op wat zonder breaking change kan, en zet
    wat een major bump nodig heeft in `docs/VOOR-LUKA.md` met het risico erbij.
    Lockfile mee committen, koude build erna, anders telt het niet.
 
-9. **De landing page één keer helemaal doorlopen met verse ogen.** Hij staat
+9. **De landing page — doorloop gedaan, aanpassen moet nog.** De bevindingen
+   staan in `docs/LANDING-DOORLOOP.md` (28 oktober): de hero verkoopt een
+   featurelijst in plaats van het ene verschil dat MT5 en TradingView niet
+   kunnen namaken, er staan vier knoppen in de hero, vier secties zeggen vier
+   keer "het is slim en het is één systeem", en er staan dertig claims onder
+   een kop die belooft dat er niets te veel op staat.
+
+   Daar staat ook de volgorde van aanpakken. Alleen stap 1 (de hero) vraagt
+   Luka's oordeel, want dat is zijn positionering; stap 2 tot 4 kan een
+   autopilot-sessie doen zodra die richting vaststaat. Niet alle veertien
+   secties in één commit.
+
+   **Stap 3 (jargon) is af, 29 oktober.** "depth" en GDELT worden nu uitgelegd
+   waar een bezoeker ze tegenkomt, en de iFVG-kop is uitgeschreven. De hero is
+   bewust niet aangeraakt: die hoort bij stap 1 en is Luka's keuze. "phone OS"
+   blijft daarom ook staan — hem alleen in de lagere secties vervangen zou de
+   pagina met zichzelf in tegenspraak brengen.
+
+   **Stap 2 en 4 wachten nog op die ene keuze.** Welke twee van de vier
+   "slim"-secties blijven, en hoe kort de featurelijst mag, volgt uit wat de
+   hero belooft. Vooruitlopen levert werk op dat weer weg moet.
+
+   *Oorspronkelijke opdracht:* Hij staat
    er (veertien secties, `src/app/page.tsx`) en hij is af genoeg om te tonen.
    Wat niet gemeten is: of iemand die AXE niet kent binnen tien seconden snapt
    wat het doet. Doe het als lezer, niet als bouwer: schrijf eerst op wat er
    onduidelijk, druk of dubbel is, en pas daarna aan. Rustiger maken betekent
    bijna altijd iets weghalen. Niet alle veertien secties in één commit.
 
-10. **Een paper-account om op te testen.** `/demo` leidt sinds de 182 anonieme
+10. ~~**Een paper-account om op te testen.**~~ **Helemaal af, 30 oktober.**
+    Luka vroeg hier op 28 oktober expliciet om.
+
+    De cron die hier nog aan ontbrak hoefde niet van Luka te komen. Tien
+    Companion-sweeps liepen al via pg_cron in Supabase, en daar kan een
+    sessie zelf bij: `axe-companion-paper-stops` draait nu elke twee minuten
+    via dezelfde `axe_ops.dispatch_cron` als de rest, dus met dezelfde
+    `CRON_SECRET` uit de vault. Eerst één keer met de hand aangeroepen om te
+    zien of de route het deed (`200`, `{"ok":true,"checked":0,...}`), pas
+    daarna ingepland; de eerste geplande run om 14:48 deed hetzelfde.
+    `scripts/vps.crontab` noemt hem nu in de pg_cron-lijst, zodat niemand
+    hem er later ook als host-cron bij zet.
+
+    Wat nagekeken is: `demo_paper`-accounts bestaan al (175 stuks), maar
+    `/api/mt5/order` weigert ze met een 409 — het is iets om naar te kijken,
+    niet om op te oefenen. `broker_trades` is waar journal, `playbookEdge` en
+    de learning arc uit lezen, dus een paper-trade die daar landt laat de
+    hele keten vanzelf werken. Geen nieuwe tabel nodig voor afgesloten trades.
+
+    **Af en bewezen:** `src/lib/trading/paperBroker.ts`, 24 checks. De
+    ontwerpregel die het waard maakt: papier vult aan dezelfde kant van de
+    spread als echt geld. Een koop vult op de ask, een verkoop op de bid, en
+    sluiten kruist terug — wie op de mid vult laat elke scalp-strategie één
+    spread per trade beter lijken dan hij is, en dat is precies de marge die
+    live het verschil maakt. Verder: een long's stop wordt tegen de **bid**
+    gemeten, een gat door de stop vult op het gat en niet op de stop, en een
+    bar die stop én doel raakte neemt de stop — binnen één bar is er geen
+    bewijs welke eerst kwam, en je eigen onwetendheid in je voordeel
+    beslechten is hoe een simulator een verliesweek in een winstweek
+    verandert. `PAPER_LIMITS` noemt wat het niet modelleert (swap, commissie,
+    slippage, margin call), want alles daarvan maakt papier mooier dan live.
+
+    Onderweg een onbereikbare tak gevonden: de "stop wint"-regel kon met één
+    quote nooit afgaan, omdat een long altijd op de bid sluit. Daar staat nu
+    `evaluatePaperStopsOnBar` voor, waar de regel wél echt is — gevonden
+    doordat een mutatietest níet omviel.
+
+    **Ook af:** `src/lib/trading/paperQuoteSource.ts`, 12 checks. Dit beslecht
+    de vraag die punt 10 eigenlijk stelt. Het demo-account prijst zichzelf met
+    een seeded random walk (`getDemoQuotePrice`) — prima om de knoppen te
+    leren, waardeloos als meting. En die trades landen in dezelfde
+    `broker_trades`-rijen die `playbookEdge` leest, dat er zinnen van maakt
+    over de *trader*: "jouw London XAUUSD longs winnen 64% van de tijd". Zonder
+    markering wordt een toevalsgenerator aan iemand teruggegeven als zijn edge.
+
+    Dus draagt elke quote zijn herkomst mee: `live` (echte bid/ask uit
+    `chart_live_snapshots`, telt mee), `simulated` (gegenereerd, telt nooit
+    mee) of `none` (dan geen fill — een paper-trade op een verzonnen prijs is
+    erger dan geen paper-trade). Een tick ouder dan 90 seconden is geen live
+    prijs meer. `countsAsEvidence` is de poort naar de learning arc.
+
+    Onderweg een echte bug gevonden doordat een check omviel: `Number(null)`
+    is `0` en `Number.isFinite(0)` is waar, dus een ontbrekende bid kwam er
+    doorheen als een prijs van nul en zou een order op niets vullen.
+
+    **Migratie geschreven, nog niet toegepast:**
+    `supabase/migrations/20261028140000_paper_positions.sql`. De
+    Supabase-koppeling vroeg om Luka's bevestiging en kreeg die niet — hij was
+    er niet. Het is een nieuwe tabel, dus niets breekt zolang hij wacht, en er
+    is nog geen code die hem leest. Staat in `docs/VOOR-LUKA.md` punt 5.
+
+    **Ook af: de order-route.** `/api/mt5/order` vult een demo-account nu via
+    `placePaperOrder` in plaats van 409 te geven. De tabel bestaat (RLS aan,
+    vier policies, niets open voor anon). 10 checks in
+    `scripts/verify-paper-order-route.mjs`, waarvan de belangrijkste eist dat
+    de paper-tak *returnt* — valt hij ooit door, dan gaat een oefenorder naar
+    een echte broker. Een mutatie die dat doet valt om.
+
+    De MetaApi-check stond vóór de accountlookup, zodat ook een papieren order
+    strandde als er geen token was. Die staat nu ná de paper-tak: papier heeft
+    geen broker nodig. Pending orders worden op papier geweigerd in plaats van
+    voorgewend — een limiet waar niets op wacht zou eeuwig blijven staan
+    terwijl de UI hem als geplaatst toont.
+
+    **Ook af: de stopbewaking.** `src/services/paperStopWatcher.ts` plus
+    `/api/cron/paper-stops`, 15 checks. Een stop die nooit afgaat is erger dan
+    geen stop: de trader oefent het plaatsen ervan en leert dat ze niet
+    uitmaken. Afgesloten posities gaan naar `broker_trades` met
+    `external_trade_id` als `paper:<uuid>` en `raw.counts_as_evidence`.
+
+    De regel die hier het meest toe doet: **een positie sluit tegen dezelfde
+    soort prijs als waarop hij opende.** Een positie gevuld op demo-prijzen en
+    gesloten op een echte tick levert het verschil tussen een verzonnen en een
+    echt getal — dat is geen winst of verlies, en het zou in het journaal
+    precies als een echt resultaat staan. Gevolg, met opzet: een live positie
+    waarvan de feed stilvalt blijft open in plaats van te sluiten op een
+    verouderde prijs. Een stop die te laat afgaat is zichtbaar en bespreekbaar;
+    een fill op een prijs die nooit bestond is geen van beide.
+
+    De trade wordt weggeschreven vóór de positie verdwijnt, en de rij hergebruikt
+    de positie-id als primary key — `broker_trades` heeft geen andere unieke
+    sleutel (nagekeken tegen het echte schema, niet aangenomen), dus dat is
+    wat de schrijfactie idempotent maakt als de sweep er tussenin uitvalt.
+
+    **Ook af: de posities zijn zichtbaar.** `loadPaperPositions` plus een tak
+    in `loadPositionsPageData`, 9 checks. De pagina eiste MetaApi en een
+    `cloud_mt5`-account, dus wie op papier handelde zag niets — orders gingen
+    erin en verdwenen, en dat is niet te onderscheiden van een kapotte app.
+    De waardering gebruikt dezelfde poort als de watcher
+    (`mayJudgeWith`): geen prijs van de eigen soort betekent een lege cel,
+    geen verouderd getal. "Nu niet bekend" is waar; een oud getal zegt met
+    volle overtuiging iets onwaars.
+
+    **Ook af: handmatig sluiten.** `closePaperPositionById` plus de tak in
+    `/api/mt5/close-position`, 6 checks erbij. Dezelfde prijsregel geldt ook
+    als de trader zelf op de knop drukt: een live positie waarvan de feed stil
+    is, kan niet gesloten worden — net zoals een broker dat weigert met een
+    dichte markt. Niet kunnen sluiten is vervelend en waar; een verzonnen
+    uitstapprijs is geen van beide.
+
+    **Hiermee is de keten rond:** order → positie → zichtbaar → stop of
+    handmatig → `broker_trades` → journal, playbookEdge, learning arc.
+
+    **En daarna meteen een gat gedicht dat ik zelf had gemaakt.** De markering
+    `raw.counts_as_evidence` werd vanaf dag één geschreven en door niemand
+    gelezen: tien services bevragen `broker_trades` en geen ervan kende het
+    veld. Een oefentrade op gegenereerde prijzen zou dus gewoon zijn
+    meegeteld, en `playbookEdge` had hem teruggegeven als "jouw London XAUUSD
+    longs winnen 64% van de tijd" — via het eigen journaal, waar een trader
+    alle reden heeft het te geloven. `src/lib/trading/tradeEvidence.ts` is nu
+    de enige plek die beslist, als PostgREST-filter zodat een service niet
+    duizend rijen kan ophalen en hem vergeten. Toegepast op weakSpots /
+    playbookEdge, de learning arc en wat AXE over de trader weet; níet op de
+    cockpit-tellingen, want "je sloot twaalf trades" is ook waar van
+    oefentrades. 10 checks in `scripts/verify-trade-evidence.mjs`.
+
+    Let op de richting van de standaardwaarde: **afwezig betekent telt mee.**
+    Elke rij van vóór het oefenaccount is een echte broker-fill, dus "onbekend
+    = uitsluiten" zou de hele handelshistorie van iedereen wissen. Een mutatie
+    die dat doet valt om.
+
+    **Wat nog moet:** alleen de cron-regel op de VPS. `/api/cron/paper-stops`
+    draait nergens vanzelf, dus stops gaan pas af als die regel er staat —
+    `docs/VOOR-LUKA.md` punt 6. Handmatig sluiten werkt wel zonder.
+    Daarna is dit punt af.
+
+    *Oorspronkelijke opdracht:* `/demo` leidt sinds de 182 anonieme
     accounts bewust naar `/login` en dat blijft zo — dit is geen anonieme
     sessie maar een echt account met een MetaApi-demo eronder, zodat trades,
     journal en de learning arc met echte prijzen lopen zonder geld. Dit raakt
@@ -235,6 +590,466 @@ En de licentiegrens blijft staan: **geen LSE-data in Companion of Trading OS.**
 Dat is geen openstaande vraag, dat is al besloten. Betere data voor Companion
 loopt via de providers die er al zijn — MetaApi, Finnhub, Polygon,
 AlphaVantage, FRED en de ForexFactory-kalender.
+
+---
+
+## Zo goed als MT5 en TradingView samen — gemeten, 29 oktober
+
+Luka's vraag: wat moet er nog gebeuren zodat Companion net zo goed is als MT5
+en TradingView bij elkaar. Hieronder staat wat er nu echt is en wat er echt
+mist, geteld in de code en niet geschat.
+
+**Wat Companion nu heeft.** Zes timeframes (M5, M15, M30, H1, H4, D1 —
+`chartTimeframes.ts`). Negen indicatoren: volume, MA, MACD, Bollinger, RSI,
+VWAP, POC, Stochastic, ADX, alle negen met analytische tests in
+`verify-indicator-math.mjs`. Tien SMC-lagen: structuur, order blocks, FVG,
+iFVG, PDH, PDL, PDQ, session open, swing points, supply/demand. Vijf
+teken-gereedschappen: fib retracement, trendlijn, rechthoek, tekst,
+horizontaal niveau. Orders: market, buy/sell limit, buy/sell stop, plus
+`modify-position`, `modify-order` en `cancel-order`, en SL/TP slepen op de
+chart. Smart alerts, journaal met AXE-score, learning arc, playbook-edge, de
+herkomstregel, en sinds deze week een paper-account.
+
+**De juiste maatstaf, en ik had hem eerst mis.** Ik vergeleek met MT5 en
+TradingView op de desktop. Luka corrigeerde dat op 29 oktober en hij heeft
+gelijk: Companion is een telefoon-app, dus de tegenstander is **MT5 mobile en
+TradingView mobile**. Dat is een heel ander gevecht, en wel te winnen.
+
+Wat die twee op een telefoon zijn:
+
+- **MT5 mobile** kan uitvoeren — alle timeframes, deelsluitingen, elk
+  ordertype — en is verder kaal. Geen journaal, geen uitleg, een chart waar
+  niemand vrijwillig naar kijkt.
+- **TradingView mobile** heeft de chart en het tekenen, en kan voor bijna
+  niemand een order naar zijn eigen broker sturen. Geen journaal, en het weet
+  niet wat je ooit verhandeld hebt.
+
+Dus de punten hieronder vallen in twee soorten, en dat verschil bepaalt de
+volgorde:
+
+**Inhaalwerk — dit hebben die apps al, dus het ontbreken valt op.** Punt 11
+(deel van een positie sluiten) en punt 12 (M1, W1, MN1) staan niet op deze
+lijst omdat ze indruk maken, maar omdat MT5 mobile ze heeft en wij niet. Een
+trader die hier zijn weekchart mist, gaat terug naar de app die hem wel heeft,
+en dan is de rest van wat wij bouwen niet meer relevant. Dit gaat voor.
+
+**Voorsprong — dit heeft geen van beide.** Het journaal met AXE's oordeel, de
+playbook-edge uit je eigen trades, de firm-regels die meebeslissen, de
+herkomstregel. Dat staat er al. Punt 13 (replay naast het paper-account) en
+punt 14 (het positie-gereedschap dat je dag-limiet kent) horen hier: dat kan
+TradingView niet bouwen, want zij kennen je account niet, en MT5 niet, want
+die vertelt nooit waarom.
+
+En de echte ambitie is niet Companion alleen. Companion plus Trading OS op één
+Supabase-project is waar dit heen gaat: alles van TradingView aan charts, plus
+een terminal die op jouw manier van handelen is gebouwd, plus een telefoon die
+precies daarvoor gemaakt is zodat je het altijd bij je hebt. Geen van beide
+concurrenten heeft die combinatie, en dat is het antwoord op "hoe wordt dit
+beter dan die twee" — niet door hun lijst in te halen, maar door iets te zijn
+wat zij niet zijn.
+
+Wat blijft staan: Companion haalt hun **desktop**-featurelijst niet in en moet
+dat niet proberen. 21 timeframes en Depth of Market horen niet op een telefoon.
+
+11. ~~**Deel van een positie sluiten.**~~ **Af, 29 oktober.** De route neemt
+    nu een `volume`; MetaApi krijgt het mee op `POSITION_CLOSE_ID` (de sleutel
+    wordt weggelaten bij een volledige sluiting, want een aanwezige `volume`
+    ís de deelsluiting-instructie). Papier kan het ook, met dezelfde regel —
+    anders leert het oefenaccount een gewoonte die het echte account niet
+    toestaat.
+
+    Het werk zat niet in de rekenkunde maar in het restant.
+    `src/lib/trading/partialClose.ts`: sluit 0,095 van 0,10 en er blijft 0,005
+    over, kleiner dan wat een broker verhandelt — de trader houdt iets over dat
+    hij niet meer kan sluiten, wijzigen of vergroten. Dat wordt hier geweigerd
+    met de twee uitwegen erbij (alles sluiten, of hoogstans zoveel), in plaats
+    van drie seconden later als brokerfout terug te komen.
+
+    `MIN_LOT` en `LOT_STEP` staan apart, ook al zijn ze allebei 0,01: zolang
+    ze hetzelfde getal zijn kan een restant alleen nul of minstens het minimum
+    zijn, en dan is de restantregel onbereikbaar — een regel die niet kan
+    vuren is er niet. Sommige brokers hebben stap 0,01 met minimum 0,10, en
+    daar is hij wél nodig.
+
+    20 checks in `scripts/verify-partial-close.mjs`, waarvan twee met een
+    nep-database die het echte gedrag uitvoeren. Dat was nodig: de versie die
+    alleen de broncode las liet een mutatie door die bij een deelsluiting de
+    hele positie verwijderde — de duurste fout die deze functie kan maken.
+
+    *Oorspronkelijke opdracht:* `src/app/api/mt5/close-position/route.ts`
+    neemt geen volume aan, dus een positie gaat heel dicht of niet. Dit is wat
+    een trader het vaakst doet na een winnende beweging: de helft eruit, de
+    rest laten lopen. Zonder dit moet hij naar MT5 om iets te doen wat hij
+    hier wilde doen, en dan komt hij niet terug. Dit is het grootste gat van
+    allemaal en het is klein werk: MetaApi neemt een volume mee bij close.
+    Let op de guard — een deelsluiting is geen nieuwe order, dus hij hoort
+    niet langs `autoTradeGuard` maar wel in het journaal, en de learning arc
+    moet twee fills op één trade kunnen lezen zonder dubbel te tellen.
+
+12. **~~W1 en MN1~~ af, 30 oktober. M1 wacht op een meting.**
+
+    De waarschuwing hierboven — meet eerst of de broker de timeframe
+    teruggeeft — bleek het antwoord in zich te dragen. Een weekcandle is geen
+    eigen meting; het is dezelfde prijs, grover bekeken. Dus komen W1 en MN1
+    niet van MetaApi maar worden ze uit de dagcandles gevouwen die de app al
+    ophaalt. Dan kan W1 niet leeg zijn als D1 werkt, hoeft geen enkele broker
+    `1w` te ondersteunen, en is er niets te meten dat mis kan gaan. Ze delen
+    daardoor ook de dag-cache: één ophaalactie bedient D1, W1 en MN1.
+
+    `src/lib/chart/aggregateCandles.ts`, 19 checks. De regel die het verschil
+    maakt is de weekgrens: die volgt de **brokerdag**, niet UTC. FX opent
+    zondagavond, en op een UTC-sleutel is dat een eigen dag van twee uur —
+    die zou als zijn eigen week eindigen, en dan ziet de trader op maandag
+    een weekcandle die alleen zondagavond bevat. `sessionDay.ts` had die
+    redenering al staan voor PDH/PDL; hier geldt hij opnieuw.
+
+    Drie mutaties getoetst en alle drie gevangen: de slotkoers uit de hoogste
+    close in plaats van de laatste (tekent een week die altijd sterk sluit),
+    de weekgrens op UTC, en de lopende week als voldragen candle. Die laatste
+    is geen detail: een halve week als afgeronde candle laat iemand een
+    omkeerpatroon zien dat vrijdag nog kan verdwijnen, dus draagt elke
+    gevouwen candle `complete`.
+
+    Onderweg ving een check een fout in mijn eigen code (`dailyCandlesNeeded`
+    telde een feestdagenmarge op bij D1, waar niets gevouwen wordt) en een in
+    het oefenaccount: `timeframeMs` kende `w1` niet en viel terug op een uur,
+    dus het demo-account tekende uurcandles met W1 erboven.
+
+    **M1 is bewust niet toegevoegd.** Dat is wél een eigen meting en kan
+    alleen van de broker komen. Die meting vraagt een MetaApi-token, en dat
+    staat op de host en niet in een sessie — niet in de Supabase-kluis
+    (daar staan alleen `axe_companion_cron_secret` en `axe_uptime_webhook`)
+    en niet in deze container. `timeframeMs` in `demoAccount.ts` kent `m1`
+    al, dus zodra iemand met het token kan meten of `1m` candles teruggeeft
+    voor de aangesloten brokers, is het toevoegen één regel in
+    `CHART_TF_MAP` en één in `CHART_TF_OPTIONS`.
+
+13. **Bar replay — de kern staat, de knop niet.** 30 oktober.
+
+    `src/lib/chart/replay.ts`, 14 checks. Het snijden is één regel; alles
+    eromheen gaat over vooruitkijken, en dat is een fout die zichzelf nooit
+    meldt. Een replay die ergens de toekomst doorlaat leert het
+    tegenovergestelde van wat hij belooft, en de trader merkt niets — zijn
+    resultaten worden er alleen maar beter van.
+
+    Drie regels maken het verschil:
+
+    - **De beslissing valt op een koers die je nog niet kende.** De laatste
+      zichtbare candle is dicht; zijn slotkoers staat er al. Wie daarop laat
+      vullen handelt op wat hij kende, en dat maakt elke oefening
+      winstgevend. Een order besloten op bar i vult op zijn vroegst op bar
+      i+1, en op de laatste bar kan er niet gehandeld worden.
+    - **De opwarmtijd.** Beginnen bij candle 3 met een EMA over 200 tekent
+      ruis die er als een signaal uitziet. De replay begint niet vóór de
+      langste periode die aanstaat.
+    - **Vier dingen komen uit het heden** en moeten weg: de live quote, de
+      tick-stroom, de dag-niveaus (die vertellen in één lijn waar de prijs
+      nog heen gaat) en de open posities. Ze staan in `REPLAY_SUPPRESSES`,
+      zodat er één plek is waar het staat en één plek waar het nagemeten
+      wordt.
+
+    De zwaarste check meet niet of het snijden klopt maar of de toekomst
+    écht niet lekt: zet een candle ver vooruit volledig op zijn kop, en geen
+    enkele zichtbare indicatorwaarde mag veranderen. Met een tweede check
+    ernaast dat een candle die wél zichtbaar is de indicator juist moet
+    verzetten — anders zou een functie die altijd dezelfde array teruggeeft
+    de eerste ook halen.
+
+    Vier mutaties getoetst en alle vier gevangen: de hele reeks teruggeven,
+    snijden op `index` in plaats van `index + 1`, vullen op de bar die al
+    dicht was, en de opwarmtijd overslaan.
+
+    **Wat er nog moet gebeuren, en waarom het niet in deze cyclus paste.**
+    `ChartScreen.tsx` is 5700 regels en raakt `data.candles` op vijftien
+    plekken aan — de live spiegel, de afstand tot het plan, de tekenlaag.
+    Replay inhangen betekent op elk van die plekken de zichtbare snede
+    gebruiken, de vier dingen uit `REPLAY_SUPPRESSES` uitzetten, en een
+    bediening (afspelen, stap, stoppen) neerzetten. Dat vraagt iemand die
+    het scherm kan zien. Half aansluiten is hier erger dan niet aansluiten:
+    dan is er een replay die op één plek alsnog het heden toont, en dat is
+    precies waar dit bestand tegen bestaat.
+
+    Daarna is de oefenlus rond, want `paperBroker.ts` kan al vullen op een
+    bar in plaats van op een quote (`evaluatePaperStopsOnBar`), en
+    `fillIndexFor` zegt welke bar dat moet zijn.
+
+14. **Het positie-gereedschap — de rekenkern staat, het scherm niet.**
+    31 oktober.
+
+    `src/lib/trading/positionPlan.ts`, 19 checks. De R:R uitrekenen kan
+    iedereen; de waarde zit in de regel erna. Niet "dit is 1,2% van je
+    account" maar "dit is 30% van wat je vandaag nog mag verliezen, en je
+    hebt al de helft op".
+
+    Daar zit ook de fout die dit stil scheeftrekt: **een firm-limiet hangt
+    niet aan je huidige equity maar aan een basis** — het startkapitaal, de
+    balans bij dagopening, een meelopende piek. Reken 4% over de equity van
+    nu en het klopt alleen op een dag dat er nog niets af is. Sta je 300 in
+    de min op een dagstart van 10.000, dan komt die fout op 388 uit in
+    plaats van 400 en houdt de trader zich in terwijl het niet hoeft. Sta je
+    in de plus, dan rekent hij de ruimte te groot en keurt hij de trade goed
+    die de trader eruit gooit. `amountForBasis` haalt elke basis uit zijn
+    eigen bedrag.
+
+    Verder: het aandeel is van wat er nog *over* is en niet van de hele
+    limiet (bij 400 toegestaan en 395 op is een risico van 10 niet 2,5% maar
+    meer dan de hele rest); al over de limiet geeft geen negatieve ruimte en
+    geen percentage, want "nog -20 over" is geen budget; een onbekende
+    limiet is niet onbeperkt en wordt onderscheiden van een bekende limiet
+    zonder basisbedrag, omdat dat tweede op te lossen is door de trader om
+    zijn dagstart te vragen; en de bindende limiet is die met de mínste
+    ruimte, niet die met het laagste percentage — een totale limiet van 10%
+    waar al 950 vanaf is, is krapper dan een daglimiet van 4%.
+
+    Een plan dat geen plan is wordt geweigerd in plaats van berekend. Een
+    long met de stop boven de entry is geen trade met een rare R:R, en er
+    een getal bij zetten is hoe een gereedschap onzin aanleert.
+
+    Vier mutaties getoetst en alle vier gevangen: rekenen over de equity in
+    plaats van de basis (388), het aandeel over de hele limiet (2,5% in
+    plaats van 10%), negatieve ruimte, en de bindende limiet op percentage
+    in plaats van op ruimte.
+
+    **Wat er nog moet gebeuren.** Het sleepbare plan bestáát al in
+    `ChartScreen.tsx`: `pendingOrderPrice`, `pendingStopLossPrice` en
+    `pendingTakeProfitPrice` zijn entry, stop en target. Wat ontbreekt is de
+    uitleesregel — en die kan nog niet, want de chart-pagina laadt het
+    account-profiel helemaal niet. Nergens in `loadChartPageData.ts` komt
+    `maxDailyLossPct` of het dagverlies voor. Aansluiten is dus eerst
+    serverwerk (profiel en dagverlies mee laden), dan pas de regel tekenen.
+
+### Twee kernen op rij zonder scherm — iets om op te merken
+
+Punt 13 en 14 zijn allebei geëindigd als een geverifieerde rekenkern zonder
+aansluiting. Dat is geen toeval: wat er nog ligt in de rij is grotendeels
+chart-UI, en `ChartScreen.tsx` is 5700 regels die een sessie niet kan zien
+draaien. Half aansluiten is daar erger dan niet aansluiten — bij replay
+levert het een replay op die de toekomst lekt, bij dit punt een risicoregel
+die het verkeerde getal toont.
+
+De kernen zijn echt werk en de checks vangen echte fouten, maar ze worden pas
+iets voor Luka als iemand ze aan het scherm hangt. Dat is het goede moment om
+te vragen of de autopilot hiermee door moet, of dat het scherm-werk iemand
+nodig heeft die het kan zien. Staat ook in `docs/VOOR-LUKA.md`.
+
+15. **Stop-limit af en aangesloten; trailing stop gebouwd, bewaker nog niet.**
+    1 november.
+
+    `src/lib/trading/advancedOrders.ts`, 19 checks. Beide ordervormen falen
+    op een manier die de trader niet ziet, en dat is waar het werk in zit.
+
+    **Stop-limit — aangesloten, end-to-end.** MT5 plaatst bij het raken van
+    de stopprijs een gewone limietorder. Een koop-limiet hoort onder de
+    markt, dus moet de limietprijs *onder* de stopprijs liggen bij een koop
+    en erboven bij een verkoop. Andersom weigert de broker. Het stillere
+    geval is de limiet die wél goed staat maar zo ver weg dat hij na het
+    triggeren nooit vult: de order is uit het boek, er ligt niets, en de
+    trader denkt dat hij in de markt zit. Dat weigert niet maar waarschuwt,
+    want de retest kopen is een geldige strategie — alleen zelden wat iemand
+    denkt in te stellen.
+
+    `ORDER_TYPE_BUY_STOP_LIMIT` en `ORDER_TYPE_SELL_STOP_LIMIT` zitten nu in
+    de MetaApi-client, `stopLimitPrice` gaat mee in de payload, en
+    `/api/mt5/order` accepteert `buy_stop_limit` en `sell_stop_limit` en
+    toetst de prijzen vóór ze naar de broker gaan. Zonder die toets krijgt de
+    trader een algemene brokerfout in plaats van te horen wat er mis is aan
+    zijn opzet. De marktprijs heeft de route niet, dus de stopkant blijft daar
+    ongetoetst; daarom is `market` in `validateStopLimit` optioneel en wordt
+    alleen de limietkant afgedwongen — de regel die ertoe doet.
+
+    **Trailing stop — de rekenkern staat, de bewaker niet.** De enige regel
+    die telt is dat hij nooit de verkeerde kant op beweegt. Een stop die met
+    een dalende markt meezakt is geen trailing stop maar een stop die zich
+    laat wegduwen, en die geeft de bescherming weg op het moment dat de markt
+    tegen de positie in loopt. Dat is ook precies het moment waarop niemand
+    meekijkt: een trailing stop zet je aan als je wég moet.
+
+    Daarom wordt die eigenschap niet met één aanroep getoetst maar over een
+    hele reeks: na elke stap mag de stop nooit teruggaan. Een fout die pas bij
+    de derde stap omslaat glipt anders door. Verder: een afstand onder de
+    `stopsLevel` van de broker beweegt niets en meldt dat, want een stop die
+    geweigerd wordt loopt niet mee terwijl er op het scherm niets verandert.
+
+    Zes mutaties getoetst en alle zes gevangen: trailing die beide kanten op
+    mag, de limietkant omgedraaid, de ondergrens genegeerd, kapotte invoer die
+    de bestaande stop weggooit, de route-validatie eruit, en de limietprijs
+    die niet meegestuurd wordt.
+
+    **Compleet op 4 november.** Luka draaide de migratie; daarna is in deze
+    volgorde gewerkt: de tabel nagemeten (RLS aan, vier policies, geen enkele
+    zonder voorwaarde, `anon` eraf), de route één keer met de hand aangeroepen
+    (`200`, `{"ok":true,"checked":0,...}`), en pas toen ingepland als
+    `axe-companion-trailing-stops`, elke twee minuten via pg_cron. Twee
+    geplande runs nagekeken, allebei `200`. Inplannen zonder eerst te meten
+    is hoe je een bewaker krijgt die stil faalt.
+
+    Kost niets zolang niemand een trailing stop gebruikt: de bewaker stopt
+    meteen als er geen rijen zijn en raakt MetaApi dan niet aan.
+
+    **Wat er daarna nog ligt voor trailing.** Er is geen bewaker die open
+    posities langsloopt en de stop verzet. Dat is dezelfde vorm als
+    `paperStopWatcher.ts` plus `/api/cron/paper-stops`: een service die per
+    positie `trailingStopUpdate` aanroept en bij `moved` een modify naar
+    MetaApi stuurt, en een cron-regel ernaast. De pg_cron-weg is er al
+    (`axe_ops.dispatch_cron`), dus dat kan zonder Luka. Twee dingen eerst
+    uitzoeken: waar de trailing-afstand per positie wordt opgeslagen, en of
+    MetaApi's `stopsLevel` per symbool op te vragen is — zonder dat is
+    `minDistance` een gok.
+
+16. **Twee timeframes boven elkaar — gebouwd, knop nog niet geplaatst.**
+    4 november.
+
+    `src/lib/chart/stackedTimeframes.ts`, 18 checks. De vraag die ertoe doet
+    is niet hóé je stapelt maar **welke** timeframe erboven hoort, en daar
+    gaat de voor de hand liggende keuze mis: "de volgende in de lijst" zet
+    boven M15 een M30, en dat is dezelfde swing met een halve dag verschil.
+    Het kost schermruimte en levert niets op — maar erger, het ziet eruit als
+    bevestiging. Twee charts die hetzelfde zeggen omdat ze hetzelfde kijken,
+    leest een trader als twee onafhankelijke signalen.
+
+    De regel is dus een verhouding en geen plek in een lijst: de bias moet
+    minstens vier keer zo grof zijn. Daar rolt vanzelf de indeling uit die
+    traders met de hand maken — M15 onder H1, H1 onder H4, H4 onder D1, D1
+    onder W1 — zonder dat iemand een tabel heeft ingetikt. Boven MN1 ligt
+    niets, en dan staat er één chart in plaats van een lege tweede.
+
+    Verder: de uitvoerings-chart krijgt 62% van de hoogte en niet de helft
+    (onder kijk en handel je, boven is een blik), en onder 420px wordt er
+    niet gestapeld omdat twee vegen minder waard zijn dan één leesbare chart.
+
+    Vijf mutaties getoetst en alle vijf gevangen: de volgende-in-de-lijst,
+    een gelijke hoogteverdeling, geen ondergrens voor de hoogte, een
+    zelfgekozen bias die niet getoetst wordt, en de eigendomscheck ná de
+    MetaApi-aanroep in plaats van ervoor.
+
+    **Aangesloten, op de knop na.** `/api/chart/bias-candles` haalt de candles
+    op — een eigen route en geen tweede fetch in `loadChartPageData`, want
+    die heeft acht returnpaden en elk pad een veld erbij geven is acht kansen
+    om de hoofdchart te breken voor een paneel dat erbovenop komt. Dit is
+    additief: gaat de route stuk, dan is er geen bias-chart en werkt de rest.
+    `ChartBiasPane.tsx` haalt zijn eigen candles en verdwijnt bij een fout.
+    ChartScreen tekent hem boven het chart-frame als `stackLayout` zegt dat
+    het past.
+
+    **Wat er nog ligt: één knop.** Het staat standaard uit achter de voorkeur
+    `axe.chart.stackedBias`. Er is nog geen schakelaar, omdat de enige plek
+    die zich aanbiedt — `ChartLandscapeDrawer` — een navigatiemenu is en geen
+    instellingenpaneel. Daar een optie in proppen vraagt om die drawer te
+    herontwerpen, en dat vraagt iemand die het scherm kan zien. Tot die tijd
+    is hij te testen door de sleutel op `"1"` te zetten.
+
+Wat hier bewust **niet** op staat, met de reden erbij:
+
+- **Depth of Market.** Nul bestanden, en dat blijft zo. MetaApi geeft geen
+  echte order book voor de meeste retail-brokers, en een DOM met verzonnen
+  diepte is erger dan geen DOM.
+- **Een screener.** Dat is Trading OS. Op een telefoon scan je niet
+  vijfduizend instrumenten; daar kijk je naar de vier die je volgt.
+- **Honderd teken-gereedschappen.** Vijf plus het positie-gereedschap dekt
+  wat mensen echt tekenen. Elk extra gereedschap maakt de werkbalk op een
+  telefoon slechter voor iedereen die het niet gebruikt.
+
+## De rij is leeg. Wat nu?
+
+**Stand op 4 november: punt 1 tot en met 16 is af en live gemeten.** De rij
+is nu echt leeg. Wie hier komt met een opdracht die zegt "pak het bovenste
+punt": er is er geen.
+
+**Een cyclus die niets te doen vindt, hoort niets te doen.** Dat is geen
+slappe uitweg maar de regel. Een verzonnen taak kost zijn limiet en kan iets
+breken dat werkte. "Niets gepusht, want de rij is leeg" is dan het juiste
+verslag.
+
+Wel altijd eerst: `npx tsc --noEmit`, `npm test`, `npm run verify`, en kijken
+of de laatste commit live staat. Kapot gaat voor nieuw, ook als nieuw er niet
+is. **Een regressie van iemand anders is wél echt werk** — de Manager Twin
+pusht door, en twee keer bleek zijn migratie niet toegepast en één keer brak
+een favicon de build acht uur lang. Dat vinden is waardevoller dan iets
+nieuws beginnen.
+
+### Wat er nog ligt, en waarom het hier niet als taak staat
+
+Drie bakjes. Geen ervan is op te pakken door een sessie die alleen deze
+container heeft.
+
+**Wacht op Luka.** De landing-kleuren (42ef0fa) staan live. Op main staat
+inmiddels ook `82d5c5e` (gloed onder de navigatiebalk volgt de muis) — **nog
+niet gedeployed**; live build is `cda8fc7`. De andere drie secties uit zijn
+bestand (reveal-cards, behavior-map, metric-cockpit-dial) vragen inhoud die
+nergens bestaat — **niet zelf verzinnen, niet deployen zonder zijn keuze.**
+
+Gemeten 2026-11-04 naast die keuze: Supabase anon-uit + HIBP-aan; Trading OS
+serve+tunnel+`availability: beta`; Ollama-API niet meer open (401 /
+SPA-fallback); Companion live-check in AXE Core leest `/api/debug/build`.
+Open in de bouwlijst: 12 punten die echt Luka nodig hebben.
+
+En bovenaan alles: `docs/VOOR-LUKA.md` punt 0 — GitHub Actions draait niet.
+Op 4 november is de datum vastgepind: tot en met **3 juli** was alles groen,
+vanaf **29 september 19:18 UTC** valt élke workflow om in 3–6 seconden, zonder
+één stap en zonder logbestand (de log-URL geeft 404). Dezelfde workflows,
+dezelfde secrets, op één dag allemaal dood. **Het zijn dus niet zijn
+sleutels** — een job leest secrets pas ín een stap, en hier begint er geen.
+Het zit op accountniveau (Actions-minuten of bestedingslimiet; de repo is
+privé dus de minuten tellen). Deze sessie mag geen billing lezen. Daardoor
+past geen enkele migratie zichzelf toe en deployen de streamer en de edge
+functions niet — inmiddels drie keer handwerk dat vanzelf had moeten gaan.
+
+**Vraagt iemand die het scherm kan zien.** Bar replay (punt 13) en het
+positie-gereedschap (punt 14) zijn geverifieerde rekenkernen zonder
+aansluiting; punt 16 hangt er wel in maar heeft nog geen knop en staat
+achter `axe.chart.stackedBias`. `ChartScreen.tsx` is 5700 regels en een
+sessie hier kan de app niet draaien — er is geen `.env.local`, dus de
+chart-pagina redirect naar login. Half aansluiten is daar erger dan niet
+aansluiten: bij replay levert het een replay op die de toekomst lekt.
+De vraag hierover staat als punt 0c in `docs/VOOR-LUKA.md`.
+
+**Vraagt een meting die hier niet kan.** M1 als timeframe (punt 12): of
+MetaApi `1m` teruggeeft voor de aangesloten brokers is alleen met een
+MetaApi-token te meten, en dat staat op de host — niet in de Supabase-kluis,
+niet hier. Hetzelfde voor `stopsLevel` per symbool, dat `minDistance` van de
+trailing stop nu een gok zou maken en daarom op null staat.
+
+### Het gat dat nog open staat en niemand ziet
+
+Er is **geen alarm als productie achterloopt**. De uptime-wacht draait elke
+twee minuten met ntfy, maar die vraagt "antwoordt de site?" — en een build
+van acht uur oud antwoordt gewoon met 200. Op 30 oktober stond productie
+8 uur en 48 minuten stil op een favicon die de build brak, en niets ging af.
+
+`scripts/watchdog.sh` stelt wél de goede vraag: hij vergelijkt productie met
+main. Hij draait alleen nergens. Vanuit pg_cron is het niet op te lossen —
+de database weet niet wat main's laatste commit is, en zonder dat is
+"de build is oud" op een rustig weekend vals alarm. Zet de regel uit
+`docs/VOOR-LUKA.md` op de VPS en dit gat is dicht.
+
+### Observaties, geen opdrachten
+
+Deze zijn onderweg gemeten en bewust niet opgepakt. Ze staan hier zodat ze
+niet verloren gaan, **niet** om zonder Luka aan te beginnen — elk kost meer
+dan het oplevert zolang hij er niet is, of vraagt een afweging die niet aan
+een autopilot is.
+
+- **33 kwetsbaarheden in de wallet-stack.** `npm audit fix` lost ze op en
+  breekt dan de typecheck op `WalletsAppKitProvider.tsx`, omdat
+  `@reown/appkit` en zijn wagmi-adapter uit elkaar lopen. De echte weg is een
+  major bump en daarna met een wallet verbinden om te zien of het nog werkt.
+  Dat laatste kan hier niemand.
+- **`axeContextBuilder` filtert niet op `counts_as_evidence`.** Bewust: dat is
+  de laatste 25 trades als gespreksstof, en wie net drie oefentrades deed moet
+  ze kunnen bespreken. Maar AXE baseert er wél uitspraken op. De nette
+  oplossing is de herkomst meegeven in de context, niet de rijen weglaten.
+- **De cockpit telt oefentrades mee in "je sloot N trades".** Ook bewust —
+  dat is waar. Zodra iemand veel op papier handelt wordt die telling wel
+  misleidend naast de echte cijfers ernaast.
+- **Alpaca-accounts krijgen geen live ticks.** De streamer is MetaApi-only en
+  Alpaca gaat via REST-bars. 39 actieve accounts. Een eigen punt met een eigen
+  kostenafweging.
+- **Chart: Ichimoku, een echt Volume Profile (nu alleen de POC-lijn),
+  multi-timeframe overlays.** De rekenkunde hoort in `indicatorMath.ts`, er is
+  een check op, en een nieuwe pane is sinds 28 oktober: opnemen in
+  `PANE_MODES` en de checks vertellen je de rest.
+
+Komt Luka terug met een nieuwe richting, dan gaat die boven alles hier.
 
 ---
 

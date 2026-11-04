@@ -91,6 +91,24 @@ export type ChartLiveEvent =
       source: ChartLiveSource;
     }
   | {
+      /** Account-wide equity / P/L snapshot. No symbol fields so every
+       *  open chart plus the Positions page accept it. */
+      type: "account_update";
+      userId?: string;
+      accountId: string;
+      balance: number | null;
+      equity: number | null;
+      margin: number | null;
+      freeMargin: number | null;
+      marginLevel: number | null;
+      currency: string | null;
+      profit: number | null;
+      /** Omit when the book is not yet known. `[]` means flat. */
+      positions?: LivePositionPayload[];
+      timestamp: string;
+      source: ChartLiveSource;
+    }
+  | {
       type: "orders_update";
       userId?: string;
       accountId: string;

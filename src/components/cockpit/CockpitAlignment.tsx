@@ -29,6 +29,10 @@ export function CockpitAlignment({ data, calibrationMessage }: Props) {
             <strong className="font-medium text-tos-text">100 = fully aligned</strong> with how you
             trade. This is separate from your trader score above.
           </span>
+          <span className="mt-1.5 block text-[11px] leading-relaxed text-tos-dim">
+            Data basis: scored trade alignments, chat feedback and journal signals on this account.
+            Use it to see when AXE is drifting from your style — then correct it in chat or rules.
+          </span>
         </p>
         <div className="mt-6 flex items-center gap-6">
           <div className="relative h-[7.25rem] w-[7.25rem] shrink-0">
@@ -86,6 +90,13 @@ export function CockpitAlignment({ data, calibrationMessage }: Props) {
               {calibrationMessage ??
                 "Moves when AXE has real chat, journal, memory, and account signals to learn from."}
             </p>
+            {/* Soft floor: below ~10 scored signals the % is noise. */}
+            {score > 0 && score < 15 ? (
+              <p className="text-[11px] leading-relaxed text-amber-100/70">
+                Not enough data yet — treat this percentage as provisional until AXE has more scored
+                trades and feedback on this account.
+              </p>
+            ) : null}
             <time
               className="block text-[10px] tabular-nums tracking-wide text-tos-dim"
               dateTime={capturedAt}

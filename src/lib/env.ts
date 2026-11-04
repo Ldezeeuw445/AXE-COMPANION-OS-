@@ -76,6 +76,22 @@ export function getVapidPublicKey(): string | undefined {
 }
 
 /**
+ * Web-push subject. Required by web-push; an empty VAPID_SUBJECT used to
+ * silently skip every delivery. Fall back to a mailto on the public host.
+ */
+export function getVapidSubject(): string | undefined {
+  const explicit = firstNonEmptyEnv("VAPID_SUBJECT");
+  if (explicit) return explicit;
+  try {
+    const host = new URL(getPublicAppBaseUrl()).hostname;
+    if (host) return `mailto:alerts@${host}`;
+  } catch {
+    /* keep going */
+  }
+  return undefined;
+}
+
+/**
  * Server-only Supabase service-role key. Used by webhook routes that operate
  * without a user session (Stripe, push delivery, scheduled jobs) and need to
  * write tables guarded by RLS. Never expose to the client.

@@ -97,7 +97,7 @@ export function ChartQuickActions({
             type="button"
             onClick={onDepth}
             className={`${baseBtn} ${tabletSize} ${whiteBtnRound} ${orderBookOpen ? activeWhite : idle}`}
-            aria-label="Market depth"
+            aria-label="Estimated depth"
             title="Depth"
             aria-pressed={orderBookOpen}
           >
@@ -149,8 +149,8 @@ export function ChartQuickActions({
         type="button"
         onClick={onDepth}
         className={`${baseBtn} ${size} ${whiteBtnRound} ${orderBookOpen ? activeWhite : idle}`}
-        aria-label="Market depth"
-        title="Market depth"
+        aria-label="Estimated depth"
+        title="Estimated depth (synthetic, from live bid/ask)"
         aria-pressed={orderBookOpen}
       >
         <BarChart2 className={icon} />

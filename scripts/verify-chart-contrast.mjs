@@ -149,6 +149,11 @@ const INDICATOR_MEASURED = [
   "macdSignal",
   "macdHistBull",
   "macdHistBear",
+  "stochK",
+  "stochD",
+  "adxLine",
+  "plusDiLine",
+  "minusDiLine",
   "labelEmphasis",
   "labelNormal",
 ];

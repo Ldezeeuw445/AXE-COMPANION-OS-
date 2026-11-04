@@ -37,6 +37,9 @@ export function LearningArcPanel({ arc, label = "AXE", accentClassName = "text-t
 
       <p className="mt-2.5 text-[14px] font-semibold text-tos-text">{arc.name}</p>
       <p className="mt-1 text-[12px] leading-relaxed text-tos-muted">{arc.summary}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-tos-dim" title="Learning Arc measures countable teaching moments: closed trades with evidence, journal labels, chat feedback and rules you wrote. It is not a vanity streak.">
+        What it measures: real teaching moments (closed trades, journal labels, chat feedback, your rules). Use it to see whether AXE is still learning how you trade — not as a performance grade.
+      </p>
 
       <div className="mt-3">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
@@ -50,6 +53,11 @@ export function LearningArcPanel({ arc, label = "AXE", accentClassName = "text-t
             ? `${arc.points} points — everything AXE knows about you`
             : `${arc.points} of ${arc.pointsForNextStage} points to the next stage`}
         </p>
+        {arc.points < 8 ? (
+          <p className="mt-1.5 text-[11px] leading-relaxed text-amber-100/70">
+            Not enough data yet — need a handful of closed trades and a few chat or journal signals before this stage means much.
+          </p>
+        ) : null}
       </div>
 
       {arc.growth?.summary ? (

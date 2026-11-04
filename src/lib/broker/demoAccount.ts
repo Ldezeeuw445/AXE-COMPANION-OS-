@@ -313,6 +313,14 @@ function timeframeMs(tf: string): number {
       return 4 * 60 * 60_000;
     case "d1":
       return 24 * 60 * 60_000;
+    // Zonder deze twee vielen W1 en MN1 door naar de default en tekende het
+    // demo-account uurcandles met een weeklabel erboven. Een handelsweek is
+    // vijf dagen, niet zeven: zeven zou elke week een weekendgat erin zetten
+    // dat er op een FX-chart niet is.
+    case "w1":
+      return 5 * 24 * 60 * 60_000;
+    case "mn1":
+      return 22 * 24 * 60 * 60_000;
     case "h1":
     default:
       return 60 * 60_000;

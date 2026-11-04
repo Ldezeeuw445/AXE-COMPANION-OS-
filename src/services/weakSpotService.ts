@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { EVIDENCE_ONLY_FILTER } from "@/lib/trading/tradeEvidence";
 import { detectWeakSpots, type WeakSpot, type WeakSpotTrade } from "@/lib/journal/weakSpots";
 
 /**
@@ -44,12 +45,18 @@ export async function loadWeakSpotTrades(
   accountId?: string,
 ): Promise<WeakSpotTrade[]> {
   const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // Practice trades live in this table too. The ones filled at generated
+  // prices must not inform `weakSpots` or `playbookEdge`: both turn closed
+  // trades into statements about the trader, and a statement built on invented
+  // prices is one they will believe because it came from their own journal.
+  // See src/lib/trading/tradeEvidence.ts.
   let query = supabase
     .from("broker_trades")
     .select("id,symbol,side,volume,pnl,open_time,close_time")
     .eq("user_id", userId)
     .not("close_time", "is", null)
     .gte("close_time", since)
+    .or(EVIDENCE_ONLY_FILTER)
     .order("close_time", { ascending: false })
     .limit(MAX_TRADES);
 

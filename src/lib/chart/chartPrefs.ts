@@ -47,6 +47,8 @@ export const SYNCED_SYMBOL_KEYS = [
   "axe.chart.paneHeight.volume",
   "axe.chart.paneHeight.rsi",
   "axe.chart.paneHeight.macd",
+  "axe.chart.paneHeight.stoch",
+  "axe.chart.paneHeight.adx",
   "axe.chart.paneOrder",
 ] as const;
 
@@ -187,6 +189,8 @@ const INDICATOR_LABELS: Record<string, string> = {
   macd: "MACD",
   bollinger: "Bollinger Bands",
   rsi: "RSI",
+  stoch: "Stochastic",
+  adx: "ADX",
   vwap: "VWAP",
   poc: "Volume POC",
 };

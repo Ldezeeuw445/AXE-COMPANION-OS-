@@ -52,6 +52,9 @@ import {
   metaApiComplianceConfirmed,
   META_API_COMPLIANCE_ERROR,
 } from "@/lib/legal/metaApiCompliance";
+import { getUserAxeEntitlement } from "@/services/billingService";
+import { canConnectLiveAccount } from "@/lib/billing/liveAccounts";
+import { featurePlanForEntitlement } from "@/lib/billing/access";
 
 export type Mt5CloudResult<T = unknown> =
   | { ok: true; data?: T }
@@ -306,6 +309,7 @@ export async function createCloudMt5ConnectionAction(
   }
   const manualTrades = passwordType === "investor";
 
+
   // Region must be one of the supported MetaApi clouds. The form already
   // restricts the select to these three; this is a belt-and-braces check so
   // a tampered request can't push the account into an unsupported region.
@@ -364,6 +368,48 @@ export async function createCloudMt5ConnectionAction(
       await provisioningUploadProfileFile(provisioningProfileId, "servers.dat", bytes);
     } catch (e) {
       return mapMetaError(e);
+    }
+  }
+
+  // Live-account plan cap — new connects only. Reconnect of same login/server is grandfathered.
+  {
+    const { data: existingSame, error: sameErr } = await supabase
+      .from("user_broker_accounts")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("provider", "mt5")
+      .eq("mt5_login", mt5Login)
+      .eq("mt5_server", mt5Server)
+      .maybeSingle();
+    if (sameErr) {
+      return { ok: false, code: "unknown", message: sameErr.message };
+    }
+    if (!existingSame?.id) {
+      const ent = await getUserAxeEntitlement(supabase, user.id);
+      const plan = featurePlanForEntitlement(ent, user.id);
+      const { data: allAccounts, error: allErr } = await supabase
+        .from("user_broker_accounts")
+        .select("id,connection_method,provider,status,metadata")
+        .eq("user_id", user.id);
+      if (allErr) {
+        return { ok: false, code: "unknown", message: allErr.message };
+      }
+      const gate = canConnectLiveAccount({
+        plan: plan === "exempt" ? "founder" : plan,
+        existingAccounts: (allAccounts ?? []).map((a) => ({
+          id: a.id as string,
+          connection_method: (a.connection_method as string | null) ?? null,
+          provider: (a.provider as string | null) ?? null,
+          status: (a.status as string | null) ?? null,
+          trading_mode:
+            a.metadata && typeof a.metadata === "object" && !Array.isArray(a.metadata)
+              ? ((a.metadata as Record<string, unknown>).trading_mode as string | null) ?? null
+              : null,
+        })),
+      });
+      if (!gate.allowed) {
+        return { ok: false, code: "validation", message: gate.message };
+      }
     }
   }
 
@@ -754,6 +800,77 @@ export async function syncCloudMt5AccountAction(accountId: string): Promise<
     allowEmptyDeals: false,
   });
 }
+
+/**
+ * Quotes tab: re-run the AXE watchlist → broker symbol registry mapping for the
+ * active MT5 cloud account. Does not place/modify/close orders. Alpaca/demo
+ * accounts are no-ops (current Quotes behaviour unchanged).
+ */
+export async function syncQuotesWithWatchlist(): Promise<
+  | { ok: true; mappedCount: number; unavailableCount: number; universeSize: number }
+  | { ok: false; code: Mt5CloudErrorCode; message: string }
+> {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return { ok: false, code: "unknown", message: "Supabase is not configured." };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, code: "validation", message: "Not signed in." };
+
+  const { data: prefs } = await supabase
+    .from("user_workspace_preferences")
+    .select("active_account_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const activeId = (prefs?.active_account_id as string | null | undefined) ?? null;
+  if (!activeId) {
+    return { ok: false, code: "validation", message: "No active account selected." };
+  }
+
+  const { data: account } = await supabase
+    .from("user_broker_accounts")
+    .select("id,connection_method")
+    .eq("user_id", user.id)
+    .eq("id", activeId)
+    .maybeSingle();
+
+  if (!account || account.connection_method !== "cloud_mt5") {
+    return {
+      ok: false,
+      code: "validation",
+      message: "Sync with watchlist applies to MT5 cloud accounts only.",
+    };
+  }
+
+  const result = await refreshCloudAccountSymbolMap(supabase, user.id, activeId, { probe: true });
+  if (!result.ok) return result;
+
+  revalidatePath("/watchlist");
+  revalidatePath("/chart");
+
+  const { data: refreshed } = await supabase
+    .from("user_broker_accounts")
+    .select("metadata")
+    .eq("id", activeId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const meta = ((refreshed?.metadata ?? {}) as Record<string, unknown>) ?? {};
+  const unavailable = Array.isArray(meta.mt5_quotes_unavailable)
+    ? meta.mt5_quotes_unavailable.filter((s): s is string => typeof s === "string")
+    : [];
+  const mapped = Array.isArray(meta.mt5_quotes_symbols)
+    ? meta.mt5_quotes_symbols.filter((s): s is string => typeof s === "string")
+    : [];
+
+  return {
+    ok: true,
+    mappedCount: mapped.length || result.data.mappedCount,
+    unavailableCount: unavailable.length,
+    universeSize: result.data.universeSize,
+  };
+}
+
 
 // ── MT5 Doctor helpers ───────────────────────────────────────────────────────
 // runCloudMt5DoctorAction referenced these but they were never written, so the

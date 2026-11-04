@@ -5,6 +5,7 @@
 
 import { metaApiTimeframeFromKey } from "@/lib/broker/chartTimeframes";
 import {
+  clientGetAccountInformation,
   clientGetHistoricalCandles,
   clientGetOrders,
   clientGetPositions,
@@ -17,6 +18,7 @@ import type {
   LivePendingOrderPayload,
   LivePositionPayload,
 } from "@/lib/chart/liveContract";
+import { figuresFromAccountInfo, isAccountLiveSymbol, mapMetaApiPosition } from "@/lib/mt5/liveAccountSnapshot";
 
 export const TICK_INTERVAL_MS = 1_000;
 export const CANDLE_INTERVAL_MS = 5_000;
@@ -124,7 +126,51 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
     emit({ type: "live_status", status: next, reason });
   }
 
+  const accountRoom = isAccountLiveSymbol(brokerSymbol);
+
+  async function accountLoop() {
+    while (!timedOut()) {
+      if (pushActive?.()) {
+        setStatus("live");
+        await sleep(TICK_INTERVAL_MS, timedOut);
+        continue;
+      }
+      try {
+        const [info, rawPositions] = await Promise.all([
+          clientGetAccountInformation(metaAccountId, false, accountRegion),
+          clientGetPositions(metaAccountId, false, accountRegion) as Promise<Record<string, unknown>[]>,
+        ]);
+        const figures = figuresFromAccountInfo(info as Record<string, unknown>);
+        const positions = (rawPositions ?? []).map((p, i) => mapMetaApiPosition(p, i));
+        emit({
+          type: "account_update",
+          userId,
+          accountId,
+          balance: figures.balance,
+          equity: figures.equity,
+          margin: figures.margin,
+          freeMargin: figures.freeMargin,
+          marginLevel: figures.marginLevel,
+          currency: figures.currency,
+          profit: figures.profit ?? (figures.equity != null && figures.balance != null ? figures.equity - figures.balance : null),
+          positions,
+          timestamp: new Date().toISOString(),
+          source: "metaapi_mt5",
+        });
+        consecutiveTickFailures = 0;
+        setStatus("live");
+      } catch (e) {
+        consecutiveTickFailures += 1;
+        if (consecutiveTickFailures >= DELAYED_THRESHOLD_FAILURES) {
+          setStatus("delayed", e instanceof Error ? e.message : "account_unavailable");
+        }
+      }
+      await sleep(TICK_INTERVAL_MS, timedOut);
+    }
+  }
+
   async function tickLoop() {
+    if (accountRoom) return accountLoop();
     while (!timedOut()) {
       if (pushActive?.()) {
         setStatus("live");
@@ -166,6 +212,7 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
   }
 
   async function candleLoop() {
+    if (accountRoom) return;
     await sleep(2_000, timedOut);
     while (!timedOut()) {
       if (pushActive?.()) {
@@ -202,6 +249,7 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
   }
 
   async function positionsLoop() {
+    if (accountRoom) return;
     await sleep(3_000, timedOut);
     while (!timedOut()) {
       try {
@@ -211,7 +259,7 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
           accountRegion,
         )) as Record<string, unknown>[];
         const onSymbol: LivePositionPayload[] = raw
-          .filter((p) => String(p.symbol ?? "") === brokerSymbol)
+          .filter((p) => accountRoom || String(p.symbol ?? "") === brokerSymbol)
           .map((p, i) => ({
             id: String(p.id ?? p.positionId ?? i),
             symbol: String(p.symbol ?? ""),
@@ -255,7 +303,7 @@ export async function runChartLivePoller(args: ChartLivePollerArgs): Promise<voi
           accountRegion,
         )) as Record<string, unknown>[];
         const onSymbol: LivePendingOrderPayload[] = raw
-          .filter((o) => String(o.symbol ?? "") === brokerSymbol)
+          .filter((o) => accountRoom || String(o.symbol ?? "") === brokerSymbol)
           .map((o, i) => {
             const type = mapOrderType(typeof o.type === "string" ? o.type : undefined);
             return {

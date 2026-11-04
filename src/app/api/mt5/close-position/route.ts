@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { closePaperPositionById } from "@/services/paperOrderService";
+import { rejectRequestedVolume } from "@/lib/trading/partialClose";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientClosePosition,
@@ -15,16 +17,20 @@ export const dynamic = "force-dynamic";
  *
  * Guards (same layering as /api/mt5/order):
  *   1. Supabase auth
- *   2. MetaApi configured
- *   3. Body validation — brokerAccountId + positionId required
- *   4. Account ownership
- *   5. Cloud MT5 account required (no demo)
- *   6. Live-trading flag
+ *   2. Body validation — brokerAccountId + positionId required
+ *   3. Account ownership
+ *   4. Practice positions close here and return — nothing reaches a broker.
+ *   5. MetaApi configured + cloud MT5 account required
+ *
+ * Closing / reducing risk is always allowed once auth + ownership hold.
+ * The live-trading kill switch must never trap a trader in a position.
  */
 
 type CloseBody = {
   brokerAccountId: string;
   positionId: string;
+  /** Lots to close. Omit for the whole position. Build-list item 11. */
+  volume?: number | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -38,13 +44,7 @@ export async function POST(request: NextRequest) {
   if (!user)
     return errJson(401, "unauthorized", "Sign in to close positions.");
 
-  if (!getMetaApiToken()) {
-    return errJson(
-      503,
-      "provider_not_configured",
-      "MetaApi token is not configured on this server.",
-    );
-  }
+
 
   let body: CloseBody;
   try {
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     return errJson(400, "invalid_body", "Payload must be JSON.");
   }
 
-  const { brokerAccountId, positionId } = body ?? {};
+  const { brokerAccountId, positionId, volume } = body ?? {};
 
   if (typeof brokerAccountId !== "string" || !brokerAccountId) {
     return errJson(400, "missing_account", "brokerAccountId is required.");
@@ -63,6 +63,15 @@ export async function POST(request: NextRequest) {
   }
 
   // Account ownership
+  // A requested size is checked here for the things the server can know —
+  // zero, off-step, under the broker minimum. Whether it fits this particular
+  // position is MetaApi's answer for a live account, and ours for a practice
+  // one, because there we hold the volume.
+  if (volume != null) {
+    const bad = rejectRequestedVolume(Number(volume));
+    if (bad) return errJson(400, "invalid_volume", bad);
+  }
+
   const { data: account, error: accountErr } = await supabase
     .from("user_broker_accounts")
     .select(
@@ -81,14 +90,27 @@ export async function POST(request: NextRequest) {
       "That broker account is not on your workspace.",
     );
 
+  // Practice position: closed here, against a price of the kind it opened on.
+  // This used to be a 409, which was true of a *live* position and wrong
+  // about the only kind this account has. Build-list item 10.
   if (
     account.connection_method === "demo_paper" ||
     account.provider === "demo"
   ) {
+    const result = await closePaperPositionById(supabase, user.id, positionId, volume ?? null);
+    if (!result.ok) {
+      const status = result.code === "position_not_found" ? 404 : 400;
+      return errJson(status, result.code, result.message);
+    }
+    return Response.json({ ...result, paper: true });
+  }
+
+  // Everything below closes a real position and needs the provider for it.
+  if (!getMetaApiToken()) {
     return errJson(
-      409,
-      "demo_account",
-      "Demo accounts cannot close live positions.",
+      503,
+      "provider_not_configured",
+      "MetaApi token is not configured on this server.",
     );
   }
 
@@ -100,23 +122,6 @@ export async function POST(request: NextRequest) {
       409,
       "account_not_connected",
       "Account is not linked to MetaApi.",
-    );
-  }
-
-  // Live-trading gate
-  const { data: prefs, error: prefsErr } = await supabase
-    .from("user_workspace_preferences")
-    .select("live_trading_enabled")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (prefsErr)
-    return errJson(500, "prefs_lookup_failed", prefsErr.message);
-  if (!prefs?.live_trading_enabled) {
-    return errJson(
-      403,
-      "live_trading_disabled",
-      "Live trading is not enabled for this workspace.",
     );
   }
 
@@ -136,6 +141,7 @@ export async function POST(request: NextRequest) {
     accountId: account.external_connection_id,
     positionId,
     region: accountRegion,
+    volume: volume ?? null,
   };
 
   try {

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { getPublicAppBaseUrl, getVapidPublicKey, normalizePublicAppBaseUrl } from "./env";
+import { getPublicAppBaseUrl, getVapidPublicKey, getVapidSubject, normalizePublicAppBaseUrl } from "./env";
 
 const PREV_APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 const PREV_PUBLIC_VAPID = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const PREV_VAPID = process.env.VAPID_PUBLIC_KEY;
+const PREV_VAPID_SUBJECT = process.env.VAPID_SUBJECT;
 
 afterEach(() => {
   if (PREV_APP_URL === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
@@ -13,6 +14,8 @@ afterEach(() => {
   else process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY = PREV_PUBLIC_VAPID;
   if (PREV_VAPID === undefined) delete process.env.VAPID_PUBLIC_KEY;
   else process.env.VAPID_PUBLIC_KEY = PREV_VAPID;
+  if (PREV_VAPID_SUBJECT === undefined) delete process.env.VAPID_SUBJECT;
+  else process.env.VAPID_SUBJECT = PREV_VAPID_SUBJECT;
 });
 
 describe("normalizePublicAppBaseUrl", () => {
@@ -72,5 +75,15 @@ describe("getVapidPublicKey", () => {
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY = "  ";
     process.env.VAPID_PUBLIC_KEY = "server-only-key";
     assert.equal(getVapidPublicKey(), "server-only-key");
+  });
+});
+
+describe("getVapidSubject", () => {
+  it("uses VAPID_SUBJECT when set, else mailto on the public host", () => {
+    process.env.VAPID_SUBJECT = "mailto:ops@example.com";
+    assert.equal(getVapidSubject(), "mailto:ops@example.com");
+    delete process.env.VAPID_SUBJECT;
+    process.env.NEXT_PUBLIC_APP_URL = "https://www.axecompanion.com";
+    assert.equal(getVapidSubject(), "mailto:alerts@www.axecompanion.com");
   });
 });

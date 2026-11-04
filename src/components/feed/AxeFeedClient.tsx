@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, RefreshCw } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -16,6 +16,7 @@ import {
 import { BriefBodyContent } from "@/components/briefing/BriefBodyContent";
 import {
   getFeedTabLastSeenAt,
+  markAllFeedTabsRead,
   markFeedTabItemsRead,
   AXE_FEED_LAST_SEEN_KEY,
 } from "@/lib/feed/feedSeen";
@@ -118,6 +119,15 @@ export function AxeFeedClient({ initialTab = "morning_brief" }: AxeFeedClientPro
       cancelled = true;
     };
   }, [loadFeed]);
+
+  const markedAllOnOpenRef = useRef(false);
+  // Opening the feed page marks every lane read so nav badges clear without a reload.
+  useEffect(() => {
+    if (loading || items.length === 0 || markedAllOnOpenRef.current) return;
+    markedAllOnOpenRef.current = true;
+    markAllFeedTabsRead(items);
+    refreshTabUnread(items);
+  }, [loading, items, refreshTabUnread]);
 
   useEffect(() => {
     if (loading || items.length === 0) return;

@@ -17,9 +17,10 @@ import { useRouter } from "next/navigation";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { formatBrokerPrice, priceDigitsForSymbol } from "@/lib/broker/symbolFormat";
 import { addBrokerWatchlistSymbol, removeWatchlistItem, saveWatchlistOrder } from "@/app/(app)/settings/actions";
+import { syncQuotesWithWatchlist } from "@/app/actions/mt5Cloud";
 import { CANONICAL_BROKER_SYMBOLS } from "@/lib/broker/brokerSymbolRuntime";
 import { cleanDisplaySymbol } from "@/lib/broker/symbolResolution";
-import { GripVertical, Plus, Search, Trash2, X } from "lucide-react";
+import { GripVertical, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
 import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 import { StaleAgeBadge } from "@/components/pwa/StaleAgeBadge";
@@ -33,6 +34,8 @@ import { useOnlineStatus } from "@/lib/pwa/useOnlineStatus";
 export type QuoteRow = {
   id: string;
   symbol: string;
+  /** Canonical AXE watchlist symbol when `symbol` shows the broker name. */
+  displaySymbol?: string | null;
   message: string | null;
   brokerSymbol?: string | null;
   runtimePrice?: number | null;
@@ -51,6 +54,10 @@ type Props = {
   brokerUniverse?: string[];
   symbolMap?: Record<string, string>;
   accountLabel?: string;
+  /** Canonical watchlist symbols not offered by the active MT5 account. */
+  unavailableSymbols?: string[];
+  /** Show "Sync with watchlist" for MT5 cloud accounts. */
+  showSyncWithWatchlist?: boolean;
 };
 
 /* ── Helpers ────────────────────────────────────────────────────── */
@@ -77,17 +84,24 @@ function writeOrder(symbols: string[]) {
 
 function applyOrder(items: QuoteRow[], savedOrder: string[]): QuoteRow[] {
   if (savedOrder.length === 0) return items;
-  const map = new Map(items.map((i) => [i.symbol, i]));
-  const ordered: QuoteRow[] = [];
-  for (const sym of savedOrder) {
-    const item = map.get(sym);
-    if (item) {
-      ordered.push(item);
-      map.delete(sym);
-    }
+  const byKey = new Map<string, QuoteRow>();
+  for (const item of items) {
+    byKey.set(item.symbol.toUpperCase(), item);
+    if (item.displaySymbol) byKey.set(item.displaySymbol.toUpperCase(), item);
+    const cleaned = cleanDisplaySymbol(item.symbol);
+    if (cleaned) byKey.set(cleaned.toUpperCase(), item);
   }
-  // Append any items not in saved order (newly added)
-  for (const item of map.values()) ordered.push(item);
+  const ordered: QuoteRow[] = [];
+  const used = new Set<string>();
+  for (const sym of savedOrder) {
+    const item = byKey.get(sym.toUpperCase());
+    if (!item || used.has(item.id)) continue;
+    ordered.push(item);
+    used.add(item.id);
+  }
+  for (const item of items) {
+    if (!used.has(item.id)) ordered.push(item);
+  }
   return ordered;
 }
 
@@ -135,6 +149,8 @@ export function WatchlistPageScreen({
   brokerUniverse = [],
   symbolMap = {},
   accountLabel = "Active broker",
+  unavailableSymbols = [],
+  showSyncWithWatchlist = false,
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -145,13 +161,17 @@ export function WatchlistPageScreen({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [removing, setRemoving] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [syncingWatchlist, setSyncingWatchlist] = useState(false);
+  const [unavailableOpen, setUnavailableOpen] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const { bidDir, askDir } = useTickColors(localItems);
   const online = useOnlineStatus();
   const [quotesFromCache, setQuotesFromCache] = useState(false);
 
   const persistOrder = useCallback((rows: QuoteRow[]) => {
-    const symbols = rows.map((item) => item.symbol);
+    // Persist canonical watchlist symbols — never broker suffixes from Quotes display.
+    const symbols = rows.map((item) => item.displaySymbol?.trim() || cleanDisplaySymbol(item.symbol) || item.symbol);
     writeOrder(symbols);
     void saveWatchlistOrder(symbols);
   }, []);
@@ -436,6 +456,58 @@ export function WatchlistPageScreen({
         </div>
       </div>
 
+      {(showSyncWithWatchlist || unavailableSymbols.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-4 py-2">
+          {showSyncWithWatchlist && (
+            <button
+              type="button"
+              disabled={syncingWatchlist}
+              onClick={() => {
+                setSyncingWatchlist(true);
+                setSyncMessage(null);
+                startTransition(() => {
+                  void syncQuotesWithWatchlist()
+                    .then((result) => {
+                      if (result.ok) {
+                        setSyncMessage(
+                          result.unavailableCount > 0
+                            ? `Mapped ${result.mappedCount} · ${result.unavailableCount} not on this account`
+                            : `Mapped ${result.mappedCount} symbols to this account`,
+                        );
+                        router.refresh();
+                      } else {
+                        setSyncMessage(result.message || "Sync failed");
+                      }
+                    })
+                    .finally(() => setSyncingWatchlist(false));
+                });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/[0.07] disabled:opacity-40"
+            >
+              <RefreshCw size={12} className={syncingWatchlist ? "animate-spin" : ""} />
+              {syncingWatchlist ? "Syncing…" : "Sync with watchlist"}
+            </button>
+          )}
+          {unavailableSymbols.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setUnavailableOpen((v) => !v)}
+              className="text-[11px] text-white/35 underline-offset-2 transition-colors hover:text-white/55 hover:underline"
+            >
+              {unavailableSymbols.length} symbol{unavailableSymbols.length === 1 ? "" : "s"} from your watchlist aren&apos;t available on this account
+            </button>
+          )}
+          {syncMessage && (
+            <span className="text-[10px] text-white/30">{syncMessage}</span>
+          )}
+          {unavailableOpen && unavailableSymbols.length > 0 && (
+            <p className="w-full font-mono text-[10px] text-white/30">
+              {unavailableSymbols.join(" · ")}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* ── Search panel ───────────────────────────────────────── */}
       {searchOpen && (
         <div className="border-b border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
@@ -579,9 +651,10 @@ export function WatchlistPageScreen({
                 onClick={() => {
                   if (!editing) {
                     const session = getActiveSession();
-                    patchActiveSession({ symbol: sym, lastTab: "chart" });
+                    const chartSymbol = item.displaySymbol?.trim() || cleanDisplaySymbol(sym) || sym;
+                    patchActiveSession({ symbol: chartSymbol, lastTab: "chart" });
                     const params = new URLSearchParams({
-                      symbol: sym,
+                      symbol: chartSymbol,
                       tf: session.timeframe,
                     });
                     if (session.accountId) params.set("account", session.accountId);

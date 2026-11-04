@@ -22,6 +22,10 @@ const journal = readFileSync("src/services/journalingService.ts", "utf8");
 
 console.log("journal wiring");
 
+check("a close that arrives on UPDATE still announces the trade", () => {
+  assert.ok(/newlyClosed/.test(sync), "open-then-close used to skip the feed entirely");
+});
+
 check("the post-sync journal trigger is not gated on new deals", () => {
   assert.ok(
     !/shouldJournal\s*&&\s*dealsUpserted\s*>\s*0/.test(sync),
@@ -62,6 +66,15 @@ check("nothing scored plus an operator-level failure is reported as a failure", 
   assert.ok(
     /journaled === 0 && blockingFailure/.test(journal),
     "returning { ok: true, journaled: 0 } on a dead provider is the silence we are fixing",
+  );
+});
+
+check("AXE journal writes populate the NOT NULL label column and check the error", () => {
+  assert.ok(/buildAxeJournalLabelRow/.test(journal), "payload builder must set label from axe_label");
+  assert.ok(/inErr/.test(journal), "insert errors must not be ignored");
+  assert.ok(
+    /journaled === 0 && failed > 0/.test(journal),
+    "a sweep that scored trades but wrote nothing is a failure",
   );
 });
 

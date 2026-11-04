@@ -3,18 +3,26 @@
 import { useEffect, useId, useMemo, useRef, useState, useCallback } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
-import { macdSeries, rsiSeries } from "@/lib/chart/indicatorMath";
+import { adxSeries, macdSeries, rsiSeries, stochasticSeries } from "@/lib/chart/indicatorMath";
+import { toSegmentedPath } from "@/lib/chart/svgPath";
+import type { PaneMode } from "@/lib/chart/panes";
 import { CHART_THEME, type ChartThemeConfig } from "@/components/chart/chartTheme";
 
 /**
- * IndicatorPane renders a single technical indicator (volume or RSI) in its
- * own bounded frame underneath the main chart. The pane reuses the main
- * chart's time scale via canvasRef.timeToCoordinate(...) so bars line up
- * exactly with the candles above. We mirror the main chart's right price-axis
- * width as a reserved gutter on the right, and draw MT5-style axis labels
- * (max/zero for volume, 100/75/50/25/0 for RSI) into that gutter.
+ * IndicatorPane renders a single technical indicator in its own bounded frame
+ * underneath the main chart. The pane reuses the main chart's time scale via
+ * canvasRef.timeToCoordinate(...) so bars line up exactly with the candles
+ * above. We mirror the main chart's right price-axis width as a reserved
+ * gutter on the right, and draw MT5-style axis labels into that gutter
+ * (max/zero for volume, 100/75/50/25/0 for the bounded oscillators).
+ *
+ * Stochastic and ADX draw gaps rather than lines where their maths has no
+ * answer — a flat window for %K, the first `2 * period` bars for ADX. That is
+ * `indicatorMath` returning null, and it must stay a gap here: joining across
+ * it would draw a line through bars where nothing was computed.
  */
-type Mode = "volume" | "rsi" | "macd";
+/** The pane this instance draws. One list, in `@/lib/chart/panes`. */
+type Mode = PaneMode;
 
 type Props = {
   mode: Mode;
@@ -32,6 +40,72 @@ type Props = {
 type Size = { w: number; h: number };
 
 const MIN_AXIS_WIDTH = 56;
+
+/**
+ * Everything a pane can draw, in one shape.
+ *
+ * Each mode fills in its own fields and leaves the rest alone. Before this,
+ * every branch of the memo spelled out all nine fields, so adding an indicator
+ * meant touching four `return`s and the compiler was the only thing standing
+ * between a forgotten line and a pane that silently drew nothing. Now a branch
+ * spreads this and overrides what it computed.
+ */
+type PaneGeometry = {
+  volumeBars: VolumeBar[];
+  volumeMax: number;
+  volumeSource: "volume" | "range";
+  rsiPath: string;
+  latestRsi: number | null;
+  macdPath: string;
+  macdSignalPath: string;
+  macdBars: MacdBar[];
+  latestMacd: number | null;
+  stochKPath: string;
+  stochDPath: string;
+  latestStochK: number | null;
+  latestStochD: number | null;
+  adxPath: string;
+  plusDiPath: string;
+  minusDiPath: string;
+  latestAdx: number | null;
+};
+
+/**
+ * The 0-100 oscillators, and the levels a trader actually reads on each.
+ *
+ * Not one shared set: the lines that matter differ per indicator. RSI is read
+ * against its midpoint; stochastic against 80 and 20, where it is called
+ * overbought and oversold; ADX against 25, the line between "trending" and
+ * "ranging" — below it the direction of +DI and -DI means little. Drawing 50
+ * on an ADX pane would emphasise a level nobody uses.
+ */
+type BoundedMode = "rsi" | "stoch" | "adx";
+
+const BOUNDED_SCALES: Record<BoundedMode, { levels: number[]; guides: number[]; emphasis: number }> = {
+  rsi: { levels: [100, 75, 50, 25, 0], guides: [25, 50, 75], emphasis: 50 },
+  stoch: { levels: [100, 80, 50, 20, 0], guides: [20, 50, 80], emphasis: 50 },
+  adx: { levels: [100, 75, 50, 25, 0], guides: [25, 50], emphasis: 25 },
+};
+
+const EMPTY_GEOMETRY: PaneGeometry = {
+  volumeBars: [],
+  volumeMax: 0,
+  volumeSource: "volume",
+  rsiPath: "",
+  latestRsi: null,
+  macdPath: "",
+  macdSignalPath: "",
+  macdBars: [],
+  latestMacd: null,
+  stochKPath: "",
+  stochDPath: "",
+  latestStochK: null,
+  latestStochD: null,
+  adxPath: "",
+  plusDiPath: "",
+  minusDiPath: "",
+  latestAdx: null,
+};
 
 export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }: Props) {
   const clipId = `indicator-pane-plot-${useId().replace(/:/g, "")}`;
@@ -73,17 +147,7 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
     void version;
     const handle = canvasRef.current;
     if (!handle || size.w <= 0 || size.h <= 0) {
-      return {
-        volumeBars: [] as VolumeBar[],
-        volumeMax: 0,
-        volumeSource: "volume" as "volume" | "range",
-        rsiPath: "",
-        latestRsi: null as number | null,
-        macdPath: "",
-        macdSignalPath: "",
-        macdBars: [] as MacdBar[],
-        latestMacd: null as number | null,
-      };
+      return EMPTY_GEOMETRY;
     }
 
     const visible = candles
@@ -136,15 +200,10 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
         });
       }
       return {
+        ...EMPTY_GEOMETRY,
         volumeBars,
         volumeMax: maxVolume,
         volumeSource: hasRealVolume ? "volume" : "range",
-        rsiPath: "",
-        latestRsi: null,
-        macdPath: "",
-        macdSignalPath: "",
-        macdBars: [],
-        latestMacd: null,
       };
     }
 
@@ -176,15 +235,68 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
         if (point.signal != null) signalPoints.push({ x, y: zeroY - (point.signal / maxAbs) * (usable / 2) });
       }
       return {
-        volumeBars: [],
+        ...EMPTY_GEOMETRY,
         volumeMax: maxAbs,
-        volumeSource: "volume",
-        rsiPath: "",
-        latestRsi: null,
         macdPath: toPath(macdPoints),
         macdSignalPath: toPath(signalPoints),
         macdBars,
         latestMacd: macd.map((point) => point.macd).filter((value): value is number => value != null).at(-1) ?? null,
+      };
+    }
+
+    if (mode === "stoch") {
+      // 14/3/3, the MT5 default, so a trader reading both platforms sees the
+      // same lines. %K may be null where a window was flat — see the note at
+      // the top of the file; those become gaps, not interpolated segments.
+      const stoch = stochasticSeries(visible, 14, 3, 3);
+      const top = 18;
+      const bottom = 6;
+      const usable = Math.max(20, size.h - top - bottom);
+      const kPoints: Array<{ x: number; y: number } | null> = [];
+      const dPoints: Array<{ x: number; y: number } | null> = [];
+      for (let i = 0; i < visible.length; i += 1) {
+        const x = handle.timeToCoordinate(visible[i].time);
+        if (x == null || x < 0 || x > plotWidth) continue;
+        const point = stoch[i];
+        kPoints.push(point.k == null ? null : { x, y: top + (1 - point.k / 100) * usable });
+        dPoints.push(point.d == null ? null : { x, y: top + (1 - point.d / 100) * usable });
+      }
+      return {
+        ...EMPTY_GEOMETRY,
+        stochKPath: toSegmentedPath(kPoints),
+        stochDPath: toSegmentedPath(dPoints),
+        latestStochK: stoch.map((p) => p.k).filter((v): v is number => v != null).at(-1) ?? null,
+        latestStochD: stoch.map((p) => p.d).filter((v): v is number => v != null).at(-1) ?? null,
+      };
+    }
+
+    if (mode === "adx") {
+      // Period 14. The first ADX value lands at bar 28, not 14 — DX needs a
+      // full period of its own to smooth. Everything before that is null and
+      // draws as nothing, which is the honest picture of "not enough history".
+      const adx = adxSeries(visible, 14);
+      const top = 18;
+      const bottom = 6;
+      const usable = Math.max(20, size.h - top - bottom);
+      const adxPoints: Array<{ x: number; y: number } | null> = [];
+      const plusPoints: Array<{ x: number; y: number } | null> = [];
+      const minusPoints: Array<{ x: number; y: number } | null> = [];
+      const place = (value: number | null, x: number) =>
+        value == null ? null : { x, y: top + (1 - Math.min(100, Math.max(0, value)) / 100) * usable };
+      for (let i = 0; i < visible.length; i += 1) {
+        const x = handle.timeToCoordinate(visible[i].time);
+        if (x == null || x < 0 || x > plotWidth) continue;
+        const point = adx[i];
+        adxPoints.push(place(point.adx, x));
+        plusPoints.push(place(point.plusDi, x));
+        minusPoints.push(place(point.minusDi, x));
+      }
+      return {
+        ...EMPTY_GEOMETRY,
+        adxPath: toSegmentedPath(adxPoints),
+        plusDiPath: toSegmentedPath(plusPoints),
+        minusDiPath: toSegmentedPath(minusPoints),
+        latestAdx: adx.map((p) => p.adx).filter((v): v is number => v != null).at(-1) ?? null,
       };
     }
 
@@ -204,15 +316,9 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
       rsiPoints.push({ x, y: top + (1 - value / 100) * usable });
     }
     return {
-      volumeBars: [],
-      volumeMax: 0,
-      volumeSource: "volume",
+      ...EMPTY_GEOMETRY,
       rsiPath: toPath(rsiPoints),
       latestRsi: rsiValues.filter((value): value is number => value != null).at(-1) ?? null,
-      macdPath: "",
-      macdSignalPath: "",
-      macdBars: [],
-      latestMacd: null,
     };
     // `colors` belongs here: the volume bars and the MACD histogram bake their
     // colour into the geometry above. Without it, switching chart theme left
@@ -228,12 +334,13 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
   const usable = Math.max(20, size.h - top - bottom);
 
   // Right-axis labels — drawn into the reserved gutter (axisWidth).
+  const bounded = BOUNDED_SCALES[mode as BoundedMode];
   const axisLabels: Array<{ y: number; text: string; emphasis?: boolean }> =
-    mode === "rsi"
-      ? [100, 75, 50, 25, 0].map((level) => ({
+    bounded
+      ? bounded.levels.map((level) => ({
           y: top + (1 - level / 100) * usable,
           text: level.toFixed(2),
-          emphasis: level === 50,
+          emphasis: level === bounded.emphasis,
         }))
       : mode === "macd"
         ? [
@@ -289,6 +396,10 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
       <span className={`pointer-events-none absolute left-2 top-1 z-[1] text-[9px] font-bold uppercase tracking-[0.22em] ${colors.titleText}`}>
         {mode === "rsi"
           ? `RSI(14) ${geometry.latestRsi != null ? geometry.latestRsi.toFixed(2) : "--"}`
+          : mode === "stoch"
+            ? `STOCH(14,3,3) ${geometry.latestStochK != null ? geometry.latestStochK.toFixed(2) : "--"} / ${geometry.latestStochD != null ? geometry.latestStochD.toFixed(2) : "--"}`
+          : mode === "adx"
+            ? `ADX(14) ${geometry.latestAdx != null ? geometry.latestAdx.toFixed(2) : "--"}`
           : mode === "macd"
             ? `MACD(12,26,9) ${geometry.latestMacd != null ? geometry.latestMacd.toFixed(4) : "--"}`
           : `${geometry.volumeSource === "volume" ? "Volumes" : "Range"} ${
@@ -320,8 +431,8 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
           />
 
           <g clipPath={`url(#${clipId})`}>
-            {mode === "rsi"
-              ? [25, 50, 75].map((level) => {
+            {bounded
+              ? bounded.guides.map((level) => {
                   const y = top + (1 - level / 100) * usable;
                   return (
                     <line
@@ -331,7 +442,7 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
                       y1={y}
                       y2={y}
                       stroke={
-                        level === 50
+                        level === bounded.emphasis
                           ? colors.levelLine
                           : colors.levelLineDim
                       }
@@ -404,6 +515,25 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
                 stroke={colors.macdSignal}
                 strokeWidth={1.15}
               />
+            ) : null}
+
+            {mode === "stoch" && geometry.stochKPath ? (
+              <path d={geometry.stochKPath} fill="none" stroke={colors.stochK} strokeWidth={1.5} />
+            ) : null}
+            {mode === "stoch" && geometry.stochDPath ? (
+              <path d={geometry.stochDPath} fill="none" stroke={colors.stochD} strokeWidth={1.15} />
+            ) : null}
+
+            {/* +DI and -DI first, ADX last: ADX is the line being read, so it
+                sits on top where the three cross. */}
+            {mode === "adx" && geometry.plusDiPath ? (
+              <path d={geometry.plusDiPath} fill="none" stroke={colors.plusDiLine} strokeWidth={1.15} />
+            ) : null}
+            {mode === "adx" && geometry.minusDiPath ? (
+              <path d={geometry.minusDiPath} fill="none" stroke={colors.minusDiLine} strokeWidth={1.15} />
+            ) : null}
+            {mode === "adx" && geometry.adxPath ? (
+              <path d={geometry.adxPath} fill="none" stroke={colors.adxLine} strokeWidth={1.6} />
             ) : null}
           </g>
 

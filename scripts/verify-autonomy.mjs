@@ -196,7 +196,7 @@ check("the level gate sits on the only road to MT5", () => {
   const guardAt = service.indexOf("evaluateAutoTrade({");
   assert.ok(gateAt > 0 && guardAt > gateAt, "the permission question comes first");
 
-  const callers = ["src/services/alertAutoTradeService.ts", "src/services/executionRequestExecutionService.ts"];
+  const callers = ["src/services/alertAutoTradeService.ts", "src/services/executionRequestExecutionService.ts", "src/services/mt5QuickOrderService.ts", "src/app/api/mt5/order/route.ts"];
   for (const file of callers) {
     const src = read(file);
     assert.ok(src.includes("decideAutoTradeAllowed("), `${file} must go through the service`);

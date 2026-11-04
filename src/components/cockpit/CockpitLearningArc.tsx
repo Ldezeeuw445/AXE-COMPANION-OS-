@@ -22,6 +22,11 @@ export function CockpitLearningArc({ data }: Props) {
         {data.headline ||
           "Your instruments and your chat feedback — no fake milestones, only what you actually did."}
       </p>
+      <p className="mt-2 text-[11px] leading-relaxed text-tos-dim">
+        What it measures: closed trades in the window (instrument mix) plus thumbs on AXE replies.
+        Minimum sample: a few closed trades before the instrument list is meaningful; chat rhythm
+        needs at least one rated reply. Use it to steer what AXE emphasises next.
+      </p>
 
       {data.weeklyFocus.length > 0 ? (
         <>

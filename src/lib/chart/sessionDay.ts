@@ -116,3 +116,92 @@ export function sessionDayKey(unixSeconds: number, timeZone: string): string {
   if (!Number.isFinite(unixSeconds)) return "";
   return formatterFor(timeZone).format(new Date(unixSeconds * 1000));
 }
+
+/**
+ * The broker's trading-day key for an instant (`YYYY-MM-DD` in `timeZone`).
+ * Same answer as `sessionDayKey` for a candle's unix seconds.
+ */
+export function brokerDayKey(now: Date, timeZone: string): string {
+  return sessionDayKey(Math.floor(now.getTime() / 1000), timeZone);
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function readZonedParts(
+  instant: Date,
+  timeZone: string,
+): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? NaN);
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+    second: get("second"),
+  };
+}
+
+/**
+ * UTC instant of the broker-day boundary for `now`.
+ *
+ * Default reset is midnight in `timeZone`. Pass `resetTime` as `HH:MM` when a
+ * firm rolls the day at a different local clock (rare; most MT5 servers use
+ * midnight server time). DST-safe: the offset is re-read after the first guess.
+ */
+function previousDayKey(dayKey: string): string {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  const prev = new Date(Date.UTC(y, m - 1, d - 1, 12, 0, 0));
+  return `${prev.getUTCFullYear()}-${pad2(prev.getUTCMonth() + 1)}-${pad2(prev.getUTCDate())}`;
+}
+
+/** UTC instant of `HH:MM` on a given `YYYY-MM-DD` calendar day in `timeZone`. */
+function wallClockOnDay(dayKey: string, timeZone: string, resetHour: number, resetMinute: number): Date {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  let utcMs = Date.UTC(y, m - 1, d, resetHour, resetMinute, 0);
+  for (let i = 0; i < 3; i += 1) {
+    const local = readZonedParts(new Date(utcMs), timeZone);
+    const asIfUtc = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+    const desired = Date.UTC(y, m - 1, d, resetHour, resetMinute, 0);
+    utcMs += desired - asIfUtc;
+  }
+  return new Date(utcMs);
+}
+
+export function brokerDayStart(now: Date, timeZone: string, resetTime = "00:00"): Date {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(resetTime).trim());
+  const resetHour = match ? Number(match[1]) : 0;
+  const resetMinute = match ? Number(match[2]) : 0;
+  if (
+    !Number.isFinite(resetHour) ||
+    !Number.isFinite(resetMinute) ||
+    resetHour < 0 ||
+    resetHour > 23 ||
+    resetMinute < 0 ||
+    resetMinute > 59
+  ) {
+    return brokerDayStart(now, timeZone, "00:00");
+  }
+
+  let dayKey = brokerDayKey(now, timeZone);
+  let start = wallClockOnDay(dayKey, timeZone, resetHour, resetMinute);
+  // Non-midnight reset: before today's reset clock, the open trading day
+  // began on the previous calendar date at that same local clock.
+  if (start.getTime() > now.getTime()) {
+    dayKey = previousDayKey(dayKey);
+    start = wallClockOnDay(dayKey, timeZone, resetHour, resetMinute);
+  }
+  return start;
+}

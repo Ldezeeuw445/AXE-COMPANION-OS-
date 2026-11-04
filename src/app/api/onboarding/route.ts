@@ -2,6 +2,7 @@ import { rejectAnonymous } from "@/lib/auth/anonymousSessions";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { DEMO_WATCHLIST_SYMBOLS } from "@/lib/broker/demoAccount";
 import { SQUAWK_STATION_IDS } from "@/lib/squawk/prefs";
+import { getUserAxeEntitlement } from "@/services/billingService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,29 @@ export async function GET() {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  // Build-list 10.1: the flow used to end with preferences saved and nothing
+  // else — no broker, no plan, and no mention that either mattered. These two
+  // facts let the last step say what is still missing.
+  //
+  // `head: true` asks Postgres for the count without the rows: the client only
+  // needs to know whether there are any, and a trader with forty accounts
+  // should not pay for forty rows to find that out. Both reads fail soft —
+  // onboarding must not break because billing is slow.
+  const [accountCount, entitlement] = await Promise.all([
+    supabase
+      .from("user_broker_accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .then((r) => r.count ?? 0, () => 0),
+    getUserAxeEntitlement(supabase, user.id).catch(() => null),
+  ]);
+
   return Response.json({
+    setup: {
+      plan: entitlement?.plan ?? "free",
+      isPaid: entitlement?.isPaid ?? false,
+      tradingAccounts: accountCount,
+    },
     completed: Boolean(data?.onboarding_completed_at),
     completedAt: data?.onboarding_completed_at ?? null,
     prefs: {

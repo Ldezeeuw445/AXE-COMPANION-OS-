@@ -21,6 +21,8 @@ export const INDICATOR_FLAG_KEYS = [
   "rsi",
   "vwap",
   "poc",
+  "stoch",
+  "adx",
 ] as const;
 
 export type SmcFlagKey = (typeof SMC_FLAG_KEYS)[number];
@@ -66,6 +68,16 @@ const INDICATOR_ALIASES: Record<string, IndicatorFlagKey> = {
   ema: "ma",
   sma: "ma",
   macd: "macd",
+  stoch: "stoch",
+  stochastic: "stoch",
+  "stochastic oscillator": "stoch",
+  sto: "stoch",
+  "%k": "stoch",
+  adx: "adx",
+  dmi: "adx",
+  "directional movement": "adx",
+  "average directional index": "adx",
+  "trend strength": "adx",
   bollinger: "bollinger",
   bb: "bollinger",
   rsi: "rsi",

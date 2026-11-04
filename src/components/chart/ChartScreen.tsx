@@ -135,6 +135,9 @@ import { TextAnnotationLayer } from "@/components/chart/annotations/TextAnnotati
 import { HorizontalLevelAnnotationLayer } from "@/components/chart/annotations/HorizontalLevelAnnotationLayer";
 import { ChartIndicatorLayer } from "@/components/chart/indicators/ChartIndicatorLayer";
 import { IndicatorPane } from "@/components/chart/indicators/IndicatorPane";
+import { PANE_MODES, normalizePaneOrder, paneHeightKey, type PaneMode } from "@/lib/chart/panes";
+import { stackLayout } from "@/lib/chart/stackedTimeframes";
+import { ChartBiasPane } from "./ChartBiasPane";
 import { FutureProjectionCursor } from "@/components/chart/FutureProjectionCursor";
 import { ChartOrderBookDrawer } from "@/components/chart/ChartOrderBookDrawer";
 import { ChartNewsDrawer } from "@/components/chart/ChartNewsDrawer";
@@ -546,9 +549,8 @@ function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice:
  * to the finger even when it leaves the handle area.
  */
 /* ── Indicator pane ordering ──────────────────────────────────── */
-type PaneMode = "volume" | "rsi" | "macd";
-const PANE_MODE_DEFAULT: PaneMode[] = ["volume", "rsi", "macd"];
-const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc"]);
+const PANE_MODE_DEFAULT: PaneMode[] = [...PANE_MODES];
+const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc", "stoch", "adx"]);
 const PRO_ONLY_SMC_TOOLS = new Set(["structure", "orderBlocks", "fvg", "ifvg", "supplyDemand"]);
 
 function ResizablePane({
@@ -664,6 +666,36 @@ export function ChartScreen({
   const drawingTf = data.timeframeKey || session.timeframe;
   const tfLabel = CHART_TF_OPTIONS.find((t) => t.key === data.timeframeKey)?.label ?? data.timeframeKey.toUpperCase();
   const accountId = data.account?.brokerAccountId ?? null;
+
+  /**
+   * Twee charts boven elkaar: de richting boven, het moment onder. Punt 16.
+   *
+   * Standaard uit. De voorkeur staat onder `axe.chart.stackedBias`; er is nog
+   * geen knop voor, omdat de chart-drawer een navigatiemenu is en geen
+   * instellingenpaneel — daar hoort dit niet zonder die drawer te
+   * herontwerpen, en dat vraagt iemand die het scherm kan zien.
+   */
+  const [stackedBias, setStackedBias] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  useEffect(() => {
+    try {
+      setStackedBias(window.localStorage.getItem("axe.chart.stackedBias") === "1");
+    } catch {
+      /* private window of geblokkeerde opslag: dan gewoon uit */
+    }
+    const meet = () => setViewportHeight(window.innerHeight);
+    meet();
+    window.addEventListener("resize", meet);
+    return () => window.removeEventListener("resize", meet);
+  }, []);
+
+  // De hoogte die voor de twee charts overblijft, los van werkbalk en
+  // koersregel. Onder de drempel beslist stackLayout zelf dat één chart beter
+  // is dan twee vegen.
+  const biasLayout = stackedBias
+    ? stackLayout(data.timeframeKey, Math.max(0, viewportHeight - 260))
+    : ({ stacked: false, reason: "te_weinig_hoogte" } as const);
   const trackChartPreference = useCallback(
     (eventType: Parameters<typeof chartPreferenceEvent>[0], payload: Record<string, unknown>) => {
       void trackAdaptiveEvent(
@@ -1218,16 +1250,18 @@ export function ChartScreen({
 
   // MT5-style resizable indicator panes. Defaults match what we previously
   // hard-coded; users can drag the divider on top of each pane to taste.
-  const [paneHeights, setPaneHeights] = useState<{ volume: number; rsi: number; macd: number }>({
+  const [paneHeights, setPaneHeights] = useState<Record<PaneMode, number>>({
     volume: 108,
     rsi: 120,
     macd: 112,
+    stoch: 120,
+    adx: 120,
   });
 
-  const setPaneHeight = useCallback((mode: "volume" | "rsi" | "macd", next: number) => {
+  const setPaneHeight = useCallback((mode: PaneMode, next: number) => {
     setPaneHeights((prev) => ({ ...prev, [mode]: next }));
     try {
-      savePref(`axe.chart.paneHeight.${mode}`, String(Math.round(next)));
+      savePref(paneHeightKey(mode), String(Math.round(next)));
     } catch {
       /* ignore — best-effort persistence */
     }
@@ -1238,20 +1272,20 @@ export function ChartScreen({
 
   useEffect(() => {
     try {
-      const v = Number(localStorage.getItem("axe.chart.paneHeight.volume") ?? "");
-      const r = Number(localStorage.getItem("axe.chart.paneHeight.rsi") ?? "");
-      const m = Number(localStorage.getItem("axe.chart.paneHeight.macd") ?? "");
-      setPaneHeights((prev) => ({
-        volume: Number.isFinite(v) && v >= 70 ? v : prev.volume,
-        rsi: Number.isFinite(r) && r >= 70 ? r : prev.rsi,
-        macd: Number.isFinite(m) && m >= 70 ? m : prev.macd,
-      }));
+      // One loop over the modes rather than a line per pane: the three-line
+      // version silently left a new pane unreadable from storage.
+      setPaneHeights((prev) => {
+        const next = { ...prev };
+        for (const mode of PANE_MODE_DEFAULT) {
+          const stored = Number(localStorage.getItem(paneHeightKey(mode)) ?? "");
+          if (Number.isFinite(stored) && stored >= 70) next[mode] = stored;
+        }
+        return next;
+      });
       const storedPaneOrder = localStorage.getItem("axe.chart.paneOrder");
       if (storedPaneOrder) {
-        const parsed: unknown = JSON.parse(storedPaneOrder);
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          setPaneOrder(parsed as PaneMode[]);
-        }
+        const order = normalizePaneOrder(JSON.parse(storedPaneOrder) as unknown);
+        if (order) setPaneOrder(order);
       }
     } catch {
       /* localStorage may be blocked */
@@ -3385,6 +3419,17 @@ export function ChartScreen({
         </div>
       ) : null}
 
+      {biasLayout.stacked ? (
+        <ChartBiasPane
+          accountId={accountId}
+          brokerSymbol={data.brokerSymbol}
+          executionKey={data.timeframeKey}
+          height={biasLayout.biasHeight}
+          background={chartTheme.background}
+          isDark={chartTheme.isDark}
+        />
+      ) : null}
+
       {/* Chart frame — flat, edge-attached trading canvas */}
       <div
         className={`relative mx-0 mt-0 min-h-0 flex-1 overflow-hidden select-none md:min-h-[420px] md:rounded-none ${
@@ -3574,8 +3619,10 @@ export function ChartScreen({
 
         {/* Tablet — compact toolbar: left meta, centered depth/news | squawk | exec, right account */}
         <div
-          className={`tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 bg-black/72 px-2 py-1.5 backdrop-blur-lg ${
-            chartTheme.isDark ? "border-b border-white/[0.06]" : ""
+          className={`tos-chart-tablet-header absolute left-0 right-0 top-0 z-30 hidden grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 py-1.5 ${
+            chartTheme.isDark
+              ? "border-b border-white/[0.06] bg-black/72 backdrop-blur-lg"
+              : "border-b border-black/[0.08] bg-[#0c0c0e]/97"
           }`}
         >
           <div className="flex min-w-0 items-center justify-self-start gap-1">
@@ -3666,17 +3713,27 @@ export function ChartScreen({
             />
           </div>
           {data.accountChoices.length > 0 ? (
-            <div className="relative shrink-0 justify-self-end">
+            <div className="relative min-w-0 max-w-[9rem] shrink-0 justify-self-end">
               <select
                 value={accountId ?? ""}
                 onChange={(e) => goAccount(e.target.value)}
-                className="max-w-[9rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2 py-0.5 pr-5 text-[9px] font-semibold text-emerald-100/90 outline-none"
+                className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                 aria-label="Account"
               >
                 {data.accountChoices.map((a) => (
                   <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
                 ))}
               </select>
+              <div
+                className="pointer-events-none flex min-w-0 items-center rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2 py-0.5 pr-5"
+                aria-hidden
+              >
+                <span className="block min-w-0 truncate text-[9px] font-semibold text-emerald-100/90">
+                  {data.accountChoices.find((a) => a.brokerAccountId === accountId)?.label
+                    ?? accountLabel
+                    ?? "Account"}
+                </span>
+              </div>
               <ChevronDown className="pointer-events-none absolute right-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
             </div>
           ) : (
@@ -3685,9 +3742,15 @@ export function ChartScreen({
         </div>
 
         {/* Phone — two-row toolbar (unchanged layout) */}
-        <div className="tos-chart-phone-header absolute left-0 right-0 top-0 z-30 border-b border-white/[0.06] bg-black/72 px-2.5 py-1.5 backdrop-blur-lg">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
+        <div
+          className={`tos-chart-phone-header absolute left-0 right-0 top-0 z-30 border-b px-2.5 py-1.5 ${
+            chartTheme.isDark
+              ? "border-white/[0.06] bg-black/72 backdrop-blur-lg"
+              : "border-black/[0.08] bg-[#0c0c0e]/97"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <div className="relative">
                 <select
                   value={data.symbol}
@@ -3733,7 +3796,7 @@ export function ChartScreen({
                 askText={askText}
                 dayPct={dayPct}
                 dayText={dayText}
-                className="ml-auto shrink-0 sm:ml-0.5"
+                className="ml-auto min-w-0 overflow-hidden sm:ml-0.5"
               />
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
@@ -3748,17 +3811,27 @@ export function ChartScreen({
                 {sessionCopy()}
               </span>
               {data.accountChoices.length > 1 ? (
-                <div className="relative shrink-0">
+                <div className="relative min-w-0 max-w-[9.5rem] shrink-0">
                   <select
                     value={accountId ?? ""}
                     onChange={(e) => goAccount(e.target.value)}
-                    className="max-w-[10.4rem] appearance-none truncate rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2.5 py-1 pr-6 text-[10px] font-semibold text-emerald-100/90 outline-none transition-colors hover:bg-emerald-400/[0.15]"
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                     aria-label="Account"
                   >
                     {data.accountChoices.map((a) => (
                       <option key={a.brokerAccountId} value={a.brokerAccountId}>{a.label}</option>
                     ))}
                   </select>
+                  <div
+                    className="pointer-events-none flex min-w-0 items-center rounded-lg border border-emerald-400/25 bg-emerald-400/[0.10] px-2.5 py-1 pr-6"
+                    aria-hidden
+                  >
+                    <span className="block min-w-0 truncate text-[10px] font-semibold text-emerald-100/90">
+                      {data.accountChoices.find((a) => a.brokerAccountId === accountId)?.label
+                        ?? accountLabel
+                        ?? "Account"}
+                    </span>
+                  </div>
                   <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-emerald-200/65" />
                 </div>
               ) : null}
@@ -3983,6 +4056,8 @@ export function ChartScreen({
                 { id: "macd", label: "MACD", icon: Activity },
                 { id: "bollinger", label: "BOL", icon: BarChart2 },
                 { id: "rsi", label: "RSI", icon: Activity },
+                { id: "stoch", label: "STOCH", icon: Activity },
+                { id: "adx", label: "ADX", icon: Activity },
                 { id: "vwap", label: "VWAP", icon: Landmark },
                 { id: "poc", label: "POC", icon: Crosshair },
               ].map((item) => {
@@ -4058,7 +4133,7 @@ export function ChartScreen({
           ) : null}
 
           {(() => {
-            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
+            const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || !PRO_ONLY_INDICATORS.has(m)));
             if (enabledPanes.length < 2) return null;
             const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
             return (
@@ -4536,6 +4611,8 @@ export function ChartScreen({
                     { id: "macd", label: "MACD", icon: Activity },
                     { id: "bollinger", label: "BOL", icon: BarChart2 },
                     { id: "rsi", label: "RSI", icon: Activity },
+                    { id: "stoch", label: "STOCH", icon: Activity },
+                    { id: "adx", label: "ADX", icon: Activity },
                     { id: "vwap", label: "VWAP", icon: Landmark },
                     { id: "poc", label: "POC", icon: Crosshair },
                   ].map((item) => {
@@ -4611,7 +4688,7 @@ export function ChartScreen({
               ) : null}
 
               {(() => {
-                const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
+                const enabledPanes = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || !PRO_ONLY_INDICATORS.has(m)));
                 if (enabledPanes.length < 2) return null;
                 const labels: Record<string, string> = { volume: "VOL", rsi: "RSI", macd: "MACD" };
                 return (
@@ -4999,7 +5076,7 @@ export function ChartScreen({
       {/* Indicator panes hidden in landscape immersive — keeps room for dates + execution bar */}
       {!isFullscreen
         ? (() => {
-        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || m !== "macd"));
+        const enabledPanesList = paneOrder.filter((m) => indicatorToolFlags[m] && (canFullIndicators || !PRO_ONLY_INDICATORS.has(m)));
         const multiPane = enabledPanesList.length > 1;
         return enabledPanesList.map((mode, idx) => (
           <ResizablePane
