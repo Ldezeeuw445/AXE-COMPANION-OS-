@@ -97,6 +97,17 @@ volgende. Niet eromheen bouwen.
   landing rendert lokaal zonder `.env.local`. Dat kost twee minuten en had de
   hele verkeerde ronde bespaard.
 
+  **En vertrouw een screenshot van een hoge container niet.** Op 5 november
+  leek het alsof de reveal-kaarten op mobiel hun voor- en achterkant over
+  elkaar heen zetten; er stond onleesbare spookttekst doorheen. Er was niets
+  mis. Ik had `locator(...).screenshot()` gedaan op een element dat hoger is
+  dan het scherm, en Playwright plakt zo'n opname uit meerdere scrollstappen
+  aan elkaar — een laag die tijdens het scrollen verdwijnt kan in één van die
+  stappen blijven staan. `page.screenshot({ fullPage: true })`, of een element
+  dat wél in beeld past, geeft het echte plaatje. Toets een vermoeden altijd
+  met een meting ernaast: `getComputedStyle(...).display` en `innerText` van
+  het element zeiden meteen dat de voorkant gewoon weg was.
+
   En: vraag om het bronbestand voordat je een ontwerp reconstrueert. Luka had
   het, en het beantwoordde in één keer wat ik uit git aan het afleiden was.
 
