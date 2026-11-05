@@ -1033,6 +1033,17 @@ de database weet niet wat main's laatste commit is, en zonder dat is
 "de build is oud" op een rustig weekend vals alarm. Zet de regel uit
 `docs/VOOR-LUKA.md` op de VPS en dit gat is dicht.
 
+**Voor wie dit dichtzet: "een mislukte cron-run" is niet hetzelfde als "er is
+iets stuk."** Op 5 november stonden alle 19 pg_cron-jobs groen, maar vier
+ervan hadden precies één mislukking in 24 uur — paper-stops, trailing-stops,
+cron-collect en uptime-watch. Alle vier op dezelfde seconde (06:56:00) en
+alle vier met `job startup timeout`. Dat is de cron-worker van Postgres die
+even niet kon starten, niet onze code; op de volgende tik liepen ze weer. Een
+alarm op "status <> succeeded" gaat daar dus af zonder dat er iets aan de
+hand is. Alarmeer op een reeks — twee of drie mislukkingen achter elkaar op
+dezelfde job — en niet op één run. Zelfde soort valkuil als bij de
+uptime-wacht: de vraag moet onderscheid maken.
+
 ### Observaties, geen opdrachten
 
 Deze zijn onderweg gemeten en bewust niet opgepakt. Ze staan hier zodat ze
