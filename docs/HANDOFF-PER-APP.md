@@ -253,11 +253,105 @@ kwaliteitspoort. Een werkplaats zonder controle die twee producten bouwt die
 ook geen controle hebben. Dat is dezelfde blinde vlek, maar één laag hoger —
 en daarom kost hij meer.
 
-**Nog te meten voor Core echt beoordeeld is:** draaien die 521 testbestanden
-ook, en hoeveel slagen er? Wat is de verhouding tussen `backend/`,
-`frontend/`, `brain/`, `memory/`, `os3/` en de losse `agent_loop.py` /
-`crew_runner.py` / `flow_runner.py` — is dat één systeem of vier generaties
-naast elkaar? Dat laatste bepaalt of Core afmaken bouwen is of eerst opruimen.
+## 4.1 Waar Core écht zit
+
+Gemeten 5 november. De repo-root is misleidend.
+
+**Het levende systeem is `AXE-CORE-ORCHESTRATOR-content/AXE-CORE-HEADQUARTERS/`**
+— 2624 bestanden, 308.989 regels, met een nette `src/domain` /
+`src/application` / `src/infrastructure`-indeling en tests naast de code.
+Dat is doordacht gebouwd.
+
+Alles eromheen is vorige generatie:
+
+| Wat | Laatst aangeraakt |
+|---|---|
+| `AXE-CORE-ORCHESTRATOR-content/` | **vandaag** |
+| `main.py` (183 KB), `agent_loop.py`, `crew_runner.py`, `flow_runner.py`, `backend/`, `frontend/` | 31 oktober, allemaal in **één** commit |
+| `AXE-CORE-ORCHESTRATOR-content.zip` | 28 oktober — een zip van de map ernaast, mee-gecommit |
+| `brain/`, `memory/`, `knowledge/`, `os3/`, `supabase/`, `tests/` | 1 tot 5 bestanden elk; stellage zonder inhoud |
+
+Die 31-oktober-commit raakte zes verschillende dingen tegelijk met één
+boodschap over een overlay. Dat is een bulk-hersync, geen werk aan elk ervan.
+
+**Dus: niet vier generaties spaghetti, maar één goed systeem in een
+verwarrende verpakking.** Dat is beter nieuws dan het eruitziet, en het
+opruimen is navenant simpeler: verplaats de inhoud naar de root, gooi de zip
+en de dode stellage weg, en Core is ineens een leesbaar project.
+
+## 4.2 Gemeten staat van het levende systeem
+
+| | |
+|---|---|
+| Tests | **3161**, waarvan **3158 slagen en 3 falen** (79s) |
+| Typecheck | **exit 2** — 18 TS-fouten, 15 daarvan in testbestanden |
+| Lint | **exit 1** — 478 problemen, waarvan **444 errors** |
+| CI | geen |
+
+De drie falende tests zijn alle drie hetzelfde soort ding, en dat is het
+interessante:
+
+1. `src/design/colourRule.test.ts` — *"expected 129 to be less than or equal
+   to 128"*. Een ratel op hoeveel plekken de kleurregel nog geschonden wordt.
+   Er is er één bijgekomen.
+2. `src/domain/dodeCode.test.ts` — *"Nieuwe export zonder aanroeper
+   gevonden"*. Een dodecode-detector.
+3. `src/domain/architecture/generateArchitectureManifest.test.ts` — de
+   architectuur-momentopname loopt achter op een migratie van 4 november.
+
+Dat zijn geen bugs maar **ratels tegen verval**. Iemand heeft hier serieus
+nagedacht: een dodecode-detector en een ontwerpregel-ratel bouw je niet per
+ongeluk. Maar een ratel werkt alleen als er iets aan draait, en er draait
+niets aan.
+
+De 444 lint-errors zijn vooral `no-unused-vars` (130), `set-state-in-effect`
+(97), `only-export-components` (65) en `react-hooks/refs` (64) — hetzelfde
+patroon als Companion had, maar daar zijn het warnings en hier errors.
+
+## 4.3 De conclusie die eruit springt
+
+**Core heeft een betere testsuite dan Companion en slechtere poorten.**
+
+| | Companion | Core |
+|---|---|---|
+| Tests | 207 groen | 3161, 3 rood |
+| Typecheck | schoon | exit 2 |
+| Lint | 0 errors | 444 errors |
+| Verify-keten | 835 checks groen | — |
+| CI | geen | geen |
+| Draait iets de checks? | **ja, elke 4 uur** | **nee** |
+
+Dat laatste rijtje verklaart alle andere. Het verschil tussen groen en rood
+is hier niet zorgvuldigheid of codekwaliteit — Core's tests zijn
+geavanceerder dan die van Companion. Het verschil is dat er bij Companion
+elke vier uur iets wakker wordt dat de checks draait en repareert wat rood
+staat, en bij Core niet.
+
+Twee projecten, dezelfde eigenaar, dezelfde agents. Bij de één draait een lus
+op de poorten, bij de ander niet. Dat is zo ongeveer een gecontroleerd
+experiment, en de uitkomst is eenduidig.
+
+## 4.4 Wat "Core perfect" betekent, en in welke volgorde
+
+Luka wil Core eerst af, dan Companion, dan Trading OS. Dat is de goede
+volgorde, want Core is de fabriek. Concreet:
+
+1. **Zet de poorten op groen.** De 3 ratels repareren (het zijn er drie, geen
+   drieduizend), de 18 TS-fouten weg, en de 444 lint-errors terugbrengen.
+   Dat laatste is het meeste werk en kan stapsgewijs met een ratel: zet de
+   bovengrens op het huidige getal en laat hem alleen dalen.
+2. **Zet er CI op.** Pas dán blijven ze groen. Zonder stap 2 is stap 1
+   eenmalig opruimen in plaats van onderhoud. Let op: Actions ligt
+   accountbreed stil (punt 1 van dit document), dus dit hangt aan de billing.
+3. **Ruim de verpakking op.** Inhoud naar de root, de zip weg, de dode
+   stellage weg, de root-generatie van 31 oktober archiveren als tag en
+   verwijderen. Daarna snapt een nieuwe sessie binnen een minuut waar hij is.
+4. **Pas daarna bouwen** aan wat Core moet kunnen (zie
+   `docs/HANDOFF-AXE-CORE-ALS-COFOUNDER.md`).
+
+Stap 1 tot en met 3 zijn geen nieuwe functies. Ze maken Core tot iets dat
+Companion en Trading OS kán onderhouden zonder er zijn eigen verval bij op
+te tellen.
 
 **Gemeld, niet gemeten:**
 
