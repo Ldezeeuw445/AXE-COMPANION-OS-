@@ -94,6 +94,12 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "chart/drawings": "Manual chart drawings are basic charting on Free; chart_actions gates AI-routed overlays only",
   "context": "Context the client needs to render anything at all",
   "feed": "The feed itself; its paid items are gated where they are produced",
+  // Same call as the feed, and for the same reason: an inbox is where things
+  // land, not where they are made. Whatever produces a signal — an alert, an
+  // AI read — is already charged for where it is produced, so charging again
+  // to look at the result would be charging twice for one thing. Decided by
+  // Luka on 2026-11-05.
+  signals: "The signals inbox; whatever produces a signal is gated where it is produced",
   "market/context": "Market context for the chart",
   "quotes/prices": "Price quotes — the chart must work for everyone",
   "shell/status": "App shell status",
