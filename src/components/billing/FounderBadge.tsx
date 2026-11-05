@@ -6,7 +6,7 @@ type Props = {
 };
 
 /** Permanent Founder marker — shown in Settings and (later) profile/chat. */
-export function FounderBadge({ label, founderBadge = false }: Props) {
+export function FounderBadge({ founderBadge = false }: Props) {
   if (!founderBadge) return null;
   return (
     <Badge variant="warm">

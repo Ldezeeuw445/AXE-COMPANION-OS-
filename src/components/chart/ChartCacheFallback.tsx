@@ -35,9 +35,12 @@ export const ChartCacheFallback = memo(function ChartCacheFallback({ symbol, tf 
   const freshness = candleFreshness({ savedAt: cache?.savedAt, online });
 
   useEffect(() => {
-    const cached = readCachedChart(displaySymbol, tfKey);
-    if (cached) setCache(cached);
-    setChecked(true);
+    const id = requestAnimationFrame(() => {
+      const cached = readCachedChart(displaySymbol, tfKey);
+      if (cached) setCache(cached);
+      setChecked(true);
+    });
+    return () => cancelAnimationFrame(id);
   }, [displaySymbol, tfKey]);
 
   if (!checked) return null; // avoid flicker

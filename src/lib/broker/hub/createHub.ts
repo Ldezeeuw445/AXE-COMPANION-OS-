@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AXE_BROKER_CATALOG } from "./catalog";
 import { SupabaseDatabaseAdapter } from "./adapters/supabaseDatabase";
-import { SupabaseAuthAdapter, authAdapterForUser } from "./adapters/supabaseAuth";
+import { authAdapterForUser } from "./adapters/supabaseAuth";
 import { SupabaseSecretsAdapter } from "./adapters/supabaseSecrets";
 import { createAxeBrokerRegistry } from "./adapters/registry";
 import { createBrokerConnectionHub, BrokerConnectionHubService } from "./service";

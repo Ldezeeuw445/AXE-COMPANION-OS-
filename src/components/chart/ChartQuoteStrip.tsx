@@ -45,9 +45,13 @@ function useTikRichting(waarde: number | null): Richting {
     const eerder = vorige.current;
     vorige.current = waarde;
     if (eerder == null || eerder === waarde) return;
-    setRichting(waarde > eerder ? "op" : "neer");
+    const dir: Richting = waarde > eerder ? "op" : "neer";
+    const raf = requestAnimationFrame(() => setRichting(dir));
     const t = setTimeout(() => setRichting("stil"), TIK_MS);
-    return () => clearTimeout(t);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
   }, [waarde]);
 
   return richting;

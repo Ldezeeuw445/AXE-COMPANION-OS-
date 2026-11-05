@@ -5,7 +5,7 @@ import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
-import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot, type Chokepoint } from "@/lib/intel/intelClient";
+import { loadIntelSnapshot, type IntelProviderStatus } from "@/lib/intel/intelClient";
 import { IntelAiChat } from "@/components/intel/IntelAiChat";
 import { CorrelateButton } from "@/components/intel/CorrelateButton";
 import { CorrelationEngine } from "@/components/intel/CorrelationEngine";
@@ -776,65 +776,6 @@ export default async function IntelPage({ searchParams }: PageProps) {
   );
 }
 
-function ProviderBadges({
-  providers,
-  cache,
-}: {
-  providers: IntelProviderStatus[];
-  cache: IntelSnapshot["cache"];
-}) {
-  const liveCount = providers.filter((p) => p.state === "live").length;
-  const errorCount = providers.filter((p) => p.state === "error").length;
-  const offCount = providers.filter((p) => p.state === "off").length;
-  const degraded = errorCount > 0 || cache.state === "stale";
-  const summary =
-    cache.state === "fresh"
-      ? `${liveCount}/${providers.length} ready`
-      : cache.state === "stale"
-        ? `${liveCount}/${providers.length} ready · cached ${cache.ageSeconds != null ? formatAge(cache.ageSeconds) : "snapshot"}`
-        : "Feed warming";
-  return (
-    <div className="tos-matte-banner flex-col items-stretch gap-2 px-3 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-white/55">Live feed health</span>
-        <span
-          className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/85"
-          title={cache.message}
-        >
-          <span
-            className={`tos-accent-dot shrink-0 ${degraded ? "tos-accent-dot--amber" : "tos-accent-dot--emerald"}`}
-            aria-hidden
-          />
-          {summary}
-        </span>
-        {offCount > 0 ? <span className="text-[10px] text-white/45">{offCount} optional off</span> : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {providers.map((p) => (
-          <span
-            key={p.id}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/75"
-            title={p.description}
-          >
-            <span
-              className={`tos-accent-dot shrink-0 ${
-                p.state === "live"
-                  ? "tos-accent-dot--emerald"
-                  : p.state === "error"
-                    ? "tos-accent-dot--amber"
-                    : ""
-              }`}
-              aria-hidden
-            />
-            {intelHealthLabel(p.id)}
-            {p.state === "live" ? "" : ` · ${p.state}`}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /** Market relevance tag for seismic/geo events */
 function seismicMarketTag(c: { eventType: string; region: string; notes: string; fatalities: number; latitude: number | null; longitude: number | null }): { label: string; color: string } {
   const text = `${c.region} ${c.notes}`.toLowerCase();
@@ -893,24 +834,6 @@ function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id:
       {text}
     </span>
   );
-}
-
-function intelHealthLabel(id: string): string {
-  const labels: Record<string, string> = {
-    marketTide: "AXE Intel Tide",
-    insiderTrades: "AXE Insider Flow",
-    senateTrades: "AXE Policy Flow",
-    darkPoolPrints: "AXE Dark Pool",
-    unusualOptions: "AXE Options Flow",
-    corporateJets: "AXE Jet Tracker",
-    militaryRadar: "AXE Military Radar",
-    emergencyMonitor: "AXE Emergency Monitor",
-    vesselTracking: "AXE Vessel Intel",
-    conflictEvents: "AXE Seismic Events",
-    energyFlows: "AXE Energy Flow",
-    cyberThreats: "AXE Cyber Intel",
-  };
-  return labels[id] ?? "AXE Intel";
 }
 
 function Tile({

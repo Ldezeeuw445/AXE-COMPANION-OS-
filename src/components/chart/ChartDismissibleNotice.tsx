@@ -49,7 +49,8 @@ export function useChartDismissedNotices() {
   const isDismissed = useCallback((key: string) => dismissed.has(key), [dismissed]);
 
   useEffect(() => {
-    setDismissed(readDismissed());
+    const id = requestAnimationFrame(() => setDismissed(readDismissed()));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   return { dismiss, isDismissed };

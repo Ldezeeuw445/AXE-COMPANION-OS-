@@ -139,7 +139,6 @@ export function FibAnnotationLayer({
   const [geoms, setGeoms] = useState<FibGeom[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  const [axisWidth, setAxisWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{
     annotationId: string;
@@ -163,15 +162,6 @@ export function FibAnnotationLayer({
     setContainerSize({ w: rect.width, h: rect.height });
     return () => ro.disconnect();
   }, []);
-
-  /* ── Axis width tracking ─────────────────────────────────────── */
-  useEffect(() => {
-    const handle = canvasRef.current;
-    if (!handle) return;
-    const update = () => setAxisWidth(handle.getRightAxisWidth());
-    update();
-    return handle.subscribeViewport(update);
-  }, [canvasRef]);
 
   /* ── Geometry computation ─────────────────────────────────────── */
   useEffect(() => {
@@ -274,7 +264,8 @@ export function FibAnnotationLayer({
   useEffect(() => {
     if (!activeId) return;
     if (annotations.some((a) => a.id === activeId)) return;
-    setActiveId(null);
+    const id = requestAnimationFrame(() => setActiveId(null));
+    return () => cancelAnimationFrame(id);
   }, [activeId, annotations]);
 
   /* ── Drag handling ───────────────────────────────────────────── */

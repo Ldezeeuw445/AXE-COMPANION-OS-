@@ -1,4 +1,3 @@
-import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { ensureAlpacaPaperAccount } from "@/lib/alpaca/provision";
 import { isAlpacaConfigured } from "@/lib/alpaca/env";
@@ -12,7 +11,7 @@ export const dynamic = "force-dynamic";
  * Creates (or refreshes) an AXE-managed Alpaca paper broker account for the
  * signed-in user. No user credentials required — uses server env keys.
  */
-export async function POST(_request: NextRequest) {
+export async function POST() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) {
     return Response.json({ ok: false, code: "supabase_not_configured", message: "Supabase not configured." }, { status: 503 });

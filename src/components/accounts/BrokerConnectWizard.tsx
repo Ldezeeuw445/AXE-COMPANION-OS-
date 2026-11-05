@@ -42,11 +42,9 @@ export function BrokerConnectWizard({
   const [passwordType, setPasswordType] = useState<"investor" | "master">("investor");
   const [state, action] = useActionState(createCloudMt5ConnectionAction, undefined);
 
+  if (state?.ok && step !== 3) setStep(3);
   useEffect(() => {
-    if (state?.ok) {
-      setStep(3);
-      router.refresh();
-    }
+    if (state?.ok) router.refresh();
   }, [state, router]);
 
   const err = state && !state.ok ? state : null;

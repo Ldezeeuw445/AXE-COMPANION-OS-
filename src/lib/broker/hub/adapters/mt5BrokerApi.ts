@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   BrokerApiAdapter,
-  ConnectAccountInput,
   ConnectAccountResult,
   ConnectionDoctorResult,
 } from "../contract";
@@ -19,7 +18,7 @@ import {
 export function createMt5BrokerApiAdapter(supabase: SupabaseClient): BrokerApiAdapter {
   return {
     brokerId: "mt5-style",
-    async connect(_input: ConnectAccountInput): Promise<ConnectAccountResult> {
+    async connect(): Promise<ConnectAccountResult> {
       return {
         success: false,
         error:

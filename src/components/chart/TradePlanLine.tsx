@@ -83,30 +83,32 @@ export const TradePlanLine = memo(function TradePlanLine({
   const originRef = useRef<{ pointerY: number; baseY: number } | null>(null);
 
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   const onDragStartRef = useRef(onDragStart);
-  onDragStartRef.current = onDragStart;
   const onDragEndRef = useRef(onDragEnd);
-  onDragEndRef.current = onDragEnd;
   const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
-
   const digitsRef = useRef(digits);
-  digitsRef.current = digits;
   const dashedRef = useRef(dashed);
-  dashedRef.current = dashed;
   const entryPriceRef = useRef(entryPrice);
-  entryPriceRef.current = entryPrice;
   const volumeRef = useRef(volume);
-  volumeRef.current = volume;
   const sideRef = useRef(side);
-  sideRef.current = side;
   const labelPropRef = useRef(label);
-  labelPropRef.current = label;
   const symbolRef = useRef(symbol);
-  symbolRef.current = symbol;
   const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onDragStartRef.current = onDragStart;
+    onDragEndRef.current = onDragEnd;
+    onSelectRef.current = onSelect;
+    digitsRef.current = digits;
+    dashedRef.current = dashed;
+    entryPriceRef.current = entryPrice;
+    volumeRef.current = volume;
+    sideRef.current = side;
+    labelPropRef.current = label;
+    symbolRef.current = symbol;
+    disabledRef.current = disabled;
+  });
 
   useEffect(() => {
     const el = hostRef.current;

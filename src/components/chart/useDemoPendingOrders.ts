@@ -107,35 +107,38 @@ export function useDemoPendingOrders(
   // Fill when price crosses trigger (simplified MT5 behavior).
   useEffect(() => {
     if (livePrice == null || !Number.isFinite(livePrice) || !brokerAccountId) return;
-    setOrders((prev) => {
-      const survivors: DemoPendingOrder[] = [];
-      let changed = false;
-      for (const o of prev) {
-        if (o.brokerAccountId !== brokerAccountId || o.symbol !== activeSymbol.toUpperCase()) {
+    const raf = requestAnimationFrame(() => {
+      setOrders((prev) => {
+        const survivors: DemoPendingOrder[] = [];
+        let changed = false;
+        for (const o of prev) {
+          if (o.brokerAccountId !== brokerAccountId || o.symbol !== activeSymbol.toUpperCase()) {
+            survivors.push(o);
+            continue;
+          }
+          const triggered =
+            (o.type === "buy_limit" && livePrice <= o.openPrice) ||
+            (o.type === "sell_limit" && livePrice >= o.openPrice) ||
+            (o.type === "buy_stop" && livePrice >= o.openPrice) ||
+            (o.type === "sell_stop" && livePrice <= o.openPrice);
+          if (triggered) {
+            changed = true;
+            onFill({
+              symbol: o.symbol,
+              side: o.side,
+              volume: o.volume,
+              entryPrice: o.openPrice,
+              stopLoss: o.stopLoss,
+              takeProfit: o.takeProfit,
+            });
+            continue;
+          }
           survivors.push(o);
-          continue;
         }
-        const triggered =
-          (o.type === "buy_limit" && livePrice <= o.openPrice) ||
-          (o.type === "sell_limit" && livePrice >= o.openPrice) ||
-          (o.type === "buy_stop" && livePrice >= o.openPrice) ||
-          (o.type === "sell_stop" && livePrice <= o.openPrice);
-        if (triggered) {
-          changed = true;
-          onFill({
-            symbol: o.symbol,
-            side: o.side,
-            volume: o.volume,
-            entryPrice: o.openPrice,
-            stopLoss: o.stopLoss,
-            takeProfit: o.takeProfit,
-          });
-          continue;
-        }
-        survivors.push(o);
-      }
-      return changed ? survivors : prev;
+        return changed ? survivors : prev;
+      });
     });
+    return () => cancelAnimationFrame(raf);
   }, [activeSymbol, brokerAccountId, livePrice, onFill]);
 
   const place = useCallback(

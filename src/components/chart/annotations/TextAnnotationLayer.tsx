@@ -46,7 +46,10 @@ export function TextAnnotationLayer({
       if (!lastSeenIdsRef.current.has(id)) newest = id;
     }
     lastSeenIdsRef.current = ids;
-    if (newest) setActiveId(newest);
+    if (newest) {
+      const id = requestAnimationFrame(() => setActiveId(newest));
+      return () => cancelAnimationFrame(id);
+    }
   }, [annotations]);
 
   useEffect(() => {

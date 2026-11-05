@@ -99,12 +99,11 @@ function StreamingBubble({
   const rafRef = useRef<number | null>(null);
   const lastFrameRef = useRef(0);
   const textRef = useRef(text);
-  textRef.current = text;
-
-  // Reset reveal cursor when a new stream starts (text goes to "")
   useEffect(() => {
-    if (text === "") setRevealed(0);
-  }, [text]);
+    textRef.current = text;
+  });
+
+  if (text === "" && revealed !== 0) setRevealed(0);
 
   // Advance reveal cursor with requestAnimationFrame for smoothness
   useEffect(() => {
@@ -274,7 +273,6 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   const [streamText, setStreamText] = useState("");
   const [streamPhase, setStreamPhase] = useState<string | null>(null);
   const [streamTools, setStreamTools] = useState<string[] | null>(null);
-  const lastServerCountRef = useRef(messages.length);
 
   // Composer dispatches events for optimistic bubbles, thinking state,
   // and streaming tokens from the SSE response.
@@ -331,12 +329,11 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   // When the server-side messages array grows, the optimistic bubble is now
   // duplicated by the real persisted message — clear pending. Also clears
   // safely on server errors that still cause a router.refresh().
-  useEffect(() => {
-    if (messages.length > lastServerCountRef.current) {
-      setPending([]);
-    }
-    lastServerCountRef.current = messages.length;
-  }, [messages.length]);
+  const [seenServerCount, setSeenServerCount] = useState(messages.length);
+  if (messages.length !== seenServerCount) {
+    if (messages.length > seenServerCount) setPending([]);
+    setSeenServerCount(messages.length);
+  }
 
   // Safety net: if the server hangs (>20s), drop the optimistic bubble so
   // we don't have a phantom message sitting forever.
@@ -406,9 +403,12 @@ export function ChatMessageList({ messages }: ChatMessageListProps) {
   useLayoutEffect(() => {
     if (pathname !== "/chat" && !pathname.startsWith("/chat/")) return;
     stickToBottomRef.current = true;
-    setShowJump(false);
+    const id = requestAnimationFrame(() => setShowJump(false));
     runPinSequence(true);
-    return clearPinTimers;
+    return () => {
+      cancelAnimationFrame(id);
+      clearPinTimers();
+    };
   }, [pathname, messages.length, lastMessageId, runPinSequence, clearPinTimers]);
 
   // iOS/WebView can restore stale scroll offsets on route revisit.

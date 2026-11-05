@@ -26,7 +26,6 @@ import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
   clientGetAccountInformation,
   clientGetHistoryDealsRange,
-  clientListSymbols,
   provisioningCreateProfile,
   provisioningListProfiles,
   provisioningUploadProfileFile,

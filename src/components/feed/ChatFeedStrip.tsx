@@ -6,7 +6,7 @@ import { feedItemTab } from "@/lib/feed/feedTabs";
 import { summarizeFeedUnread, feedUnreadBadgeClass } from "@/lib/feed/feedUnread";
 import { inferFeedItemUrl } from "@/lib/feed/feedDeepLinks";
 import { feedKindStyle } from "@/lib/feed/feedKindStyle";
-import { getFeedTabLastSeenAt, markAllFeedTabsRead } from "@/lib/feed/feedSeen";
+import { markAllFeedTabsRead } from "@/lib/feed/feedSeen";
 import { isTabletViewport } from "@/lib/viewport/tablet";
 import type { AxeFeedItem } from "@/types/feed";
 

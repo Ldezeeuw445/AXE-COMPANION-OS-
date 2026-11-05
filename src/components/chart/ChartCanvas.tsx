@@ -5,7 +5,6 @@ import {
   CandlestickSeries,
   ColorType,
   CrosshairMode,
-  LineSeries,
   LineStyle,
   createChart,
 } from "lightweight-charts";
@@ -15,7 +14,6 @@ import type {
   Logical,
   IPriceLine,
   ISeriesApi,
-  LineData,
   MouseEventParams,
   UTCTimestamp,
 } from "lightweight-charts";
@@ -386,6 +384,9 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, Props>(function ChartCa
       seriesRef.current = null;
       lastBarRef.current = null;
     };
+    // Theme, grid, compact layout, and navigation lock are applied by
+    // dedicated effects below so a palette change does not rebuild the chart.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- split apply-options effects own those inputs
   }, [candles, symbol]);
 
   useEffect(() => {

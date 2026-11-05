@@ -9,6 +9,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useIsClient } from "@/hooks/useIsClient";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -803,8 +804,7 @@ const TRADE_SHEET_BOTTOM =
   "calc(4.1rem + env(safe-area-inset-bottom, 0px) + 0.85rem)";
 
 function BodyPortal({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsClient();
   if (!mounted || typeof document === "undefined") return null;
   return createPortal(children, document.body);
 }

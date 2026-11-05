@@ -166,13 +166,16 @@ export function ChartOrderBookDrawer({
 
   useEffect(() => {
     if (mid == null || !Number.isFinite(mid)) return;
-    if (previousMid == null) {
+    const raf = requestAnimationFrame(() => {
+      if (previousMid == null) {
+        setPreviousMid(mid);
+        return;
+      }
+      if (mid > previousMid) setLastTickDir("up");
+      else if (mid < previousMid) setLastTickDir("down");
       setPreviousMid(mid);
-      return;
-    }
-    if (mid > previousMid) setLastTickDir("up");
-    else if (mid < previousMid) setLastTickDir("down");
-    setPreviousMid(mid);
+    });
+    return () => cancelAnimationFrame(raf);
   }, [mid, previousMid]);
 
   // Close on ESC for desktop kb users — gentle UX touch.

@@ -102,6 +102,15 @@ export function Mt5CloudAccountActions({ accountId }: Props) {
         return;
       }
 
+      if (r.ok && label === "Doctor") {
+        const report =
+          r.data && typeof r.data === "object" && "steps" in r.data
+            ? (r.data as Mt5DoctorReport)
+            : null;
+        setDoctorReport(report);
+      } else if (label === "Doctor") {
+        setDoctorReport(null);
+      }
       if (r.ok && label === "Sync") {
         const d =
           r.data && typeof r.data === "object"

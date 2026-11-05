@@ -88,7 +88,6 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   ];
 
   const hasFred = ctx.providers.find((p) => p.id === "fred")?.state === "live";
-  const hasFinnhub = ctx.providers.find((p) => p.id === "finnhub")?.state === "live";
   const hasCalendarFeed =
     calendarReady ||
     ctx.providers.some((p) => (p.id === "finnhub" || p.id === "forexFactory") && p.state === "live");
