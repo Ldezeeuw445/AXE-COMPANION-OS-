@@ -3,10 +3,28 @@
 Geschreven 5 november 2026. Vervangt de managers-handoff van 09:40, die drie
 fouten bevatte (zie "Correcties" onderaan).
 
-Dit document gaat **per app**, want dat is hoe ze afgemaakt worden: niet door
-overal een beetje, maar door er één tegelijk klaar te verklaren. Per app staat
-er wat "af" betekent, wat er nog ligt, in welke volgorde, en wie de volgende
-stap zet.
+Dit document gaat **per onderdeel**, want dat is hoe ze afgemaakt worden: niet
+door overal een beetje, maar door er één tegelijk klaar te verklaren. Per
+onderdeel staat er wat "af" betekent, wat er nog ligt, in welke volgorde, en
+wie de volgende stap zet.
+
+## Wat is wat — de indeling klopte eerst niet
+
+Luka corrigeerde dit op 5 november, en het verandert de volgorde:
+
+- **Twee commerciële producten met abonnementen:** AXE Companion (telefoon) en
+  Trading OS (web/PWA). Dit zijn de dingen die geld opbrengen.
+- **AXE Core is geen product.** Geen abonnementen, geen klanten. Het is Luka's
+  commandocentrum, en — dit is het punt — **het is de fabriek die de andere
+  twee afmaakt en onderhoudt.** Daarmee is het niet onderdeel nummer vier maar
+  het onderdeel waar de andere twee van afhangen.
+- **AXON Memory** is de geheugenlaag onder alles, geen losse app.
+- **Northsea Desk is geen software.** Het is Luka's koperhandel; de managers
+  doen daar de uitgaande acquisitie voor.
+
+Dit document houdt de volgorde Companion → Trading OS → AXON → Core aan omdat
+dat de volgorde is waarin ik ze heb kunnen meten, niet de volgorde van belang.
+Op belang staat Core bovenaan.
 
 ## Hoe je dit leest
 
@@ -210,9 +228,38 @@ in je AXON-GPT.
 
 ---
 
-# 4. AXE Core (axeheadquarters.com)
+# 4. AXE Core (axeheadquarters.com) — de fabriek
 
-**Gemeld, niet gemeten.**
+**Deels gemeten op 5 november.** Repo `Ldezeeuw445/AXE-CORE-`, publiek.
+
+| | |
+|---|---|
+| Default branch | **`orchestrator`**, niet `main` |
+| Laatste commit | `e50c38b`, vandaag |
+| Omvang | 324 Python-bestanden, 1585 TS/TSX — groter dan Companion |
+| Testbestanden | 521 |
+| Branches | 33 |
+| Workflows | 3: `apply-design-wire`, `reassemble-codeeditor-wire`, `tauri-build` |
+| **CI** | **geen** — net als Companion toetst geen enkele workflow de code |
+
+De branches sluiten aan op de managersberichten: `cursor/notch-look-sync-d0b7`
+(#300), `cursor/lint-gate-baseline-2c8e` (#301),
+`cursor/provider-router-fallback-8ade` (de router),
+`cursor/managers-composer-routing-2b1d` (de Managers-composer).
+
+**Het probleem dat hieruit springt:** Core is de fabriek die Companion en
+Trading OS moet afmaken en onderhouden, en die fabriek heeft zelf geen
+kwaliteitspoort. Een werkplaats zonder controle die twee producten bouwt die
+ook geen controle hebben. Dat is dezelfde blinde vlek, maar één laag hoger —
+en daarom kost hij meer.
+
+**Nog te meten voor Core echt beoordeeld is:** draaien die 521 testbestanden
+ook, en hoeveel slagen er? Wat is de verhouding tussen `backend/`,
+`frontend/`, `brain/`, `memory/`, `os3/` en de losse `agent_loop.py` /
+`crew_runner.py` / `flow_runner.py` — is dat één systeem of vier generaties
+naast elkaar? Dat laatste bepaalt of Core afmaken bouwen is of eerst opruimen.
+
+**Gemeld, niet gemeten:**
 
 - Router #298 gemerged, draait op de VPS als `1907452a`
 - #299 (Fix-knop bij lint-meldingen) gemerged, nog niet op de VPS
@@ -231,7 +278,7 @@ Wat AXE Core uiteindelijk moet worden staat in het tweede document:
 
 ---
 
-# 5. Northsea Desk
+# 5. Northsea Desk — geen app, maar het bedrijf
 
 **Gemeld, niet gemeten.** Loopt autonoom en vraagt niets van jou.
 

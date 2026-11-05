@@ -448,8 +448,12 @@ eerder. Die agent voegde CI toe, zag hem meteen omvallen, concludeerde
 gemeld. Daarom staat het al vijf weken stil.
 
 Stap: github.com → Settings → **Billing and plans** → Actions-minuten,
-"Spending limit", en of de betaalmethode nog geldig is. De repo is privé, dus
-minuten tellen.
+"Spending limit", en of de betaalmethode nog geldig is. **Let op: de repo is publiek** (gemeten:
+`gh api /repos/Ldezeeuw445/AXE-COMPANION-OS- --jq .private` geeft `false`), en
+publieke repo's hebben gratis onbeperkte Actions-minuten. "Minuten op" kan de
+oorzaak dus niet zijn. Wat overblijft is een slot op accountniveau — precies
+wat die commit van 29 september zegt. Kijk dus naar de betaalmethode en naar
+een eventuele account-blokkade, niet naar het minutentegoed.
 
 ### 2. Er draait helemaal geen CI, ook niet als de billing hersteld is
 
