@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRelevantKnowledge } from "@/lib/axe/knowledgeRetrieval";
+import { TABLES } from "@/lib/datamodel/tables";
 
 function isMissingTable(err: { message?: string; code?: string } | null): boolean {
   if (!err) return false;
@@ -67,7 +68,7 @@ export async function buildAxeKnowledgeLayerBlock(
 
   const rules = await safe(
     supabase
-      .from("axe_user_rules")
+      .from(TABLES.userRules)
       .select("rule_type,severity,rule_text")
       .eq("user_id", userId)
       .eq("active", true)

@@ -14,6 +14,7 @@
  * user when the price oscillates around the threshold.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { TABLES } from "@/lib/datamodel/tables";
 import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     : 60;
 
   const { data: existing, error: fetchErr } = await supabase
-    .from("user_alerts")
+    .from(TABLES.alerts)
     .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,metadata")
     .eq("id", id)
     .eq("user_id", user.id)
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   };
 
   const { error: updateErr } = await supabase
-    .from("user_alerts")
+    .from(TABLES.alerts)
     .update({ triggered_at: now, metadata })
     .eq("id", id)
     .eq("user_id", user.id);

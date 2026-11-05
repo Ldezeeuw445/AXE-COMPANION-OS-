@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { TABLES } from "@/lib/datamodel/tables";
 import {
   learningStage,
   type LearningSignalCounts,
@@ -73,7 +74,7 @@ async function countsAt(
       before,
       timeColumn: "updated_at",
     }),
-    countRows(supabase, "axe_user_rules", userId, { before }),
+    countRows(supabase, TABLES.userRules, userId, { before }),
     countRows(supabase, "axe_strategy_playbooks", userId, { before }),
     countRows(supabase, "axe_proactive_events", userId, { before }),
   ]);
