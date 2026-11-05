@@ -225,19 +225,22 @@ export function WatchlistPageScreen({
 
   // Keep items in sync with server data (but preserve order + last quotes)
   useEffect(() => {
-    setLocalItems((prev) => {
-      const prevOrder = prev.map((i) => i.symbol);
-      const newMap = new Map(items.map((i) => [i.symbol, i]));
-      const updated = prevOrder
-        .map((sym) => newMap.get(sym))
-        .filter((i): i is QuoteRow => i != null);
-      for (const item of items) {
-        if (!prevOrder.includes(item.symbol)) updated.push(item);
-      }
-      const merged = mergeLastQuotes(updated, readLastQuotes());
-      writeLastQuotes(merged);
-      return merged;
+    const raf = requestAnimationFrame(() => {
+      setLocalItems((prev) => {
+        const prevOrder = prev.map((i) => i.symbol);
+        const newMap = new Map(items.map((i) => [i.symbol, i]));
+        const updated = prevOrder
+          .map((sym) => newMap.get(sym))
+          .filter((i): i is QuoteRow => i != null);
+        for (const item of items) {
+          if (!prevOrder.includes(item.symbol)) updated.push(item);
+        }
+        const merged = mergeLastQuotes(updated, readLastQuotes());
+        writeLastQuotes(merged);
+        return merged;
+      });
     });
+    return () => cancelAnimationFrame(raf);
   }, [items]);
 
   // Focus search input when opened

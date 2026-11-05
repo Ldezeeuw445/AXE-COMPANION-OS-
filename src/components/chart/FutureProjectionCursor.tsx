@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { useChartCanvasHandle } from "@/components/chart/useChartCanvasHandle";
 
 type Props = {
   /** Ref to the underlying chart canvas — we read pixel-per-bar from it. */
@@ -33,6 +34,7 @@ export function FutureProjectionCursor({
   enabled,
 }: Props) {
   const lastCandleTime = recentCandleTimes.length > 0 ? recentCandleTimes[recentCandleTimes.length - 1] : null;
+  const canvasHandle = useChartCanvasHandle(canvasRef);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [hostSize, setHostSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [version, setVersion] = useState(0);
@@ -67,7 +69,7 @@ export function FutureProjectionCursor({
   const cursorX = useMemo<number | null>(() => {
     void version;
     if (!enabled) return null;
-    const handle = canvasRef.current;
+    const handle = canvasHandle;
     if (!handle || lastCandleTime == null || hostSize.w <= 0) return null;
     const lastX = handle.timeToCoordinate(lastCandleTime);
     if (lastX == null) return null;
@@ -78,7 +80,7 @@ export function FutureProjectionCursor({
     // the price axis labels).
     const clamped = Math.max(lastX + barWidth * 1.5, Math.min(hostSize.w - 4, x));
     return clamped;
-  }, [barOffset, canvasRef, enabled, hostSize.w, lastCandleTime, recentCandleTimes, version]);
+  }, [barOffset, canvasHandle, enabled, hostSize.w, lastCandleTime, recentCandleTimes, version]);
 
   // Notify parent whenever the cursor moves.
   useEffect(() => {

@@ -8,7 +8,7 @@
  * checkboxes. Even after this, every BUY/SELL on the chart still asks for a
  * final confirm before going to MetaApi.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, ShieldCheck, ShieldOff, X } from "lucide-react";
 import { TosMatteBanner } from "@/components/ui/TosNotice";
 import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
@@ -29,9 +29,7 @@ export function LiveTradingPanel({ initialEnabled }: { initialEnabled: boolean }
   const [checkboxesOk, setCheckboxesOk] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
 
-  useEffect(() => {
-    if (!open) setCheckboxesOk(false);
-  }, [open]);
+  if (!open && checkboxesOk) setCheckboxesOk(false);
 
   return (
     <section className="rounded-2xl border border-white/[0.07] bg-[#0c0d0e]/90 p-4">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Wrench } from "lucide-react";
+import { AlertTriangle, Wrench } from "lucide-react";
 
 export type ReliabilityCheck = {
   id: string;

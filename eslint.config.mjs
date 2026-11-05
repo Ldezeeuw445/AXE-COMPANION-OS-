@@ -22,6 +22,12 @@ const eslintConfig = defineConfig([
     "test-results/**",
     "playwright-report/**",
     "e2e/artifacts/**",
+    // Scratch / reference trees excluded from tsconfig; they are not the Next app.
+    "AXE ADAPTIVENESS/**",
+    "AXE Improvents/**",
+    "Alpaca Live/**",
+    "OKComputer_Untitled_Chat/**",
+    "axe-companion-super-agent/**",
   ]),
   {
     // React 19 + eslint-plugin-react-hooks ships strict new rules ("ref access

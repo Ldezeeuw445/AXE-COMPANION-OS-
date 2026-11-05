@@ -90,43 +90,39 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
 
   // Hydrate the armed window + legacy carry-over after mount (SSR-safe).
   useEffect(() => {
-    setArmedUntilMs(readArmedUntil());
-    if (!initialEnabled && readLegacyEnabled()) {
-      // Legacy device-only opt-in pre-dates the server flag. Treat it as
-      // "enabled" for this session so the user isn't suddenly blocked, and
-      // sync to server in the background. This runs at most once.
-      setEnabled(true);
-      startTransition(async () => {
-        const result = await toggleLiveTradingEnabledAction(true);
-        if (!result.ok) {
-          setEnabled(false);
-        } else {
-          clearLegacyEnabled();
-        }
-      });
-    } else if (initialEnabled) {
-      // Server is now the source of truth — drop any leftover legacy key.
-      clearLegacyEnabled();
-    }
-    // We intentionally only re-sync when the server prop changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const raf = requestAnimationFrame(() => {
+      setArmedUntilMs(readArmedUntil());
+      if (!initialEnabled && readLegacyEnabled()) {
+        // Legacy device-only opt-in pre-dates the server flag. Treat it as
+        // "enabled" for this session so the user isn't suddenly blocked, and
+        // sync to server in the background. This runs at most once.
+        setEnabled(true);
+        startTransition(async () => {
+          const result = await toggleLiveTradingEnabledAction(true);
+          if (!result.ok) {
+            setEnabled(false);
+          } else {
+            clearLegacyEnabled();
+          }
+        });
+      } else if (initialEnabled) {
+        // Server is now the source of truth — drop any leftover legacy key.
+        clearLegacyEnabled();
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [initialEnabled]);
 
-  // `nowMs` is what makes `armed` reactive — incrementing it in an interval
-  // causes the derived `armed` value below to recompute without us having
-  // to call Date.now() during render (which trips React 19 purity rules).
-  const [nowMs, setNowMs] = useState<number>(() => 0);
-
-  // Tick once a minute so the armed window auto-expires in the UI. We also
-  // refresh nowMs so the derived `armed` reflects expiry in real time.
+  // Tick once a minute so the armed window auto-expires in the UI.
   useEffect(() => {
-    setNowMs(Date.now());
-    setArmedUntilMs(readArmedUntil());
+    const raf = requestAnimationFrame(() => setArmedUntilMs(readArmedUntil()));
     const id = setInterval(() => {
-      setNowMs(Date.now());
       setArmedUntilMs(readArmedUntil());
     }, 60_000);
-    return () => clearInterval(id);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(id);
+    };
   }, []);
 
   // Cross-tab sync of the armed window only (enabled is server-driven).
@@ -135,7 +131,6 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
     const onStorage = (event: StorageEvent) => {
       if (event.key === ARMED_UNTIL_KEY) {
         setArmedUntilMs(readArmedUntil());
-        setNowMs(Date.now());
       }
     };
     window.addEventListener("storage", onStorage);
@@ -166,7 +161,6 @@ export function useLiveTradingFlag(initialEnabled: boolean): LiveTradingState & 
     const next = Date.now() + ARM_WINDOW_MS;
     writeArmedUntil(next);
     setArmedUntilMs(next);
-    setNowMs(Date.now());
   }, [enabled]);
 
   const disarm = useCallback(() => {

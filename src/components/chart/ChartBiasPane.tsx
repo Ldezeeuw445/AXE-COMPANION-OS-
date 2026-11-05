@@ -47,12 +47,12 @@ export function ChartBiasPane({
 
   useEffect(() => {
     if (!accountId || !brokerSymbol) {
-      setState("leeg");
-      return;
+      const id = requestAnimationFrame(() => setState("leeg"));
+      return () => cancelAnimationFrame(id);
     }
 
     const mijn = ++aanvraagRef.current;
-    setState("laden");
+    const start = requestAnimationFrame(() => setState("laden"));
 
     const params = new URLSearchParams({
       account: accountId,
@@ -73,6 +73,7 @@ export function ChartBiasPane({
         if (mijn !== aanvraagRef.current) return;
         setState("leeg");
       });
+    return () => cancelAnimationFrame(start);
   }, [accountId, brokerSymbol, executionKey]);
 
   // Niets te tonen is niets tonen. Een lege chart boven een volle chart is

@@ -27,7 +27,6 @@ import { useAppTopBarSlots } from "@/components/shell/AppTopBarContext";
 import { ChatHeaderSwitch } from "@/components/chat/ChatHeaderSwitch";
 import { AxeWordmark } from "@/components/brand/AxeWordmark";
 import { AxeTriangle } from "@/components/brand/AxeTriangle";
-import Image from "next/image";
 import { QuickActionMenu } from "@/components/shell/QuickActionMenu";
 import { FeedLaneBadges } from "@/components/feed/FeedLaneBadges";
 

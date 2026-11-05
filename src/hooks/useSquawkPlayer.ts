@@ -25,8 +25,6 @@ export function useSquawkPlayer() {
   }, []);
 
   useEffect(() => {
-    syncStations(readSquawkStationIds());
-
     let cancelled = false;
     (async () => {
       try {
@@ -54,8 +52,10 @@ export function useSquawkPlayer() {
     if (!audio) return;
 
     let cancelled = false;
-    setResolving(true);
-    setError(null);
+    const raf = requestAnimationFrame(() => {
+      setResolving(true);
+      setError(null);
+    });
 
     (async () => {
       const needsResolve = Boolean(station.feedUrl || station.mount || station.amperwaveUrl);
@@ -87,6 +87,7 @@ export function useSquawkPlayer() {
 
     return () => {
       cancelled = true;
+      cancelAnimationFrame(raf);
     };
   }, [station]);
 

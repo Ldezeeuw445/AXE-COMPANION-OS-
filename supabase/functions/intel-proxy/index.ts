@@ -2591,7 +2591,7 @@ async function handleEmergencyMonitor(): Promise<Response> {
     await markSynced("emergencyMonitor", emergencies.length, "adsb_exchange");
     setCache(cacheKey, emergencies);
     return json({ ok: true, data: emergencies });
-  } catch (e) {
+  } catch {
     const fallback = await readEmergencyFromDb();
     if (fallback.length > 0) return json({ ok: true, data: fallback });
     // Even on error, return ok with empty — no emergencies is normal

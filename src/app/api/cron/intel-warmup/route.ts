@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { runIntelWarmupBatch } from "@/services/intelWarmupService";
 
 export const runtime = "nodejs";

@@ -44,8 +44,8 @@ export function ChartWorkflowFavorites({
 
   useLayoutEffect(() => {
     if (!open) {
-      setMenuPos(null);
-      return;
+      const id = requestAnimationFrame(() => setMenuPos(null));
+      return () => cancelAnimationFrame(id);
     }
     updateMenuPosition();
     window.addEventListener("resize", updateMenuPosition);

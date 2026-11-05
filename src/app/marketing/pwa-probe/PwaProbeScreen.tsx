@@ -75,7 +75,8 @@ export function PwaProbeScreen() {
       },
       NOW - 2 * 60 * 60_000,
     );
-    setChartReady(true);
+    const id = requestAnimationFrame(() => setChartReady(true));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   return (

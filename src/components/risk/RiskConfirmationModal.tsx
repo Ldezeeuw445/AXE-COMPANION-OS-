@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 
 const REQUIRED_PHRASE = "I am responsible";
@@ -27,14 +27,12 @@ export function RiskConfirmationModal({
   const [deviceAck, setDeviceAck] = useState(false);
   const [phrase, setPhrase] = useState("");
 
-  useEffect(() => {
-    if (!open) {
-      setRiskAck(false);
-      setResponsibilityAck(false);
-      setDeviceAck(false);
-      setPhrase("");
-    }
-  }, [open]);
+  if (!open && (riskAck || responsibilityAck || deviceAck || phrase)) {
+    setRiskAck(false);
+    setResponsibilityAck(false);
+    setDeviceAck(false);
+    setPhrase("");
+  }
 
   if (!open) return null;
 

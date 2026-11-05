@@ -100,7 +100,10 @@ export function TrendlineAnnotationLayer({
       if (!lastSeenIdsRef.current.has(id)) newest = id;
     }
     lastSeenIdsRef.current = ids;
-    if (newest) setActiveId(newest);
+    if (newest) {
+      const id = requestAnimationFrame(() => setActiveId(newest));
+      return () => cancelAnimationFrame(id);
+    }
   }, [annotations]);
 
   // Tap outside the trendline layer (e.g. on the chart) deselects → handles
@@ -302,8 +305,6 @@ export function TrendlineAnnotationLayer({
       >
         {geoms.map((g) => {
           const isActive = activeId === g.id;
-          const mx = (g.ax + g.bx) / 2;
-          const my = (g.ay + g.by) / 2;
           const controlX = Math.max(6, Math.min(g.ax, g.bx) - 28);
           const controlY = Math.max(6, Math.min(g.ay, g.by) - 34);
           const color = lineColor(g.direction, isActive, isDark);

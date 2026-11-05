@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MetaApiCandle } from "@/lib/mt5/metaApiClient";
 import type { ChartCanvasHandle } from "@/components/chart/ChartCanvas";
+import { useChartCanvasHandle } from "@/components/chart/useChartCanvasHandle";
 import {
   bollingerBands,
   pointOfControl,
@@ -15,19 +16,9 @@ import {
 import { resolveSessionZone, sessionDayKey } from "@/lib/chart/sessionDay";
 
 /**
- * Shared right-rail offset. Right-rail labels (OB volume, fib %, fib
- * price, iFVG / FVG counts) anchor at `containerWidth - RIGHT_RAIL_OFFSET`
- * so the entire right column lines up vertically with no overlap.
- * Mirrors `RIGHT_RAIL_OFFSET` in `FibAnnotationLayer.tsx`.
- */
-const RIGHT_RAIL_OFFSET = 8;
-
 /**
- * Mirror of {@link RIGHT_RAIL_OFFSET} for the LEFT rail. Used for
- * previous-day context labels (PDH / PDL / PDQ, and later the Supply /
- * Demand band labels). Lines drawn between rails span
- * `[LEFT_RAIL_OFFSET, containerWidth - RIGHT_RAIL_OFFSET]` so they
- * never overlap fib percentages or price labels on the right.
+ * Left-rail offset for previous-day context labels (PDH / PDL / PDQ, and
+ * later the Supply / Demand band labels).
  */
 const LEFT_RAIL_OFFSET = 8;
 
@@ -298,6 +289,7 @@ export function ChartIndicatorLayer({
   const pal = useMemo(() => overlayPalette(isDark), [isDark]);
   const sessionZone = useMemo(() => resolveSessionZone(brokerTimezone), [brokerTimezone]);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const canvasHandle = useChartCanvasHandle(canvasRef);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState(56);
   const [version, setVersion] = useState(0);
@@ -332,7 +324,7 @@ export function ChartIndicatorLayer({
 
   const geometry = useMemo(() => {
     void version;
-    const handle = canvasRef.current;
+    const handle = canvasHandle;
     if (!handle || size.w <= 0 || size.h <= 0) {
       return {
         maPath: "",
@@ -512,7 +504,7 @@ export function ChartIndicatorLayer({
     // trading day, and without it VWAP and the previous-day levels would keep
     // the previous account's boundary until something else happened to
     // invalidate the memo.
-  }, [candles, canvasRef, size.h, size.w, plotRight, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal, sessionZone]);
+  }, [candles, canvasHandle, size.h, size.w, plotRight, version, futureProjectionX, orderBlockCount, inverseFvgCount, fvgCount, projectionCount, maPeriod, maType, pal, sessionZone]);
 
   return (
     <div ref={hostRef} className="pointer-events-none absolute inset-0 z-[22]" aria-hidden>

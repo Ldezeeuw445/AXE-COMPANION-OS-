@@ -18,6 +18,9 @@ export async function resetAlpacaPaperTrading(
   _userId: string,
   _brokerAccountId: string,
 ): Promise<AlpacaResetResult> {
+  void _supabase;
+  void _userId;
+  void _brokerAccountId;
   const config = getAlpacaPaperConfig();
   if (!config) {
     return {

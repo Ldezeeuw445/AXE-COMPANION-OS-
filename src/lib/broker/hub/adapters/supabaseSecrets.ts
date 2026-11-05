@@ -37,7 +37,7 @@ export class SupabaseSecretsAdapter implements ConfigSecretsAdapter {
     if (error) throw new Error(error.message);
   }
 
-  async loadCredentials(_accountId: string): Promise<Record<string, string> | null> {
+  async loadCredentials(): Promise<Record<string, string> | null> {
     // Secrets are not loaded from Supabase — host uses MetaApi / vault.
     return null;
   }

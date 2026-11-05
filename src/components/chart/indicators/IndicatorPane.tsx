@@ -7,6 +7,7 @@ import { adxSeries, macdSeries, rsiSeries, stochasticSeries } from "@/lib/chart/
 import { toSegmentedPath } from "@/lib/chart/svgPath";
 import type { PaneMode } from "@/lib/chart/panes";
 import { CHART_THEME, type ChartThemeConfig } from "@/components/chart/chartTheme";
+import { useChartCanvasHandle } from "@/components/chart/useChartCanvasHandle";
 
 /**
  * IndicatorPane renders a single technical indicator in its own bounded frame
@@ -110,6 +111,7 @@ const EMPTY_GEOMETRY: PaneGeometry = {
 export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }: Props) {
   const clipId = `indicator-pane-plot-${useId().replace(/:/g, "")}`;
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const canvasHandle = useChartCanvasHandle(canvasRef);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const [axisWidth, setAxisWidth] = useState<number>(MIN_AXIS_WIDTH);
   const [version, setVersion] = useState(0);
@@ -145,7 +147,7 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
 
   const geometry = useMemo(() => {
     void version;
-    const handle = canvasRef.current;
+    const handle = canvasHandle;
     if (!handle || size.w <= 0 || size.h <= 0) {
       return EMPTY_GEOMETRY;
     }
@@ -327,7 +329,7 @@ export function IndicatorPane({ mode, candles, canvasRef, theme = CHART_THEME }:
     // exhaustive-deps warning had been saying so for as long as the file
     // existed. The palettes are module constants, so this is one identity per
     // theme and recomputes exactly when the theme changes.
-  }, [candles, canvasRef, colors, mode, plotWidth, size.h, size.w, version]);
+  }, [candles, canvasHandle, colors, mode, plotWidth, size.h, size.w, version]);
 
   const top = 18;
   const bottom = 6;

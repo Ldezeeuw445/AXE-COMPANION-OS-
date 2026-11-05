@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { RefObject } from "react";
 import {
   Activity,
   ArrowRight,
@@ -23,16 +22,11 @@ import {
   Maximize2,
   Minimize2,
   MoveHorizontal,
-  Newspaper,
-  Plus,
   Minus,
-  RotateCcw,
   Save,
-  Settings2,
   Sparkles,
   Sun,
   Trash2,
-  Zap,
   Spline,
   Square,
   TrendingUp,
@@ -66,7 +60,6 @@ import type { ChartOverlayRow, ChartPageData, PendingOrderOverlay } from "@/lib/
 import { AxeChartActionBus } from "@/lib/axeChartActions/chartActionBus";
 import {
   buildFibonacciActionFromCandles,
-  buildTrendlineActionFromCandles,
   buildTrendlinePairFromCandles,
 } from "@/lib/axeChartActions/swingAnalysis";
 import type {
@@ -551,7 +544,6 @@ function draggablePlanDistance(candles: ChartPageData["candles"], fallbackPrice:
 /* ── Indicator pane ordering ──────────────────────────────────── */
 const PANE_MODE_DEFAULT: PaneMode[] = [...PANE_MODES];
 const PRO_ONLY_INDICATORS = new Set(["macd", "bollinger", "vwap", "poc", "stoch", "adx"]);
-const PRO_ONLY_SMC_TOOLS = new Set(["structure", "orderBlocks", "fvg", "ifvg", "supplyDemand"]);
 
 function ResizablePane({
   height,
@@ -708,11 +700,9 @@ export function ChartScreen({
     },
     [accountId, data.symbol, data.timeframeKey],
   );
-  const [isRoutePending, startRouteTransition] = useTransition();
+  const [, startRouteTransition] = useTransition();
   const [pendingTfKey, setPendingTfKey] = useState<string | null>(null);
   const [routeFallbackMessage, setRouteFallbackMessage] = useState<string | null>(null);
-  const isTimeframePending =
-    !routeFallbackMessage && (isRoutePending || (pendingTfKey != null && pendingTfKey !== data.timeframeKey));
 
   // Chart-only guard against accidental horizontal page drift on iOS/PWA.
   // Desktop stays untouched.
@@ -840,7 +830,7 @@ export function ChartScreen({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const shellViewport = useShellViewport();
   const [isTabletLayout, setIsTabletLayout] = useState(shellViewport === "tablet");
-  const { enabled: tabletNavCollapse, collapsed: tabletNavCollapsed, collapse: collapseTabletNav } =
+  const { enabled: tabletNavCollapse, collapse: collapseTabletNav } =
     useTabletNavCollapse();
   const [landscapeDockOpen, setLandscapeDockOpen] = useState(false);
   const chartFrameRef = useRef<HTMLDivElement | null>(null);
@@ -1150,7 +1140,7 @@ export function ChartScreen({
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [savePref]);
   const updateInverseFvgCount = useCallback((next: 1 | 2 | 3) => {
     setInverseFvgCount(next);
     try {
@@ -1158,7 +1148,7 @@ export function ChartScreen({
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [savePref]);
   const updateFvgCount = useCallback((next: 1 | 2 | 3) => {
     setFvgCount(next);
     try {
@@ -1166,7 +1156,7 @@ export function ChartScreen({
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [savePref]);
   const updateProjectionCount = useCallback((next: 1 | 2 | 3) => {
     setProjectionCount(next);
     try {
@@ -1174,19 +1164,7 @@ export function ChartScreen({
     } catch {
       /* ignore */
     }
-  }, []);
-  const cycleMaPeriod = useCallback(() => {
-    const periods: Array<9 | 20 | 50 | 200> = [9, 20, 50, 200];
-    setMaPeriod((prev) => {
-      const next = periods[(periods.indexOf(prev) + 1) % periods.length];
-      try {
-        savePref("axe.chart.maPeriod", String(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
+  }, [savePref]);
   const toggleMaType = useCallback(() => {
     setMaType((prev) => {
       const next = prev === "sma" ? "ema" : "sma";
@@ -1197,7 +1175,7 @@ export function ChartScreen({
       }
       return next;
     });
-  }, []);
+  }, [savePref]);
   // Persist + apply on change. The actual "rebuild the fib annotation
   // when the mode changes while a Fib is active" hook lives further down,
   // because it needs `executeActionByType` and `annotations` in scope.
@@ -1208,7 +1186,7 @@ export function ChartScreen({
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [savePref]);
   const updateFibSwingOffset = useCallback((next: 0 | 1 | 2 | 3) => {
     setFibSwingOffset(next);
     try {
@@ -1216,7 +1194,7 @@ export function ChartScreen({
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [savePref]);
 
   // Per-fib left/right extension toggles. The fib layer reads
   // `settings.extendLeft` / `settings.extendRight` and clamps the
@@ -1365,7 +1343,7 @@ export function ChartScreen({
   const [orderTypeMenuOpen, setOrderTypeMenuOpen] = useState(false);
   const [lotMenuOpen, setLotMenuOpen] = useState(false);
   const [lotVolumeDraft, setLotVolumeDraft] = useState("0.10");
-  const [deviationPoints, setDeviationPoints] = useState(10);
+  const [deviationPoints] = useState(10);
   const [oneClickVisible, setOneClickVisible] = useState(false);
   const [pendingSheetExpanded, setPendingSheetExpanded] = useState(false);
   const executionSwipeStartYRef = useRef<number | null>(null);
@@ -1689,7 +1667,6 @@ export function ChartScreen({
       volumeUnit: isAlpacaAccount ? "shares" : "lots",
     });
   }, [
-    data.account?.brokerAccountId,
     data.account?.label,
     data.brokerSymbol,
     data.lastPrice,
@@ -2208,6 +2185,7 @@ export function ChartScreen({
     data.lastAsk,
     data.lastTickAt,
     data.positionsOnSymbol,
+    data.pendingOrdersOnSymbol,
     data.totalPositions,
   ]);
 
@@ -2885,6 +2863,8 @@ export function ChartScreen({
     accountId,
     annotationsLoadedKey,
     data.failure,
+    data.symbol,
+    data.timeframeKey,
     drawingSymbol,
     drawingTf,
     executeActionByType,
@@ -3334,7 +3314,7 @@ export function ChartScreen({
     // niemand ziet en denk je dat er niets gebeurd is.
     setOneClickVisible(true);
     vibrate("light");
-  }, [overlays, setSlTpDrafts, setOneClickVisible]);
+  }, [overlays, setSlTpDrafts, setOneClickVisible, vibrate]);
 
   return (
     <div

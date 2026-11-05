@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useIsClient } from "@/hooks/useIsClient";
 import { createPortal } from "react-dom";
 import { Camera, ImageIcon, Mic, Square, X } from "lucide-react";
 import {
@@ -48,8 +49,7 @@ export type QuickJournalSheetProps = {
 };
 
 function BodyPortal({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useIsClient();
   if (!mounted || typeof document === "undefined") return null;
   return createPortal(children, document.body);
 }

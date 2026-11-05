@@ -20,14 +20,17 @@ export function IpadQaChecklist() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Record<string, boolean>;
-      setChecked(parsed);
-    } catch {
-      // ignore invalid local cache
-    }
+    const id = requestAnimationFrame(() => {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as Record<string, boolean>;
+        setChecked(parsed);
+      } catch {
+        // ignore invalid local cache
+      }
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   useEffect(() => {

@@ -7,9 +7,6 @@ import {
 } from "@/services/serviceSupabase";
 import {
   buildAxeMessagesFromContext,
-  callAxe,
-  callAxeAfterTool,
-  callAxeFinal,
   callAxeStreaming,
   callAxeFinalStreaming,
   computeFibonacci,
@@ -39,7 +36,7 @@ import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
 import { autoJournalTrades } from "@/services/journalingService";
 import { handlePrepareExecutionRequest, handleRouteChartAction } from "@/services/axeToolHandlers";
 import type { ChatMessage as DomainChatMessage, ConversationSummary } from "@/types/domain";
-import type { LLMMessage, LLMRequest } from "@/services/llmClient";
+import type { LLMMessage } from "@/services/llmClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
 import { brokerPricingState, canonicalBrokerPrice } from "@/lib/runtime/runtimeTruth";

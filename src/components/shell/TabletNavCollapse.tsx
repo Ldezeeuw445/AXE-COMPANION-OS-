@@ -57,11 +57,9 @@ export function TabletNavCollapseProvider({ children }: { children: ReactNode })
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!enabled) {
-      setCollapsed(false);
-      return;
-    }
-    setCollapsed(readCollapsedHint());
+    const next = enabled ? readCollapsedHint() : false;
+    const id = requestAnimationFrame(() => setCollapsed(next));
+    return () => cancelAnimationFrame(id);
   }, [enabled]);
 
   useEffect(() => {

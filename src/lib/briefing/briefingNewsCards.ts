@@ -61,7 +61,8 @@ export function buildBriefHighlights(
 }
 
 /** @deprecated use buildBriefHighlights */
-export function buildBriefNewsCards(ctx: MarketContext, _limit = 1): BriefNewsCard[] {
+export function buildBriefNewsCards(ctx: MarketContext, limit = 1): BriefNewsCard[] {
+  void limit;
   return buildBriefHighlights(ctx, "Europe/Amsterdam", [])
     .filter((h): h is BriefNewsCard => h.type === "news")
     .slice(0, 1);

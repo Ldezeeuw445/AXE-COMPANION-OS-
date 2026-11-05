@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import { useIsClient } from "@/hooks/useIsClient";
 
 type Props = {
   children: ReactNode;
@@ -22,15 +23,11 @@ function readKeyboardInset(): number {
  * Shifts up with the on-screen keyboard via visualViewport.
  */
 export function ChatComposerDock({ children }: Props) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsClient();
   const [keyboardInset, setKeyboardInset] = useState(0);
   const rafRef = useRef<number | null>(null);
   const insetRef = useRef(0);
   const cardRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   /**
    * Reserve exactly the height the composer actually has.
