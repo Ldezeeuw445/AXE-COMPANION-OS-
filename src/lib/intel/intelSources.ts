@@ -21,11 +21,12 @@ export type IntelSource = "unusual_whales" | "alphavantage" | "free";
 
 /** Actions the intel proxy serves, and what each one needs. */
 export const INTEL_ACTION_SOURCE: Record<string, IntelSource> = {
-  insiderTrades: "free", // SEC EDGAR fallback works without a UW key
-  // Moved off Unusual Whales: Alpha Vantage serves the same STOCK Act
-  // disclosures for free, House and Senate both. Filled by
-  // /api/cron/congress-trades-sync.
-  senateTrades: "alphavantage",
+  insiderTrades: "free", // SEC EDGAR Form 4 → FMP insider; UW not required
+  // Free-first congress: FMP senate+house, public STOCK Act watchers,
+  // Alpha Vantage cron (/api/cron/congress-trades-sync), then Quiver/UW.
+  senateTrades: "free",
+  // FINRA daily CNMS Reg SHO short sale volume — free CDN, no key.
+  shortVolume: "free",
   darkPoolPrints: "unusual_whales",
   unusualOptions: "unusual_whales",
   marketTide: "unusual_whales",

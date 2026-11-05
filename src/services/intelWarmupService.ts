@@ -16,6 +16,7 @@ import { actionAvailability } from "@/lib/intel/intelSources";
 const WARMUP_ACTIONS = [
   "insiderTrades",
   "senateTrades",
+  "shortVolume",
   "darkPoolPrints",
   "unusualOptions",
   "marketTide",

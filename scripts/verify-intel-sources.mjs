@@ -49,7 +49,15 @@ check("the remaining Unusual Whales actions are skipped while unsubscribed", () 
 });
 
 check("free sources keep running", () => {
-  for (const action of ["corporateJets", "vesselStream", "gdeltEvents", "openSourcesBrief"]) {
+  for (const action of [
+    "insiderTrades",
+    "senateTrades",
+    "shortVolume",
+    "corporateJets",
+    "vesselStream",
+    "gdeltEvents",
+    "openSourcesBrief",
+  ]) {
     assert.equal(actionAvailability(action, OFF).available, true, `${action} needs no key`);
   }
 });
@@ -78,11 +86,10 @@ check("an unknown action is treated as free, not silently dropped", () => {
 
 check("the warmup only calls what it can reach", () => {
   const all = Object.keys(INTEL_ACTION_SOURCE);
-  // Four unconfigured: three Unusual Whales feeds plus senateTrades, which
-  // now waits on an Alpha Vantage key instead.
-  assert.equal(availableIntelActions(all, OFF).length, all.length - 4);
-  // The UW switch alone no longer buys senateTrades back.
-  assert.equal(availableIntelActions(all, ON).length, all.length - 1);
+  // Three Unusual Whales feeds stay skipped while unsubscribed. Insider,
+  // congress and short volume are free and stay warmable.
+  assert.equal(availableIntelActions(all, OFF).length, all.length - 3);
+  assert.equal(availableIntelActions(all, ON).length, all.length);
   assert.equal(availableIntelActions(all, ALL_ON).length, all.length);
 });
 
@@ -138,21 +145,14 @@ check("cron smoke and crontab listings no longer probe Krater", () => {
   );
 });
 
-check("senateTrades is off Unusual Whales and onto a free source", () => {
-  assert.equal(INTEL_ACTION_SOURCE.senateTrades, "alphavantage");
-
-  const off = actionAvailability("senateTrades", OFF);
-  assert.equal(off.available, false, "no key means not configured");
-  assert.match(off.reason, /ALPHAVANTAGE_API_KEY/, "say which key, and which cron fills it");
-  assert.doesNotMatch(off.reason, /Unusual Whales/, "this feed no longer waits on that subscription");
-
-  assert.equal(
-    actionAvailability("senateTrades", { ALPHAVANTAGE_API_KEY: "k" }).available,
-    true,
-    "with the key it is available — this key is read by this process, so presence is a real answer",
-  );
-  // And the UW switch must not accidentally gate it any more.
-  assert.equal(actionAvailability("senateTrades", { UNUSUAL_WHALES_ENABLED: "true" }).available, false);
+check("senateTrades and shortVolume stay free (no Unusual Whales)", () => {
+  assert.equal(INTEL_ACTION_SOURCE.senateTrades, "free");
+  assert.equal(INTEL_ACTION_SOURCE.shortVolume, "free");
+  assert.equal(actionAvailability("senateTrades", OFF).available, true);
+  assert.equal(actionAvailability("shortVolume", OFF).available, true);
+  // UW switch must not gate congress or FINRA short volume.
+  assert.equal(actionAvailability("senateTrades", { UNUSUAL_WHALES_ENABLED: "true" }).available, true);
+  assert.equal(actionAvailability("shortVolume", { UNUSUAL_WHALES_ENABLED: "true" }).available, true);
 });
 
 // ── no quick action may be a dead end ────────────────────────────────────

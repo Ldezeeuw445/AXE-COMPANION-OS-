@@ -2,7 +2,7 @@
  * PR #131 paper-testplan TC1–TC5 as static + pure checks (no real broker).
  * Behavioral mocks for TC2/TC5 live in src/services/tradeGuardService.test.ts.
  *
- * Run: npx tsx scripts/verify-pr131-paper-cases.mjs
+ * Run: npm run verify pr131-paper-cases
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
