@@ -427,3 +427,79 @@ Lever je ze aan als PNG, dan zet ik ze erin en haal ik de regel in
 `scripts/verify-landing-hero-light.mjs` weg die de oude twee tegenhoudt. In de
 tussentijd staat er links een kolom met drie regels over waar de map op
 gebouwd is; dat is waar en het houdt de plaat in balans.
+
+## 0e. GitHub: vijf dingen, en vier ervan zijn geen billing
+
+Nieuw, 5 november, op Luka's vraag of er nog meer aan GitHub te doen was. Ja.
+Punt 0 ging alleen over de billing; dit is de rest. In volgorde van belang.
+
+### 1. De billing-lock staat zwart op wit in de repo
+
+Geen vermoeden meer. Commit `ab63e60` van **29 september 19:20**, door een
+Cursor Agent:
+
+> `ci: do not add GitHub Actions while the account is locked`
+> The new CI workflow failed immediately (billing lock) and would have
+> blocked review.
+
+De eerste dode workflow-run is van **19:18** diezelfde avond, twee minuten
+eerder. Die agent voegde CI toe, zag hem meteen omvallen, concludeerde
+"billing lock" en haalde CI er weer uit — en heeft dat verder aan niemand
+gemeld. Daarom staat het al vijf weken stil.
+
+Stap: github.com → Settings → **Billing and plans** → Actions-minuten,
+"Spending limit", en of de betaalmethode nog geldig is. De repo is privé, dus
+minuten tellen.
+
+### 2. Er draait helemaal geen CI, ook niet als de billing hersteld is
+
+In `.github/workflows/` staan drie workflows en die **deployen** alleen:
+migraties, de streamer, de edge functions. Geen enkele draait `tsc`,
+`npm test`, `npm run verify` of `npm run build`. Gemeten op `main`'s laatste
+commit: nul check-runs.
+
+Dat verklaart twee dingen die ons dit jaar geld aan tijd hebben gekost: de
+favicon die de build 8 uur en 48 minuten brak, en de drie dubbele koppen uit
+#124. Beide waren met één CI-run gevangen.
+
+**Niet zelf toegevoegd,** want PR #144 brengt `ci.yml` al terug. Twee keer
+dezelfde workflow toevoegen geeft een merge-conflict op een PR die toch al
+niet gemerged mag worden. Zie punt 3.
+
+### 3. Dertien openstaande PR's, waarvan twee die je echt moet bekijken
+
+- **#146** (vandaag) — lint. Zegt zelf **"Do NOT merge. main auto-deploys to
+  production."** Terecht: alles op `main` gaat live.
+- **#144** (gisteren) — datamodel samenvoegen met Trading OS, mét migratie die
+  **nog niet toegepast is**, en mét de `ci.yml` uit punt 2. Zegt zelf "Do NOT
+  squash-merge yet".
+- **#145** — de AXE Core bouwloop, bewust draft.
+- **#90, #88, #87, #86, #83, #82, #5, #4, #3, #2, #1** — negen daarvan zijn
+  "set up dev environment"-drafts uit mei en juni. Die kunnen dicht; ze maken
+  de lijst onleesbaar zodat de twee die er wél toe doen eronder verdwijnen.
+
+### 4. `npm run lint` is een check die niet kan falen
+
+Gemeten op `main`: `npm run lint` is kaal `eslint`, geeft **192 waarschuwingen
+en exit 0**. Met `--max-warnings=0` is het exit 1. Lint zit ook **niet** in
+`npm run verify`. Er is dus geen enkele plek waar een lint-probleem iets
+tegenhoudt.
+
+PR #146 lost dit op: hij ruimt de 192 op en zet `"lint"` op
+`eslint --max-warnings=0`. Pas daarna is het zinnig om lint aan `npm run
+verify` toe te voegen; nu zou verify meteen rood staan.
+
+### 5. 212 branches
+
+Daar zitten de 52 gearchiveerde bij die volgens `docs/AUTOPILOT.md` blijven
+staan tot de tags bestaan. De rest is grotendeels afgewerkt werk. Geen haast,
+wel een keer opruimen waard.
+
+### De volgorde die ik zou aanhouden
+
+1. Billing. Zonder dat doet de rest niets.
+2. Eén workflow handmatig herstarten om te zien dat er stappen verschijnen.
+3. #146 bekijken en mergen → lint kan daarna echt falen.
+4. #144 bekijken: eerst de migratie toepassen, dan pas mergen. Daarmee komt
+   CI terug.
+5. De negen oude drafts sluiten.
