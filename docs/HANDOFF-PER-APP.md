@@ -78,7 +78,9 @@ Staat uitgewerkt in `docs/VOOR-LUKA.md` punt 0e. Kort:
 3. **`npm run lint` kan niet falen.** Gemeten: kaal `eslint`, 192
    waarschuwingen, exit 0. Met `--max-warnings=0` exit 1. Lint zit niet in
    `npm run verify`. PR #146 repareert dit.
-4. **13 openstaande PR's**, waarvan 9 dev-env-drafts uit mei en juni.
+4. **Nog 3 openstaande PR's** (#144, #145, #146). Waren er 13; een andere
+   sessie sloot er op 5 november elf, branches behouden. Alle drie wachten op
+   een beslissing van Luka — zie `docs/VOOR-LUKA.md` punt 0e.
 5. **219 branches** (gemeten vandaag). De Projects Manager meldde dat er 121
    verwijderd zijn; dat is niet terug te zien in dit getal.
 

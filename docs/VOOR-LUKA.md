@@ -470,17 +470,31 @@ favicon die de build 8 uur en 48 minuten brak, en de drie dubbele koppen uit
 dezelfde workflow toevoegen geeft een merge-conflict op een PR die toch al
 niet gemerged mag worden. Zie punt 3.
 
-### 3. Dertien openstaande PR's, waarvan twee die je echt moet bekijken
+### 3. Nog drie openstaande PR's — opgeruimd op 5 november
 
-- **#146** (vandaag) — lint. Zegt zelf **"Do NOT merge. main auto-deploys to
-  production."** Terecht: alles op `main` gaat live.
-- **#144** (gisteren) — datamodel samenvoegen met Trading OS, mét migratie die
-  **nog niet toegepast is**, en mét de `ci.yml` uit punt 2. Zegt zelf "Do NOT
-  squash-merge yet".
-- **#145** — de AXE Core bouwloop, bewust draft.
-- **#90, #88, #87, #86, #83, #82, #5, #4, #3, #2, #1** — negen daarvan zijn
-  "set up dev environment"-drafts uit mei en juni. Die kunnen dicht; ze maken
-  de lijst onleesbaar zodat de twee die er wél toe doen eronder verdwijnen.
+Een andere Claude-sessie heeft op 5 november **elf van de veertien** gesloten,
+elk met een reden erbij, en de branches laten staan zodat alles heropend kan
+worden. Wat eraf ging: zeven bijna gelijke Cursor-drafts uit mei en juni, een
+Trae-agent die `AXE_SYSTEM_TRUTH.md` en `SPEC.md` weggooide, twee oude
+finallaunch-ontwerpen, en één PR met 470 bestanden waaronder een per ongeluk
+meegekopieerde map van het bureaublad.
+
+Over, en alle drie wachten ze op jou:
+
+- **#146** — lint. Ruimt de 192 waarschuwingen op en zet `"lint"` op
+  `--max-warnings=0`, zodat een lintfout voortaan iets kan tegenhouden. Twee
+  keer onafhankelijk nagemeten (de andere sessie en ik): typecheck schoon,
+  207 tests, strikte lint exit 0, verify 847 checks groen. Raakt het vinkje
+  op het live-orderscherm, en die verandering gaat de veilige kant op — hij
+  gaat eerder uit, nooit later. **Jij beslist of hij gemerged wordt**, want
+  `main` gaat automatisch live.
+- **#144** — datamodel samenvoegen met Trading OS. `npm run verify` valt hier
+  om, en terecht: de nieuwe route `/api/signals` heeft geen prijsniveau. De
+  PR meldde "tests groen" maar had verify nooit gedraaid. **Jij beslist:
+  gratis of betaald.** Advies: gratis, zoals `feed` — de inbox is gratis en
+  wat een signaal maakt is betaald waar het gemaakt wordt. Daarna moet de
+  migratie nog op de gedeelde database die Trading OS ook gebruikt.
+- **#145** — de AXE Core bouwlus, bewust draft.
 
 ### 4. `npm run lint` is een check die niet kan falen
 
