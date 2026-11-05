@@ -12,10 +12,50 @@
 -- C7 alert auto-trade: metadata / order paths are NOT altered. Extra columns are
 -- additive. Alert evaluation behaviour stays identical.
 --
+-- Security: compat views are security_invoker so they inherit the caller's RLS
+-- (owner-rights views would leak every user's rows to authenticated). INSTEAD OF
+-- triggers refuse writes whose user_id is not auth.uid(). anon/PUBLIC have no
+-- grants; authenticated/service_role keep theirs. Legacy renamed tables stay.
+--
 -- Apply via: supabase link + db push (needs SUPABASE_ACCESS_TOKEN, PROJECT_REF,
 -- SUPABASE_DB_PASSWORD) or SQL editor. Safe to re-run (IF EXISTS / OR REPLACE).
+-- Do not apply from CI on this PR; schema is applied separately after review.
 
 BEGIN;
+
+-- JWT users may only write their own user_id. service_role / postgres have
+-- auth.uid() IS NULL and may write any row. Null user_id from a JWT is filled.
+CREATE OR REPLACE FUNCTION public.compat_view_enforce_user_id(target_user_id uuid)
+RETURNS uuid
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  uid uuid := auth.uid();
+BEGIN
+  IF uid IS NULL THEN
+    IF target_user_id IS NULL THEN
+      RAISE EXCEPTION 'user_id is required' USING ERRCODE = '23502';
+    END IF;
+    RETURN target_user_id;
+  END IF;
+  IF target_user_id IS NULL THEN
+    RETURN uid;
+  END IF;
+  IF target_user_id IS DISTINCT FROM uid THEN
+    RAISE EXCEPTION 'not allowed to write rows for another user'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN uid;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.compat_view_enforce_user_id(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.compat_view_enforce_user_id(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.compat_view_enforce_user_id(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.compat_view_enforce_user_id(uuid) TO service_role;
 
 -- =============================================================================
 -- (a) ALERTS — expand user_alerts, migrate user_price_alerts, compat view
@@ -128,7 +168,9 @@ BEGIN
 END $$;
 
 -- Compatibility view: TOS keeps .from('user_price_alerts')
-CREATE OR REPLACE VIEW public.user_price_alerts AS
+-- security_invoker: query as the caller so user_alerts RLS applies.
+CREATE OR REPLACE VIEW public.user_price_alerts
+WITH (security_invoker = true) AS
 SELECT
   id,
   user_id,
@@ -183,6 +225,8 @@ BEGIN
     NEW.alert_kind := 'price';
   END IF;
 
+  NEW.user_id := public.compat_view_enforce_user_id(NEW.user_id);
+
   INSERT INTO public.user_alerts (
     id, user_id, symbol, type, condition, threshold, price, status, note,
     created_at, triggered_at, last_evaluated_at, spec, timeframes,
@@ -223,6 +267,9 @@ LANGUAGE plpgsql
 SECURITY INVOKER
 AS $$
 BEGIN
+  PERFORM public.compat_view_enforce_user_id(OLD.user_id);
+  NEW.user_id := public.compat_view_enforce_user_id(COALESCE(NEW.user_id, OLD.user_id));
+
   UPDATE public.user_alerts SET
     symbol = NEW.symbol,
     condition = NEW.condition,
@@ -252,6 +299,7 @@ LANGUAGE plpgsql
 SECURITY INVOKER
 AS $$
 BEGIN
+  PERFORM public.compat_view_enforce_user_id(OLD.user_id);
   DELETE FROM public.user_alerts WHERE id = OLD.id AND user_id = OLD.user_id;
   RETURN OLD;
 END;
@@ -273,8 +321,10 @@ CREATE TRIGGER user_price_alerts_instead_of_delete_trg
   INSTEAD OF DELETE ON public.user_price_alerts
   FOR EACH ROW EXECUTE FUNCTION public.user_price_alerts_instead_of_delete();
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_price_alerts TO authenticated;
-GRANT ALL ON public.user_price_alerts TO service_role;
+REVOKE ALL ON TABLE public.user_price_alerts FROM PUBLIC;
+REVOKE ALL ON TABLE public.user_price_alerts FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_price_alerts TO authenticated;
+GRANT ALL ON TABLE public.user_price_alerts TO service_role;
 
 -- =============================================================================
 -- (b) CHART — canonical user_chart_states; prefs as view over marker rows
@@ -331,8 +381,10 @@ DROP POLICY IF EXISTS "user_chart_states_delete_own" ON public.user_chart_states
 CREATE POLICY "user_chart_states_delete_own" ON public.user_chart_states
   FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_chart_states TO authenticated;
-GRANT ALL ON public.user_chart_states TO service_role;
+REVOKE ALL ON TABLE public.user_chart_states FROM PUBLIC;
+REVOKE ALL ON TABLE public.user_chart_states FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_chart_states TO authenticated;
+GRANT ALL ON TABLE public.user_chart_states TO service_role;
 
 CREATE INDEX IF NOT EXISTS user_chart_states_user_updated_idx
   ON public.user_chart_states (user_id, updated_at DESC);
@@ -369,7 +421,8 @@ BEGIN
   END IF;
 END $$;
 
-CREATE OR REPLACE VIEW public.user_chart_preferences AS
+CREATE OR REPLACE VIEW public.user_chart_preferences
+WITH (security_invoker = true) AS
 SELECT
   user_id,
   account_key,
@@ -389,6 +442,8 @@ BEGIN
   IF NEW.account_key IS NULL THEN NEW.account_key := '*'; END IF;
   IF NEW.prefs IS NULL THEN NEW.prefs := '{}'::jsonb; END IF;
   IF NEW.updated_at IS NULL THEN NEW.updated_at := now(); END IF;
+
+  NEW.user_id := public.compat_view_enforce_user_id(NEW.user_id);
 
   INSERT INTO public.user_chart_states (
     user_id, symbol, timeframe, layout_id, workspace_id, account_key, prefs, state, updated_at
@@ -418,6 +473,9 @@ LANGUAGE plpgsql
 SECURITY INVOKER
 AS $$
 BEGIN
+  PERFORM public.compat_view_enforce_user_id(OLD.user_id);
+  NEW.user_id := public.compat_view_enforce_user_id(COALESCE(NEW.user_id, OLD.user_id));
+
   UPDATE public.user_chart_states SET
     prefs = NEW.prefs,
     state = jsonb_build_object('prefs', NEW.prefs),
@@ -439,6 +497,7 @@ LANGUAGE plpgsql
 SECURITY INVOKER
 AS $$
 BEGIN
+  PERFORM public.compat_view_enforce_user_id(OLD.user_id);
   DELETE FROM public.user_chart_states
   WHERE user_id = OLD.user_id
     AND symbol = OLD.symbol_key
@@ -466,8 +525,10 @@ CREATE TRIGGER user_chart_preferences_instead_of_delete_trg
   INSTEAD OF DELETE ON public.user_chart_preferences
   FOR EACH ROW EXECUTE FUNCTION public.user_chart_preferences_instead_of_delete();
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_chart_preferences TO authenticated;
-GRANT ALL ON public.user_chart_preferences TO service_role;
+REVOKE ALL ON TABLE public.user_chart_preferences FROM PUBLIC;
+REVOKE ALL ON TABLE public.user_chart_preferences FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_chart_preferences TO authenticated;
+GRANT ALL ON TABLE public.user_chart_preferences TO service_role;
 
 -- =============================================================================
 -- (c) RISK — expand axe_user_rules, migrate user_risk_profiles, compat view
@@ -510,7 +571,8 @@ BEGIN
   END IF;
 END $$;
 
-CREATE OR REPLACE VIEW public.user_risk_profiles AS
+CREATE OR REPLACE VIEW public.user_risk_profiles
+WITH (security_invoker = true) AS
 SELECT
   id,
   user_id,
@@ -535,6 +597,8 @@ BEGIN
   IF NEW.limits IS NULL THEN NEW.limits := '{}'::jsonb; END IF;
   IF NEW.created_at IS NULL THEN NEW.created_at := timezone('utc', now()); END IF;
   IF NEW.updated_at IS NULL THEN NEW.updated_at := timezone('utc', now()); END IF;
+
+  NEW.user_id := public.compat_view_enforce_user_id(NEW.user_id);
 
   INSERT INTO public.axe_user_rules (
     id, user_id, rule_type, severity, rule_text, active, name, kind, limits, currency, created_at, updated_at
@@ -562,6 +626,9 @@ LANGUAGE plpgsql
 SECURITY INVOKER
 AS $$
 BEGIN
+  PERFORM public.compat_view_enforce_user_id(OLD.user_id);
+  NEW.user_id := public.compat_view_enforce_user_id(COALESCE(NEW.user_id, OLD.user_id));
+
   UPDATE public.axe_user_rules SET
     rule_text = NEW.name,
     name = NEW.name,
@@ -581,6 +648,7 @@ LANGUAGE plpgsql
 SECURITY INVOKER
 AS $$
 BEGIN
+  PERFORM public.compat_view_enforce_user_id(OLD.user_id);
   DELETE FROM public.axe_user_rules
   WHERE id = OLD.id AND user_id = OLD.user_id AND rule_type = 'risk_profile';
   RETURN OLD;
@@ -603,8 +671,10 @@ CREATE TRIGGER user_risk_profiles_instead_of_delete_trg
   INSTEAD OF DELETE ON public.user_risk_profiles
   FOR EACH ROW EXECUTE FUNCTION public.user_risk_profiles_instead_of_delete();
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_risk_profiles TO authenticated;
-GRANT ALL ON public.user_risk_profiles TO service_role;
+REVOKE ALL ON TABLE public.user_risk_profiles FROM PUBLIC;
+REVOKE ALL ON TABLE public.user_risk_profiles FROM anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_risk_profiles TO authenticated;
+GRANT ALL ON TABLE public.user_risk_profiles TO service_role;
 
 -- =============================================================================
 -- (d) user_signals — new shared inbox
@@ -650,10 +720,127 @@ DROP POLICY IF EXISTS "user_signals_delete_own" ON public.user_signals;
 CREATE POLICY "user_signals_delete_own" ON public.user_signals
   FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
-REVOKE ALL ON TABLE public.user_signals FROM public;
+REVOKE ALL ON TABLE public.user_signals FROM PUBLIC;
 REVOKE ALL ON TABLE public.user_signals FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.user_signals TO authenticated;
 GRANT ALL ON TABLE public.user_signals TO service_role;
+
+-- =============================================================================
+-- Grants + RLS on every base/legacy table this migration touches.
+-- Views are not RLS objects; security_invoker + underlying policies cover reads.
+-- Legacy tables keep their data (non-destructive) but must not stay world-readable.
+-- =============================================================================
+
+DO $$
+DECLARE
+  rel text;
+  rels text[] := ARRAY[
+    'user_alerts',
+    'user_price_alerts',
+    'user_price_alerts_legacy',
+    'user_chart_states',
+    'user_chart_preferences',
+    'user_chart_preferences_legacy',
+    'axe_user_rules',
+    'user_risk_profiles',
+    'user_risk_profiles_legacy',
+    'user_signals'
+  ];
+BEGIN
+  FOREACH rel IN ARRAY rels LOOP
+    IF to_regclass('public.' || rel) IS NULL THEN
+      CONTINUE;
+    END IF;
+    EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC', rel);
+    EXECUTE format('REVOKE ALL ON TABLE public.%I FROM anon', rel);
+    EXECUTE format(
+      'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO authenticated',
+      rel
+    );
+    EXECUTE format('GRANT ALL ON TABLE public.%I TO service_role', rel);
+  END LOOP;
+END $$;
+
+DO $$
+DECLARE
+  rel text;
+  pol record;
+  alias_name text;
+  base_tables text[] := ARRAY[
+    'user_alerts',
+    'user_price_alerts_legacy',
+    'user_chart_states',
+    'user_chart_preferences_legacy',
+    'axe_user_rules',
+    'user_risk_profiles_legacy',
+    'user_signals'
+  ];
+BEGIN
+  FOREACH rel IN ARRAY base_tables LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND c.relname = rel
+        AND c.relkind = 'r'
+    ) THEN
+      CONTINUE;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = rel
+        AND column_name = 'user_id'
+    ) THEN
+      CONTINUE;
+    END IF;
+
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', rel);
+
+    -- Drop current and pre-rename policy names so we can recreate a single set.
+    FOR pol IN
+      SELECT policyname
+      FROM pg_policies
+      WHERE schemaname = 'public' AND tablename = rel
+        AND (
+          policyname LIKE '%_select_own'
+          OR policyname LIKE '%_insert_own'
+          OR policyname LIKE '%_update_own'
+          OR policyname LIKE '%_delete_own'
+        )
+    LOOP
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', pol.policyname, rel);
+    END LOOP;
+
+    alias_name := regexp_replace(rel, '_legacy$', '');
+    IF alias_name <> rel THEN
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', alias_name || '_select_own', rel);
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', alias_name || '_insert_own', rel);
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', alias_name || '_update_own', rel);
+      EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', alias_name || '_delete_own', rel);
+    END IF;
+
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (auth.uid() = user_id)',
+      rel || '_select_own', rel
+    );
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id)',
+      rel || '_insert_own', rel
+    );
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id)',
+      rel || '_update_own', rel
+    );
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING (auth.uid() = user_id)',
+      rel || '_delete_own', rel
+    );
+  END LOOP;
+END $$;
 
 COMMENT ON TABLE public.user_signals IS
   'Shared signal inbox (telegram/manual/tradingview). RLS: own rows only. No auto-execution.';
@@ -662,12 +849,12 @@ COMMENT ON TABLE public.user_alerts IS
   'Canonical alerts for Companion + Trading OS. TOS name user_price_alerts is a compatibility view.';
 
 COMMENT ON VIEW public.user_price_alerts IS
-  'Compat view over user_alerts for Trading OS. Writable via INSTEAD OF triggers.';
+  'Compat view over user_alerts for Trading OS. security_invoker; writable via INSTEAD OF triggers that enforce user_id = auth.uid().';
 
 COMMENT ON VIEW public.user_chart_preferences IS
-  'Compat view over user_chart_states prefs marker rows (layout_id=prefs).';
+  'Compat view over user_chart_states prefs marker rows (layout_id=prefs). security_invoker; writes enforce user_id = auth.uid().';
 
 COMMENT ON VIEW public.user_risk_profiles IS
-  'Compat view over axe_user_rules where rule_type=risk_profile.';
+  'Compat view over axe_user_rules where rule_type=risk_profile. security_invoker; writes enforce user_id = auth.uid().';
 
 COMMIT;

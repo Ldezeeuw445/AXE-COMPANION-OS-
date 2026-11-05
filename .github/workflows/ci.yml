@@ -1,0 +1,44 @@
+name: CI
+
+# Quality gate. Deploy workflows only run on main and do not attach to PRs,
+# which is why PR #144 had 0 check runs. This job typechecks, lints, and tests.
+# No secrets and no deploys — it never applies Supabase migrations.
+
+on:
+  push:
+    branches:
+      - main
+      - feat/unify-shared-tables-alerts-chart-risk-signals
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Typecheck · Lint · Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # Warnings are expected (React Compiler hints); errors are not.
+      - name: Lint
+        run: npm run lint -- --max-warnings=-1
+
+      - name: Tests
+        run: npm test
