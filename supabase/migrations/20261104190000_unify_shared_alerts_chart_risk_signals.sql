@@ -21,8 +21,6 @@
 -- SUPABASE_DB_PASSWORD) or SQL editor. Safe to re-run (IF EXISTS / OR REPLACE).
 -- Do not apply from CI on this PR; schema is applied separately after review.
 
-BEGIN;
-
 -- JWT users may only write their own user_id. service_role / postgres have
 -- auth.uid() IS NULL and may write any row. Null user_id from a JWT is filled.
 CREATE OR REPLACE FUNCTION public.compat_view_enforce_user_id(target_user_id uuid)
@@ -30,7 +28,7 @@ RETURNS uuid
 LANGUAGE plpgsql
 STABLE
 SECURITY INVOKER
-SET search_path = pg_catalog
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   uid uuid := auth.uid();
@@ -80,6 +78,7 @@ ALTER TABLE public.user_alerts
 CREATE OR REPLACE FUNCTION public.user_alerts_sync_price_threshold()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.price IS NULL AND NEW.threshold IS NOT NULL THEN
@@ -201,6 +200,7 @@ CREATE OR REPLACE FUNCTION public.user_price_alerts_instead_of_insert()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.id IS NULL THEN
@@ -265,6 +265,7 @@ CREATE OR REPLACE FUNCTION public.user_price_alerts_instead_of_update()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   PERFORM public.compat_view_enforce_user_id(OLD.user_id);
@@ -297,6 +298,7 @@ CREATE OR REPLACE FUNCTION public.user_price_alerts_instead_of_delete()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   PERFORM public.compat_view_enforce_user_id(OLD.user_id);
@@ -347,10 +349,46 @@ ALTER TABLE public.user_chart_states
   ADD COLUMN IF NOT EXISTS prefs jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 -- Prefs need account_key in the uniqueness key (Companion multi-account scopes).
+-- Live Postgres truncated the original 5-col unique to
+-- user_chart_states_user_id_symbol_timeframe_layout_id_worksp_key; DROP by
+-- the untruncated name is a no-op there. Drop both names, then any unique
+-- whose columns are exactly that 5-tuple, before adding the 6-col unique.
+-- Otherwise the prefs copy fails when one user has two '*' rows with
+-- different account_keys.
 ALTER TABLE public.user_chart_states
   DROP CONSTRAINT IF EXISTS user_chart_states_user_id_symbol_timeframe_layout_id_workspace_id_key;
 ALTER TABLE public.user_chart_states
+  DROP CONSTRAINT IF EXISTS user_chart_states_user_id_symbol_timeframe_layout_id_worksp_key;
+ALTER TABLE public.user_chart_states
   DROP CONSTRAINT IF EXISTS user_chart_states_user_symbol_tf_layout_ws_account_key;
+
+DO $$
+DECLARE
+  rec record;
+BEGIN
+  FOR rec IN
+    SELECT c.conname
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = 'public'
+      AND t.relname = 'user_chart_states'
+      AND c.contype = 'u'
+      AND (
+        SELECT array_agg(a.attname ORDER BY u.ord)
+        FROM unnest(c.conkey) WITH ORDINALITY AS u(attnum, ord)
+        JOIN pg_attribute a
+          ON a.attrelid = c.conrelid
+         AND a.attnum = u.attnum
+      ) = ARRAY['user_id', 'symbol', 'timeframe', 'layout_id', 'workspace_id']::text[]
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE public.user_chart_states DROP CONSTRAINT IF EXISTS %I',
+      rec.conname
+    );
+  END LOOP;
+END $$;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -436,6 +474,7 @@ CREATE OR REPLACE FUNCTION public.user_chart_preferences_instead_of_insert()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.symbol_key IS NULL THEN NEW.symbol_key := '*'; END IF;
@@ -471,6 +510,7 @@ CREATE OR REPLACE FUNCTION public.user_chart_preferences_instead_of_update()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   PERFORM public.compat_view_enforce_user_id(OLD.user_id);
@@ -495,6 +535,7 @@ CREATE OR REPLACE FUNCTION public.user_chart_preferences_instead_of_delete()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   PERFORM public.compat_view_enforce_user_id(OLD.user_id);
@@ -590,6 +631,7 @@ CREATE OR REPLACE FUNCTION public.user_risk_profiles_instead_of_insert()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.id IS NULL THEN NEW.id := gen_random_uuid(); END IF;
@@ -624,6 +666,7 @@ CREATE OR REPLACE FUNCTION public.user_risk_profiles_instead_of_update()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   PERFORM public.compat_view_enforce_user_id(OLD.user_id);
@@ -646,6 +689,7 @@ CREATE OR REPLACE FUNCTION public.user_risk_profiles_instead_of_delete()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
+SET search_path = public, pg_temp
 AS $$
 BEGIN
   PERFORM public.compat_view_enforce_user_id(OLD.user_id);
@@ -856,5 +900,3 @@ COMMENT ON VIEW public.user_chart_preferences IS
 
 COMMENT ON VIEW public.user_risk_profiles IS
   'Compat view over axe_user_rules where rule_type=risk_profile. security_invoker; writes enforce user_id = auth.uid().';
-
-COMMIT;

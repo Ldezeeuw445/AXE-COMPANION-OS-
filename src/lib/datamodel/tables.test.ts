@@ -68,4 +68,31 @@ describe("canonical tables", () => {
       );
     }
   });
+
+  it("drops the truncated 5-col unique before adding the 6-col unique", () => {
+    const sql = readFileSync(resolve(process.cwd(), UNIFY_MIGRATION), "utf8");
+    const truncated =
+      "DROP CONSTRAINT IF EXISTS user_chart_states_user_id_symbol_timeframe_layout_id_worksp_key";
+    const addSix =
+      "UNIQUE (user_id, symbol, timeframe, layout_id, workspace_id, account_key)";
+    const dropAt = sql.indexOf(truncated);
+    const addAt = sql.indexOf(addSix);
+    assert.ok(dropAt >= 0, "must DROP the Postgres-truncated 5-col unique name");
+    assert.ok(addAt >= 0, "must add the 6-col unique");
+    assert.ok(dropAt < addAt, "truncated 5-col unique must be dropped before the 6-col unique is added");
+    assert.match(
+      sql,
+      /c\.contype = 'u'[\s\S]*ARRAY\['user_id', 'symbol', 'timeframe', 'layout_id', 'workspace_id'\]/,
+      "must drop any unique whose columns are exactly the old 5-tuple via pg_constraint",
+    );
+  });
+
+  it("pins function search_path and has no file-level transaction", () => {
+    const sql = readFileSync(resolve(process.cwd(), UNIFY_MIGRATION), "utf8");
+    const functions = sql.match(/^CREATE OR REPLACE FUNCTION /gm) ?? [];
+    const searchPaths = sql.match(/^SET search_path = public, pg_temp$/gm) ?? [];
+    assert.equal(searchPaths.length, functions.length, "every function must SET search_path = public, pg_temp");
+    assert.doesNotMatch(sql, /^BEGIN;/m);
+    assert.doesNotMatch(sql, /^COMMIT;/m);
+  });
 });
