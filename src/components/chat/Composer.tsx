@@ -510,7 +510,7 @@ function ComposerInner({ initialQuota = null, showQuota = true }: ComposerProps)
           <p>{quota.notice ?? `You've reached today's AXE chat allowance (${quota.limit}). Resets at midnight UTC.`}</p>
           {quota.offerUpgrade ? (
             <a
-              href="/pricing"
+              href="/upgrade"
               className="mt-1 inline-block font-semibold text-cyan-300/90 underline-offset-2 hover:underline"
             >
               Upgrade for a higher daily allowance

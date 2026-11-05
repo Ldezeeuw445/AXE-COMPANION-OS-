@@ -102,7 +102,7 @@ export function BrokerConnectWizard({
           className="mb-4 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-[12px] leading-snug text-amber-100/90"
         >
           {liveCapMessage}{" "}
-          <a href="/pricing" className="font-semibold text-cyan-300/90 underline-offset-2 hover:underline">
+          <a href="/upgrade" className="font-semibold text-cyan-300/90 underline-offset-2 hover:underline">
             View plans
           </a>
         </div>
