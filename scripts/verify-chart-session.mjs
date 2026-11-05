@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
  * Local checks for /api/chart/session auth + live SSE auth.
- * Does not require a signed-in user.
+ * Does not require a signed-in user, but does require the app to be running,
+ * so `npm run verify` leaves it out. Start the dev server first, then:
  *
+ *   npm run verify chart-session
  *   CHART_VERIFY_BASE=http://127.0.0.1:5000 node scripts/verify-chart-session.mjs
  */
 const BASE = (process.env.CHART_VERIFY_BASE ?? "http://127.0.0.1:5000").replace(/\/$/, "");

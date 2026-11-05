@@ -20,6 +20,22 @@ export type DeliverWebPushResult = {
   expired: number;
 };
 
+/**
+ * The one call that actually leaves the server.
+ *
+ * Injectable so a test can drive the real delivery path — prefs, dedup,
+ * subscription fan-out, expired-endpoint pruning — without a VAPID keypair and
+ * without posting to a push service. Production never passes this; it gets
+ * `webpush.sendNotification`.
+ */
+export type PushSender = (
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+  payload: string,
+) => Promise<unknown>;
+
+const webPushSender: PushSender = (subscription, payload) =>
+  webpush.sendNotification(subscription, payload);
+
 export function vapidConfigStatus(): {
   ok: boolean;
   missing: string[];
@@ -78,8 +94,13 @@ export async function deliverWebPushToUser(input: {
   userId: string;
   payload: string;
   supabase?: SupabaseClient | null;
+  /** Test seam — see {@link PushSender}. Omit in production. */
+  send?: PushSender;
 }): Promise<DeliverWebPushResult> {
-  if (!configureWebPushVapid()) {
+  const send = input.send ?? webPushSender;
+  // A caller that brought its own sender is not using VAPID, so requiring a
+  // keypair would only stop the test that proves this path works.
+  if (!input.send && !configureWebPushVapid()) {
     return { sent: 0, total: 0, expired: 0 };
   }
   const supabase = input.supabase ?? createServiceRoleSupabaseClient();
@@ -94,10 +115,7 @@ export async function deliverWebPushToUser(input: {
 
   const results = await Promise.allSettled(
     subs.map((sub) =>
-      webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        input.payload,
-      ),
+      send({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, input.payload),
     ),
   );
 
