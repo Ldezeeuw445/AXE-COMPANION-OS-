@@ -19,8 +19,8 @@ geschiedenis te hoeven lezen.
 Niet "de code staat er". Af is:
 
 1. `npx tsc --noEmit` — schoon.
-2. `npm test` — alles groen (116 tests op het moment van schrijven).
-3. `npm run verify` — alles groen (463 checks op het moment van schrijven).
+2. `npm test` — alles groen (207 tests, gemeten 5 nov 2026 op `9f157b0`).
+3. `npm run verify` — alles groen (847 checks, zelfde meting).
    Een nieuwe gedraging hoort een nieuwe check te krijgen, in het script dat
    er het dichtst bij staat, en die check moet **omvallen tegen de oude code**
    — anders bewijst hij niets.
@@ -983,11 +983,17 @@ nieuws beginnen.
 Drie bakjes. Geen ervan is op te pakken door een sessie die alleen deze
 container heeft.
 
-**Wacht op Luka.** De landing-kleuren (42ef0fa) staan live. Op main staat
-inmiddels ook `82d5c5e` (gloed onder de navigatiebalk volgt de muis) — **nog
-niet gedeployed**; live build is `cda8fc7`. De andere drie secties uit zijn
-bestand (reveal-cards, behavior-map, metric-cockpit-dial) vragen inhoud die
-nergens bestaat — **niet zelf verzinnen, niet deployen zonder zijn keuze.**
+**Wacht op Luka.** Bijgewerkt 5 nov 2026: de landing is af en live. De
+kleuren (42ef0fa), de gloed onder de navigatiebalk, de reveal-cards en de
+behavior map staan allemaal op `main` en in de live build (`9f157b0`), met
+checks in `verify-landing-hero-light.mjs` en `verify-landing-no-echo.mjs`. Van
+zijn bestand blijft alleen **metric-cockpit-dial** open: die vraagt cijfers die
+nergens bestaan — **niet zelf verzinnen.**
+
+Wat wél op hem wacht zijn drie open PR's: **#144** (gedeelde
+alerts/chart/risk-tabellen + `user_signals`), **#145** (de build-loop-tak) en
+**#146** (192 lint-waarschuwingen weg). Mergen is zijn keuze, niet die van een
+autopilot-beurt.
 
 Gemeten 2026-11-04 naast die keuze: Supabase anon-uit + HIBP-aan; Trading OS
 serve+tunnel+`availability: beta`; Ollama-API niet meer open (401 /
