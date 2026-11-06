@@ -101,8 +101,11 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
   "lib/broker/hub/adapters/supabaseDatabase.ts": {
     tables: { user_broker_accounts: 2 },
     why:
-      "the hub's generic save/delete. Takes whichever client its caller built, and filters " +
-      "on id alone — so it must stay on the trader's client until it filters user_id too",
+      "the hub's generic save/delete, still on whichever client its caller built — but no " +
+      "longer *because* of the client: it is bound to an owner and filters user_id on every " +
+      "statement, which `adapters/supabaseDatabase.test.ts` holds it to against a fake with " +
+      "no RLS at all. What keeps it listed is that its caller still hands it the trader's " +
+      "client; moving that is the same user-initiated-edit question as the entries above",
   },
 };
 
