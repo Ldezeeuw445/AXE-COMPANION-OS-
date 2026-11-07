@@ -23,11 +23,14 @@ export class AxeBrokerAdapterRegistry implements BrokerAdapterRegistry {
   }
 }
 
-export function createAxeBrokerRegistry(supabase: SupabaseClient): AxeBrokerAdapterRegistry {
+export function createAxeBrokerRegistry(
+  supabase: SupabaseClient,
+  userId: string,
+): AxeBrokerAdapterRegistry {
   return new AxeBrokerAdapterRegistry([
-    createMt5BrokerApiAdapter(supabase),
+    createMt5BrokerApiAdapter(supabase, userId),
     axeDemoBrokerApi,
-    createAlpacaBrokerApiAdapter(supabase),
+    createAlpacaBrokerApiAdapter(supabase, userId),
     ibkrStubBrokerApi,
   ]);
 }

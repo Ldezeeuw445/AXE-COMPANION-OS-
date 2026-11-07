@@ -2,14 +2,18 @@ import type { AlpacaEnvConfig } from "@/lib/alpaca/env";
 import type { AlpacaAccount, AlpacaBar, AlpacaOrder, AlpacaPosition } from "@/lib/alpaca/types";
 
 export class AlpacaApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code?: string,
-    readonly payload?: unknown,
-  ) {
+  // Plain fields rather than parameter properties: the test runner loads .ts
+  // with Node's type stripping, which cannot compile those.
+  readonly status: number;
+  readonly code?: string;
+  readonly payload?: unknown;
+
+  constructor(message: string, status: number, code?: string, payload?: unknown) {
     super(message);
     this.name = "AlpacaApiError";
+    this.status = status;
+    this.code = code;
+    this.payload = payload;
   }
 }
 

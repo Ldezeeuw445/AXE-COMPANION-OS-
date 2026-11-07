@@ -88,15 +88,21 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
   },
   "lib/broker/hub/adapters/alpacaLive.ts": {
     tables: { user_broker_accounts: 1 },
-    why: "marks the account disconnected when Alpaca rejects the stored keys",
+    why:
+      "the trader tapping disconnect in the hub panel. Bound to an owner and filtering user_id " +
+      "(`adapters/brokerAdapterScope.test.ts`), so the client is the only thing left to move",
   },
   "lib/broker/hub/adapters/ibkrGateway.ts": {
     tables: { user_broker_accounts: 4 },
-    why: "IBKR gateway pairing writes session state onto the account row",
+    why:
+      "IBKR gateway pairing, disconnect and the doctor writing its result onto the account row. " +
+      "Bound to an owner and filtering user_id (`adapters/brokerAdapterScope.test.ts`)",
   },
   "lib/broker/hub/adapters/mt5BrokerApi.ts": {
     tables: { user_broker_accounts: 1 },
-    why: "marks the account disconnected when MetaApi reports the login is gone",
+    why:
+      "the trader tapping disconnect in the hub panel. Bound to an owner and filtering user_id " +
+      "(`adapters/brokerAdapterScope.test.ts`), so the client is the only thing left to move",
   },
   "lib/broker/hub/adapters/supabaseDatabase.ts": {
     tables: { user_broker_accounts: 2 },
