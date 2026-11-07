@@ -12,10 +12,10 @@ export function createAxeBrokerConnectionHub(
   userId: string,
 ): BrokerConnectionHubService {
   return createBrokerConnectionHub({
-    database: new SupabaseDatabaseAdapter(supabase),
+    database: new SupabaseDatabaseAdapter(supabase, userId),
     auth: authAdapterForUser(userId),
     secrets: new SupabaseSecretsAdapter(supabase, userId),
-    brokers: createAxeBrokerRegistry(supabase),
+    brokers: createAxeBrokerRegistry(supabase, userId),
     brokerCatalog: AXE_BROKER_CATALOG,
   });
 }
