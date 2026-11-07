@@ -1,8 +1,15 @@
+import {
+  congressTicker,
+  congressTradeDate,
+  congressTradeDirection,
+  type CongressDirection,
+} from "./congressDisclosure.ts";
+
 export type FreeCongressTrade = {
   politician: string;
   chamber: string;
   ticker: string;
-  direction: "BUY" | "SELL";
+  direction: CongressDirection;
   size: string;
   date: string;
 };
@@ -17,25 +24,32 @@ function mapCongressRow(
   r: Record<string, unknown>,
   defaultChamber: string,
 ): FreeCongressTrade | null {
-  const type = String(r.type ?? r.transactionType ?? r.transaction ?? "").toLowerCase();
-  const isPurchase =
-    type.includes("purchase") || type.includes("buy") || type.includes("acquisition");
+  // Direction, ticker and date all drop the row when the filing does not
+  // actually disclose one — see freeSources/congressDisclosure.ts. The ticker
+  // chain deliberately stops at `symbol`/`ticker`: `assetDescription` is prose,
+  // not a symbol.
+  const direction = congressTradeDirection(
+    String(r.type ?? r.transactionType ?? r.transaction ?? ""),
+  );
+  if (!direction) return null;
+
+  const ticker = congressTicker(String(r.symbol ?? r.ticker ?? ""));
+  if (!ticker) return null;
+
+  const date = congressTradeDate(
+    String(r.transactionDate ?? r.disclosureDate ?? r.dateRecieved ?? r.dateReceived ?? r.date ?? ""),
+  );
+  if (!date) return null;
+
   const politician =
     `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim() ||
     String(r.representative ?? r.senator ?? r.name ?? "Unknown");
-  const ticker = String(r.symbol ?? r.ticker ?? r.assetDescription ?? "")
-    .toUpperCase()
-    .trim();
-  const date = String(
-    r.transactionDate ?? r.disclosureDate ?? r.dateRecieved ?? r.dateReceived ?? r.date ?? "",
-  ).slice(0, 10);
-  if (!ticker || !date) return null;
 
   return {
     politician,
     chamber: String(r.office ?? r.chamber ?? defaultChamber),
     ticker,
-    direction: isPurchase ? "BUY" : "SELL",
+    direction,
     size: String(r.amount ?? r.range ?? r.amountRange ?? "N/A"),
     date,
   };

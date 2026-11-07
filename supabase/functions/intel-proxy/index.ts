@@ -29,6 +29,12 @@ import { unusualWhalesHeaders } from "./freeSources/uwGate.ts";
 import { fetchInsiderTradesFromFmp } from "./freeSources/fmpInsider.ts";
 import { fetchCongressFromFmpSenateAndHouse } from "./freeSources/fmpCongress.ts";
 import {
+  dedupeCongressTrades,
+  mapQuiverCongressRow,
+  mapStockWatcherRow,
+  mapUnusualWhalesCongressRow,
+} from "./freeSources/congressFeeds.ts";
+import {
   fetchFinraShortVolume,
   type FreeShortVolume,
 } from "./freeSources/finraShortVolume.ts";
@@ -517,20 +523,10 @@ async function fetchCongressFromUW(headers: Record<string, string>): Promise<Sen
   const raw = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
   if (raw.length === 0) throw new Error("uw_congress_empty");
 
-  return raw.slice(0, 25).map((r: Record<string, unknown>) => {
-    const txType = String(
-      r.transaction_type ?? r.type ?? r.trade_type ?? ""
-    ).toLowerCase();
-    const isPurchase = txType.includes("purchase") || txType.includes("buy");
-    return {
-      politician: String(r.politician ?? r.representative ?? r.name ?? "Unknown"),
-      chamber: String(r.chamber ?? r.house ?? r.party ?? "Congress"),
-      ticker: String(r.ticker ?? r.symbol ?? r.asset_ticker ?? ""),
-      direction: isPurchase ? "BUY" as const : "SELL" as const,
-      size: String(r.amount ?? r.range ?? r.transaction_amount ?? "N/A"),
-      date: String(r.transaction_date ?? r.trade_date ?? r.filed_date ?? r.date ?? ""),
-    };
-  }).filter((t) => t.ticker && t.date);
+  return raw
+    .slice(0, 25)
+    .map((r: Record<string, unknown>) => mapUnusualWhalesCongressRow(r))
+    .filter((t: SenateTrade | null): t is SenateTrade => t !== null);
 }
 
 async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
@@ -548,49 +544,10 @@ async function fetchCongressFromQuiver(apiKey: string): Promise<SenateTrade[]> {
           : [];
     if (raw.length === 0) throw new Error("quiver_empty");
 
-    return raw.slice(0, 25).map((r: Record<string, unknown>) => {
-      const txType = String(
-        r.Transaction ?? r.transaction ?? r.TradeType ?? r.trade_type ?? "",
-      ).toLowerCase();
-      const isPurchase =
-        txType.includes("purchase") ||
-        txType.includes("buy") ||
-        txType.includes("acquisition");
-      const politician = String(
-        r.Representative ??
-          r.representative ??
-          r.Name ??
-          r.name ??
-          r.Politician ??
-          "Unknown",
-      );
-      const chamber = String(
-        r.House ?? r.house ?? r.Chamber ?? r.chamber ?? "Congress",
-      );
-      const ticker = String(r.Ticker ?? r.ticker ?? r.Symbol ?? r.symbol ?? "");
-      const size = String(
-        r.Range ?? r.range ?? r.Amount ?? r.amount ?? r.transaction_amount ?? "N/A",
-      );
-      const date = String(
-        r.TransactionDate ??
-          r.transaction_date ??
-          r.Traded ??
-          r.traded ??
-          r.Filed ??
-          r.filed ??
-          r.Date ??
-          r.date ??
-          "",
-      );
-      return {
-        politician,
-        chamber,
-        ticker,
-        direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
-        size,
-        date,
-      };
-    }).filter((t) => t.ticker && t.date);
+    return raw
+      .slice(0, 25)
+      .map((r: Record<string, unknown>) => mapQuiverCongressRow(r))
+      .filter((t: SenateTrade | null): t is SenateTrade => t !== null);
   }
 
   // Prefer bulk endpoint (current Quiver API); fall back to legacy live path.
@@ -623,18 +580,10 @@ async function fetchCongressFromFreeSources(): Promise<SenateTrade[]> {
       const body = (await senateRes.json()) as Array<Record<string, unknown>>;
       const raw = Array.isArray(body) ? body : [];
       results.push(
-        ...raw.slice(0, 25).map((r) => {
-          const txType = String(r.type ?? r.transaction_type ?? "").toLowerCase();
-          const isPurchase = txType.includes("purchase") || txType.includes("buy");
-          return {
-            politician: String(r.senator ?? r.name ?? r.representative ?? "Unknown"),
-            chamber: "Senate",
-            ticker: String(r.ticker ?? r.symbol ?? ""),
-            direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
-            size: String(r.amount_range ?? r.range ?? r.amount ?? "N/A"),
-            date: String(r.transaction_date ?? r.date ?? r.filing_date ?? ""),
-          };
-        }).filter((t) => t.ticker && t.date),
+        ...raw
+          .slice(0, 25)
+          .map((r) => mapStockWatcherRow(r, "Senate"))
+          .filter((t): t is SenateTrade => t !== null),
       );
     }
   } catch { /* ignore */ }
@@ -648,33 +597,19 @@ async function fetchCongressFromFreeSources(): Promise<SenateTrade[]> {
       const body = (await houseRes.json()) as Array<Record<string, unknown>>;
       const raw = Array.isArray(body) ? body : [];
       results.push(
-        ...raw.slice(0, 25).map((r) => {
-          const txType = String(r.type ?? r.transaction_type ?? "").toLowerCase();
-          const isPurchase = txType.includes("purchase") || txType.includes("buy");
-          return {
-            politician: String(r.representative ?? r.name ?? r.senator ?? "Unknown"),
-            chamber: "House",
-            ticker: String(r.ticker ?? r.symbol ?? ""),
-            direction: isPurchase ? ("BUY" as const) : ("SELL" as const),
-            size: String(r.amount_range ?? r.range ?? r.amount ?? "N/A"),
-            date: String(r.transaction_date ?? r.date ?? r.filing_date ?? ""),
-          };
-        }).filter((t) => t.ticker && t.date),
+        ...raw
+          .slice(0, 25)
+          .map((r) => mapStockWatcherRow(r, "House"))
+          .filter((t): t is SenateTrade => t !== null),
       );
     }
   } catch { /* ignore */ }
 
-  // Deduplicate and keep the 25 most recent
-  const seen = new Set<string>();
-  const unique = results
-    .filter((t) => {
-      const key = `${t.politician}|${t.ticker}|${t.date}|${t.direction}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 25);
+  // Deduplicate and keep the 25 most recent. The key matches the unique index
+  // on intel_congress_trades, amount band included: two filings by the same
+  // person on the same day in different bands are two disclosures, and the old
+  // key collapsed them into one.
+  const unique = dedupeCongressTrades(results, 25);
 
   if (unique.length === 0) throw new Error("free_public_empty");
   return unique;

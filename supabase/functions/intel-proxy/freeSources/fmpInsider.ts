@@ -35,10 +35,16 @@ function mapFmpInsiderRow(r: Record<string, unknown>): FreeInsiderTrade | null {
     tx.includes("s-sale");
   if (!isBuy && !isSell) return null;
 
-  const shares = Number(r.securitiesTransacted ?? r.shares ?? r.securitiesOwned ?? 0);
+  // `securitiesOwned` is deliberately not in this chain. FMP sends it on every
+  // row and it is the holding *after* the filing, not the amount transacted —
+  // using it as a fallback turns "sold 500 of their 2,000,000 shares" into a
+  // $2M trade. A row with no transacted size is dropped below instead.
+  const shares = Number(r.securitiesTransacted ?? r.shares ?? 0);
   const price = Number(r.price ?? r.sharePrice ?? 0);
   const valueRaw = Number(r.value ?? r.totalValue ?? 0);
   const value = valueRaw > 0 ? valueRaw : Math.max(0, shares) * Math.max(0, price);
+  // Same rule the SEC EDGAR path uses: no size, no information.
+  if (!(value > 0) && !(shares > 0)) return null;
 
   const date = String(
     r.transactionDate ?? r.filingDate ?? r.date ?? r.reportingDate ?? "",

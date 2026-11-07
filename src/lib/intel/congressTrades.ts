@@ -13,6 +13,8 @@
  * Dependency-free so `node --experimental-strip-types` can exercise it.
  */
 
+import { congressTradeDirection } from "@/lib/intel/freeSources/congressDisclosure";
+
 /** One trade as Alpha Vantage returns it. Everything is optional: this is
  *  someone else's API and a missing field must drop a row, not throw. */
 export type AlphaVantageCongressTrade = {
@@ -53,13 +55,10 @@ export const CONGRESS_TRADES_SOURCE = "alphavantage";
  * would reject it anyway.
  */
 export function normalizeDirection(raw: string | null | undefined): "BUY" | "SELL" | null {
-  const v = (raw ?? "").trim().toUpperCase();
-  if (!v) return null;
-  if (v.includes("PURCHASE") || v === "BUY" || v === "P") return "BUY";
-  // "PARTIAL_SALE" and "SALE_FULL" are still sales.
-  if (v.includes("SALE") || v.includes("SELL") || v === "S") return "SELL";
-  // EXCHANGE, RECEIVE, and the blanks: not a direction we can act on.
-  return null;
+  // One rule, shared with intel-proxy's four congress feeds. They used to guess
+  // SELL for anything that was not clearly a purchase, which is the mistake
+  // this function was written to avoid; see freeSources/congressDisclosure.ts.
+  return congressTradeDirection(raw);
 }
 
 function money(value: string | number | null | undefined): number | null {
