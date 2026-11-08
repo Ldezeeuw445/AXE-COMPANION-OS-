@@ -27,6 +27,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getMergedEdgeEnv } from "../_shared/mergeEdgeEnv.ts";
 import { unusualWhalesHeaders } from "./freeSources/uwGate.ts";
 import { fetchInsiderTradesFromFmp } from "./freeSources/fmpInsider.ts";
+import {
+  insiderTicker,
+  insiderTradesForSymbol,
+  mergeInsiderTrades,
+  parseForm4Trades,
+  type InsiderTrade,
+} from "./freeSources/insiderDisclosure.ts";
 import { fetchCongressFromFmpSenateAndHouse } from "./freeSources/fmpCongress.ts";
 import {
   dedupeCongressTrades,
@@ -136,30 +143,11 @@ function uwHeaders(): Record<string, string> | null {
   return unusualWhalesHeaders(env);
 }
 
-// ── XML helper ─────────────────────────────────────────────────────
-function xmlVal(xml: string, tag: string): string {
-  const outerRe = new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "i");
-  const outerMatch = xml.match(outerRe);
-  if (!outerMatch) return "";
-  const inner = outerMatch[0];
-  const valMatch = inner.match(/<value>([\s\S]*?)<\/value>/i);
-  if (valMatch) return valMatch[1].trim();
-  const directMatch = inner.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
-  return directMatch ? directMatch[1].trim() : "";
-}
-
 // ═══════════════════════════════════════════════════════════════════
 // 1. INSIDER TRADES — SEC EDGAR (free, no API key)
 // ═══════════════════════════════════════════════════════════════════
-type InsiderTrade = {
-  ticker: string;
-  insider: string;
-  role?: string;
-  type: "BUY" | "SELL";
-  shares?: number;
-  value: number;
-  date: string;
-};
+// Row rules (direction, ticker, date, lot merging) live in
+// freeSources/insiderDisclosure.ts, where npm test can reach them.
 
 async function handleInsiderTrades(symbol?: string): Promise<Response> {
   const cacheKey = `insider:${symbol ?? "all"}`;
@@ -236,15 +224,18 @@ async function readInsidersFromDb(symbol?: string): Promise<InsiderTrade[]> {
     if (symbol) query = query.eq("ticker", symbol);
     const { data } = await query;
     if (!data) return [];
-    return data.map((r: Record<string, unknown>) => ({
-      ticker: String(r.ticker),
-      insider: String(r.insider_name),
-      role: r.insider_role ? String(r.insider_role) : undefined,
-      type: String(r.trade_type) as "BUY" | "SELL",
-      shares: r.shares ? Number(r.shares) : undefined,
-      value: Number(r.total_value),
-      date: String(r.trade_date),
-    }));
+    return data
+      // Rows written before insiderDisclosure.ts existed can carry "N/A".
+      .filter((r: Record<string, unknown>) => insiderTicker(String(r.ticker ?? "")) != null)
+      .map((r: Record<string, unknown>) => ({
+        ticker: String(r.ticker),
+        insider: String(r.insider_name),
+        role: r.insider_role ? String(r.insider_role) : undefined,
+        type: String(r.trade_type) as "BUY" | "SELL",
+        shares: r.shares ? Number(r.shares) : undefined,
+        value: Number(r.total_value),
+        date: String(r.trade_date),
+      }));
   } catch {
     return [];
   }
@@ -317,51 +308,11 @@ async function fetchInsiderTradesFromEdgar(symbol?: string): Promise<InsiderTrad
     }),
   );
 
-  const trades: InsiderTrade[] = [];
-  for (const result of xmlResults) {
-    if (!result) continue;
-    const { xml } = result;
-    const ticker = xmlVal(xml, "issuerTradingSymbol").split(/[\s,]+/)[0].toUpperCase();
-    const insiderName = xmlVal(xml, "rptOwnerName");
-    const officerTitle = xmlVal(xml, "officerTitle") || undefined;
-    const txDate = xmlVal(xml, "periodOfReport") || xmlVal(xml, "transactionDate");
-
-    const txRegex = /<nonDerivativeTransaction>([\s\S]*?)<\/nonDerivativeTransaction>/gi;
-    let txMatch;
-    while ((txMatch = txRegex.exec(xml)) !== null) {
-      const txXml = txMatch[1];
-      const code = xmlVal(txXml, "transactionCode").toUpperCase();
-      if (code !== "P" && code !== "S") continue;
-      const shares = Math.round(Number(xmlVal(txXml, "transactionShares")) || 0);
-      const price = Number(xmlVal(txXml, "transactionPricePerShare")) || 0;
-      const value = Math.round(shares * price);
-      if (value <= 0 && shares <= 0) continue;
-      trades.push({
-        ticker: ticker || "N/A",
-        insider: insiderName || "Unknown",
-        role: officerTitle,
-        type: code === "P" ? "BUY" : "SELL",
-        shares: shares > 0 ? shares : undefined,
-        value,
-        date: txDate,
-      });
-    }
-  }
-
-  // De-duplicate and sort
-  const seen = new Set<string>();
-  const unique = trades.filter((t) => {
-    const key = `${t.insider}:${t.ticker}:${t.date}:${t.type}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  unique.sort((a, b) => b.value - a.value);
-
-  const filtered = symbol
-    ? unique.filter((t) => t.ticker === symbol || t.ticker.startsWith(symbol))
-    : unique;
-  return filtered.slice(0, 25);
+  const trades = mergeInsiderTrades(
+    xmlResults.flatMap((result) => (result ? parseForm4Trades(result.xml) : [])),
+  );
+  trades.sort((a, b) => b.value - a.value);
+  return insiderTradesForSymbol(trades, symbol).slice(0, 25);
 }
 
 

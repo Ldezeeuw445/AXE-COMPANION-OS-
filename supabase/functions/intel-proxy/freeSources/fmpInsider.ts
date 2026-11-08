@@ -1,12 +1,10 @@
-export type FreeInsiderTrade = {
-  ticker: string;
-  insider: string;
-  role?: string;
-  type: "BUY" | "SELL";
-  shares?: number;
-  value: number;
-  date: string;
-};
+import {
+  insiderTrade,
+  mergeInsiderTrades,
+  type InsiderTrade,
+} from "./insiderDisclosure.ts";
+
+export type FreeInsiderTrade = InsiderTrade;
 
 type FetchFn = (
   url: string,
@@ -14,57 +12,24 @@ type FetchFn = (
   headers?: Record<string, string>,
 ) => Promise<Response>;
 
-function mapFmpInsiderRow(r: Record<string, unknown>): FreeInsiderTrade | null {
-  const ticker = String(r.symbol ?? r.ticker ?? "").toUpperCase().trim();
-  if (!ticker) return null;
-
-  const tx = String(
-    r.transactionType ?? r.acquistionOrDisposition ?? r.type ?? r.transactionCode ?? "",
-  ).toLowerCase();
-  const isBuy =
-    tx.includes("purchase") ||
-    tx.includes("buy") ||
-    tx === "a" ||
-    tx.includes("acquisition") ||
-    tx.includes("p-purchase");
-  const isSell =
-    tx.includes("sale") ||
-    tx.includes("sell") ||
-    tx === "d" ||
-    tx.includes("disposition") ||
-    tx.includes("s-sale");
-  if (!isBuy && !isSell) return null;
-
-  // `securitiesOwned` is deliberately not in this chain. FMP sends it on every
-  // row and it is the holding *after* the filing, not the amount transacted —
-  // using it as a fallback turns "sold 500 of their 2,000,000 shares" into a
-  // $2M trade. A row with no transacted size is dropped below instead.
-  const shares = Number(r.securitiesTransacted ?? r.shares ?? 0);
-  const price = Number(r.price ?? r.sharePrice ?? 0);
-  const valueRaw = Number(r.value ?? r.totalValue ?? 0);
-  const value = valueRaw > 0 ? valueRaw : Math.max(0, shares) * Math.max(0, price);
-  // Same rule the SEC EDGAR path uses: no size, no information.
-  if (!(value > 0) && !(shares > 0)) return null;
-
-  const date = String(
-    r.transactionDate ?? r.filingDate ?? r.date ?? r.reportingDate ?? "",
-  ).slice(0, 10);
-  if (!date) return null;
-
-  const insider = String(
-    r.reportingName ?? r.insiderName ?? r.name ?? r.ownerName ?? "Unknown",
-  ).trim();
-  const role = String(r.typeOfOwner ?? r.reporterTitle ?? r.position ?? "").trim() || undefined;
-
-  return {
-    ticker,
-    insider: insider || "Unknown",
-    role,
-    type: isBuy ? "BUY" : "SELL",
-    shares: Number.isFinite(shares) && shares > 0 ? Math.round(shares) : undefined,
-    value: Number.isFinite(value) ? value : 0,
-    date,
-  };
+export function mapFmpInsiderRow(r: Record<string, unknown>): FreeInsiderTrade | null {
+  return insiderTrade({
+    ticker: r.symbol ?? r.ticker,
+    // `transactionType` is the Form 4 code (`P-Purchase`, `A-Award`, ...).
+    // `acquistionOrDisposition` is deliberately not a fallback: it is `A` for
+    // every grant and option exercise, which is not an insider buying.
+    direction: r.transactionType ?? r.transactionCode,
+    // `securitiesOwned` is deliberately not in this chain. FMP sends it on every
+    // row and it is the holding *after* the filing, not the amount transacted —
+    // using it as a fallback turns "sold 500 of their 2,000,000 shares" into a
+    // $2M trade. A row with no transacted size is dropped instead.
+    shares: r.securitiesTransacted ?? r.shares,
+    price: r.price ?? r.sharePrice,
+    value: r.value ?? r.totalValue,
+    date: r.transactionDate ?? r.filingDate ?? r.date,
+    insider: r.reportingName ?? r.insiderName ?? r.name ?? r.ownerName,
+    role: r.typeOfOwner ?? r.reporterTitle ?? r.position,
+  });
 }
 
 /**
@@ -99,10 +64,11 @@ export async function fetchInsiderTradesFromFmp(
         : Array.isArray(body?.data)
           ? body.data
           : [];
-      const trades = (raw as Record<string, unknown>[])
-        .map(mapFmpInsiderRow)
-        .filter((t): t is FreeInsiderTrade => t != null)
-        .slice(0, 40);
+      const trades = mergeInsiderTrades(
+        (raw as Record<string, unknown>[])
+          .map(mapFmpInsiderRow)
+          .filter((t): t is FreeInsiderTrade => t != null),
+      ).slice(0, 40);
       if (trades.length > 0) return trades;
     } catch {
       /* try next */
