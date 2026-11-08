@@ -43,6 +43,8 @@ import {
 } from "./freeSources/congressFeeds.ts";
 import {
   fetchFinraShortVolume,
+  FINRA_TOP_MIN_TOTAL_VOLUME,
+  shortVolumeTopFromStored,
   type FreeShortVolume,
 } from "./freeSources/finraShortVolume.ts";
 
@@ -2561,8 +2563,11 @@ async function handleShortVolume(symbol?: string): Promise<Response> {
   const hit = cached<FreeShortVolume[]>(cacheKey);
   if (hit) return json({ ok: true, data: hit, source: "cache" });
 
-  if (await isFeedFresh("shortVolume")) {
-    const fromDb = await readShortVolumeFromDb(symbol);
+  // The sync log tracks the market-wide list only. A fresh list says nothing
+  // about a symbol's own newest row, so a lookup always asks FINRA (behind the
+  // in-memory cache) and never marks the market-wide list fresh.
+  if (!symbol && await isFeedFresh("shortVolume")) {
+    const fromDb = await readShortVolumeFromDb();
     if (fromDb.length > 0) {
       setCache(cacheKey, fromDb);
       return json({ ok: true, data: fromDb, source: "db" });
@@ -2573,7 +2578,7 @@ async function handleShortVolume(symbol?: string): Promise<Response> {
     const rows = await fetchFinraShortVolume(fetchWithTimeout, symbol);
     if (rows.length > 0) {
       await persistShortVolume(rows);
-      await markSynced("shortVolume", rows.length, "finra_cnms");
+      if (!symbol) await markSynced("shortVolume", rows.length, "finra_cnms");
     }
     setCache(cacheKey, rows);
     return json({ ok: true, data: rows, source: "finra_cnms" });
@@ -2605,13 +2610,14 @@ async function readShortVolumeFromDb(symbol?: string): Promise<FreeShortVolume[]
       .from("intel_short_volume")
       .select("*")
       .order("trade_date", { ascending: false })
-      // Same ranking as the live FINRA list, so a DB hit isn't a shuffled one.
-      .order("short_ratio", { ascending: false, nullsFirst: false })
-      .limit(40);
-    if (symbol) query = query.eq("symbol", symbol);
+      .order("short_ratio", { ascending: false, nullsFirst: false });
+    query = symbol
+      ? query.eq("symbol", symbol).limit(40)
+      // A few days of market-wide lists; shortVolumeTopFromStored picks one.
+      : query.gte("total_volume", FINRA_TOP_MIN_TOTAL_VOLUME).limit(400);
     const { data } = await query;
     if (!data) return [];
-    return data.map((r: Record<string, unknown>) => {
+    const rows: FreeShortVolume[] = data.map((r: Record<string, unknown>) => {
       const shortVolume = Number(r.short_volume ?? 0);
       const totalVolume = Number(r.total_volume ?? 0);
       return {
@@ -2629,6 +2635,7 @@ async function readShortVolumeFromDb(symbol?: string): Promise<FreeShortVolume[]
         market: String(r.market ?? "CNMS"),
       };
     });
+    return symbol ? rows : shortVolumeTopFromStored(rows, 40);
   } catch {
     return [];
   }
