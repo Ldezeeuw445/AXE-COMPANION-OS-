@@ -1127,7 +1127,7 @@ export function buildAxeMessagesFromContext(
       intelLines.push(
         "DARK POOL: " +
           intel.topDarkPool
-            .map((r) => `${r.symbol} ${r.size.toLocaleString()} @ $${r.price.toFixed(2)} = $${(r.notional / 1e6).toFixed(2)}M`)
+            .map((r) => r.line)
             .join(" | "),
       );
     }

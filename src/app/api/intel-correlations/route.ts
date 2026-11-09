@@ -1,5 +1,5 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
-import { loadIntelSnapshot } from "@/lib/intel/intelClient";
+import { describeDarkPoolRow, loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { callLLM, type LLMMessage, type LLMRequest } from "@/services/llmClient";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
@@ -150,7 +150,7 @@ function buildIntelContext(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>)
   if (intel.darkPool.length > 0) {
     parts.push(`\n## DARK POOL (${intel.darkPool.length})`);
     for (const p of intel.darkPool.slice(0, 10)) {
-      parts.push(`- ${p.symbol}: $${p.price.toFixed(2)} × ${p.size.toLocaleString()} = $${formatCompact(p.notional)}${p.side ? ` (${p.side})` : ""}`);
+      parts.push(`- ${describeDarkPoolRow(p)}`);
     }
   }
 

@@ -30,7 +30,7 @@ import {
   precomputeTradingOSContextLane,
 } from "@/services/contextService";
 import { loadNews } from "@/lib/market/newsProvider";
-import { loadIntelSnapshot } from "@/lib/intel/intelClient";
+import { describeDarkPoolRow, loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildAxeKnowledgeLayerBlock } from "@/lib/axe/knowledgeLayerContext";
 import { buildIntelKnowledgeLayerBlock } from "@/lib/intel/intelKnowledgeLayer";
 import { buildIntelContext, truncateIntelContext } from "@/lib/intel/buildIntelContext";
@@ -923,7 +923,7 @@ export async function streamChatMessage(
             "DARK POOL: " +
               intel.darkPool
                 .slice(0, 3)
-                .map((r) => `${r.symbol} ${r.size.toLocaleString()} @ $${r.price.toFixed(2)} = $${(r.notional / 1e6).toFixed(2)}M`)
+                .map((r) => describeDarkPoolRow(r))
                 .join(" | "),
           );
         }

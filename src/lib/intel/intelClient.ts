@@ -48,15 +48,56 @@ export type SenateTrade = {
   date: string;
 };
 
+/**
+ * Off-exchange activity. Single dark pool prints only exist in paid feeds; the
+ * shared intel-proxy serves FINRA's daily off-exchange (short) volume per
+ * symbol instead, marked `kind: "finra_short_volume"`. Older rows (and the
+ * table fallback) still carry price / size / notional per print.
+ */
 export type DarkPoolPrint = {
   symbol: string;
-  price: number;
-  size: number;
-  notional: number;
+  price?: number;
+  size?: number;
+  notional?: number;
   side?: "buy" | "sell" | "neutral";
   /** HH:MM stamp from the proxy. */
   time?: string;
+  kind?: "finra_short_volume";
+  shortVolume?: number;
+  totalVolume?: number;
+  shortPct?: number;
+  /** FINRA trading day, YYYY-MM-DD. */
+  date?: string;
 };
+
+export function isOffExchangeVolume(row: DarkPoolPrint): boolean {
+  return row.kind === "finra_short_volume" || (typeof row.totalVolume === "number" && typeof row.price !== "number");
+}
+
+function compactNumber(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return String(Math.round(n));
+}
+
+/**
+ * One plain line for AXE's context, for either shape:
+ * "SPY: 17.60M shares off-exchange, 42.7% short (FINRA, 2026-11-06)" or
+ * "NVDA: $192.50 × 1,200 = $230.4K (buy)". Never reads a field the row lacks.
+ */
+export function describeDarkPoolRow(p: DarkPoolPrint): string {
+  if (isOffExchangeVolume(p)) {
+    const vol = typeof p.totalVolume === "number" ? `${compactNumber(p.totalVolume)} shares off-exchange` : "off-exchange volume";
+    const short = typeof p.shortPct === "number" ? `, ${p.shortPct.toFixed(1)}% short` : "";
+    return `${p.symbol}: ${vol}${short} (FINRA${p.date ? `, ${p.date}` : ""})`;
+  }
+  const price = typeof p.price === "number" ? `$${p.price.toFixed(2)}` : "";
+  const size = typeof p.size === "number" ? ` × ${p.size.toLocaleString()}` : "";
+  const notional = typeof p.notional === "number" ? ` = $${compactNumber(p.notional)}` : "";
+  return `${p.symbol}: ${price}${size}${notional}${p.side ? ` (${p.side})` : ""}`;
+}
 
 export type UnusualOption = {
   symbol: string;
@@ -274,22 +315,16 @@ const PROXY_ACTION_MAP: Partial<Record<IntelAction, string>> = {
 };
 
 /**
- * Feeds the deployed proxy has no handler for at all.
- *
- * These four were dropped from the Edge function (there is no EIA, GreyNoise or
- * RapidAPI path left in it). Asking anyway costs a round-trip that can only
- * return 401, so they are served from their Postgres tables directly.
- *
- * Their tables still hold rows, but nothing has written to them since July —
- * so the rows are served, and the tile is told the truth about them rather than
- * being allowed to present months-old rows as a live feed. See RETIRED_MAX_AGE.
+ * Feeds served straight from their tables, never from the proxy. Empty now:
+ * the shared intel-proxy (deployed from Ldezeeuw445/trading-os-app, the one
+ * function for both apps) serves energyFlows (EIA), cyberThreats (CISA KEV),
+ * militaryRadar and emergencyMonitor (adsb.lol). Their old tables are only a
+ * fallback while a proxy without those handlers is still deployed.
  */
-const PROXY_UNSUPPORTED_ACTIONS = new Set<IntelAction>([
-  "energyFlows",
-  "cyberThreats",
-  "militaryRadar",
-  "emergencyMonitor",
-]);
+const PROXY_UNSUPPORTED_ACTIONS = new Set<IntelAction>([]);
+
+/** Alt-data feeds the shared proxy serves; their old tables are only a fallback. */
+type LiveAltFeed = "energyFlows" | "cyberThreats" | "militaryRadar" | "emergencyMonitor";
 
 /** How old a retired feed's newest row may be before the tile stops claiming it. */
 const RETIRED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -559,7 +594,7 @@ function normalizeProxyPayload<T>(action: IntelAction, raw: unknown): T {
   return raw as T;
 }
 
-async function loadIntelFromDb<T>(
+async function loadIntelFromDbTables<T>(
   action: IntelAction,
   args: Record<string, unknown>,
 ): Promise<IntelEnvelope<T>> {
@@ -825,7 +860,11 @@ async function loadIntelFromDb<T>(
 async function callIntelProxy<T>(
   action: IntelAction,
   args: Record<string, unknown> = {},
+  opts: { dbFallback?: boolean } = {},
 ): Promise<IntelEnvelope<T>> {
+  const dbFallback = opts.dbFallback ?? true;
+  const loadIntelFromDb = <U>(a: IntelAction, x: Record<string, unknown>): Promise<IntelEnvelope<U>> =>
+    dbFallback ? loadIntelFromDbTables<U>(a, x) : Promise.resolve({ ok: false, error: "no_db_fallback" });
   if (DB_ONLY_ACTIONS.has(action)) {
     const db = await loadIntelFromDb<T>(action, args);
     if (db.ok) return db;
@@ -1001,6 +1040,28 @@ export async function loadIntelSnapshot(opts?: {
   }
 }
 
+/**
+ * One alt-data feed: live from the shared proxy, or — while a proxy without
+ * this handler is still deployed — its old table, shown only while young.
+ */
+async function loadAltFeed<T>(
+  action: LiveAltFeed,
+  label: string,
+  description: string,
+): Promise<{ rows: T[]; status: IntelProviderStatus }> {
+  const live = await callIntelProxy<T[]>(action, {}, { dbFallback: false });
+  if (live.ok && Array.isArray(live.data)) {
+    // An empty list is a real answer here (no aircraft squawking 7700 is good news).
+    return { rows: live.data, status: { id: action, label, state: "live", description } };
+  }
+  const [db, newestAt] = await Promise.all([loadIntelFromDbTables<T[]>(action, {}), newestRetiredSnapshot(action)]);
+  const fresh = newestAt != null && Date.now() - newestAt < RETIRED_MAX_AGE_MS;
+  return {
+    rows: fresh && db.ok && Array.isArray(db.data) ? db.data : [],
+    status: retiredStatus(action, label, description, newestAt),
+  };
+}
+
 async function fetchIntelSnapshot(
   opts: { symbol?: string } | undefined,
   cached?: IntelSnapshotCacheEntry,
@@ -1024,12 +1085,17 @@ async function fetchIntelSnapshot(
   const vesselRes = await callIntelProxy<VesselTrack[]>("vesselTracking", {});
   const chokepointRes = await callIntelProxy<Chokepoint[]>("chokepoints", {});
   const conflictRes = await callIntelProxy<ConflictEvent[]>("conflictEvents", {});
-  const energyRes = await callIntelProxy<EnergyFlow[]>("energyFlows", {});
-  const cyberRes = await callIntelProxy<CyberThreat[]>("cyberThreats", {});
-
-  // Military & Emergency feeds — same ADS-B Exchange subscription as jets
-  const militaryRes = await callIntelProxy<MilitaryAircraft[]>("militaryRadar", {});
-  const emergencyRes = await callIntelProxy<EmergencySquawk[]>("emergencyMonitor", {});
+  // Energy (EIA), cyber (CISA KEV), military and emergency aircraft (adsb.lol)
+  // come from the shared intel-proxy; the old tables only stand in until that
+  // proxy is deployed.
+  const energyFeed = await loadAltFeed<EnergyFlow>("energyFlows", "Energy flows", "EIA crude, gas and fuel stocks and prices");
+  const cyberFeed = await loadAltFeed<CyberThreat>("cyberThreats", "Cyber threats", "CISA known exploited vulnerabilities");
+  const militaryFeed = await loadAltFeed<MilitaryAircraft>("militaryRadar", "Military radar", "Military aircraft on ADS-B (adsb.lol)");
+  const emergencyFeed = await loadAltFeed<EmergencySquawk>(
+    "emergencyMonitor",
+    "Emergency monitor",
+    "Aircraft squawking 7500 / 7600 / 7700 (adsb.lol)",
+  );
 
   const insiders = insiderRes.ok && Array.isArray(insiderRes.data) ? insiderRes.data : [];
   const senate = senateRes.ok && Array.isArray(senateRes.data) ? senateRes.data : [];
@@ -1041,27 +1107,14 @@ async function fetchIntelSnapshot(
   const vessels = vesselRes.ok && Array.isArray(vesselRes.data) ? vesselRes.data : [];
   const chokepoints = chokepointRes.ok && Array.isArray(chokepointRes.data) ? chokepointRes.data : [];
   const conflicts = conflictRes.ok && Array.isArray(conflictRes.data) ? conflictRes.data : [];
-  const energy = energyRes.ok && Array.isArray(energyRes.data) ? energyRes.data : [];
-  const cyber = cyberRes.ok && Array.isArray(cyberRes.data) ? cyberRes.data : [];
-  const military = militaryRes.ok && Array.isArray(militaryRes.data) ? militaryRes.data : [];
-  const emergency = emergencyRes.ok && Array.isArray(emergencyRes.data) ? emergencyRes.data : [];
 
-  // The retired feeds keep their rows but must not be presented as live once
-  // those rows go cold, so ask each table once when it last grew.
-  const [energyAt, cyberAt, militaryAt, emergencyAt] = await Promise.all([
-    newestRetiredSnapshot("energyFlows"),
-    newestRetiredSnapshot("cyberThreats"),
-    newestRetiredSnapshot("militaryRadar"),
-    newestRetiredSnapshot("emergencyMonitor"),
-  ]);
-  const retiredFresh = (at: number | null) => at != null && Date.now() - at < RETIRED_MAX_AGE_MS;
-  const energyLive = retiredFresh(energyAt) ? energy : [];
-  const cyberLive = retiredFresh(cyberAt) ? cyber : [];
-  const militaryLive = retiredFresh(militaryAt) ? military : [];
-  const emergencyLive = retiredFresh(emergencyAt) ? emergency : [];
+  const energyLive = energyFeed.rows;
+  const cyberLive = cyberFeed.rows;
+  const militaryLive = militaryFeed.rows;
+  const emergencyLive = emergencyFeed.rows;
 
-  // The retired feeds are excluded: a feed with no upstream is a known state,
-  // not an outage, and letting it count here pinned the page to a stale snapshot.
+  // The alt-data feeds are excluded: one of them failing must not pin the page
+  // to a stale snapshot of the market feeds.
   const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes];
   const hadError = allResults.some((r) => !r.ok);
   const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energyLive.length || cyberLive.length || militaryLive.length);
@@ -1139,15 +1192,10 @@ async function fetchIntelSnapshot(
       conflictRes.ok && conflicts.length > 0,
       conflictRes.ok ? undefined : conflictRes.error,
     ),
-    retiredStatus("energyFlows", "Energy flows", "AXE Intel energy inventory & pricing", energyAt),
-    retiredStatus("cyberThreats", "Cyber threats", "AXE Intel cyber threat detection", cyberAt),
-    retiredStatus("militaryRadar", "Military radar", "AXE Intel global military aircraft tracking", militaryAt),
-    retiredStatus(
-      "emergencyMonitor",
-      "Emergency monitor",
-      "AXE Intel aviation emergency squawk tracking",
-      emergencyAt,
-    ),
+    energyFeed.status,
+    cyberFeed.status,
+    militaryFeed.status,
+    emergencyFeed.status,
   ];
 
   const snapshot: IntelSnapshot = {

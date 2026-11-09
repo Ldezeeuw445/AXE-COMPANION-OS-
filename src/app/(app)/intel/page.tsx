@@ -5,7 +5,7 @@ import { AxeTopBarInjector } from "@/components/axe/AxeTopBarInjector";
 import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
-import { loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot, type Chokepoint } from "@/lib/intel/intelClient";
+import { isOffExchangeVolume, loadIntelSnapshot, type IntelProviderStatus, type IntelSnapshot, type Chokepoint } from "@/lib/intel/intelClient";
 import { IntelAiChat } from "@/components/intel/IntelAiChat";
 import { CorrelateButton } from "@/components/intel/CorrelateButton";
 import { CorrelationEngine } from "@/components/intel/CorrelationEngine";
@@ -264,14 +264,30 @@ export default async function IntelPage({ searchParams }: PageProps) {
           </div>
           {intel.darkPool.length > 0 ? (
             <ul className="mt-3 space-y-2">
-              {intel.darkPool.slice(0, 10).map((row, i) => (
+              {intel.darkPool.slice(0, 10).map((row, i) =>
+                isOffExchangeVolume(row) ? (
+                  // FINRA daily off-exchange volume: one row per symbol, no single prints.
+                  <li
+                    key={`${row.symbol}-${row.date ?? i}`}
+                    className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
+                  >
+                    <span className="font-mono text-[11px] font-semibold text-tos-text">{row.symbol}</span>
+                    <span className="font-mono text-[10px] text-tos-muted">
+                      {typeof row.totalVolume === "number" ? `${row.totalVolume.toLocaleString()} off-exch` : "—"}
+                    </span>
+                    <span className="font-mono text-[10px] text-tos-muted">
+                      {typeof row.shortPct === "number" ? `${row.shortPct.toFixed(1)}% short` : ""}
+                    </span>
+                    <span className="ml-auto font-mono text-[10px] text-tos-dim">{row.date ?? ""}</span>
+                  </li>
+                ) : (
                 <li
                   key={`${row.symbol}-${row.time ?? i}`}
                   className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2"
                 >
                   <span className="font-mono text-[11px] font-semibold text-tos-text">{row.symbol}</span>
-                  <span className="font-mono text-[10px] text-tos-muted">${row.price.toFixed(2)}</span>
-                  <span className="font-mono text-[10px] text-tos-muted">{row.size.toLocaleString()}</span>
+                  <span className="font-mono text-[10px] text-tos-muted">{typeof row.price === "number" ? `$${row.price.toFixed(2)}` : "—"}</span>
+                  <span className="font-mono text-[10px] text-tos-muted">{typeof row.size === "number" ? row.size.toLocaleString() : ""}</span>
                   {row.side ? (
                     <span
                       className={`font-mono text-[10px] font-semibold uppercase ${
@@ -282,10 +298,11 @@ export default async function IntelPage({ searchParams }: PageProps) {
                     </span>
                   ) : null}
                   <span className="ml-auto font-mono text-[10px] font-semibold text-tos-text">
-                    {formatMoneyShort(row.notional)}
+                    {typeof row.notional === "number" ? formatMoneyShort(row.notional) : ""}
                   </span>
                 </li>
-              ))}
+                ),
+              )}
             </ul>
           ) : (
             <p className="mt-2 text-xs text-tos-muted">
@@ -715,7 +732,7 @@ export default async function IntelPage({ searchParams }: PageProps) {
                   </span>
                   <span
                     className={`font-mono text-[10px] font-semibold uppercase ${
-                      t.classification === "malicious" ? "text-rose-300" :
+                      t.classification === "malicious" || t.classification === "ransomware" ? "text-rose-300" :
                       t.classification === "benign" ? "text-emerald-300" :
                       "text-amber-200/70"
                     }`}
