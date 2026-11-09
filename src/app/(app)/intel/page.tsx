@@ -836,7 +836,7 @@ function ProviderBadges({
   cache: IntelSnapshot["cache"];
 }) {
   const liveCount = providers.filter((p) => p.state === "live").length;
-  const errorCount = providers.filter((p) => p.state === "error").length;
+  const errorCount = providers.filter((p) => p.state === "error" || p.state === "stale").length;
   const offCount = providers.filter((p) => p.state === "off").length;
   const degraded = errorCount > 0 || cache.state === "stale";
   const summary =
@@ -872,14 +872,14 @@ function ProviderBadges({
               className={`tos-accent-dot shrink-0 ${
                 p.state === "live"
                   ? "tos-accent-dot--emerald"
-                  : p.state === "error"
+                  : p.state === "error" || p.state === "stale"
                     ? "tos-accent-dot--amber"
                     : ""
               }`}
               aria-hidden
             />
             {intelHealthLabel(p.id)}
-            {p.state === "live" ? "" : ` · ${p.state}`}
+            {p.state === "live" ? "" : ` · ${p.state === "stale" ? "cached" : p.state}`}
           </span>
         ))}
       </div>
@@ -933,12 +933,18 @@ function seismicMarketTag(c: { eventType: string; region: string; notes: string;
 function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id: string }) {
   const p = providers.find((pv) => pv.id === id);
   if (!p) return null;
-  const dot =
-    p.state === "live" ? "bg-emerald-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25";
+  const amber = p.state === "error" || p.state === "stale";
+  const dot = p.state === "live" ? "bg-emerald-300" : amber ? "bg-amber-300/85" : "bg-white/25";
   const text =
-    p.state === "live" ? "live" : p.state === "error" ? "unavailable" : "off";
+    p.state === "live"
+      ? "live"
+      : p.state === "stale"
+        ? "cached"
+        : p.state === "error"
+          ? "unavailable"
+          : "off";
   const textColor =
-    p.state === "live" ? "text-emerald-300/80" : p.state === "error" ? "text-amber-300/80" : "text-tos-dim";
+    p.state === "live" ? "text-emerald-300/80" : amber ? "text-amber-300/80" : "text-tos-dim";
   return (
     <span
       className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}

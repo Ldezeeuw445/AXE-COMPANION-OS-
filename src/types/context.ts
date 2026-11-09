@@ -319,7 +319,8 @@ export type IntelContext = {
   providers: Array<{
     id: string;
     label: string;
-    state: "live" | "off" | "error";
+    /** "stale": cached rows shown because the live source failed. */
+    state: "live" | "stale" | "off" | "error";
     description?: string;
   }>;
   compactSummary: string | null;
