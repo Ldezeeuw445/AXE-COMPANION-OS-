@@ -2,7 +2,8 @@ import type { LossBasis, TradingConstraints } from "@/lib/risk/accountProfile";
 import type { ProactiveNotice } from "@/lib/axe/notice";
 import { signedAmount } from "@/lib/axe/notice";
 
-export const DRAWDOWN_WARN_PCTS = [70, 85, 95] as const;
+/** 100 = the firm limit itself is reached or breached. */
+export const DRAWDOWN_WARN_PCTS = [70, 85, 95, 100] as const;
 export type DrawdownWarnPct = (typeof DRAWDOWN_WARN_PCTS)[number];
 export type DrawdownKind = "daily" | "total";
 
@@ -82,6 +83,7 @@ export function readingForKind(
 }
 
 export function bandForUtilization(ofLimitPct: number): DrawdownWarnPct | null {
+  if (ofLimitPct >= 100) return 100;
   if (ofLimitPct >= 95) return 95;
   if (ofLimitPct >= 85) return 85;
   if (ofLimitPct >= 70) return 70;
@@ -106,6 +108,17 @@ export function buildDrawdownNotice(reading: DrawdownReading, band: DrawdownWarn
   const ofLimit = reading.ofLimitPct.toFixed(0);
   const limit = reading.limitPct.toFixed(1);
   const remaining = Math.max(0, 100 - reading.ofLimitPct).toFixed(0);
+  if (band >= 100) {
+    return {
+      title: `${kindLabel(reading.kind)} limit reached`,
+      what: `${used}% of equity is gone (${signedAmount(-reading.loss)}) — at or past the ${limit}% ${kindLabel(reading.kind)} cap.`,
+      soWhat:
+        reading.kind === "daily"
+          ? "The firm's daily loss rule is hit. Stop trading for today and check the account with your firm."
+          : "The firm's total drawdown rule is hit. The account may be failed; check it with your firm before any new trade.",
+      action: { label: "Open positions", href: "/positions" },
+    };
+  }
   return {
     title: `${band}% of ${kindLabel(reading.kind)} limit`,
     what: `${used}% of equity is gone (${signedAmount(-reading.loss)}) — ${ofLimit}% of the ${limit}% ${kindLabel(reading.kind)} cap.`,

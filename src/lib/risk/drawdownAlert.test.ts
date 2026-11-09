@@ -25,6 +25,29 @@ describe("drawdown bands", () => {
     assert.equal(bandForUtilization(85), 85);
     assert.equal(bandForUtilization(94.9), 85);
     assert.equal(bandForUtilization(95), 95);
+    assert.equal(bandForUtilization(99.9), 95);
+  });
+
+  it("reports a reached or breached limit as its own band, not as 95%", () => {
+    assert.equal(bandForUtilization(100), 100);
+    assert.equal(bandForUtilization(130), 100);
+    const [daily] = evaluateDrawdownAlerts({
+      accountId: "acc-1",
+      constraints: ftmoLike,
+      snap: {
+        equity: 94_000,
+        balance: 100_000,
+        dayStartBalance: 100_000,
+        dayStartEquity: 100_000,
+        initialBalance: 100_000,
+        peakBalance: 100_000,
+      },
+      now: new Date("2026-11-09T12:00:00Z"),
+    });
+    assert.equal(daily.kind, "daily");
+    assert.equal(daily.band, 100);
+    assert.match(daily.notice.title, /limit reached/);
+    assert.equal(daily.eventKey, "drawdown:acc-1:daily:100:2026-11-09");
   });
 });
 
