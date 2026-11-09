@@ -23,6 +23,10 @@ const WARMUP_ACTIONS = [
   "vesselStream",
   "gdeltEvents",
   "openSourcesBrief",
+  "militaryRadar",
+  "emergencyMonitor",
+  "cyberThreats",
+  "energyFlows",
 ] as const;
 
 const PROXY_TIMEOUT_MS = 25_000;

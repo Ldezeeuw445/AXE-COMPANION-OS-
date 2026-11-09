@@ -29,7 +29,7 @@ import type {
   TradingSpaceContext,
 } from "@/types/context";
 import type { TerminalAlert, TerminalExecution, WatchlistEntry } from "@/services/axeService";
-import { loadIntelSnapshot } from "@/lib/intel/intelClient";
+import { describeDarkPoolRow, loadIntelSnapshot } from "@/lib/intel/intelClient";
 import { buildMarketContext, summarizeMarketContext } from "@/lib/market/marketContextService";
 import { brokerPricingState, isFreshIso } from "@/lib/runtime/runtimeTruth";
 import { getMetaApiCloudAccountById } from "@/lib/mt5/activeCloudAccount";
@@ -351,6 +351,7 @@ function mapIntelSummary(intel: Awaited<ReturnType<typeof loadIntelSnapshot>>): 
     })),
     topDarkPool: intel.darkPool.slice(0, 3).map((r) => ({
       symbol: r.symbol,
+      line: describeDarkPoolRow(r),
       notional: r.notional,
       size: r.size,
       price: r.price,
@@ -942,7 +943,7 @@ async function buildIntel(symbol: string | null): Promise<IntelContext> {
   if (summary?.topDarkPool.length) {
     compact.push(
       `dark pool ${summary.topDarkPool
-        .map((r) => `${r.symbol} $${(r.notional / 1e6).toFixed(1)}M`)
+        .map((r) => (typeof r.notional === "number" ? `${r.symbol} $${(r.notional / 1e6).toFixed(1)}M` : r.line))
         .join(", ")}`,
     );
   }

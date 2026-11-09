@@ -38,18 +38,17 @@ const ALL_ON = { UNUSUAL_WHALES_ENABLED: "true", ALPHAVANTAGE_API_KEY: "k" };
 
 console.log("intel sources");
 
-check("the remaining Unusual Whales actions are skipped while unsubscribed", () => {
-  // senateTrades used to be on this list. It moved to Alpha Vantage, which
-  // serves the same STOCK Act disclosures for free — see the check below.
+check("smart-money feeds no longer wait on Unusual Whales", () => {
+  // 9 Nov 2026: the shared intel-proxy serves these from free sources
+  // (FINRA off-exchange volume, CBOE delayed chains), so nothing gates them.
   for (const action of ["darkPoolPrints", "unusualOptions", "marketTide"]) {
-    const a = actionAvailability(action, OFF);
-    assert.equal(a.available, false, `${action} should be skipped`);
-    assert.match(a.reason, /Unusual Whales is not subscribed/);
+    assert.equal(INTEL_ACTION_SOURCE[action], "free");
+    assert.equal(actionAvailability(action, OFF).available, true, `${action} needs no subscription`);
   }
 });
 
 check("free sources keep running", () => {
-  for (const action of ["corporateJets", "vesselStream", "gdeltEvents", "openSourcesBrief"]) {
+  for (const action of ["corporateJets", "vesselStream", "gdeltEvents", "openSourcesBrief", "militaryRadar", "emergencyMonitor", "cyberThreats", "energyFlows"]) {
     assert.equal(actionAvailability(action, OFF).available, true, `${action} needs no key`);
   }
 });
@@ -78,11 +77,8 @@ check("an unknown action is treated as free, not silently dropped", () => {
 
 check("the warmup only calls what it can reach", () => {
   const all = Object.keys(INTEL_ACTION_SOURCE);
-  // Four unconfigured: three Unusual Whales feeds plus senateTrades, which
-  // now waits on an Alpha Vantage key instead.
-  assert.equal(availableIntelActions(all, OFF).length, all.length - 4);
-  // The UW switch alone no longer buys senateTrades back.
-  assert.equal(availableIntelActions(all, ON).length, all.length - 1);
+  // Every feed is on a free source now, so nothing is skipped either way.
+  assert.equal(availableIntelActions(all, OFF).length, all.length);
   assert.equal(availableIntelActions(all, ALL_ON).length, all.length);
 });
 
@@ -138,21 +134,11 @@ check("cron smoke and crontab listings no longer probe Krater", () => {
   );
 });
 
-check("senateTrades is off Unusual Whales and onto a free source", () => {
-  assert.equal(INTEL_ACTION_SOURCE.senateTrades, "alphavantage");
-
-  const off = actionAvailability("senateTrades", OFF);
-  assert.equal(off.available, false, "no key means not configured");
-  assert.match(off.reason, /ALPHAVANTAGE_API_KEY/, "say which key, and which cron fills it");
-  assert.doesNotMatch(off.reason, /Unusual Whales/, "this feed no longer waits on that subscription");
-
-  assert.equal(
-    actionAvailability("senateTrades", { ALPHAVANTAGE_API_KEY: "k" }).available,
-    true,
-    "with the key it is available — this key is read by this process, so presence is a real answer",
-  );
-  // And the UW switch must not accidentally gate it any more.
-  assert.equal(actionAvailability("senateTrades", { UNUSUAL_WHALES_ENABLED: "true" }).available, false);
+check("senateTrades is off Unusual Whales and on a free source", () => {
+  // The shared intel-proxy serves STOCK Act disclosures from FMP (both
+  // chambers); no Alpha Vantage key or UW subscription gates it.
+  assert.equal(INTEL_ACTION_SOURCE.senateTrades, "free");
+  assert.equal(actionAvailability("senateTrades", OFF).available, true);
 });
 
 // ── no quick action may be a dead end ────────────────────────────────────
@@ -226,12 +212,11 @@ check("the health route reports availability and its real providers", () => {
 });
 
 // Market Tide is the live example: with nothing configured it must disappear.
-check("Market Tide drops out while Unusual Whales is unsubscribed", () => {
+check("Market Tide stays available: CBOE's delayed chains are free", () => {
   const tide = INTEL_QUICK_ACTIONS.find((q) => q.label === "Market Tide");
   assert.ok(tide, "the example this filter was written for must still exist");
-  assert.equal(INTEL_ACTION_SOURCE[tide.requires], "unusual_whales");
-  assert.equal(actionAvailability(tide.requires, OFF).available, false);
-  assert.equal(actionAvailability(tide.requires, ON).available, true, "and come back when it is bought");
+  assert.equal(INTEL_ACTION_SOURCE[tide.requires], "free");
+  assert.equal(actionAvailability(tide.requires, OFF).available, true);
 });
 
 console.log(`\n${passed} checks passed`);

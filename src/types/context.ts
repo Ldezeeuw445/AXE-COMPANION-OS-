@@ -135,11 +135,14 @@ export type IntelSummary = {
     date: string;
   }>;
   /** Top-3 dark pool prints by notional. */
+  /** Top dark pool prints, or FINRA off-exchange volume rows (no single prints). */
   topDarkPool: Array<{
     symbol: string;
-    notional: number;
-    size: number;
-    price: number;
+    /** Plain line for prompts; safe for either row shape. */
+    line: string;
+    notional?: number;
+    size?: number;
+    price?: number;
   }>;
   /** Top-3 unusual options flow alerts by premium. */
   topOptions: Array<{
