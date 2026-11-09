@@ -26,6 +26,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getMergedEdgeEnv } from "../_shared/mergeEdgeEnv.ts";
 import { unusualWhalesHeaders } from "./freeSources/uwGate.ts";
+import {
+  cacheTtlFor,
+  replyBody,
+  staleReply,
+  type StaleReply,
+} from "./freeSources/staleReply.ts";
 import { fetchInsiderTradesFromFmp } from "./freeSources/fmpInsider.ts";
 import {
   insiderTicker,
@@ -113,7 +119,7 @@ const CACHE_TTL_MS = 15 * 60 * 1000;
 
 function cached<T>(key: string): T | null {
   const entry = cache.get(key);
-  if (!entry || Date.now() - entry.ts > CACHE_TTL_MS) return null;
+  if (!entry || Date.now() - entry.ts > cacheTtlFor(entry.data, CACHE_TTL_MS)) return null;
   return entry.data as T;
 }
 function setCache(key: string, data: unknown) {
@@ -153,8 +159,8 @@ function uwHeaders(): Record<string, string> | null {
 
 async function handleInsiderTrades(symbol?: string): Promise<Response> {
   const cacheKey = `insider:${symbol ?? "all"}`;
-  const hit = cached<InsiderTrade[]>(cacheKey);
-  if (hit) return json({ ok: true, data: hit });
+  const hit = cached<InsiderTrade[] | StaleReply<InsiderTrade[]>>(cacheKey);
+  if (hit) return json(replyBody(hit));
 
   // Try Supabase first
   if (await isFeedFresh("insiderTrades")) {
@@ -203,8 +209,9 @@ async function handleInsiderTrades(symbol?: string): Promise<Response> {
 
   const fallback = await readInsidersFromDb(symbol);
   if (fallback.length > 0) {
-    setCache(cacheKey, fallback);
-    return json({ ok: true, data: fallback, source: "db_stale", unavailable: sourceErrors });
+    const reply = staleReply(fallback, sourceErrors);
+    setCache(cacheKey, reply);
+    return json(replyBody(reply));
   }
 
   return json({
@@ -332,8 +339,8 @@ type SenateTrade = {
 
 async function handleSenateTrades(): Promise<Response> {
   const cacheKey = "senate:all";
-  const hit = cached<SenateTrade[]>(cacheKey);
-  if (hit) return json({ ok: true, data: hit });
+  const hit = cached<SenateTrade[] | StaleReply<SenateTrade[]>>(cacheKey);
+  if (hit) return json(replyBody(hit));
 
   // Try Supabase first
   if (await isFeedFresh("congressTrades")) {
@@ -414,8 +421,9 @@ async function handleSenateTrades(): Promise<Response> {
 
   const fallback = await readCongressFromDb();
   if (fallback.length > 0) {
-    setCache(cacheKey, fallback);
-    return json({ ok: true, data: fallback, source: "db_stale", unavailable: sourceErrors });
+    const reply = staleReply(fallback, sourceErrors);
+    setCache(cacheKey, reply);
+    return json(replyBody(reply));
   }
 
   return json({
@@ -2560,8 +2568,8 @@ async function persistEmergency(emergencies: EmergencySquawk[]) {
 // ═══════════════════════════════════════════════════════════════════
 async function handleShortVolume(symbol?: string): Promise<Response> {
   const cacheKey = `shortVolume:${symbol ?? "top"}`;
-  const hit = cached<FreeShortVolume[]>(cacheKey);
-  if (hit) return json({ ok: true, data: hit, source: "cache" });
+  const hit = cached<FreeShortVolume[] | StaleReply<FreeShortVolume[]>>(cacheKey);
+  if (hit) return json(replyBody(hit, "cache"));
 
   // The sync log tracks the market-wide list only. A fresh list says nothing
   // about a symbol's own newest row, so a lookup always asks FINRA (behind the
@@ -2586,13 +2594,9 @@ async function handleShortVolume(symbol?: string): Promise<Response> {
     const reason = e instanceof Error ? e.message : String(e);
     const fallback = await readShortVolumeFromDb(symbol);
     if (fallback.length > 0) {
-      setCache(cacheKey, fallback);
-      return json({
-        ok: true,
-        data: fallback,
-        source: "db_stale",
-        unavailable: [reason],
-      });
+      const reply = staleReply(fallback, [reason]);
+      setCache(cacheKey, reply);
+      return json(replyBody(reply));
     }
     return json({
       ok: false,
