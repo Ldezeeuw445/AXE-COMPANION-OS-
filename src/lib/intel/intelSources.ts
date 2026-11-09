@@ -19,20 +19,30 @@
 
 export type IntelSource = "unusual_whales" | "alphavantage" | "free";
 
-/** Actions the intel proxy serves, and what each one needs. */
+/**
+ * Actions the intel proxy serves, and what each one needs.
+ *
+ * Since 9 Nov 2026 the shared intel-proxy (deployed from
+ * Ldezeeuw445/trading-os-app, the one function for Trading OS and this app)
+ * fills every feed from real sources that cost nothing: FMP for insiders and
+ * Congress, CBOE delayed chains for options and tide, FINRA for off-exchange
+ * volume, adsb.lol for military and emergency aircraft, CISA for exploited
+ * vulnerabilities, EIA for energy. Unusual Whales is no longer needed.
+ */
 export const INTEL_ACTION_SOURCE: Record<string, IntelSource> = {
-  insiderTrades: "free", // SEC EDGAR fallback works without a UW key
-  // Moved off Unusual Whales: Alpha Vantage serves the same STOCK Act
-  // disclosures for free, House and Senate both. Filled by
-  // /api/cron/congress-trades-sync.
-  senateTrades: "alphavantage",
-  darkPoolPrints: "unusual_whales",
-  unusualOptions: "unusual_whales",
-  marketTide: "unusual_whales",
+  insiderTrades: "free",
+  senateTrades: "free",
+  darkPoolPrints: "free",
+  unusualOptions: "free",
+  marketTide: "free",
   corporateJets: "free",
   vesselStream: "free",
   gdeltEvents: "free",
   openSourcesBrief: "free",
+  militaryRadar: "free",
+  emergencyMonitor: "free",
+  cyberThreats: "free",
+  energyFlows: "free",
 };
 
 function envFlag(value: string | undefined): boolean {

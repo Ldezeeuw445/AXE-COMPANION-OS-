@@ -72,7 +72,22 @@ These services assemble AXE behavior, chat, context, memory, market context, and
 
 ## Intel Truth
 
-- Intel currently flows through `intel-proxy`.
+- Intel flows through `intel-proxy`, **one function shared with Trading OS**
+  (project `pqnngpcgbdwxavbatbia`). Its code lives only in
+  `Ldezeeuw445/trading-os-app` (`supabase/functions/intel-proxy/`) and is
+  deployed from there by `scripts/release-mac.sh`. This repo has no copy and
+  no workflow that deploys it, so the live function cannot be overwritten from
+  here.
+- Every feed is on a real source that costs nothing (since 9 Nov 2026):
+  - FMP: insiders (SEC Form 4) and Congress (STOCK Act).
+  - CBOE delayed chains: options flow and market tide.
+  - FINRA: daily off-exchange volume. Single dark pool prints only exist in paid feeds.
+  - adsb.lol: military and emergency aircraft.
+  - CISA: known exploited vulnerabilities.
+  - EIA: energy.
+  - The existing jets, vessels and GDELT feeds.
+- New feeds: add them in Trading OS's intel-proxy, keeping the row shapes
+  `src/lib/intel/intelClient.ts` reads.
 - Provider/API keys for Intel belong in Supabase Edge/server secret scope, not frontend code.
 
 ## Phase 1 Stability Truth

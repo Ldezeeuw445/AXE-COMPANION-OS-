@@ -1,4 +1,4 @@
-import type { IntelSnapshot } from "@/lib/intel/intelClient";
+import { describeDarkPoolRow, type IntelSnapshot } from "@/lib/intel/intelClient";
 
 function formatCompact(n: number): string {
   if (!Number.isFinite(n)) return "?";
@@ -35,10 +35,10 @@ export function buildIntelContext(intel: IntelSnapshot, symbol?: string): string
   }
 
   if (intel.darkPool.length > 0) {
-    parts.push(`\n## DARK POOL PRINTS (${intel.darkPool.length} prints)`);
+    parts.push(`\n## DARK POOL / OFF-EXCHANGE (${intel.darkPool.length})`);
     for (const p of intel.darkPool.slice(0, 10)) {
       parts.push(
-        `- ${p.symbol}: $${p.price.toFixed(2)} × ${p.size.toLocaleString()} = $${formatCompact(p.notional)}${p.side ? ` (${p.side})` : ""}`,
+        `- ${describeDarkPoolRow(p)}`,
       );
     }
   }
