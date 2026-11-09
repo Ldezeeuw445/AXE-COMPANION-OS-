@@ -13,7 +13,6 @@ type GlassPanelProps = {
 export function GlassPanel({
   children,
   className = "",
-  glow: _glow = "none",
   linear = true,
   onClick,
 }: GlassPanelProps) {

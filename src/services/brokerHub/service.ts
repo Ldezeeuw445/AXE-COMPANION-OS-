@@ -156,7 +156,8 @@ export class BrokerHub {
   /**
    * Get recommended broker for a symbol/strategy
    */
-  async getRecommendedBroker(symbol: string): Promise<string | null> {
+  async getRecommendedBroker(_symbol: string): Promise<string | null> {
+    void _symbol;
     // Logic: Check which brokers have this symbol available
     // Prefer the one with lowest fees for this symbol class
     const accounts = await this.getAccounts();

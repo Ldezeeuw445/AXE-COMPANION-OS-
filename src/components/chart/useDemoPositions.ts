@@ -149,37 +149,42 @@ export function useDemoPositions(
   const closeRef = useRef<(id: string) => void>(() => {});
   useEffect(() => {
     if (livePrice == null || !Number.isFinite(livePrice)) return;
-    setPositions((prev) => {
-      const survivors: DemoPosition[] = [];
-      let changed = false;
-      for (const p of prev) {
-        if (p.brokerAccountId !== brokerAccountId) {
+    const raf = requestAnimationFrame(() => {
+      setPositions((prev) => {
+        const survivors: DemoPosition[] = [];
+        let changed = false;
+        for (const p of prev) {
+          if (p.brokerAccountId !== brokerAccountId) {
+            survivors.push(p);
+            continue;
+          }
+          if (p.symbol !== activeSymbol) {
+            survivors.push(p);
+            continue;
+          }
+          const stopHit =
+            p.stopLoss != null &&
+            (p.side === "buy" ? livePrice <= p.stopLoss : livePrice >= p.stopLoss);
+          const takeHit =
+            p.takeProfit != null &&
+            (p.side === "buy" ? livePrice >= p.takeProfit : livePrice <= p.takeProfit);
+          if (stopHit || takeHit) {
+            changed = true;
+            continue;
+          }
           survivors.push(p);
-          continue;
         }
-        if (p.symbol !== activeSymbol) {
-          survivors.push(p);
-          continue;
-        }
-        const stopHit =
-          p.stopLoss != null &&
-          (p.side === "buy" ? livePrice <= p.stopLoss : livePrice >= p.stopLoss);
-        const takeHit =
-          p.takeProfit != null &&
-          (p.side === "buy" ? livePrice >= p.takeProfit : livePrice <= p.takeProfit);
-        if (stopHit || takeHit) {
-          changed = true;
-          continue;
-        }
-        survivors.push(p);
-      }
-      return changed ? survivors : prev;
+        return changed ? survivors : prev;
+      });
     });
+    return () => cancelAnimationFrame(raf);
   }, [activeSymbol, brokerAccountId, livePrice]);
 
-  closeRef.current = (id: string) => {
-    setPositions((prev) => prev.filter((p) => p.id !== id));
-  };
+  useEffect(() => {
+    closeRef.current = (id: string) => {
+      setPositions((prev) => prev.filter((p) => p.id !== id));
+    };
+  });
 
   const open = useCallback<UseDemoPositionsReturn["open"]>(
     ({ symbol, side, volume, entryPrice, stopLoss, takeProfit }) => {

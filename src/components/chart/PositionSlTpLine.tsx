@@ -62,7 +62,9 @@ export const PositionSlTpLine = memo(function PositionSlTpLine({
   const dragPriceRef = useRef<number | null>(null);
   const originRef = useRef<{ pointerY: number; baseY: number } | null>(null);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   useEffect(() => {
     const el = hostRef.current;

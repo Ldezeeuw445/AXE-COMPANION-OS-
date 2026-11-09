@@ -27,14 +27,17 @@ export function ChatStickyPanel({ children }: ChatStickyPanelProps) {
   const [badgeClass, setBadgeClass] = useState("bg-cyan-400");
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw === "0" || raw === "false") setExpanded(false);
-      else if (raw === "1" || raw === "true") setExpanded(true);
-    } catch {
-      /* ignore */
-    }
-    setHydrated(true);
+    const id = requestAnimationFrame(() => {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw === "0" || raw === "false") setExpanded(false);
+        else if (raw === "1" || raw === "true") setExpanded(true);
+      } catch {
+        /* ignore */
+      }
+      setHydrated(true);
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   useEffect(() => {
@@ -60,13 +63,14 @@ export function ChatStickyPanel({ children }: ChatStickyPanelProps) {
   }, []);
 
   useEffect(() => {
-    void refreshUnread();
+    const raf = requestAnimationFrame(() => void refreshUnread());
     const onSeen = () => void refreshUnread();
     window.addEventListener("axe:feed-seen", onSeen);
-    const id = window.setInterval(() => void refreshUnread(), 60_000);
+    const interval = window.setInterval(() => void refreshUnread(), 60_000);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener("axe:feed-seen", onSeen);
-      window.clearInterval(id);
+      window.clearInterval(interval);
     };
   }, [refreshUnread]);
 

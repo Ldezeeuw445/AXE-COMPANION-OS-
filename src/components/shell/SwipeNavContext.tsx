@@ -12,7 +12,7 @@
  * The navbar reads this to animate a glass bubble between tabs.
  */
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 interface SwipeNavState {
   /** -1 … +1 swipe progress (0 = resting) */

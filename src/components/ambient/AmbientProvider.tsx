@@ -60,12 +60,13 @@ export function AmbientProvider({ children }: { children: ReactNode }) {
   const [hapticsOn, setHapticsOnState] = useState(true);
   const { play, enabled: soundOn, setEnabled: setSoundOn } = useSoundFx();
 
-  // Hydrate from localStorage
+  // Hydrate from localStorage after paint so SSR/client markup stays aligned.
   useEffect(() => {
-    const storedP = localStorage.getItem(LS_PARTICLES);
-    if (storedP === "off") setParticlesOnState(false);
-    const storedH = localStorage.getItem(LS_HAPTICS);
-    if (storedH === "off") setHapticsOnState(false);
+    const id = requestAnimationFrame(() => {
+      if (localStorage.getItem(LS_PARTICLES) === "off") setParticlesOnState(false);
+      if (localStorage.getItem(LS_HAPTICS) === "off") setHapticsOnState(false);
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   const setParticlesOn = useCallback((v: boolean) => {

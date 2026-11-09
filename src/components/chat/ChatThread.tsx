@@ -35,10 +35,14 @@ export function ChatThread({
   realtimeEnabled,
 }: ChatThreadProps) {
   const [messages, setMessages] = useState(initialMessages);
+  const [prevInitial, setPrevInitial] = useState(initialMessages);
   const streamingRef = useRef(false);
+  if (initialMessages !== prevInitial) {
+    setPrevInitial(initialMessages);
+    setMessages(initialMessages);
+  }
 
   useEffect(() => {
-    setMessages(initialMessages);
     window.dispatchEvent(new CustomEvent("axe:chat-pin"));
     const t1 = window.setTimeout(() => window.dispatchEvent(new CustomEvent("axe:chat-pin")), 120);
     const t2 = window.setTimeout(() => window.dispatchEvent(new CustomEvent("axe:chat-pin")), 420);

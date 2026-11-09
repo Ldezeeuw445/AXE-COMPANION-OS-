@@ -104,11 +104,15 @@ function TradeRow({
   const [note, setNote] = useState(trade.note ?? "");
   const [selectedTag, setSelectedTag] = useState<string | null>(trade.label);
 
-  // Sync when server data updates
-  useEffect(() => {
+  const [syncedTrade, setSyncedTrade] = useState({
+    label: trade.label,
+    note: trade.note ?? "",
+  });
+  if (trade.label !== syncedTrade.label || (trade.note ?? "") !== syncedTrade.note) {
+    setSyncedTrade({ label: trade.label, note: trade.note ?? "" });
     setSelectedTag(trade.label);
     setNote(trade.note ?? "");
-  }, [trade.label, trade.note]);
+  }
 
   const handleSave = useCallback(async () => {
     if (!selectedTag && !note.trim()) return;

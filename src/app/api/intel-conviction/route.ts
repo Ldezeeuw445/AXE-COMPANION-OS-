@@ -1,7 +1,7 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { createClient } from "@supabase/supabase-js";
 import { describeDarkPoolRow, loadIntelSnapshot } from "@/lib/intel/intelClient";
-import { callLLM, type LLMMessage, type LLMRequest } from "@/services/llmClient";
+import { callLLM, type LLMMessage } from "@/services/llmClient";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 
 export const dynamic = "force-dynamic";

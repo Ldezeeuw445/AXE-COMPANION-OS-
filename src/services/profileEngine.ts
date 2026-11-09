@@ -111,9 +111,8 @@ export async function getTraderRecentWins(
  */
 export async function buildDecisionSet(traderId: string): Promise<AdaptiveUiDecisionSet> {
   try {
-    const [profile, alignment] = await Promise.all([
+    const [profile] = await Promise.all([
       getTraderProfile(traderId),
-      getTraderAlignmentScore(traderId),
     ]);
 
     return {

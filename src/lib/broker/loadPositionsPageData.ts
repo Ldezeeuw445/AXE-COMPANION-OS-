@@ -144,7 +144,10 @@ export async function loadPositionsPageData(): Promise<PositionsPageData> {
     if (isPaper) {
       const paper = await loadPaperPositions(supabase, user.id, activeId);
       return emptyPositions({
-        positions: paper.map(({ quoteOrigin: _origin, ...row }) => row),
+        positions: paper.map(({ quoteOrigin, ...row }) => {
+          void quoteOrigin;
+          return row;
+        }),
         brokerAccountId: activeId,
         providerStatus: "paper",
         hint:

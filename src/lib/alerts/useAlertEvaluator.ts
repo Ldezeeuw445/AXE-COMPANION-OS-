@@ -85,9 +85,12 @@ export function useAlertEvaluator({ enabled, symbol, cooldownSeconds = 60, onFir
 
   useEffect(() => {
     if (!enabled) return;
-    void refresh();
+    const raf = requestAnimationFrame(() => void refresh());
     const interval = setInterval(() => void refresh(), 30_000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(interval);
+    };
   }, [enabled, refresh]);
 
   const evaluate = useCallback(

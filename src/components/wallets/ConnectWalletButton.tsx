@@ -58,15 +58,19 @@ function AppKitConnectButton({
   useEffect(() => {
     if (!awaitingAddress.current || !isConnected || !address) return;
     awaitingAddress.current = false;
-    setConnecting(false);
-    onConnected(address);
+    const id = requestAnimationFrame(() => {
+      setConnecting(false);
+      onConnected(address);
+    });
+    return () => cancelAnimationFrame(id);
   }, [address, isConnected, onConnected]);
 
   useEffect(() => {
     if (!awaitingAddress.current || modalOpen) return;
     if (!isConnected) {
       awaitingAddress.current = false;
-      setConnecting(false);
+      const id = requestAnimationFrame(() => setConnecting(false));
+      return () => cancelAnimationFrame(id);
     }
   }, [isConnected, modalOpen]);
 

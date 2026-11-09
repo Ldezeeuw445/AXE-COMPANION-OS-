@@ -23,11 +23,15 @@ export function useDemoLivePrice(
   seedPrice: number | null | undefined,
 ): number | null {
   const [price, setPrice] = useState<number | null>(seedPrice ?? null);
+  const [seedKey, setSeedKey] = useState(`${symbol}:${seedPrice ?? ""}`);
   const ref = useRef(seedPrice ?? null);
-
+  const nextSeedKey = `${symbol}:${seedPrice ?? ""}`;
+  if (nextSeedKey !== seedKey) {
+    setSeedKey(nextSeedKey);
+    setPrice(seedPrice ?? null);
+  }
   useEffect(() => {
     ref.current = seedPrice ?? null;
-    setPrice(seedPrice ?? null);
   }, [seedPrice, symbol]);
 
   useEffect(() => {

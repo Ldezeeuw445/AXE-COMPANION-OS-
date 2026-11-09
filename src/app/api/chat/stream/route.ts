@@ -1,6 +1,5 @@
 import { streamChatMessage, type StreamEvent } from "@/services/chatService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 
 // Node.js runtime — metaApiClient uses node:crypto

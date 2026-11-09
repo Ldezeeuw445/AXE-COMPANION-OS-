@@ -90,9 +90,10 @@ export function useSoundFx() {
   const ctxRef = useRef<AudioContext | null>(null);
   const [enabled, setEnabledState] = useState(false);
 
-  // Sync from localStorage on mount
+  // Sync from localStorage after paint so SSR/client markup stays aligned.
   useEffect(() => {
-    setEnabledState(getStoredPref());
+    const id = requestAnimationFrame(() => setEnabledState(getStoredPref()));
+    return () => cancelAnimationFrame(id);
   }, []);
 
   const setEnabled = useCallback((on: boolean) => {

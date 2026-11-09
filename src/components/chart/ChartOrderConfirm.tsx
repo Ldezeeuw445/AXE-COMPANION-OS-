@@ -6,7 +6,7 @@
  * single live order goes through this dialog. Two distinct buttons to
  * commit, with risk text and a clear summary of what will be sent.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, X } from "lucide-react";
 import { formatBrokerPrice } from "@/lib/broker/symbolFormat";
 
@@ -49,10 +49,7 @@ export function ChartOrderConfirm({
   onConfirm: () => void;
 }) {
   const [primaryArmed, setPrimaryArmed] = useState(false);
-
-  useEffect(() => {
-    if (!open) setPrimaryArmed(false);
-  }, [open]);
+  if (!open && primaryArmed) setPrimaryArmed(false);
 
   if (!open || !input) return null;
 
