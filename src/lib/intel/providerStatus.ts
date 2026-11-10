@@ -22,6 +22,20 @@ export type ProviderTile<Id extends string = string> = {
 const MAX_REASONS = 3;
 
 /**
+ * Map a proxy failure into tile/hover copy. `intelClient` stores
+ * `intel_proxy_<status>:<body>` on HTTP errors; the body is Edge HTML/JSON
+ * and must never reach the intel view.
+ */
+export function userFacingProxyError(err: string): string {
+  const http = /^intel_proxy_(\d{3}):/.exec(err);
+  if (http) return `Bron tijdelijk niet bereikbaar (HTTP ${http[1]})`;
+  if (err.startsWith("intel_proxy_timeout_")) {
+    return "Bron tijdelijk niet bereikbaar (timeout)";
+  }
+  return err;
+}
+
+/**
  * Why a successful proxy reply is still not live data, or undefined when it is.
  *
  * Only `source: "db_stale"` counts: rows from the feed's own fresh DB read are
@@ -59,12 +73,13 @@ export function providerTile<Id extends string>(
   }
   if (ok) return { id, label, state: "live", description };
   if (err) {
+    const reason = userFacingProxyError(err);
     return {
       id,
       label,
       state: "error",
-      description: `${description} — unavailable: ${err}`,
-      reason: err,
+      description: `${description} — unavailable: ${reason}`,
+      reason,
     };
   }
   return {

@@ -13,7 +13,6 @@
  * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/intel/freeSources/congressDisclosure.test.ts
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   congressTicker,
@@ -21,17 +20,6 @@ import {
   congressTradeDirection,
 } from "./congressDisclosure.ts";
 import { normalizeDirection } from "../congressTrades.ts";
-
-/**
- * Source with its comments removed, so an assertion about the code is not
- * satisfied — or broken — by a comment that quotes the code.
- *
- * `//` is only treated as a comment when it does not follow a `:`, which keeps
- * the `https://` in these files intact.
- */
-function codeOnly(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-}
 
 describe("INTEL-FREE congress disclosure direction", () => {
   it("reads every spelling of a purchase the four feeds use", () => {
@@ -148,69 +136,5 @@ describe("INTEL-FREE congress disclosure date", () => {
   it("keeps a real leap day", () => {
     assert.equal(congressTradeDate("2024-02-29"), "2024-02-29");
     assert.equal(congressTradeDate("2026-02-29"), null);
-  });
-});
-
-describe("INTEL-FREE congress disclosure, edge-function copy", () => {
-  it("carries the same rules as this one", () => {
-    // Deno can't import from src/, so intel-proxy keeps its own copy. This is
-    // the only thing that notices if the two drift apart.
-    const edge = readFileSync(
-      new URL(
-        "../../../../supabase/functions/intel-proxy/freeSources/congressDisclosure.ts",
-        import.meta.url,
-      ),
-      "utf8",
-    );
-    const mine = readFileSync(new URL("./congressDisclosure.ts", import.meta.url), "utf8");
-
-    // The three bodies, compared on the lines that make the decisions.
-    const rules = [
-      /if \(v === "P"\) return "BUY";/,
-      /if \(v === "S"\) return "SELL";/,
-      /v\.includes\("PURCHASE"\) \|\| v\.includes\("BUY"\) \|\| v\.includes\("ACQUISITION"\)/,
-      /v\.includes\("SALE"\) \|\| v\.includes\("SELL"\) \|\| v\.includes\("DISPOSITION"\)/,
-      /return TICKER_SHAPE\.test\(v\) \? v : null;/,
-      /\^\[A-Z\]\[A-Z0-9\.\\-\]\{0,9\}\$/,
-    ];
-    for (const rule of rules) {
-      assert.match(edge, rule, `edge copy is missing: ${rule}`);
-      assert.match(mine, rule, `tested copy is missing: ${rule}`);
-    }
-
-    // The placeholder set has to match exactly: a symbol one copy drops and the
-    // other keeps is a duplicate row in intel_congress_trades.
-    const placeholders = (src: string) =>
-      /const TICKER_PLACEHOLDERS = new Set\(\[([\s\S]*?)\]\);/
-        .exec(src)?.[1]
-        .match(/"[^"]*"/g)
-        ?.sort();
-    const edgeSet = placeholders(edge);
-    assert.ok(edgeSet && edgeSet.length > 0, "edge copy has no placeholder set");
-    assert.deepEqual(edgeSet, placeholders(mine));
-  });
-
-  it("is actually used by every congress mapper in intel-proxy", () => {
-    // Four feeds reach intel_congress_trades, across two mapper files. A fifth
-    // added with its own ternary would be invisible to the tests above, so the
-    // ternary itself is what gets asserted gone — in the code, not in the
-    // comments, which quote it on purpose to say what went wrong.
-    // Companion no longer owns intel-proxy/index.ts (#149); the mappers live here.
-    const proxyDir = new URL("../../../../supabase/functions/intel-proxy/", import.meta.url);
-    const read = (file: string) => codeOnly(readFileSync(new URL(file, proxyDir), "utf8"));
-
-    for (const file of ["freeSources/fmpCongress.ts", "freeSources/congressFeeds.ts"]) {
-      const src = read(file);
-      assert.doesNotMatch(
-        src,
-        /isPurchase/,
-        `${file} still decides a direction with a ternary instead of congressTradeDirection`,
-      );
-      assert.match(
-        src,
-        /congressTradeDirection\(/,
-        `${file} should use the shared direction rule`,
-      );
-    }
   });
 });

@@ -31,9 +31,8 @@
  * loses the whole batch, silently. Validating here means that row drops and the
  * other 24 land.
  *
- * Deno cannot import from `src/`, so `supabase/functions/intel-proxy/
- * freeSources/congressDisclosure.ts` keeps a copy of these rules; the last test
- * in `congressDisclosure.test.ts` is what notices if the two drift apart.
+ * The deployed intel-proxy lives only in trading-os-app (#149). This module is
+ * the tested rule set this app uses when it maps congress rows itself.
  *
  * Dependency-free, so `node --test` can exercise it directly.
  */

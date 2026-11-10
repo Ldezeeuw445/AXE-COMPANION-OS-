@@ -46,6 +46,21 @@ describe("INTEL-FREE provider tiles", () => {
     assert.equal(off.reason, "no_data");
   });
 
+  it("maps intel-proxy HTTP errors without leaking the response body", () => {
+    const tile = providerTile(
+      "x",
+      "X",
+      "Feed",
+      false,
+      "intel_proxy_503:<html>Worker exceeded CPU limits at line 12</html>",
+    );
+    assert.equal(tile.state, "error");
+    assert.equal(tile.reason, "Bron tijdelijk niet bereikbaar (HTTP 503)");
+    assert.equal(tile.description, "Feed — unavailable: Bron tijdelijk niet bereikbaar (HTTP 503)");
+    assert.doesNotMatch(tile.reason ?? "", /intel_proxy_|<html>|Worker exceeded/);
+    assert.doesNotMatch(tile.description ?? "", /intel_proxy_|<html>|Worker exceeded/);
+  });
+
   it("an empty stale read is not shown as stale", () => {
     // ok=false (no rows) wins over a stale reason: nothing cached is on screen.
     assert.equal(providerTile("x", "X", "Feed", false, undefined, "fmp_insider_empty").state, "off");

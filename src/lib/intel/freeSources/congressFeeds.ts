@@ -18,12 +18,8 @@
  * throw. What a row has to carry to be usable is decided in one place,
  * `congressDisclosure.ts`.
  *
- * Deno cannot import from `src/`, so
- * `supabase/functions/intel-proxy/freeSources/congressFeeds.ts` keeps a copy.
- * Everything from `export type CongressFeedTrade` down is byte-identical in
- * both files — only the header and the import's file extension differ, because
- * Deno requires one and `tsc` rejects it — and `congressFeeds.test.ts` compares
- * them character for character.
+ * The deployed intel-proxy lives only in trading-os-app (#149). This module is
+ * the tested mapper this app keeps for congress row shapes.
  *
  * Dependency-free, so `node --test` can exercise it directly.
  */

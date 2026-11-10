@@ -11,7 +11,6 @@
  * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/intel/freeSources/congressFeeds.test.ts
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   dedupeCongressTrades,
@@ -221,46 +220,5 @@ describe("INTEL-FREE congress dedupe", () => {
       2,
     );
     assert.deepEqual(out.map((t) => t.ticker), ["BBB", "CCC"]);
-  });
-});
-
-describe("INTEL-FREE congress feeds, edge-function copy", () => {
-  it("is byte-identical to this one from the first export down", () => {
-    // Deno can't import from src/, so intel-proxy keeps its own copy. Both
-    // files declare that everything from the first export down is the same —
-    // only the header and the import's file extension differ — so compare
-    // exactly rather than by sampled regex.
-    const read = (url: URL) => readFileSync(url, "utf8");
-    // Anchored to the start of a line: both headers name the marker in prose.
-    const MARKER = /^export type CongressFeedTrade/m;
-    const body = (src: string) => {
-      const at = MARKER.exec(src)?.index;
-      assert.ok(at !== undefined, `expected ${MARKER} to split header from body`);
-      return src.slice(at);
-    };
-
-    assert.equal(
-      body(read(new URL("../../../../supabase/functions/intel-proxy/freeSources/congressFeeds.ts", import.meta.url))),
-      body(read(new URL("./congressFeeds.ts", import.meta.url))),
-    );
-  });
-
-  it("exports the four mappers the shared proxy must call (no companion index.ts after #149)", () => {
-    const mod = readFileSync(
-      new URL("../../../../supabase/functions/intel-proxy/freeSources/congressFeeds.ts", import.meta.url),
-      "utf8",
-    );
-    for (const fn of [
-      "mapUnusualWhalesCongressRow",
-      "mapQuiverCongressRow",
-      "mapStockWatcherRow",
-      "dedupeCongressTrades",
-    ]) {
-      assert.match(mod, new RegExp(`export function ${fn}`), `freeSources should export ${fn}`);
-    }
-    // The bug this replaced: a direction resolved by ternary instead of by rule.
-    // Only the body counts — the header names the old bug in prose.
-    const at = /^export type CongressFeedTrade/m.exec(mod)?.index ?? 0;
-    assert.doesNotMatch(mod.slice(at), /isPurchase/);
   });
 });
