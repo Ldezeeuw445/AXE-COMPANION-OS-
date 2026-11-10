@@ -1,6 +1,7 @@
 import { mockVaultMedia, mockVaultNotes } from "@/services/mock/seed";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import type { VaultMediaItem, VaultNote } from "@/types/domain";
+import { applyAccountIdReadFilter, loadActiveAccountId } from "@/lib/account/accountScopedRows";
 
 export async function listVaultNotes(): Promise<VaultNote[]> {
   const authed = await getAuthedServiceSupabase();
@@ -9,11 +10,14 @@ export async function listVaultNotes(): Promise<VaultNote[]> {
     return mockVaultNotes;
   }
 
-  const { data, error } = await authed.supabase
-    .from("notes")
-    .select("id,title,body,tags,symbol,created_at")
-    .eq("user_id", authed.user.id)
-    .order("created_at", { ascending: false });
+  const activeAccountId = await loadActiveAccountId(authed.supabase, authed.user.id);
+  const { data, error } = await applyAccountIdReadFilter(
+    authed.supabase
+      .from("notes")
+      .select("id,title,body,tags,symbol,created_at")
+      .eq("user_id", authed.user.id),
+    activeAccountId,
+  ).order("created_at", { ascending: false });
 
   if (error) {
     console.error("[vaultService] listVaultNotes error:", error.message);

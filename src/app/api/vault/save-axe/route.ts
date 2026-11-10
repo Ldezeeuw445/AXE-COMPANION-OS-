@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { accountIdWriteValue, loadActiveAccountId } from "@/lib/account/accountScopedRows";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,8 +83,10 @@ export async function POST(request: NextRequest) {
     ),
   );
 
+  const activeAccountId = await loadActiveAccountId(supabase, user.id);
   const row = {
     user_id: user.id,
+    account_id: accountIdWriteValue(activeAccountId),
     title,
     body: content,
     tags,

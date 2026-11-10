@@ -1787,7 +1787,7 @@ export function ChartScreen({
     return () => {
       cancelled = true;
     };
-  }, [drawingSymbol, drawingTf]);
+  }, [drawingSymbol, drawingTf, data.account?.brokerAccountId]);
 
   useEffect(() => {
     patchActiveSession({

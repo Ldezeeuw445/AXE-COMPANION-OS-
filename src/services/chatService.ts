@@ -33,6 +33,10 @@ import { buildIntelKnowledgeLayerBlock } from "@/lib/intel/intelKnowledgeLayer";
 import { buildIntelContext, truncateIntelContext } from "@/lib/intel/buildIntelContext";
 import { tryConsumeChatQuota, refundChatQuota } from "@/lib/chatQuota";
 import { buildUserAlertFromChatTool } from "@/lib/alerts/fromChatTool";
+import {
+  accountIdWriteValue,
+  applyAccountIdReadFilter,
+} from "@/lib/account/accountScopedRows";
 import { autoJournalTrades } from "@/services/journalingService";
 import { handlePrepareExecutionRequest, handleRouteChartAction } from "@/services/axeToolHandlers";
 import type { ChatMessage as DomainChatMessage, ConversationSummary } from "@/types/domain";
@@ -814,12 +818,16 @@ export async function streamChatMessage(
   // Helper: execute a single tool call and return its string result
   async function executeTool(tc: AxeToolCall): Promise<string> {
     const toolCall = tc as AxeToolCall & { args: Record<string, unknown> };
+    const activeAccountId = accountIdWriteValue(
+      context.axe_context?.accounts?.activeAccountId ?? context.companion_active_account_id,
+    );
     if (toolCall.tool === "create_alert") {
       const { title, body } = toolCall.args;
       const row = buildUserAlertFromChatTool(toolCall.args);
       const { error: alertError } = await supabase.from("user_alerts").insert({
         user_id: user.id,
         ...row,
+        account_id: activeAccountId,
       });
       if (alertError) {
         console.error("[create_alert] insert failed:", alertError.message);
@@ -941,10 +949,13 @@ export async function streamChatMessage(
     } else if (toolCall.tool === "list_alerts") {
       const sym = (toolCall.args.symbol ?? "").toString().toUpperCase().trim();
       const includePaused = toolCall.args.include_paused !== false;
-      let q = supabase
-        .from("user_alerts")
-        .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at")
-        .eq("user_id", user.id)
+      let q = applyAccountIdReadFilter(
+        supabase
+          .from("user_alerts")
+          .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at")
+          .eq("user_id", user.id),
+        activeAccountId,
+      )
         .order("created_at", { ascending: false })
         .limit(50);
       if (sym) q = q.eq("symbol", sym);
@@ -983,7 +994,10 @@ export async function streamChatMessage(
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
       const cleanSym = (raw: string) => raw.toUpperCase().replace(/\.[a-z]+$/i, "").trim();
       const [journalRes, tradesRes] = await Promise.all([
-        supabase.from("user_journal_entries").select("symbol,notes,created_at").eq("user_id", user.id).gte("created_at", since).order("created_at", { ascending: false }).limit(30),
+        applyAccountIdReadFilter(
+          supabase.from("user_journal_entries").select("symbol,notes,created_at").eq("user_id", user.id).gte("created_at", since),
+          activeAccountId,
+        ).order("created_at", { ascending: false }).limit(30),
         supabase.from("broker_trades").select("id,symbol,side,volume,pnl,close_time").eq("user_id", user.id).not("close_time", "is", null).gte("close_time", since).order("close_time", { ascending: false }).limit(30),
       ]);
       const entries = (journalRes.data ?? []) as { symbol: string; notes: string; created_at: string }[];
@@ -1036,6 +1050,7 @@ export async function streamChatMessage(
       });
       const { error: journalError } = await supabase.from("user_journal_entries").insert({
         user_id: user.id,
+        account_id: activeAccountId,
         symbol: "NOTE",
         notes: noteBody,
         tags: tag ? [tag] : [],

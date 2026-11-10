@@ -43,6 +43,7 @@ import {
 } from "@/lib/axe/capabilityRoadmap";
 import { buildTradingSpaceContext } from "@/lib/axe/tradingSpaceContext";
 import { BROKER_ACCOUNT_MEMORY_SCOPE, buildAccountPersona } from "@/lib/axe/accountPersona";
+import { applyAccountIdReadFilter } from "@/lib/account/accountScopedRows";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
 const INTEL_TIMEOUT_MS = 14_000;
@@ -657,10 +658,13 @@ async function buildTrades(
   userId: string,
   activeAccountId: string | null,
 ): Promise<TradesJournalContext> {
-  const journalPromise = supabase
-    .from("user_journal_entries")
-    .select("symbol,notes,created_at")
-    .eq("user_id", userId)
+  const journalPromise = applyAccountIdReadFilter(
+    supabase
+      .from("user_journal_entries")
+      .select("symbol,notes,created_at")
+      .eq("user_id", userId),
+    activeAccountId,
+  )
     .order("created_at", { ascending: false })
     .limit(8);
 
@@ -763,11 +767,15 @@ async function buildAlerts(
   supabase: SupabaseClient,
   userId: string,
   symbol: string | null,
+  activeAccountId: string | null,
 ): Promise<AlertsContext> {
-  const { data } = await supabase
-    .from("user_alerts")
-    .select("symbol,type,condition,threshold,keyword,status,triggered_at,created_at")
-    .eq("user_id", userId)
+  const { data } = await applyAccountIdReadFilter(
+    supabase
+      .from("user_alerts")
+      .select("symbol,type,condition,threshold,keyword,status,triggered_at,created_at")
+      .eq("user_id", userId),
+    activeAccountId,
+  )
     .order("created_at", { ascending: false })
     .limit(40);
 
@@ -1296,7 +1304,9 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
     ),
     withAdapter("trades", EMPTY_TRADES, () => buildTrades(args.supabase, args.userId, activeAccountId)),
     withAdapter("intel", { ...EMPTY_INTEL, symbol }, () => buildIntel(symbol), INTEL_TIMEOUT_MS),
-    withAdapter("alerts", EMPTY_ALERTS, () => buildAlerts(args.supabase, args.userId, symbol)),
+    withAdapter("alerts", EMPTY_ALERTS, () =>
+      buildAlerts(args.supabase, args.userId, symbol, activeAccountId),
+    ),
     withAdapter("market", { ...EMPTY_MARKET, symbol }, () => buildMarket(symbol, watchlist), MARKET_TIMEOUT_MS),
   ]);
 
