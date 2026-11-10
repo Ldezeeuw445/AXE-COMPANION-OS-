@@ -39,7 +39,9 @@ export type DrawdownAlert = {
 function referenceFor(basis: LossBasis, snap: LiveEquitySnapshot): number | null {
   switch (basis) {
     case "initial_balance":
-      return positive(snap.initialBalance ?? snap.dayStartBalance ?? snap.balance);
+      // Unknown starting capital: measure from the highest balance we do know.
+      // Falling back to today's balance alone hides every loss taken before today.
+      return positive(snap.initialBalance) ?? maxPositive(snap.peakBalance, snap.dayStartBalance, snap.balance);
     case "day_start_balance":
       return positive(snap.dayStartBalance ?? snap.balance);
     case "day_start_equity":
@@ -50,6 +52,11 @@ function referenceFor(basis: LossBasis, snap: LiveEquitySnapshot): number | null
     default:
       return positive(snap.balance);
   }
+}
+
+function maxPositive(...values: Array<number | null | undefined>): number | null {
+  const known = values.map(positive).filter((n): n is number => n != null);
+  return known.length ? Math.max(...known) : null;
 }
 
 function positive(n: number | null | undefined): number | null {

@@ -121,3 +121,33 @@ describe("evaluateDrawdownAlerts", () => {
     assert.equal(alerts.length, 0);
   });
 });
+
+describe("total drawdown without a known starting balance", () => {
+  it("measures from the highest known balance instead of today's balance", () => {
+    const reading = readingForKind("total", ftmoLike, {
+      equity: 92_000,
+      balance: 92_000,
+      dayStartBalance: 93_000,
+      dayStartEquity: 93_000,
+      initialBalance: null,
+      peakBalance: 100_000,
+    });
+    assert.ok(reading);
+    assert.equal(reading.reference, 100_000);
+    assert.equal(reading.loss, 8_000);
+    assert.equal(Math.round(reading.ofLimitPct), 80);
+  });
+
+  it("still uses the real starting balance when it is known", () => {
+    const reading = readingForKind("total", ftmoLike, {
+      equity: 92_000,
+      balance: 92_000,
+      dayStartBalance: 93_000,
+      dayStartEquity: 93_000,
+      initialBalance: 95_000,
+      peakBalance: 100_000,
+    });
+    assert.ok(reading);
+    assert.equal(reading.reference, 95_000);
+  });
+});
