@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRelevantKnowledge } from "@/lib/axe/knowledgeRetrieval";
+import { applyAccountIdReadFilter, normalizeAccountId } from "@/lib/account/accountScopedRows";
 
 function isMissingTable(err: { message?: string; code?: string } | null): boolean {
   if (!err) return false;
@@ -104,11 +105,24 @@ export async function buildAxeKnowledgeLayerBlock(
     );
   }
 
-  const journal = await safe(
+  const prefs = await safe(
     supabase
-      .from("user_journal_entries")
-      .select("symbol,notes,rating,created_at")
+      .from("user_workspace_preferences")
+      .select("active_account_id")
       .eq("user_id", userId)
+      .maybeSingle(),
+  );
+  const activeAccountId =
+    normalizeAccountId((prefs as { active_account_id?: string } | null)?.active_account_id) ?? null;
+
+  const journal = await safe(
+    applyAccountIdReadFilter(
+      supabase
+        .from("user_journal_entries")
+        .select("symbol,notes,rating,created_at")
+        .eq("user_id", userId),
+      activeAccountId,
+    )
       .order("created_at", { ascending: false })
       .limit(8),
   );
@@ -122,15 +136,6 @@ export async function buildAxeKnowledgeLayerBlock(
         .join("\n")}`,
     );
   }
-
-  const prefs = await safe(
-    supabase
-      .from("user_workspace_preferences")
-      .select("active_account_id")
-      .eq("user_id", userId)
-      .maybeSingle(),
-  );
-  const activeAccountId = (prefs as { active_account_id?: string } | null)?.active_account_id ?? null;
 
   if (activeAccountId) {
     const trades = await safe(

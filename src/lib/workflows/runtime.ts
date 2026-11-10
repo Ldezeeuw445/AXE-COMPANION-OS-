@@ -8,6 +8,7 @@ import {
   getPerigonKey,
 } from "@/lib/market/providerStatus";
 import type { WorkflowRuntime } from "@/lib/workflows/status";
+import { applyAccountIdReadFilter, loadActiveAccountId } from "@/lib/account/accountScopedRows";
 
 export type ActionRuntime = Omit<WorkflowRuntime, "hasNews" | "hasMacro">;
 
@@ -50,6 +51,7 @@ export async function detectActionRuntime(): Promise<ActionRuntime> {
       }) ?? data[0]
     : null;
   const accountId = activeAccount?.id as string | undefined;
+  const activeAccountId = await loadActiveAccountId(supabase, user.id);
   const [positions, trades, journalNotes, tradeLabels, memory] = await Promise.all([
     accountId
       ? supabase
@@ -65,7 +67,10 @@ export async function detectActionRuntime(): Promise<ActionRuntime> {
           .eq("user_id", user.id)
           .eq("account_id", accountId)
       : Promise.resolve({ count: 0 }),
-    supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    applyAccountIdReadFilter(
+      supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      activeAccountId,
+    ),
     supabase.from("trade_journal_labels").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
   ]);

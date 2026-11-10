@@ -21,6 +21,7 @@ import {
   type FeedbackVote,
 } from "@/lib/axe/learningArc";
 import { getAxeEngineProfile } from "@/services/axeEngineService";
+import { applyAccountIdReadFilter, loadActiveAccountId } from "@/lib/account/accountScopedRows";
 
 /**
  * The cockpit's "Learning arc · live" panel, from measurements only.
@@ -243,6 +244,7 @@ export async function fetchCockpitTodaySummary(
   userId: string,
 ): Promise<CockpitTodaySummary> {
   const since = todayUtcStartIso();
+  const activeAccountId = await loadActiveAccountId(supabase, userId);
   const [chatRes, tradesRes, feedRes, journalRes] = await Promise.all([
     supabase
       .from("messages")
@@ -261,11 +263,14 @@ export async function fetchCockpitTodaySummary(
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .gte("created_at", since),
-    supabase
-      .from("user_journal_entries")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .gte("created_at", since),
+    applyAccountIdReadFilter(
+      supabase
+        .from("user_journal_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .gte("created_at", since),
+      activeAccountId,
+    ),
   ]);
 
   return {
@@ -393,10 +398,14 @@ export async function getCockpitDashboard(): Promise<CockpitDashboard> {
     rationale: engineProfile?.rationale ?? {},
   } as const;
 
+  const activeAccountId = await loadActiveAccountId(supabase, user.id);
   const [messageCount, memoryCount, journalNotesCount, tradeJournalCount, tradeCount, metricsCount, learningSignalCount] = await Promise.all([
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-    supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    applyAccountIdReadFilter(
+      supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      activeAccountId,
+    ),
     supabase.from("trade_journal_labels").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("broker_trades").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     supabase.from("assistant_learning_metrics").select("id", { count: "exact", head: true }).eq("user_id", user.id),

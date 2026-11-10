@@ -27,6 +27,7 @@ import {
 import type { TradeExecutionPrefs } from "@/lib/trading/tradeExecutionPrefs";
 import { readAlertAutoTradeEnabled } from "@/lib/trading/alertMetadata";
 import { alertAutoTradeArmedRemainingMs } from "@/lib/trading/alertAutoTradeArmed";
+import { useActiveSession } from "@/lib/session/activeSessionStore";
 
 type AlertRow = {
   id: string;
@@ -184,6 +185,7 @@ export function AlertsClient({
   canSmartAlerts?: boolean;
 }) {
   const router = useRouter();
+  const activeAccountId = useActiveSession().accountId;
   const focusSymbol = initialSymbol.trim().toUpperCase();
 
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
@@ -315,7 +317,7 @@ export function AlertsClient({
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, activeAccountId]);
 
   useEffect(() => {
     if (!armed) return;

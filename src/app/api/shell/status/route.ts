@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { brokerPricingState, type RuntimeTruthState } from "@/lib/runtime/runtimeTruth";
+import { applyAccountIdReadFilter, normalizeAccountId } from "@/lib/account/accountScopedRows";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export async function GET() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const activeId = (prefs?.active_account_id as string | null | undefined) ?? null;
+  const activeId = normalizeAccountId(prefs?.active_account_id as string | null | undefined);
 
   const [snapshotRes, alertsRes] = await Promise.all([
     activeId
@@ -54,12 +55,15 @@ export async function GET() {
           .order("updated_at", { ascending: false })
           .limit(1)
       : Promise.resolve({ data: null }),
-    supabase
-      .from("user_alerts")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("status", "triggered")
-      .gte("triggered_at", new Date(Date.now() - TRIGGERED_WINDOW_MS).toISOString()),
+    applyAccountIdReadFilter(
+      supabase
+        .from("user_alerts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("status", "triggered")
+        .gte("triggered_at", new Date(Date.now() - TRIGGERED_WINDOW_MS).toISOString()),
+      activeId,
+    ),
   ]);
 
   const row = (snapshotRes.data?.[0] ?? null) as Record<string, unknown> | null;

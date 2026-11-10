@@ -6,6 +6,11 @@ import { getMetadataSymbolMap, getMetadataSymbolReport, getMetadataSymbolUnivers
 import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolResolution";
 import { DEMO_WATCHLIST_SYMBOLS, isDemoAccount } from "@/lib/broker/demoAccount";
 import { isAlpacaSupportedSymbol, toAlpacaSymbol } from "@/lib/alpaca/symbols";
+import {
+  accountIdWriteValue,
+  applyAccountIdReadFilter,
+  loadActiveAccountId,
+} from "@/lib/account/accountScopedRows";
 
 type CreateAlertBody = {
   symbol?: string | null;
@@ -33,10 +38,14 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data, error } = await supabase
-    .from("user_alerts")
-    .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at,metadata")
-    .eq("user_id", user.id)
+  const activeAccountId = await loadActiveAccountId(supabase, user.id);
+  const { data, error } = await applyAccountIdReadFilter(
+    supabase
+      .from("user_alerts")
+      .select("id,symbol,type,condition,threshold,keyword,status,triggered_at,created_at,metadata")
+      .eq("user_id", user.id),
+    activeAccountId,
+  )
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -85,17 +94,12 @@ export async function POST(req: NextRequest) {
 
   const status: "active" | "paused" = body.status === "paused" ? "paused" : "active";
   let metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+  const activeId = await loadActiveAccountId(supabase, user.id);
 
   const isSmart = isSmartAlertRequest(body);
 
   if (type === "price" && (!isSmart || symbol)) {
     if (!symbol) return NextResponse.json({ error: "Price alerts need a symbol." }, { status: 400 });
-    const { data: prefs } = await supabase
-      .from("user_workspace_preferences")
-      .select("active_account_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    const activeId = (prefs?.active_account_id as string | null | undefined) ?? null;
     if (!activeId) {
       return NextResponse.json({ error: "Select an active broker account before creating price alerts." }, { status: 400 });
     }
@@ -134,6 +138,7 @@ export async function POST(req: NextRequest) {
     .from("user_alerts")
     .insert({
       user_id: user.id,
+      account_id: accountIdWriteValue(activeId),
       symbol,
       type,
       condition,

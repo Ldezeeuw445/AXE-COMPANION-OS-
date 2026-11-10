@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isUuid, normalizeSymbol, normalizeTimeframe } from "@/lib/chart/drawingsSync";
+import {
+  accountIdForUpsertRow,
+  applyAccountIdReadFilter,
+  loadActiveAccountId,
+} from "@/lib/account/accountScopedRows";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,11 +87,15 @@ export async function GET(request: NextRequest) {
   const timeframeParam = request.nextUrl.searchParams.get("timeframe");
   const symbol = symbolParam ? normalizeSymbol(symbolParam) : null;
   const timeframe = timeframeParam != null ? normalizeTimeframe(timeframeParam) : undefined;
+  const activeAccountId = await loadActiveAccountId(supabase, user.id);
 
-  let query = supabase
-    .from("chart_drawings")
-    .select("id,user_id,symbol,timeframe,drawing,tool_type,created_at,updated_at,deleted")
-    .eq("user_id", user.id)
+  let query = applyAccountIdReadFilter(
+    supabase
+      .from("chart_drawings")
+      .select("id,user_id,symbol,timeframe,drawing,tool_type,created_at,updated_at,deleted")
+      .eq("user_id", user.id),
+    activeAccountId,
+  )
     .order("updated_at", { ascending: false })
     .limit(GET_LIMIT);
 
@@ -124,6 +133,22 @@ export async function PUT(request: NextRequest) {
   if (incoming.length === 0) return Response.json({ ok: true, upserted: 0 });
 
   const now = new Date().toISOString();
+  const activeAccountId = await loadActiveAccountId(supabase, user.id);
+  const incomingIds = incoming
+    .map((item) => (typeof item.id === "string" ? item.id : ""))
+    .filter((id) => isUuid(id));
+  const existingById = new Map<string, string | null>();
+  if (incomingIds.length > 0) {
+    const { data: existing } = await supabase
+      .from("chart_drawings")
+      .select("id,account_id")
+      .eq("user_id", user.id)
+      .in("id", incomingIds);
+    for (const row of existing ?? []) {
+      const r = row as { id: string; account_id: string | null };
+      existingById.set(r.id, r.account_id);
+    }
+  }
   const rows: Record<string, unknown>[] = [];
 
   for (const item of incoming) {
@@ -138,9 +163,14 @@ export async function PUT(request: NextRequest) {
     }
     const createdAt = asIso(item.createdAt, now);
     const updatedAt = asIso(item.updatedAt, now);
+    const existed = existingById.has(item.id);
     rows.push({
       id: item.id,
       user_id: user.id,
+      account_id: accountIdForUpsertRow(
+        existed ? { account_id: existingById.get(item.id) ?? null } : null,
+        activeAccountId,
+      ),
       symbol: normalizeSymbol(item.symbol),
       timeframe: normalizeTimeframe(typeof item.timeframe === "string" ? item.timeframe : null),
       drawing: asObject(item.drawing),
