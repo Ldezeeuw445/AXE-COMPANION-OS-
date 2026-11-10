@@ -10,6 +10,7 @@ import type {
   CockpitConfidencePoint,
   CockpitFeedbackImpact,
 } from "@/types/cockpit";
+import { applyAccountIdReadFilter, loadActiveAccountId } from "@/lib/account/accountScopedRows";
 
 type TradeRow = {
   symbol: string;
@@ -109,6 +110,7 @@ export async function fetchCockpitSourceData(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<CockpitSourceData> {
+  const activeAccountId = await loadActiveAccountId(supabase, userId);
   const [
     messagesResult,
     memoryResult,
@@ -143,10 +145,13 @@ export async function fetchCockpitSourceData(
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(40),
-    supabase
-      .from("user_journal_entries")
-      .select("symbol,notes,rating,tags,created_at")
-      .eq("user_id", userId)
+    applyAccountIdReadFilter(
+      supabase
+        .from("user_journal_entries")
+        .select("symbol,notes,rating,tags,created_at")
+        .eq("user_id", userId),
+      activeAccountId,
+    )
       .order("created_at", { ascending: false })
       .limit(40),
     supabase

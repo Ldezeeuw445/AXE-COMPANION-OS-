@@ -5,6 +5,7 @@ import { detectWeakSpots, type WeakSpot } from "@/lib/journal/weakSpots";
 import { loadWeakSpotTrades } from "@/services/weakSpotService";
 import { getLearningGrowth } from "@/services/learningGrowthService";
 import type { LearningStage } from "@/lib/axe/learningStage";
+import { applyAccountIdReadFilter } from "@/lib/account/accountScopedRows";
 
 export type JournalEntryRow = {
   id: string;
@@ -95,26 +96,28 @@ export async function loadJournalPageData(opts: {
   const sb = supabase;
   const userId = user.id;
 
-  const [jRes, prefsRes] = await Promise.all([
+  const prefsRes = await supabase
+    .from("user_workspace_preferences")
+    .select("active_account_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const activeAccountId = (prefsRes.data?.active_account_id as string | null | undefined) ?? null;
+
+  const jRes = await applyAccountIdReadFilter(
     supabase
       .from("user_journal_entries")
       .select("id,symbol,notes,rating,tags,created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(40),
-    supabase
-      .from("user_workspace_preferences")
-      .select("active_account_id")
-      .eq("user_id", userId)
-      .maybeSingle(),
-  ]);
+      .eq("user_id", userId),
+    activeAccountId,
+  )
+    .order("created_at", { ascending: false })
+    .limit(40);
 
   if (jRes.error) {
     return { ...empty(), loadError: jRes.error.message };
   }
 
   const entries = (jRes.data ?? []) as JournalEntryRow[];
-  const activeAccountId = (prefsRes.data?.active_account_id as string | null | undefined) ?? null;
   let weakSpots: WeakSpot[] = [];
   // Outside the activeAccountId branch on purpose: the arc counts rules,
   // playbooks and memories, which exist whether or not a broker is linked.
