@@ -14,8 +14,12 @@ import { resetAlpacaPaperTrading } from "@/lib/alpaca/reset";
  * Alpaca paper adapter — platform-managed keys in server env for Phase 1.
  * Users tap "Enable Alpaca Paper" (no credentials). Phase 2 adds BYO keys
  * or Alpaca Broker API sub-accounts.
+ *
+ * Bound to one owner: `accountId` comes from a request body, so every
+ * statement filters `user_id` as well as `id` rather than leaving ownership to
+ * RLS (TOS-SEC-2 — see `brokerAdapterScope.test.ts`).
  */
-export function createAlpacaBrokerApiAdapter(supabase: SupabaseClient): BrokerApiAdapter {
+export function createAlpacaBrokerApiAdapter(supabase: SupabaseClient, userId: string): BrokerApiAdapter {
   return {
     brokerId: "alpaca-style",
     async connect(input: ConnectAccountInput): Promise<ConnectAccountResult> {
@@ -23,9 +27,9 @@ export function createAlpacaBrokerApiAdapter(supabase: SupabaseClient): BrokerAp
         return { success: false, error: "Alpaca adapter currently supports paper mode only." };
       }
 
-      const userId = input.credentials._userId?.trim();
-      if (!userId) {
-        return { success: false, error: "Internal: user id required for Alpaca provision." };
+      const claimed = input.credentials._userId?.trim();
+      if (claimed && claimed !== userId) {
+        return { success: false, error: "Internal: user id does not match the session." };
       }
 
       const result = await ensureAlpacaPaperAccount(supabase, userId);
@@ -58,7 +62,8 @@ export function createAlpacaBrokerApiAdapter(supabase: SupabaseClient): BrokerAp
       await supabase
         .from("user_broker_accounts")
         .update({ hub_status: "disconnected", provider_status: "disconnected" })
-        .eq("id", accountId);
+        .eq("id", accountId)
+        .eq("user_id", userId);
     },
     async runDoctor(accountId: string): Promise<ConnectionDoctorResult> {
       const ranAt = new Date().toISOString();
@@ -83,6 +88,7 @@ export function createAlpacaBrokerApiAdapter(supabase: SupabaseClient): BrokerAp
         .from("user_broker_accounts")
         .select("id,connection_method,external_connection_id")
         .eq("id", accountId)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (!row || row.connection_method !== "cloud_alpaca") {
