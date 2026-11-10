@@ -4,6 +4,7 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { autoJournalTrades } from "@/services/journalingService";
 import { llmFailureAdvice } from "@/lib/ops/llmFailure";
 import { refreshWeakSpots } from "@/services/weakSpotService";
+import { chunkIds, planJournalSweep, type SweepTradeRow } from "@/lib/journal/journalSweepPlan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,27 +52,28 @@ export async function GET(request: NextRequest) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  const { data: labeled } = await supabase
-    .from("trade_journal_labels")
-    .select("trade_id")
-    .not("axe_label", "is", null)
-    .limit(2000);
-  const labeledIds = new Set((labeled ?? []).map((l: { trade_id: string }) => l.trade_id));
-
-  // One entry per (user, account) that still owes AXE a journal.
-  const pending = new Map<string, { userId: string; accountId: string; trades: number }>();
-  for (const t of trades ?? []) {
-    if (labeledIds.has(t.id as string)) continue;
-    const userId = t.user_id as string | null;
-    const accountId = t.account_id as string | null;
-    if (!userId || !accountId) continue;
-    const key = `${userId}:${accountId}`;
-    const existing = pending.get(key);
-    if (existing) existing.trades += 1;
-    else pending.set(key, { userId, accountId, trades: 1 });
+  // Look up AXE labels only for the trades fetched above. An unfiltered read
+  // capped at 2000 rows made already-journaled trades look pending once a user
+  // had more labels than that.
+  const rows = (trades ?? []) as SweepTradeRow[];
+  const tradeIds = [...new Set(rows.map((t) => t.id).filter((id): id is string => !!id))];
+  const labeledIds = new Set<string>();
+  for (const chunk of chunkIds(tradeIds)) {
+    const { data: labeled, error: lErr } = await supabase
+      .from("trade_journal_labels")
+      .select("trade_id")
+      .in("trade_id", chunk)
+      .not("axe_label", "is", null);
+    if (lErr) {
+      return Response.json({ ok: false, error: lErr.message }, { status: 500 });
+    }
+    for (const l of (labeled ?? []) as Array<{ trade_id: string }>) labeledIds.add(l.trade_id);
   }
 
-  const targets = [...pending.values()].slice(0, MAX_ACCOUNTS);
+  // One entry per (user, account) that still owes AXE a journal, carrying the
+  // exact trade ids so older pending trades are not lost behind the latest 20.
+  const plan = planJournalSweep(rows, labeledIds);
+  const targets = plan.targets.slice(0, MAX_ACCOUNTS);
 
   let journaled = 0;
   let failedAccounts = 0;
@@ -83,7 +85,7 @@ export async function GET(request: NextRequest) {
       supabase,
       target.userId,
       target.accountId,
-      undefined,
+      target.tradeIds,
       "journal_sweep",
     );
 
@@ -115,7 +117,8 @@ export async function GET(request: NextRequest) {
 
   return Response.json({
     ok: blockers.length === 0,
-    accountsPending: pending.size,
+    accountsPending: plan.targets.length,
+    tradesPending: plan.pendingTrades,
     accountsProcessed: targets.length,
     journaled,
     weakSpotsWritten,
