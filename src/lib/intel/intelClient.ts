@@ -1,5 +1,10 @@
 import "server-only";
 import { getSupabaseKey } from "@/lib/env";
+import {
+  providerTile,
+  staleReasonFromProxy,
+  type IntelProviderState,
+} from "@/lib/intel/providerStatus";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
 const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
@@ -7,7 +12,7 @@ const SNAPSHOT_FRESH_MS = 15 * 60 * 1000;
 const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
 const INTEL_PROXY_TIMEOUT_MS = 12_000;
 
-export type IntelProviderState = "live" | "off" | "error";
+export type { IntelProviderState };
 
 export type IntelProviderStatus = {
   id:
@@ -27,6 +32,8 @@ export type IntelProviderStatus = {
   label: string;
   state: IntelProviderState;
   description?: string;
+  /** Human-readable reason when state is stale/error/off. */
+  reason?: string;
 };
 
 export type InsiderTrade = {
@@ -281,7 +288,10 @@ type IntelAction =
   | "militaryRadar"
   | "emergencyMonitor";
 
-type IntelEnvelope<T> = { ok: true; data: T } | { ok: false; error: string };
+/** `staleReason` is set when the proxy served cached rows because live sources failed. */
+type IntelEnvelope<T> =
+  | { ok: true; data: T; staleReason?: string }
+  | { ok: false; error: string };
 
 type IntelSnapshotCacheEntry = {
   snapshot: IntelSnapshot;
@@ -903,11 +913,25 @@ async function callIntelProxy<T>(
       const body = await res.text().catch(() => "");
       return { ok: false, error: `intel_proxy_${res.status}:${body.slice(0, 120)}` };
     }
-    const json = (await res.json()) as { ok?: boolean; data?: unknown; error?: string };
+    const json = (await res.json()) as {
+      ok?: boolean;
+      data?: unknown;
+      error?: string;
+      message?: string;
+      source?: unknown;
+      unavailable?: unknown;
+    };
     if (!json.ok) {
       const db = await loadIntelFromDb<T>(action, args);
       if (db.ok) return db;
-      return { ok: false, error: json.error ?? "intel_proxy_unknown_error" };
+      const unavailable =
+        Array.isArray(json.unavailable) && json.unavailable.length > 0
+          ? ` (${json.unavailable.slice(0, 3).join("; ")})`
+          : "";
+      return {
+        ok: false,
+        error: `${json.message ?? json.error ?? "intel_proxy_unknown_error"}${unavailable}`,
+      };
     }
     const normalized = normalizeProxyPayload<T>(action, json.data);
     if (action === "marketTide" && (normalized == null || normalized === undefined)) {
@@ -922,7 +946,10 @@ async function callIntelProxy<T>(
       const db = await loadIntelFromDb<T>(action, args);
       if (db.ok && Array.isArray(db.data) && db.data.length > 0) return db;
     }
-    return { ok: true, data: normalized };
+    const staleReason = staleReasonFromProxy(json);
+    return staleReason
+      ? { ok: true, data: normalized, staleReason }
+      : { ok: true, data: normalized };
   } catch (e) {
     const db = await loadIntelFromDb<T>(action, args);
     if (db.ok) return db;
@@ -1001,22 +1028,9 @@ function toStatus(
   description: string,
   ok: boolean,
   err?: string,
+  staleReason?: string,
 ): IntelProviderStatus {
-  if (ok) return { id, label, state: "live", description };
-  if (err) {
-    return {
-      id,
-      label,
-      state: "error",
-      description: `${description} — feed syncing…`,
-    };
-  }
-  return {
-    id,
-    label,
-    state: "off",
-    description: `${description} — waiting for new signals…`,
-  };
+  return providerTile(id, label, description, ok, err, staleReason);
 }
 
 export async function loadIntelSnapshot(opts?: {
@@ -1135,6 +1149,7 @@ async function fetchIntelSnapshot(
       "AXE Intel insider transaction feed",
       insiderRes.ok && insiders.length > 0,
       insiderRes.ok ? undefined : insiderRes.error,
+      insiderRes.ok ? insiderRes.staleReason : undefined,
     ),
     toStatus(
       "senateTrades",
@@ -1142,6 +1157,7 @@ async function fetchIntelSnapshot(
       "AXE Intel congressional disclosure feed",
       senateRes.ok && senate.length > 0,
       senateRes.ok ? undefined : senateRes.error,
+      senateRes.ok ? senateRes.staleReason : undefined,
     ),
     toStatus(
       "darkPoolPrints",
@@ -1149,6 +1165,7 @@ async function fetchIntelSnapshot(
       "AXE Intel off-exchange print feed",
       darkPoolRes.ok && darkPool.length > 0,
       darkPoolRes.ok ? undefined : darkPoolRes.error,
+      darkPoolRes.ok ? darkPoolRes.staleReason : undefined,
     ),
     toStatus(
       "unusualOptions",
@@ -1156,6 +1173,7 @@ async function fetchIntelSnapshot(
       "AXE Intel smart-money options feed",
       optionsRes.ok && options.length > 0,
       optionsRes.ok ? undefined : optionsRes.error,
+      optionsRes.ok ? optionsRes.staleReason : undefined,
     ),
     toStatus(
       "marketTide",
@@ -1163,6 +1181,7 @@ async function fetchIntelSnapshot(
       "AXE Intel net call/put premium tide",
       tideRes.ok && tide != null,
       tideRes.ok ? undefined : tideRes.error,
+      tideRes.ok ? tideRes.staleReason : undefined,
     ),
     toStatus(
       "corporateJets",
@@ -1170,6 +1189,7 @@ async function fetchIntelSnapshot(
       "AXE Intel executive mobility tracking",
       jetsRes.ok && jets.length > 0,
       jetsRes.ok ? undefined : jetsRes.error,
+      jetsRes.ok ? jetsRes.staleReason : undefined,
     ),
     toStatus(
       "vesselTracking",
@@ -1177,6 +1197,7 @@ async function fetchIntelSnapshot(
       "AXE Intel supply chain & chokepoint monitoring",
       vesselRes.ok && vessels.length > 0,
       vesselRes.ok ? undefined : vesselRes.error,
+      vesselRes.ok ? vesselRes.staleReason : undefined,
     ),
     toStatus(
       "chokepoints",
@@ -1184,6 +1205,7 @@ async function fetchIntelSnapshot(
       "AXE Intel global chokepoint monitoring",
       chokepointRes.ok && chokepoints.length > 0,
       chokepointRes.ok ? undefined : chokepointRes.error,
+      chokepointRes.ok ? chokepointRes.staleReason : undefined,
     ),
     toStatus(
       "conflictEvents",
@@ -1191,6 +1213,7 @@ async function fetchIntelSnapshot(
       "AXE Intel geopolitical & seismic events",
       conflictRes.ok && conflicts.length > 0,
       conflictRes.ok ? undefined : conflictRes.error,
+      conflictRes.ok ? conflictRes.staleReason : undefined,
     ),
     energyFeed.status,
     cyberFeed.status,

@@ -839,14 +839,25 @@ function seismicMarketTag(c: { eventType: string; region: string; notes: string;
 function InlineStatus({ providers, id }: { providers: IntelProviderStatus[]; id: string }) {
   const p = providers.find((pv) => pv.id === id);
   if (!p) return null;
-  const dot =
-    p.state === "live" ? "bg-emerald-300" : p.state === "error" ? "bg-amber-300/85" : "bg-white/25";
+  // INTEL-FREE: a feed that answered with cached rows because every live source
+  // failed must read "cached", not "live". Hover shows the proxy's reason.
+  const amber = p.state === "error" || p.state === "stale";
+  const dot = p.state === "live" ? "bg-emerald-300" : amber ? "bg-amber-300/85" : "bg-white/25";
   const text =
-    p.state === "live" ? "live" : p.state === "error" ? "error" : "off";
+    p.state === "live"
+      ? "live"
+      : p.state === "stale"
+        ? "cached"
+        : p.state === "error"
+          ? "error"
+          : "off";
   const textColor =
-    p.state === "live" ? "text-emerald-300/80" : p.state === "error" ? "text-amber-300/80" : "text-tos-dim";
+    p.state === "live" ? "text-emerald-300/80" : amber ? "text-amber-300/80" : "text-tos-dim";
   return (
-    <span className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wider ${textColor}`}
+      title={p.reason ?? p.description}
+    >
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
       {text}
     </span>

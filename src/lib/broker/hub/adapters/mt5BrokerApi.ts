@@ -14,8 +14,12 @@ import {
 /**
  * MT5 accounts use the existing MetaApi connect flow (AccountsScreen wizard).
  * This adapter exposes doctor + read paths via the hub contract.
+ *
+ * Bound to one owner: `accountId` comes from a request body, so every
+ * statement filters `user_id` as well as `id` rather than leaving ownership to
+ * RLS (TOS-SEC-2 — see `brokerAdapterScope.test.ts`).
  */
-export function createMt5BrokerApiAdapter(supabase: SupabaseClient): BrokerApiAdapter {
+export function createMt5BrokerApiAdapter(supabase: SupabaseClient, userId: string): BrokerApiAdapter {
   return {
     brokerId: "mt5-style",
     async connect(): Promise<ConnectAccountResult> {
@@ -29,7 +33,8 @@ export function createMt5BrokerApiAdapter(supabase: SupabaseClient): BrokerApiAd
       await supabase
         .from("user_broker_accounts")
         .update({ hub_status: "disconnected", provider_status: "disconnected" })
-        .eq("id", accountId);
+        .eq("id", accountId)
+        .eq("user_id", userId);
     },
     async runDoctor(accountId: string): Promise<ConnectionDoctorResult> {
       const { data, error } = await supabase
@@ -38,6 +43,7 @@ export function createMt5BrokerApiAdapter(supabase: SupabaseClient): BrokerApiAd
           "id,user_id,label,provider,connection_method,provider_status,last_sync_at,created_at,hub_broker_id,trading_mode,hub_status,hub_permissions,metadata,masked_login,mt5_server",
         )
         .eq("id", accountId)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (error || !data) {

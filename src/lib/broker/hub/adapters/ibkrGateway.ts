@@ -68,11 +68,19 @@ async function fetchIbkrAuthStatus(url: string): Promise<{ ok: boolean; message:
   }
 }
 
-export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiAdapter {
+/**
+ * Bound to one owner: `accountId` comes from a request body, so every
+ * statement filters `user_id` as well as `id` rather than leaving ownership to
+ * RLS (TOS-SEC-2 — see `brokerAdapterScope.test.ts`).
+ */
+export function createIbkrBrokerApiAdapter(supabase: SupabaseClient, userId: string): BrokerApiAdapter {
   return {
     brokerId: "ibkr-style",
     async connect(input: ConnectAccountInput): Promise<ConnectAccountResult> {
-      const userId = input.credentials._userId?.trim();
+      const claimed = input.credentials._userId?.trim();
+      if (claimed && claimed !== userId) {
+        return { success: false, error: "Internal: user id does not match the session." };
+      }
       const accountId = (input.credentials.accountId ?? input.credentials.ibkrAccountId ?? "").trim().toUpperCase();
       const environment = input.credentials.environment === "live" ? "live" : "paper";
       const gatewayHost = (input.credentials.gatewayHost ?? "127.0.0.1").trim();
@@ -80,7 +88,6 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
       const clientPortalBaseUrl = (input.credentials.clientPortalBaseUrl ?? "").trim() || null;
       const username = (input.credentials.username ?? "").trim() || null;
 
-      if (!userId) return { success: false, error: "Internal: user id required." };
       if (!accountId) return { success: false, error: "IBKR account id is required." };
 
       const connectionMethod = environment === "live" ? "ibkr_gateway_live" : "ibkr_gateway_paper";
@@ -128,7 +135,8 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
             },
             last_sync_at: now,
           })
-          .eq("id", existing.id);
+          .eq("id", existing.id)
+          .eq("user_id", userId);
         if (updateError) return { success: false, error: updateError.message };
         dbId = existing.id;
       } else {
@@ -188,7 +196,8 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
           hub_status: "disconnected",
           provider_status: "disconnected",
         })
-        .eq("id", accountId);
+        .eq("id", accountId)
+        .eq("user_id", userId);
     },
     async runDoctor(accountId: string): Promise<ConnectionDoctorResult> {
       const ranAt = new Date().toISOString();
@@ -196,6 +205,7 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
         .from("user_broker_accounts")
         .select("id,metadata,connection_method")
         .eq("id", accountId)
+        .eq("user_id", userId)
         .maybeSingle<IbkrRow>();
 
       if (error || !row) {
@@ -263,7 +273,8 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient): BrokerApiA
           },
           last_sync_at: ranAt,
         })
-        .eq("id", accountId);
+        .eq("id", accountId)
+        .eq("user_id", userId);
 
       return {
         accountId,

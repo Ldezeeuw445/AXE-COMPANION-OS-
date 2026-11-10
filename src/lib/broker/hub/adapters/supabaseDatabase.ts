@@ -10,10 +10,50 @@ import {
   type BrokerAccountDbRow,
 } from "../mappers";
 
+/**
+ * TOS-SEC-2: the hub's account store, bound to one owner.
+ *
+ * The contract hands these methods an `accountId` that came off a request body
+ * (`src/app/api/broker/hub/route.ts` reads `body.accountId`), and the hub
+ * service does not check who owns it — `getAccount` returning null is what
+ * makes `disconnectAccount` and `updatePermissions` no-op. That check used to
+ * be row-level security alone: every statement here filtered on `id`, so the
+ * only thing keeping one trader off another's row was the client being
+ * RLS-scoped.
+ *
+ * That is the assumption TOS-SEC-2 removes. The same route already filters
+ * `user_id` on its own sync write, and `syncWriteClient` states the rule the
+ * MT5 path follows: establish ownership through the caller's own client, and
+ * still filter `user_id` on every write so a wrong id cannot reach another
+ * trader's row even once RLS is no longer the thing stopping it.
+ *
+ * So the adapter now carries the owner and filters on it everywhere, matching
+ * the secrets adapter beside it. For a legitimate caller nothing changes —
+ * RLS was already returning only their rows — and the grant this file holds
+ * open in `src/lib/mt5/revokeBlockers.test.ts` stops depending on the client.
+ */
 export class SupabaseDatabaseAdapter implements DatabaseAdapter {
-  constructor(private readonly supabase: SupabaseClient) {}
+  // Declared and assigned rather than written as constructor parameter
+  // properties: `npm test` runs Node's type-stripping, which rejects those
+  // outright (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX), so the parameter-property
+  // form made this class impossible to import from a test at all.
+  private readonly supabase: SupabaseClient;
+  private readonly userId: string;
+
+  constructor(supabase: SupabaseClient, userId: string) {
+    this.supabase = supabase;
+    this.userId = userId;
+  }
 
   async listAccounts(userId: string): Promise<AccountConnection[]> {
+    // The contract passes the id in and the constructor binds it; in production
+    // both come from the same session. If they ever disagree the hub has been
+    // wired to the wrong client, which should be loud rather than silently
+    // answered from one of the two.
+    if (userId !== this.userId) {
+      throw new Error("Broker hub database adapter was built for a different user");
+    }
+
     const { data, error } = await this.supabase
       .from("user_broker_accounts")
       .select(
@@ -33,6 +73,7 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
         "id,user_id,label,provider,status,connection_method,provider_status,last_sync_at,created_at,hub_broker_id,trading_mode,hub_status,hub_permissions,metadata,masked_login,mt5_server",
       )
       .eq("id", accountId)
+      .eq("user_id", this.userId)
       .maybeSingle();
 
     if (error) throw new Error(error.message);
@@ -46,6 +87,7 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
       .from("user_broker_accounts")
       .update(patch)
       .eq("id", account.id)
+      .eq("user_id", this.userId)
       .select(
         "id,user_id,label,provider,status,connection_method,provider_status,last_sync_at,created_at,hub_broker_id,trading_mode,hub_status,hub_permissions,metadata,masked_login,mt5_server",
       )
@@ -59,7 +101,8 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
     const { error } = await this.supabase
       .from("user_broker_accounts")
       .delete()
-      .eq("id", accountId);
+      .eq("id", accountId)
+      .eq("user_id", this.userId);
     if (error) throw new Error(error.message);
   }
 
@@ -69,7 +112,8 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
       .select(
         "id,account_id,canonical_symbol,broker_symbol,asset_class,exchange,multiplier,notes",
       )
-      .eq("account_id", accountId);
+      .eq("account_id", accountId)
+      .eq("user_id", this.userId);
 
     if (error) throw new Error(error.message);
 
@@ -91,6 +135,7 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
       .from("user_broker_accounts")
       .select("metadata")
       .eq("id", accountId)
+      .eq("user_id", this.userId)
       .maybeSingle();
 
     const meta = acct?.metadata;
@@ -114,13 +159,13 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
   }
 
   async saveSymbolMapping(mapping: BrokerSymbolMapping): Promise<BrokerSymbolMapping> {
-    const {
-      data: { user },
-    } = await this.supabase.auth.getUser();
-    if (!user) throw new Error("Not signed in");
-
+    // Was `auth.getUser()` on the client. The hub is only ever built for an
+    // authenticated session, so the bound owner is the same id — and reading it
+    // from the client is the one thing here that would stop working if this
+    // adapter were handed an elevated client, which is the direction TOS-SEC-2
+    // is moving.
     const row = {
-      user_id: user.id,
+      user_id: this.userId,
       account_id: mapping.accountId,
       canonical_symbol: mapping.canonicalSymbol,
       broker_symbol: mapping.brokerSymbol,
