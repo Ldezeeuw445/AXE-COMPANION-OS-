@@ -1,10 +1,10 @@
 import "server-only";
 import { getSupabaseKey } from "@/lib/env";
 import {
-  providerTile,
   staleReasonFromProxy,
   type IntelProviderState,
 } from "@/lib/intel/providerStatus";
+import { resolveFeed, type CachedFeed } from "@/lib/intel/feedCache";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
 const REVALIDATE_SECONDS = 15 * 60; // Unusual Whales is expensive and slow-moving enough for 15 min cache.
@@ -293,9 +293,23 @@ type IntelEnvelope<T> =
   | { ok: true; data: T; staleReason?: string }
   | { ok: false; error: string };
 
+/** The proxy-backed feeds that fall back to their own last good rows. */
+type MarketFeedId =
+  | "insiderTrades"
+  | "senateTrades"
+  | "darkPoolPrints"
+  | "unusualOptions"
+  | "marketTide"
+  | "corporateJets"
+  | "vesselTracking"
+  | "chokepoints"
+  | "conflictEvents";
+
 type IntelSnapshotCacheEntry = {
   snapshot: IntelSnapshot;
   savedAt: number;
+  /** Last good rows per feed, each with its own age (see feedCache.ts). */
+  feeds?: Partial<Record<MarketFeedId, CachedFeed<unknown>>>;
 };
 
 const intelSnapshotCache = globalThis as typeof globalThis & {
@@ -1022,24 +1036,13 @@ function retiredStatus(
   };
 }
 
-function toStatus(
-  id: IntelProviderStatus["id"],
-  label: string,
-  description: string,
-  ok: boolean,
-  err?: string,
-  staleReason?: string,
-): IntelProviderStatus {
-  return providerTile(id, label, description, ok, err, staleReason);
-}
-
 export async function loadIntelSnapshot(opts?: {
   symbol?: string;
 }): Promise<IntelSnapshot> {
   const cacheKey = (opts?.symbol ?? "market").toUpperCase();
   const cached = snapshotCache.get(cacheKey);
   if (cached && Date.now() - cached.savedAt < SNAPSHOT_FRESH_MS) {
-    return markCache(cached.snapshot, "fresh", cached.savedAt);
+    return markCache(cached.snapshot, "fresh", cached.savedAt, cached.snapshot.cache.message);
   }
 
   const inflight = snapshotInflight.get(cacheKey);
@@ -1111,110 +1114,73 @@ async function fetchIntelSnapshot(
     "Aircraft squawking 7500 / 7600 / 7700 (adsb.lol)",
   );
 
-  const insiders = insiderRes.ok && Array.isArray(insiderRes.data) ? insiderRes.data : [];
-  const senate = senateRes.ok && Array.isArray(senateRes.data) ? senateRes.data : [];
-  const darkPool = darkPoolRes.ok && Array.isArray(darkPoolRes.data) ? darkPoolRes.data : [];
-  const options = optionsRes.ok && Array.isArray(optionsRes.data) ? optionsRes.data : [];
-  const tide = tideRes.ok && tideRes.data ? tideRes.data : null;
+  // INTEL-FREE: each market feed stands on its own. A failing feed shows its
+  // own last good rows as "cached" (or "error" when it has none), with this
+  // round's reason; the feeds that answered stay live. It used to swap the
+  // whole page for the cached snapshot as soon as any one feed failed.
+  const now = Date.now();
+  const priorFeeds = cached?.feeds ?? {};
+  const nextFeeds: Partial<Record<MarketFeedId, CachedFeed<unknown>>> = {};
+  let anyFromCache = false;
+  const hasArrayRows = (v: unknown) => Array.isArray(v) && v.length > 0;
+  function feed<T>(
+    id: MarketFeedId,
+    label: string,
+    description: string,
+    res: IntelEnvelope<T>,
+    empty: T,
+    hasRows: (v: T) => boolean,
+  ) {
+    const r = resolveFeed({
+      id,
+      label,
+      description,
+      round: res.ok ? { ok: true, rows: res.data, staleReason: res.staleReason } : { ok: false, error: res.error },
+      empty,
+      hasRows,
+      cached: priorFeeds[id] as CachedFeed<T> | undefined,
+      now,
+      maxAgeMs: SNAPSHOT_STALE_MS,
+    });
+    if (r.cache) nextFeeds[id] = r.cache as CachedFeed<unknown>;
+    if (r.fromCache) anyFromCache = true;
+    return r;
+  }
 
-  const jets = jetsRes.ok && Array.isArray(jetsRes.data) ? jetsRes.data : [];
-  const vessels = vesselRes.ok && Array.isArray(vesselRes.data) ? vesselRes.data : [];
-  const chokepoints = chokepointRes.ok && Array.isArray(chokepointRes.data) ? chokepointRes.data : [];
-  const conflicts = conflictRes.ok && Array.isArray(conflictRes.data) ? conflictRes.data : [];
+  const insiderFeed = feed("insiderTrades", "Insider trades", "AXE Intel insider transaction feed", insiderRes, [], hasArrayRows);
+  const senateFeed = feed("senateTrades", "Congress", "AXE Intel congressional disclosure feed", senateRes, [], hasArrayRows);
+  const darkPoolFeed = feed("darkPoolPrints", "Dark pool", "AXE Intel off-exchange print feed", darkPoolRes, [], hasArrayRows);
+  const optionsFeed = feed("unusualOptions", "Options flow", "AXE Intel smart-money options feed", optionsRes, [], hasArrayRows);
+  const tideFeed = feed<MarketTide | null>("marketTide", "Market tide", "AXE Intel net call/put premium tide", tideRes, null, (v) => v != null);
+  const jetsFeed = feed("corporateJets", "Corporate jets", "AXE Intel executive mobility tracking", jetsRes, [], hasArrayRows);
+  const vesselFeed = feed("vesselTracking", "Vessel tracking", "AXE Intel supply chain & chokepoint monitoring", vesselRes, [], hasArrayRows);
+  const chokepointFeed = feed("chokepoints", "Chokepoints", "AXE Intel global chokepoint monitoring", chokepointRes, [], hasArrayRows);
+  const conflictFeed = feed("conflictEvents", "Seismic events", "AXE Intel geopolitical & seismic events", conflictRes, [], hasArrayRows);
+
+  const insiders = insiderFeed.rows;
+  const senate = senateFeed.rows;
+  const darkPool = darkPoolFeed.rows;
+  const options = optionsFeed.rows;
+  const tide = tideFeed.rows;
+
+  const jets = jetsFeed.rows;
+  const vessels = vesselFeed.rows;
+  const chokepoints = chokepointFeed.rows;
+  const conflicts = conflictFeed.rows;
 
   const energyLive = energyFeed.rows;
   const cyberLive = cyberFeed.rows;
   const militaryLive = militaryFeed.rows;
   const emergencyLive = emergencyFeed.rows;
 
-  // The alt-data feeds are excluded: one of them failing must not pin the page
-  // to a stale snapshot of the market feeds.
-  const allResults = [insiderRes, senateRes, darkPoolRes, optionsRes, tideRes, jetsRes, vesselRes, chokepointRes, conflictRes];
-  const hadError = allResults.some((r) => !r.ok);
-  const hasLiveData = Boolean(insiders.length || senate.length || darkPool.length || options.length || tide || jets.length || vessels.length || chokepoints.length || conflicts.length || energyLive.length || cyberLive.length || militaryLive.length);
-
-  if (hadError && cached && Date.now() - cached.savedAt < SNAPSHOT_STALE_MS) {
-    return markCache(
-      cached.snapshot,
-      "stale",
-      cached.savedAt,
-      "AXE Intel is cooling down or rate-limited. Showing the last cached intel snapshot.",
-    );
-  }
+  // Rows on screen from this round; our own cached rows do not count as live.
+  const marketFeeds = [insiderFeed, senateFeed, darkPoolFeed, optionsFeed, tideFeed, jetsFeed, vesselFeed, chokepointFeed, conflictFeed];
+  const hasLiveData =
+    marketFeeds.some((f) => !f.fromCache && f.status.state !== "off" && f.status.state !== "error") ||
+    Boolean(energyLive.length || cyberLive.length || militaryLive.length);
 
   const providers: IntelProviderStatus[] = [
-    toStatus(
-      "insiderTrades",
-      "Insider trades",
-      "AXE Intel insider transaction feed",
-      insiderRes.ok && insiders.length > 0,
-      insiderRes.ok ? undefined : insiderRes.error,
-      insiderRes.ok ? insiderRes.staleReason : undefined,
-    ),
-    toStatus(
-      "senateTrades",
-      "Congress",
-      "AXE Intel congressional disclosure feed",
-      senateRes.ok && senate.length > 0,
-      senateRes.ok ? undefined : senateRes.error,
-      senateRes.ok ? senateRes.staleReason : undefined,
-    ),
-    toStatus(
-      "darkPoolPrints",
-      "Dark pool",
-      "AXE Intel off-exchange print feed",
-      darkPoolRes.ok && darkPool.length > 0,
-      darkPoolRes.ok ? undefined : darkPoolRes.error,
-      darkPoolRes.ok ? darkPoolRes.staleReason : undefined,
-    ),
-    toStatus(
-      "unusualOptions",
-      "Options flow",
-      "AXE Intel smart-money options feed",
-      optionsRes.ok && options.length > 0,
-      optionsRes.ok ? undefined : optionsRes.error,
-      optionsRes.ok ? optionsRes.staleReason : undefined,
-    ),
-    toStatus(
-      "marketTide",
-      "Market tide",
-      "AXE Intel net call/put premium tide",
-      tideRes.ok && tide != null,
-      tideRes.ok ? undefined : tideRes.error,
-      tideRes.ok ? tideRes.staleReason : undefined,
-    ),
-    toStatus(
-      "corporateJets",
-      "Corporate jets",
-      "AXE Intel executive mobility tracking",
-      jetsRes.ok && jets.length > 0,
-      jetsRes.ok ? undefined : jetsRes.error,
-      jetsRes.ok ? jetsRes.staleReason : undefined,
-    ),
-    toStatus(
-      "vesselTracking",
-      "Vessel tracking",
-      "AXE Intel supply chain & chokepoint monitoring",
-      vesselRes.ok && vessels.length > 0,
-      vesselRes.ok ? undefined : vesselRes.error,
-      vesselRes.ok ? vesselRes.staleReason : undefined,
-    ),
-    toStatus(
-      "chokepoints",
-      "Chokepoints",
-      "AXE Intel global chokepoint monitoring",
-      chokepointRes.ok && chokepoints.length > 0,
-      chokepointRes.ok ? undefined : chokepointRes.error,
-      chokepointRes.ok ? chokepointRes.staleReason : undefined,
-    ),
-    toStatus(
-      "conflictEvents",
-      "Seismic events",
-      "AXE Intel geopolitical & seismic events",
-      conflictRes.ok && conflicts.length > 0,
-      conflictRes.ok ? undefined : conflictRes.error,
-      conflictRes.ok ? conflictRes.staleReason : undefined,
-    ),
+    ...marketFeeds.map((f) => f.status),
     energyFeed.status,
     cyberFeed.status,
     militaryFeed.status,
@@ -1239,16 +1205,21 @@ async function fetchIntelSnapshot(
     providers,
     hasLiveData,
     cache: {
-      state: hasLiveData ? "fresh" : "empty",
+      state: hasLiveData ? "fresh" : anyFromCache ? "stale" : "empty",
       ageSeconds: null,
-      message: hasLiveData ? undefined : "No cached intel rows yet. AXE Intel will retry without exposing runtime errors.",
+      message: anyFromCache
+        ? "Some feeds are unavailable right now. Their panels show the last good rows, marked CACHED; hover the badge for the reason."
+        : hasLiveData
+          ? undefined
+          : "No cached intel rows yet. AXE Intel will retry without exposing runtime errors.",
     },
   };
 
   if (hasLiveData) {
     snapshotCache.set((opts?.symbol ?? "market").toUpperCase(), {
       snapshot,
-      savedAt: Date.now(),
+      savedAt: now,
+      feeds: nextFeeds,
     });
   }
 
