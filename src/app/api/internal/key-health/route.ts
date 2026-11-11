@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { hasCronSecret } from "@/lib/auth/cronSecret";
 import { getSupabaseKey } from "@/lib/env";
+import { intelFeedProbes, readProbeReply } from "@/lib/intel/intelFeedProbes";
+import { isSourceAvailable } from "@/lib/intel/intelSources";
 import { firstNonEmptyEnv } from "@/lib/envFallback";
 import { getMetaApiProvisioningBaseUrl, getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import {
@@ -182,12 +184,18 @@ function vercelChecks(): Array<Promise<Check>> {
       { headers: { Authorization: `Bearer ${stripe}` } },
     ),
     ...stripePrices,
-    httpCheck(
-      { name: "Unusual Whales (Next side)", area: "intel", env: ["UNUSUAL_WHALES_TOKEN"] },
-      uw,
-      "https://api.unusualwhales.com/api/market/market-tide",
-      { headers: { Authorization: `Bearer ${uw}`, Accept: "application/json" } },
-    ),
+    // Optional since INTEL-FREE: unsubscribed is not missing, so it is only
+    // checked once switched on or once a key is actually set.
+    ...(uw || isSourceAvailable("unusual_whales", process.env)
+      ? [
+          httpCheck(
+            { name: "Unusual Whales (optional)", area: "intel", env: ["UNUSUAL_WHALES_ENABLED", "UNUSUAL_WHALES_TOKEN"] },
+            uw,
+            "https://api.unusualwhales.com/api/market/market-tide",
+            { headers: { Authorization: `Bearer ${uw}`, Accept: "application/json" } },
+          ),
+        ]
+      : []),
     httpCheck(
       { name: "FRED (macro)", area: "market", env: ["FRED_API_KEY"] },
       fred,
@@ -230,54 +238,16 @@ function vercelChecks(): Array<Promise<Check>> {
 }
 
 /**
- * intel-proxy feeds run on Supabase Edge with their own secrets. Probe each
- * action raw (no DB fallback) so a dead key shows as a failing feed.
+ * intel-proxy feeds run on Supabase Edge with their own secrets, so their keys
+ * can only be tested by calling the proxy. Which feeds, which sources and how a
+ * reply is read live in `@/lib/intel/intelFeedProbes`, where they are tested.
  */
-/**
- * Every action the deployed intel-proxy serves is public, so every one of them
- * is probed here for real.
- *
- * An earlier version of this file read `invalid_token` as "needs a signed-in
- * user". It is not that. The proxy skips its auth check only for names on its own
- * whitelist and sends everything else through `getUser(<the anon key>)`, which
- * cannot succeed — so a name the proxy has never heard of answers exactly like a
- * session problem. The four feeds below are in that position: they were dropped
- * from the Edge function and no EIA, GreyNoise or RapidAPI path remains in it.
- * Probing them proves nothing about their keys, so they are reported as retired.
- *
- * Where a public name exists for the same data (vesselStream for vessels,
- * gdeltEvents for conflict) that one is probed, because it does test the key.
- */
-const RETIRED_ACTIONS = new Set(["militaryRadar", "emergencyMonitor", "energyFlows", "cyberThreats"]);
-
-const INTEL_FEEDS: Array<{ action: string; name: string; env: string[] }> = [
-  { action: "marketTide", name: "Market tide", env: ["UNUSUAL_WHALES_TOKEN", "FINNHUB_API_KEY"] },
-  { action: "darkPoolPrints", name: "Dark pool", env: ["UNUSUAL_WHALES_TOKEN", "FINNHUB_API_KEY"] },
-  { action: "unusualOptions", name: "Options flow", env: ["UNUSUAL_WHALES_TOKEN", "FINNHUB_API_KEY"] },
-  { action: "insiderTrades", name: "Insider (Form 4)", env: ["UNUSUAL_WHALES_TOKEN (SEC EDGAR fallback)"] },
-  { action: "senateTrades", name: "Congress trades", env: ["QUIVER_API_KEY", "FMP_API_KEY"] },
-  { action: "corporateJets", name: "Corporate jets", env: ["OPENSKY_USERNAME", "OPENSKY_PASSWORD", "RAPIDAPI_KEY"] },
-  { action: "militaryRadar", name: "Military radar", env: ["RAPIDAPI_KEY"] },
-  { action: "emergencyMonitor", name: "Emergency squawks", env: ["RAPIDAPI_KEY"] },
-  { action: "vesselStream", name: "Vessels", env: ["AISSTREAM_API_KEY"] },
-  { action: "gdeltEvents", name: "Conflict events", env: ["ACLED_MAIL", "ACLED_PASSWORD"] },
-  { action: "energyFlows", name: "Energy flows", env: ["EIA_API_KEY"] },
-  { action: "cyberThreats", name: "Cyber threats", env: ["GREYNOISE_API_KEY"] },
-];
-
 function intelChecks(): Array<Promise<Check>> {
   const url = env("NEXT_PUBLIC_SUPABASE_URL")?.replace(/\/$/, "");
   const anon = getSupabaseKey() ?? null;
-  return INTEL_FEEDS.map(async (feed): Promise<Check> => {
+  return intelFeedProbes(process.env).map(async (feed): Promise<Check> => {
     const base = { name: `Intel: ${feed.name}`, area: "intel-edge", env: feed.env };
     if (!url || !anon) return { ...base, state: "missing", detail: "Supabase URL/anon key missing" };
-    if (RETIRED_ACTIONS.has(feed.action)) {
-      return {
-        ...base,
-        state: "retired",
-        detail: "the deployed intel-proxy has no handler for this feed — its key is untestable, and unused",
-      };
-    }
     const start = Date.now();
     try {
       const res = await fetch(`${url}/functions/v1/intel-proxy`, {
@@ -289,16 +259,10 @@ function intelChecks(): Array<Promise<Check>> {
       });
       const ms = Date.now() - start;
       const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; data?: unknown; error?: string; source?: string }
+        | { ok?: boolean; data?: unknown; error?: string; source?: string; unavailable?: unknown }
         | null;
-      if (!res.ok || !json?.ok) {
-        return { ...base, state: "error", ms, detail: scrub(json?.error ?? `HTTP ${res.status}`, [anon]) };
-      }
-      const rows = Array.isArray(json.data) ? json.data.length : json.data ? 1 : 0;
-      const source = json.source ? ` source=${json.source}` : "";
-      return rows > 0
-        ? { ...base, state: "ok", ms, detail: `${rows} rows${source}` }
-        : { ...base, state: "error", ms, detail: `0 rows${source} — key missing/invalid or upstream empty` };
+      const outcome = readProbeReply(feed, res.ok, res.status, json);
+      return { ...base, state: outcome.state, ms, detail: scrub(outcome.detail, [anon]) };
     } catch (e) {
       return { ...base, state: "error", ms: Date.now() - start, detail: e instanceof Error ? e.message : String(e) };
     }
