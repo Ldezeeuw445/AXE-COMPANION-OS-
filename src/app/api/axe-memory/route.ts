@@ -1,6 +1,13 @@
 import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { callLLM } from "@/services/llmClient";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
+import {
+  isMemoryType,
+  parseExtractedMemories,
+  parseMemoryLimit,
+  selectMemoriesToStore,
+  trimConversation,
+} from "@/lib/axe/memoryRules";
 
 export const dynamic = "force-dynamic";
 
@@ -23,24 +30,6 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-/* ── Memory types ────────────────────────────────────────────────── */
-
-type MemoryType =
-  | "observation"       // "Trades better in London session"
-  | "pattern"           // "Closes winners too early 3x this week"
-  | "preference"        // "Prefers gold, usually bullish bias"
-  | "weakness"          // "Adds to losers under pressure"
-  | "strength"          // "Excellent risk management in ranging markets"
-  | "rule"              // "Never trade NFP without plan"
-  | "context";          // "Currently focused on XAUUSD M15 ICT setups"
-
-type ExtractedMemory = {
-  memory_type: MemoryType;
-  content: string;
-  symbol: string | null;
-  confidence: number;
-};
-
 /* ── GET: list memories ──────────────────────────────────────────── */
 
 export async function GET(request: Request) {
@@ -55,8 +44,12 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const type = url.searchParams.get("type") as MemoryType | null;
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);
+  const rawType = url.searchParams.get("type");
+  if (rawType && !isMemoryType(rawType)) {
+    return jsonResponse({ ok: false, error: "Unknown memory type." }, 400);
+  }
+  const type = rawType;
+  const limit = parseMemoryLimit(url.searchParams.get("limit"));
 
   let query = supabase
     .from("axe_memories")
@@ -92,46 +85,57 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, error: gate.error, upgradeRequired: true }, gate.status);
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    messages?: Array<{ role: string; content: string }>;
-  };
+  const body = (await request.json().catch(() => ({}))) as { messages?: unknown };
 
-  const messages = Array.isArray(body.messages) ? body.messages : [];
-  if (messages.length < 2) {
+  // Last 20 well-formed messages, each capped in length.
+  const recentMessages = trimConversation(body.messages);
+  if (recentMessages.length < 2) {
     return jsonResponse({ ok: false, error: "Need at least 2 messages to extract memories." }, 400);
   }
-
-  // Take last 20 messages for context
-  const recentMessages = messages.slice(-20);
 
   try {
     const memories = await extractMemories(recentMessages);
 
-    // Store each memory
-    const stored = [];
-    for (const memory of memories) {
-      if (memory.confidence < 0.6) continue; // Only store high-confidence memories
+    if (memories.length === 0) {
+      return jsonResponse({ ok: true, extracted: 0, stored: 0 });
+    }
 
-      const { data, error } = await supabase
-        .from("axe_memories")
-        .insert({
+    // Skip repeats of memories the trader already has.
+    const { data: existing, error: existingError } = await supabase
+      .from("axe_memories")
+      .select("memory_type,content")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (existingError) {
+      console.error("[axe-memory] Failed to load existing memories:", existingError);
+      return jsonResponse({ ok: false, error: "Failed to load memories." }, 500);
+    }
+
+    const toStore = selectMemoriesToStore(memories, existing ?? []);
+    if (toStore.length === 0) {
+      return jsonResponse({ ok: true, extracted: memories.length, stored: 0 });
+    }
+
+    const { data: stored, error } = await supabase
+      .from("axe_memories")
+      .insert(
+        toStore.map((memory) => ({
           user_id: user.id,
           memory_type: memory.memory_type,
           content: memory.content,
           symbol: memory.symbol,
           confidence: memory.confidence,
-        })
-        .select()
-        .single();
+        })),
+      )
+      .select("id");
 
-      if (error) {
-        console.error("[axe-memory] Failed to store memory:", error);
-      } else {
-        stored.push(data);
-      }
+    if (error) {
+      console.error("[axe-memory] Failed to store memories:", error);
+      return jsonResponse({ ok: false, error: "Failed to store memories." }, 500);
     }
 
-    return jsonResponse({ ok: true, extracted: memories.length, stored: stored.length });
+    return jsonResponse({ ok: true, extracted: memories.length, stored: stored?.length ?? 0 });
   } catch (e) {
     console.error("[axe-memory] Extraction failed:", e);
     return jsonResponse({ ok: false, error: "Failed to extract memories." }, 500);
@@ -208,7 +212,7 @@ Rules:
 
 async function extractMemories(
   messages: Array<{ role: string; content: string }>
-): Promise<ExtractedMemory[]> {
+): Promise<ReturnType<typeof parseExtractedMemories>> {
   const conversationText = messages
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n\n");
@@ -224,28 +228,5 @@ async function extractMemories(
     max_tokens: 1500,
   });
 
-  if (!result.content) return [];
-
-  try {
-    const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(cleaned) as {
-      memories: Array<{
-        memory_type: string;
-        content: string;
-        symbol: string | null;
-        confidence: number;
-      }>;
-    };
-
-    return (parsed.memories ?? []).map((m) => ({
-      memory_type: (["observation", "pattern", "preference", "weakness", "strength", "rule", "context"].includes(m.memory_type)
-        ? m.memory_type
-        : "observation") as MemoryType,
-      content: String(m.content ?? "").slice(0, 500),
-      symbol: m.symbol ? String(m.symbol).slice(0, 20) : null,
-      confidence: Math.max(0, Math.min(1, Number(m.confidence) || 0.5)),
-    }));
-  } catch {
-    return [];
-  }
+  return parseExtractedMemories(result.content);
 }
