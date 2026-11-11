@@ -17,7 +17,8 @@
  *              -> push_subscriptions fan-out -> send -> prune dead endpoints
  *
  * The two seams this needs (`supabase`, `send`) are both injection points on
- * the real functions; nothing is re-implemented here.
+ * the real functions; nothing is re-implemented here. `announce` lives in
+ * `src/lib/axe/announce.ts` so the first hop is the watcher's real code too.
  *
  * Whole suite: npm test
  * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/push/pushDelivery.test.ts
@@ -27,6 +28,7 @@ import { describe, it } from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 import type { PushSender } from "@/lib/push/deliver";
+import { announce, type AnnounceOptions } from "@/lib/axe/announce";
 
 type DeliveryRow = {
   user_id: string;
@@ -46,6 +48,8 @@ type FakeState = {
   profiles: Record<string, { preferences?: unknown; timezone?: string | null }>;
   deliveries: DeliveryRow[];
   subscriptions: SubscriptionRow[];
+  /** The watcher's feed rows (`axe_proactive_events`), written by `announce`. */
+  proactiveEvents?: { user_id: string; event_key: string; title: string; body: string; url: string }[];
   /** Set to simulate a project where the dedup table was never migrated. */
   deliveriesTableMissing?: boolean;
 };
@@ -103,6 +107,17 @@ function fakeSupabase(state: FakeState): SupabaseClient {
         }
         const found = state.deliveries.filter((r) => matches(r as unknown as Record<string, unknown>));
         return { data: single ? (found[0] ?? null) : found, error: null };
+      }
+
+      if (table === "axe_proactive_events" && op === "insert") {
+        // Unique on (user_id, event_key) in the real table too.
+        const next = payload as unknown as NonNullable<FakeState["proactiveEvents"]>[number];
+        const rows = (state.proactiveEvents ??= []);
+        if (rows.some((r) => r.user_id === next.user_id && r.event_key === next.event_key)) {
+          return { data: null, error: { code: UNIQUE_VIOLATION, message: "duplicate key" } };
+        }
+        rows.push({ ...next });
+        return { data: null, error: null };
       }
 
       if (table === "push_subscriptions") {
@@ -423,5 +438,99 @@ describe("C6 push delivery path", () => {
 
     assert.equal(result.sent, 1);
     assert.equal(calls.length, 1);
+  });
+});
+
+/**
+ * The hop before `dispatchPushEvent`: the watcher's own `announce`, which every
+ * producer in `axeProactiveWatcher.ts` goes through. It writes the feed row and
+ * then pushes the same notice, so the feed and the phone cannot disagree.
+ */
+describe("C6 watcher announce -> device", () => {
+  const drawdownNotice = {
+    title: "Daily loss limit is close",
+    what: "You are 0.4% from the daily loss limit on acct-7.",
+    soWhat: "One more loss at this size ends the day.",
+    action: { label: "Stop or size down", href: "/positions" },
+  };
+
+  function announceOpts(send: PushSender, overrides: Partial<AnnounceOptions> = {}): AnnounceOptions {
+    return {
+      eventKey: "drawdown:acct-7:2026-10-28",
+      notice: drawdownNotice,
+      category: "risk_alert",
+      hasPush: true,
+      send,
+      now: new Date("2026-10-28T12:00:00.000Z"),
+      ...overrides,
+    };
+  }
+
+  it("writes the feed row and delivers the same notice to every subscribed device", async () => {
+    const state = stateWithDevices(["https://fcm.example/dev-a", "https://fcm.example/dev-b"]);
+    const { send, calls } = recordingSender();
+
+    const result = await announce(fakeSupabase(state), USER, announceOpts(send));
+
+    assert.deepEqual(result, { created: 1, pushed: 1 });
+
+    const body =
+      "You are 0.4% from the daily loss limit on acct-7. · One more loss at this size ends the day. · Stop or size down";
+    assert.deepEqual(state.proactiveEvents, [
+      {
+        user_id: USER,
+        event_key: "drawdown:acct-7:2026-10-28",
+        title: "Daily loss limit is close",
+        body,
+        url: "/positions",
+      },
+    ]);
+
+    assert.deepEqual(
+      calls.map((c) => c.endpoint).sort(),
+      ["https://fcm.example/dev-a", "https://fcm.example/dev-b"],
+    );
+    for (const call of calls) {
+      const payload = JSON.parse(call.payload);
+      assert.equal(payload.title, "AXE · Daily loss limit is close");
+      assert.equal(payload.body, body);
+      assert.equal(payload.url, "/positions");
+      assert.equal(payload.category, "risk_alert");
+      assert.equal(payload.eventKey, "drawdown:acct-7:2026-10-28");
+    }
+  });
+
+  it("says a notice once: the same event key on the next watcher run sends nothing", async () => {
+    const state = stateWithDevices(["https://fcm.example/dev-a"]);
+    const supabase = fakeSupabase(state);
+    const { send, calls } = recordingSender();
+
+    await announce(supabase, USER, announceOpts(send));
+    const again = await announce(supabase, USER, announceOpts(send));
+
+    assert.deepEqual(again, { created: 0, pushed: 0 });
+    assert.equal(state.proactiveEvents?.length, 1);
+    assert.equal(calls.length, 1);
+  });
+
+  it("records the notice in the feed but sends nothing when the trader has push off", async () => {
+    const state = stateWithDevices(["https://fcm.example/dev-a"]);
+    const { send, calls } = recordingSender();
+
+    const result = await announce(fakeSupabase(state), USER, announceOpts(send, { hasPush: false }));
+
+    assert.deepEqual(result, { created: 1, pushed: 0 });
+    assert.equal(state.proactiveEvents?.length, 1);
+    assert.equal(calls.length, 0);
+  });
+
+  it("counts no push when the only device is gone, and prunes it", async () => {
+    const state = stateWithDevices(["https://fcm.example/dead"]);
+    const { send } = recordingSender({ "https://fcm.example/dead": 410 });
+
+    const result = await announce(fakeSupabase(state), USER, announceOpts(send));
+
+    assert.deepEqual(result, { created: 1, pushed: 0 });
+    assert.equal(state.subscriptions.length, 0);
   });
 });

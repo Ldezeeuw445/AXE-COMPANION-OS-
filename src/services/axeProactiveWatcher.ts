@@ -1,8 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
-import { type PushCategory } from "@/lib/push/categories";
-import { dispatchPushEvent } from "@/lib/push/dispatch";
+import { announce } from "@/lib/axe/announce";
 import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
 import { detectConcentration, weekendExposureWarning } from "@/lib/risk/positionRisk";
 import { detectWeakSpots } from "@/lib/journal/weakSpots";
@@ -16,11 +15,7 @@ import {
 import { getChartSetup } from "@/services/chartSetupService";
 import { loadWeakSpotTrades } from "@/services/weakSpotService";
 import { brokerHealthWarning } from "@/lib/risk/brokerHealth";
-import {
-  renderNoticeBody,
-  signedAmount,
-  type ProactiveNotice,
-} from "@/lib/axe/notice";
+import { signedAmount } from "@/lib/axe/notice";
 import { tradeHistoryProvenance } from "@/lib/axe/provenance";
 import {
   collectWatcherCandidates,
@@ -45,85 +40,6 @@ export type ProactiveWatcherSummary = {
 type WatcherUser = {
   id: string;
 };
-
-async function firePush(
-  supabase: SupabaseClient,
-  userId: string,
-  title: string,
-  body: string,
-  url: string,
-  category: PushCategory,
-  eventKey: string,
-  extra?: { symbol?: string; timeframe?: string; threadId?: string },
-): Promise<boolean> {
-  const result = await dispatchPushEvent({
-    userId,
-    category,
-    eventKey,
-    title,
-    body,
-    url,
-    symbol: extra?.symbol,
-    timeframe: extra?.timeframe,
-    threadId: extra?.threadId,
-    supabase,
-  });
-  return result.ok && result.sent > 0;
-}
-
-/**
- * Record one notice, and push it if the trader has push on.
- *
- * Both used to be done by hand at each of the seven producers below, with the
- * title, body and URL repeated three times per notice and the push arguments
- * drifting from the feed row's. Worse, every producer decided for itself
- * whether to say anything beyond what had happened — and most did not, which
- * is what this whole change is about. The notice type will not let a producer
- * skip the next step now, and this is the only place that writes one.
- */
-async function announce(
-  supabase: SupabaseClient,
-  userId: string,
-  opts: {
-    eventKey: string;
-    notice: ProactiveNotice;
-    category: PushCategory;
-    hasPush: boolean;
-    extra?: { symbol?: string; timeframe?: string; threadId?: string };
-  },
-): Promise<{ created: number; pushed: number }> {
-  const body = renderNoticeBody(opts.notice);
-  const { error } = await supabase.from("axe_proactive_events").insert({
-    user_id: userId,
-    event_key: opts.eventKey,
-    title: opts.notice.title,
-    body,
-    url: opts.notice.action.href,
-  });
-  if (error) {
-    // Duplicate event key: already said, and saying it twice is how a useful
-    // notice becomes one the trader swipes away without reading.
-    if (error.code === "23505") return { created: 0, pushed: 0 };
-    throw error;
-  }
-
-  const pushed =
-    opts.hasPush &&
-    (await firePush(
-      supabase,
-      userId,
-      `AXE · ${opts.notice.title}`,
-      body,
-      opts.notice.action.href,
-      opts.category,
-      opts.eventKey,
-      opts.extra,
-    ))
-      ? 1
-      : 0;
-
-  return { created: 1, pushed };
-}
 
 async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ created: number; pushed: number }> {
   let created = 0;
