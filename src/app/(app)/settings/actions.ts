@@ -6,6 +6,7 @@ import { cleanDisplaySymbol, resolveBrokerSymbol } from "@/lib/broker/symbolReso
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 import { runPushTestSuite, type PushTestSuiteResult } from "@/lib/push/runTestSuite";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 
 export async function sendPushTestSuiteAction(): Promise<
@@ -173,7 +174,9 @@ export async function addBrokerWatchlistSymbol(
   if (!resolvedBroker) return {};
 
   const nextMap = { ...existingMap, [display]: resolvedBroker };
-  await supabase
+  // Elevated (TOS-SEC-2): the account read above, on the trader's own client,
+  // is the ownership check; the write keeps the user_id filter.
+  await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update({
       metadata: {

@@ -23,10 +23,13 @@
  *   blocker  — provider/sync-owned state written on the trader's client. Has to
  *              move to the elevated client (or go away) before the revoke.
  *
- * Note what the owner entries imply: three of them write `metadata`, the same
- * jsonb column the sync writes. So the revoke TOS-SEC-2 can land is
- * column-level (provider_status, hub_*, external_connection_id, last_sync_at,
- * …), not on `metadata`, unless trading rules and the symbol map move out of it.
+ * `metadata` is the same jsonb column the sync writes, and it carries the
+ * MetaApi account summary the ledger reconciles against. Trading rules and the
+ * symbol map used to be owner UPDATEs of it on the trader's client, which kept
+ * the whole column writable. Both now go out elevated after a user_id-filtered
+ * ownership read (`syncWriteScope.test.ts` holds them to that order), so no
+ * owner entry below is an UPDATE: what the trader still needs is INSERT and
+ * DELETE on their own rows, and the remaining UPDATE users are the blockers.
  *
  * Whole suite: npm test
  * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/mt5/accountWriteSurface.test.ts
@@ -106,8 +109,10 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
   },
 
   "src/app/(app)/settings/actions.ts": {
-    why: "The trader choosing which broker symbol a display symbol maps to.",
-    writes: [owner("update", "supabase", "metadata.symbol_map")],
+    why:
+      "The trader choosing which broker symbol a display symbol maps to. Elevated so " +
+      "metadata UPDATE can come off; ownership is the user_id-filtered read before it.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
   "src/app/actions/brokerAccounts.ts": {
     why:
@@ -116,8 +121,10 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
     writes: [owner("insert", "supabase", "INSERT"), owner("delete", "supabase", "DELETE")],
   },
   "src/app/api/preferences/account-rules/route.ts": {
-    why: "The trader's own trading rules for an account.",
-    writes: [owner("update", "supabase", "metadata.trading_rules")],
+    why:
+      "The trader's own trading rules for an account. Elevated so metadata UPDATE can " +
+      "come off; the rules are parsed server-side and ownership is the read before it.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
 
   "src/app/api/broker/hub/route.ts": {
@@ -285,6 +292,18 @@ describe("user_broker_accounts write surface", () => {
         if (w.kind === "owner") assert.ok(w.columns, `${file}: owner write must name its column`);
       }
     }
+  });
+
+  it("no owner write is an UPDATE, so the trader's UPDATE grant only serves the blockers", () => {
+    const ownerUpdates = Object.entries(EXPECTED).flatMap(([file, { writes }]) =>
+      writes.filter((w) => w.kind === "owner" && w.op === "update").map(() => file),
+    );
+    assert.deepEqual(
+      ownerUpdates,
+      [],
+      "an owner edit on the trader's client keeps UPDATE (and metadata) writable; " +
+        "read the row on the caller's client, then write it through syncWriteClient(supabase)",
+    );
   });
 
   it("the scan finds writes at all", () => {

@@ -59,10 +59,6 @@ const SERVICE_ROLE_ONLY: Record<string, { calledFrom: string; why: string }> = {
  * still the trader doing the writing.
  */
 const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: string }> = {
-  "app/(app)/settings/actions.ts": {
-    tables: { user_broker_accounts: 1 },
-    why: "adding a watchlist symbol caches its broker mapping on the account's metadata",
-  },
   "app/actions/brokerAccounts.ts": {
     tables: { broker_trades: 1, user_broker_accounts: 2 },
     why:
@@ -73,10 +69,6 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
   "app/api/broker/hub/route.ts": {
     tables: { user_broker_accounts: 1 },
     why: "the hub panel writing back provider/hub status after a reconnect",
-  },
-  "app/api/preferences/account-rules/route.ts": {
-    tables: { user_broker_accounts: 1 },
-    why: "saving per-account risk rules into metadata",
   },
   "lib/alpaca/provision.ts": {
     tables: { user_broker_accounts: 2 },
