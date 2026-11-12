@@ -66,10 +66,6 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
       "DELETE that clears the removed account's history, so revoking INSERT/UPDATE on " +
       "that table does not break it — revoking DELETE would",
   },
-  "app/api/broker/hub/route.ts": {
-    tables: { user_broker_accounts: 1 },
-    why: "the hub panel writing back provider/hub status after a reconnect",
-  },
   "lib/alpaca/provision.ts": {
     tables: { user_broker_accounts: 2 },
     why: "provisioning an Alpaca paper account creates and then updates the trader's row",
@@ -78,23 +74,11 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
     tables: { user_broker_accounts: 1 },
     why: "first visit creates the built-in demo account row",
   },
-  "lib/broker/hub/adapters/alpacaLive.ts": {
-    tables: { user_broker_accounts: 1 },
-    why:
-      "the trader tapping disconnect in the hub panel. Bound to an owner and filtering user_id " +
-      "(`adapters/brokerAdapterScope.test.ts`), so the client is the only thing left to move",
-  },
   "lib/broker/hub/adapters/ibkrGateway.ts": {
     tables: { user_broker_accounts: 4 },
     why:
       "IBKR gateway pairing, disconnect and the doctor writing its result onto the account row. " +
       "Bound to an owner and filtering user_id (`adapters/brokerAdapterScope.test.ts`)",
-  },
-  "lib/broker/hub/adapters/mt5BrokerApi.ts": {
-    tables: { user_broker_accounts: 1 },
-    why:
-      "the trader tapping disconnect in the hub panel. Bound to an owner and filtering user_id " +
-      "(`adapters/brokerAdapterScope.test.ts`), so the client is the only thing left to move",
   },
   "lib/broker/hub/adapters/supabaseDatabase.ts": {
     tables: { user_broker_accounts: 2 },

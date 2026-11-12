@@ -94,6 +94,9 @@ const SCOPED_FILES = [
   // off the trader's client so they stop blocking the revoke.
   "src/app/api/preferences/account-rules/route.ts",
   "src/app/(app)/settings/actions.ts",
+  // The hub panel's disconnect for MT5 and Alpaca: fixed status values.
+  "src/lib/broker/hub/adapters/mt5BrokerApi.ts",
+  "src/lib/broker/hub/adapters/alpacaLive.ts",
 ];
 
 /**
@@ -104,6 +107,8 @@ const SCOPED_FILES = [
 const READ_THEN_ELEVATE = [
   "src/app/api/preferences/account-rules/route.ts",
   "src/app/(app)/settings/actions.ts",
+  "src/lib/broker/hub/adapters/mt5BrokerApi.ts",
+  "src/lib/broker/hub/adapters/alpacaLive.ts",
 ];
 
 describe("MT5 sync write scoping", () => {

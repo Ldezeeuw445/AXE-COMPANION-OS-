@@ -9,6 +9,7 @@ import { ensureAlpacaPaperAccount } from "@/lib/alpaca/provision";
 import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
 import { getAlpacaAccount } from "@/lib/alpaca/client";
 import { resetAlpacaPaperTrading } from "@/lib/alpaca/reset";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 
 /**
  * Alpaca paper adapter — platform-managed keys in server env for Phase 1.
@@ -59,7 +60,17 @@ export function createAlpacaBrokerApiAdapter(supabase: SupabaseClient, userId: s
       };
     },
     async disconnect(accountId: string): Promise<void> {
-      await supabase
+      // Ownership on the trader's own client, then the status write elevated so
+      // it survives the UPDATE revoke (TOS-SEC-2, see syncWriteClient).
+      const { data: account } = await supabase
+        .from("user_broker_accounts")
+        .select("id")
+        .eq("id", accountId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!account) return;
+
+      await syncWriteClient(supabase)
         .from("user_broker_accounts")
         .update({ hub_status: "disconnected", provider_status: "disconnected" })
         .eq("id", accountId)

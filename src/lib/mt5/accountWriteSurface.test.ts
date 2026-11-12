@@ -120,6 +120,11 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
       "Both asked for by the owner.",
     writes: [owner("insert", "supabase", "INSERT"), owner("delete", "supabase", "DELETE")],
   },
+  // src/app/api/broker/hub/route.ts used to be a blocker here: its `sync`
+  // action copied provider_status, hub_status and metadata from the request
+  // body. Elevating it would have laundered exactly the write TOS-SEC-2 stops,
+  // so the action was removed; the route now writes nothing itself. The test
+  // below keeps it that way.
   "src/app/api/preferences/account-rules/route.ts": {
     why:
       "The trader's own trading rules for an account. Elevated so metadata UPDATE can " +
@@ -127,13 +132,6 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
     writes: [elevated("update", "syncWriteClient(supabase)")],
   },
 
-  "src/app/api/broker/hub/route.ts": {
-    why:
-      "Takes provider_status, hub_status and metadata from the request body. " +
-      "Elevating it would launder exactly the write TOS-SEC-2 exists to stop; " +
-      "it needs the client-supplied status fields dropped, not a new client.",
-    writes: [blocker("update", "supabase")],
-  },
   "src/lib/broker/demoAccount.ts": {
     why: "Provisions the demo account with provider_status=connected on the trader's client.",
     writes: [blocker("insert", "supabase")],
@@ -149,12 +147,16 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
     writes: [blocker("update", "supabase"), owner("delete", "supabase", "DELETE")],
   },
   "src/lib/broker/hub/adapters/alpacaLive.ts": {
-    why: "disconnect() sets hub/provider status, filtered on id only.",
-    writes: [blocker("update", "supabase")],
+    why:
+      "disconnect() sets fixed hub/provider status after a user_id-filtered ownership " +
+      "read on the trader's client.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
   "src/lib/broker/hub/adapters/mt5BrokerApi.ts": {
-    why: "disconnect() sets hub/provider status, filtered on id only.",
-    writes: [blocker("update", "supabase")],
+    why:
+      "disconnect() sets fixed hub/provider status after a user_id-filtered ownership " +
+      "read on the trader's client.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
   "src/lib/broker/hub/adapters/ibkrGateway.ts": {
     why: "IBKR gateway connect / sync / disconnect write provider state on the trader's client.",
@@ -304,6 +306,15 @@ describe("user_broker_accounts write surface", () => {
       "an owner edit on the trader's client keeps UPDATE (and metadata) writable; " +
         "read the row on the caller's client, then write it through syncWriteClient(supabase)",
     );
+  });
+
+  it("the hub route takes no provider state from the request body", () => {
+    // Its old `sync` action let a trader mark their account connected or
+    // overwrite the MetaApi summary in `metadata` the ledger reconciles against.
+    const code = readFileSync("src/app/api/broker/hub/route.ts", "utf8");
+    assert.equal(found["src/app/api/broker/hub/route.ts"], undefined, "the hub route writes the account row again");
+    assert.doesNotMatch(code, /body\.(providerStatus|hubStatus|metadata)/);
+    assert.doesNotMatch(code, /"sync"/);
   });
 
   it("the scan finds writes at all", () => {

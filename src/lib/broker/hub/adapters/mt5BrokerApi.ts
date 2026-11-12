@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import type {
   BrokerApiAdapter,
   ConnectAccountResult,
@@ -30,7 +31,17 @@ export function createMt5BrokerApiAdapter(supabase: SupabaseClient, userId: stri
       };
     },
     async disconnect(accountId: string): Promise<void> {
-      await supabase
+      // Ownership on the trader's own client, then the status write elevated so
+      // it survives the UPDATE revoke (TOS-SEC-2, see syncWriteClient).
+      const { data: account } = await supabase
+        .from("user_broker_accounts")
+        .select("id")
+        .eq("id", accountId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!account) return;
+
+      await syncWriteClient(supabase)
         .from("user_broker_accounts")
         .update({ hub_status: "disconnected", provider_status: "disconnected" })
         .eq("id", accountId)
