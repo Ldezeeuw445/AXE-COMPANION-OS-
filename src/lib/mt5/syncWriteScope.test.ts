@@ -90,6 +90,25 @@ const SCOPED_FILES = [
   // so they need the same user_id filter (accountWriteSurface.test.ts).
   "src/lib/broker/hub/sync.ts",
   "src/lib/broker/loadChartPageData.ts",
+  // Trader-initiated metadata edits (risk rules, watchlist symbol map). Moved
+  // off the trader's client so they stop blocking the revoke.
+  "src/app/api/preferences/account-rules/route.ts",
+  "src/app/(app)/settings/actions.ts",
+  // The hub panel's disconnect for MT5 and Alpaca: fixed status values.
+  "src/lib/broker/hub/adapters/mt5BrokerApi.ts",
+  "src/lib/broker/hub/adapters/alpacaLive.ts",
+];
+
+/**
+ * Files that read the account on the caller's own client and only then write
+ * it elevated. The read is what proves ownership, so it has to come first and
+ * has to be on `supabase`, or rule 1 is not actually established.
+ */
+const READ_THEN_ELEVATE = [
+  "src/app/api/preferences/account-rules/route.ts",
+  "src/app/(app)/settings/actions.ts",
+  "src/lib/broker/hub/adapters/mt5BrokerApi.ts",
+  "src/lib/broker/hub/adapters/alpacaLive.ts",
 ];
 
 describe("MT5 sync write scoping", () => {
@@ -169,6 +188,28 @@ describe("MT5 sync write scoping", () => {
             `those grants are revoked. Route it through syncWriteClient(supabase).`,
         );
       }
+    });
+  }
+
+  for (const file of READ_THEN_ELEVATE) {
+    it(`${file} proves ownership on the caller's client before the elevated write`, () => {
+      const code = source(file);
+      const write = /syncWriteClient\(supabase\)\s*\.from\("user_broker_accounts"\)\s*\.update\(/.exec(code);
+      assert.ok(write, `${file}: the account write is not elevated`);
+      // The nearest read before the write: an earlier handler's read (the GET
+      // in account-rules) says nothing about this write.
+      const read = [...code.matchAll(/await supabase\s*\.from\("user_broker_accounts"\)\s*\.select\(/g)]
+        .filter((match) => match.index < write.index)
+        .pop();
+      assert.ok(read, `${file}: no ownership read on the caller's own client before the write`);
+
+      // The read must filter on the signed-in user, not just the account id
+      // the request sent, or it proves nothing about who owns the row.
+      const readStatement = tableStatements(code.slice(read.index), "user_broker_accounts")[0];
+      assert.match(readStatement, /\.eq\("user_id",/);
+      // And a missing row must stop the function before the write.
+      const between = code.slice(read.index, write.index);
+      assert.match(between, /if \(!(?:row|account)[\s\S]*?return/);
     });
   }
 

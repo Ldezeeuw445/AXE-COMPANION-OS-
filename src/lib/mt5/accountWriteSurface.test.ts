@@ -23,10 +23,13 @@
  *   blocker  — provider/sync-owned state written on the trader's client. Has to
  *              move to the elevated client (or go away) before the revoke.
  *
- * Note what the owner entries imply: three of them write `metadata`, the same
- * jsonb column the sync writes. So the revoke TOS-SEC-2 can land is
- * column-level (provider_status, hub_*, external_connection_id, last_sync_at,
- * …), not on `metadata`, unless trading rules and the symbol map move out of it.
+ * `metadata` is the same jsonb column the sync writes, and it carries the
+ * MetaApi account summary the ledger reconciles against. Trading rules and the
+ * symbol map used to be owner UPDATEs of it on the trader's client, which kept
+ * the whole column writable. Both now go out elevated after a user_id-filtered
+ * ownership read (`syncWriteScope.test.ts` holds them to that order), so no
+ * owner entry below is an UPDATE: what the trader still needs is INSERT and
+ * DELETE on their own rows, and the remaining UPDATE users are the blockers.
  *
  * Whole suite: npm test
  * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/mt5/accountWriteSurface.test.ts
@@ -106,8 +109,10 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
   },
 
   "src/app/(app)/settings/actions.ts": {
-    why: "The trader choosing which broker symbol a display symbol maps to.",
-    writes: [owner("update", "supabase", "metadata.symbol_map")],
+    why:
+      "The trader choosing which broker symbol a display symbol maps to. Elevated so " +
+      "metadata UPDATE can come off; ownership is the user_id-filtered read before it.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
   "src/app/actions/brokerAccounts.ts": {
     why:
@@ -115,18 +120,18 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
       "Both asked for by the owner.",
     writes: [owner("insert", "supabase", "INSERT"), owner("delete", "supabase", "DELETE")],
   },
+  // src/app/api/broker/hub/route.ts used to be a blocker here: its `sync`
+  // action copied provider_status, hub_status and metadata from the request
+  // body. Elevating it would have laundered exactly the write TOS-SEC-2 stops,
+  // so the action was removed; the route now writes nothing itself. The test
+  // below keeps it that way.
   "src/app/api/preferences/account-rules/route.ts": {
-    why: "The trader's own trading rules for an account.",
-    writes: [owner("update", "supabase", "metadata.trading_rules")],
+    why:
+      "The trader's own trading rules for an account. Elevated so metadata UPDATE can " +
+      "come off; the rules are parsed server-side and ownership is the read before it.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
 
-  "src/app/api/broker/hub/route.ts": {
-    why:
-      "Takes provider_status, hub_status and metadata from the request body. " +
-      "Elevating it would launder exactly the write TOS-SEC-2 exists to stop; " +
-      "it needs the client-supplied status fields dropped, not a new client.",
-    writes: [blocker("update", "supabase")],
-  },
   "src/lib/broker/demoAccount.ts": {
     why: "Provisions the demo account with provider_status=connected on the trader's client.",
     writes: [blocker("insert", "supabase")],
@@ -142,12 +147,16 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
     writes: [blocker("update", "supabase"), owner("delete", "supabase", "DELETE")],
   },
   "src/lib/broker/hub/adapters/alpacaLive.ts": {
-    why: "disconnect() sets hub/provider status, filtered on id only.",
-    writes: [blocker("update", "supabase")],
+    why:
+      "disconnect() sets fixed hub/provider status after a user_id-filtered ownership " +
+      "read on the trader's client.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
   "src/lib/broker/hub/adapters/mt5BrokerApi.ts": {
-    why: "disconnect() sets hub/provider status, filtered on id only.",
-    writes: [blocker("update", "supabase")],
+    why:
+      "disconnect() sets fixed hub/provider status after a user_id-filtered ownership " +
+      "read on the trader's client.",
+    writes: [elevated("update", "syncWriteClient(supabase)")],
   },
   "src/lib/broker/hub/adapters/ibkrGateway.ts": {
     why: "IBKR gateway connect / sync / disconnect write provider state on the trader's client.",
@@ -285,6 +294,27 @@ describe("user_broker_accounts write surface", () => {
         if (w.kind === "owner") assert.ok(w.columns, `${file}: owner write must name its column`);
       }
     }
+  });
+
+  it("no owner write is an UPDATE, so the trader's UPDATE grant only serves the blockers", () => {
+    const ownerUpdates = Object.entries(EXPECTED).flatMap(([file, { writes }]) =>
+      writes.filter((w) => w.kind === "owner" && w.op === "update").map(() => file),
+    );
+    assert.deepEqual(
+      ownerUpdates,
+      [],
+      "an owner edit on the trader's client keeps UPDATE (and metadata) writable; " +
+        "read the row on the caller's client, then write it through syncWriteClient(supabase)",
+    );
+  });
+
+  it("the hub route takes no provider state from the request body", () => {
+    // Its old `sync` action let a trader mark their account connected or
+    // overwrite the MetaApi summary in `metadata` the ledger reconciles against.
+    const code = readFileSync("src/app/api/broker/hub/route.ts", "utf8");
+    assert.equal(found["src/app/api/broker/hub/route.ts"], undefined, "the hub route writes the account row again");
+    assert.doesNotMatch(code, /body\.(providerStatus|hubStatus|metadata)/);
+    assert.doesNotMatch(code, /"sync"/);
   });
 
   it("the scan finds writes at all", () => {

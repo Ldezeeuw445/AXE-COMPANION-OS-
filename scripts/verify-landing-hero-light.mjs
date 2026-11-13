@@ -202,14 +202,15 @@ check("de behavior map noemt zichzelf een voorbeeld", () => {
   assert.ok(pagina.includes("<LandingBehaviorMap"), "de map staat niet op de pagina");
 });
 
-check("geen mockup die een bron toont die niet betaald is", () => {
-  // behavior-phone-left-transparent.png heeft "Market Tide" in zijn eigen
-  // screenshot gebakken, en marketTide is een Unusual Whales-bron die nooit
-  // gekocht is. verify-landing-claims leest de paginatekst en ziet dat niet:
-  // een claim in een PNG glipt erlangs. Rechts staan zes verbeteringen die
-  // AXE zichzelf voorstelt en die geen van alle bestaan.
-  const bronnen = readFileSync("src/lib/intel/intelSources.ts", "utf8");
-  assert.match(bronnen, /marketTide:\s*"unusual_whales"/, "marketTide is van bron veranderd — kijk de mockups opnieuw na");
+check("geen mockup met verzonnen inhoud", () => {
+  // Deze twee PNG's zijn een paar en gingen samen van de landing af.
+  // behavior-phone-left-transparent.png had "Market Tide" in zijn eigen
+  // screenshot gebakken toen dat een Unusual Whales-bron was die nooit gekocht
+  // is. Sinds de gedeelde intel-proxy (#149) komt marketTide gratis van CBOE,
+  // dus dát klopt nu wel. Maar rechts staan nog steeds zes verbeteringen die
+  // AXE zichzelf voorstelt en die geen van alle bestaan, en verify-landing-claims
+  // leest alleen de paginatekst: een claim in een PNG glipt erlangs. Dus het
+  // paar blijft weg tot iemand er een echte screenshot voor maakt.
 
   // Zonder commentaar, anders valt deze check om over de uitleg waarin de
   // bestandsnamen staan juist omdat ze er niet mogen staan. Een check die

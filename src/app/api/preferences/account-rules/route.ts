@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import { buildAccountProfile, type AccountProfile } from "@/lib/risk/accountProfile";
 import { parseAccountRules, withTradingRules } from "@/lib/trading/accountRules";
 
@@ -119,7 +120,9 @@ export async function POST(request: NextRequest) {
   const rules = parseAccountRules(body.rules);
   const metadata = withTradingRules(row.metadata as Record<string, unknown> | null, rules);
 
-  const { error } = await supabase
+  // Elevated (TOS-SEC-2): the read above, on the trader's own client, is the
+  // ownership check; the write keeps the user_id filter because RLS no longer does.
+  const { error } = await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .update({ metadata })
     .eq("user_id", user.id)

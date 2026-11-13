@@ -150,6 +150,8 @@ console.log("\nevery producer goes through it");
 
 const watcher = read("src/services/axeProactiveWatcher.ts");
 const watcherCode = codeOnly(watcher);
+// The one writer lives in its own file so the C6 push test can drive it.
+const announceCode = codeOnly(read("src/lib/axe/announce.ts"));
 
 check("the watcher checks people who just traded, not the first idle accounts", () => {
   assert.ok(/collectWatcherCandidates/.test(watcherCode));
@@ -162,8 +164,17 @@ check("there is one writer, and the old one is gone", () => {
     !/recordProactiveEvent/.test(watcherCode),
     "the title, body and URL were repeated three times per notice and the push drifted from the feed row",
   );
+  assert.ok(
+    /import \{ announce \} from "@\/lib\/axe\/announce"/.test(watcherCode),
+    "the watcher announces through the shared writer",
+  );
   assert.equal(
-    (watcherCode.match(/from\("axe_proactive_events"\)\s*\.insert/g) ?? []).length,
+    (watcherCode.match(/axe_proactive_events/g) ?? []).length,
+    0,
+    "the watcher must not write a notice row by hand",
+  );
+  assert.equal(
+    (announceCode.match(/from\("axe_proactive_events"\)\s*\.insert/g) ?? []).length,
     1,
     "exactly one place writes a notice",
   );
@@ -200,7 +211,7 @@ check("every notice the watcher sends names its next step", () => {
 check("the push body is the feed body, not a second version of it", () => {
   // They used to be assembled separately at each producer, which is how they
   // drift: the lock screen said one thing and the feed another.
-  const announce = watcherCode.slice(watcherCode.indexOf("async function announce"));
+  const announce = announceCode.slice(announceCode.indexOf("async function announce"));
   assert.ok(/const body = renderNoticeBody\(opts\.notice\)/.test(announce));
   assert.equal(
     (announce.match(/renderNoticeBody/g) ?? []).length,
@@ -213,7 +224,7 @@ check("the push body is the feed body, not a second version of it", () => {
 check("a duplicate notice is still dropped silently", () => {
   // Saying the same thing twice is how a useful notice becomes one the trader
   // swipes away without reading, and the unique index is what prevents it.
-  const announce = watcherCode.slice(watcherCode.indexOf("async function announce"));
+  const announce = announceCode.slice(announceCode.indexOf("async function announce"));
   assert.ok(/error\.code === "23505"/.test(announce));
   assert.ok(/return \{ created: 0, pushed: 0 \}/.test(announce));
 });

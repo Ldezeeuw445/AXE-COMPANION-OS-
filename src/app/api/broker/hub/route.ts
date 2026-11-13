@@ -5,13 +5,20 @@ import { createAxeBrokerConnectionHubForSession } from "@/lib/broker/hub/createH
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Flat interface so all fields are accessible without discriminated-union narrowing.
+/**
+ * The hub panel can disconnect an account or run its connection doctor. Both
+ * go through the hub service, which writes only fixed, server-decided values.
+ *
+ * There used to be a third action, `sync`, that copied `providerStatus`,
+ * `hubStatus` and `metadata` from the request body onto the account row.
+ * Nothing in the app called it, and it let a trader mark their own account
+ * connected or rewrite the MetaApi summary in `metadata` that the ledger is
+ * reconciled against (TOS-SEC-2). Provider state is written by the sync paths
+ * (`mt5Cloud.ts`, `hub/sync.ts`), never taken from the request.
+ */
 interface HubPostBody {
-  action?: "doctor" | "disconnect" | "sync";
+  action?: "doctor" | "disconnect";
   accountId: string;
-  providerStatus?: string | null;
-  hubStatus?: string | null;
-  metadata?: Record<string, unknown> | null;
 }
 
 export async function GET() {
@@ -60,46 +67,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, result });
   }
 
-  const { data: row, error } = await supabase
-    .from("user_broker_accounts")
-    .select("id,user_id,metadata")
-    .eq("id", accountId)
-    .eq("user_id", sessionHub.userId)
-    .maybeSingle();
-
-  if (error) {
-    return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
-  }
-  if (!row) {
-    return NextResponse.json({ ok: false, message: "Account not found." }, { status: 404 });
-  }
-
-  const { error: updateError } = await supabase
-    .from("user_broker_accounts")
-    .update({
-      provider_status:
-        typeof body.providerStatus === "string" && body.providerStatus.trim()
-          ? body.providerStatus.trim()
-          : undefined,
-      hub_status:
-        typeof body.hubStatus === "string" && body.hubStatus.trim()
-          ? body.hubStatus.trim()
-          : undefined,
-      metadata:
-        body.metadata && typeof body.metadata === "object"
-          ? {
-              ...((row.metadata as Record<string, unknown> | null) ?? {}),
-              ...body.metadata,
-            }
-          : row.metadata,
-      last_sync_at: new Date().toISOString(),
-    })
-    .eq("id", accountId)
-    .eq("user_id", sessionHub.userId);
-
-  if (updateError) {
-    return NextResponse.json({ ok: false, message: updateError.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: false, message: "Unknown action." }, { status: 400 });
 }
