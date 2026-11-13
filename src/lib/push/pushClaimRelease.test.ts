@@ -35,8 +35,9 @@ function fakeSupabase(state: State): SupabaseClient {
         return { data: null, error: null };
       }
       if (op === "update") {
-        for (const r of rows()) if (matches(r)) Object.assign(r, payload);
-        return { data: null, error: null };
+        const hit = rows().filter(matches);
+        for (const r of hit) Object.assign(r, payload);
+        return { data: hit.map((r) => ({ ...r })), error: null };
       }
       if (op === "delete") {
         const keep = rows().filter((r) => !matches(r));
@@ -120,5 +121,26 @@ describe("dispatchPushEvent dedup claim release", () => {
     assert.equal(first.sent, 1);
     const repeat = await send(state, ok, "2026-11-11T10:00:05Z");
     assert.equal(repeat.skipped, "rate_limited");
+  });
+});
+
+describe("dispatchPushEvent concurrent claim", () => {
+  it("lets only one of two racing sends past an expired cooldown", async () => {
+    const earlier = "2026-11-10T08:00:00.000Z";
+    const state: State = {
+      deliveries: [{ user_id: USER, event_key: "alert:xau:2400", category: "price_alert", last_sent_at: earlier }],
+      subscriptions: [device("https://push/a")],
+    };
+    let sends = 0;
+    const counting: PushSender = async () => {
+      sends += 1;
+      return { statusCode: 201 };
+    };
+    const [a, b] = await Promise.all([
+      send(state, counting, "2026-11-11T10:00:00Z"),
+      send(state, counting, "2026-11-11T10:00:00.500Z"),
+    ]);
+    assert.equal(sends, 1, "only one device push goes out");
+    assert.deepEqual([a.skipped, b.skipped].filter(Boolean), ["duplicate"]);
   });
 });

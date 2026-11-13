@@ -100,10 +100,9 @@ function fakeSupabase(state: FakeState): SupabaseClient {
           return { data: null, error: null };
         }
         if (op === "update") {
-          for (const row of state.deliveries) {
-            if (matches(row as unknown as Record<string, unknown>)) Object.assign(row, payload);
-          }
-          return { data: null, error: null };
+          const hit = state.deliveries.filter((r) => matches(r as unknown as Record<string, unknown>));
+          for (const row of hit) Object.assign(row, payload);
+          return { data: hit.map((r) => ({ ...r })), error: null };
         }
         const found = state.deliveries.filter((r) => matches(r as unknown as Record<string, unknown>));
         return { data: single ? (found[0] ?? null) : found, error: null };
