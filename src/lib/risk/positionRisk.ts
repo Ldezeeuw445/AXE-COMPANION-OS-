@@ -37,20 +37,31 @@ const INDICES = new Set([
   "JP225", "HK50", "AUS200", "EU50",
 ]);
 
-function isLong(side: string | number): boolean {
+export function isLong(side: string | number): boolean {
   if (typeof side === "number") return side === 0; // MT5: 0 = buy, 1 = sell
-  return /^(buy|long|0)$/i.test(side.trim());
+  const s = side.trim();
+  // MetaApi reports MT5 positions as POSITION_TYPE_BUY / POSITION_TYPE_SELL
+  // (and orders as ORDER_TYPE_BUY_LIMIT etc.). Matching only bare "buy" made
+  // every MT5 long count as short.
+  if (/(^|_)BUY(_|$)/i.test(s)) return true;
+  if (/(^|_)SELL(_|$)/i.test(s)) return false;
+  return /^(long|0)$/i.test(s);
 }
 
-function normalize(symbol: string): string {
-  // Strip broker suffixes: XAUUSD.r, EURUSD_i, US30cash
-  return symbol
+export function normalize(symbol: string): string {
+  // Strip broker suffixes: XAUUSD.r, EURUSD_i, US30cash, XAUUSDm
+  const upper = symbol
     .toUpperCase()
     .replace(/[._-].*$/, "")
-    .replace(/(CASH|SPOT|M|I|R|PRO|ECN)$/i, (m, _g, offset: number) =>
-      offset >= 6 ? "" : m,
-    )
     .trim();
+  // Word suffixes are stripped whenever something is left in front of them,
+  // so index CFDs like US30CASH / NAS100CASH (shorter than six characters
+  // without the suffix) still normalise to US30 / NAS100.
+  const word = upper.match(/^(.+?)(CASH|SPOT|PRO|ECN)$/);
+  if (word && word[1].length >= 4) return word[1];
+  // Single-letter suffixes only after a full six-character symbol, so real
+  // names are never clipped.
+  return upper.replace(/(M|I|R)$/, (m, _g, offset: number) => (offset >= 6 ? "" : m));
 }
 
 /** Split a six-letter FX pair. Returns null for anything else. */
@@ -179,6 +190,20 @@ export function topConcentration(positions: OpenPosition[]): ConcentrationFindin
    needs telling on Friday afternoon, not on Monday morning.
    ───────────────────────────────────────────────────────────────── */
 
+const NY_WEEKDAYS: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/** Weekday (0 = Sunday) and hour in America/New_York, DST included. */
+export function newYorkClock(now: Date): { weekday: number; hour: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return { weekday: NY_WEEKDAYS[get("weekday")] ?? -1, hour: Number(get("hour")) % 24 };
+}
+
 export function weekendExposureWarning(
   now: Date,
   openPositions: number,
@@ -186,12 +211,13 @@ export function weekendExposureWarning(
 ): { title: string; body: string } | null {
   if (openPositions < 1) return null;
 
-  // Markets close around 21:00 UTC on Friday. Warn in the last three hours.
-  const isFriday = now.getUTCDay() === 5;
-  const hour = now.getUTCHours();
-  if (!isFriday || hour < 18 || hour >= 21) return null;
+  // FX/CFD markets close at 17:00 New York time on Friday: 21:00 UTC in US
+  // summer time, 22:00 UTC in winter. A fixed 21:00 UTC went silent an hour
+  // before the real close from November to March. Warn in the last three hours.
+  const { weekday, hour } = newYorkClock(now);
+  if (weekday !== 5 || hour < 14 || hour >= 17) return null;
 
-  const hoursLeft = Math.max(1, 21 - hour);
+  const hoursLeft = Math.max(1, 17 - hour);
   if (!weekendHoldingAllowed) {
     return {
       title: "Weekend rule: positions still open",
