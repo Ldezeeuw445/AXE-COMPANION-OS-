@@ -19,6 +19,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
+import { claimAlertTrigger } from "@/lib/alerts/alertTriggerClaim";
 
 type Body = {
   price?: number | null;
@@ -80,14 +81,18 @@ export async function POST(req: NextRequest, { params }: Params) {
     last_trigger_at: now,
   };
 
-  const { error: updateErr } = await supabase
-    .from("user_alerts")
-    .update({ triggered_at: now, metadata })
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  // Claim this firing atomically: the cooldown check above is only a fast
+  // path. Two requests racing past it must not both push and auto-trade.
+  const claim = await claimAlertTrigger(supabase, {
+    alertId: id,
+    userId: user.id,
+    nowIso: now,
+    cooldownSeconds,
+    metadata,
+  });
+  if (!claim.claimed) {
+    if (claim.error) return NextResponse.json({ error: claim.error }, { status: 500 });
+    return NextResponse.json({ ok: true, skipped: "cooldown" });
   }
 
   const message =
