@@ -122,17 +122,23 @@ export async function autoJournalTrades(
     return journalTrades(supabase, userId, accountId, trades as BrokerTrade[], source);
   }
 
-  // Otherwise: journal recent trades that don't yet have an AXE label.
-  const { data: labeled } = await supabase
-    .from("trade_journal_labels")
-    .select("trade_id")
-    .eq("user_id", userId)
-    .not("axe_label", "is", null);
-
-  const labeledIds = new Set((labeled ?? []).map((l: { trade_id: string }) => l.trade_id));
-
+  // Otherwise: journal recent trades that don't yet have an AXE label. Check
+  // labels for exactly these trades; reading every label of the user hit the
+  // default row cap and re-journaled trades that already had one.
   const { data: allTrades, error: tErr } = await baseQuery.limit(20);
   if (tErr) return { ok: false, error: tErr.message, status: 500 };
+
+  const recentIds = ((allTrades ?? []) as BrokerTrade[]).map((t) => t.id);
+  const { data: labeled } = recentIds.length
+    ? await supabase
+        .from("trade_journal_labels")
+        .select("trade_id")
+        .eq("user_id", userId)
+        .in("trade_id", recentIds)
+        .not("axe_label", "is", null)
+    : { data: [] as Array<{ trade_id: string }> };
+
+  const labeledIds = new Set((labeled ?? []).map((l: { trade_id: string }) => l.trade_id));
 
   const trades = ((allTrades ?? []) as BrokerTrade[]).filter((t) => !labeledIds.has(t.id));
   if (trades.length === 0) {
