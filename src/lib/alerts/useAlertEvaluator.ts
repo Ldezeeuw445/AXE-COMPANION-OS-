@@ -48,10 +48,44 @@ type Args = {
   onFire?: (event: AlertFiredEvent) => void;
 };
 
+function sameSymbol(a: string | null | undefined, b: string): boolean {
+  return String(a ?? "").toUpperCase() === b.toUpperCase();
+}
+
+/**
+ * Pure crossing check. `previous` must be the last price of the SAME symbol:
+ * comparing a tick of the new chart against the last price of the old chart
+ * (e.g. EURUSD 1.08 -> XAUUSD 2600) looks like a crossing of every threshold
+ * in between and fires false alerts. Alerts bound to another symbol (stale
+ * list right after a switch) are skipped too.
+ */
+export function findCrossedAlerts(
+  alerts: AlertRow[],
+  symbol: string,
+  previous: { symbol: string; price: number } | null,
+  price: number,
+): Array<{ alert: AlertRow; condition: "above" | "below"; threshold: number }> {
+  if (!previous || !sameSymbol(previous.symbol, symbol)) return [];
+  if (!Number.isFinite(previous.price) || !Number.isFinite(price)) return [];
+  const out: Array<{ alert: AlertRow; condition: "above" | "below"; threshold: number }> = [];
+  for (const alert of alerts) {
+    if (alert.symbol && !sameSymbol(alert.symbol, symbol)) continue;
+    const threshold = Number(alert.threshold);
+    if (alert.threshold == null || !Number.isFinite(threshold)) continue;
+    const condition = alert.condition === "below" ? "below" : "above";
+    const crossed =
+      condition === "above"
+        ? previous.price < threshold && price >= threshold
+        : previous.price > threshold && price <= threshold;
+    if (crossed) out.push({ alert, condition, threshold });
+  }
+  return out;
+}
+
 export function useAlertEvaluator({ enabled, symbol, cooldownSeconds = 60, onFire }: Args) {
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const lastPriceRef = useRef<number | null>(null);
+  const lastPriceRef = useRef<{ symbol: string; price: number } | null>(null);
   const lastFireAtRef = useRef<Map<string, number>>(new Map());
   const onFireRef = useRef(onFire);
   useEffect(() => {
@@ -83,6 +117,12 @@ export function useAlertEvaluator({ enabled, symbol, cooldownSeconds = 60, onFir
     }
   }, [enabled, symbol]);
 
+  // Symbol switch: forget the old chart's last price so the first ticks of
+  // the new symbol can't "cross" thresholds (findCrossedAlerts also checks).
+  useEffect(() => {
+    lastPriceRef.current = null;
+  }, [symbol]);
+
   useEffect(() => {
     if (!enabled) return;
     const raf = requestAnimationFrame(() => void refresh());
@@ -96,25 +136,14 @@ export function useAlertEvaluator({ enabled, symbol, cooldownSeconds = 60, onFir
   const evaluate = useCallback(
     (price: number | null) => {
       if (!enabled || price == null || !Number.isFinite(price) || alerts.length === 0) {
-        if (price != null && Number.isFinite(price)) lastPriceRef.current = price;
+        if (price != null && Number.isFinite(price)) lastPriceRef.current = { symbol, price };
         return;
       }
 
       const previous = lastPriceRef.current;
-      lastPriceRef.current = price;
-      if (previous == null) return; // need two samples for crossing detection
+      lastPriceRef.current = { symbol, price };
 
-      for (const alert of alerts) {
-        const threshold = Number(alert.threshold);
-        if (!Number.isFinite(threshold)) continue;
-
-        const condition = alert.condition === "below" ? "below" : "above";
-        const crossed =
-          condition === "above"
-            ? previous < threshold && price >= threshold
-            : previous > threshold && price <= threshold;
-        if (!crossed) continue;
-
+      for (const { alert, condition, threshold } of findCrossedAlerts(alerts, symbol, previous, price)) {
         const lastFire = lastFireAtRef.current.get(alert.id) ?? 0;
         if (Date.now() - lastFire < cooldownSeconds * 1000) continue;
         lastFireAtRef.current.set(alert.id, Date.now());
