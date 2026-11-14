@@ -1,17 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAlpacaPaperConfig, isAlpacaConfigured } from "@/lib/alpaca/env";
 import { getAlpacaAccount } from "@/lib/alpaca/client";
+import { ALPACA_CONNECTION_METHOD, ALPACA_PROVIDER } from "@/lib/broker/accountKind";
+import { sessionIsUser, syncWriteClient } from "@/lib/supabase/syncWriteClient";
 
-export const ALPACA_CONNECTION_METHOD = "cloud_alpaca";
-export const ALPACA_PROVIDER = "alpaca";
-
-export function isAlpacaAccount(
-  account: { connection_method?: string | null; provider?: string | null } | null | undefined,
-): boolean {
-  return (
-    account?.connection_method === ALPACA_CONNECTION_METHOD || account?.provider === ALPACA_PROVIDER
-  );
-}
+export { ALPACA_CONNECTION_METHOD, ALPACA_PROVIDER, isAlpacaAccount } from "@/lib/broker/accountKind";
 
 export type AlpacaProvisionResult =
   | { ok: true; accountId: string; created: boolean }
@@ -80,8 +73,13 @@ export async function ensureAlpacaPaperAccount(
     provisioned_at: now,
   };
 
+  // Every column below is server-set (connected status, the Alpaca account
+  // summary), so both writes go out elevated and the trader's own grants are
+  // not what provisions the row (TOS-SEC-2). Ownership: the update targets the
+  // row the RLS-scoped lookup above returned and filters user_id; the insert
+  // has no row to read, so the session must be this user.
   if (existing?.id) {
-    await supabase
+    await syncWriteClient(supabase)
       .from("user_broker_accounts")
       .update({
         external_connection_id: alpacaAccountId,
@@ -92,12 +90,17 @@ export async function ensureAlpacaPaperAccount(
         last_sync_at: now,
         metadata,
       })
-      .eq("id", existing.id);
+      .eq("id", existing.id)
+      .eq("user_id", userId);
 
     return { ok: true, accountId: existing.id, created: false };
   }
 
-  const { data: created, error: createErr } = await supabase
+  if (!(await sessionIsUser(supabase, userId))) {
+    return { ok: false, code: "unauthorized", message: "Session does not match the account owner." };
+  }
+
+  const { data: created, error: createErr } = await syncWriteClient(supabase)
     .from("user_broker_accounts")
     .insert({
       user_id: userId,

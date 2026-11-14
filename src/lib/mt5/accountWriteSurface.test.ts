@@ -132,13 +132,17 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
     writes: [elevated("update", "syncWriteClient(supabase)")],
   },
 
-  "src/lib/broker/demoAccount.ts": {
-    why: "Provisions the demo account with provider_status=connected on the trader's client.",
-    writes: [blocker("insert", "supabase")],
+  "src/lib/broker/demoAccountProvision.ts": {
+    why:
+      "Provisions the demo account (provider_status=connected, a fixed balance). Server-defined " +
+      "row; the insert is elevated after sessionIsUser confirms the owner.",
+    writes: [elevated("insert", "syncWriteClient(supabase)")],
   },
   "src/lib/alpaca/provision.ts": {
-    why: "Alpaca paper provisioning writes provider/hub status on the trader's client.",
-    writes: [blocker("update", "supabase"), blocker("insert", "supabase")],
+    why:
+      "Alpaca paper provisioning writes provider/hub status and the account summary. The update " +
+      "follows the RLS-scoped lookup and filters user_id; the insert follows sessionIsUser.",
+    writes: [elevated("update", "syncWriteClient(supabase)"), elevated("insert", "syncWriteClient(supabase)")],
   },
   "src/lib/broker/hub/adapters/supabaseDatabase.ts": {
     why:

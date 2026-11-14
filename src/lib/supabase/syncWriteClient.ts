@@ -31,3 +31,18 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 export function syncWriteClient(userClient: SupabaseClient): SupabaseClient {
   return createServiceRoleSupabaseClient() ?? userClient;
 }
+
+/**
+ * Rule 1 for an elevated INSERT. There is no existing row to read back through
+ * RLS, so ownership is the session itself: the `user_id` about to be written
+ * must be the signed-in user on the caller's client. Without this, a helper
+ * that takes `userId` as a parameter could create a row for anyone the moment
+ * its insert stops going through RLS.
+ */
+export async function sessionIsUser(userClient: SupabaseClient, userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const {
+    data: { user },
+  } = await userClient.auth.getUser();
+  return user?.id === userId;
+}

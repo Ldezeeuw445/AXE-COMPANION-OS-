@@ -66,14 +66,6 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
       "DELETE that clears the removed account's history, so revoking INSERT/UPDATE on " +
       "that table does not break it — revoking DELETE would",
   },
-  "lib/alpaca/provision.ts": {
-    tables: { user_broker_accounts: 2 },
-    why: "provisioning an Alpaca paper account creates and then updates the trader's row",
-  },
-  "lib/broker/demoAccount.ts": {
-    tables: { user_broker_accounts: 1 },
-    why: "first visit creates the built-in demo account row",
-  },
   "lib/broker/hub/adapters/ibkrGateway.ts": {
     tables: { user_broker_accounts: 4 },
     why:

@@ -18,12 +18,8 @@ import {
 } from "@/lib/broker/chartTimeframes";
 import { foldIsoCandles } from "@/lib/chart/aggregateCandles";
 import { resolveSessionZone } from "@/lib/chart/sessionDay";
-import {
-  DEMO_EXTERNAL_ID,
-  ensureActiveDemoWhenEmpty,
-  generateDemoCandles,
-  isDemoAccount,
-} from "@/lib/broker/demoAccount";
+import { DEMO_EXTERNAL_ID, generateDemoCandles, isDemoAccount } from "@/lib/broker/demoAccount";
+import { ensureActiveDemoWhenEmpty } from "@/lib/broker/demoAccountProvision";
 import type { BrokerAccountRow } from "@/lib/broker/loadAccountsPageData";
 import { fetchAlpacaCandles } from "@/lib/alpaca/bars";
 import { listAlpacaOrders, listAlpacaPositions } from "@/lib/alpaca/client";
