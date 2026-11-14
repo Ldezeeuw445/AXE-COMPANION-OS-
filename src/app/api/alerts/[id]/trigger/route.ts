@@ -8,6 +8,8 @@
  *  - Marks the alert as triggered server-side (`triggered_at` = now).
  *  - Best-effort web push if VAPID + a subscription exist; the alert still
  *    counts as triggered when push is missing — the UI surfaces it in-app.
+ *  - If the alert actually places an auto-trade, the alert row is deleted
+ *    (one-shot, not paused) so it cannot fire a second market order.
  *
  * The route is intentionally idempotent: passing the same payload twice
  * within `cooldownSeconds` (default 60s) is a no-op so we don't spam the
@@ -19,6 +21,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
+import { claimAlertTrigger, removeAlertAfterAutoTrade } from "@/lib/alerts/alertTriggerClaim";
 
 type Body = {
   price?: number | null;
@@ -80,14 +83,18 @@ export async function POST(req: NextRequest, { params }: Params) {
     last_trigger_at: now,
   };
 
-  const { error: updateErr } = await supabase
-    .from("user_alerts")
-    .update({ triggered_at: now, metadata })
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  // Claim this firing atomically: the cooldown check above is only a fast
+  // path. Two requests racing past it must not both push and auto-trade.
+  const claim = await claimAlertTrigger(supabase, {
+    alertId: id,
+    userId: user.id,
+    nowIso: now,
+    cooldownSeconds,
+    metadata,
+  });
+  if (!claim.claimed) {
+    if (claim.error) return NextResponse.json({ error: claim.error }, { status: 500 });
+    return NextResponse.json({ ok: true, skipped: "cooldown" });
   }
 
   const message =
@@ -104,7 +111,25 @@ export async function POST(req: NextRequest, { params }: Params) {
     feedUrl,
   );
 
-  const autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
+  let autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
+
+  // One-shot: after a successful auto-trade the alert is deleted, not paused.
+  // Notification-only alerts stay active. A failed attempt also stays, so a
+  // later crossing can still fill if the gate or broker recovers.
+  let removed = false;
+  if (autoTrade.traded) {
+    const removal = await removeAlertAfterAutoTrade(supabase, { alertId: id, userId: user.id });
+    if (removal.removed) {
+      removed = true;
+    } else if (removal.error) {
+      // Trade already placed — keep the HTTP success, but say the cleanup failed
+      // so the alert is not silently left able to fire again after cooldown.
+      autoTrade = {
+        ...autoTrade,
+        message: [autoTrade.message, `alert not removed: ${removal.error}`].filter(Boolean).join(" — "),
+      };
+    }
+  }
 
   // Best-effort push delivery — fire and forget. If VAPID isn't configured
   // or the user has no subscribed device, /api/push/send returns gracefully
@@ -126,7 +151,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     pushed = false;
   }
 
-  return NextResponse.json({ ok: true, triggered_at: now, pushed, autoTrade });
+  return NextResponse.json({ ok: true, triggered_at: now, pushed, autoTrade, removed });
 }
 
 function buildDefaultMessage(

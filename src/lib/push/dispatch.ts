@@ -33,6 +33,16 @@ export type DispatchPushResult = DeliverWebPushResult & {
 };
 
 const MISSING_TABLE = "42P01";
+
+/**
+ * A successful claim remembers what it overwrote, so a delivery that reached no
+ * device can hand the cooldown back. Without that, a failed send (push service
+ * down, no device yet) still burned the event key and the retry inside the
+ * cooldown was silently dropped as a duplicate.
+ */
+type ClaimResult =
+  | { deliver: true; claim: { eventKey: string; sentAt: string; previousSentAt: string | null } | null }
+  | { deliver: false; skipped: "duplicate" | "rate_limited" };
 const UNIQUE_VIOLATION = "23505";
 
 export async function loadPushPrefsForUser(
@@ -53,7 +63,7 @@ export async function loadPushPrefsForUser(
 async function claimDelivery(
   supabase: SupabaseClient,
   input: { userId: string; eventKey: string; category: PushCategory; now: Date; cooldownMs: number },
-): Promise<{ deliver: boolean; skipped?: "duplicate" | "rate_limited" }> {
+): Promise<ClaimResult> {
   const eventKey = normalizeEventKey(input.eventKey);
   const sentAt = input.now.toISOString();
 
@@ -65,14 +75,14 @@ async function claimDelivery(
   });
 
   if (!insertError) {
-    return { deliver: true };
+    return { deliver: true, claim: { eventKey, sentAt, previousSentAt: null } };
   }
   if (insertError.code === MISSING_TABLE) {
-    return { deliver: true };
+    return { deliver: true, claim: null };
   }
   if (insertError.code !== UNIQUE_VIOLATION) {
     console.warn("[push] dedup insert failed:", insertError.message);
-    return { deliver: true };
+    return { deliver: true, claim: null };
   }
 
   const { data } = await supabase
@@ -82,6 +92,7 @@ async function claimDelivery(
     .eq("event_key", eventKey)
     .maybeSingle();
 
+  const previousSentAt = (data?.last_sent_at as string | undefined) ?? null;
   const lastSentAt = data?.last_sent_at ? Date.parse(data.last_sent_at as string) : null;
   const decision = decideDedup({
     lastSentAt: Number.isFinite(lastSentAt) ? lastSentAt : null,
@@ -97,10 +108,38 @@ async function claimDelivery(
     .update({ last_sent_at: sentAt, category: input.category })
     .eq("user_id", input.userId)
     .eq("event_key", eventKey);
-  if (updateError && updateError.code !== MISSING_TABLE) {
-    console.warn("[push] dedup update failed:", updateError.message);
+  if (updateError) {
+    if (updateError.code !== MISSING_TABLE) {
+      console.warn("[push] dedup update failed:", updateError.message);
+    }
+    return { deliver: true, claim: null };
   }
-  return { deliver: true };
+  return {
+    deliver: true,
+    claim: { eventKey, sentAt, previousSentAt },
+  };
+}
+
+/**
+ * Undo a claim whose delivery reached no device. Only touches the row while it
+ * still carries this claim's timestamp, so a newer send is never rolled back.
+ */
+async function releaseDelivery(
+  supabase: SupabaseClient,
+  userId: string,
+  claim: { eventKey: string; sentAt: string; previousSentAt: string | null },
+): Promise<void> {
+  const query =
+    claim.previousSentAt == null
+      ? supabase.from("push_event_deliveries").delete()
+      : supabase.from("push_event_deliveries").update({ last_sent_at: claim.previousSentAt });
+  const { error } = await query
+    .eq("user_id", userId)
+    .eq("event_key", claim.eventKey)
+    .eq("last_sent_at", claim.sentAt);
+  if (error && error.code !== MISSING_TABLE) {
+    console.warn("[push] dedup release failed:", error.message);
+  }
 }
 
 export async function dispatchPushEvent(input: DispatchPushInput): Promise<DispatchPushResult> {
@@ -143,6 +182,7 @@ export async function dispatchPushEvent(input: DispatchPushInput): Promise<Dispa
     }
   }
 
+  let claim: { eventKey: string; sentAt: string; previousSentAt: string | null } | null = null;
   if (!input.bypassDedup) {
     const claimed = await claimDelivery(supabase, {
       userId: input.userId,
@@ -154,6 +194,7 @@ export async function dispatchPushEvent(input: DispatchPushInput): Promise<Dispa
     if (!claimed.deliver) {
       return { ...base, ok: true, skipped: claimed.skipped };
     }
+    claim = claimed.claim;
   }
 
   const delivered = await deliverWebPushToUser({
@@ -162,6 +203,10 @@ export async function dispatchPushEvent(input: DispatchPushInput): Promise<Dispa
     supabase,
     send: input.send,
   });
+
+  if (delivered.sent === 0 && claim) {
+    await releaseDelivery(supabase, input.userId, claim);
+  }
 
   if (delivered.total === 0) {
     return { ...base, ...delivered, ok: true, skipped: "no_subscription" };
