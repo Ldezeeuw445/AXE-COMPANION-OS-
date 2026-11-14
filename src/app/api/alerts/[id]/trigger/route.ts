@@ -8,6 +8,8 @@
  *  - Marks the alert as triggered server-side (`triggered_at` = now).
  *  - Best-effort web push if VAPID + a subscription exist; the alert still
  *    counts as triggered when push is missing — the UI surfaces it in-app.
+ *  - If the alert actually places an auto-trade, the alert row is deleted
+ *    (one-shot, not paused) so it cannot fire a second market order.
  *
  * The route is intentionally idempotent: passing the same payload twice
  * within `cooldownSeconds` (default 60s) is a no-op so we don't spam the
@@ -19,7 +21,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
-import { claimAlertTrigger } from "@/lib/alerts/alertTriggerClaim";
+import { claimAlertTrigger, removeAlertAfterAutoTrade } from "@/lib/alerts/alertTriggerClaim";
 
 type Body = {
   price?: number | null;
@@ -111,6 +113,21 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
 
+  // One-shot: after a successful auto-trade the alert is deleted, not paused.
+  // Notification-only alerts stay active. A failed attempt also stays, so a
+  // later crossing can still fill if the gate or broker recovers.
+  let removed = false;
+  if (autoTrade.traded) {
+    const removal = await removeAlertAfterAutoTrade(supabase, { alertId: id, userId: user.id });
+    if (removal.error) {
+      autoTrade.message = [autoTrade.message, `alert not removed: ${removal.error}`]
+        .filter(Boolean)
+        .join(" — ");
+    } else {
+      removed = removal.removed;
+    }
+  }
+
   // Best-effort push delivery — fire and forget. If VAPID isn't configured
   // or the user has no subscribed device, /api/push/send returns gracefully
   // and we still consider the trigger successful (in-app already shows it).
@@ -131,7 +148,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     pushed = false;
   }
 
-  return NextResponse.json({ ok: true, triggered_at: now, pushed, autoTrade });
+  return NextResponse.json({ ok: true, triggered_at: now, pushed, autoTrade, removed });
 }
 
 function buildDefaultMessage(

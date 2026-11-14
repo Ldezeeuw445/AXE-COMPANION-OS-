@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { claimAlertTrigger, triggerCooldownCutoff } from "./alertTriggerClaim";
+import {
+  claimAlertTrigger,
+  removeAlertAfterAutoTrade,
+  triggerCooldownCutoff,
+} from "./alertTriggerClaim";
 
 type Row = { id: string; user_id: string; status: string; triggered_at: string | null };
 
@@ -11,8 +15,10 @@ function fakeSupabase(rows: Row[], fail = false) {
     from() {
       const filters: Array<(r: Row) => boolean> = [];
       let patch: Partial<Row> = {};
+      let mode: "update" | "delete" = "update";
       const q = {
-        update(p: Partial<Row>) { patch = p; return q; },
+        update(p: Partial<Row>) { patch = p; mode = "update"; return q; },
+        delete() { mode = "delete"; return q; },
         eq(col: keyof Row, v: string) { filters.push((r) => r[col] === v); return q; },
         or(expr: string) {
           const cutoff = expr.split("triggered_at.lt.")[1];
@@ -22,6 +28,13 @@ function fakeSupabase(rows: Row[], fail = false) {
         async select() {
           if (fail) return { data: null, error: { message: "boom" } };
           const hit = rows.filter((r) => filters.every((f) => f(r)));
+          if (mode === "delete") {
+            for (const r of hit) {
+              const i = rows.indexOf(r);
+              if (i >= 0) rows.splice(i, 1);
+            }
+            return { data: hit.map((r) => ({ id: r.id })), error: null };
+          }
           hit.forEach((r) => Object.assign(r, { triggered_at: patch.triggered_at }));
           return { data: hit.map((r) => ({ id: r.id })), error: null };
         },
@@ -77,4 +90,36 @@ test("database error is surfaced, not treated as claimed", async () => {
     claimed: false,
     error: "boom",
   });
+});
+
+test("successful auto-trade deletes the alert, not pauses it", async () => {
+  const rows: Row[] = [{ id: "a1", user_id: "u1", status: "active", triggered_at: now }];
+  assert.deepEqual(await removeAlertAfterAutoTrade(fakeSupabase(rows), { alertId: "a1", userId: "u1" }), {
+    removed: true,
+  });
+  assert.equal(rows.length, 0);
+});
+
+test("second delete after a one-shot trade is a no-op (race-safe)", async () => {
+  const rows: Row[] = [{ id: "a1", user_id: "u1", status: "active", triggered_at: now }];
+  const sb = fakeSupabase(rows);
+  assert.equal((await removeAlertAfterAutoTrade(sb, { alertId: "a1", userId: "u1" })).removed, true);
+  assert.equal((await removeAlertAfterAutoTrade(sb, { alertId: "a1", userId: "u1" })).removed, false);
+  assert.equal(rows.length, 0);
+});
+
+test("one-shot delete never removes another user's alert", async () => {
+  const rows: Row[] = [{ id: "a1", user_id: "u2", status: "active", triggered_at: now }];
+  assert.equal((await removeAlertAfterAutoTrade(fakeSupabase(rows), { alertId: "a1", userId: "u1" })).removed, false);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "active");
+});
+
+test("database error is surfaced, not treated as removed", async () => {
+  const rows: Row[] = [{ id: "a1", user_id: "u1", status: "active", triggered_at: now }];
+  assert.deepEqual(await removeAlertAfterAutoTrade(fakeSupabase(rows, true), { alertId: "a1", userId: "u1" }), {
+    removed: false,
+    error: "boom",
+  });
+  assert.equal(rows.length, 1);
 });
