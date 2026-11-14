@@ -111,7 +111,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     feedUrl,
   );
 
-  const autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
+  let autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
 
   // One-shot: after a successful auto-trade the alert is deleted, not paused.
   // Notification-only alerts stay active. A failed attempt also stays, so a
@@ -119,12 +119,15 @@ export async function POST(req: NextRequest, { params }: Params) {
   let removed = false;
   if (autoTrade.traded) {
     const removal = await removeAlertAfterAutoTrade(supabase, { alertId: id, userId: user.id });
-    if (removal.error) {
-      autoTrade.message = [autoTrade.message, `alert not removed: ${removal.error}`]
-        .filter(Boolean)
-        .join(" — ");
-    } else {
-      removed = removal.removed;
+    if (removal.removed) {
+      removed = true;
+    } else if (removal.error) {
+      // Trade already placed — keep the HTTP success, but say the cleanup failed
+      // so the alert is not silently left able to fire again after cooldown.
+      autoTrade = {
+        ...autoTrade,
+        message: [autoTrade.message, `alert not removed: ${removal.error}`].filter(Boolean).join(" — "),
+      };
     }
   }
 
