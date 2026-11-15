@@ -23,6 +23,16 @@ export function triggerCooldownCutoff(nowMs: number, cooldownSeconds: number): s
   return new Date(nowMs - cooldownSeconds * 1000).toISOString();
 }
 
+/**
+ * PostgREST `or=(...)` filter for "never fired, or last fired before cutoff".
+ * The ISO timestamp is double-quoted: its `:` and `.` are otherwise part of
+ * the filter grammar (`column.operator.value`), and unquoted values with
+ * reserved characters are a classic source of silently-wrong filters.
+ */
+export function cooldownOrFilter(cutoffIso: string): string {
+  return `triggered_at.is.null,triggered_at.lt."${cutoffIso}"`;
+}
+
 export async function claimAlertTrigger(
   supabase: SupabaseClient,
   args: {
@@ -40,7 +50,7 @@ export async function claimAlertTrigger(
     .eq("id", args.alertId)
     .eq("user_id", args.userId)
     .eq("status", "active")
-    .or(`triggered_at.is.null,triggered_at.lt.${cutoff}`)
+    .or(cooldownOrFilter(cutoff))
     .select("id");
 
   if (error) return { claimed: false, error: error.message };

@@ -16,6 +16,7 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
+import { claimAlertTrigger } from "@/lib/alerts/alertTriggerClaim";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 
 type AlertRow = {
@@ -64,13 +65,10 @@ async function triggerAlert(
   hasPush: boolean,
   cooldownMs = 60 * 60 * 1000,
 ): Promise<{ triggered: boolean; pushed: boolean }> {
-  if (alert.triggered_at) {
-    const last = Date.parse(alert.triggered_at);
-    if (Number.isFinite(last) && Date.now() - last < cooldownMs) {
-      return { triggered: false, pushed: false };
-    }
-  }
-
+  // Atomic claim (same one the /api/alerts/[id]/trigger route uses): the
+  // cooldown lives in the UPDATE's WHERE clause, so overlapping cron runs, or
+  // a cron run racing the client trigger route, cannot both fire the alert.
+  // The old read-check-then-write let both pass and double-notified.
   const now = new Date().toISOString();
   const metadata = {
     ...(alert.metadata && typeof alert.metadata === "object" ? alert.metadata : {}),
@@ -78,13 +76,14 @@ async function triggerAlert(
     last_trigger_at: now,
   };
 
-  const { error } = await supabase
-    .from("user_alerts")
-    .update({ triggered_at: now, metadata })
-    .eq("id", alert.id)
-    .eq("user_id", userId);
-
-  if (error) return { triggered: false, pushed: false };
+  const claim = await claimAlertTrigger(supabase, {
+    alertId: alert.id,
+    userId,
+    nowIso: now,
+    cooldownSeconds: Math.round(cooldownMs / 1000),
+    metadata,
+  });
+  if (!claim.claimed) return { triggered: false, pushed: false };
 
   const feedUrl = alert.symbol ? chartDeepLink(alert.symbol) : "/alerts";
   await recordProactiveFeedEvent(

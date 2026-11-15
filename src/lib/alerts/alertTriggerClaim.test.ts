@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   claimAlertTrigger,
+  cooldownOrFilter,
   pauseAlertAfterAutoTrade,
   triggerCooldownCutoff,
 } from "./alertTriggerClaim";
@@ -21,7 +22,7 @@ function fakeSupabase(rows: Row[], fail = false) {
         delete() { mode = "delete"; return q; },
         eq(col: keyof Row, v: string) { filters.push((r) => r[col] === v); return q; },
         or(expr: string) {
-          const cutoff = expr.split("triggered_at.lt.")[1];
+          const cutoff = expr.split('triggered_at.lt."')[1]?.replace(/"$/, "") ?? "";
           filters.push((r) => r.triggered_at == null || r.triggered_at < cutoff);
           return q;
         },
@@ -134,4 +135,28 @@ test("database error is surfaced, not treated as paused", async () => {
   });
   assert.equal(rows.length, 1);
   assert.equal(rows[0].status, "active");
+});
+
+test("cooldown filter quotes the ISO timestamp (PostgREST rules)", () => {
+  assert.equal(
+    cooldownOrFilter("2026-11-12T14:59:00.000Z"),
+    'triggered_at.is.null,triggered_at.lt."2026-11-12T14:59:00.000Z"',
+  );
+});
+
+test("claim sends the quoted filter to PostgREST", async () => {
+  let seen = "";
+  const sb = {
+    from: () => {
+      const q: Record<string, unknown> = {
+        update: () => q,
+        eq: () => q,
+        or: (e: string) => { seen = e; return q; },
+        select: async () => ({ data: [], error: null }),
+      };
+      return q;
+    },
+  } as unknown as SupabaseClient;
+  await claimAlertTrigger(sb, { ...base, nowIso: now });
+  assert.match(seen, /triggered_at\.lt\."2026-11-12T14:59:00\.000Z"$/);
 });
