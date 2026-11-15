@@ -98,6 +98,7 @@ export async function executeExecutionRequestOnMt5(
     orderType,
     volume: volumeLots,
     openPrice: orderType === "market" ? null : entryPrice,
+    riskReferencePrice: orderType === "market" ? entryPrice : null,
     stopLoss: stopLoss != null && Number.isFinite(stopLoss) && stopLoss > 0 ? stopLoss : null,
     takeProfit: takeProfit != null && Number.isFinite(takeProfit) && takeProfit > 0 ? takeProfit : null,
     comment: "AXE draft",
