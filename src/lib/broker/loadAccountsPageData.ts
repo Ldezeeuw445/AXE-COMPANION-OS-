@@ -6,7 +6,7 @@ import {
   type AccountLedger,
 } from "@/lib/account/reconcileAccountLedger";
 import { asFiniteNumber } from "@/lib/journal/tradePnl";
-import { ensureActiveDemoWhenEmpty } from "@/lib/broker/demoAccount";
+import { ensureActiveDemoWhenEmpty } from "@/lib/broker/demoAccountProvision";
 import { isAccountOffered, isDemoBrokerEnabled } from "@/lib/broker/brokerAvailability";
 import { ensureAlpacaPaperAccount } from "@/lib/alpaca/provision";
 import { isAlpacaConfigured } from "@/lib/alpaca/env";

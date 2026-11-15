@@ -97,7 +97,18 @@ const SCOPED_FILES = [
   // The hub panel's disconnect for MT5 and Alpaca: fixed status values.
   "src/lib/broker/hub/adapters/mt5BrokerApi.ts",
   "src/lib/broker/hub/adapters/alpacaLive.ts",
+  // Server-defined rows created for the trader: the demo account and the
+  // platform-managed Alpaca paper account.
+  "src/lib/broker/demoAccountProvision.ts",
+  "src/lib/alpaca/provision.ts",
 ];
+
+/**
+ * Files that create an account row elevated. An insert has no row to read back
+ * through RLS, so ownership is `sessionIsUser`: the user_id being written must
+ * be the signed-in user, checked before the insert, and a mismatch must return.
+ */
+const SESSION_THEN_INSERT = ["src/lib/broker/demoAccountProvision.ts", "src/lib/alpaca/provision.ts"];
 
 /**
  * Files that read the account on the caller's own client and only then write
@@ -212,6 +223,35 @@ describe("MT5 sync write scoping", () => {
       assert.match(between, /if \(!(?:row|account)[\s\S]*?return/);
     });
   }
+
+  for (const file of SESSION_THEN_INSERT) {
+    it(`${file} confirms the session is the owner before the elevated insert`, () => {
+      const code = source(file);
+      const insert = /syncWriteClient\(supabase\)\s*\.from\("user_broker_accounts"\)\s*\.insert\(/.exec(code);
+      assert.ok(insert, `${file}: the account insert is not elevated`);
+
+      const check = [...code.matchAll(/if \(!\(await sessionIsUser\(supabase, userId\)\)\)\s*\{[\s\S]*?return/g)]
+        .filter((match) => match.index < insert.index)
+        .pop();
+      assert.ok(check, `${file}: no sessionIsUser guard that returns before the elevated insert`);
+
+      // Nothing between the guard and the insert may change who userId is.
+      const between = code.slice(check.index, insert.index);
+      assert.doesNotMatch(between, /userId\s*=/);
+    });
+  }
+
+  it("the Alpaca refresh only updates the row the RLS lookup returned", () => {
+    const code = source("src/lib/alpaca/provision.ts");
+    const lookup = /await supabase\s*\.from\("user_broker_accounts"\)\s*\.select\(/.exec(code);
+    const update = /syncWriteClient\(supabase\)\s*\.from\("user_broker_accounts"\)\s*\.update\(/.exec(code);
+    assert.ok(lookup && update && lookup.index < update.index, "lookup on the caller's client must come first");
+    assert.match(tableStatements(code.slice(lookup.index), "user_broker_accounts")[0], /\.eq\("user_id", userId\)/);
+
+    const updateStatement = tableStatements(code.slice(update.index), "user_broker_accounts")[0];
+    assert.match(updateStatement, /\.eq\("id", existing\.id\)/);
+    assert.match(updateStatement, /\.eq\("user_id", userId\)/);
+  });
 
   it("the user-client detector actually detects one", () => {
     // Guards the regex above: a check that can never fail proves nothing.

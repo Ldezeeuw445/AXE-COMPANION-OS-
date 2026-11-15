@@ -28,8 +28,7 @@ import {
 import { BrokerConnectWizard } from "@/components/accounts/BrokerConnectWizard";
 import { Mt5ProvisioningAutoPoll } from "@/components/accounts/Mt5ProvisioningAutoPoll";
 import { friendlyProviderStatus } from "@/lib/accounts/accountUiLabels";
-import { isDemoAccount } from "@/lib/broker/demoAccount";
-import { isAlpacaAccount } from "@/lib/alpaca/provision";
+import { isAlpacaAccount, isDemoAccount } from "@/lib/broker/accountKind";
 import { accountTypeFromBroker } from "@/lib/session/accountType";
 import { getActiveSession, patchActiveSession } from "@/lib/session/activeSessionStore";
 import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
