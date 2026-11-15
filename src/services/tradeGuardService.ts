@@ -258,10 +258,41 @@ export async function decideAutoTradeAllowed(
     | { balance?: unknown; equity?: unknown }
     | null;
 
+  // When the newest snapshot has neither equity nor balance, borrow the last
+  // balance recorded since broker-day open (stale-safe: a balance from
+  // before today's open is not used). No such row => equity stays unknown and
+  // the guard fails closed, rather than treating floating P&L as equity.
+  let fallbackBalance: number | null = null;
+  const latestHasEquity = latest?.equity != null && Number(latest.equity) > 0;
+  const latestHasBalance = latest?.balance != null && Number(latest.balance) > 0;
+  if (!latestHasEquity && !latestHasBalance) {
+    const fbRes = await supabase
+      .from("mt5_account_snapshots")
+      .select("balance,updated_at")
+      .eq("user_id", userId)
+      .eq("account_id", accountId)
+      .not("balance", "is", null)
+      .gt("balance", 0)
+      .gte("updated_at", dayStart.toISOString())
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (fbRes.error) {
+      console.error("[tradeGuard] fallback balance failed", fbRes.error.message);
+      return {
+        allowed: false,
+        reason: "guard_data_error",
+        detail: `Not placed: could not read mt5_account_snapshots (${fbRes.error.message}).`,
+      };
+    }
+    fallbackBalance = fbRes.data?.balance != null ? Number(fbRes.data.balance) : null;
+  }
+
   const currentEquity = resolveCurrentEquity({
     snapshotEquity: latest?.equity != null ? Number(latest.equity) : null,
     snapshotBalance: latest?.balance != null ? Number(latest.balance) : null,
     floatingPnl,
+    fallbackBalance,
   });
 
   // Prefer the first snapshot at/after broker-day open. If that tick was

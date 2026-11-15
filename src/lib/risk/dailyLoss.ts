@@ -52,22 +52,40 @@ export function dayResultPctFromEquity(
 /**
  * Live equity from a snapshot row, or from balance + open floating P&L when
  * the snapshot has no equity column filled in.
+ *
+ * A missing balance is NOT zero. `Number(null)` is 0, so the old code turned
+ * "no balance" into "equity = floating P&L only": a +$300 float on a $100k
+ * account read as $300 equity, and the guard saw a ~-99.7% day and blocked a
+ * perfectly fine trade (or computed a huge risk %). Now:
+ *   1. snapshot equity, when present and > 0;
+ *   2. snapshot balance + floating P&L, when the balance really is there;
+ *   3. `fallbackBalance` (last known balance from the same broker day,
+ *      supplied by the caller) + floating P&L;
+ *   4. otherwise null — "unknown", which the guard fails closed on.
+ * Never a bare floating P&L, and never a guess that loosens a limit.
  */
 export function resolveCurrentEquity(input: {
   snapshotEquity?: number | null;
   snapshotBalance?: number | null;
   floatingPnl?: number | null;
+  fallbackBalance?: number | null;
 }): number | null {
-  const eq = Number(input.snapshotEquity);
-  if (Number.isFinite(eq) && eq > 0) return eq;
+  const positive = (v: unknown): number | null => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
 
-  const bal = Number(input.snapshotBalance);
-  const floating = Number(input.floatingPnl ?? 0);
-  if (Number.isFinite(bal) && Number.isFinite(floating)) {
-    const derived = bal + floating;
-    if (Number.isFinite(derived) && derived > 0) return derived;
-  }
-  return null;
+  const eq = positive(input.snapshotEquity);
+  if (eq != null) return eq;
+
+  const bal = positive(input.snapshotBalance) ?? positive(input.fallbackBalance);
+  if (bal == null) return null;
+
+  const floating = input.floatingPnl == null ? 0 : Number(input.floatingPnl);
+  if (!Number.isFinite(floating)) return null;
+  const derived = bal + floating;
+  return Number.isFinite(derived) && derived > 0 ? derived : null;
 }
 
 /**
