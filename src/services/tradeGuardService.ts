@@ -6,6 +6,7 @@ import {
   dayResultPctFromEquity,
   resolveCurrentEquity,
 } from "@/lib/risk/dailyLoss";
+import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import {
@@ -277,20 +278,20 @@ export async function decideAutoTradeAllowed(
 
   const dayResultPct = dayResultPctFromEquity(startEquity, currentEquity);
 
-  // Automated trades AXE placed today, counted from the feed events it writes.
-  const autoTradesRes = await supabase
-    .from("axe_proactive_events")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .like("event_key", "alert_trade:%")
-    .gte("created_at", dayStart.toISOString());
+  // Automated trades AXE placed today ON THIS ACCOUNT (not the whole user:
+  // two accounts must not share one daily cap). See autoTradeCount.ts.
+  const autoTradesRes = await countAutoTradesToday(supabase, {
+    userId,
+    accountId,
+    sinceIso: dayStart.toISOString(),
+  });
 
-  if (autoTradesRes.error) {
-    console.error("[tradeGuard] axe_proactive_events failed", autoTradesRes.error.message);
+  if ("error" in autoTradesRes) {
+    console.error("[tradeGuard] axe_proactive_events failed", autoTradesRes.error);
     return {
       allowed: false,
       reason: "guard_data_error",
-      detail: `Not placed: could not read axe_proactive_events (${autoTradesRes.error.message}).`,
+      detail: `Not placed: could not read axe_proactive_events (${autoTradesRes.error}).`,
     };
   }
 
@@ -337,7 +338,7 @@ export async function decideAutoTradeAllowed(
     profile,
     volumeLots,
     openPositions: positions.length,
-    autoTradesToday: autoTradesRes.count ?? 0,
+    autoTradesToday: autoTradesRes.count,
     dayResultPct,
     minutesToHighImpact,
     now,
