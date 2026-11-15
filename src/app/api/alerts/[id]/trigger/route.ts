@@ -8,8 +8,9 @@
  *  - Marks the alert as triggered server-side (`triggered_at` = now).
  *  - Best-effort web push if VAPID + a subscription exist; the alert still
  *    counts as triggered when push is missing — the UI surfaces it in-app.
- *  - If the alert actually places an auto-trade, the alert row is deleted
- *    (one-shot, not paused) so it cannot fire a second market order.
+ *  - If the alert actually places an auto-trade, the alert is paused
+ *    (one-shot) so it cannot fire a second market order. The row stays,
+ *    so the trader can see it and turn it back on.
  *
  * The route is intentionally idempotent: passing the same payload twice
  * within `cooldownSeconds` (default 60s) is a no-op so we don't spam the
@@ -21,7 +22,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 import { maybeAutoTradeOnAlert } from "@/services/alertAutoTradeService";
-import { claimAlertTrigger, removeAlertAfterAutoTrade } from "@/lib/alerts/alertTriggerClaim";
+import { claimAlertTrigger, pauseAlertAfterAutoTrade } from "@/lib/alerts/alertTriggerClaim";
 
 type Body = {
   price?: number | null;
@@ -113,20 +114,21 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   let autoTrade = await maybeAutoTradeOnAlert(supabase, user.id, existing, body.price ?? null);
 
-  // One-shot: after a successful auto-trade the alert is deleted, not paused.
-  // Notification-only alerts stay active. A failed attempt also stays, so a
-  // later crossing can still fill if the gate or broker recovers.
-  let removed = false;
+  // One-shot: after a successful auto-trade the alert is paused, so it cannot
+  // fire a second market order. Notification-only alerts stay active. A failed
+  // attempt also stays active, so a later crossing can still fill if the gate
+  // or broker recovers.
+  let paused = false;
   if (autoTrade.traded) {
-    const removal = await removeAlertAfterAutoTrade(supabase, { alertId: id, userId: user.id });
-    if (removal.removed) {
-      removed = true;
-    } else if (removal.error) {
+    const pause = await pauseAlertAfterAutoTrade(supabase, { alertId: id, userId: user.id });
+    if (pause.paused) {
+      paused = true;
+    } else if (pause.error) {
       // Trade already placed — keep the HTTP success, but say the cleanup failed
       // so the alert is not silently left able to fire again after cooldown.
       autoTrade = {
         ...autoTrade,
-        message: [autoTrade.message, `alert not removed: ${removal.error}`].filter(Boolean).join(" — "),
+        message: [autoTrade.message, `alert not paused: ${pause.error}`].filter(Boolean).join(" — "),
       };
     }
   }
@@ -151,7 +153,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     pushed = false;
   }
 
-  return NextResponse.json({ ok: true, triggered_at: now, pushed, autoTrade, removed });
+  return NextResponse.json({ ok: true, triggered_at: now, pushed, autoTrade, paused });
 }
 
 function buildDefaultMessage(

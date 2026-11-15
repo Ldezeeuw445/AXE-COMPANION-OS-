@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   claimAlertTrigger,
-  removeAlertAfterAutoTrade,
+  pauseAlertAfterAutoTrade,
   triggerCooldownCutoff,
 } from "./alertTriggerClaim";
 
@@ -35,7 +35,7 @@ function fakeSupabase(rows: Row[], fail = false) {
             }
             return { data: hit.map((r) => ({ id: r.id })), error: null };
           }
-          hit.forEach((r) => Object.assign(r, { triggered_at: patch.triggered_at }));
+          hit.forEach((r) => Object.assign(r, patch));
           return { data: hit.map((r) => ({ id: r.id })), error: null };
         },
       };
@@ -92,34 +92,46 @@ test("database error is surfaced, not treated as claimed", async () => {
   });
 });
 
-test("successful auto-trade deletes the alert, not pauses it", async () => {
+test("successful auto-trade pauses the alert and keeps the row", async () => {
   const rows: Row[] = [{ id: "a1", user_id: "u1", status: "active", triggered_at: now }];
-  assert.deepEqual(await removeAlertAfterAutoTrade(fakeSupabase(rows), { alertId: "a1", userId: "u1" }), {
-    removed: true,
+  assert.deepEqual(await pauseAlertAfterAutoTrade(fakeSupabase(rows), { alertId: "a1", userId: "u1" }), {
+    paused: true,
   });
-  assert.equal(rows.length, 0);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "paused");
+  assert.equal(rows[0].triggered_at, now);
 });
 
-test("second delete after a one-shot trade is a no-op (race-safe)", async () => {
+test("paused one-shot alert cannot be claimed again", async () => {
   const rows: Row[] = [{ id: "a1", user_id: "u1", status: "active", triggered_at: now }];
   const sb = fakeSupabase(rows);
-  assert.equal((await removeAlertAfterAutoTrade(sb, { alertId: "a1", userId: "u1" })).removed, true);
-  assert.equal((await removeAlertAfterAutoTrade(sb, { alertId: "a1", userId: "u1" })).removed, false);
-  assert.equal(rows.length, 0);
+  assert.equal((await pauseAlertAfterAutoTrade(sb, { alertId: "a1", userId: "u1" })).paused, true);
+  assert.equal((await claimAlertTrigger(sb, { ...base, nowIso: "2026-11-12T15:05:00.000Z" })).claimed, false);
+  assert.equal(rows[0].status, "paused");
 });
 
-test("one-shot delete never removes another user's alert", async () => {
+test("second pause after a one-shot trade is a no-op (race-safe)", async () => {
+  const rows: Row[] = [{ id: "a1", user_id: "u1", status: "active", triggered_at: now }];
+  const sb = fakeSupabase(rows);
+  assert.equal((await pauseAlertAfterAutoTrade(sb, { alertId: "a1", userId: "u1" })).paused, true);
+  assert.equal((await pauseAlertAfterAutoTrade(sb, { alertId: "a1", userId: "u1" })).paused, false);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "paused");
+});
+
+test("one-shot pause never changes another user's alert", async () => {
   const rows: Row[] = [{ id: "a1", user_id: "u2", status: "active", triggered_at: now }];
-  assert.equal((await removeAlertAfterAutoTrade(fakeSupabase(rows), { alertId: "a1", userId: "u1" })).removed, false);
+  assert.equal((await pauseAlertAfterAutoTrade(fakeSupabase(rows), { alertId: "a1", userId: "u1" })).paused, false);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].status, "active");
 });
 
-test("database error is surfaced, not treated as removed", async () => {
+test("database error is surfaced, not treated as paused", async () => {
   const rows: Row[] = [{ id: "a1", user_id: "u1", status: "active", triggered_at: now }];
-  assert.deepEqual(await removeAlertAfterAutoTrade(fakeSupabase(rows, true), { alertId: "a1", userId: "u1" }), {
-    removed: false,
+  assert.deepEqual(await pauseAlertAfterAutoTrade(fakeSupabase(rows, true), { alertId: "a1", userId: "u1" }), {
+    paused: false,
     error: "boom",
   });
   assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "active");
 });
