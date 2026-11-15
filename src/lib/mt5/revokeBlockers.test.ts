@@ -66,12 +66,6 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
       "DELETE that clears the removed account's history, so revoking INSERT/UPDATE on " +
       "that table does not break it — revoking DELETE would",
   },
-  "lib/broker/hub/adapters/ibkrGateway.ts": {
-    tables: { user_broker_accounts: 4 },
-    why:
-      "IBKR gateway pairing, disconnect and the doctor writing its result onto the account row. " +
-      "Bound to an owner and filtering user_id (`adapters/brokerAdapterScope.test.ts`)",
-  },
   "lib/broker/hub/adapters/supabaseDatabase.ts": {
     tables: { user_broker_accounts: 2 },
     why:

@@ -163,12 +163,14 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
     writes: [elevated("update", "syncWriteClient(supabase)")],
   },
   "src/lib/broker/hub/adapters/ibkrGateway.ts": {
-    why: "IBKR gateway connect / sync / disconnect write provider state on the trader's client.",
+    why:
+      "IBKR gateway connect / disconnect / doctor write provider state. Updates follow a " +
+      "user_id-filtered read on the trader's client; the insert follows sessionIsUser.",
     writes: [
-      blocker("update", "supabase"),
-      blocker("insert", "supabase"),
-      blocker("update", "supabase"),
-      blocker("update", "supabase"),
+      elevated("update", "syncWriteClient(supabase)"),
+      elevated("insert", "syncWriteClient(supabase)"),
+      elevated("update", "syncWriteClient(supabase)"),
+      elevated("update", "syncWriteClient(supabase)"),
     ],
   },
 };

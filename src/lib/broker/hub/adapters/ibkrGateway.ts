@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sessionIsUser, syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import type {
   BrokerApiAdapter,
   ConnectAccountInput,
@@ -72,6 +73,11 @@ async function fetchIbkrAuthStatus(url: string): Promise<{ ok: boolean; message:
  * Bound to one owner: `accountId` comes from a request body, so every
  * statement filters `user_id` as well as `id` rather than leaving ownership to
  * RLS (TOS-SEC-2 — see `brokerAdapterScope.test.ts`).
+ *
+ * Every write here is provider state (pending_setup, the doctor's verdict,
+ * disconnected), so it goes out on `syncWriteClient` and survives the
+ * INSERT/UPDATE revoke. Ownership comes first: a user_id-filtered read on the
+ * caller's client for an existing row, `sessionIsUser` for a new one.
  */
 export function createIbkrBrokerApiAdapter(supabase: SupabaseClient, userId: string): BrokerApiAdapter {
   return {
@@ -119,7 +125,7 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient, userId: str
 
       let dbId: string;
       if (existing?.id) {
-        const { error: updateError } = await supabase
+        const { error: updateError } = await syncWriteClient(supabase)
           .from("user_broker_accounts")
           .update({
             label: input.label || "IBKR Account",
@@ -140,7 +146,10 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient, userId: str
         if (updateError) return { success: false, error: updateError.message };
         dbId = existing.id;
       } else {
-        const { data: created, error: createError } = await supabase
+        if (!(await sessionIsUser(supabase, userId))) {
+          return { success: false, error: "Internal: user id does not match the session." };
+        }
+        const { data: created, error: createError } = await syncWriteClient(supabase)
           .from("user_broker_accounts")
           .insert({
             user_id: userId,
@@ -190,7 +199,15 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient, userId: str
       };
     },
     async disconnect(accountId: string): Promise<void> {
-      await supabase
+      const { data: account } = await supabase
+        .from("user_broker_accounts")
+        .select("id")
+        .eq("id", accountId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!account) return;
+
+      await syncWriteClient(supabase)
         .from("user_broker_accounts")
         .update({
           hub_status: "disconnected",
@@ -257,7 +274,7 @@ export function createIbkrBrokerApiAdapter(supabase: SupabaseClient, userId: str
         },
       ];
 
-      await supabase
+      await syncWriteClient(supabase)
         .from("user_broker_accounts")
         .update({
           provider_status: auth.ok ? "connected" : "gateway_offline",
