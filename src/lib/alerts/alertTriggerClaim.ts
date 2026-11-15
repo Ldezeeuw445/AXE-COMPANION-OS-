@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Atomically claim one firing of a price alert, and (for auto-trade) remove
+ * Atomically claim one firing of a price alert, and (for auto-trade) pause
  * the alert after its single trade.
  *
  * The trigger route used to read `triggered_at`, check the cooldown in JS and
@@ -13,13 +13,24 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * back and must skip push, feed and auto-trade.
  *
  * Auto-trade alerts are one-shot: after that winning request actually places
- * a trade, `removeAlertAfterAutoTrade` deletes the row (it is not paused).
- * A second delete is a no-op, so a retried cleanup cannot affect another
- * user's alert. Notification-only alerts, and auto-trade attempts that did
- * not place an order, stay in place.
+ * a trade, `pauseAlertAfterAutoTrade` sets the row to `paused` with the same
+ * id + user + status=active claim, so it cannot fire a second market order.
+ * The trader can still see it and re-enable it. A second pause is a no-op,
+ * so a retried cleanup cannot affect another user's alert. Notification-only
+ * alerts, and auto-trade attempts that did not place an order, stay active.
  */
 export function triggerCooldownCutoff(nowMs: number, cooldownSeconds: number): string {
   return new Date(nowMs - cooldownSeconds * 1000).toISOString();
+}
+
+/**
+ * PostgREST `or=(...)` filter for "never fired, or last fired before cutoff".
+ * The ISO timestamp is double-quoted: its `:` and `.` are otherwise part of
+ * the filter grammar (`column.operator.value`), and unquoted values with
+ * reserved characters are a classic source of silently-wrong filters.
+ */
+export function cooldownOrFilter(cutoffIso: string): string {
+  return `triggered_at.is.null,triggered_at.lt."${cutoffIso}"`;
 }
 
 export async function claimAlertTrigger(
@@ -39,7 +50,7 @@ export async function claimAlertTrigger(
     .eq("id", args.alertId)
     .eq("user_id", args.userId)
     .eq("status", "active")
-    .or(`triggered_at.is.null,triggered_at.lt.${cutoff}`)
+    .or(cooldownOrFilter(cutoff))
     .select("id");
 
   if (error) return { claimed: false, error: error.message };
@@ -47,21 +58,24 @@ export async function claimAlertTrigger(
 }
 
 /**
- * Delete the alert after one successful auto-trade. Scoped to the owning
- * user so a concurrent request cannot remove someone else's row; zero rows
- * means the alert was already gone (race-safe, idempotent).
+ * Pause the alert after one successful auto-trade. Same atomic claim as the
+ * trigger: scoped to the owning user and only applied while the row is still
+ * `active`, so a concurrent request cannot pause someone else's alert or
+ * re-write a row the trader already changed. Zero rows means it was already
+ * paused (race-safe, idempotent).
  */
-export async function removeAlertAfterAutoTrade(
+export async function pauseAlertAfterAutoTrade(
   supabase: SupabaseClient,
   args: { alertId: string; userId: string },
-): Promise<{ removed: true } | { removed: false; error?: string }> {
+): Promise<{ paused: true } | { paused: false; error?: string }> {
   const { data, error } = await supabase
     .from("user_alerts")
-    .delete()
+    .update({ status: "paused" })
     .eq("id", args.alertId)
     .eq("user_id", args.userId)
+    .eq("status", "active")
     .select("id");
 
-  if (error) return { removed: false, error: error.message };
-  return Array.isArray(data) && data.length > 0 ? { removed: true } : { removed: false };
+  if (error) return { paused: false, error: error.message };
+  return Array.isArray(data) && data.length > 0 ? { paused: true } : { paused: false };
 }

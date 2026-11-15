@@ -13,6 +13,7 @@ import {
   type PlaceOrderInput,
 } from "@/lib/mt5/metaApiClient";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
+import { quickOrderGuardEntryPrice } from "@/lib/trading/quickOrderGuardPrice";
 import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import {
@@ -62,6 +63,12 @@ export async function placeMt5QuickOrder(
     orderType: "market" | "buy_limit" | "sell_limit";
     volume?: number;
     openPrice?: number | null;
+    /**
+     * Market orders only: the price the caller expects to fill at (alert
+     * trigger, draft entry). Never sent to the broker — used so the guard can
+     * measure risk-per-trade instead of refusing as `risk_unknown`.
+     */
+    riskReferencePrice?: number | null;
     stopLoss?: number | null;
     takeProfit?: number | null;
     comment?: string;
@@ -149,7 +156,11 @@ export async function placeMt5QuickOrder(
     volume,
     attended,
     {
-      entryPrice: args.orderType === "market" ? null : openPrice,
+      entryPrice: quickOrderGuardEntryPrice({
+        orderType: args.orderType,
+        openPrice,
+        riskReferencePrice: args.riskReferencePrice ?? null,
+      }),
       stopLoss: args.stopLoss ?? null,
       brokerAccountId: cloud.brokerAccountId,
     },

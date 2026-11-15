@@ -6,6 +6,7 @@ import {
   dayResultPctFromEquity,
   resolveCurrentEquity,
 } from "@/lib/risk/dailyLoss";
+import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import {
@@ -257,10 +258,41 @@ export async function decideAutoTradeAllowed(
     | { balance?: unknown; equity?: unknown }
     | null;
 
+  // When the newest snapshot has neither equity nor balance, borrow the last
+  // balance recorded since broker-day open (stale-safe: a balance from
+  // before today's open is not used). No such row => equity stays unknown and
+  // the guard fails closed, rather than treating floating P&L as equity.
+  let fallbackBalance: number | null = null;
+  const latestHasEquity = latest?.equity != null && Number(latest.equity) > 0;
+  const latestHasBalance = latest?.balance != null && Number(latest.balance) > 0;
+  if (!latestHasEquity && !latestHasBalance) {
+    const fbRes = await supabase
+      .from("mt5_account_snapshots")
+      .select("balance,updated_at")
+      .eq("user_id", userId)
+      .eq("account_id", accountId)
+      .not("balance", "is", null)
+      .gt("balance", 0)
+      .gte("updated_at", dayStart.toISOString())
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (fbRes.error) {
+      console.error("[tradeGuard] fallback balance failed", fbRes.error.message);
+      return {
+        allowed: false,
+        reason: "guard_data_error",
+        detail: `Not placed: could not read mt5_account_snapshots (${fbRes.error.message}).`,
+      };
+    }
+    fallbackBalance = fbRes.data?.balance != null ? Number(fbRes.data.balance) : null;
+  }
+
   const currentEquity = resolveCurrentEquity({
     snapshotEquity: latest?.equity != null ? Number(latest.equity) : null,
     snapshotBalance: latest?.balance != null ? Number(latest.balance) : null,
     floatingPnl,
+    fallbackBalance,
   });
 
   // Prefer the first snapshot at/after broker-day open. If that tick was
@@ -277,20 +309,20 @@ export async function decideAutoTradeAllowed(
 
   const dayResultPct = dayResultPctFromEquity(startEquity, currentEquity);
 
-  // Automated trades AXE placed today, counted from the feed events it writes.
-  const autoTradesRes = await supabase
-    .from("axe_proactive_events")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .like("event_key", "alert_trade:%")
-    .gte("created_at", dayStart.toISOString());
+  // Automated trades AXE placed today ON THIS ACCOUNT (not the whole user:
+  // two accounts must not share one daily cap). See autoTradeCount.ts.
+  const autoTradesRes = await countAutoTradesToday(supabase, {
+    userId,
+    accountId,
+    sinceIso: dayStart.toISOString(),
+  });
 
-  if (autoTradesRes.error) {
-    console.error("[tradeGuard] axe_proactive_events failed", autoTradesRes.error.message);
+  if ("error" in autoTradesRes) {
+    console.error("[tradeGuard] axe_proactive_events failed", autoTradesRes.error);
     return {
       allowed: false,
       reason: "guard_data_error",
-      detail: `Not placed: could not read axe_proactive_events (${autoTradesRes.error.message}).`,
+      detail: `Not placed: could not read axe_proactive_events (${autoTradesRes.error}).`,
     };
   }
 
@@ -337,7 +369,7 @@ export async function decideAutoTradeAllowed(
     profile,
     volumeLots,
     openPositions: positions.length,
-    autoTradesToday: autoTradesRes.count ?? 0,
+    autoTradesToday: autoTradesRes.count,
     dayResultPct,
     minutesToHighImpact,
     now,
