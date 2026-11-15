@@ -103,16 +103,24 @@ async function claimDelivery(
     return { deliver: false, skipped: decision.reason };
   }
 
-  const { error: updateError } = await supabase
+  // Compare-and-swap on the timestamp we just read: when two sends race past
+  // the cooldown check, only the one whose update still sees the old value
+  // wins; the other matches no row and is dropped as a duplicate.
+  let update = supabase
     .from("push_event_deliveries")
     .update({ last_sent_at: sentAt, category: input.category })
     .eq("user_id", input.userId)
     .eq("event_key", eventKey);
+  if (previousSentAt != null) update = update.eq("last_sent_at", previousSentAt);
+  const { data: updated, error: updateError } = await update.select("event_key");
   if (updateError) {
     if (updateError.code !== MISSING_TABLE) {
       console.warn("[push] dedup update failed:", updateError.message);
     }
     return { deliver: true, claim: null };
+  }
+  if (previousSentAt != null && Array.isArray(updated) && updated.length === 0) {
+    return { deliver: false, skipped: "duplicate" };
   }
   return {
     deliver: true,

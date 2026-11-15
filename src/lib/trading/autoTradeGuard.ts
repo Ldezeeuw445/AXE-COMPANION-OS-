@@ -219,9 +219,28 @@ function tighter(a: number | null, b: number | null): number | null {
   return Math.min(a, b);
 }
 
-/** Friday, within three hours of the 21:00 UTC close. */
+const NY_WEEKDAYS: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+/**
+ * Friday, within three hours of the weekly close.
+ *
+ * FX/CFD markets close at 17:00 New York time: 21:00 UTC in US summer time,
+ * 22:00 UTC from November to March. A fixed 21:00 UTC let auto-trade open
+ * positions on a no-weekend-holding account in the last winter hour — and
+ * they were then held over the weekend. Intl is built in, so this file still
+ * has no runtime imports.
+ */
 function isWeekendEdge(now: Date): boolean {
-  if (now.getUTCDay() !== 5) return false;
-  const hour = now.getUTCHours();
-  return hour >= 18 && hour < 21;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  if (NY_WEEKDAYS[get("weekday")] !== 5) return false;
+  const hour = Number(get("hour")) % 24;
+  return hour >= 14 && hour < 17;
 }
