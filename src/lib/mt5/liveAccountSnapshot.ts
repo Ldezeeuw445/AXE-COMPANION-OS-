@@ -1,6 +1,7 @@
 import type { LivePositionPayload } from "@/lib/chart/liveContract";
 import type { LiveEquitySnapshot } from "@/lib/risk/drawdownAlert";
 import { asFiniteNumber } from "@/lib/journal/tradePnl";
+import { brokerDayKey, brokerDayStart, resolveSessionZone } from "@/lib/chart/sessionDay";
 
 export const ACCOUNT_LIVE_SYMBOL = "__account__";
 
@@ -164,7 +165,32 @@ export function liveEquitySnapshotFromMetadata(
   };
 }
 
-/** Roll day-start anchors when the UTC date changes; trail the peak. */
+/**
+ * The broker trading day an instant belongs to, as `YYYY-MM-DD`.
+ *
+ * Same boundary as tradeGuardService: the account's server/broker timezone
+ * (EET by default) and optional `dailyResetTime`. Prop firms measure the daily
+ * loss from the broker-day open, which for EET servers is 21:00/22:00 UTC. A
+ * UTC-date key rolled the day-start anchor two to three hours into the broker
+ * day, so losses taken before UTC midnight silently dropped out of the
+ * daily-loss warning.
+ */
+export function liveAccountDayKey(metadata: unknown, now = new Date()): string {
+  const rec =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  const tz = resolveSessionZone(
+    (typeof rec.serverTimezone === "string" && rec.serverTimezone) ||
+      (typeof rec.brokerTimezone === "string" && rec.brokerTimezone) ||
+      null,
+  );
+  const resetTime =
+    typeof rec.dailyResetTime === "string" && rec.dailyResetTime.trim() ? rec.dailyResetTime.trim() : "00:00";
+  return brokerDayKey(brokerDayStart(now, tz, resetTime), tz);
+}
+
+/** Roll day-start anchors when the broker day changes; trail the peak. */
 export function nextLiveAccountState(
   metadata: unknown,
   figures: LiveAccountFigures,
@@ -183,7 +209,7 @@ export function nextLiveAccountState(
       ? (rec.accountSummary as Record<string, unknown>)
       : {};
 
-  const day = now.toISOString().slice(0, 10);
+  const day = liveAccountDayKey(rec, now);
   const prevDay = typeof prev.dayStartDate === "string" ? prev.dayStartDate : "";
   const equity = figures.equity ?? figures.balance;
   const balance = figures.balance ?? figures.equity;

@@ -47,7 +47,7 @@ describe("toMt5PositionRow", () => {
 });
 
 describe("nextLiveAccountState", () => {
-  it("anchors the UTC day on first tick and trails the peak", () => {
+  it("anchors the broker day on first tick and trails the peak", () => {
     const first = nextLiveAccountState({}, { balance: 100_000, equity: 99_000, margin: 1, freeMargin: 99, marginLevel: 1000, currency: "USD", profit: -1000 }, new Date("2026-10-28T08:00:00Z"));
     const live = first.liveAccountState as Record<string, unknown>;
     assert.equal(live.dayStartDate, "2026-10-28");

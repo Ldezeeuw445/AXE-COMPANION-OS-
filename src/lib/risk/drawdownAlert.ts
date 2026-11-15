@@ -10,7 +10,7 @@ export type DrawdownKind = "daily" | "total";
 export type LiveEquitySnapshot = {
   equity: number;
   balance: number;
-  /** Balance at the UTC day open. Falls back to balance when unknown. */
+  /** Balance at the broker-day open. Falls back to balance when unknown. */
   dayStartBalance: number | null;
   dayStartEquity: number | null;
   /** Starting capital the total-loss rule is measured from. */
@@ -146,9 +146,11 @@ export function evaluateDrawdownAlerts(input: {
   constraints: Pick<TradingConstraints, "maxDailyLossPct" | "maxDailyLossBasis" | "maxTotalLossPct" | "maxTotalLossBasis">;
   snap: LiveEquitySnapshot;
   now?: Date;
+  /** Broker trading day (`YYYY-MM-DD`) for dedup; defaults to the UTC date. */
+  dayStamp?: string;
 }): DrawdownAlert[] {
   const now = input.now ?? new Date();
-  const dayStamp = now.toISOString().slice(0, 10);
+  const dayStamp = input.dayStamp || now.toISOString().slice(0, 10);
   const alerts: DrawdownAlert[] = [];
   for (const kind of ["daily", "total"] as const) {
     const reading = readingForKind(kind, input.constraints, input.snap);
