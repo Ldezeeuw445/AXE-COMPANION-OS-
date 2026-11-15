@@ -49,7 +49,7 @@ function row(id: string, userId: string): Row {
 }
 
 /** An un-scoped `user_broker_accounts`: no RLS, filters are all there is. */
-function fakeSupabase(rows: Row[]) {
+function fakeSupabase(rows: Row[], sessionUserId: string | null = OWNER) {
   const statements: Statement[] = [];
 
   function from(table: string) {
@@ -59,6 +59,13 @@ function fakeSupabase(rows: Row[]) {
     const filters: Record<string, unknown> = {};
 
     const run = () => {
+      if (op === "insert") {
+        // The row's own user_id is its scope: that is what lands in the table.
+        statements.push({ op, filters: { user_id: payload.user_id } });
+        const created = { id: `acct-new-${rows.length}`, ...payload } as Row;
+        rows.push(created);
+        return [created];
+      }
       statements.push({ op, filters: { ...filters } });
       const found = rows.filter((r) => Object.entries(filters).every(([k, v]) => r[k] === v));
       if (op === "update") for (const r of found) Object.assign(r, payload);
@@ -72,19 +79,29 @@ function fakeSupabase(rows: Row[]) {
         payload = body;
         return builder;
       },
+      insert: (body: Record<string, unknown>) => {
+        op = "insert";
+        payload = body;
+        return builder;
+      },
       eq: (column: string, value: unknown) => {
         filters[column] = value;
         return builder;
       },
       maybeSingle: () => Promise.resolve({ data: run()[0] ?? null, error: null }),
+      single: () => Promise.resolve({ data: run()[0] ?? null, error: null }),
       then: <T>(onFulfilled?: (value: { data: unknown; error: null }) => T) =>
         Promise.resolve({ data: run(), error: null }).then(onFulfilled),
     };
     return builder;
   }
 
+  const auth = {
+    getUser: async () => ({ data: { user: sessionUserId ? { id: sessionUserId } : null }, error: null }),
+  };
+
   return {
-    client: { from } as unknown as SupabaseClient,
+    client: { from, auth } as unknown as SupabaseClient,
     statements,
     allScoped: () => statements.length > 0 && statements.every((s) => s.filters.user_id === OWNER),
   };
@@ -163,6 +180,57 @@ describe("TOS-SEC-2 broker adapters are owner-scoped without RLS", () => {
     assert.ok((byId("acct-own").metadata as { ibkr: { lastDoctor?: unknown } }).ibkr.lastDoctor);
     assert.ok(db.statements.some((s) => s.op === "update"));
     assert.ok(db.allScoped());
+  });
+
+  it("ibkr: connect on an existing profile updates only the owner's row", async () => {
+    const { db, byId } = setup();
+    const result = await createIbkrBrokerApiAdapter(db.client, OWNER).connect({
+      brokerId: "ibkr-style",
+      label: "Mine",
+      mode: "paper",
+      credentials: { accountId: "acct-own" },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.account?.id, "acct-own");
+    assert.equal(byId("acct-own").label, "Mine");
+    assert.equal(byId("acct-other").label, "acct-other");
+    assert.ok(db.allScoped(), JSON.stringify(db.statements));
+  });
+
+  it("ibkr: connect on another trader's gateway id creates a new row for the owner, never touches theirs", async () => {
+    const { db, rows, byId } = setup();
+    const before = JSON.stringify(byId("acct-other"));
+    const result = await createIbkrBrokerApiAdapter(db.client, OWNER).connect({
+      brokerId: "ibkr-style",
+      label: "Mine",
+      mode: "paper",
+      credentials: { accountId: "acct-other" },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(JSON.stringify(byId("acct-other")), before);
+    const created = rows.find((r) => r.id === result.account?.id);
+    assert.equal(created?.user_id, OWNER);
+    assert.ok(db.allScoped(), JSON.stringify(db.statements));
+  });
+
+  it("ibkr: connect creates nothing when the session is not the bound owner", async () => {
+    // The insert is elevated, so RLS no longer compares user_id to the session;
+    // sessionIsUser is what does.
+    const rows = [row("acct-own", OWNER)];
+    const db = fakeSupabase(rows, OTHER);
+    const result = await createIbkrBrokerApiAdapter(db.client, OWNER).connect({
+      brokerId: "ibkr-style",
+      label: "x",
+      mode: "paper",
+      credentials: { accountId: "U12345" },
+    });
+
+    assert.equal(result.success, false);
+    assert.match(result.error ?? "", /does not match/);
+    assert.equal(rows.length, 1);
+    assert.ok(!db.statements.some((s) => s.op === "insert"));
   });
 
   for (const [name, create] of [
