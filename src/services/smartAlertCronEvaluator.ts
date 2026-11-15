@@ -16,6 +16,7 @@ import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
+import { createCandleCache } from "@/lib/alerts/candleCache";
 import { claimAlertTrigger } from "@/lib/alerts/alertTriggerClaim";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 
@@ -100,6 +101,8 @@ async function triggerAlert(
   return { triggered: true, pushed };
 }
 
+const SMART_ALERT_TIMEFRAME = "h1";
+
 async function loadCandlesForSymbol(symbol: string): Promise<ReturnType<typeof candlesFromMetaApi>> {
   const sym = symbol.toUpperCase();
   const alpaca = isAlpacaSupportedSymbol(sym) ? await fetchAlpacaCandles(sym, "h1", 120) : null;
@@ -170,7 +173,8 @@ export async function evaluateSmartAlertsForUser(
     ? evaluateSentimentShift(market.news, watchlist)
     : { fire: false, message: "", avgSentiment: 0, headlineCount: 0 };
 
-  let candleCache: Awaited<ReturnType<typeof loadCandlesForSymbol>> | null = null;
+  // Keyed by symbol + timeframe: each alert must evaluate on its own symbol's candles.
+  const candleCache = createCandleCache((sym) => loadCandlesForSymbol(sym));
 
   for (const alert of smartAlerts) {
     const kind = smartKind(alert);
@@ -197,12 +201,12 @@ export async function evaluateSmartAlertsForUser(
       if (sentimentEval.fire) message = sentimentEval.message;
     } else if (kind === "technical_confluence" || kind === "predictive") {
       const sym = (alert.symbol ?? focusSymbol).toUpperCase();
-      if (!candleCache) candleCache = await loadCandlesForSymbol(sym);
+      const candles = await candleCache.get(sym, SMART_ALERT_TIMEFRAME);
       if (kind === "technical_confluence") {
-        const evalResult = evaluateTechnicalConfluence(candleCache);
+        const evalResult = evaluateTechnicalConfluence(candles);
         if (evalResult.fire) message = evalResult.message;
       } else {
-        const evalResult = evaluatePredictiveLevelBreak(candleCache, sym);
+        const evalResult = evaluatePredictiveLevelBreak(candles, sym);
         if (evalResult.fire) message = evalResult.message;
       }
     }
