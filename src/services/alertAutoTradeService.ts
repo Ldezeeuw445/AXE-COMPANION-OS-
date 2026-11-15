@@ -8,6 +8,7 @@ import { readAlertAutoTradeEnabled } from "@/lib/trading/alertMetadata";
 import { evaluateAlertTradeGate } from "@/lib/trading/alertAutoTrade";
 import { isAlertAutoTradeArmed } from "@/lib/trading/alertAutoTradeArmed";
 import { getTradeExecutionPrefsForUser } from "@/lib/trading/serverTradePrefs";
+import { autoTradeEventKey } from "@/lib/trading/autoTradeCount";
 import { placeMt5QuickOrder } from "@/services/mt5QuickOrderService";
 import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
 
@@ -149,7 +150,7 @@ export async function maybeAutoTradeOnAlert(
     await recordProactiveFeedEvent(
       supabase,
       userId,
-      `alert_trade:${alert.id}:${Date.now()}`,
+      autoTradeEventKey(guardDecision.accountId, alert.id, Date.now()),
       `Alert auto-trade: ${symbol}`,
       `${side.toUpperCase()} ${prefs.defaultVolume} lots${priceText}${riskText} — ${placed.message}`,
       chartDeepLink(symbol),
