@@ -134,6 +134,7 @@ export async function maybeAutoTradeOnAlert(
     symbol,
     side,
     orderType: "market",
+    riskReferencePrice: entry,
     stopLoss: stops.stopLoss,
     takeProfit: stops.takeProfit,
     comment: `AXE alert ${alert.id.slice(0, 8)}`,
