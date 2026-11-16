@@ -250,6 +250,7 @@ export async function decideAutoTradeAllowed(
     inferredInitial: inferredInitialBalance(metadata),
     inferredPeak: livePeakBalance(metadata),
     now,
+    dayStart,
   });
 
   // Automated trades AXE placed today ON THIS ACCOUNT (not the whole user:

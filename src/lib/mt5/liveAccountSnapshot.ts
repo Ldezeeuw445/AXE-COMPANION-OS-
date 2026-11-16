@@ -244,6 +244,10 @@ export function nextLiveAccountState(
     ...prev,
     ...figures,
     dayStartDate: day,
+    // When the anchors were captured: only a roll sets it. An anchor taken hours
+    // after the broker-day open does not contain the losses before it, and the
+    // auto-trade guard refuses to measure the daily loss from one (guardEquity).
+    dayStartAt: rolled ? now.toISOString() : (typeof prev.dayStartAt === "string" ? prev.dayStartAt : null),
     dayStartBalance,
     dayStartEquity,
     initialBalance,

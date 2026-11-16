@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildAccountProfile } from "./accountProfile";
 import {
+  DAY_ANCHOR_MAX_LATE_MINUTES,
   GUARD_EQUITY_MAX_AGE_SECONDS,
+  dayAnchorOnTime,
   canRefreshLiveState,
   judgeReading,
   limitsNeedEquity,
@@ -13,9 +15,12 @@ import {
 import { guardLossInputs } from "./guardLossInputs";
 import { evaluateAutoTrade, type AutoTradeGuardInput } from "../trading/autoTradeGuard";
 import { liveAccountDayKey, nextLiveAccountState } from "../mt5/liveAccountSnapshot";
+import { brokerDayStart } from "../chart/sessionDay";
 
 const NOW = new Date("2026-11-11T12:00:00Z"); // Wednesday, 14:00 broker time (EET)
 const DAY = liveAccountDayKey({}, NOW);
+/** Start of the broker day (EET default): 2026-11-10T22:00Z. */
+const DAY_START = brokerDayStart(NOW, "Europe/Athens", "00:00");
 const ago = (sec: number) => new Date(NOW.getTime() - sec * 1000);
 
 /** Metadata exactly as persistLiveFiguresAndPositions writes it. */
@@ -204,6 +209,7 @@ describe("resolveGuardEquity — refresh fails: unknown, and unknown blocks", ()
       inferredInitial: null,
       inferredPeak: null,
       now: NOW,
+      dayStart: DAY_START,
     });
     assert.equal(inputs.totalLoss.status, "unknown");
     assert.match(inputs.totalLoss.status === "unknown" ? inputs.totalLoss.detail : "", /equity/i);
@@ -253,6 +259,8 @@ describe("guardLossInputs — daily (#172 broker day) and total (#179 account si
     usable: true,
     reading: {
       ...readLiveAccountReading(metaAt(ago(5), { balance, equity })),
+      // Anchors captured 1 minute after the broker-day open.
+      dayStartAt: new Date(DAY_START.getTime() + 60_000).toISOString(),
       dayStartBalance: dayStart,
       dayStartEquity: dayStart,
       peakBalance: 100_000,
@@ -269,6 +277,7 @@ describe("guardLossInputs — daily (#172 broker day) and total (#179 account si
       inferredInitial: null,
       inferredPeak: null,
       now: NOW,
+      dayStart: DAY_START,
     });
     assert.equal(i.dayResultPct, -6);
     assert.equal(evaluateAutoTrade(guard({ ...i })).allowed, false);
@@ -285,6 +294,7 @@ describe("guardLossInputs — daily (#172 broker day) and total (#179 account si
       inferredInitial: null,
       inferredPeak: null,
       now: NOW,
+      dayStart: DAY_START,
     });
     assert.equal(i.totalLoss.status, "blocked");
     const d = evaluateAutoTrade(guard({ ...i, dayResultPct: 0 }));
@@ -300,6 +310,7 @@ describe("guardLossInputs — daily (#172 broker day) and total (#179 account si
       inferredInitial: null,
       inferredPeak: null,
       now: NOW,
+      dayStart: DAY_START,
     });
     assert.equal(evaluateAutoTrade(guard({ ...i })).allowed, true);
   });
@@ -315,6 +326,7 @@ describe("guardLossInputs — daily (#172 broker day) and total (#179 account si
       inferredInitial: null,
       inferredPeak: null,
       now: NOW,
+      dayStart: DAY_START,
     });
     assert.equal(i.currentEquity, 96_000);
   });
@@ -330,6 +342,7 @@ describe("guardLossInputs — daily (#172 broker day) and total (#179 account si
       inferredInitial: null,
       inferredPeak: null,
       now: NOW,
+      dayStart: DAY_START,
     });
     assert.equal(i.dayResultPct, null);
     assert.equal(evaluateAutoTrade(guard({ ...i })).allowed, false);
@@ -340,11 +353,82 @@ describe("guardLossInputs — daily (#172 broker day) and total (#179 account si
       usable: true,
       reading: { ...usable(95_000).reading, dayStartBalance: 100_000, dayStartEquity: 102_000, initialBalance: null },
     };
-    const args = { resolved: r, floatingPnl: 0, accountSize: null, inferredInitial: null, inferredPeak: null, now: NOW };
+    const args = { resolved: r, floatingPnl: 0, accountSize: null, inferredInitial: null, inferredPeak: null, now: NOW, dayStart: DAY_START };
     const bal = guardLossInputs({ ...args, limits: { ...twoStep, maxDailyLossBasis: "day_start_balance" } });
     const eq = guardLossInputs({ ...args, limits: { ...twoStep, maxDailyLossBasis: "day_start_equity" } });
     assert.ok(bal.dayResultPct != null && eq.dayResultPct != null);
     assert.ok(Math.abs(bal.dayResultPct - -5) < 1e-9);
     assert.ok(eq.dayResultPct < bal.dayResultPct);
+  });
+});
+
+describe("the day anchor must be captured at the broker-day open (late anchor ⇒ daily unknown)", () => {
+  const FIG = { balance: 100_000, equity: 94_000 };
+  const args = (resolved: Parameters<typeof guardLossInputs>[0]["resolved"]) => ({
+    limits: twoStep,
+    resolved,
+    floatingPnl: 0,
+    accountSize: 100_000,
+    inferredInitial: null,
+    inferredPeak: null,
+    now: NOW,
+    dayStart: DAY_START,
+  });
+  /** Persist at the day open, then keep updating — what a live account does. */
+  const onTimeMeta = () => {
+    const open = metaAt(new Date(DAY_START.getTime() + 3 * 60_000), { balance: 100_000, equity: 100_000 });
+    return metaAt(ago(5), FIG, open);
+  };
+
+  it("nextLiveAccountState records dayStartAt on the roll and keeps it afterwards", () => {
+    const open = metaAt(new Date(DAY_START.getTime() + 3 * 60_000), { balance: 100_000, equity: 100_000 });
+    const later = metaAt(ago(5), FIG, open);
+    const a = readLiveAccountReading(open);
+    const b = readLiveAccountReading(later);
+    assert.equal(a.dayStartAt, new Date(DAY_START.getTime() + 3 * 60_000).toISOString());
+    assert.equal(b.dayStartAt, a.dayStartAt, "later updates the same day do not move the anchor time");
+    assert.equal(b.dayStartBalance, 100_000);
+  });
+
+  it("anchor captured right after the open: daily loss is measured", async () => {
+    const { r } = await resolveWith(onTimeMeta(), { canRefresh: false });
+    assert.equal(r.usable, true);
+    const i = guardLossInputs(args(r));
+    assert.equal(i.dayResultPct, -6);
+    assert.equal(evaluateAutoTrade(guard({ ...i })).reason, "daily_loss_reached");
+  });
+
+  it("anchor rolled by a 10:00 refresh: daily is unknown and an unattended trade is blocked — even though equity looks fine", async () => {
+    const stale = metaAt(new Date("2026-11-10T20:00:00Z"), { balance: 100_000, equity: 100_000 });
+    // The refresh happens at NOW (14:00 broker time) and rolls the day with today's figures.
+    const rolled = metaAt(ago(1), { balance: 99_000, equity: 99_000 }, stale);
+    const { r } = await resolveWith(stale, { refresh: async () => rolled });
+    assert.equal(r.usable, true, "equity itself is fresh");
+    const i = guardLossInputs(args(r));
+    assert.equal(i.dayResultPct, null, "but the anchor is 14 h late — the earlier loss is invisible");
+    assert.equal(i.totalLoss.status, "ok", "the total check does not depend on the day anchor");
+    const d = evaluateAutoTrade(guard({ ...i }));
+    assert.equal(d.allowed, false);
+    assert.equal(!d.allowed && d.reason, "daily_loss_unknown");
+  });
+
+  it("state written before dayStartAt existed: daily unknown", async () => {
+    const meta = onTimeMeta();
+    const live = { ...(meta.liveAccountState as Record<string, unknown>) };
+    delete live.dayStartAt;
+    const { r } = await resolveWith({ ...meta, liveAccountState: live }, { canRefresh: false });
+    assert.equal(r.usable, true);
+    assert.equal(guardLossInputs(args(r)).dayResultPct, null);
+  });
+
+  it("dayAnchorOnTime tolerance: up to the maximum lateness, not after, not missing", () => {
+    const at = (min: number) =>
+      ({ ...readLiveAccountReading({}), dayStartAt: new Date(DAY_START.getTime() + min * 60_000).toISOString() });
+    assert.equal(dayAnchorOnTime(at(0), DAY_START), true);
+    assert.equal(dayAnchorOnTime(at(DAY_ANCHOR_MAX_LATE_MINUTES), DAY_START), true);
+    assert.equal(dayAnchorOnTime(at(DAY_ANCHOR_MAX_LATE_MINUTES + 1), DAY_START), false);
+    assert.equal(dayAnchorOnTime(at(-30), DAY_START), false);
+    assert.equal(dayAnchorOnTime({ ...readLiveAccountReading({}), dayStartAt: null }, DAY_START), false);
+    assert.equal(dayAnchorOnTime({ ...readLiveAccountReading({}), dayStartAt: "x" }, DAY_START), false);
   });
 });

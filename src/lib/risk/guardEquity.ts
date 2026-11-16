@@ -28,6 +28,8 @@ export type LiveAccountReading = {
   dayStartEquity: number | null;
   /** Broker-day key (`YYYY-MM-DD`) the day anchors belong to. */
   dayStartDate: string | null;
+  /** ISO time the day anchors were captured (the first reading of the broker day). */
+  dayStartAt: string | null;
   peakBalance: number | null;
   initialBalance: number | null;
   /** ISO time of the last write of the live state. */
@@ -46,6 +48,7 @@ const EMPTY: LiveAccountReading = {
   dayStartBalance: null,
   dayStartEquity: null,
   dayStartDate: null,
+  dayStartAt: null,
   peakBalance: null,
   initialBalance: null,
   updatedAt: null,
@@ -63,6 +66,7 @@ export function readLiveAccountReading(metadata: unknown): LiveAccountReading {
     dayStartBalance: positive(r.dayStartBalance),
     dayStartEquity: positive(r.dayStartEquity),
     dayStartDate: typeof r.dayStartDate === "string" && r.dayStartDate ? r.dayStartDate : null,
+    dayStartAt: typeof r.dayStartAt === "string" && r.dayStartAt ? r.dayStartAt : null,
     peakBalance: positive(r.peakBalance),
     initialBalance: positive(r.initialBalance),
     updatedAt: typeof r.updatedAt === "string" && r.updatedAt ? r.updatedAt : null,
@@ -75,6 +79,29 @@ export function readingAgeSeconds(reading: LiveAccountReading, now: Date): numbe
   const t = Date.parse(reading.updatedAt);
   if (!Number.isFinite(t)) return null;
   return (now.getTime() - t) / 1000;
+}
+
+/**
+ * How long after the broker-day open the day anchors may have been captured.
+ * The anchor is the first reading AXE saw that day; a late one (first sync at
+ * 10:00, or a guard refresh that rolled the day) misses every loss before it,
+ * so the daily check treats it as unknown instead of "fine". Matches the
+ * ten-minute background sync cadence with a little room.
+ */
+export const DAY_ANCHOR_MAX_LATE_MINUTES = 15;
+
+/**
+ * Were the day anchors captured at (or very soon after) the broker-day open?
+ * False when `dayStartAt` is missing (state written before it was recorded),
+ * unparseable, before the open, or later than the tolerance.
+ */
+export function dayAnchorOnTime(reading: LiveAccountReading, dayStart: Date): boolean {
+  if (!reading.dayStartAt) return false;
+  const at = Date.parse(reading.dayStartAt);
+  if (!Number.isFinite(at)) return false;
+  const lateMin = (at - dayStart.getTime()) / 60_000;
+  // A small negative (clock skew between the writer and the broker-day maths) is fine.
+  return lateMin >= -2 && lateMin <= DAY_ANCHOR_MAX_LATE_MINUTES;
 }
 
 export type ReadingVerdict = "usable" | "missing" | "undated" | "stale" | "future" | "wrong_day";
