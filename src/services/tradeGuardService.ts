@@ -2,9 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { buildAccountProfile } from "@/lib/risk/accountProfile";
 import {
+  dailyLossReference,
   dayAnchorBase,
-  dayResultPctFromEquity,
+  dayResultPctOfReference,
+  inferredInitialBalance,
   resolveCurrentEquity,
+  statedAccountSize,
 } from "@/lib/risk/dailyLoss";
 import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
@@ -307,7 +310,16 @@ export async function decideAutoTradeAllowed(
     // rather than inventing "start = current".
     null;
 
-  const dayResultPct = dayResultPctFromEquity(startEquity, currentEquity);
+  // The firm's daily % is of the account size (FTMO: initial balance), measured
+  // from the day-start anchor — not % of the anchor, which is looser whenever
+  // the account is in profit. See dailyLossReference.
+  const dailyLossBase = dailyLossReference({
+    dayStartBase: startEquity,
+    basis: profile.maxDailyLossBasis,
+    accountSize: statedAccountSize(metadata),
+    inferredInitialBalance: inferredInitialBalance(metadata),
+  });
+  const dayResultPct = dayResultPctOfReference(startEquity, currentEquity, dailyLossBase);
 
   // Automated trades AXE placed today ON THIS ACCOUNT (not the whole user:
   // two accounts must not share one daily cap). See autoTradeCount.ts.
