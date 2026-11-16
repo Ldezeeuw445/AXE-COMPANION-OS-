@@ -34,8 +34,9 @@ export function entitlementFromRow(data: EntitlementRow | undefined, nowMs = Dat
   const founderBadge = data?.founder_badge === true;
   const paidUntilActive = proUntil ? new Date(proUntil).getTime() > nowMs : false;
 
-  const isPaid =
-    chatQuotaExempt || isPaidAxePlan(plan) || (plan === "free" && paidUntilActive);
+  // Paid = a paid plan, or an active pro_until trial on a free plan. Badge and
+  // chat exemption are deliberately NOT part of this: see featurePlanForEntitlement.
+  const isPaid = isPaidAxePlan(plan) || (plan === "free" && paidUntilActive);
 
   return {
     plan: isPaid && plan === "free" && paidUntilActive ? "pro" : plan,
@@ -45,16 +46,10 @@ export function entitlementFromRow(data: EntitlementRow | undefined, nowMs = Dat
     chatQuotaExempt,
     stripeCustomerId: (data?.stripe_customer_id as string | null | undefined) ?? null,
     stripeSubscriptionId: (data?.stripe_subscription_id as string | null | undefined) ?? null,
+    // The label names the plan. The Founder marker is shown separately from
+    // `founderBadge`, so a cancelled Founder reads "Free" with a badge.
     label:
-      founderBadge || plan === "founder"
-        ? "Founder"
-        : plan === "elite"
-          ? "Elite"
-          : isPaid && plan === "free"
-            ? "Pro"
-            : plan === "pro"
-              ? "Pro"
-              : "Free",
+      plan === "founder" ? "Founder" : plan === "elite" ? "Elite" : isPaid ? "Pro" : "Free",
   };
 }
 
