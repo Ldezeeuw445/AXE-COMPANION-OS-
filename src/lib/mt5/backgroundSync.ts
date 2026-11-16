@@ -66,7 +66,7 @@ function isProvisioning(
  */
 export async function syncStaleMt5Accounts(
   supabase: SupabaseClient,
-  opts: { maxAccounts?: number; minAgeMs?: number } = {},
+  opts: { maxAccounts?: number; minAgeMs?: number; autoDeploy?: boolean } = {},
 ): Promise<BackgroundSyncSummary> {
   const maxAccounts = Math.max(1, Math.min(10, opts.maxAccounts ?? 5));
   const minAgeMs = opts.minAgeMs ?? DEFAULT_STALE_MS;
@@ -109,8 +109,9 @@ export async function syncStaleMt5Accounts(
       revalidate: false,
       autoJournal: true,
       allowEmptyDeals: true,
-      // Unattended recovery of an undeployed terminal, rate limited per account.
-      autoDeploy: true,
+      // Unattended restart of an undeployed terminal. It costs MetaApi credit,
+      // so the host switches it on (AXE_MT5_AUTO_DEPLOY=1) — see the cron route.
+      autoDeploy: opts.autoDeploy === true,
     });
 
     if (result.ok) {

@@ -39,7 +39,9 @@ check("the final write keeps the live state written meanwhile", () => {
 });
 
 check("an undeployed terminal is restarted only on the unattended path", () => {
-  assert.ok(/autoDeploy:\s*true/.test(bg));
+  assert.ok(/autoDeploy:\s*opts\.autoDeploy === true/.test(bg));
+  assert.ok(/AXE_MT5_AUTO_DEPLOY/.test(route), "the cron route gates auto-deploy on an env flag");
+  assert.ok(!/autoDeploy:\s*true/.test(bg + route), "auto-deploy must never be hardwired on");
   assert.ok(/opts\.autoDeploy === true/.test(sync));
 });
 

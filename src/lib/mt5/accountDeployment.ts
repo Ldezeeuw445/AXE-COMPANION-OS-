@@ -66,7 +66,7 @@ export function notRunningMessage(action: DeployAction): string {
     case "rate_limited":
       return "The MetaApi terminal is undeployed and was already restarted in the last 6 hours. If it keeps stopping, check the MetaApi balance and plan.";
     case "not_allowed":
-      return "The MetaApi terminal is undeployed, so no broker data can be read. Reconnect the account.";
+      return "The MetaApi terminal is undeployed, so no broker data can be read. Restart it with Test / reconnect on the Accounts page, or switch on AXE_MT5_AUTO_DEPLOY for the background sync.";
     default:
       return "The MetaApi terminal is not running.";
   }

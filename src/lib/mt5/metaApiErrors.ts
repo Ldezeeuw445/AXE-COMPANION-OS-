@@ -32,7 +32,7 @@ const USER_MESSAGES: Record<Mt5CloudErrorCode, string> = {
   sync_failed: "Sync could not finish. Check account status with Test, then try again.",
   disconnected: "This MetaApi connection was removed or is no longer available.",
   undeployed:
-    "The MetaApi terminal for this account is not running, so no broker data can be read. AXE restarts it automatically; if it keeps stopping, check the MetaApi balance and plan.",
+    "The MetaApi terminal for this account is not running, so no broker data can be read. Restart it from the Accounts page; if it keeps stopping, check the MetaApi balance and plan.",
   validation: "Some fields are missing or invalid. Check the form and try again.",
   forbidden: "Connecting an account is temporarily unavailable. This is on our side, not yours — we can see it and are on it.",
   not_found: "The MetaApi account was not found. It may have been deleted in MetaApi.",

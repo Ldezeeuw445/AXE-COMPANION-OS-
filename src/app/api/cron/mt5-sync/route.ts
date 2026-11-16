@@ -33,6 +33,13 @@ export async function GET(request: NextRequest) {
   }
 
   const symbolMapSummary = await syncAccountsMissingSymbolMap(supabase, { maxAccounts: 5 });
-  const summary = await syncStaleMt5Accounts(supabase, { maxAccounts: 5, minAgeMs: 8 * 60 * 1000 });
+  const summary = await syncStaleMt5Accounts(supabase, {
+    maxAccounts: 5,
+    minAgeMs: 8 * 60 * 1000,
+    // Off unless the host sets it: restarting a MetaApi terminal spends credit,
+    // and an undeployed account can mean the balance is empty. Rate limited to
+    // one restart per account per 6 hours even when on.
+    autoDeploy: process.env.AXE_MT5_AUTO_DEPLOY?.trim() === "1",
+  });
   return Response.json({ ok: true, symbolMapSummary, ...summary });
 }

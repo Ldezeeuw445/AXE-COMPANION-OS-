@@ -1286,7 +1286,7 @@ export function buildAxeMessagesFromContext(
       const cur = p.current_price != null ? ` @${p.current_price}` : "";
       return `${p.symbol} ${dir} ${p.volume}lot  open:${p.open_price}${cur}  P&L:${pnl}${sl}${tp}`;
     });
-    const positionsHeading = !context.live_account && context.last_known_account
+    const positionsHeading = !context.live_account
       ? "OPEN POSITIONS (LAST KNOWN — STALE, the live sync is behind; do not present these as the current open positions)"
       : "OPEN POSITIONS (live — TradingOS sync)";
     parts.push(`\n${positionsHeading}\n${posLines.join("\n")}`);

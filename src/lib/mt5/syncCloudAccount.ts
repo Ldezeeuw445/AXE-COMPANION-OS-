@@ -170,8 +170,6 @@ export type RunCloudMt5SyncOptions = {
 };
 
 const AUTO_DEPLOY_BUDGET_MS = 30_000;
-const AUTO_DEPLOY_READY_BUDGET_MS = 60_000;
-const AUTO_DEPLOY_POLL_MS = 3_000;
 /** Written once the live figures are in, so the slower deal history cannot cost us a fresh state. */
 const LIVE_KEYS = ["liveAccountState", "lastLivePositionsAt"] as const;
 
@@ -296,29 +294,13 @@ export async function runCloudMt5Sync(
       prevMeta.lastAutoDeployAt = stamped.lastAutoDeployAt;
       await db.from("user_broker_accounts").update({ metadata: stamped }).eq("id", accountId).eq("user_id", userId);
       await withActionBudget("sync_auto_deploy", provisioningDeployAccount(extId), AUTO_DEPLOY_BUDGET_MS);
-      const readyDeadline = Date.now() + AUTO_DEPLOY_READY_BUDGET_MS;
-      let running = false;
-      while (!running && Date.now() < readyDeadline) {
-        await new Promise((resolve) => setTimeout(resolve, AUTO_DEPLOY_POLL_MS));
-        try {
-          const probe = await withActionBudget(
-            "sync_auto_deploy_probe",
-            provisioningGetAccount(extId),
-            SYNC_FINAL_STATUS_TIMEOUT_MS,
-          );
-          running =
-            String(probe.state ?? "").toUpperCase() === "DEPLOYED" &&
-            String(probe.connectionStatus ?? "").toUpperCase() === "CONNECTED";
-        } catch {
-          /* transient while the terminal starts */
-        }
-      }
-      if (!running) {
-        throw new AccountNotRunningError(
-          "deploying",
-          "The MetaApi terminal was restarted and is still connecting. The next background sync continues.",
-        );
-      }
+      // No waiting for the terminal here: the cron route has a 300 s budget
+      // shared by every account, and a terminal takes a minute or more to
+      // connect. The next run finds it DEPLOYED and syncs it.
+      throw new AccountNotRunningError(
+        "deploying",
+        "The MetaApi terminal was restarted. The next background sync reads it once it is connected.",
+      );
     }
 
     info = await withActionBudget(
