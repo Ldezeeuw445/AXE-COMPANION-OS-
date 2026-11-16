@@ -9,6 +9,7 @@ export type Mt5CloudErrorCode =
   | "sync_no_deals"
   | "sync_failed"
   | "disconnected"
+  | "undeployed"
   | "validation"
   | "forbidden"
   | "not_found"
@@ -30,6 +31,8 @@ const USER_MESSAGES: Record<Mt5CloudErrorCode, string> = {
   sync_no_deals: "Sync completed but no closed position deals were found in the last 90 days for this account.",
   sync_failed: "Sync could not finish. Check account status with Test, then try again.",
   disconnected: "This MetaApi connection was removed or is no longer available.",
+  undeployed:
+    "The MetaApi terminal for this account is not running, so no broker data can be read. AXE restarts it automatically; if it keeps stopping, check the MetaApi balance and plan.",
   validation: "Some fields are missing or invalid. Check the form and try again.",
   forbidden: "Connecting an account is temporarily unavailable. This is on our side, not yours — we can see it and are on it.",
   not_found: "The MetaApi account was not found. It may have been deleted in MetaApi.",
@@ -54,6 +57,7 @@ const OPERATOR_FAULT: ReadonlySet<Mt5CloudErrorCode> = new Set([
   "metaapi_region_error",
   "metaapi_resource_slots",
   "forbidden",
+  "undeployed",
 ]);
 
 export function isOperatorFault(code: Mt5CloudErrorCode): boolean {

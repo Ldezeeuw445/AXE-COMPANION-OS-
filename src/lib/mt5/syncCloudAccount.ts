@@ -14,6 +14,7 @@ import {
   metaApiTradingAccountId,
   MetaApiRequestError,
   provisioningFindMt5CloudAccount,
+  provisioningDeployAccount,
   provisioningGetAccount,
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
@@ -38,6 +39,11 @@ import { renderNoticeBody, signedAmount } from "@/lib/axe/notice";
 import { isAnnounceableTradeClose, tradeCloseEventKey } from "@/lib/axe/watcherCandidates";
 import { figuresFromAccountInfo, mapMetaApiPosition } from "@/lib/mt5/liveAccountSnapshot";
 import { persistLiveFiguresAndPositions } from "@/lib/mt5/persistLiveAccount";
+import {
+  AccountNotRunningError,
+  decideDeployAction,
+  notRunningMessage,
+} from "@/lib/mt5/accountDeployment";
 import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 
 export type CloudMt5SyncResult =
@@ -155,7 +161,35 @@ export type RunCloudMt5SyncOptions = {
   autoJournal?: boolean;
   /** Treat zero deals as success for background/cron sync. */
   allowEmptyDeals?: boolean;
+  /**
+   * Start the account's MetaApi terminal when it is undeployed (unattended
+   * recovery, rate limited per account — see accountDeployment). Off for the
+   * manual Sync button: the user-driven Test / reconnect actions already do it.
+   */
+  autoDeploy?: boolean;
 };
+
+const AUTO_DEPLOY_BUDGET_MS = 30_000;
+const AUTO_DEPLOY_READY_BUDGET_MS = 60_000;
+const AUTO_DEPLOY_POLL_MS = 3_000;
+/** Written once the live figures are in, so the slower deal history cannot cost us a fresh state. */
+const LIVE_KEYS = ["liveAccountState", "lastLivePositionsAt"] as const;
+
+async function readMetadata(
+  db: SupabaseClient,
+  userId: string,
+  accountId: string,
+  fallback: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { data } = await db
+    .from("user_broker_accounts")
+    .select("metadata")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const meta = data?.metadata;
+  return meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as Record<string, unknown>) : fallback;
+}
 
 /**
  * Core MetaAPI → Supabase sync for a single cloud_mt5 account.
@@ -243,6 +277,50 @@ export async function runCloudMt5Sync(
       accountRegion = acc.region;
     }
 
+    const deployAction = decideDeployAction({
+      state: acc.state,
+      allowDeploy: opts.autoDeploy === true,
+      lastAutoDeployAt:
+        typeof prevMeta.lastAutoDeployAt === "string" ? prevMeta.lastAutoDeployAt : null,
+    });
+    if (deployAction === "wait") {
+      throw new AccountNotRunningError("deploying", notRunningMessage(deployAction));
+    }
+    if (deployAction === "rate_limited" || deployAction === "not_allowed") {
+      throw new AccountNotRunningError("undeployed", notRunningMessage(deployAction));
+    }
+    if (deployAction === "deploy") {
+      // Stamped before the call: a deploy that errors or times out still
+      // counts, so a broken account is retried every few hours, not every run.
+      const stamped = { ...(await readMetadata(db, userId, accountId, prevMeta)), lastAutoDeployAt: new Date().toISOString() };
+      prevMeta.lastAutoDeployAt = stamped.lastAutoDeployAt;
+      await db.from("user_broker_accounts").update({ metadata: stamped }).eq("id", accountId).eq("user_id", userId);
+      await withActionBudget("sync_auto_deploy", provisioningDeployAccount(extId), AUTO_DEPLOY_BUDGET_MS);
+      const readyDeadline = Date.now() + AUTO_DEPLOY_READY_BUDGET_MS;
+      let running = false;
+      while (!running && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, AUTO_DEPLOY_POLL_MS));
+        try {
+          const probe = await withActionBudget(
+            "sync_auto_deploy_probe",
+            provisioningGetAccount(extId),
+            SYNC_FINAL_STATUS_TIMEOUT_MS,
+          );
+          running =
+            String(probe.state ?? "").toUpperCase() === "DEPLOYED" &&
+            String(probe.connectionStatus ?? "").toUpperCase() === "CONNECTED";
+        } catch {
+          /* transient while the terminal starts */
+        }
+      }
+      if (!running) {
+        throw new AccountNotRunningError(
+          "deploying",
+          "The MetaApi terminal was restarted and is still connecting. The next background sync continues.",
+        );
+      }
+    }
+
     info = await withActionBudget(
       "sync_account_information",
       clientGetAccountInformation(extId, true, accountRegion),
@@ -253,6 +331,20 @@ export async function runCloudMt5Sync(
       clientGetPositions(extId, false, accountRegion),
       SYNC_POSITIONS_TIMEOUT_MS,
     );
+    // The live figures go in now, before the symbol list and the 90-day deal
+    // history. Those two are the slow, failure-prone steps (a timeout on the
+    // deals used to throw away the account information already in hand), and
+    // `liveAccountState` — the guard's equity, the day anchors, AXE-chat's
+    // balances — must not depend on them.
+    await persistLiveFiguresAndPositions(supabase, {
+      userId,
+      accountId,
+      figures: figuresFromAccountInfo(info),
+      positions: (Array.isArray(positions) ? positions : [])
+        .filter((p): p is Record<string, unknown> => !!p && typeof p === "object" && !Array.isArray(p))
+        .map((p, i) => mapMetaApiPosition(p, i)),
+      force: true,
+    });
     try {
       brokerSymbols = await withActionBudget(
         "sync_symbols",
@@ -270,14 +362,20 @@ export async function runCloudMt5Sync(
       SYNC_HISTORY_TIMEOUT_MS,
     );
   } catch (e) {
+    // Merge into what is stored now, not into the copy read at the start: the
+    // live figures were written in between and must survive a failed sync.
+    const current = await readMetadata(db, userId, accountId, prevMeta);
     await db
       .from("user_broker_accounts")
       .update({
-        provider_status: "sync_failed",
-        metadata: { ...prevMeta, lastSyncErrorAt: new Date().toISOString() },
+        provider_status: e instanceof AccountNotRunningError ? e.providerStatus : "sync_failed",
+        metadata: { ...current, lastSyncErrorAt: new Date().toISOString() },
       })
       .eq("id", accountId)
       .eq("user_id", userId);
+    if (e instanceof AccountNotRunningError) {
+      return { ok: false, code: "undeployed", message: e.message };
+    }
     const m = mapMetaApiActionError(e);
     if (m.code === "unknown") {
       return { ok: false, code: "sync_failed", message: userMessageForCode("sync_failed") };
@@ -439,8 +537,17 @@ export async function runCloudMt5Sync(
   const quotesMeta = buildMt5QuotesSyncMeta(quotesMapping);
   const mergedSymbolMap = mergeMappedQuotesIntoSymbolMap(baseMap, quotesMapping);
 
+  // Anything the live path wrote since the sync began (the early persist above,
+  // or a streamer event) wins over the copy read at the start.
+  const storedNow = await readMetadata(db, userId, accountId, prevMeta);
+  const keepLive: Record<string, unknown> = {};
+  for (const key of LIVE_KEYS) {
+    if (storedNow[key] !== undefined) keepLive[key] = storedNow[key];
+  }
+
   const metadata = {
     ...prevMeta,
+    ...keepLive,
     accountSummary: {
       balance: info.balance,
       equity: info.equity,

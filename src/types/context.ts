@@ -37,6 +37,15 @@ export type Mt5AccountSnapshot = {
   server: string | null;
   name: string | null;
   updated_at: string;
+  /**
+   * Added 2026-11-16, optional so existing consumers keep compiling: where the
+   * figures came from, and how old they were when the context was built.
+   * `live_account` only carries fresh figures; older ones go to
+   * `TradingOSContext.last_known_account` with `stale: true`.
+   */
+  source?: "live_account_state" | "mt5_account_snapshots";
+  age_seconds?: number | null;
+  stale?: boolean;
 };
 
 export type Mt5Position = {
@@ -163,7 +172,10 @@ export type TradingOSContext = {
   candles_summary: string | null;
   key_levels: string[];
   open_commitments: OpenCommitment[];
+  /** Fresh account figures only (see LIVE_ACCOUNT_MAX_AGE_SECONDS). Null when there are none or they are old. */
   live_account: Mt5AccountSnapshot | null;
+  /** Old figures, `stale: true`: the last thing known, never to be shown as live. Optional: absent in older contexts. */
+  last_known_account?: Mt5AccountSnapshot | null;
   live_positions: Mt5Position[];
   closed_positions: Mt5ClosedPosition[];
   /** Assembled retrieval block (knowledge + journal + broker snapshot + rules). */
