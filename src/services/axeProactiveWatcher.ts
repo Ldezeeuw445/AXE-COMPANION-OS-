@@ -25,6 +25,7 @@ import {
 } from "@/lib/axe/watcherCandidates";
 import {
   figuresFromMetadata,
+  liveAccountDayKey,
   liveEquitySnapshotFromMetadata,
   positionsFromAccountMetadata,
 } from "@/lib/mt5/liveAccountSnapshot";
@@ -266,6 +267,8 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
         accountId,
         constraints: accountProfile,
         snap,
+        // Dedup per broker day, same boundary the day-start anchor rolls on.
+        dayStamp: liveAccountDayKey(accountRow?.metadata ?? null),
       });
       for (const alert of ddAlerts) {
         const result = await announce(supabase, userId, {
