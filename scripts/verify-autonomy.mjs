@@ -70,6 +70,7 @@ const BASE = {
   openPositions: 0,
   autoTradesToday: 0,
   dayResultPct: 0,
+  totalLoss: { status: "ok", usedPct: 0, limitPct: 10 },
   minutesToHighImpact: null,
   now: new Date("2026-10-14T12:00:00Z"), // a Wednesday
 };

@@ -268,7 +268,7 @@ export function dailyLossReference(input: {
   if (anchor == null) return null;
   if (input.basis === "day_start_equity") return anchor;
 
-  const stated = positiveOrNull(input.accountSize);
+  const stated = validAccountSize(input.accountSize);
   const inferred = positiveOrNull(input.inferredInitialBalance);
 
   if (input.basis === "day_start_balance" || input.basis === "initial_balance") {

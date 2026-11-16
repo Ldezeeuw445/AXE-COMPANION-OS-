@@ -33,6 +33,7 @@ function secondGuard(args: {
     openPositions: 0,
     autoTradesToday: 0,
     dayResultPct: 0,
+    totalLoss: { status: "ok", usedPct: 0, limitPct: 10 },
     minutesToHighImpact: null,
     now,
     attended: false,

@@ -9,6 +9,7 @@ import {
   resolveCurrentEquity,
   statedAccountSize,
 } from "@/lib/risk/dailyLoss";
+import { evaluateTotalLoss, livePeakBalance } from "@/lib/risk/totalLoss";
 import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
@@ -322,6 +323,19 @@ export async function decideAutoTradeAllowed(
   });
   const dayResultPct = dayResultPctOfReference(startEquity, currentEquity, dailyLossBase);
 
+  // The account's maximum TOTAL loss, from the same basis as the drawdown alert:
+  // stated account size first, then the first recorded balance; trailing models
+  // measure from the recorded peak. Equity is the same live figure as above.
+  // Unknown basis or equity fails closed for unattended orders.
+  const totalLoss = evaluateTotalLoss({
+    maxTotalLossPct: profile.maxTotalLossPct,
+    basis: profile.maxTotalLossBasis,
+    currentEquity,
+    accountSize: statedAccountSize(metadata),
+    initialBalance: inferredInitialBalance(metadata),
+    peakBalance: livePeakBalance(metadata),
+  });
+
   // Automated trades AXE placed today ON THIS ACCOUNT (not the whole user:
   // two accounts must not share one daily cap). See autoTradeCount.ts.
   const autoTradesRes = await countAutoTradesToday(supabase, {
@@ -382,6 +396,7 @@ export async function decideAutoTradeAllowed(
     openPositions: positions.length,
     autoTradesToday: autoTradesRes.count,
     dayResultPct,
+    totalLoss,
     minutesToHighImpact,
     calendarKnown,
     now,

@@ -1,5 +1,6 @@
 import type { AccountProfile } from "@/lib/risk/accountProfile";
 import { evaluateDailyLoss } from "../risk/dailyLoss";
+import type { TotalLossDecision } from "../risk/totalLoss";
 
 /**
  * The last thing that runs before AXE places an order nobody is watching.
@@ -37,6 +38,14 @@ export type AutoTradeGuardInput = {
    * rules — see `dailyLossReference`). Negative is a loss.
    */
   dayResultPct: number | null;
+  /**
+   * Where the account stands against its maximum TOTAL loss, computed by the
+   * caller with `evaluateTotalLoss` (static vs trailing basis, stated account
+   * size). Missing is not "fine": with a total-loss limit set, an unattended
+   * order whose `totalLoss` is absent or `unknown` is refused. Attended orders
+   * skip this check, like the daily trade cap.
+   */
+  totalLoss?: TotalLossDecision | null;
   /** Minutes until the next high-impact event, or null when none is near. */
   minutesToHighImpact: number | null;
   /**
@@ -97,6 +106,8 @@ export type AutoTradeDecision =
         | "risk_unknown"
         | "daily_loss_reached"
         | "daily_loss_unknown"
+        | "total_loss_reached"
+        | "total_loss_unknown"
         | "daily_trade_cap";
       /** One sentence the trader reads in the feed. Names the rule and the number. */
       detail: string;
@@ -192,6 +203,26 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
         reason: "risk_above_limit",
         detail: `Not placed: this trade risks ${riskPct.toFixed(2)}% of the account and your cap is ${userMaxRiskPct}%. Move the stop or lower the size yourself — AXE will not resize a trade you specified.`,
       };
+    }
+  }
+
+  // 3a. The account's damage. The daily limit costs the day, this one costs the
+  //     account, so it is checked first. Unattended orders only: a trader who
+  //     presses the button sees the account's state and decides; automation
+  //     must not open new risk on an account at its maximum loss, or on one
+  //     whose basis it cannot establish.
+  const totalLimit = profile.maxTotalLossPct;
+  if (input.attended !== true && totalLimit != null && Number.isFinite(totalLimit) && totalLimit > 0) {
+    const total = input.totalLoss ?? null;
+    if (total === null) {
+      return {
+        allowed: false,
+        reason: "total_loss_unknown",
+        detail: `Not placed: this account's maximum total loss is ${totalLimit}% and AXE did not check where the account stands against it. Missing risk data means no automatic order.`,
+      };
+    }
+    if (total.status === "unknown" || total.status === "blocked") {
+      return { allowed: false, reason: total.reason, detail: total.detail };
     }
   }
 

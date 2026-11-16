@@ -30,6 +30,7 @@
  * rechtstreeks kan uitoefenen.
  */
 import type { LossBasis } from "@/lib/risk/accountProfile";
+import { dailyLossReference, validAccountSize } from "../risk/dailyLoss";
 
 export type PlanSide = "buy" | "sell";
 
@@ -46,6 +47,13 @@ export type PositionPlan = {
 
 /** De bedragen waar een limiet vanaf gemeten kan worden. */
 export type BasisAmounts = {
+  /**
+   * Account size the trader stated (`metadata.accountSize`). It is what an
+   * FTMO-style percentage is a percentage OF, whatever the day-start balance
+   * or the first balance AXE saw happens to be. Null/absent: not stated.
+   */
+  accountSize?: number | null;
+  /** First balance AXE recorded. A hint, used when no account size is stated. */
   initialBalance?: number | null;
   dayStartBalance?: number | null;
   dayStartEquity?: number | null;
@@ -76,6 +84,12 @@ export type LimitRoom = {
   limitPct: number | null;
   basis: LossBasis | null;
   basisAmount: number | null;
+  /**
+   * Waar het percentage van genomen wordt. Gelijk aan `basisAmount`, behalve
+   * bij een firm die het percentage van de accountgrootte neemt: dan is dat de
+   * grootte (FTMO: 5% van 100k is 5k, ook op een dag die op 110k begint).
+   */
+  allowanceBase: number | null;
   /** Hoeveel er in totaal verloren mag worden voor de limiet raakt, in geld. */
   allowedLoss: number | null;
   alreadyLost: number;
@@ -119,7 +133,8 @@ const finite = (n: unknown): n is number => typeof n === "number" && Number.isFi
 export function amountForBasis(basis: LossBasis | null, amounts: BasisAmounts): number | null {
   if (!basis) return null;
   const byBasis: Record<LossBasis, number | null | undefined> = {
-    initial_balance: amounts.initialBalance,
+    // Opgegeven accountgrootte gaat voor de eerste balans die AXE toevallig zag.
+    initial_balance: validAccountSize(amounts.accountSize) ?? amounts.initialBalance,
     day_start_balance: amounts.dayStartBalance,
     day_start_equity: amounts.dayStartEquity,
     trailing_eod_balance: amounts.trailingEodBalance,
@@ -127,6 +142,36 @@ export function amountForBasis(basis: LossBasis | null, amounts: BasisAmounts): 
   };
   const value = byBasis[basis];
   return finite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Waar de limiet-% van genomen wordt. Dezelfde regels als de auto-trade guard
+ * (`dailyLossReference`) en de drawdown-waarschuwing, zodat het gereedschap
+ * niet iets anders zegt dan de rest van de app:
+ *  - dagelijks, `day_start_balance` / `initial_balance`: de opgegeven
+ *    accountgrootte; anders de kleinste van dagstart en eerste balans.
+ *  - totaal, `initial_balance`: de opgegeven accountgrootte, anders de eerste
+ *    balans.
+ *  - al het andere: de basis zelf (equity bij dagopening, meelopende piek).
+ */
+function allowanceBaseFor(
+  kind: "daily" | "total",
+  basis: LossBasis | null,
+  amounts: BasisAmounts,
+  basisAmount: number,
+): number {
+  if (kind === "daily") {
+    return (
+      dailyLossReference({
+        dayStartBase: basisAmount,
+        basis,
+        accountSize: amounts.accountSize,
+        inferredInitialBalance: amounts.initialBalance,
+      }) ?? basisAmount
+    );
+  }
+  if (basis === "initial_balance") return validAccountSize(amounts.accountSize) ?? basisAmount;
+  return basisAmount;
 }
 
 function roomFor(
@@ -144,20 +189,21 @@ function roomFor(
   // te zeggen, en dan hoort er niets gezegd te worden.
   if (!finite(limitPct) || limitPct <= 0) {
     return {
-      kind, unknown: "limit", limitPct: null, basis, basisAmount,
+      kind, unknown: "limit", limitPct: null, basis, basisAmount, allowanceBase: null,
       allowedLoss: null, alreadyLost, roomLeft: null, breached: false,
       shareOfRoomPct: null, wouldBreach: false,
     };
   }
   if (basisAmount === null) {
     return {
-      kind, unknown: "basis", limitPct, basis, basisAmount: null,
+      kind, unknown: "basis", limitPct, basis, basisAmount: null, allowanceBase: null,
       allowedLoss: null, alreadyLost, roomLeft: null, breached: false,
       shareOfRoomPct: null, wouldBreach: false,
     };
   }
 
-  const allowedLoss = (basisAmount * limitPct) / 100;
+  const allowanceBase = allowanceBaseFor(kind, basis, amounts, basisAmount);
+  const allowedLoss = (allowanceBase * limitPct) / 100;
   const over = alreadyLost >= allowedLoss;
   const roomLeft = Math.max(0, allowedLoss - alreadyLost);
 
@@ -167,6 +213,7 @@ function roomFor(
     limitPct,
     basis,
     basisAmount,
+    allowanceBase,
     allowedLoss,
     alreadyLost,
     roomLeft,
