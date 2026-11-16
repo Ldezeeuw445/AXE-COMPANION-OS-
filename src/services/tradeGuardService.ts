@@ -11,7 +11,8 @@ import {
 } from "@/lib/risk/dailyLoss";
 import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
-import { buildMarketContext } from "@/lib/market/marketContextService";
+import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
+import { readNewsWindow, type NewsReading } from "@/lib/trading/newsWindow";
 import {
   AUTONOMY_MAX_LOT_CEILING,
   AUTONOMY_MAX_RISK_PCT_CEILING,
@@ -338,26 +339,24 @@ export async function decideAutoTradeAllowed(
     };
   }
 
-  let minutesToHighImpact: number | null = null;
+  // Calendar read. An unreadable calendar is NOT "no news": it is surfaced as
+  // calendarKnown=false and the guard fails closed for unattended orders on
+  // accounts that forbid news trading (reason `news_unknown`).
+  //
+  // The limit is deliberately wide: the calendar is sorted by start time from
+  // 12 h back, so a small limit can cut off the very event that is 20 minutes
+  // away behind earlier ones.
+  let newsReading: NewsReading = { calendarKnown: false, minutesToHighImpact: null };
   try {
-    const market = await buildMarketContext({
-      symbol,
-      watchlist: [symbol],
-      newsLimit: 2,
-      calendarLimit: 8,
-    });
-    for (const event of market.events ?? []) {
-      if (event.impact !== "high") continue;
-      const delta = (new Date(event.startsAt).getTime() - Date.now()) / 60000;
-      if (delta < -45 || delta > 90) continue;
-      if (minutesToHighImpact === null || Math.abs(delta) < Math.abs(minutesToHighImpact)) {
-        minutesToHighImpact = delta;
-      }
-    }
-  } catch {
-    // Calendar unavailable. Left as null: the guard treats that as unknown,
-    // and a news rule cannot be enforced on data we do not have.
+    const events = await loadEconomicCalendar({ symbol, daysAhead: 2, limit: 200 });
+    newsReading = readNewsWindow(events, Date.now());
+  } catch (err) {
+    console.error(
+      "[tradeGuard] economic calendar unavailable",
+      err instanceof Error ? err.message : String(err),
+    );
   }
+  const { minutesToHighImpact, calendarKnown } = newsReading;
 
   // Risk % per trade uses equity, not balance — same number the day cap uses.
   const riskPct = tradeRiskPct({
@@ -384,6 +383,7 @@ export async function decideAutoTradeAllowed(
     autoTradesToday: autoTradesRes.count,
     dayResultPct,
     minutesToHighImpact,
+    calendarKnown,
     now,
     attended,
     userMaxLot: autonomy.maxLot,

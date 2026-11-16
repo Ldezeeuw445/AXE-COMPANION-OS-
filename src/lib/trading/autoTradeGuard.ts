@@ -39,6 +39,15 @@ export type AutoTradeGuardInput = {
   dayResultPct: number | null;
   /** Minutes until the next high-impact event, or null when none is near. */
   minutesToHighImpact: number | null;
+  /**
+   * False when the economic calendar could not be read at all (every provider
+   * failed or returned nothing). Distinct from `minutesToHighImpact: null`,
+   * which means "calendar read fine, nothing high-impact is near".
+   *
+   * Optional and defaults to known, so existing callers behave as before.
+   * Only the service that actually fetches the calendar passes `false`.
+   */
+  calendarKnown?: boolean;
   now: Date;
   /**
    * True when a human pressed the button for this specific order.
@@ -81,6 +90,7 @@ export type AutoTradeDecision =
       /** Stable identifier so the same block does not spam the feed. */
       reason:
         | "news_restricted"
+        | "news_unknown"
         | "weekend_restricted"
         | "lot_above_limit"
         | "risk_above_limit"
@@ -120,6 +130,22 @@ export function evaluateAutoTrade(input: AutoTradeGuardInput): AutoTradeDecision
       allowed: false,
       reason: "news_restricted",
       detail: `Not placed: high-impact news ${when} and this is ${profile.description}. AXE will not trade through an event its own rules forbid.`,
+    };
+  }
+
+  // 1a. Fail closed on an unreadable calendar. An account that forbids news
+  //     trading cannot be protected on data we do not have, and "no data" must
+  //     never read as "no news". Unattended orders only: a trader pressing the
+  //     button can see the calendar themselves; automation cannot.
+  if (
+    !profile.newsTradingAllowed &&
+    input.calendarKnown === false &&
+    input.attended !== true
+  ) {
+    return {
+      allowed: false,
+      reason: "news_unknown",
+      detail: `Not placed: AXE could not read the economic calendar, and this is ${profile.description}, which may not trade through high-impact news. AXE will not place an unattended order without knowing whether news is near.`,
     };
   }
 
