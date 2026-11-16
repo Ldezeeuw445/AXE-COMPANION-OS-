@@ -1,6 +1,7 @@
 import type { LivePositionPayload } from "@/lib/chart/liveContract";
 import type { LiveEquitySnapshot } from "@/lib/risk/drawdownAlert";
 import { asFiniteNumber } from "@/lib/journal/tradePnl";
+import { statedAccountSize } from "@/lib/risk/dailyLoss";
 import { brokerDayKey, brokerDayStart, resolveSessionZone } from "@/lib/chart/sessionDay";
 
 export const ACCOUNT_LIVE_SYMBOL = "__account__";
@@ -162,6 +163,7 @@ export function liveEquitySnapshotFromMetadata(
     dayStartEquity: num(live.dayStartEquity) ?? num(summary.equity) ?? equity,
     initialBalance: num(live.initialBalance) ?? num(summary.balance) ?? balance,
     peakBalance: num(live.peakBalance) ?? Math.max(balance, equity),
+    accountSize: statedAccountSize(metadata),
   };
 }
 

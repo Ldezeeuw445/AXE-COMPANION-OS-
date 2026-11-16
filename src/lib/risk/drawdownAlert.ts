@@ -17,6 +17,8 @@ export type LiveEquitySnapshot = {
   /** Starting capital the total-loss rule is measured from. */
   initialBalance: number | null;
   peakBalance: number | null;
+  /** Account size the trader stated (`metadata.accountSize`); null when not stated. */
+  accountSize?: number | null;
 };
 
 export type DrawdownReading = {
@@ -85,6 +87,7 @@ export function readingForKind(
       ? dailyLossReference({
           dayStartBase: reference,
           basis,
+          accountSize: snap.accountSize,
           inferredInitialBalance: snap.initialBalance,
         })
       : reference;
