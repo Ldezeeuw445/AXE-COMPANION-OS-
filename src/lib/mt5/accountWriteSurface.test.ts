@@ -29,7 +29,8 @@
  * the whole column writable. Both now go out elevated after a user_id-filtered
  * ownership read (`syncWriteScope.test.ts` holds them to that order), so no
  * owner entry below is an UPDATE: what the trader still needs is INSERT and
- * DELETE on their own rows, and the remaining UPDATE users are the blockers.
+ * DELETE on their own rows. The last blocker, the hub adapter's saveAccount,
+ * went elevated too, so no UPDATE on this table needs the trader's grant.
  *
  * Whole suite: npm test
  * This file only: node --import ./scripts/bundler-resolve.mjs --test src/lib/mt5/accountWriteSurface.test.ts
@@ -45,7 +46,6 @@ type Kind = "elevated" | "owner" | "blocker";
 type Write = { op: string; receiver: string; kind: Kind; columns?: string };
 
 const elevated = (op: string, receiver: string): Write => ({ op, receiver, kind: "elevated" });
-const blocker = (op: string, receiver: string): Write => ({ op, receiver, kind: "blocker" });
 const owner = (op: string, receiver: string, columns: string): Write => ({
   op,
   receiver,
@@ -146,9 +146,9 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
   },
   "src/lib/broker/hub/adapters/supabaseDatabase.ts": {
     why:
-      "Hub adapter persistence. saveAccount writes hub/provider columns and filters " +
-      "only on id; deleteAccount is an owner action.",
-    writes: [blocker("update", "supabase"), owner("delete", "supabase", "DELETE")],
+      "Hub adapter persistence. saveAccount writes hub/provider columns, elevated after a " +
+      "user_id-filtered getAccount on the trader's client; deleteAccount is an owner action.",
+    writes: [elevated("update", "accountWriter"), owner("delete", "supabase", "DELETE")],
   },
   "src/lib/broker/hub/adapters/alpacaLive.ts": {
     why:
@@ -312,6 +312,22 @@ describe("user_broker_accounts write surface", () => {
       "an owner edit on the trader's client keeps UPDATE (and metadata) writable; " +
         "read the row on the caller's client, then write it through syncWriteClient(supabase)",
     );
+  });
+
+  it("no blocker is left, so the trader's UPDATE grant on this table is revocable", () => {
+    const blockers = Object.entries(EXPECTED).flatMap(([file, { writes }]) =>
+      writes.filter((w) => w.kind === "blocker").map((w) => `${file}: ${w.op} on ${w.receiver}`),
+    );
+    assert.deepEqual(
+      blockers,
+      [],
+      "a provider/sync write is back on the trader's client; route it through syncWriteClient(supabase)",
+    );
+
+    const sessionUpdates = Object.entries(found).flatMap(([file, writes]) =>
+      writes.filter((w) => w.op === "update" && w.receiver === "supabase").map(() => file),
+    );
+    assert.deepEqual(sessionUpdates, [], "an UPDATE went back to the trader's own client");
   });
 
   it("the hub route takes no provider state from the request body", () => {

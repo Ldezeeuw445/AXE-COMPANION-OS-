@@ -67,13 +67,11 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
       "that table does not break it — revoking DELETE would",
   },
   "lib/broker/hub/adapters/supabaseDatabase.ts": {
-    tables: { user_broker_accounts: 2 },
+    tables: { user_broker_accounts: 1 },
     why:
-      "the hub's generic save/delete, still on whichever client its caller built — but no " +
-      "longer *because* of the client: it is bound to an owner and filters user_id on every " +
-      "statement, which `adapters/supabaseDatabase.test.ts` holds it to against a fake with " +
-      "no RLS at all. What keeps it listed is that its caller still hands it the trader's " +
-      "client; moving that is the same user-initiated-edit question as the entries above",
+      "the hub's deleteAccount: the trader removing their own account, so it needs DELETE, " +
+      "not INSERT/UPDATE. saveAccount (hub/provider columns) now goes out elevated after an " +
+      "owner-scoped read, which `adapters/supabaseDatabase.test.ts` holds it to",
   },
 };
 
