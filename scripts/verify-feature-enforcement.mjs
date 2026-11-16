@@ -98,4 +98,20 @@ check("nothing in the app writes a paid entitlement except the Stripe webhook", 
   assert.ok(writers.every((w) => w === "src/app/api/stripe/webhook/route.ts"), `unexpected entitlement writers: ${writers.join(", ")}`);
 });
 
+check("features come from the plan only: badge and chat exemption unlock nothing", () => {
+  const access = readFileSync("src/lib/billing/access.ts", "utf8");
+  const fn = access.slice(access.indexOf("export function featurePlanForEntitlement"), access.indexOf("export function hasEntitlementFeature"));
+  assert.ok(!/founderBadge|chatQuotaExempt/.test(fn), "featurePlanForEntitlement must not read founderBadge/chatQuotaExempt");
+  const core = readFileSync("src/lib/billing/entitlementCore.ts", "utf8");
+  const isPaid = core.slice(core.indexOf("const isPaid ="), core.indexOf("return {", core.indexOf("const isPaid =")));
+  assert.ok(!/chatQuotaExempt|founderBadge/.test(isPaid), "isPaid must not depend on badge or exemption");
+});
+
+check("the database refuses paid rows for anonymous users (trigger migration present)", () => {
+  const sql = readFileSync("supabase/migrations/20261116133500_axe_entitlements_anonymous_never_paid.sql", "utf8");
+  for (const needle of ["trg_axe_entitlements_anonymous_free", "BEFORE INSERT OR UPDATE", "is_anonymous", "plan := 'free'", "founder_badge := false", "chat_quota_exempt := false"]) {
+    assert.ok(sql.includes(needle), `migration lost: ${needle}`);
+  }
+});
+
 console.log(`\n${passed} checks passed`);

@@ -59,6 +59,7 @@ export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
   let entitlementLabel = "Free";
   let founderBadge = false;
+  let entitlementPlan = "free";
   if (supabase) {
     const {
       data: { user },
@@ -67,6 +68,7 @@ export default async function SettingsPage() {
       const ent = await getUserAxeEntitlement(supabase, user.id);
       entitlementLabel = ent.label;
       founderBadge = ent.founderBadge;
+      entitlementPlan = ent.plan;
     }
   }
 
@@ -422,9 +424,11 @@ export default async function SettingsPage() {
         <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">Subscription</h2>
         <PlanStatusLine label={entitlementLabel} founderBadge={founderBadge} />
         <p className="mt-1 text-xs text-tos-muted">
-          {founderBadge
-            ? "Founder status is permanent — full Companion access plus Trading OS Founder pricing when the terminal ships."
-            : "Free includes core tools with a daily chat cap. Pro unlocks Cockpit learning, trade prep, and unlimited chat."}
+          {entitlementPlan === "founder"
+            ? "Founder status is permanent — full Companion access plus Trading OS Founder pricing while you stay subscribed."
+            : founderBadge
+              ? "Your Founder badge stays. Features come with a plan — see Subscriptions to pick one."
+              : "Free includes core tools with a daily chat cap. Pro unlocks Cockpit learning, trade prep, and unlimited chat."}
         </p>
         <Link
           href="/upgrade"

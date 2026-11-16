@@ -1,6 +1,6 @@
 import type { UserAxeEntitlement } from "@/lib/billing/types";
 import { isPaidAxePlan, type AxePlanId } from "@/lib/billing/tiers";
-import { type AxeFeature, hasAxeFeature, normalizeAxePlan } from "@/lib/billing/features";
+import { type AxeFeature, hasAxeFeature } from "@/lib/billing/features";
 
 /** Comma-separated auth user UUIDs with full Companion access (owner/dev accounts). */
 export function isFullAccessUserId(userId: string): boolean {
@@ -12,16 +12,27 @@ export function isFullAccessUserId(userId: string): boolean {
   return ids.includes(userId);
 }
 
-/** Plan string used for feature-gate checks (maps paid/exempt → pro+). */
+/**
+ * Plan used for feature-gate checks. Features come from the PLAN (founder /
+ * elite / pro) or an active `pro_until` trial — nothing else.
+ *
+ * `founder_badge` is a permanent marker that survives cancelling; it is not a
+ * subscription. `chat_quota_exempt` lifts the daily chat cap and nothing more
+ * (the quota RPCs read it; this function does not). Neither unlocks a Pro
+ * feature. Until 2026-11-16 both did, so a cancelled Founder kept every Pro
+ * route, and every exempt row was a free Founder plan.
+ *
+ * The owner allow-list (`AXE_FULL_ACCESS_USER_IDS`) is an explicit env switch,
+ * not data in the table, and still grants everything.
+ */
 export function featurePlanForEntitlement(ent: UserAxeEntitlement, userId?: string): AxePlanId | "exempt" {
   if (isFullAccessUserId(userId ?? "")) return "founder";
-  if (ent.chatQuotaExempt) return "founder";
-  if (ent.founderBadge || ent.plan === "founder") return "founder";
+  if (ent.plan === "founder") return "founder";
   if (ent.plan === "elite") return "elite";
-  if (ent.isPaid || isPaidAxePlan(ent.plan)) {
-    return ent.plan === "free" ? "pro" : ent.plan;
-  }
-  return normalizeAxePlan(ent.plan);
+  if (isPaidAxePlan(ent.plan)) return ent.plan;
+  // An active pro_until on a free plan is a time-boxed Pro trial.
+  if (ent.isPaid) return "pro";
+  return "free";
 }
 
 export function hasEntitlementFeature(
