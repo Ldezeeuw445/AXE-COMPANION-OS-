@@ -13,6 +13,9 @@ export const maxDuration = 300;
  * Secured with CRON_SECRET (`scripts/run-vps-cron.sh` sends Authorization: Bearer <CRON_SECRET>).
  * Set CRON_SECRET + SUPABASE_SERVICE_ROLE_KEY + METAAPI_TOKEN on the IONOS host.
  */
+// minAgeMs is 8 minutes, not 10: the job fires every 10 minutes and a sync ends
+// a little after its tick, so the next tick found the account 9 minutes old,
+// skipped it, and an account was really synced only every 20 minutes.
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET?.trim();
   const auth = request.headers.get("authorization") ?? "";
@@ -30,6 +33,13 @@ export async function GET(request: NextRequest) {
   }
 
   const symbolMapSummary = await syncAccountsMissingSymbolMap(supabase, { maxAccounts: 5 });
-  const summary = await syncStaleMt5Accounts(supabase, { maxAccounts: 5, minAgeMs: 10 * 60 * 1000 });
+  const summary = await syncStaleMt5Accounts(supabase, {
+    maxAccounts: 5,
+    minAgeMs: 8 * 60 * 1000,
+    // Off unless the host sets it: restarting a MetaApi terminal spends credit,
+    // and an undeployed account can mean the balance is empty. Rate limited to
+    // one restart per account per 6 hours even when on.
+    autoDeploy: process.env.AXE_MT5_AUTO_DEPLOY?.trim() === "1",
+  });
   return Response.json({ ok: true, symbolMapSummary, ...summary });
 }

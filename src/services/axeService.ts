@@ -1,5 +1,6 @@
 import { callLLM, streamLLM, type LLMMessage } from "@/services/llmClient";
 import type { TradingOSContext } from "@/types/context";
+import { liveAccountPromptBlock } from "@/lib/chat/liveAccountContext";
 import type OpenAI from "openai";
 
 const AXE_SYSTEM_PROMPT = `You are AXE — a battle-tested trading companion: sharp on desktop (Trading OS) and standalone in AXE Companion on web and phone. You think like a senior prop trader. You do not teach basics. You do not hedge your words. You analyse, challenge, and sharpen.
@@ -1269,19 +1270,9 @@ export function buildAxeMessagesFromContext(
     parts.push(`\nJOURNAL ENTRIES (user_journal_entries)\n${lines.join("\n")}`);
   }
 
-  // 11. Live MT5 account snapshot
-  if (context.live_account) {
-    const a = context.live_account;
-    const cur = a.currency ?? "USD";
-    const bal = a.balance != null ? `${cur} ${a.balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
-    const eq = a.equity != null ? `${cur} ${a.equity.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
-    const fm = a.free_margin != null ? `${cur} ${a.free_margin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
-    const lev = a.leverage != null ? `1:${a.leverage}` : "—";
-    const acctName = a.name ? ` (${a.name})` : "";
-    parts.push(
-      `\nLIVE ACCOUNT${acctName} — synced ${a.updated_at ? new Date(a.updated_at).toUTCString() : "recently"}\nBalance: ${bal}   Equity: ${eq}   Free margin: ${fm}   Leverage: ${lev}`
-    );
-  }
+  // 11. MT5 account figures — LIVE only when fresh, otherwise LAST KNOWN (stale)
+  const accountBlock = liveAccountPromptBlock(context);
+  if (accountBlock) parts.push(accountBlock);
 
   // 12. Live open positions
   if (context.live_positions && context.live_positions.length > 0) {
@@ -1295,7 +1286,10 @@ export function buildAxeMessagesFromContext(
       const cur = p.current_price != null ? ` @${p.current_price}` : "";
       return `${p.symbol} ${dir} ${p.volume}lot  open:${p.open_price}${cur}  P&L:${pnl}${sl}${tp}`;
     });
-    parts.push(`\nOPEN POSITIONS (live — TradingOS sync)\n${posLines.join("\n")}`);
+    const positionsHeading = !context.live_account
+      ? "OPEN POSITIONS (LAST KNOWN — STALE, the live sync is behind; do not present these as the current open positions)"
+      : "OPEN POSITIONS (live — TradingOS sync)";
+    parts.push(`\n${positionsHeading}\n${posLines.join("\n")}`);
   } else if (context.live_account) {
     parts.push(`\nOPEN POSITIONS\nNo open positions.`);
   }

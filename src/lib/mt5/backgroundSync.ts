@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { metadataHasSymbolMap } from "@/lib/broker/brokerSymbolRuntime";
+import { syncDueReason } from "@/lib/mt5/syncDue";
 import { refreshCloudAccountSymbolMap, runCloudMt5Sync } from "@/lib/mt5/syncCloudAccount";
 
 const DEFAULT_STALE_MS = 10 * 60 * 1000;
@@ -65,34 +66,40 @@ function isProvisioning(
  */
 export async function syncStaleMt5Accounts(
   supabase: SupabaseClient,
-  opts: { maxAccounts?: number; minAgeMs?: number } = {},
+  opts: { maxAccounts?: number; minAgeMs?: number; autoDeploy?: boolean } = {},
 ): Promise<BackgroundSyncSummary> {
   const maxAccounts = Math.max(1, Math.min(10, opts.maxAccounts ?? 5));
   const minAgeMs = opts.minAgeMs ?? DEFAULT_STALE_MS;
-  const cutoff = new Date(Date.now() - minAgeMs).toISOString();
+  const now = new Date();
 
-  const { data: accounts, error } = await supabase
+  // Not filtered on age in SQL: an account is also due when its day anchors are
+  // from a previous broker day (see syncDueReason), which only the metadata
+  // knows. The set of active cloud accounts is small.
+  const { data: allAccounts, error } = await supabase
     .from("user_broker_accounts")
-    .select("id,user_id,last_sync_at,provider_status,external_connection_id")
+    .select("id,user_id,last_sync_at,provider_status,external_connection_id,metadata")
     .eq("connection_method", "cloud_mt5")
     .eq("status", "active")
     .not("external_connection_id", "is", null)
-    .or(`last_sync_at.is.null,last_sync_at.lt.${cutoff}`)
     .order("last_sync_at", { ascending: true, nullsFirst: true })
-    .limit(maxAccounts);
+    .limit(200);
 
   if (error) {
     return { scanned: 0, synced: 0, skipped: 0, failures: [{ accountId: "-", userId: "-", error: error.message }] };
   }
 
+  const accounts = ((allAccounts ?? []) as CloudAccountRow[])
+    .filter((row) => syncDueReason({ lastSyncAt: row.last_sync_at, metadata: row.metadata, now, minAgeMs }) !== null)
+    .slice(0, maxAccounts);
+
   const summary: BackgroundSyncSummary = {
-    scanned: accounts?.length ?? 0,
+    scanned: accounts.length,
     synced: 0,
     skipped: 0,
     failures: [],
   };
 
-  for (const row of accounts ?? []) {
+  for (const row of accounts) {
     if (isProvisioning(row.provider_status, row.last_sync_at)) {
       summary.skipped += 1;
       continue;
@@ -102,6 +109,9 @@ export async function syncStaleMt5Accounts(
       revalidate: false,
       autoJournal: true,
       allowEmptyDeals: true,
+      // Unattended restart of an undeployed terminal. It costs MetaApi credit,
+      // so the host switches it on (AXE_MT5_AUTO_DEPLOY=1) — see the cron route.
+      autoDeploy: opts.autoDeploy === true,
     });
 
     if (result.ok) {

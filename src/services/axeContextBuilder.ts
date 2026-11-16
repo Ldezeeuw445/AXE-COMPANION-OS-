@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { pickLiveAccountContext, type LiveAccountSourceRow } from "@/lib/chat/liveAccountContext";
 import type {
   AccountsContext,
   AlertsContext,
@@ -157,6 +158,7 @@ type LegacyContextParts = {
   filteredNews: FilteredNewsEvent[];
   recentExecutions: TerminalExecution[];
   liveAccount: Mt5AccountSnapshot | null;
+  lastKnownAccount: Mt5AccountSnapshot | null;
   livePositions: Mt5Position[];
   closedPositions: Mt5ClosedPosition[];
 };
@@ -1000,7 +1002,7 @@ async function buildLegacy(
   userId: string,
   symbol: string | null,
 ): Promise<LegacyContextParts> {
-  const [execRes, liveAccountRes, livePositionsRes, closedPositionsRes] = await Promise.all([
+  const [execRes, liveAccountRes, liveStateRes, prefsRes, livePositionsRes, closedPositionsRes] = await Promise.all([
     supabase
       .from("execution_requests")
       .select("symbol,instrument,direction,status,notes,rationale")
@@ -1013,6 +1015,19 @@ async function buildLegacy(
       .eq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(1)
+      .maybeSingle(),
+    // The figures every sync and live event writes. mt5_account_snapshots above
+    // has had no writer since 2026-04-21 and is only kept as a fallback.
+    supabase
+      .from("user_broker_accounts")
+      .select("id,label,mt5_server,metadata")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .limit(20),
+    supabase
+      .from("user_workspace_preferences")
+      .select("active_account_id")
+      .eq("user_id", userId)
       .maybeSingle(),
     supabase
       .from("mt5_positions")
@@ -1035,7 +1050,11 @@ async function buildLegacy(
   }));
 
   const filteredNews: FilteredNewsEvent[] = [];
-  const liveAccount = (liveAccountRes.data ?? null) as Mt5AccountSnapshot | null;
+  const { live: liveAccount, lastKnown: lastKnownAccount } = pickLiveAccountContext({
+    accounts: (liveStateRes.data ?? []) as LiveAccountSourceRow[],
+    activeAccountId: (prefsRes.data?.active_account_id as string | null | undefined) ?? null,
+    legacySnapshot: (liveAccountRes.data ?? null) as Mt5AccountSnapshot | null,
+  });
   const livePositions = (livePositionsRes.data ?? []) as Mt5Position[];
   const closedPositions = (closedPositionsRes.data ?? []) as Mt5ClosedPosition[];
 
@@ -1047,6 +1066,7 @@ async function buildLegacy(
     filteredNews,
     recentExecutions,
     liveAccount,
+    lastKnownAccount,
     livePositions,
     closedPositions,
   };
@@ -1387,6 +1407,7 @@ export async function buildTradingOSCompatibleContext(args: BuilderArgs): Promis
       filteredNews: [],
       recentExecutions: [],
       liveAccount: null,
+      lastKnownAccount: null,
       livePositions: [],
       closedPositions: [],
     },
@@ -1437,6 +1458,7 @@ export async function buildTradingOSCompatibleContext(args: BuilderArgs): Promis
     key_levels: keyLevelsFromWatchlist(axeContext.settings.watchlist, axeContext.symbol),
     open_commitments: axeContext.memory.openCommitments,
     live_account: legacyRes.value.liveAccount,
+    last_known_account: legacyRes.value.lastKnownAccount,
     live_positions: legacyLivePositions,
     closed_positions: legacyRes.value.closedPositions,
     knowledge_layer: null,

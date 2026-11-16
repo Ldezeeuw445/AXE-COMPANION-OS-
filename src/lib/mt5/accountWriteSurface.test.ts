@@ -88,6 +88,8 @@ const EXPECTED: Record<string, { why: string; writes: Write[] }> = {
       elevated("update", "db"),
       elevated("update", "db"),
       elevated("update", "db"),
+      // lastAutoDeployAt stamp before an unattended MetaApi redeploy.
+      elevated("update", "db"),
       elevated("update", "syncWriteClient(supabase)"),
     ],
   },
