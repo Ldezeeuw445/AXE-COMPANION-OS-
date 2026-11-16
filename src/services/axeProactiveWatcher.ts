@@ -30,6 +30,7 @@ import {
   positionsFromAccountMetadata,
 } from "@/lib/mt5/liveAccountSnapshot";
 import { evaluateDrawdownAlerts } from "@/lib/risk/drawdownAlert";
+import { filterUsersWithFeature } from "@/services/entitledUsers";
 
 export type ProactiveWatcherSummary = {
   usersChecked: number;
@@ -507,14 +508,32 @@ export async function runAxeProactiveWatcher(
     })
     .map((row) => row.user_id as string);
 
+  // "No proactive notifications" is a Free-plan restriction, and this loop is
+  // where proactive notifications are produced: it writes feed events, spends
+  // model calls and sends pushes per user, with no route in front of it. Keep
+  // only users whose entitlement (anonymous rule included) allows the feature —
+  // filtered per source list so unentitled users cannot fill the maxUsers cap
+  // and crowd out paying ones.
+  const everyone = [
+    ...idsOf(tradeUsers),
+    ...idsOf(execUsers),
+    ...smartAlertUserIds,
+    ...openPositionUserIds,
+    ...staleConnectionUserIds,
+    ...idsOf(accountRows),
+    ...idsOf(pushUsers),
+  ];
+  const entitled = await filterUsersWithFeature(supabase, everyone, "proactive_notifications");
+  const keep = (ids: string[]) => ids.filter((id) => entitled.has(id));
+
   const candidateIds = collectWatcherCandidates(
     {
-      recentTradeUserIds: idsOf(tradeUsers),
-      pendingExecUserIds: [...idsOf(execUsers), ...smartAlertUserIds],
-      openPositionUserIds,
-      staleConnectionUserIds,
-      activeAccountUserIds: idsOf(accountRows),
-      pushUserIds: idsOf(pushUsers),
+      recentTradeUserIds: keep(idsOf(tradeUsers)),
+      pendingExecUserIds: keep([...idsOf(execUsers), ...smartAlertUserIds]),
+      openPositionUserIds: keep(openPositionUserIds),
+      staleConnectionUserIds: keep(staleConnectionUserIds),
+      activeAccountUserIds: keep(idsOf(accountRows)),
+      pushUserIds: keep(idsOf(pushUsers)),
     },
     maxUsers,
   );

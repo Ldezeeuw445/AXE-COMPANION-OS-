@@ -5,11 +5,10 @@ import {
   FOUNDER_SEAT_CAP,
   isEliteTierAvailable,
   isFounderTierAvailable,
-  isPaidAxePlan,
-  planDisplayLabel,
   type AxePlanId,
 } from "@/lib/billing/tiers";
-import { normalizeAxePlan } from "@/lib/billing/features";
+import { isAnonymousAuthUser } from "@/lib/billing/anonymousUsers";
+import { applyAnonymousRule, entitlementFromRow, isPaidShaped } from "@/lib/billing/entitlementCore";
 
 import type { UserAxeEntitlement, BillingCatalogState } from "@/lib/billing/types";
 
@@ -26,34 +25,12 @@ export async function getUserAxeEntitlement(
     .eq("user_id", userId)
     .maybeSingle();
 
-  const plan = normalizeAxePlan(data?.plan as string | undefined);
-  const proUntil = (data?.pro_until as string | null) ?? null;
-  const chatQuotaExempt = data?.chat_quota_exempt === true;
-  const founderBadge = data?.founder_badge === true;
-  const paidUntilActive = proUntil ? new Date(proUntil) > new Date() : false;
-
-  const isPaid =
-    chatQuotaExempt ||
-    isPaidAxePlan(plan) ||
-    (plan === "free" && paidUntilActive);
-
-  return {
-    plan: isPaid && plan === "free" && paidUntilActive ? "pro" : plan,
-    isPaid,
-    founderBadge,
-    proUntil,
-    chatQuotaExempt,
-    stripeCustomerId: (data?.stripe_customer_id as string | null) ?? null,
-    stripeSubscriptionId: (data?.stripe_subscription_id as string | null) ?? null,
-    label:
-      founderBadge || plan === "founder"
-        ? "Founder"
-        : plan === "elite"
-          ? "Elite"
-          : isPaid && plan === "free"
-            ? "Pro"
-            : planDisplayLabel(plan),
-  };
+  const raw = entitlementFromRow(data);
+  // An anonymous auth user is never paid, whatever the row says (see
+  // entitlementCore). The auth lookup only runs for paid-looking rows, and is
+  // cached, so a free user costs nothing extra.
+  if (!isPaidShaped(raw)) return raw;
+  return applyAnonymousRule(raw, await isAnonymousAuthUser(userId));
 }
 
 export async function getFounderSeatsUsed(

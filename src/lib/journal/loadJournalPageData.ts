@@ -6,6 +6,8 @@ import { loadWeakSpotTrades } from "@/services/weakSpotService";
 import { getLearningGrowth } from "@/services/learningGrowthService";
 import type { LearningStage } from "@/lib/axe/learningStage";
 import { applyAccountIdReadFilter } from "@/lib/account/accountScopedRows";
+import { hasEntitlementFeature } from "@/lib/billing/access";
+import { getUserAxeEntitlement } from "@/services/billingService";
 
 export type JournalEntryRow = {
   id: string;
@@ -121,7 +123,12 @@ export async function loadJournalPageData(opts: {
   let weakSpots: WeakSpot[] = [];
   // Outside the activeAccountId branch on purpose: the arc counts rules,
   // playbooks and memories, which exist whether or not a broker is linked.
-  const learningArc = await getLearningGrowth(sb, userId, "axe");
+  // The Learning Arc is a Pro feature; the journal itself (manual) is Free.
+  // Gated here, where the data is produced, not only in the component.
+  const learningArcEntitled = await getUserAxeEntitlement(sb, userId)
+    .then((ent) => hasEntitlementFeature(ent, "learning_arc", userId))
+    .catch(() => false);
+  const learningArc = learningArcEntitled ? await getLearningGrowth(sb, userId, "axe") : null;
 
   if (activeAccountId) {
     void syncAccountIfStale(sb, userId, activeAccountId).catch(() => undefined);

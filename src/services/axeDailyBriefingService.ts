@@ -32,6 +32,7 @@ import {
 import type { BriefHighlight } from "@/lib/briefing/briefBodyFormat";
 import type { MarketContext } from "@/lib/market/marketTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { filterUsersWithFeature } from "@/services/entitledUsers";
 
 // ─── Timezone helpers ─────────────────────────────────────────────────────────
 
@@ -873,19 +874,11 @@ async function getTraderIdsForBriefing(
 
     if (!paidOnly) return ids;
 
-    const paid: string[] = [];
-    for (const id of ids) {
-      const { data: ent } = await supabase
-        .from("axe_user_entitlements")
-        .select("plan")
-        .eq("user_id", id)
-        .maybeSingle();
-      const plan = ent?.plan ?? "free";
-      if (plan === "pro" || plan === "founder" || plan === "elite") {
-        paid.push(id);
-      }
-    }
-    return paid;
+    // Same entitlement a request sees, including "an anonymous user is never
+    // paid" — the plan string alone briefed 8,032 mornings for anonymous
+    // accounts and would have kept doing it for the 51 founder rows.
+    const entitled = await filterUsersWithFeature(supabase, ids, "briefings");
+    return ids.filter((id) => entitled.has(id));
   } catch (err) {
     console.error("[Briefing] getTraderIdsForBriefing error:", err);
     return [];

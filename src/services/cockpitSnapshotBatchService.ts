@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isPaidAxePlan } from "@/lib/billing/tiers";
+import { filterUsersWithFeature } from "@/services/entitledUsers";
 import { generateCockpitSnapshot } from "@/services/cockpitSnapshotService";
 import { refreshAxeEngineProfile } from "@/services/axeEngineService";
 
@@ -26,7 +26,7 @@ export async function runCockpitSnapshotBatch(
 
   const { data: entitlements, error } = await supabase
     .from("axe_user_entitlements")
-    .select("user_id,plan,chat_quota_exempt,pro_until")
+    .select("user_id")
     .limit(500);
 
   if (error) {
@@ -34,16 +34,12 @@ export async function runCockpitSnapshotBatch(
     return summary;
   }
 
-  const now = Date.now();
-  const paidUserIds = (entitlements ?? [])
-    .filter((row) => {
-      if (row.chat_quota_exempt === true) return true;
-      if (isPaidAxePlan(row.plan as string)) return true;
-      const proUntil = row.pro_until ? new Date(String(row.pro_until)).getTime() : 0;
-      return proUntil > now;
-    })
-    .map((row) => row.user_id as string)
-    .slice(0, maxUsers);
+  // Same entitlement a request would see — including "an anonymous user is
+  // never paid". The raw rows were enough to bill model calls to 51 anonymous
+  // "founder" accounts minted by the old demo route.
+  const candidateIds = (entitlements ?? []).map((row) => row.user_id as string);
+  const entitled = await filterUsersWithFeature(supabase, candidateIds, "cockpit_learning");
+  const paidUserIds = candidateIds.filter((id) => entitled.has(id)).slice(0, maxUsers);
 
   for (const userId of paidUserIds) {
     summary.attempted += 1;
