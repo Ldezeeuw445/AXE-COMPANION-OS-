@@ -6,15 +6,13 @@ import {
   TOTAL_LOSS_BUFFER_PCT,
   TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES,
   evaluateTotalLoss,
-  freshestEquity,
-  liveEquityReading,
   livePeakBalance,
   totalLossFrame,
 } from "./totalLoss";
 import { evaluateAutoTrade, type AutoTradeGuardInput } from "../trading/autoTradeGuard";
 
 const NOW = new Date("2026-11-11T12:00:00Z"); // Wednesday noon
-const FRESH = new Date(NOW.getTime() - 60_000);
+const FRESH = new Date(NOW.getTime() - 30_000);
 
 const staticInput = {
   equityAsOf: FRESH,
@@ -197,14 +195,14 @@ describe("evaluateTotalLoss — stale or undated equity fails closed", () => {
   const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * 60_000);
 
   it("fresh equity is used; just past the maximum age is refused", () => {
-    assert.equal(evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(5) }).status, "ok");
+    assert.equal(evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(1) }).status, "ok");
     assert.equal(
       evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES) }).status,
       "ok",
     );
     const stale = evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES + 1) });
     assert.equal(stale.status, "unknown");
-    assert.match(stale.status === "unknown" ? stale.detail : "", /31 min old/);
+    assert.match(stale.status === "unknown" ? stale.detail : "", /3 min old/);
   });
 
   it("an equity from days ago (sync down, weekend gap) cannot say the account is fine", () => {
@@ -221,31 +219,6 @@ describe("evaluateTotalLoss — stale or undated equity fails closed", () => {
 
   it("a stale breach is still refused (unknown) — it never reads as ok", () => {
     assert.equal(evaluateTotalLoss({ ...staticInput, currentEquity: 80_000, equityAsOf: at(600) }).status, "unknown");
-  });
-});
-
-describe("freshestEquity / liveEquityReading", () => {
-  it("picks the newest usable reading, so a stale snapshot row cannot mask a fresher live state", () => {
-    const best = freshestEquity([
-      { equity: 100_000, at: "2026-04-21T08:18:25.195Z" },
-      { equity: 91_000, at: "2026-11-11T11:58:00Z" },
-    ]);
-    assert.equal(best?.equity, 91_000);
-  });
-
-  it("skips readings without positive equity or a valid timestamp", () => {
-    assert.equal(freshestEquity([{ equity: null, at: NOW }, { equity: 5, at: null }, { equity: 0, at: NOW }, { equity: 5, at: "x" }]), null);
-    assert.equal(freshestEquity([]), null);
-  });
-
-  it("reads equity (else balance) and updatedAt from liveAccountState", () => {
-    assert.deepEqual(liveEquityReading({ liveAccountState: { equity: 91_000, balance: 92_000, updatedAt: "2026-11-11T11:58:00Z" } }), {
-      equity: 91_000,
-      at: "2026-11-11T11:58:00Z",
-    });
-    assert.equal(liveEquityReading({ liveAccountState: { balance: 92_000, updatedAt: "t" } }).equity, 92_000);
-    assert.deepEqual(liveEquityReading(null), { equity: null, at: null });
-    assert.deepEqual(liveEquityReading({}), { equity: null, at: null });
   });
 });
 

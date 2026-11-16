@@ -1,20 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { buildAccountProfile } from "@/lib/risk/accountProfile";
+import { inferredInitialBalance, statedAccountSize } from "@/lib/risk/dailyLoss";
+import { livePeakBalance } from "@/lib/risk/totalLoss";
 import {
-  dailyLossReference,
-  dayAnchorBase,
-  dayResultPctOfReference,
-  inferredInitialBalance,
-  resolveCurrentEquity,
-  statedAccountSize,
-} from "@/lib/risk/dailyLoss";
-import {
-  evaluateTotalLoss,
-  freshestEquity,
-  liveEquityReading,
-  livePeakBalance,
-} from "@/lib/risk/totalLoss";
+  canRefreshLiveState,
+  limitsNeedEquity,
+  resolveGuardEquity,
+} from "@/lib/risk/guardEquity";
+import { guardLossInputs } from "@/lib/risk/guardLossInputs";
+import { liveAccountDayKey } from "@/lib/mt5/liveAccountSnapshot";
+import { refreshLiveAccountState } from "@/lib/mt5/refreshLiveAccount";
 import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
@@ -201,31 +197,30 @@ export async function decideAutoTradeAllowed(
   const now = new Date();
   const dayStart = brokerDayStart(now, brokerTz, resetTime);
 
-  const [positionsRes, snapshotRes, dayStartSnapshotRes] = await Promise.all([
-    supabase
-      .from("mt5_positions")
-      .select("id,profit,swap")
-      .eq("user_id", userId)
-      .eq("account_id", accountId),
-    supabase
-      .from("mt5_account_snapshots")
-      .select("balance,equity,updated_at")
-      .eq("user_id", userId)
-      .eq("account_id", accountId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("mt5_account_snapshots")
-      .select("balance,equity,updated_at")
-      .eq("user_id", userId)
-      .eq("account_id", accountId)
-      .gte("updated_at", dayStart.toISOString())
-      .order("updated_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  /* ── Where the account stands now ─────────────────────────────────
+     From `liveAccountState` (what every sync and live event writes), not from
+     mt5_account_snapshots, which nothing writes to. Only fetched when a limit
+     actually needs equity. A reading older than two minutes, or whose day
+     anchors belong to another broker day, is refreshed once through the
+     read-only broker path; if that fails the equity stays unknown and the
+     checks below block. Alpaca/paper accounts have no refresh path. */
+  const needsEquity = limitsNeedEquity(profile);
+  const resolved = await resolveGuardEquity({
+    metadata,
+    now,
+    dayKey: liveAccountDayKey(metadata, now),
+    canRefresh: canRefreshLiveState({
+      connectionMethod: account.connection_method as string | null,
+      needsEquity,
+    }),
+    refresh: () => refreshLiveAccountState(supabase, userId, accountId),
+  });
 
+  const positionsRes = await supabase
+    .from("mt5_positions")
+    .select("id,profit,swap")
+    .eq("user_id", userId)
+    .eq("account_id", accountId);
   if (positionsRes.error) {
     console.error("[tradeGuard] mt5_positions failed", positionsRes.error.message);
     return {
@@ -234,23 +229,6 @@ export async function decideAutoTradeAllowed(
       detail: `Not placed: could not read mt5_positions (${positionsRes.error.message}).`,
     };
   }
-  if (snapshotRes.error) {
-    console.error("[tradeGuard] mt5_account_snapshots failed", snapshotRes.error.message);
-    return {
-      allowed: false,
-      reason: "guard_data_error",
-      detail: `Not placed: could not read mt5_account_snapshots (${snapshotRes.error.message}).`,
-    };
-  }
-  if (dayStartSnapshotRes.error) {
-    console.error("[tradeGuard] day-start snapshot failed", dayStartSnapshotRes.error.message);
-    return {
-      allowed: false,
-      reason: "guard_data_error",
-      detail: `Not placed: could not read day-start mt5_account_snapshots (${dayStartSnapshotRes.error.message}).`,
-    };
-  }
-
   const positions = (positionsRes.data ?? []) as Array<{
     id?: string;
     profit?: number | null;
@@ -261,93 +239,17 @@ export async function decideAutoTradeAllowed(
     0,
   );
 
-  const latest = snapshotRes.data as
-    | { balance?: unknown; equity?: unknown; updated_at?: string | null }
-    | null;
-  const dayStartRow = dayStartSnapshotRes.data as
-    | { balance?: unknown; equity?: unknown }
-    | null;
-
-  // When the newest snapshot has neither equity nor balance, borrow the last
-  // balance recorded since broker-day open (stale-safe: a balance from
-  // before today's open is not used). No such row => equity stays unknown and
-  // the guard fails closed, rather than treating floating P&L as equity.
-  let fallbackBalance: number | null = null;
-  const latestHasEquity = latest?.equity != null && Number(latest.equity) > 0;
-  const latestHasBalance = latest?.balance != null && Number(latest.balance) > 0;
-  if (!latestHasEquity && !latestHasBalance) {
-    const fbRes = await supabase
-      .from("mt5_account_snapshots")
-      .select("balance,updated_at")
-      .eq("user_id", userId)
-      .eq("account_id", accountId)
-      .not("balance", "is", null)
-      .gt("balance", 0)
-      .gte("updated_at", dayStart.toISOString())
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (fbRes.error) {
-      console.error("[tradeGuard] fallback balance failed", fbRes.error.message);
-      return {
-        allowed: false,
-        reason: "guard_data_error",
-        detail: `Not placed: could not read mt5_account_snapshots (${fbRes.error.message}).`,
-      };
-    }
-    fallbackBalance = fbRes.data?.balance != null ? Number(fbRes.data.balance) : null;
-  }
-
-  const currentEquity = resolveCurrentEquity({
-    snapshotEquity: latest?.equity != null ? Number(latest.equity) : null,
-    snapshotBalance: latest?.balance != null ? Number(latest.balance) : null,
+  // One derivation for both loss checks (see guardLossInputs): equity, the
+  // broker-day anchor (#172) and the account-size basis (#179). Anything not
+  // usable comes out as unknown, which the guard blocks.
+  const { currentEquity, dayResultPct, totalLoss } = guardLossInputs({
+    limits: profile,
+    resolved,
     floatingPnl,
-    fallbackBalance,
-  });
-
-  // Prefer the first snapshot at/after broker-day open. If that tick was
-  // missed, fall back to max(balance, equity) on the same row (stricter).
-  const startEquity =
-    dayAnchorBase(
-      dayStartRow?.balance != null ? Number(dayStartRow.balance) : null,
-      dayStartRow?.equity != null ? Number(dayStartRow.equity) : null,
-      profile.maxDailyLossBasis === "day_start_balance" ? "balance" : "max",
-    ) ??
-    // Last resort only when there is no day-start row: refuse via null below
-    // rather than inventing "start = current".
-    null;
-
-  // The firm's daily % is of the account size (FTMO: initial balance), measured
-  // from the day-start anchor — not % of the anchor, which is looser whenever
-  // the account is in profit. See dailyLossReference.
-  const dailyLossBase = dailyLossReference({
-    dayStartBase: startEquity,
-    basis: profile.maxDailyLossBasis,
     accountSize: statedAccountSize(metadata),
-    inferredInitialBalance: inferredInitialBalance(metadata),
-  });
-  const dayResultPct = dayResultPctOfReference(startEquity, currentEquity, dailyLossBase);
-
-  // The account's maximum TOTAL loss, from the same basis as the drawdown alert:
-  // stated account size first, then the first recorded balance; trailing models
-  // measure from the recorded peak. Equity is the same live figure as above.
-  // Unknown basis, missing equity or an equity reading older than 30 minutes
-  // fails closed for unattended orders. Equity comes from the newest of the
-  // snapshot table and the account's live state (`liveAccountState`, written by
-  // every sync and live event); a stale snapshot must not mask a fresher one.
-  const totalEquity = freshestEquity([
-    { equity: currentEquity, at: latest?.updated_at ?? null },
-    liveEquityReading(metadata),
-  ]);
-  const totalLoss = evaluateTotalLoss({
-    maxTotalLossPct: profile.maxTotalLossPct,
-    basis: profile.maxTotalLossBasis,
-    currentEquity: totalEquity?.equity ?? null,
-    equityAsOf: totalEquity?.at ?? null,
+    inferredInitial: inferredInitialBalance(metadata),
+    inferredPeak: livePeakBalance(metadata),
     now,
-    accountSize: statedAccountSize(metadata),
-    initialBalance: inferredInitialBalance(metadata),
-    peakBalance: livePeakBalance(metadata),
   });
 
   // Automated trades AXE placed today ON THIS ACCOUNT (not the whole user:

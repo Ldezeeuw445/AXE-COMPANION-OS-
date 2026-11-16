@@ -321,12 +321,29 @@ check("a human tapping drops the daily cap and nothing else", () => {
 });
 
 
-check("the guard service feeds the total-loss check into the guard", () => {
-  assert.ok(/evaluateTotalLoss\(\{/.test(guardService), "tradeGuardService must evaluate the total loss");
-  assert.ok(/totalLoss,\s*\n/.test(guardService.slice(guardService.indexOf("evaluateAutoTrade({"))), "…and pass it to evaluateAutoTrade");
-  const call = guardService.slice(guardService.indexOf("evaluateTotalLoss({"));
-  assert.ok(/statedAccountSize\(metadata\)/.test(call), "…from the stated account size");
-  assert.ok(/equityAsOf:/.test(call) && /freshestEquity\(/.test(guardService), "…with a dated equity, so stale readings fail closed");
+check("the guard service feeds both loss checks from one live reading", () => {
+  assert.ok(/guardLossInputs\(\{/.test(guardService), "tradeGuardService must derive the loss inputs in one place");
+  const body = guardService.slice(guardService.indexOf("evaluateAutoTrade({"));
+  assert.ok(/totalLoss,\s*\n/.test(body) && /dayResultPct,\s*\n/.test(body), "…and pass both to evaluateAutoTrade");
+  assert.ok(/statedAccountSize\(metadata\)/.test(guardService), "…from the stated account size");
+  const inputs = readFileSync("src/lib/risk/guardLossInputs.ts", "utf8");
+  assert.ok(/equityAsOf:/.test(inputs), "…with a dated equity, so stale readings fail closed");
+});
+
+check("the guard reads liveAccountState, not the unwritten mt5_account_snapshots table", () => {
+  assert.ok(!/mt5_account_snapshots/.test(guardService.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")), "tradeGuardService must not query mt5_account_snapshots");
+  assert.ok(/resolveGuardEquity\(/.test(guardService), "equity is resolved through resolveGuardEquity");
+  assert.ok(/refreshLiveAccountState\(supabase, userId, accountId\)/.test(guardService), "a stale reading is refreshed once");
+  assert.ok(/canRefreshLiveState\(/.test(guardService), "only accounts with a read-only path are refreshed");
+});
+
+check("the guard's live refresh is read-only: account information and positions, never an order", () => {
+  const src = readFileSync("src/lib/mt5/refreshLiveAccount.ts", "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const imported = [...code.matchAll(/\b(client[A-Za-z]+)\b/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(imported)].sort(), ["clientGetAccountInformation", "clientGetPositions"]);
+  assert.ok(!/(place|modify|close|cancel|order|trade)\w*\s*\(/i.test(code), "no order-ish call");
+  assert.ok(!/method:\s*["'](POST|PUT|DELETE|PATCH)/i.test(code));
 });
 
 check("a total-loss breach stops unattended automation but not a human's order", () => {
