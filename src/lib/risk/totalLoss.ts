@@ -30,16 +30,17 @@
  */
 import type { LossBasis } from "./accountProfile";
 import { validAccountSize } from "./dailyLoss";
+import { GUARD_EQUITY_MAX_AGE_SECONDS } from "./guardEquity";
 
 /** Buffer under the published cap, in percentage points — same as the daily guard. */
 export const TOTAL_LOSS_BUFFER_PCT = 0.5;
 
 /**
- * How old the equity reading may be for an unattended order. Equity that is
- * hours or days old (sync down, app closed, market gap) says nothing about
- * where the account is now: it could already be past its floor.
+ * How old the equity reading may be. Same threshold the guard uses to decide a
+ * refresh is needed (`GUARD_EQUITY_MAX_AGE_SECONDS`): equity that is hours or
+ * days old says nothing about where the account is now.
  */
-export const TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES = 30;
+export const TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES = GUARD_EQUITY_MAX_AGE_SECONDS / 60;
 
 export type TotalLossInput = {
   maxTotalLossPct: number | null | undefined;
@@ -171,38 +172,4 @@ export function evaluateTotalLoss(input: TotalLossInput): TotalLossDecision {
   }
 
   return { status: "ok", usedPct, limitPct: limit };
-}
-
-export type EquityReading = { equity: number | null | undefined; at: Date | string | number | null | undefined };
-
-/**
- * The newest usable equity reading of several sources (the account snapshot
- * table and `metadata.liveAccountState`): positive equity and a parseable
- * timestamp. Null when no source has both — the caller then passes
- * `equityAsOf: null` and the check fails closed.
- */
-export function freshestEquity(
-  readings: ReadonlyArray<EquityReading>,
-): { equity: number; at: Date } | null {
-  let best: { equity: number; at: Date } | null = null;
-  for (const r of readings) {
-    const equity = positive(r.equity);
-    if (equity == null || r.at == null) continue;
-    const at = new Date(r.at);
-    if (!Number.isFinite(at.getTime())) continue;
-    if (best == null || at.getTime() > best.at.getTime()) best = { equity, at };
-  }
-  return best;
-}
-
-/** `liveAccountState.{equity|balance, updatedAt}` from account metadata. */
-export function liveEquityReading(metadata: unknown): EquityReading {
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return { equity: null, at: null };
-  const live = (metadata as Record<string, unknown>).liveAccountState;
-  if (!live || typeof live !== "object" || Array.isArray(live)) return { equity: null, at: null };
-  const rec = live as Record<string, unknown>;
-  return {
-    equity: positive(rec.equity) ?? positive(rec.balance),
-    at: typeof rec.updatedAt === "string" ? rec.updatedAt : null,
-  };
 }
