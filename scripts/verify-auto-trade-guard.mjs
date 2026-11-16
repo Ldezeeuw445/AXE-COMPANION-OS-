@@ -32,6 +32,7 @@ const base = {
   openPositions: 0,
   autoTradesToday: 0,
   dayResultPct: 0,
+  totalLoss: { status: "ok", usedPct: 0, limitPct: 10 },
   minutesToHighImpact: null,
   now: TUESDAY,
 };
@@ -137,6 +138,7 @@ check("the 0.5% buffer blocks before the hard daily loss limit", () => {
     ...base,
     profile: funded,
     dayResultPct: insideHardOutsideBuffer,
+    totalLoss: { status: "ok", usedPct: 0, limitPct: 10 },
   });
   assert.equal(d.allowed, false);
   assert.equal(d.reason, "daily_loss_reached");
@@ -293,6 +295,7 @@ check("a human tapping drops the daily cap and nothing else", () => {
     openPositions: 0,
     autoTradesToday: MAX_AUTO_TRADES_PER_DAY,
     dayResultPct: 0,
+    totalLoss: { status: "ok", usedPct: 0, limitPct: 10 },
     minutesToHighImpact: null,
     now: new Date("2026-10-14T10:00:00Z"),
   };
@@ -317,6 +320,23 @@ check("a human tapping drops the daily cap and nothing else", () => {
   );
 });
 
+
+check("the guard service feeds the total-loss check into the guard", () => {
+  assert.ok(/evaluateTotalLoss\(\{/.test(guardService), "tradeGuardService must evaluate the total loss");
+  assert.ok(/totalLoss,\s*\n/.test(guardService.slice(guardService.indexOf("evaluateAutoTrade({"))), "…and pass it to evaluateAutoTrade");
+  const call = guardService.slice(guardService.indexOf("evaluateTotalLoss({"));
+  assert.ok(/statedAccountSize\(metadata\)/.test(call), "…from the stated account size");
+  assert.ok(/equityAsOf:/.test(call) && /freshestEquity\(/.test(guardService), "…with a dated equity, so stale readings fail closed");
+});
+
+check("a total-loss breach stops unattended automation but not a human's order", () => {
+  const breach = { status: "blocked", reason: "total_loss_reached", usedPct: 9.8, limitPct: 10, detail: "x" };
+  const d = evaluateAutoTrade({ ...base, profile: funded, totalLoss: breach });
+  assert.equal(d.allowed, false);
+  assert.equal(d.reason, "total_loss_reached");
+  assert.equal(evaluateAutoTrade({ ...base, profile: funded, totalLoss: breach, attended: true }).allowed, true);
+  assert.equal(evaluateAutoTrade({ ...base, profile: funded, totalLoss: undefined }).reason, "total_loss_unknown");
+});
 
 console.log("order-route wiring");
 

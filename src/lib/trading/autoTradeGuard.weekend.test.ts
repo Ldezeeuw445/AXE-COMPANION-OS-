@@ -14,6 +14,7 @@ const at = (iso: string) =>
     openPositions: 0,
     autoTradesToday: 0,
     dayResultPct: 0,
+    totalLoss: { status: "ok", usedPct: 0, limitPct: 10 },
     minutesToHighImpact: null,
     now: new Date(iso),
   });
@@ -49,6 +50,7 @@ test("weekdays and accounts that may hold over the weekend are untouched", () =>
     openPositions: 0,
     autoTradesToday: 0,
     dayResultPct: 0,
+    totalLoss: { status: "ok", usedPct: 0, limitPct: 10 },
     minutesToHighImpact: null,
     now: new Date("2026-11-13T21:30:00Z"),
   });

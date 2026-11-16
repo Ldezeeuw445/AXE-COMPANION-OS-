@@ -275,6 +275,89 @@ check("zijn beide onbekend, dan wijst niets aan", () => {
 });
 
 console.log("");
+console.log("het percentage is van de opgegeven accountgrootte, niet van de dagstart");
+
+check("een account in winst krijgt niet meer daagse ruimte dan de firm geeft", () => {
+  // FTMO 2-Step: 5% van 100.000 is 5.000, ook op een dag die op 110.000 begint.
+  // Over de dagstart gerekend was het 5.500: 500 te veel, en juist op de
+  // accounts die het meeste te verliezen hebben.
+  const r = evaluatePositionPlan(
+    plan(),
+    rekening({ accountSize: 100_000, dayStartBalance: 110_000, initialBalance: 100_000, equity: 110_000 }),
+    regels({ maxDailyLossPct: 5 }),
+  );
+  assert.equal(r.daily.allowedLoss, 5_000, `rekende over de dagstart: ${r.daily.allowedLoss}`);
+  assert.equal(r.daily.allowanceBase, 100_000);
+  assert.equal(r.daily.basisAmount, 110_000, "de dagstart blijft het ankerpunt");
+});
+
+check("een account in verlies krijgt niet minder ruimte dan de firm geeft", () => {
+  const r = evaluatePositionPlan(
+    plan(),
+    rekening({ accountSize: 100_000, dayStartBalance: 91_000, initialBalance: 95_000, equity: 91_000 }),
+    regels({ maxDailyLossPct: 5 }),
+  );
+  assert.equal(r.daily.allowedLoss, 5_000, `rekende over de dagstart: ${r.daily.allowedLoss}`);
+});
+
+check("zonder opgegeven grootte is het nooit losser dan de kleinste bekende basis", () => {
+  // Dagstart 110k maar de eerste balans was 100k: 5% van 100k, zoals de guard.
+  const r = evaluatePositionPlan(
+    plan(),
+    rekening({ dayStartBalance: 110_000, initialBalance: 100_000, equity: 110_000 }),
+    regels({ maxDailyLossPct: 5 }),
+  );
+  assert.equal(r.daily.allowedLoss, 5_000);
+});
+
+check("de totale limiet meet vanaf de opgegeven grootte, niet vanaf de eerste balans", () => {
+  // Eerste balans 95k op een account van 100k: de vloer is 90k, niet 85,5k.
+  const r = evaluatePositionPlan(
+    plan(),
+    rekening({ accountSize: 100_000, initialBalance: 95_000, equity: 91_000, lostTotalMoney: 9_000 }),
+    regels({ maxTotalLossPct: 10, maxTotalLossBasis: "initial_balance" }),
+  );
+  assert.equal(r.total.allowedLoss, 10_000);
+  assert.equal(r.total.roomLeft, 1_000);
+  assert.equal(amountForBasis("initial_balance", { accountSize: 100_000, initialBalance: 95_000 }), 100_000);
+});
+
+check("een opgegeven grootte alleen is genoeg voor de statische basis", () => {
+  const r = evaluatePositionPlan(
+    plan(),
+    { equity: 100_000, accountSize: 100_000 },
+    regels({ maxDailyLossPct: null, maxDailyLossBasis: null, maxTotalLossPct: 10, maxTotalLossBasis: "initial_balance" }),
+  );
+  assert.equal(r.total.unknown, null);
+  assert.equal(r.total.allowedLoss, 10_000);
+});
+
+check("een onmogelijke grootte (boven 10 miljoen) wordt niet als basis gebruikt", () => {
+  const r = evaluatePositionPlan(
+    plan(),
+    rekening({ accountSize: 20_000_000 }),
+    regels(),
+  );
+  assert.equal(r.total.allowedLoss, 1_000, "viel terug op de eerste balans van 10.000");
+  assert.equal(r.daily.allowedLoss, 400);
+});
+
+check("equity-basis en trailing blijven ongemoeid door de accountgrootte", () => {
+  const r = evaluatePositionPlan(
+    plan(),
+    rekening({ accountSize: 100_000, dayStartEquity: 8_500, trailingPeakBalance: 12_000 }),
+    regels({
+      maxDailyLossPct: 4,
+      maxDailyLossBasis: "day_start_equity",
+      maxTotalLossPct: 10,
+      maxTotalLossBasis: "trailing_peak_balance",
+    }),
+  );
+  assert.equal(r.daily.allowedLoss, 340);
+  assert.equal(r.total.allowedLoss, 1_200);
+});
+
+console.log("");
 console.log("de lotgrens uit de regels");
 
 check("boven de maximale lotgrootte wordt gemeld, niet stil afgekapt", () => {
