@@ -21,6 +21,11 @@ export type DailyLossInput = {
   maxDailyLossPct: number | null | undefined;
   /** Soft buffer under the limit. Defaults to {@link DAILY_LOSS_BUFFER_PCT}. */
   bufferPct?: number | null;
+  /**
+   * What `maxDailyLossPct` is a percent OF (see {@link dailyLossReference}),
+   * e.g. the account size. Omitted: the start equity, as before.
+   */
+  referenceBase?: number | null;
 };
 
 export type DailyLossDecision =
@@ -98,7 +103,10 @@ export function resolveCurrentEquity(input: {
 export function evaluateDailyLoss(input: DailyLossInput): DailyLossDecision {
   const limitRaw = input.maxDailyLossPct;
   const hasLimit = limitRaw != null && Number.isFinite(limitRaw) && limitRaw > 0;
-  const dayResultPct = dayResultPctFromEquity(input.startEquity, input.currentEquity);
+  const dayResultPct =
+    input.referenceBase == null
+      ? dayResultPctFromEquity(input.startEquity, input.currentEquity)
+      : dayResultPctOfReference(input.startEquity, input.currentEquity, input.referenceBase);
 
   if (!hasLimit) {
     if (dayResultPct == null) {
@@ -165,4 +173,111 @@ export function dayAnchorBase(
   if (balOk == null) return eqOk;
   if (eqOk == null) return balOk;
   return Math.max(balOk, eqOk);
+}
+
+/* ── What the daily-loss percentage is a percentage OF ─────────────────────
+   FTMO (and most firms) publish the daily limit as X% of the INITIAL account
+   balance, measured from the day's opening balance: a $100k 2-Step account
+   may lose $5,000 from wherever the day started, whether the account is at
+   $100k or $110k. Taking X% of the day-start figure instead hands an account
+   in profit a bigger allowance than the firm's ($5,500 at $110k) — the guard
+   and the alert both fire too late, on the accounts that matter most.
+
+   So the day-start anchor stays the point the loss is measured FROM, and the
+   allowance is X% of the account size. `day_start_equity` is the one basis a
+   firm explicitly publishes as "% of the day's starting equity" (Upcomers
+   Oracle) and is left as it was. Anything else with no known account size
+   takes the smallest base we know, so it is never looser than before. */
+
+/** Positive finite number, else null. */
+function positiveOrNull(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Account size the trader (or an import) stated explicitly in
+ * `user_broker_accounts.metadata`: `tradingRules.accountSize`, then a
+ * top-level `accountSize` / `initialBalance`. Null when none is stated.
+ *
+ * Not `liveAccountState.initialBalance`: that is the first balance AXE happened
+ * to observe, which on an account connected while in profit is above the real
+ * account size. See {@link inferredInitialBalance}.
+ */
+export function statedAccountSize(metadata: unknown): number | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const rec = metadata as Record<string, unknown>;
+  const rules =
+    rec.tradingRules && typeof rec.tradingRules === "object" && !Array.isArray(rec.tradingRules)
+      ? (rec.tradingRules as Record<string, unknown>)
+      : {};
+  return (
+    positiveOrNull(rules.accountSize) ??
+    positiveOrNull(rec.accountSize) ??
+    positiveOrNull(rec.initialBalance)
+  );
+}
+
+/** First balance AXE recorded for the account (`liveAccountState.initialBalance`). */
+export function inferredInitialBalance(metadata: unknown): number | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const live = (metadata as Record<string, unknown>).liveAccountState;
+  if (!live || typeof live !== "object" || Array.isArray(live)) return null;
+  return positiveOrNull((live as Record<string, unknown>).initialBalance);
+}
+
+/**
+ * The amount base the daily-loss percentage applies to.
+ *
+ *  - `day_start_equity` (explicit firm rule): the day-start anchor, unchanged.
+ *  - `day_start_balance` / `initial_balance` (FTMO-style, and the prop
+ *    default): the stated account size when known; otherwise the smaller of
+ *    the anchor and the inferred initial balance.
+ *  - no/unknown basis (e.g. a % the trader typed without one): the smallest
+ *    known base — never looser than measuring from the anchor.
+ *
+ * Null only when the anchor itself is unknown (the caller fails closed).
+ */
+export function dailyLossReference(input: {
+  /** Day-start anchor the loss is measured from (balance/equity at the open). */
+  dayStartBase: number | null | undefined;
+  basis: string | null | undefined;
+  /** Explicitly stated account size. Authoritative for the FTMO-style basis. */
+  accountSize?: number | null;
+  /** First observed balance. A hint only: used as a ceiling, never a floor. */
+  inferredInitialBalance?: number | null;
+}): number | null {
+  const anchor = positiveOrNull(input.dayStartBase);
+  if (anchor == null) return null;
+  if (input.basis === "day_start_equity") return anchor;
+
+  const stated = positiveOrNull(input.accountSize);
+  const inferred = positiveOrNull(input.inferredInitialBalance);
+
+  if (input.basis === "day_start_balance" || input.basis === "initial_balance") {
+    if (stated != null) return stated;
+    return inferred != null ? Math.min(anchor, inferred) : anchor;
+  }
+
+  const known = [anchor, stated, inferred].filter((n): n is number => n != null);
+  return Math.min(...known);
+}
+
+/**
+ * Day result as a signed percent of `reference` (see {@link dailyLossReference}),
+ * measured from the day-start anchor. Negative is a loss. Comparable directly
+ * against the firm's published daily-loss percentage.
+ */
+export function dayResultPctOfReference(
+  startEquity: number | null | undefined,
+  currentEquity: number | null | undefined,
+  reference: number | null | undefined,
+): number | null {
+  if (startEquity == null || currentEquity == null || reference == null) return null;
+  if (!Number.isFinite(startEquity) || !Number.isFinite(currentEquity) || !Number.isFinite(reference)) {
+    return null;
+  }
+  if (startEquity <= 0 || reference <= 0) return null;
+  return ((currentEquity - startEquity) / reference) * 100;
 }

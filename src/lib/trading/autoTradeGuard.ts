@@ -31,7 +31,11 @@ export type AutoTradeGuardInput = {
   openPositions: number;
   /** Auto-trades already placed today, this account. */
   autoTradesToday: number;
-  /** Day equity result as a percentage of start-of-day equity; negative is a loss. */
+  /**
+   * Day equity result, measured from the start-of-day anchor, as a percentage
+   * of the base the firm's daily % applies to (account size for FTMO-style
+   * rules — see `dailyLossReference`). Negative is a loss.
+   */
   dayResultPct: number | null;
   /** Minutes until the next high-impact event, or null when none is near. */
   minutesToHighImpact: number | null;

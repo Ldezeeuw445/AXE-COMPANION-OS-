@@ -1,6 +1,7 @@
 import type { LossBasis, TradingConstraints } from "@/lib/risk/accountProfile";
 import type { ProactiveNotice } from "@/lib/axe/notice";
 import { signedAmount } from "@/lib/axe/notice";
+import { dailyLossReference } from "@/lib/risk/dailyLoss";
 
 /** 100 = the firm limit itself is reached or breached. */
 export const DRAWDOWN_WARN_PCTS = [70, 85, 95, 100] as const;
@@ -76,7 +77,19 @@ export function readingForKind(
   if (reference == null) return null;
   const loss = reference - snap.equity;
   if (!Number.isFinite(loss)) return null;
-  const usedPct = (loss / reference) * 100;
+  // Daily: the loss is measured FROM the day-start anchor, but the firm's %
+  // is of the account size (FTMO: initial balance). % of the anchor let an
+  // account in profit run past the firm's real limit before any warning.
+  const base =
+    kind === "daily"
+      ? dailyLossReference({
+          dayStartBase: reference,
+          basis,
+          inferredInitialBalance: snap.initialBalance,
+        })
+      : reference;
+  if (base == null) return null;
+  const usedPct = (loss / base) * 100;
   if (usedPct < 0) return null;
   return {
     kind,
