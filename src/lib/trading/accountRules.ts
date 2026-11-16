@@ -40,6 +40,14 @@ export type AccountTradingRules = {
    * account.
    */
   firmModel: string | null;
+  /**
+   * The account's initial balance / size as the firm sold it ("100000" for a
+   * $100k challenge). FTMO-style daily limits are X% of THIS, measured from the
+   * day's opening balance (see `dailyLossReference`). Without it AXE can only
+   * infer the figure from the first balance it saw, which is too high on an
+   * account connected while in profit.
+   */
+  accountSize: number | null;
 };
 
 export const EMPTY_ACCOUNT_RULES: AccountTradingRules = {
@@ -49,6 +57,7 @@ export const EMPTY_ACCOUNT_RULES: AccountTradingRules = {
   maxTotalLossPct: null,
   maxLot: null,
   firmModel: null,
+  accountSize: null,
 };
 
 /** A daily loss limit above this is not a prop rule, it is a typo. */
@@ -57,6 +66,12 @@ export const MAX_DAILY_LOSS_PCT_CEILING = 50;
 export const MAX_TOTAL_LOSS_PCT_CEILING = 90;
 /** A model name is a short label off a list, not free text. */
 export const MAX_FIRM_MODEL_LENGTH = 40;
+/**
+ * Largest account size accepted. Above it the value is dropped, not clamped:
+ * a clamped typo (a stray extra zero) would still read as a real, much looser
+ * limit, while a dropped one falls back to AXE's careful inferred figure.
+ */
+export const MAX_ACCOUNT_SIZE_CEILING = 10_000_000;
 /** Matches the autonomy ceiling: a cap nobody could mean. */
 export const MAX_LOT_CEILING = 50;
 
@@ -88,7 +103,33 @@ export function parseAccountRules(input: unknown): AccountTradingRules {
     maxTotalLossPct: readNumber(r.maxTotalLossPct, MAX_TOTAL_LOSS_PCT_CEILING),
     maxLot: readNumber(r.maxLot, MAX_LOT_CEILING),
     firmModel: readModel(r.firmModel),
+    accountSize: readAccountSize(r.accountSize),
   };
+}
+
+/** Positive finite amount up to the ceiling; anything else is "not stated". */
+function readAccountSize(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_ACCOUNT_SIZE_CEILING) return null;
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * What the panel shows for one account: the stated rules plus the two values
+ * stored beside them (`firmModel`, `accountSize`).
+ *
+ * Reading only `metadata.tradingRules` dropped both on every reload, and the
+ * next "Save rules" then wrote null back over them.
+ */
+export function rulesFromMetadata(metadata: unknown): AccountTradingRules {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return EMPTY_ACCOUNT_RULES;
+  const m = metadata as Record<string, unknown>;
+  const stated =
+    m.tradingRules && typeof m.tradingRules === "object" && !Array.isArray(m.tradingRules)
+      ? (m.tradingRules as Record<string, unknown>)
+      : {};
+  return parseAccountRules({ ...stated, firmModel: m.firmModel, accountSize: m.accountSize });
 }
 
 /**
@@ -113,7 +154,8 @@ export function hasAnyRule(rules: AccountTradingRules): boolean {
     rules.maxDailyLossPct !== null ||
     rules.maxTotalLossPct !== null ||
     rules.maxLot !== null ||
-    rules.firmModel !== null
+    rules.firmModel !== null ||
+    rules.accountSize !== null
   );
 }
 
@@ -148,6 +190,14 @@ export function withTradingRules(
    */
   if (rules.firmModel !== null) base.firmModel = rules.firmModel;
   else delete base.firmModel;
+
+  /*
+   * `accountSize` is a fact about the account, not a limit the trader set, so
+   * it lives beside `firmModel` for the same reason: inside `tradingRules` it
+   * would flip `explicit` to true. `statedAccountSize` reads it from here.
+   */
+  if (rules.accountSize !== null) base.accountSize = rules.accountSize;
+  else delete base.accountSize;
 
   if (Object.keys(stated).length === 0) {
     delete base.tradingRules;

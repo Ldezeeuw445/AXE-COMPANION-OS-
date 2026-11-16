@@ -6,6 +6,7 @@ import { TosMatteBanner } from "@/components/ui/TosNotice";
 import {
   EMPTY_ACCOUNT_RULES,
   MAX_DAILY_LOSS_PCT_CEILING,
+  MAX_ACCOUNT_SIZE_CEILING,
   MAX_LOT_CEILING,
   MAX_TOTAL_LOSS_PCT_CEILING,
   type AccountTradingRules,
@@ -215,6 +216,18 @@ export function AccountRulesPanel() {
           {current ? <DetectedSummary row={current} onPickModel={pickModel} /> : null}
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <NumberField
+                label="Account size (starting balance)"
+                value={draft.accountSize}
+                onChange={(v) => setDraft((d) => ({ ...d, accountSize: v }))}
+                placeholder={`e.g. 100000 · ≤ ${MAX_ACCOUNT_SIZE_CEILING.toLocaleString("en-US")}`}
+              />
+              <AccountSizeHint
+                size={draft.accountSize}
+                dailyPct={draft.maxDailyLossPct ?? current?.profile.maxDailyLossPct ?? null}
+              />
+            </div>
             <NumberField
               label="Max daily loss (%)"
               value={draft.maxDailyLossPct}
@@ -291,6 +304,38 @@ function SourceBadge({ source, firmName }: { source: ConstraintSource; firmName?
     source === "stated" ? "you said" : source === "firm" ? firmName ?? "the firm" : "assumed";
   return (
     <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] ${style}`}>{text}</span>
+  );
+}
+
+/**
+ * Turns the typed size into the one number a trader can check against their
+ * firm's dashboard: the daily allowance in money. A stray zero is then visible
+ * here before it ever loosens a limit.
+ */
+function AccountSizeHint({ size, dailyPct }: { size: number | null; dailyPct: number | null }) {
+  const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return (
+    <p className="mt-1.5 text-[10px] leading-relaxed text-tos-dim">
+      {size == null ? (
+        <>
+          Not stated — AXE estimates it from the first balance it saw, which can be too high if you
+          connected while in profit. Enter the size you bought (e.g. 100000) so FTMO-style limits
+          are exact.
+        </>
+      ) : dailyPct != null ? (
+        <>
+          {dailyPct}% daily limit ={" "}
+          <span className="font-mono text-white/75">{fmt((size * dailyPct) / 100)}</span> of loss
+          from the day&apos;s opening balance, on a{" "}
+          <span className="font-mono text-white/75">{fmt(size)}</span> account.
+        </>
+      ) : (
+        <>
+          Used as the base for your daily limit:{" "}
+          <span className="font-mono text-white/75">{fmt(size)}</span>.
+        </>
+      )}
+    </p>
   );
 }
 

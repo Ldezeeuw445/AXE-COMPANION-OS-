@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import { buildAccountProfile, type AccountProfile } from "@/lib/risk/accountProfile";
-import { parseAccountRules, withTradingRules } from "@/lib/trading/accountRules";
+import { parseAccountRules, rulesFromMetadata, withTradingRules } from "@/lib/trading/accountRules";
 
 /**
  * GET/POST /api/preferences/account-rules
@@ -81,7 +81,7 @@ export async function GET() {
       id: row.id as string,
       label: (row.label as string | null) ?? "Account",
       server: (row.mt5_server as string | null) ?? null,
-      rules: parseAccountRules(metadata?.tradingRules),
+      rules: rulesFromMetadata(metadata),
       profile: publicProfile(profile),
     };
   });
