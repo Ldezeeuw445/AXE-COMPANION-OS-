@@ -197,9 +197,25 @@ function positiveOrNull(value: unknown): number | null {
 }
 
 /**
+ * Highest account size taken as real. Same value as
+ * `MAX_ACCOUNT_SIZE_CEILING` in `lib/trading/accountRules.ts` (kept local so
+ * this file stays dependency-free; a test holds the two equal). Anything above
+ * is a typo or a bad import, and using it as a base would make every loss
+ * percentage tiny — i.e. switch the limits off.
+ */
+export const STATED_ACCOUNT_SIZE_CEILING = 10_000_000;
+
+/** A usable stated account size: positive, finite, at most the ceiling. */
+export function validAccountSize(value: unknown): number | null {
+  const n = positiveOrNull(value);
+  return n != null && n <= STATED_ACCOUNT_SIZE_CEILING ? n : null;
+}
+
+/**
  * Account size the trader (or an import) stated explicitly in
  * `user_broker_accounts.metadata`: `tradingRules.accountSize`, then a
- * top-level `accountSize` / `initialBalance`. Null when none is stated.
+ * top-level `accountSize` / `initialBalance`. Null when none is stated, or
+ * when the value is not a usable size (see {@link validAccountSize}).
  *
  * Not `liveAccountState.initialBalance`: that is the first balance AXE happened
  * to observe, which on an account connected while in profit is above the real
@@ -213,9 +229,9 @@ export function statedAccountSize(metadata: unknown): number | null {
       ? (rec.tradingRules as Record<string, unknown>)
       : {};
   return (
-    positiveOrNull(rules.accountSize) ??
-    positiveOrNull(rec.accountSize) ??
-    positiveOrNull(rec.initialBalance)
+    validAccountSize(rules.accountSize) ??
+    validAccountSize(rec.accountSize) ??
+    validAccountSize(rec.initialBalance)
   );
 }
 

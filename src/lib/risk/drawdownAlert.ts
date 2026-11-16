@@ -1,7 +1,7 @@
 import type { LossBasis, TradingConstraints } from "@/lib/risk/accountProfile";
 import type { ProactiveNotice } from "@/lib/axe/notice";
 import { signedAmount } from "@/lib/axe/notice";
-import { dailyLossReference } from "@/lib/risk/dailyLoss";
+import { dailyLossReference, validAccountSize } from "@/lib/risk/dailyLoss";
 
 /** 100 = the firm limit itself is reached or breached. */
 export const DRAWDOWN_WARN_PCTS = [70, 85, 95, 100] as const;
@@ -42,9 +42,19 @@ export type DrawdownAlert = {
 function referenceFor(basis: LossBasis, snap: LiveEquitySnapshot): number | null {
   switch (basis) {
     case "initial_balance":
+      // The firm's total-loss floor is X% under the account size. When the
+      // trader stated it (`metadata.accountSize`), that IS the base.
+      // `snap.initialBalance` is only the first balance AXE happened to see:
+      // on an account connected while already in drawdown it sits below the
+      // account size and hides the loss taken before; connected in profit it
+      // sits above and counts profit as loss.
       // Unknown starting capital: measure from the highest balance we do know.
       // Falling back to today's balance alone hides every loss taken before today.
-      return positive(snap.initialBalance) ?? maxPositive(snap.peakBalance, snap.dayStartBalance, snap.balance);
+      return (
+        validAccountSize(snap.accountSize) ??
+        positive(snap.initialBalance) ??
+        maxPositive(snap.peakBalance, snap.dayStartBalance, snap.balance)
+      );
     case "day_start_balance":
       return positive(snap.dayStartBalance ?? snap.balance);
     case "day_start_equity":
