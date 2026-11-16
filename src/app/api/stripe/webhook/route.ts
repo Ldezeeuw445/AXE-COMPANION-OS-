@@ -1,3 +1,4 @@
+import { isAnonymousAuthUser } from "@/lib/billing/anonymousUsers";
 import "server-only";
 
 import type { NextRequest } from "next/server";
@@ -278,6 +279,18 @@ async function upsertEntitlement(
   supabase: SupabaseClientLike,
   input: EntitlementUpsert,
 ): Promise<void> {
+  // An anonymous auth user can never hold a paid plan. A real checkout needs
+  // an account with an email, so this should never fire; if it does, skip the
+  // grant (and say so) rather than write a paid row for an unrecoverable
+  // account. Downgrades to free are always allowed. Skipping — not throwing —
+  // so Stripe does not retry the event forever.
+  if (input.plan !== "free" && (await isAnonymousAuthUser(input.userId)) === true) {
+    console.warn("[stripe webhook] refused paid entitlement for an anonymous user", {
+      userId: input.userId,
+      plan: input.plan,
+    });
+    return;
+  }
   const { error } = await supabase
     .from("axe_user_entitlements")
     .upsert(

@@ -42,6 +42,8 @@ import {
   AXE_CAPABILITY_ROADMAP_SCOPE,
 } from "@/lib/axe/capabilityRoadmap";
 import { buildTradingSpaceContext } from "@/lib/axe/tradingSpaceContext";
+import { hasEntitlementFeature } from "@/lib/billing/access";
+import { getUserAxeEntitlement } from "@/services/billingService";
 import { BROKER_ACCOUNT_MEMORY_SCOPE, buildAccountPersona } from "@/lib/axe/accountPersona";
 import { applyAccountIdReadFilter } from "@/lib/account/accountScopedRows";
 
@@ -1356,8 +1358,19 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
     ],
   };
 
-  const tradingExtras = await buildTradingSpaceExtras(args.supabase, args.userId);
-  const tradingSpace = buildTradingSpaceContext(contextWithoutSummary, tradingExtras);
+  // "Trading space context" and "pair awareness" (the per-pair history inside
+  // it) are Pro features. This builder feeds AXE's prompt for every chat, so
+  // the gate has to live here — a Free user's chat simply gets no trading-space
+  // block. A failed entitlement read is treated as not entitled.
+  const tradingSpaceEntitled = await getUserAxeEntitlement(args.supabase, args.userId)
+    .then((ent) => hasEntitlementFeature(ent, "trading_space_context", args.userId))
+    .catch(() => false);
+  const tradingSpace = tradingSpaceEntitled
+    ? buildTradingSpaceContext(
+        contextWithoutSummary,
+        await buildTradingSpaceExtras(args.supabase, args.userId),
+      )
+    : null;
 
   return {
     ...contextWithoutSummary,
