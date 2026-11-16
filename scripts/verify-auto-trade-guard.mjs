@@ -324,7 +324,9 @@ check("a human tapping drops the daily cap and nothing else", () => {
 check("the guard service feeds the total-loss check into the guard", () => {
   assert.ok(/evaluateTotalLoss\(\{/.test(guardService), "tradeGuardService must evaluate the total loss");
   assert.ok(/totalLoss,\s*\n/.test(guardService.slice(guardService.indexOf("evaluateAutoTrade({"))), "…and pass it to evaluateAutoTrade");
-  assert.ok(/statedAccountSize\(metadata\)/.test(guardService.slice(guardService.indexOf("evaluateTotalLoss({"))), "…from the stated account size");
+  const call = guardService.slice(guardService.indexOf("evaluateTotalLoss({"));
+  assert.ok(/statedAccountSize\(metadata\)/.test(call), "…from the stated account size");
+  assert.ok(/equityAsOf:/.test(call) && /freshestEquity\(/.test(guardService), "…with a dated equity, so stale readings fail closed");
 });
 
 check("a total-loss breach stops unattended automation but not a human's order", () => {

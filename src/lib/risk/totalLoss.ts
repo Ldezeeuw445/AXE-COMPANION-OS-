@@ -11,17 +11,18 @@
  *  - `trailing_eod_balance` / `trailing_peak_balance`: the highest balance
  *    recorded (`liveAccountState.peakBalance`). The percentage is of that peak,
  *    as in the alert.
- *  - no basis (the trader typed a percentage and never said what it is of): the
- *    STRICTEST reading. The loss is measured from the highest figure we know,
- *    against the smallest base we know, so the result is never looser than any
- *    real model would be.
+ *  - no basis (the trader typed a percentage and never said what it is of, or
+ *    the account is an FTMO account whose model is not named, and the models
+ *    disagree on static vs trailing): UNKNOWN. A "10%" that is static on one
+ *    model and trailing on another cannot be enforced by guessing.
  *  - `day_start_*` is not a total-loss basis any firm uses and the day anchor in
  *    metadata can be a day old: treated as unknown.
  *
  * Equity, not balance: firms measure the floor against equity, floating
  * positions included.
  *
- * Fails closed: a limit is set but the basis or the equity is missing means
+ * Fails closed: a limit is set but the basis is missing, or the equity is
+ * missing or older than {@link TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES}, means
  * `total_loss_unknown`, never "fine". No limit set means nothing to enforce.
  *
  * Dependency-free apart from the pure daily-loss helpers, so the verify
@@ -33,11 +34,26 @@ import { validAccountSize } from "./dailyLoss";
 /** Buffer under the published cap, in percentage points — same as the daily guard. */
 export const TOTAL_LOSS_BUFFER_PCT = 0.5;
 
+/**
+ * How old the equity reading may be for an unattended order. Equity that is
+ * hours or days old (sync down, app closed, market gap) says nothing about
+ * where the account is now: it could already be past its floor.
+ */
+export const TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES = 30;
+
 export type TotalLossInput = {
   maxTotalLossPct: number | null | undefined;
   basis: LossBasis | null | undefined;
-  /** Live equity now; null when it cannot be read. */
+  /** Latest equity; null when it cannot be read. */
   currentEquity: number | null | undefined;
+  /**
+   * When `currentEquity` was recorded. Required: null/unparseable means the
+   * age is unknown, which is treated as stale.
+   */
+  equityAsOf: Date | string | number | null | undefined;
+  now: Date;
+  /** Defaults to {@link TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES}. */
+  maxEquityAgeMinutes?: number | null;
   /** `metadata.accountSize` as the trader stated it (already ceiling-checked or not: it is checked here). */
   accountSize?: number | null;
   /** First balance AXE recorded (`liveAccountState.initialBalance`). */
@@ -91,18 +107,8 @@ export function totalLossFrame(
     case "trailing_eod_balance":
     case "trailing_peak_balance":
       return peak == null ? null : { reference: peak, base: peak, phrase: "from the highest balance" };
-    case null:
-    case undefined: {
-      const known = [size, initial, peak].filter((n): n is number => n != null);
-      if (known.length === 0) return null;
-      return {
-        reference: Math.max(...known),
-        base: Math.min(...known),
-        phrase: "from the highest known balance (strictest reading: the rule type is not set)",
-      };
-    }
     default:
-      // day_start_* — not a total-loss basis.
+      // No basis, or day_start_* (not a total-loss basis).
       return null;
   }
 }
@@ -113,15 +119,38 @@ export function evaluateTotalLoss(input: TotalLossInput): TotalLossDecision {
   if (!hasLimit) return { status: "ok", usedPct: null, limitPct: null };
   const limit = Number(limitRaw);
 
-  const equity = positive(input.currentEquity);
+  const unknown = (why: string): TotalLossDecision => ({
+    status: "unknown",
+    reason: "total_loss_unknown",
+    detail: `Not placed: this account's maximum total loss is ${limit}% and ${why} Missing risk data means no automatic order.`,
+  });
+
+  if (!input.basis) {
+    return unknown(
+      "AXE does not know whether that limit is static or trailing. Pick your firm and account type in the account rules.",
+    );
+  }
   const frame = totalLossFrame(input);
-  if (equity == null || frame == null) {
-    const missing = equity == null ? "live equity" : "the balance this limit is measured from";
-    return {
-      status: "unknown",
-      reason: "total_loss_unknown",
-      detail: `Not placed: this account's maximum total loss is ${limit}% and AXE cannot read ${missing}. Fill in your account size in the account rules, or wait for the next balance sync. Missing risk data means no automatic order.`,
-    };
+  if (frame == null) {
+    return unknown(
+      "AXE cannot work out the balance it is measured from. Fill in your account size in the account rules, or wait for the next balance sync.",
+    );
+  }
+  const equity = positive(input.currentEquity);
+  if (equity == null) return unknown("AXE cannot read the account's live equity.");
+
+  const asOfMs = input.equityAsOf == null ? Number.NaN : new Date(input.equityAsOf).getTime();
+  const maxAge =
+    input.maxEquityAgeMinutes != null && Number.isFinite(input.maxEquityAgeMinutes) && input.maxEquityAgeMinutes > 0
+      ? input.maxEquityAgeMinutes
+      : TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES;
+  const ageMin = (input.now.getTime() - asOfMs) / 60_000;
+  if (!Number.isFinite(ageMin)) return unknown("AXE does not know when the account's equity was last read.");
+  // A reading from the future (clock skew) is not fresher than "now": allow a minute.
+  if (ageMin > maxAge || ageMin < -1) {
+    return unknown(
+      `the account's last equity reading is ${ageMin < -1 ? "from the future" : `${Math.round(ageMin)} min old`} (limit ${maxAge} min). Reconnect or sync the account.`,
+    );
   }
 
   const usedPct = ((frame.reference - equity) / frame.base) * 100;
@@ -142,4 +171,38 @@ export function evaluateTotalLoss(input: TotalLossInput): TotalLossDecision {
   }
 
   return { status: "ok", usedPct, limitPct: limit };
+}
+
+export type EquityReading = { equity: number | null | undefined; at: Date | string | number | null | undefined };
+
+/**
+ * The newest usable equity reading of several sources (the account snapshot
+ * table and `metadata.liveAccountState`): positive equity and a parseable
+ * timestamp. Null when no source has both — the caller then passes
+ * `equityAsOf: null` and the check fails closed.
+ */
+export function freshestEquity(
+  readings: ReadonlyArray<EquityReading>,
+): { equity: number; at: Date } | null {
+  let best: { equity: number; at: Date } | null = null;
+  for (const r of readings) {
+    const equity = positive(r.equity);
+    if (equity == null || r.at == null) continue;
+    const at = new Date(r.at);
+    if (!Number.isFinite(at.getTime())) continue;
+    if (best == null || at.getTime() > best.at.getTime()) best = { equity, at };
+  }
+  return best;
+}
+
+/** `liveAccountState.{equity|balance, updatedAt}` from account metadata. */
+export function liveEquityReading(metadata: unknown): EquityReading {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return { equity: null, at: null };
+  const live = (metadata as Record<string, unknown>).liveAccountState;
+  if (!live || typeof live !== "object" || Array.isArray(live)) return { equity: null, at: null };
+  const rec = live as Record<string, unknown>;
+  return {
+    equity: positive(rec.equity) ?? positive(rec.balance),
+    at: typeof rec.updatedAt === "string" ? rec.updatedAt : null,
+  };
 }

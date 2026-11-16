@@ -2,10 +2,23 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildAccountProfile } from "./accountProfile";
 import { dailyLossReference } from "./dailyLoss";
-import { TOTAL_LOSS_BUFFER_PCT, evaluateTotalLoss, livePeakBalance, totalLossFrame } from "./totalLoss";
+import {
+  TOTAL_LOSS_BUFFER_PCT,
+  TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES,
+  evaluateTotalLoss,
+  freshestEquity,
+  liveEquityReading,
+  livePeakBalance,
+  totalLossFrame,
+} from "./totalLoss";
 import { evaluateAutoTrade, type AutoTradeGuardInput } from "../trading/autoTradeGuard";
 
+const NOW = new Date("2026-11-11T12:00:00Z"); // Wednesday noon
+const FRESH = new Date(NOW.getTime() - 60_000);
+
 const staticInput = {
+  equityAsOf: FRESH,
+  now: NOW,
   maxTotalLossPct: 10,
   basis: "initial_balance" as const,
   accountSize: 100_000,
@@ -86,12 +99,12 @@ describe("evaluateTotalLoss — trailing models", () => {
 
 describe("evaluateTotalLoss — missing data fails closed", () => {
   it("no limit set: nothing to enforce, even without data", () => {
-    assert.deepEqual(evaluateTotalLoss({ maxTotalLossPct: null, basis: null, currentEquity: null }), {
+    assert.deepEqual(evaluateTotalLoss({ maxTotalLossPct: null, basis: null, currentEquity: null, equityAsOf: null, now: NOW }), {
       status: "ok",
       usedPct: null,
       limitPct: null,
     });
-    assert.equal(evaluateTotalLoss({ maxTotalLossPct: 0, basis: "initial_balance", currentEquity: null }).status, "ok");
+    assert.equal(evaluateTotalLoss({ maxTotalLossPct: 0, basis: "initial_balance", currentEquity: null, equityAsOf: null, now: NOW }).status, "ok");
   });
 
   it("limit set but equity unknown → total_loss_unknown", () => {
@@ -103,6 +116,8 @@ describe("evaluateTotalLoss — missing data fails closed", () => {
 
   it("limit set, static basis, no account size and no recorded balance → unknown", () => {
     const d = evaluateTotalLoss({
+      equityAsOf: FRESH,
+      now: NOW,
       maxTotalLossPct: 10,
       basis: "initial_balance",
       currentEquity: 95_000,
@@ -128,27 +143,109 @@ describe("evaluateTotalLoss — missing data fails closed", () => {
   });
 });
 
-describe("evaluateTotalLoss — a percentage with no stated basis uses the strictest reading", () => {
-  const noBasis = { maxTotalLossPct: 8, basis: null, accountSize: 100_000, initialBalance: 100_000, peakBalance: 110_000 };
-
-  it("measures from the highest known figure against the smallest known base", () => {
-    // reference 110k, base 100k: 7.6% down at 102.4k → past 7.5% → blocked.
-    const d = evaluateTotalLoss({ ...noBasis, currentEquity: 102_400 });
-    assert.equal(d.status, "blocked");
-    assert.match(d.status === "blocked" ? d.detail : "", /strictest reading/);
-    assert.equal(evaluateTotalLoss({ ...noBasis, currentEquity: 104_000 }).status, "ok");
+describe("evaluateTotalLoss — no basis is unknown, never guessed", () => {
+  it("a percentage with no basis fails closed, even deep in profit and with all figures known", () => {
+    const d = evaluateTotalLoss({
+      maxTotalLossPct: 8,
+      basis: null,
+      currentEquity: 120_000,
+      equityAsOf: FRESH,
+      now: NOW,
+      accountSize: 100_000,
+      initialBalance: 100_000,
+      peakBalance: 110_000,
+    });
+    assert.equal(d.status, "unknown");
+    assert.match(d.status === "unknown" ? d.detail : "", /static or trailing/);
+    assert.match(d.status === "unknown" ? d.detail : "", /firm and account type/);
   });
 
-  it("nothing known at all → unknown", () => {
-    const d = evaluateTotalLoss({ maxTotalLossPct: 8, basis: null, currentEquity: 90_000 });
+  it("FTMO without a named model has a 10% limit but no basis: unattended auto-trade is refused until the model is picked", () => {
+    const unnamed = buildAccountProfile({ label: "FTMO Funded 100K", mt5Server: "FTMO-Server" });
+    assert.equal(unnamed.maxTotalLossPct, 10);
+    assert.equal(unnamed.maxTotalLossBasis, null);
+    const totalLoss = evaluateTotalLoss({
+      ...staticInput,
+      maxTotalLossPct: unnamed.maxTotalLossPct,
+      basis: unnamed.maxTotalLossBasis,
+      currentEquity: 100_000,
+    });
+    assert.equal(totalLoss.status, "unknown");
+    const d = evaluateAutoTrade({ ...guardBase({ profile: unnamed, totalLoss }) });
+    assert.equal(!d.allowed && d.reason, "total_loss_unknown");
+    // Naming the model resolves it.
+    const named = buildAccountProfile({ label: "FTMO Funded 100K", mt5Server: "FTMO-Server", metadata: { firmModel: "2-Step" } });
+    assert.equal(named.maxTotalLossBasis, "initial_balance");
+  });
+
+  it("a trader-typed total percentage has no basis either: unknown", () => {
+    const typed = buildAccountProfile({
+      label: "FTMO Funded 100K",
+      mt5Server: "FTMO-Server",
+      metadata: { firmModel: "2-Step", tradingRules: { maxTotalLossPct: 8 } },
+    });
+    assert.equal(typed.maxTotalLossPct, 8);
+    assert.equal(typed.maxTotalLossBasis, null);
+  });
+
+  it("totalLossFrame is null without a basis", () => {
+    assert.equal(totalLossFrame({ basis: null, accountSize: 100_000, initialBalance: 95_000, peakBalance: 110_000 }), null);
+  });
+});
+
+describe("evaluateTotalLoss — stale or undated equity fails closed", () => {
+  const at = (minAgo: number) => new Date(NOW.getTime() - minAgo * 60_000);
+
+  it("fresh equity is used; just past the maximum age is refused", () => {
+    assert.equal(evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(5) }).status, "ok");
+    assert.equal(
+      evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES) }).status,
+      "ok",
+    );
+    const stale = evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(TOTAL_LOSS_MAX_EQUITY_AGE_MINUTES + 1) });
+    assert.equal(stale.status, "unknown");
+    assert.match(stale.status === "unknown" ? stale.detail : "", /31 min old/);
+  });
+
+  it("an equity from days ago (sync down, weekend gap) cannot say the account is fine", () => {
+    // 5 days old, healthy-looking figure — the account may be past its floor now.
+    const d = evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: at(5 * 24 * 60) });
     assert.equal(d.status, "unknown");
   });
 
-  it("totalLossFrame exposes the reference and base", () => {
-    assert.deepEqual(
-      { ...totalLossFrame({ basis: null, accountSize: 100_000, initialBalance: 95_000, peakBalance: 110_000 }), phrase: "" },
-      { reference: 110_000, base: 95_000, phrase: "" },
-    );
+  it("a missing, unparseable or future timestamp is unknown", () => {
+    for (const t of [null, undefined, "not a date", at(-60)]) {
+      assert.equal(evaluateTotalLoss({ ...staticInput, currentEquity: 99_000, equityAsOf: t }).status, "unknown");
+    }
+  });
+
+  it("a stale breach is still refused (unknown) — it never reads as ok", () => {
+    assert.equal(evaluateTotalLoss({ ...staticInput, currentEquity: 80_000, equityAsOf: at(600) }).status, "unknown");
+  });
+});
+
+describe("freshestEquity / liveEquityReading", () => {
+  it("picks the newest usable reading, so a stale snapshot row cannot mask a fresher live state", () => {
+    const best = freshestEquity([
+      { equity: 100_000, at: "2026-04-21T08:18:25.195Z" },
+      { equity: 91_000, at: "2026-11-11T11:58:00Z" },
+    ]);
+    assert.equal(best?.equity, 91_000);
+  });
+
+  it("skips readings without positive equity or a valid timestamp", () => {
+    assert.equal(freshestEquity([{ equity: null, at: NOW }, { equity: 5, at: null }, { equity: 0, at: NOW }, { equity: 5, at: "x" }]), null);
+    assert.equal(freshestEquity([]), null);
+  });
+
+  it("reads equity (else balance) and updatedAt from liveAccountState", () => {
+    assert.deepEqual(liveEquityReading({ liveAccountState: { equity: 91_000, balance: 92_000, updatedAt: "2026-11-11T11:58:00Z" } }), {
+      equity: 91_000,
+      at: "2026-11-11T11:58:00Z",
+    });
+    assert.equal(liveEquityReading({ liveAccountState: { balance: 92_000, updatedAt: "t" } }).equity, 92_000);
+    assert.deepEqual(liveEquityReading(null), { equity: null, at: null });
+    assert.deepEqual(liveEquityReading({}), { equity: null, at: null });
   });
 });
 
@@ -170,7 +267,6 @@ const funded2Step = buildAccountProfile({
   metadata: { firmModel: "2-Step" },
 });
 const live = buildAccountProfile({ label: "MT5 LIVE", mt5Server: "ICMarkets-Live" });
-const NOW = new Date("2026-11-11T12:00:00Z"); // Wednesday noon
 
 const guardBase = (over: Partial<AutoTradeGuardInput> = {}): AutoTradeGuardInput => ({
   profile: funded2Step,
@@ -244,6 +340,8 @@ describe("evaluateAutoTrade — total loss", () => {
     const instant = buildAccountProfile({ label: "FTMO Instant", mt5Server: "FTMO-Server", metadata: { firmModel: "Instant" } });
     assert.equal(instant.maxTotalLossBasis, "trailing_peak_balance");
     const totalLoss = evaluateTotalLoss({
+      equityAsOf: FRESH,
+      now: NOW,
       maxTotalLossPct: instant.maxTotalLossPct,
       basis: instant.maxTotalLossBasis,
       currentEquity: 97_000,

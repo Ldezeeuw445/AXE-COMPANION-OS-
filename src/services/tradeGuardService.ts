@@ -9,7 +9,12 @@ import {
   resolveCurrentEquity,
   statedAccountSize,
 } from "@/lib/risk/dailyLoss";
-import { evaluateTotalLoss, livePeakBalance } from "@/lib/risk/totalLoss";
+import {
+  evaluateTotalLoss,
+  freshestEquity,
+  liveEquityReading,
+  livePeakBalance,
+} from "@/lib/risk/totalLoss";
 import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
@@ -326,11 +331,20 @@ export async function decideAutoTradeAllowed(
   // The account's maximum TOTAL loss, from the same basis as the drawdown alert:
   // stated account size first, then the first recorded balance; trailing models
   // measure from the recorded peak. Equity is the same live figure as above.
-  // Unknown basis or equity fails closed for unattended orders.
+  // Unknown basis, missing equity or an equity reading older than 30 minutes
+  // fails closed for unattended orders. Equity comes from the newest of the
+  // snapshot table and the account's live state (`liveAccountState`, written by
+  // every sync and live event); a stale snapshot must not mask a fresher one.
+  const totalEquity = freshestEquity([
+    { equity: currentEquity, at: latest?.updated_at ?? null },
+    liveEquityReading(metadata),
+  ]);
   const totalLoss = evaluateTotalLoss({
     maxTotalLossPct: profile.maxTotalLossPct,
     basis: profile.maxTotalLossBasis,
-    currentEquity,
+    currentEquity: totalEquity?.equity ?? null,
+    equityAsOf: totalEquity?.at ?? null,
+    now,
     accountSize: statedAccountSize(metadata),
     initialBalance: inferredInitialBalance(metadata),
     peakBalance: livePeakBalance(metadata),
