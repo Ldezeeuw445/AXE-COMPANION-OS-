@@ -5,6 +5,8 @@ import { renderMarkdownInline } from "@/components/ui/MarkdownLite";
 import {
   emphasizeTradingPairs,
   eventsFromHighlights,
+  formatPriceFactsFooter,
+  priceFactsFromHighlights,
   isItalicBriefSection,
   newsCardsFromHighlights,
   pairHighlights,
@@ -128,6 +130,15 @@ export function BriefBodyContent({
   const pairs = pairHighlights(highlights);
   const newsCards = newsCardsFromHighlights(highlights);
   const eventChips = eventsFromHighlights(highlights);
+  const priceFacts = priceFactsFromHighlights(highlights);
+  const priceFooter = priceFacts ? (
+    <p
+      className={`mt-2 border-t border-white/5 pt-1.5 text-[10px] leading-snug text-tos-text/45`}
+      suppressHydrationWarning
+    >
+      Live prices used: {formatPriceFactsFooter(priceFacts).join(" | ")}
+    </p>
+  ) : null;
   const sections = parseBriefSections(body);
   const textSize = compact ? "text-[12px]" : "text-[13px]";
 
@@ -142,6 +153,7 @@ export function BriefBodyContent({
           .map((para, i) => (
             <RichBriefLine key={i} text={para} pairs={pairs} className={`leading-relaxed text-tos-text/85 ${textSize}`} />
           ))}
+        {priceFooter}
       </div>
     );
   }
@@ -208,6 +220,7 @@ export function BriefBodyContent({
           </div>
         );
       })}
+      {priceFooter}
     </div>
   );
 }
