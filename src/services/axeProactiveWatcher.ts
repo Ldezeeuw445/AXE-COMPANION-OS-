@@ -67,6 +67,12 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
         .maybeSingle()
     : { data: null };
 
+  // Dedup day for every once-a-day notice below: the broker trading day
+  // (same boundary as the day-start anchor and the drawdown alerts), not the
+  // UTC date. A UTC key re-fired a still-true warning at 01:00 Amsterdam and
+  // split one session (e.g. Asia, open across UTC midnight) into two days.
+  const dayStamp = liveAccountDayKey(accountRow?.metadata ?? null);
+
   const accountProfile = buildAccountProfile({
     label: (accountRow?.label as string | null) ?? null,
     mt5Server: (accountRow?.mt5_server as string | null) ?? null,
@@ -239,7 +245,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       // repeating it every fifteen minutes would train the trader to swipe
       // it away — which is how this went unnoticed for eight days.
       const result = await announce(supabase, userId, {
-        eventKey: `broker_health:${accountId ?? "none"}:${health.kind}:${new Date().toISOString().slice(0, 10)}`,
+        eventKey: `broker_health:${accountId ?? "none"}:${health.kind}:${dayStamp}`,
         category: "broker_disconnect",
         hasPush,
         notice: {
@@ -269,7 +275,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
         constraints: accountProfile,
         snap,
         // Dedup per broker day, same boundary the day-start anchor rolls on.
-        dayStamp: liveAccountDayKey(accountRow?.metadata ?? null),
+        dayStamp,
       });
       for (const alert of ddAlerts) {
         const result = await announce(supabase, userId, {
@@ -303,7 +309,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       // Keyed on the cluster, not the clock: re-opening the same stack
       // tomorrow is worth saying again, nagging every 15 minutes is not.
       const result = await announce(supabase, userId, {
-        eventKey: `concentration:${top.id}:${top.symbols.join("+")}:${new Date().toISOString().slice(0, 10)}`,
+        eventKey: `concentration:${top.id}:${top.symbols.join("+")}:${dayStamp}`,
         category: "risk_alert",
         hasPush,
         extra: { symbol: top.symbols[0] },
@@ -329,7 +335,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
   );
   if (weekend) {
     const result = await announce(supabase, userId, {
-      eventKey: `weekend:${new Date().toISOString().slice(0, 10)}`,
+      eventKey: `weekend:${dayStamp}`,
       category: "risk_alert",
       hasPush,
       notice: {
@@ -402,7 +408,7 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
       // would be the fastest way to make a trader mute AXE.
       const parts = edgeNoticeParts(edge);
       const result = await announce(supabase, userId, {
-        eventKey: `playbook_edge:${edge.id}:${new Date().toISOString().slice(0, 10)}`,
+        eventKey: `playbook_edge:${edge.id}:${dayStamp}`,
         category: "axe_finding",
         hasPush,
         extra: { symbol: edge.symbol },
