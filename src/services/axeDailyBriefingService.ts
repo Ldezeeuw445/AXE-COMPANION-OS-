@@ -30,6 +30,19 @@ import {
   type BriefPeriodPerformance,
 } from "@/lib/briefing/briefPeriodTrades";
 import type { BriefHighlight } from "@/lib/briefing/briefBodyFormat";
+import { loadBriefPriceFacts } from "@/services/briefPriceFacts";
+import {
+  formatPriceFactBlock,
+  hasPriceFactsMarker,
+  priceFactRules,
+  toPriceFactsHighlight,
+  type SymbolFactsResult,
+} from "@/lib/briefing/priceFacts";
+import {
+  describeViolationsForRetry,
+  findPriceViolations,
+  stripViolatingSentences,
+} from "@/lib/briefing/briefPriceValidator";
 import type { MarketContext } from "@/lib/market/marketTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterUsersWithFeature } from "@/services/entitledUsers";
@@ -417,7 +430,6 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
 
 Key facts:
 - Their local time: ${timeStr} (${context.timezone})
-- Tier: ${context.tier}
 - Top pairs: ${hasPairs ? context.preferredPairs.join(", ") : "not yet identified — be encouraging, and do not name pairs as if they were theirs"}
 - AXE alignment score: ${hasAlignment ? `${context.alignment}% (how well AXE has learned this trader's style)` : "not scored yet — AXE has taken no snapshot of this trader. Do not state or imply a number."}
 - AXE engine confidence: ${context.engineConfidence.score}/100 (${context.engineConfidence.tier}, gate: ${context.engineConfidence.gateMode})
@@ -442,8 +454,8 @@ Key facts:
 
 Write a weekly outlook that:
 1. Opens with a greeting that uses ${context.name}'s name and frames the week ahead
-2. Calls out 2-3 high-probability setups or macro themes for the week
-3. References their tier (${context.tier})${hasAlignment ? " and alignment score" : " — AXE has no alignment score for them yet, so do not mention one"} in a motivating way
+2. Covers their markets for the week using ONLY the PRICE FACTS levels (this week's and last week's high/low, 20-day range) and the dated calendar events and headlines below — no setups or levels from memory
+3. ${hasAlignment ? "May mention their alignment score once, as the number given above" : "Does not mention an alignment score — AXE has none for them yet"}; never mention their plan, tier or subscription
 4. Includes one tactical insight tied to ${context.sessionHistory ? `the ${context.sessionHistory.session} session they trade` : "their recent winners"}
 5. Ends with the single most important thing to watch this week
 
@@ -488,6 +500,7 @@ Rules:
 - Never repeat a section header inside the body text under that section
 - Omit RECENT PERFORMANCE entirely if no closed trades were provided above
 - Use ONLY calendar events and headlines from the market context below — never invent news
+- Never mention their plan, tier or subscription
 - Ignore SEC filings, Form 8.3, fund disclosure PR — not useful for traders
 - Mention trading pairs by ticker (XAUUSD, BTCUSD, etc.)
 - Closed trades come from History — never call them Quotes; open positions live under Trade
@@ -517,6 +530,7 @@ Length: 160-240 words maximum.`;
 async function appendMarketContextToPrompt(
   context: TraderBriefingContext,
   prompt: string,
+  weekly = false,
 ): Promise<{ prompt: string; marketCtx: MarketContext | null }> {
   const primaryPair = context.preferredPairs[0] ?? "XAUUSD";
   try {
@@ -526,10 +540,10 @@ async function appendMarketContextToPrompt(
       newsLimit: 6,
       calendarLimit: 8,
     });
-    const summary = summarizeBriefMarketContext(marketCtx, context.timezone);
+    const summary = summarizeBriefMarketContext(marketCtx, context.timezone, { weekly });
     if (summary.trim()) {
       return {
-        prompt: `${prompt}\n\nMarket context (calendar + filtered headlines — do not fabricate beyond this):\n${summary}`,
+        prompt: `${prompt}\n\nMarket context (real calendar + dated headlines — do not fabricate beyond this):\n${summary}`,
         marketCtx,
       };
     }
@@ -537,7 +551,27 @@ async function appendMarketContextToPrompt(
   } catch (err) {
     console.warn("[Briefing] Market context unavailable:", err);
   }
-  return { prompt, marketCtx: null };
+  return {
+    prompt: `${prompt}\n\nMarket context: the news and calendar feed is unavailable right now — say so and do not name any event or headline.`,
+    marketCtx: null,
+  };
+}
+
+/** The markets a brief may talk about: their top pairs, plus gold and bitcoin (the ones AXE gets asked about most). */
+export function briefPriceSymbols(preferredPairs: string[]): string[] {
+  const out: string[] = [];
+  for (const s of [...preferredPairs.slice(0, 2), "XAUUSD", "BTCUSD", ...preferredPairs.slice(2)]) {
+    const up = s.trim().toUpperCase();
+    if (up && !out.includes(up)) out.push(up);
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+/** Text that is honest when there is no live price at all. */
+function noPriceDataNote(results: SymbolFactsResult[]): string | null {
+  if (results.some((r) => r.ok)) return null;
+  return "Live prices are unavailable right now, so this brief names no price levels.";
 }
 
 // ─── Generate brief and save to DB ───────────────────────────────────────────
@@ -572,13 +606,14 @@ export async function generateMorningBrief(
   if (shouldSave && !force) {
     const { data: existingRow } = await writeSb
       .from("axe_daily_briefings")
-      .select("body, created_at")
+      .select("body, created_at, highlights")
       .eq("user_id", traderId)
       .eq("briefing_date", today)
       .eq("briefing_type", briefingType)
       .maybeSingle();
 
-    if (existingRow?.body) {
+    // Rows written before live-price checking existed are regenerated, not served.
+    if (existingRow?.body && hasPriceFactsMarker(existingRow.highlights)) {
       const syncedBody = syncBriefAlignmentSection(String(existingRow.body), contextForDate.alignment);
       if (syncedBody !== String(existingRow.body)) {
         await writeSb
@@ -603,12 +638,19 @@ export async function generateMorningBrief(
 
   // Build prompt (+ live market context for news section)
   let userPrompt = buildBriefingPrompt(context, { weekly: isWeekly });
-  let marketCtx: MarketContext | null = null;
-  if (!isWeekly) {
-    const enriched = await appendMarketContextToPrompt(context, userPrompt);
-    userPrompt = enriched.prompt;
-    marketCtx = enriched.marketCtx;
-  }
+  const enriched = await appendMarketContextToPrompt(context, userPrompt, isWeekly);
+  userPrompt = enriched.prompt;
+  const marketCtx: MarketContext | null = enriched.marketCtx;
+
+  // Real prices (MT5 broker feed → Twelve Data → Yahoo), never the model's memory.
+  const factsAt = new Date();
+  const priceFacts = await loadBriefPriceFacts(readSb, traderId, briefPriceSymbols(context.preferredPairs), factsAt).catch(
+    (err): SymbolFactsResult[] => {
+      console.warn("[Briefing] price facts failed:", err);
+      return briefPriceSymbols(context.preferredPairs).map((symbol) => ({ ok: false, symbol, reason: "price lookup failed" }));
+    },
+  );
+  userPrompt += `\n\n${formatPriceFactBlock(priceFacts)}\n\n${priceFactRules(priceFacts)}`;
 
   // Call LLM
   const llmRequest: LLMRequest = {
@@ -624,7 +666,37 @@ export async function generateMorningBrief(
     max_tokens: 350,
   };
 
-  const response = await callLLM(llmRequest, "briefing");
+  let response = await callLLM(llmRequest, "briefing");
+
+  // Server-side check: every price must sit near the live price. One regenerate, then strip.
+  let violations = findPriceViolations(response.content ?? "", priceFacts);
+  if (violations.length > 0) {
+    console.warn(`[Briefing] ${violations.length} invented price(s) for ${traderId} — regenerating`);
+    const retry = await callLLM(
+      {
+        ...llmRequest,
+        temperature: 0.3,
+        messages: [
+          ...llmRequest.messages,
+          { role: "assistant", content: response.content ?? "" },
+          { role: "user", content: describeViolationsForRetry(violations) },
+        ],
+      },
+      "briefing",
+    ).catch(() => null);
+    if (retry?.content) {
+      response = retry;
+      violations = findPriceViolations(retry.content, priceFacts);
+    }
+  }
+  if (violations.length > 0) {
+    console.warn(`[Briefing] stripping ${violations.length} invented price sentence(s) for ${traderId}`);
+    response = { ...response, content: stripViolatingSentences(response.content ?? "", violations) };
+  }
+  const noDataNote = noPriceDataNote(priceFacts);
+  if (noDataNote && !/unavailable/i.test(response.content ?? "")) {
+    response = { ...response, content: `${noDataNote}\n\n${response.content ?? ""}` };
+  }
   const latency_ms = Date.now() - startTime;
 
   console.log(
@@ -642,10 +714,12 @@ export async function generateMorningBrief(
     context.alignment,
   );
 
-  const highlightRows: BriefHighlight[] =
-    marketCtx && !isWeekly
+  const highlightRows: BriefHighlight[] = [
+    ...(marketCtx && !isWeekly
       ? buildBriefHighlights(marketCtx, context.timezone, context.preferredPairs)
-      : context.preferredPairs.map((p) => ({ pair: p }));
+      : context.preferredPairs.map((p) => ({ pair: p }))),
+    toPriceFactsHighlight(priceFacts, factsAt),
+  ];
 
   // Save to axe_daily_briefings (upsert by user_id + date + type)
   if (shouldSave) {
@@ -669,6 +743,7 @@ export async function generateMorningBrief(
             })}`,
         body: briefText,
         highlights: highlightRows,
+        created_at: new Date().toISOString(),
         chat_prefill: isWeekly
           ? `AXE, walk me through this week's outlook for ${
               context.preferredPairs[0] ?? "the market"
@@ -744,16 +819,19 @@ export async function getTodaysBrief(
     const today = getLocalDateString(tz);
 
     if (type === "weekly") {
+      // Only this week's outlook — an unread one from weeks ago is not "this week".
+      const weekAgo = getLocalDateString(tz, new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
       const { data } = await supabase
         .from("axe_daily_briefings")
         .select("title, body, highlights, chat_prefill, briefing_date, feed_url, briefing_type, read_at")
         .eq("user_id", userId)
         .eq("briefing_type", "weekly")
         .is("read_at", null)
+        .gte("briefing_date", weekAgo)
         .order("briefing_date", { ascending: false })
         .limit(1)
         .maybeSingle();
-      return data ?? null;
+      return data && hasPriceFactsMarker(data.highlights) ? data : null;
     }
 
     const { data } = await supabase
@@ -763,7 +841,8 @@ export async function getTodaysBrief(
       .eq("briefing_date", today)
       .eq("briefing_type", type)
       .maybeSingle();
-    return data ?? null;
+    // A brief written before its prices were checked against live data is not served.
+    return data && hasPriceFactsMarker(data.highlights) ? data : null;
   } catch {
     return null;
   }

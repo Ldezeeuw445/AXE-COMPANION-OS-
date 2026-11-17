@@ -1,5 +1,7 @@
 /** Parse and normalize AXE morning brief body text for structured UI rendering. */
 
+import type { BriefPriceFactsHighlight } from "@/lib/briefing/priceFacts";
+
 export type BriefNewsCard = {
   type: "news";
   title: string;
@@ -13,7 +15,8 @@ export type BriefNewsCard = {
 export type BriefHighlight =
   | { pair?: string; type?: undefined }
   | BriefNewsCard
-  | BriefEventChip;
+  | BriefEventChip
+  | BriefPriceFactsHighlight;
 
 export type BriefEventChip = {
   type: "event";
@@ -317,4 +320,31 @@ export function pairHighlights(
   return highlights
     .filter((h) => h.pair && h.type !== "news")
     .map((h) => String(h.pair).toUpperCase());
+}
+
+/** The live prices a brief was checked against, with source + time, for the footer line. */
+export function priceFactsFromHighlights(
+  highlights: Array<{ type?: string; [key: string]: unknown }> | undefined,
+): BriefPriceFactsHighlight | null {
+  const h = highlights?.find((x) => x?.type === "price_facts");
+  if (!h || !Array.isArray(h.prices)) return null;
+  return h as unknown as BriefPriceFactsHighlight;
+}
+
+/** "XAUUSD 3,849.07 · Twelve Data spot XAU/USD · 17 Nov 22:25" — or an honest "unavailable". */
+export function formatPriceFactsFooter(facts: BriefPriceFactsHighlight, timezone?: string): string[] {
+  return facts.prices.map((p) => {
+    if (p.price == null || !p.asOf) return `${p.symbol}: live price unavailable`;
+    const when = new Date(p.asOf).toLocaleString("en-GB", {
+      timeZone: timezone,
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+    const dp = p.price >= 100 ? 2 : p.price >= 10 ? 3 : 5;
+    const price = p.price.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+    return `${p.symbol} ${price} · ${p.source ?? "unknown source"} · ${when}${p.marketOpen === false ? " (last close)" : ""}`;
+  });
 }

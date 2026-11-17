@@ -3,6 +3,7 @@ import { chartDeepLink } from "@/lib/feed/feedDeepLinks";
 import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import type { AxeFeedItem } from "@/types/feed";
 import { chartActionSummary } from "@/lib/feed/chartActionSummary";
+import { hasPriceFactsMarker } from "@/lib/briefing/priceFacts";
 
 export { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 
@@ -44,7 +45,7 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
       .limit(15),
     authed.supabase
       .from("axe_daily_briefings")
-      .select("id,title,body,briefing_type,briefing_date,chat_prefill,created_at")
+      .select("id,title,body,briefing_type,briefing_date,chat_prefill,created_at,highlights")
       .eq("user_id", authed.user.id)
       .gte("created_at", since)
       .order("created_at", { ascending: false })
@@ -105,7 +106,8 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
     };
   });
 
-  const briefings: AxeFeedItem[] = (briefingsRes.data ?? []).map((row) => {
+  // Briefs written before their prices were checked against live data (gold "1950", BTC "30,000") stay out of the feed.
+  const briefings: AxeFeedItem[] = (briefingsRes.data ?? []).filter((row) => hasPriceFactsMarker(row.highlights)).map((row) => {
     const type = String(row.briefing_type ?? "daily") as "daily" | "weekly";
     const prefill = String(row.chat_prefill ?? "").trim();
     return {
