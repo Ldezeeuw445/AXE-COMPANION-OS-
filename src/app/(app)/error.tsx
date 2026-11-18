@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { isStaleBuildError, reloadForNewBuild } from "@/lib/pwa/staleBuild";
 
 export default function AppError({
   error,
@@ -10,6 +11,13 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // A stale bundle after a deploy (missing chunk or Server Action) is cured by
+  // a reload, not by re-rendering the same old code: do it once, by itself.
+  const stale = isStaleBuildError(error.message);
+  useEffect(() => {
+    if (stale) reloadForNewBuild();
+  }, [stale]);
+
   useEffect(() => {
     // Reported in production too. This block used to be wrapped in
     // `if (process.env.NODE_ENV !== "production")`, so the screen below
@@ -53,7 +61,7 @@ export default function AppError({
       </p>
       <button
         type="button"
-        onClick={reset}
+        onClick={() => (stale ? window.location.reload() : reset())}
         className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.08] active:bg-white/[0.10]"
       >
         <RefreshCw className="h-4 w-4" />
