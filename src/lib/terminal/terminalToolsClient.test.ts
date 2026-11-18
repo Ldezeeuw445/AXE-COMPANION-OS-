@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   AXE_TOOL_SOURCE_COMPANION,
+  COMPANION_READONLY_CATALOG_COUNT,
   FALLBACK_READONLY_AXE_TOOLS,
   FALLBACK_READONLY_TOOL_NAMES,
   PHASE1_WRITE_DENYLIST,
@@ -10,9 +11,11 @@ import {
   companionToolName,
   engineToolName,
   isCompanionTerminalTool,
+  isInnerAxeToolUnavailable,
   isServiceRoleJwt,
   terminalStatusLabel,
   toOpenAiTerminalTools,
+  unwrapInvokeEnvelope,
 } from "./terminalToolsClient.ts";
 
 const PREV_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -268,8 +271,29 @@ describe("listAxeTools", () => {
     assert.equal(listed.tools.some((t) => t.name === "create_journal_note"), false);
     assert.equal(listed.tools.every((t) => t.readOnly === true), true);
     assert.equal(listed.tools.every((t) => typeof t.category === "string" && t.category.length > 0), true);
+    assert.equal(listed.tools.length, COMPANION_READONLY_CATALOG_COUNT);
+    assert.equal(FALLBACK_READONLY_AXE_TOOLS.length, COMPANION_READONLY_CATALOG_COUNT);
     assert.equal(calls[0]?.body.action, "listAxeTools");
     assert.deepEqual(calls[0]?.body.args, { source: "companion" });
+  });
+
+  it("keeps 16 read-only tools when the proxy returns the full 18-tool catalog", async () => {
+    const { fetchImpl } = captureFetch(() =>
+      jsonResponse(200, {
+        ok: true,
+        data: [
+          ...FALLBACK_READONLY_AXE_TOOLS,
+          { name: "set_price_alert", description: "alert", parameters: {}, readOnly: false, app: "trading-os", category: "alerts" },
+          { name: "create_journal_note", description: "note", parameters: {}, readOnly: false, app: "trading-os", category: "journal" },
+        ],
+      }),
+    );
+    const listed = await clientWithFetch(fetchImpl).listReadOnlyTools({
+      userId: "user-1",
+      accessToken: USER_JWT,
+    });
+    assert.equal(listed.tools.length, COMPANION_READONLY_CATALOG_COUNT);
+    assert.equal(listed.tools.some((t) => PHASE1_WRITE_DENYLIST.has(t.name)), false);
   });
 
   it("fallback catalog entries use the TOS field names", () => {
@@ -379,7 +403,7 @@ describe("invokeAxeTool", () => {
     assert.equal(parsed.data.key, "DGS10");
   });
 
-  it("passes through the inner unavailable shape {unavailable:true, reason}", async () => {
+  it("treats HTTP 200 {ok:true, data:{ok:false, unavailable:true}} as unavailable, never success", async () => {
     const inner = {
       ok: false,
       unavailable: true,
@@ -406,6 +430,35 @@ describe("invokeAxeTool", () => {
     assert.equal(parsed.field, "news");
     assert.equal(parsed.reason, "FMP news error: 502 invalid_key");
     assert.equal(parsed.quality, "unavailable");
+  });
+
+  it("treats nested write-tool rejection (field:tool) as unavailable, not a successful result", async () => {
+    const inner = {
+      ok: false,
+      unavailable: true,
+      tool: "get_macro_series",
+      field: "tool",
+      reason:
+        "Companion may only invoke read-only AXE tools (Phase 1). This tool is not readOnly. Send source:'companion' only for readOnly tools.",
+      quality: "unavailable",
+    };
+    const { fetchImpl } = captureFetch((captured) => {
+      if (captured.body.action === "listAxeTools") {
+        return jsonResponse(400, { ok: false, error: "unknown_action" });
+      }
+      return jsonResponse(200, { ok: true, data: inner });
+    });
+    const result = await clientWithFetch(fetchImpl).invoke({
+      userId: "user-1",
+      accessToken: USER_JWT,
+      companionName: "terminal_get_macro_series",
+    });
+    const parsed = JSON.parse(result) as typeof inner & { data?: unknown };
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.unavailable, true);
+    assert.equal(parsed.field, "tool");
+    assert.equal(parsed.quality, "unavailable");
+    assert.equal("data" in parsed && parsed.data != null && typeof parsed.data === "object" && "ok" in (parsed.data as object), false);
   });
 
   it("refuses write tools without calling invokeAxeTool and returns the unavailable shape", async () => {
@@ -497,6 +550,77 @@ describe("invokeAxeTool", () => {
     assert.equal((args.args as Record<string, unknown>).userId, undefined);
     assert.equal((args.args as Record<string, unknown>).source, undefined);
     assert.equal((args.args as Record<string, unknown>).accountId, "acc-9");
+  });
+});
+
+describe("nested invoke envelope (TOS commit 2601e3e)", () => {
+  const WRITE_REJECTION = {
+    ok: false,
+    unavailable: true,
+    tool: "set_price_alert",
+    field: "tool",
+    reason:
+      "Companion may only invoke read-only AXE tools (Phase 1). This tool is not readOnly. Send source:'companion' only for readOnly tools.",
+    quality: "unavailable",
+  } as const;
+
+  it("does not treat top-level ok:true as success when data.ok is false", () => {
+    const raw = unwrapInvokeEnvelope("set_price_alert", { ok: true, data: WRITE_REJECTION });
+    const parsed = JSON.parse(raw) as typeof WRITE_REJECTION;
+    assert.equal(isInnerAxeToolUnavailable(WRITE_REJECTION), true);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.unavailable, true);
+    assert.equal(parsed.tool, "set_price_alert");
+    assert.equal(parsed.field, "tool");
+    assert.equal(parsed.reason, WRITE_REJECTION.reason);
+    assert.equal(parsed.quality, "unavailable");
+  });
+
+  it("treats data.unavailable === true as unavailable even if data.ok is missing", () => {
+    const raw = unwrapInvokeEnvelope("get_news", {
+      ok: true,
+      data: { unavailable: true, tool: "get_news", field: "news", reason: "empty feed" },
+    });
+    const parsed = JSON.parse(raw) as { ok: boolean; unavailable: boolean; reason: string };
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.unavailable, true);
+    assert.equal(parsed.reason, "empty feed");
+  });
+
+  it("treats data.ok === false as unavailable even if data.unavailable is missing", () => {
+    const raw = unwrapInvokeEnvelope("get_scanner", {
+      ok: true,
+      data: { ok: false, tool: "get_scanner", field: "scanner", reason: "FMP invalid_key" },
+    });
+    const parsed = JSON.parse(raw) as { ok: boolean; unavailable: boolean; field: string };
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.unavailable, true);
+    assert.equal(parsed.field, "scanner");
+  });
+
+  it("keeps top-level {ok:false} as a transport error", () => {
+    const raw = unwrapInvokeEnvelope("inspect_chart", { ok: false, error: "boom" });
+    const parsed = JSON.parse(raw) as { ok: boolean; unavailable: boolean; field: string; reason: string };
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.unavailable, true);
+    assert.equal(parsed.field, "terminal");
+    assert.match(parsed.reason, /boom/);
+  });
+
+  it("passes through a nested success {ok:true, unavailable:false}", () => {
+    const raw = unwrapInvokeEnvelope("get_macro_series", {
+      ok: true,
+      data: {
+        ok: true,
+        unavailable: false,
+        tool: "get_macro_series",
+        data: { key: "DGS10", value: 4.21 },
+      },
+    });
+    const parsed = JSON.parse(raw) as { ok: boolean; unavailable: boolean; data: { key: string } };
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.unavailable, false);
+    assert.equal(parsed.data.key, "DGS10");
   });
 });
 

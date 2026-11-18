@@ -30,14 +30,17 @@
  *         "chartState"?: unknown
  *       }
  *     }
- *   Envelope: { "ok": true, "data": AxeToolResult } | { "ok": false, "error": string }
+ *   engine-proxy always returns HTTP 200 { ok: true, data: inner } for tool
+ *   outcomes (TOS commit 2601e3e). Check data.ok / data.unavailable — not only
+ *   the top-level ok. Nested failure:
+ *     { ok: true, data: { ok: false, unavailable: true, tool, field, reason, quality: "unavailable" } }
  *   AxeToolResult success:
  *     { "ok": true, "unavailable": false, "tool": "<name>", "data": unknown }
- *   AxeToolResult failure (HTTP 200 envelope):
- *     { "ok": false, "unavailable": true, "tool": "<name>", "field": string, "reason": string, "quality": "unavailable" }
+ *   Transport errors may still be top-level { ok: false, error }.
  *
- * Companion MUST send source:"companion". Omitted source defaults to trading-os
- * on the proxy and would keep write tools. Non-readOnly tools are refused.
+ * Companion MUST send source:"companion" exactly. Any other source (omitted,
+ * "", "trading-os", …) counts as trading-os and keeps write tools.
+ * source:"companion" listAxeTools returns 16 read-only tools (writes filtered).
  */
 
 import { getSupabaseKey } from "../env";
@@ -74,6 +77,8 @@ export const AXE_INTEL_FEED_NAMES = [
 
 /** Known write tools — never invoked from Companion, even if a stale proxy lists them. */
 export const PHASE1_WRITE_DENYLIST = new Set(["set_price_alert", "create_journal_note"]);
+/** listAxeTools source:"companion" — 18 catalog tools minus the 2 writes. */
+export const COMPANION_READONLY_CATALOG_COUNT = 16;
 
 const UNKNOWN_LIST_ERRORS = new Set([
   "unknown_action",
@@ -139,7 +144,7 @@ type CacheEntry = {
 
 type EngineProxySuccess<T> = { ok: true; data: T };
 type EngineProxyFailure = { ok: false; error?: string };
-type EngineProxyEnvelope<T> = EngineProxySuccess<T> | EngineProxyFailure;
+export type EngineProxyEnvelope<T> = EngineProxySuccess<T> | EngineProxyFailure;
 
 type OpenAiTerminalTool = {
   type: "function";
@@ -384,6 +389,41 @@ export function terminalUnavailablePayload(
     reason,
     quality: "unavailable",
   });
+}
+
+/** Inner AxeToolResult is unavailable when data.ok === false or data.unavailable is true. */
+export function isInnerAxeToolUnavailable(data: unknown): boolean {
+  const row = asRecord(data);
+  if (!row) return false;
+  return row.ok === false || row.unavailable === true;
+}
+
+/**
+ * Unwrap engine-proxy invoke envelope.
+ * Nested { ok:true, data:{ ok:false, unavailable:true, … } } is UNAVAILABLE, never success.
+ * Top-level { ok:false, error } is a transport error.
+ */
+export function unwrapInvokeEnvelope(engineName: string, envelope: EngineProxyEnvelope<unknown>): string {
+  if (!envelope.ok) {
+    const err = readString(envelope.error) ?? "transport_error";
+    return terminalUnavailablePayload(engineName, `terminal unavailable: ${err}`);
+  }
+  const data = envelope.data;
+  if (data === undefined || data === null) {
+    return terminalUnavailablePayload(engineName, "terminal unavailable: empty result");
+  }
+  if (isInnerAxeToolUnavailable(data)) {
+    const row = asRecord(data) ?? {};
+    return JSON.stringify({
+      ok: false,
+      unavailable: true,
+      tool: readString(row.tool) ?? engineName,
+      field: readString(row.field) ?? "terminal",
+      reason: readString(row.reason) ?? "terminal unavailable",
+      quality: "unavailable",
+    });
+  }
+  return typeof data === "string" ? data : JSON.stringify(data);
 }
 
 function sanitizeToolArgs(args: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -718,16 +758,7 @@ export class TerminalToolsClient {
         return terminalUnavailablePayload(engineName, "terminal unavailable: not authorised");
       }
 
-      if (!posted.json.ok) {
-        const err = readString(posted.json.error) ?? `http_${posted.status}`;
-        return terminalUnavailablePayload(engineName, `terminal unavailable: ${err}`);
-      }
-
-      const data = posted.json.data;
-      if (data === undefined) {
-        return terminalUnavailablePayload(engineName, "terminal unavailable: empty result");
-      }
-      return typeof data === "string" ? data : JSON.stringify(data);
+      return unwrapInvokeEnvelope(engineName, posted.json);
     } catch (err) {
       const message = err instanceof Error ? err.message : "unknown error";
       return terminalUnavailablePayload(engineName, `terminal unavailable: ${message}`);
