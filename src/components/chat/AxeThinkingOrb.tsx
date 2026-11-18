@@ -69,6 +69,9 @@ export function orbForPhase(
   tools?: string[] | null,
 ): { state: OrbState; label: string } {
   if (phase === "tools") {
+    if ((tools ?? []).some((t) => t.startsWith("terminal_"))) {
+      return { state: "searching", label: "kijkt in je terminal…" };
+    }
     const known = (tools ?? []).map((t) => TOOL_LABELS[t]).filter(Boolean);
     if (known.length === 1) return known[0];
     if (known.length > 1) return { state: "connecting", label: "Gathering your context" };

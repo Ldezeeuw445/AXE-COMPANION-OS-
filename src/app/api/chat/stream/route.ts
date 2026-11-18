@@ -1,4 +1,4 @@
-import { streamChatMessage, type StreamEvent } from "@/services/chatService";
+import { streamChatMessage, type ChatStreamAuth, type StreamEvent } from "@/services/chatService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 
@@ -53,13 +53,14 @@ export async function POST(request: Request) {
     typeof body?.symbolTouchedAt === "string" ? body.symbolTouchedAt : null;
   const chatType = body?.type === "intel" ? "intel" : "axe";
 
-  // Server auth: try Bearer token first, then fall back to cookie session.
-  let edgeAuth = await getAuthedServiceSupabase();
+  // Forward the user's JWT to engine-proxy (never the service role).
+  const authHeader = request.headers.get("Authorization") ?? "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+
+  // Server auth: try cookie session first, then Bearer (Trading OS / Composer).
+  let edgeAuth: ChatStreamAuth | null = await getAuthedServiceSupabase();
 
   if (!edgeAuth) {
-    // Fallback: extract JWT from Authorization header (sent by Composer)
-    const authHeader = request.headers.get("Authorization") ?? "";
-    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
     if (bearerToken) {
       try {
         const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -72,12 +73,14 @@ export async function POST(request: Request) {
         });
         const { data: { user }, error } = await sbClient.auth.getUser(bearerToken);
         if (!error && user) {
-          edgeAuth = { supabase: sbClient as ReturnType<typeof createServiceRoleClient>, user };
+          edgeAuth = { supabase: sbClient as ReturnType<typeof createServiceRoleClient>, user, accessToken: bearerToken };
         }
       } catch {
         // Bearer auth also failed — fall through to 401
       }
     }
+  } else if (bearerToken) {
+    edgeAuth = { ...edgeAuth, accessToken: bearerToken };
   }
 
   if (!edgeAuth) {
