@@ -4,6 +4,11 @@ import { normalizeTradeVolume } from "@/lib/trading/tradeVolume";
 import type { AxeFeedItem } from "@/types/feed";
 import { chartActionSummary } from "@/lib/feed/chartActionSummary";
 import { hasPriceFactsMarker } from "@/lib/briefing/priceFacts";
+import {
+  loadSharedNewsItems,
+  sharedNewsToFeedItem,
+  type SharedNewsFreshness,
+} from "@/lib/market/sharedNewsItems";
 
 export { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 
@@ -14,13 +19,26 @@ function feedSinceIso(): string {
   return new Date(Date.now() - FEED_HISTORY_DAYS * 86_400_000).toISOString();
 }
 
+export type AxeFeedPayload = {
+  items: AxeFeedItem[];
+  sharedNews: { state: SharedNewsFreshness; newestAt: string | null };
+};
+
 export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
+  const payload = await listAxeFeed(limit);
+  return payload.items;
+}
+
+export async function listAxeFeed(limit = 80): Promise<AxeFeedPayload> {
   const authed = await getAuthedServiceSupabase();
-  if (!authed) return [];
+  if (!authed) {
+    return { items: [], sharedNews: { state: "unavailable", newestAt: null } };
+  }
 
   const since = feedSinceIso();
+  const sinceMs = Date.parse(since);
 
-  const [eventsRes, execRes, chartRes, briefingsRes, broadcastRes] = await Promise.all([
+  const [eventsRes, execRes, chartRes, briefingsRes, broadcastRes, sharedNews] = await Promise.all([
     authed.supabase
       .from("axe_proactive_events")
       .select("id,title,body,url,created_at")
@@ -56,6 +74,7 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(14),
+    loadSharedNewsItems(authed.supabase, { limit: 50 }),
   ]);
 
   const proactive: AxeFeedItem[] = (eventsRes.data ?? []).map((row) => ({
@@ -140,7 +159,16 @@ export async function listAxeFeedItems(limit = 80): Promise<AxeFeedItem[]> {
     };
   });
 
-  return [...briefings, ...broadcasts, ...proactive, ...drafts, ...chartActions]
+  const sharedHeadlines: AxeFeedItem[] = sharedNews.items
+    .filter((item) => Date.parse(item.publishedAt) >= sinceMs)
+    .map(sharedNewsToFeedItem);
+
+  const items = [...briefings, ...broadcasts, ...sharedHeadlines, ...proactive, ...drafts, ...chartActions]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, limit);
+
+  return {
+    items,
+    sharedNews: { state: sharedNews.state, newestAt: sharedNews.newestAt },
+  };
 }

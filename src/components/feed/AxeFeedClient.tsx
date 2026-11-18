@@ -23,6 +23,7 @@ import {
 import { countUnreadFeedItemsForTab } from "@/lib/feed/feedUnread";
 import { cn } from "@/lib/utils";
 import type { AxeFeedItem } from "@/types/feed";
+import type { SharedNewsFreshness } from "@/lib/market/sharedNewsItems";
 
 export { getFeedTabLastSeenAt as getFeedLastSeenAt, AXE_FEED_LAST_SEEN_KEY };
 
@@ -68,6 +69,10 @@ export function AxeFeedClient({ initialTab = "morning_brief" }: AxeFeedClientPro
   const [refreshDone, setRefreshDone] = useState(false);
   const [markReadDone, setMarkReadDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sharedNews, setSharedNews] = useState<{
+    state: SharedNewsFreshness;
+    newestAt: string | null;
+  }>({ state: "empty", newestAt: null });
 
   useEffect(() => {
     const tab = parseFeedTabParam(searchParams.get("tab") ?? initialTab);
@@ -98,8 +103,17 @@ export function AxeFeedClient({ initialTab = "morning_brief" }: AxeFeedClientPro
     async (markSeenTab?: FeedTabId) => {
       const res = await fetch("/api/feed", { credentials: "include" });
       if (!res.ok) throw new Error("Could not load feed");
-      const json = (await res.json()) as { items?: AxeFeedItem[] };
+      const json = (await res.json()) as {
+        items?: AxeFeedItem[];
+        sharedNews?: { state?: SharedNewsFreshness; newestAt?: string | null };
+      };
       applyItems(json.items ?? [], markSeenTab);
+      if (json.sharedNews?.state) {
+        setSharedNews({
+          state: json.sharedNews.state,
+          newestAt: json.sharedNews.newestAt ?? null,
+        });
+      }
     },
     [applyItems],
   );
@@ -298,6 +312,23 @@ export function AxeFeedClient({ initialTab = "morning_brief" }: AxeFeedClientPro
         </div>
       </div>
 
+      {activeTab === "daily_news" && sharedNews.state === "stale" ? (
+        <GlassPanel className="axe-body px-4 py-3">
+          <p className="text-tos-muted">
+            Shared headlines are stale
+            {sharedNews.newestAt ? ` (newest ${formatWhen(sharedNews.newestAt)})` : ""}. Trading OS
+            refreshes this table on a 30-minute cron — AXE is not inventing replacements.
+          </p>
+        </GlassPanel>
+      ) : null}
+      {activeTab === "daily_news" && sharedNews.state === "unavailable" ? (
+        <GlassPanel className="axe-body px-4 py-3">
+          <p className="text-tos-muted">
+            Shared headlines could not be loaded. Broadcast Daily News still shows below when present.
+          </p>
+        </GlassPanel>
+      ) : null}
+
       {visibleItems.length === 0 ? (
         <GlassPanel className="axe-body p-6 text-center">
           <p className="text-tos-muted">Nothing here yet.</p>
@@ -305,7 +336,9 @@ export function AxeFeedClient({ initialTab = "morning_brief" }: AxeFeedClientPro
             {activeTab === "morning_brief"
               ? "Your personal brief, trade drafts, and AXE notices will show here."
               : activeTab === "daily_news"
-                ? "Daily News arrives around 07:00 Amsterdam — broadcast to all AXE users."
+                ? sharedNews.state === "empty"
+                  ? "The shared news table has no recent items. Broadcast Daily News still arrives around 07:00 Amsterdam."
+                  : "Daily News arrives around 07:00 Amsterdam — broadcast to all AXE users. Shared headlines from Trading OS show here when the feed is available."
                 : "Market Recap lands around 20:00 Amsterdam with the day’s wrap-up."}
           </p>
         </GlassPanel>
