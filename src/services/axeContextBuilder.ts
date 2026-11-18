@@ -47,6 +47,11 @@ import { hasEntitlementFeature } from "@/lib/billing/access";
 import { getUserAxeEntitlement } from "@/services/billingService";
 import { BROKER_ACCOUNT_MEMORY_SCOPE, buildAccountPersona } from "@/lib/axe/accountPersona";
 import { applyAccountIdReadFilter } from "@/lib/account/accountScopedRows";
+import {
+  compactSharedNewsForAxe,
+  loadSharedNewsItems,
+  pickSharedNewsForContext,
+} from "@/lib/market/sharedNewsItems";
 
 const ADAPTER_TIMEOUT_MS = 7_000;
 const INTEL_TIMEOUT_MS = 14_000;
@@ -1320,7 +1325,7 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
   const watchlist = settingsRes.value.watchlist;
   const activeAccountId = accountsRes.value.activeAccountId;
 
-  const [chartRes, tradesRes, intelRes, alertsRes, marketRes] = await Promise.all([
+  const [chartRes, tradesRes, intelRes, alertsRes, marketRes, sharedNews] = await Promise.all([
     withAdapter("chart", { ...EMPTY_CHART, symbol, timeframe }, () =>
       buildChart(args.supabase, args.userId, symbol, timeframe, activeAccountId, accountsRes.value.activeSymbolMap),
     ),
@@ -1330,6 +1335,7 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
       buildAlerts(args.supabase, args.userId, symbol, activeAccountId),
     ),
     withAdapter("market", { ...EMPTY_MARKET, symbol }, () => buildMarket(symbol, watchlist), MARKET_TIMEOUT_MS),
+    loadSharedNewsItems(args.supabase, { limit: 50 }),
   ]);
 
   const accounts = enrichAccounts(accountsRes.value, chartRes.value, tradesRes.value, watchlist);
@@ -1392,9 +1398,19 @@ export async function buildAxeCompanionContext(args: BuilderArgs): Promise<AxeCo
       )
     : null;
 
+  const sharedLine = compactSharedNewsForAxe(
+    pickSharedNewsForContext(sharedNews.items, {
+      symbol,
+      watchlist: watchlist.map((entry) => entry.symbol),
+      limit: 6,
+    }),
+    sharedNews.state,
+    { newestAt: sharedNews.newestAt },
+  );
+
   return {
     ...contextWithoutSummary,
-    summary: buildSummary(contextWithoutSummary),
+    summary: [buildSummary(contextWithoutSummary), sharedLine].filter(Boolean).join("\n").slice(0, 4_000),
     tradingSpace,
   };
 }
