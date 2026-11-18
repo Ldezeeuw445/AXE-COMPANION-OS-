@@ -8,6 +8,29 @@ export const dynamic = "force-dynamic";
 // Allow up to 300 s on Pro — Ollama VPS + context assembly can exceed 60 s
 export const maxDuration = 300;
 
+// CORS: Trading OS (same Supabase login) uses this AXE brain cross-origin.
+// Bearer token only — no cookies/credentials, so no Allow-Credentials header.
+const ALLOWED_ORIGINS = new Set([
+  "https://tradingosapp.com",
+  "https://www.tradingosapp.com",
+]);
+
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("Origin") ?? "";
+  const headers: Record<string, string> = { Vary: "Origin" };
+  if (ALLOWED_ORIGINS.has(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
+    headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
+    headers["Access-Control-Max-Age"] = "600";
+  }
+  return headers;
+}
+
+export async function OPTIONS(request: Request) {
+  return new Response(null, { status: 204, headers: corsHeaders(request) });
+}
+
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | {
@@ -60,7 +83,7 @@ export async function POST(request: Request) {
   if (!edgeAuth) {
     return new Response(
       JSON.stringify({ ok: false, error: "Unauthorized — please log in and try again." }),
-      { status: 401, headers: { "Content-Type": "application/json" } }
+      { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders(request) } }
     );
   }
 
@@ -130,6 +153,7 @@ export async function POST(request: Request) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      ...corsHeaders(request),
     },
   });
 }
