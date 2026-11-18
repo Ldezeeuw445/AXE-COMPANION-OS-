@@ -1,4 +1,5 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
@@ -12,8 +13,8 @@ import { applyAccountIdReadFilter, loadActiveAccountId } from "@/lib/account/acc
 
 export type ActionRuntime = Omit<WorkflowRuntime, "hasNews" | "hasMacro">;
 
-export async function detectActionRuntime(): Promise<ActionRuntime> {
-  const supabase = await createServerSupabaseClient();
+export async function detectActionRuntime(auth?: { supabase: SupabaseClient; userId: string }): Promise<ActionRuntime> {
+  const supabase = auth?.supabase ?? await createServerSupabaseClient();
   if (!supabase) {
     return {
       hasActiveAccount: false,
@@ -23,10 +24,8 @@ export async function detectActionRuntime(): Promise<ActionRuntime> {
       hasMemory: false,
     };
   }
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const userId = auth?.userId ?? (await supabase.auth.getUser()).data.user?.id;
+  if (!userId) {
     return {
       hasActiveAccount: false,
       hasOpenPositions: false,
@@ -35,11 +34,11 @@ export async function detectActionRuntime(): Promise<ActionRuntime> {
       hasMemory: false,
     };
   }
-  const selectedAccountId = await loadActiveAccountId(supabase, user.id);
+  const selectedAccountId = await loadActiveAccountId(supabase, userId);
   const { data } = await supabase
     .from("user_broker_accounts")
     .select("id,connection_method,external_connection_id,provider_status")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .in("connection_method", ["cloud_mt5", "cloud_alpaca", "demo_paper"])
     .limit(20);
   const activeAccount = Array.isArray(data)
@@ -58,22 +57,22 @@ export async function detectActionRuntime(): Promise<ActionRuntime> {
       ? supabase
           .from("mt5_positions")
           .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("account_id", accountId)
       : Promise.resolve({ count: 0 }),
     accountId
       ? supabase
           .from("broker_trades")
           .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("account_id", accountId)
       : Promise.resolve({ count: 0 }),
     applyAccountIdReadFilter(
-      supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("user_journal_entries").select("id", { count: "exact", head: true }).eq("user_id", userId),
       activeAccountId,
     ),
-    supabase.from("trade_journal_labels").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-    supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    supabase.from("trade_journal_labels").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("assistant_memory_entries").select("id", { count: "exact", head: true }).eq("user_id", userId),
   ]);
   const journalActivity = (journalNotes.count ?? 0) + (tradeLabels.count ?? 0);
   return {
