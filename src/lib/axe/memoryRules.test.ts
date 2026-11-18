@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  axeMemoryInsertPayload,
+  existingMemoriesForDedupe,
+  mapAxeMemoryApiRow,
   parseExtractedMemories,
   parseMemoryLimit,
   selectMemoriesToStore,
@@ -89,3 +92,64 @@ describe("selectMemoriesToStore", () => {
     assert.equal(out.length, 5);
   });
 });
+
+describe("axe_memory table mapping", () => {
+  it("prefers memory_type and falls back to the older type column", () => {
+    assert.equal(
+      mapAxeMemoryApiRow({
+        id: "1",
+        memory_type: "preference",
+        type: "insight",
+        content: "Prefers gold",
+        symbol: null,
+        confidence: 0.9,
+        source: "chat",
+        created_at: "2026-11-18T00:00:00.000Z",
+      }).memory_type,
+      "preference",
+    );
+    assert.equal(
+      mapAxeMemoryApiRow({
+        id: "2",
+        memory_type: null,
+        type: "rule",
+        content: "No NFP",
+        symbol: "XAUUSD",
+        confidence: 0.8,
+        source: "tos",
+        created_at: "2026-11-18T00:00:00.000Z",
+      }).memory_type,
+      "rule",
+    );
+  });
+
+  it("writes both type and memory_type so chat and MemoryBrain share one row shape", () => {
+    const payload = axeMemoryInsertPayload("user-1", {
+      memory_type: "pattern",
+      content: "Closes winners early",
+      symbol: "XAUUSD",
+      confidence: 0.85,
+    });
+    assert.equal(payload.user_id, "user-1");
+    assert.equal(payload.memory_type, "pattern");
+    assert.equal(payload.type, "pattern");
+    assert.equal(payload.source, "axe-memory");
+    assert.equal(payload.content, "Closes winners early");
+  });
+
+  it("dedupes against type when memory_type is missing on an existing row", () => {
+    const existing = existingMemoriesForDedupe([
+      { memory_type: null, type: "preference", content: "Prefers gold" },
+      { memory_type: "rule", type: "rule", content: "No NFP" },
+    ]);
+    const out = selectMemoriesToStore(
+      [
+        { memory_type: "preference", content: "prefers gold", symbol: null, confidence: 0.9 },
+        { memory_type: "observation", content: "London session", symbol: null, confidence: 0.8 },
+      ],
+      existing,
+    );
+    assert.deepEqual(out.map((m) => m.content), ["London session"]);
+  });
+});
+

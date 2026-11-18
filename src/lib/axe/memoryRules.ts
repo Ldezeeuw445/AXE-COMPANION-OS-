@@ -95,6 +95,73 @@ function normalizeContent(text: string): string {
  * normalized text) or of another row in this same batch. Without this every
  * chat re-stored the same "prefers gold" memory.
  */
+export type AxeMemoryTableRow = {
+  id?: string;
+  memory_type?: string | null;
+  type?: string | null;
+  content?: string | null;
+  symbol?: string | null;
+  confidence?: number | null;
+  source?: string | null;
+  created_at?: string | null;
+  resolved_at?: string | null;
+};
+
+export type AxeMemoryApiRow = {
+  id: string;
+  memory_type: string;
+  content: string;
+  symbol: string | null;
+  confidence: number;
+  source: string;
+  created_at: string;
+};
+
+function memoryTypeFromRow(row: { memory_type?: string | null; type?: string | null }): string {
+  if (isMemoryType(row.memory_type)) return row.memory_type;
+  if (isMemoryType(row.type)) return row.type;
+  if (typeof row.memory_type === "string" && row.memory_type.trim()) return row.memory_type.trim();
+  if (typeof row.type === "string" && row.type.trim()) return row.type.trim();
+  return "observation";
+}
+
+/** Map a live `axe_memory` row onto the MemoryBrain / GET payload. */
+export function mapAxeMemoryApiRow(row: AxeMemoryTableRow): AxeMemoryApiRow {
+  const confidence = Number(row.confidence);
+  return {
+    id: String(row.id ?? ""),
+    memory_type: memoryTypeFromRow(row),
+    content: typeof row.content === "string" ? row.content : "",
+    symbol: typeof row.symbol === "string" && row.symbol.trim() ? row.symbol.trim() : null,
+    confidence: Number.isFinite(confidence) ? confidence : 0.7,
+    source: typeof row.source === "string" && row.source.trim() ? row.source.trim() : "chat",
+    created_at: typeof row.created_at === "string" ? row.created_at : "",
+  };
+}
+
+/** Insert shape for the agreed `axe_memory` table (chat already writes type + memory_type). */
+export function axeMemoryInsertPayload(userId: string, memory: ExtractedMemory) {
+  return {
+    user_id: userId,
+    memory_type: memory.memory_type,
+    type: memory.memory_type,
+    content: memory.content,
+    symbol: memory.symbol,
+    confidence: memory.confidence,
+    source: "axe-memory",
+    priority: "medium",
+  };
+}
+
+export function existingMemoriesForDedupe(
+  rows: Array<{ memory_type?: string | null; type?: string | null; content?: string | null }>,
+): Array<{ memory_type: string; content: string }> {
+  return rows.map((row) => ({
+    memory_type: memoryTypeFromRow(row),
+    content: typeof row.content === "string" ? row.content : "",
+  }));
+}
+
 export function selectMemoriesToStore(
   extracted: ExtractedMemory[],
   existing: Array<{ memory_type: string; content: string }>,

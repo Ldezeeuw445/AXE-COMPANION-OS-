@@ -2,7 +2,10 @@ import { createEdgeSupabaseClient } from "@/lib/supabase/edge";
 import { callLLM } from "@/services/llmClient";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 import {
+  axeMemoryInsertPayload,
+  existingMemoriesForDedupe,
   isMemoryType,
+  mapAxeMemoryApiRow,
   parseExtractedMemories,
   parseMemoryLimit,
   selectMemoriesToStore,
@@ -51,15 +54,18 @@ export async function GET(request: Request) {
   const type = rawType;
   const limit = parseMemoryLimit(url.searchParams.get("limit"));
 
+  // Agreed single source: `axe_memory` (chat already writes here). `axe_memories`
+  // is unused and left in place for a later cleanup — do not drop it here.
   let query = supabase
-    .from("axe_memories")
-    .select("id,memory_type,content,symbol,confidence,created_at")
+    .from("axe_memory")
+    .select("id,memory_type,type,content,symbol,confidence,source,created_at,resolved_at")
     .eq("user_id", user.id)
+    .is("resolved_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
 
   if (type) {
-    query = query.eq("memory_type", type);
+    query = query.or(`memory_type.eq.${type},type.eq.${type}`);
   }
 
   const { data, error } = await query;
@@ -69,7 +75,8 @@ export async function GET(request: Request) {
     return jsonResponse({ ok: false, error: "Failed to load memories." }, 500);
   }
 
-  return jsonResponse({ ok: true, memories: data ?? [] });
+  const memories = (data ?? []).map(mapAxeMemoryApiRow);
+  return jsonResponse({ ok: true, memories });
 }
 
 /* ── POST: extract & store memories ──────────────────────────────── */
@@ -102,9 +109,10 @@ export async function POST(request: Request) {
 
     // Skip repeats of memories the trader already has.
     const { data: existing, error: existingError } = await supabase
-      .from("axe_memories")
-      .select("memory_type,content")
+      .from("axe_memory")
+      .select("memory_type,type,content")
       .eq("user_id", user.id)
+      .is("resolved_at", null)
       .order("created_at", { ascending: false })
       .limit(500);
     if (existingError) {
@@ -112,22 +120,14 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Failed to load memories." }, 500);
     }
 
-    const toStore = selectMemoriesToStore(memories, existing ?? []);
+    const toStore = selectMemoriesToStore(memories, existingMemoriesForDedupe(existing ?? []));
     if (toStore.length === 0) {
       return jsonResponse({ ok: true, extracted: memories.length, stored: 0 });
     }
 
     const { data: stored, error } = await supabase
-      .from("axe_memories")
-      .insert(
-        toStore.map((memory) => ({
-          user_id: user.id,
-          memory_type: memory.memory_type,
-          content: memory.content,
-          symbol: memory.symbol,
-          confidence: memory.confidence,
-        })),
-      )
+      .from("axe_memory")
+      .insert(toStore.map((memory) => axeMemoryInsertPayload(user.id, memory)))
       .select("id");
 
     if (error) {
@@ -163,7 +163,7 @@ export async function DELETE(request: Request) {
   }
 
   const { error } = await supabase
-    .from("axe_memories")
+    .from("axe_memory")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);
