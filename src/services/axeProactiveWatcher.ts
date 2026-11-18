@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { evaluateSmartAlertsForUser } from "@/services/smartAlertCronEvaluator";
+import { evaluatePriceAlertsForUserWithPush } from "@/services/priceAlertCronBridge";
 import { announce } from "@/lib/axe/announce";
 import { buildAccountProfile, newsWarningFor } from "@/lib/risk/accountProfile";
 import { detectConcentration, weekendExposureWarning } from "@/lib/risk/positionRisk";
@@ -449,6 +450,17 @@ async function checkUser(supabase: SupabaseClient, userId: string): Promise<{ cr
     /* smart alerts optional */
   }
 
+  try {
+    const price = await evaluatePriceAlertsForUserWithPush(supabase, userId, {
+      accountId: accountId ?? null,
+      hasPush,
+    });
+    created += price.triggered;
+    pushed += price.pushed;
+  } catch {
+    /* TOS / Companion price alerts optional */
+  }
+
   return { created, pushed };
 }
 
@@ -514,6 +526,12 @@ export async function runAxeProactiveWatcher(
     })
     .map((row) => row.user_id as string);
 
+  // Trading OS writes ordinary type=price rows with no Companion smart metadata.
+  // Those users still need a watcher slot so the cron can push a cross.
+  const priceAlertUserIds = (alertUsers ?? [])
+    .filter((row) => row.type === "price")
+    .map((row) => row.user_id as string);
+
   // "No proactive notifications" is a Free-plan restriction, and this loop is
   // where proactive notifications are produced: it writes feed events, spends
   // model calls and sends pushes per user, with no route in front of it. Keep
@@ -524,6 +542,7 @@ export async function runAxeProactiveWatcher(
     ...idsOf(tradeUsers),
     ...idsOf(execUsers),
     ...smartAlertUserIds,
+    ...priceAlertUserIds,
     ...openPositionUserIds,
     ...staleConnectionUserIds,
     ...idsOf(accountRows),
@@ -535,7 +554,7 @@ export async function runAxeProactiveWatcher(
   const candidateIds = collectWatcherCandidates(
     {
       recentTradeUserIds: keep(idsOf(tradeUsers)),
-      pendingExecUserIds: keep([...idsOf(execUsers), ...smartAlertUserIds]),
+      pendingExecUserIds: keep([...idsOf(execUsers), ...smartAlertUserIds, ...priceAlertUserIds]),
       openPositionUserIds: keep(openPositionUserIds),
       staleConnectionUserIds: keep(staleConnectionUserIds),
       activeAccountUserIds: keep(idsOf(accountRows)),
