@@ -46,3 +46,23 @@ test("no previous sample means no fire", () => {
 test("null threshold is ignored", () => {
   assert.equal(findCrossedAlerts([row({ threshold: null })], "XAUUSD", { symbol: "XAUUSD", price: -1 }, 1).length, 0);
 });
+
+test("GOLD alert matches an XAUUSD chart tick", () => {
+  const hits = findCrossedAlerts(
+    [row({ symbol: "GOLD" })],
+    "XAUUSD",
+    { symbol: "XAUUSD", price: 1999 },
+    2001,
+  );
+  assert.equal(hits.length, 1);
+});
+
+test("TOS metadata.price is enough when the threshold column is empty", () => {
+  const hits = findCrossedAlerts(
+    [row({ threshold: null, metadata: { price: 2000, source_app: "trading-os" } })],
+    "XAUUSD",
+    { symbol: "XAUUSD", price: 1999 },
+    2001,
+  );
+  assert.equal(hits.length, 1);
+});

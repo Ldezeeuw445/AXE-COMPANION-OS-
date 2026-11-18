@@ -1,6 +1,7 @@
 import { streamChatMessage, type ChatStreamAuth, type StreamEvent } from "@/services/chatService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
+import { normalizeChatRouteContext } from "@/lib/chat/normalizeChatRouteContext";
 
 // Node.js runtime — metaApiClient uses node:crypto
 export const runtime = "nodejs";
@@ -47,20 +48,20 @@ export async function POST(request: Request) {
   const text = typeof body?.text === "string" ? body.text : "";
   const imageBase64 = typeof body?.imageBase64 === "string" ? body.imageBase64 : undefined;
   const imageType = typeof body?.imageType === "string" ? body.imageType : undefined;
-  const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
-  const tf = typeof body?.tf === "string" ? body.tf : undefined;
+  const rawSymbol = typeof body?.symbol === "string" ? body.symbol : undefined;
+  const rawTf = typeof body?.tf === "string" ? body.tf : undefined;
+  const { symbol, tf } = normalizeChatRouteContext({ symbol: rawSymbol, tf: rawTf });
   const symbolTouchedAt =
     typeof body?.symbolTouchedAt === "string" ? body.symbolTouchedAt : null;
   const chatType = body?.type === "intel" ? "intel" : "axe";
 
-  // Forward the user's JWT to engine-proxy (never the service role).
-  const authHeader = request.headers.get("Authorization") ?? "";
-  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-
-  // Server auth: try cookie session first, then Bearer (Trading OS / Composer).
+  // Prefer the cookie session. Validate bearer credentials for cross-origin clients.
   let edgeAuth: ChatStreamAuth | null = await getAuthedServiceSupabase();
 
   if (!edgeAuth) {
+    // Fallback: extract JWT from Authorization header (sent by Composer)
+    const authHeader = request.headers.get("Authorization") ?? "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
     if (bearerToken) {
       try {
         const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -79,8 +80,6 @@ export async function POST(request: Request) {
         // Bearer auth also failed — fall through to 401
       }
     }
-  } else if (bearerToken) {
-    edgeAuth = { ...edgeAuth, accessToken: bearerToken };
   }
 
   if (!edgeAuth) {

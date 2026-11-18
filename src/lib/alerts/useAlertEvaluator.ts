@@ -1,6 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  alertSymbolsMatch,
+  readPriceCondition,
+  readPriceThreshold,
+  type PriceAlertRow,
+} from "@/lib/alerts/tosPriceAlert";
 
 /**
  * Standalone alert evaluator for the AXE Companion app.
@@ -49,7 +55,7 @@ type Args = {
 };
 
 function sameSymbol(a: string | null | undefined, b: string): boolean {
-  return String(a ?? "").toUpperCase() === b.toUpperCase();
+  return alertSymbolsMatch(a, b);
 }
 
 /**
@@ -70,9 +76,9 @@ export function findCrossedAlerts(
   const out: Array<{ alert: AlertRow; condition: "above" | "below"; threshold: number }> = [];
   for (const alert of alerts) {
     if (alert.symbol && !sameSymbol(alert.symbol, symbol)) continue;
-    const threshold = Number(alert.threshold);
-    if (alert.threshold == null || !Number.isFinite(threshold)) continue;
-    const condition = alert.condition === "below" ? "below" : "above";
+    const threshold = readPriceThreshold(alert as PriceAlertRow);
+    const condition = readPriceCondition(alert as PriceAlertRow);
+    if (threshold == null || !condition) continue;
     const crossed =
       condition === "above"
         ? previous.price < threshold && price >= threshold
@@ -106,9 +112,9 @@ export function useAlertEvaluator({ enabled, symbol, cooldownSeconds = 60, onFir
         (a) =>
           a.status === "active" &&
           a.type === "price" &&
-          a.threshold != null &&
-          a.condition != null &&
-          (!a.symbol || a.symbol.toUpperCase() === symbol.toUpperCase()),
+          readPriceThreshold(a as PriceAlertRow) != null &&
+          readPriceCondition(a as PriceAlertRow) != null &&
+          (!a.symbol || sameSymbol(a.symbol, symbol)),
       );
       setAlerts(next);
       setError(null);
