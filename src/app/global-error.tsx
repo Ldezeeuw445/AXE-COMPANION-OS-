@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { isStaleBuildError, reloadForNewBuild } from "@/lib/pwa/staleBuild";
 
 export default function GlobalError({
   error,
@@ -9,6 +10,11 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const stale = isStaleBuildError(error.message);
+  useEffect(() => {
+    if (stale) reloadForNewBuild();
+  }, [stale]);
+
   useEffect(() => {
     // Same fix as (app)/error.tsx: this only logged outside production, so a
     // root-layout crash left no trace anywhere a person could reach.
@@ -84,7 +90,7 @@ export default function GlobalError({
           </p>
           <button
             type="button"
-            onClick={reset}
+            onClick={() => (stale ? window.location.reload() : reset())}
             style={{
               background: "rgba(255,255,255,0.06)",
               border: "1px solid rgba(255,255,255,0.1)",

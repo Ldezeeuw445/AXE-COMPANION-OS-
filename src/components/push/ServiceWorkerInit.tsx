@@ -4,6 +4,13 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ServiceWorkerUpdateBanner } from "@/components/pwa/ServiceWorkerUpdateBanner";
 import {
+  clientBuildCommit,
+  fetchServerBuildCommit,
+  isDifferentBuild,
+  isStaleBuildError,
+  reloadForNewBuild,
+} from "@/lib/pwa/staleBuild";
+import {
   SW_CACHE_LAST_VIEWED_MESSAGE,
   SW_SKIP_WAITING_MESSAGE,
   isSafeNavigation,
@@ -61,6 +68,45 @@ export function ServiceWorkerInit() {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
       registration?.removeEventListener("updatefound", onUpdateFound);
+    };
+  }, []);
+
+  // A deploy does not change sw.js, so the worker handshake above never fires
+  // for it. A phone that resumes the PWA hours later still runs the old bundle:
+  // its chunks and Server Actions are gone from the server (18 Nov: a red
+  // account card and "Something went wrong" while MT5 was fine). Compare the
+  // commit this bundle was built from with the one the server runs: on resume
+  // reload straight away (nothing typed yet); while in use, show the banner.
+  useEffect(() => {
+    const build = clientBuildCommit();
+    if (!build) return;
+    let alive = true;
+    const check = async (resumed: boolean) => {
+      const serving = await fetchServerBuildCommit();
+      if (!alive || !isDifferentBuild(build, serving)) return;
+      if (resumed && reloadForNewBuild()) return;
+      setUpdateWaiting(true);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check(true);
+    };
+    const onError = (event: ErrorEvent) => {
+      if (isStaleBuildError(event.message || event.error)) reloadForNewBuild();
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      if (isStaleBuildError(event.reason)) reloadForNewBuild();
+    };
+    void check(false);
+    const id = window.setInterval(() => void check(false), 5 * 60_000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
     };
   }, []);
 
