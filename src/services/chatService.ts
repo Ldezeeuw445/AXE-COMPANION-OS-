@@ -1,3 +1,4 @@
+import { formatKrakenReply, parseKrakenRequest } from "@/lib/chat/krakenRequest";
 import { mockMessages } from "@/services/mock/seed";
 import { detectCorrection } from "@/lib/axe/correctionDetector";
 import { recordLearningSignal } from "@/services/learningService";
@@ -713,6 +714,31 @@ export async function streamChatMessage(
     .eq("id", conversation.id)
     .eq("user_id", user.id);
 
+  const krakenRequest = parseKrakenRequest(trimmed);
+  if (krakenRequest) {
+    const accessToken = await resolveUserAccessToken(supabase, authed.accessToken);
+    const result = accessToken && krakenRequest.pair
+      ? await getTerminalToolsClient().invoke({
+          userId: user.id,
+          accessToken,
+          companionName: "terminal_get_kraken_market_data",
+          args: krakenRequest,
+        })
+      : null;
+    const reply = formatKrakenReply(krakenRequest, result);
+    const { error } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      user_id: user.id,
+      role: "assistant",
+      content: reply,
+    });
+    if (error) console.error("Failed to save Kraken reply", error);
+    onEvent({ type: "token", text: reply });
+    onEvent({ type: "done" });
+    markChatLatency("ok");
+    return { ok: true };
+  }
+
   // 3. Fetch message history + central TradingOS context in parallel
   const intelSnapshotPromise =
     type === "intel"
@@ -1386,7 +1412,7 @@ export async function streamChatMessage(
       lastAsk: chart?.lastAsk ?? null,
     });
 
-    if (canonical != null && (state === "live" || state === "degraded")) {
+    if (canonical != null && state === "live") {
       const pretty = formatPriceCompact(canonical);
       const bidAskSummary = formatBidAskSummary(
         requestedUpper || activeSymbol,
