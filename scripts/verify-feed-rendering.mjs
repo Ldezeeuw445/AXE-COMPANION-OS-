@@ -84,6 +84,14 @@ check("the three lanes have three distinguishable colours", () => {
   assert.match(recap, /emerald/);
 });
 
+check("daily news reads the shared Trading OS table", () => {
+  const helper = readFileSync("src/lib/market/sharedNewsItems.ts", "utf8");
+  assert.match(helper, /shared_news_items/, "helper must query public.shared_news_items");
+  assert.match(feedService, /loadSharedNewsItems/, "feed must use the shared-news helper");
+  const contextBuilder = readFileSync("src/services/axeContextBuilder.ts", "utf8");
+  assert.match(contextBuilder, /compactSharedNewsForAxe/, "AXE chat context must include shared news");
+});
+
 check("the feed no longer truncates a brief mid-sentence", () => {
   assert.ok(
     !/row\.body \?\? ""\)\.slice\(0, 480\)/.test(feedService),
