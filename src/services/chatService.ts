@@ -54,6 +54,15 @@ import {
   resolveChatSymbolContext,
   type ChatSymbolResolution,
 } from "@/lib/chat/resolveChatSymbolContext";
+import { loadChatPriceFacts } from "@/services/chatPriceFacts";
+import {
+  buildChatPriceFactsPrompt,
+  chatPriceStreamNote,
+  detectChatPriceSymbols,
+  guardChatReply,
+  symbolsForChatValidation,
+} from "@/lib/briefing/chatPriceGuard";
+import type { SymbolFactsResult } from "@/lib/briefing/priceFacts";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -694,6 +703,14 @@ export async function streamChatMessage(
       ? loadIntelSnapshot({ symbol: effectiveSymbol }).catch(() => null)
       : Promise.resolve(null);
 
+  // Live price facts for the markets this message names (cached briefly). Started
+  // here so the lookup runs in parallel with history/context assembly.
+  const messagePriceSymbols = detectChatPriceSymbols({ message: trimmed, effectiveSymbol });
+  const priceFactsPrefetch: Promise<SymbolFactsResult[]> =
+    messagePriceSymbols.length > 0
+      ? loadChatPriceFacts(supabase, user.id, messagePriceSymbols).catch(() => [])
+      : Promise.resolve([]);
+
   const [historyResult, context, knowledgeLayer, intelSnapshot, engineProfile] = await Promise.all([
     supabase
       .from("messages")
@@ -709,6 +726,7 @@ export async function streamChatMessage(
       : buildAxeKnowledgeLayerBlock(supabase, user.id, trimmed, effectiveSymbol ?? null),
     intelSnapshotPromise,
     getAxeEngineProfile(supabase, user.id, { source: "chat_turn" }).catch(() => null),
+    priceFactsPrefetch,
   ]);
 
   const history = ((historyResult.data ?? []) as { role: "user" | "assistant"; content: string }[])
@@ -734,6 +752,19 @@ export async function streamChatMessage(
       });
     }
   }
+
+  // Markets the conversation is about: this message, the chart symbol in
+  // force, and the last user turns ("and what about the levels?"). Prefetched
+  // symbols come back from the cache.
+  const chatPriceSymbols = detectChatPriceSymbols({
+    message: trimmed,
+    effectiveSymbol,
+    recentUserMessages: history.filter((m) => m.role === "user").map((m) => m.content),
+  });
+  const chatPriceFacts: SymbolFactsResult[] =
+    chatPriceSymbols.length > 0
+      ? await loadChatPriceFacts(supabase, user.id, chatPriceSymbols).catch(() => [])
+      : [];
 
   // 4. Inject candles_summary from pinned_context (+ intel snapshot when in intel mode)
   let knowledgeBlock = knowledgeLayer;
@@ -790,6 +821,14 @@ export async function streamChatMessage(
       content: `${INTEL_CHAT_PREFIX}\n\n${String(aiMessages[0].content ?? "")}`,
     };
   }
+  const priceFactsPrompt = buildChatPriceFactsPrompt(chatPriceFacts);
+  if (priceFactsPrompt && aiMessages[0]?.role === "system") {
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${String(aiMessages[0].content ?? "")}\n\n${priceFactsPrompt}`,
+    };
+  }
+
   if (aiMessages[0]?.role === "system" && engineProfile) {
     aiMessages[0] = {
       ...aiMessages[0],
@@ -1103,6 +1142,8 @@ export async function streamChatMessage(
 
   // 3. Stream the response — tool rounds are non-streaming, final text is streaming
   let finalReply: string | null = null;
+  // The message list that produced `finalReply` — the price guard regenerates from it.
+  let finalMessages: LLMMessage[] = aiMessages;
   const executedToolResults: Array<{ tc: AxeToolCall; result: string }> = [];
 
   try {
@@ -1150,8 +1191,10 @@ export async function streamChatMessage(
           onEvent({ type: "token", text: token });
         });
         finalReply = round3Content || null;
+        finalMessages = afterRound2;
       } else {
         finalReply = round2Content || null;
+        finalMessages = afterRound1;
       }
     } else {
       finalReply = firstContent || null;
@@ -1174,6 +1217,8 @@ export async function streamChatMessage(
     markChatLatency("no_reply");
     return { ok: false, aiFailed: true };
   }
+
+  const modelReply = finalReply;
 
   // Hard safety for fib chart actions:
   // - if user asked for fib-on-chart, ensure we have a routed chart action link
@@ -1342,6 +1387,43 @@ export async function streamChatMessage(
         finalReply =
           `I can only analyze with your broker context. Live broker pricing is unavailable right now for ${active}, ` +
           `so I won't output guessed levels. Sync account/chart and I will continue from live broker data. [[link:/chart|Open chart]]`;
+      }
+    }
+  }
+
+  // Price check on the model's own answer (deterministic replies above are
+  // built from broker data and skip this). Tokens already streamed: the
+  // corrected text is what gets saved, clients reload the thread on `done`,
+  // and a correction note is streamed for clients that do not.
+  if (finalReply === modelReply) {
+    const validateSymbols = symbolsForChatValidation(chatPriceSymbols, finalReply);
+    if (validateSymbols.length > 0) {
+      const facts = validateSymbols.every((s) => chatPriceSymbols.includes(s))
+        ? chatPriceFacts
+        : await loadChatPriceFacts(supabase, user.id, validateSymbols).catch(() => chatPriceFacts);
+      const draft = finalReply;
+      const guarded = await guardChatReply({
+        reply: draft,
+        facts,
+        regenerate: async (feedback) => {
+          const factsBlock = buildChatPriceFactsPrompt(facts);
+          return callAxeFinalStreaming(
+            [
+              ...finalMessages,
+              { role: "assistant", content: draft },
+              { role: "user", content: factsBlock ? `${feedback}\n\n${factsBlock}` : feedback },
+            ],
+            () => {},
+          );
+        },
+      });
+      if (guarded.changed) {
+        console.warn(
+          `[chatService] price guard: ${guarded.violations.length} unverified price(s)` +
+            ` (regenerated=${guarded.regenerated}, stripped=${guarded.stripped})`,
+        );
+        finalReply = guarded.text;
+        onEvent({ type: "token", text: chatPriceStreamNote(facts) });
       }
     }
   }
