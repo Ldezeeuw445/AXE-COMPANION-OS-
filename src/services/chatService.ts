@@ -63,6 +63,14 @@ import {
   symbolsForChatValidation,
 } from "@/lib/briefing/chatPriceGuard";
 import type { SymbolFactsResult } from "@/lib/briefing/priceFacts";
+import {
+  buildTerminalToolsPrompt,
+  getTerminalToolsClient,
+  isCompanionTerminalTool,
+  resolveUserAccessToken,
+  toOpenAiTerminalTools,
+  type ReadOnlyAxeTool,
+} from "@/lib/terminal/terminalToolsClient";
 
 export const CHAT_USES_MOCK_DATA = SERVICES_USE_MOCK_DATA;
 
@@ -106,7 +114,9 @@ async function runToolWithPolicy(
   tc: AxeToolCall,
   execute: (call: AxeToolCall) => Promise<string>,
 ): Promise<string> {
-  const timeoutMs = Math.max(1_500, TOOL_TIMEOUTS_MS[tc.tool] ?? TOOL_TIMEOUT_DEFAULT_MS);
+  const timeoutMs = isCompanionTerminalTool(tc.tool)
+    ? 9_000
+    : Math.max(1_500, TOOL_TIMEOUTS_MS[tc.tool] ?? TOOL_TIMEOUT_DEFAULT_MS);
   const maxAttempts = RETRYABLE_TOOLS.has(tc.tool) ? 2 : 1;
   let lastErr: unknown = null;
 
@@ -610,6 +620,12 @@ Be concrete. Use numbers. Connect dots others miss. Same voice as AXE — direct
 Use INTEL KNOWLEDGE (RAG) and LIVE INTEL SNAPSHOT together — cite feeds used, confidence, and signal.
 Intel chat feeds the trader's learning arc; reference their memory and saved correlations when relevant.`;
 
+export type ChatStreamAuth = {
+  supabase: SupabaseClient;
+  user: User;
+  accessToken?: string | null;
+};
+
 export async function streamChatMessage(
   text: string,
   onEvent: (event: StreamEvent) => void,
@@ -617,7 +633,7 @@ export async function streamChatMessage(
   imageType?: string,
   symbol?: string,
   tf?: string,
-  edgeAuth?: { supabase: SupabaseClient; user: User } | null,
+  edgeAuth?: ChatStreamAuth | null,
   type: "axe" | "intel" = "axe",
   symbolTouchedAt?: string | null,
 ): Promise<SendChatMessageResult> {
@@ -647,7 +663,7 @@ export async function streamChatMessage(
   const effectiveSymbol = symbolResolution.effectiveSymbol ?? undefined;
   const loggingSymbol = loggingSymbolForResolution(symbolResolution);
 
-  const authed = edgeAuth ?? await getAuthedServiceSupabase();
+  const authed: ChatStreamAuth | null = edgeAuth ?? await getAuthedServiceSupabase();
   if (!authed) return { ok: false };
 
   const conversation = await ensurePrimaryConversation(authed.user.id, authed, type);
@@ -703,6 +719,17 @@ export async function streamChatMessage(
       ? loadIntelSnapshot({ symbol: effectiveSymbol }).catch(() => null)
       : Promise.resolve(null);
 
+  const accessToken = await resolveUserAccessToken(supabase, authed.accessToken);
+  const terminalListedPromise = accessToken
+    ? getTerminalToolsClient()
+        .listReadOnlyTools({ userId: user.id, accessToken })
+        .catch((): { tools: ReadOnlyAxeTool[]; source: "engine-proxy" | "fallback"; available: boolean } => ({
+          tools: [],
+          source: "fallback",
+          available: false,
+        }))
+    : Promise.resolve({ tools: [] as ReadOnlyAxeTool[], source: "fallback" as const, available: false });
+
   // Live price facts for the markets this message names (cached briefly). Started
   // here so the lookup runs in parallel with history/context assembly.
   const messagePriceSymbols = detectChatPriceSymbols({ message: trimmed, effectiveSymbol });
@@ -728,6 +755,7 @@ export async function streamChatMessage(
     getAxeEngineProfile(supabase, user.id, { source: "chat_turn" }).catch(() => null),
     priceFactsPrefetch,
   ]);
+  const terminalListed = await terminalListedPromise;
 
   const history = ((historyResult.data ?? []) as { role: "user" | "assistant"; content: string }[])
     .reverse()
@@ -836,6 +864,14 @@ export async function streamChatMessage(
     };
   }
 
+  const terminalOpenAiTools = toOpenAiTerminalTools(terminalListed.tools);
+  if (aiMessages[0]?.role === "system") {
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${String(aiMessages[0].content ?? "")}\n\n${buildTerminalToolsPrompt(terminalListed)}`,
+    };
+  }
+
   // Fire-and-forget push notification to user's subscribed devices
   async function firePush(title: string, body: string, url = "/chat", extra?: { category?: "price_alert" | "axe_finding"; eventKey?: string; threadId?: string; symbol?: string }) {
     try {
@@ -860,6 +896,28 @@ export async function streamChatMessage(
     const activeAccountId = accountIdWriteValue(
       context.axe_context?.accounts?.activeAccountId ?? context.companion_active_account_id,
     );
+    if (isCompanionTerminalTool(toolCall.tool)) {
+      if (!accessToken) {
+        return JSON.stringify({
+          ok: false,
+          unavailable: true,
+          tool: toolCall.tool,
+          field: "terminal",
+          reason: "terminal unavailable: missing user session",
+          quality: "unavailable",
+        });
+      }
+      return getTerminalToolsClient().invoke({
+        userId: user.id,
+        accessToken,
+        companionName: toolCall.tool,
+        args: toolCall.args ?? {},
+        extras: {
+          symbol: effectiveSymbol,
+          timeframe: tf,
+        },
+      });
+    }
     if (toolCall.tool === "create_alert") {
       const { title, body } = toolCall.args;
       const row = buildUserAlertFromChatTool(toolCall.args);
@@ -1152,7 +1210,7 @@ export async function streamChatMessage(
     const firstResponse = await callAxeStreaming(aiMessages, (token) => {
       firstContent += token;
       onEvent({ type: "token", text: token });
-    });
+    }, terminalOpenAiTools);
 
     if (firstResponse.toolCalls.length > 0) {
       // Tool calls — execute them
@@ -1171,7 +1229,7 @@ export async function streamChatMessage(
       const round2Response = await callAxeStreaming(afterRound1, (token) => {
         round2Content += token;
         onEvent({ type: "token", text: token });
-      });
+      }, terminalOpenAiTools);
 
       if (round2Response.toolCalls.length > 0) {
         // Third round of tools (rare)
@@ -1460,7 +1518,7 @@ export async function sendChatMessage(
   imageType?: string,
   symbol?: string,
   tf?: string,
-  edgeAuth?: { supabase: SupabaseClient; user: User } | null,
+  edgeAuth?: ChatStreamAuth | null,
   type: "axe" | "intel" = "axe",
   symbolTouchedAt?: string | null,
 ): Promise<SendChatMessageResult> {

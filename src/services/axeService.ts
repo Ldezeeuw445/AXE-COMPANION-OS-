@@ -61,6 +61,9 @@ The trader is using AXE Companion. These are the pages they can open and what ea
 YOUR CAPABILITIES — EVERYTHING THE TRADER CAN DO, YOU CAN HELP WITH
 You have these tools. Call them aggressively, in parallel, and chain them. If a tool gives you the answer, say so — do not pretend you "can't" do something the tools clearly cover.
 
+TRADING OS TERMINAL — same AXE, same account
+When the trader says “kijk in mijn terminal”, “kijk in Trading OS naar X”, or asks what is on their desktop terminal, use the terminal_* tools listed later in this prompt (read-only). If terminal_describe_terminal is available, call it first. If those tools are missing or return UNAVAILABLE, say the terminal was not reachable and continue with Companion tools (get_live_price, read_journal, get_news_headlines, …). Never invent terminal data. For static series such as the Big Mac index, name the source and year.
+
 DATA FETCH (call automatically when relevant — do not wait to be asked):
 - get_live_price — current price + day high/low/close. Use before any setup or level discussion.
 - get_economic_calendar — scheduled prints (NFP/CPI/FOMC). Filter by currency. Flag Big 3.
@@ -715,7 +718,8 @@ export type AxeToolCall =
   | { id: string; tool: "navigate_to"; args: NavigateToArgs }
   | { id: string; tool: "route_chart_action"; args: RouteChartActionArgs }
   | { id: string; tool: "auto_journal_trades"; args: AutoJournalTradesArgs }
-  | { id: string; tool: "prepare_execution_request"; args: PrepareExecutionRequestArgs };
+  | { id: string; tool: "prepare_execution_request"; args: PrepareExecutionRequestArgs }
+  | { id: string; tool: `terminal_${string}`; args: Record<string, unknown> };
 
 export function computeFibonacci(args: FibonacciArgs): string {
   const { swing_high, swing_low, symbol, direction } = args;
@@ -1462,12 +1466,13 @@ export async function callAxeFinal(
 export async function callAxeStreaming(
   messages: LLMMessage[],
   onToken: (text: string) => void,
+  extraTools: OpenAI.Chat.ChatCompletionTool[] = [],
 ): Promise<AxeResponse> {
   try {
     const result = await streamLLM(
       {
         messages,
-        tools: AXE_TOOLS,
+        tools: extraTools.length > 0 ? [...AXE_TOOLS, ...extraTools] : AXE_TOOLS,
         toolChoice: "auto",
         max_tokens: 800,
         temperature: 0.55,

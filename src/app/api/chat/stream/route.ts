@@ -1,4 +1,4 @@
-import { streamChatMessage, type StreamEvent } from "@/services/chatService";
+import { streamChatMessage, type ChatStreamAuth, type StreamEvent } from "@/services/chatService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 import { normalizeChatRouteContext } from "@/lib/chat/normalizeChatRouteContext";
@@ -55,8 +55,8 @@ export async function POST(request: Request) {
     typeof body?.symbolTouchedAt === "string" ? body.symbolTouchedAt : null;
   const chatType = body?.type === "intel" ? "intel" : "axe";
 
-  // Server auth: try Bearer token first, then fall back to cookie session.
-  let edgeAuth = await getAuthedServiceSupabase();
+  // Prefer the cookie session. Validate bearer credentials for cross-origin clients.
+  let edgeAuth: ChatStreamAuth | null = await getAuthedServiceSupabase();
 
   if (!edgeAuth) {
     // Fallback: extract JWT from Authorization header (sent by Composer)
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
         });
         const { data: { user }, error } = await sbClient.auth.getUser(bearerToken);
         if (!error && user) {
-          edgeAuth = { supabase: sbClient as ReturnType<typeof createServiceRoleClient>, user };
+          edgeAuth = { supabase: sbClient as ReturnType<typeof createServiceRoleClient>, user, accessToken: bearerToken };
         }
       } catch {
         // Bearer auth also failed — fall through to 401
