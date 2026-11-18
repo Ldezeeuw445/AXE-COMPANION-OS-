@@ -1,6 +1,7 @@
 import { streamChatMessage, type StreamEvent } from "@/services/chatService";
 import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
+import { normalizeChatRouteContext } from "@/lib/chat/normalizeChatRouteContext";
 
 // Node.js runtime — metaApiClient uses node:crypto
 export const runtime = "nodejs";
@@ -47,8 +48,9 @@ export async function POST(request: Request) {
   const text = typeof body?.text === "string" ? body.text : "";
   const imageBase64 = typeof body?.imageBase64 === "string" ? body.imageBase64 : undefined;
   const imageType = typeof body?.imageType === "string" ? body.imageType : undefined;
-  const symbol = typeof body?.symbol === "string" ? body.symbol : undefined;
-  const tf = typeof body?.tf === "string" ? body.tf : undefined;
+  const rawSymbol = typeof body?.symbol === "string" ? body.symbol : undefined;
+  const rawTf = typeof body?.tf === "string" ? body.tf : undefined;
+  const { symbol, tf } = normalizeChatRouteContext({ symbol: rawSymbol, tf: rawTf });
   const symbolTouchedAt =
     typeof body?.symbolTouchedAt === "string" ? body.symbolTouchedAt : null;
   const chatType = body?.type === "intel" ? "intel" : "axe";
