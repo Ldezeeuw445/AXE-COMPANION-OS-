@@ -35,6 +35,7 @@ export async function detectActionRuntime(): Promise<ActionRuntime> {
       hasMemory: false,
     };
   }
+  const selectedAccountId = await loadActiveAccountId(supabase, user.id);
   const { data } = await supabase
     .from("user_broker_accounts")
     .select("id,connection_method,external_connection_id,provider_status")
@@ -42,16 +43,16 @@ export async function detectActionRuntime(): Promise<ActionRuntime> {
     .in("connection_method", ["cloud_mt5", "cloud_alpaca", "demo_paper"])
     .limit(20);
   const activeAccount = Array.isArray(data)
-    ? data.find((a) => {
+    ? (selectedAccountId ? data.find((account) => account.id === selectedAccountId) : data.find((a) => {
         const statusOk = ["connected", "provisioned"].includes(String(a.provider_status ?? "").toLowerCase());
         if (a.connection_method === "cloud_mt5") {
           return statusOk && Boolean(a.external_connection_id);
         }
         return statusOk;
-      }) ?? data[0]
+      }) ?? data[0])
     : null;
   const accountId = activeAccount?.id as string | undefined;
-  const activeAccountId = await loadActiveAccountId(supabase, user.id);
+  const activeAccountId = selectedAccountId ?? accountId ?? null;
   const [positions, trades, journalNotes, tradeLabels, memory] = await Promise.all([
     accountId
       ? supabase
