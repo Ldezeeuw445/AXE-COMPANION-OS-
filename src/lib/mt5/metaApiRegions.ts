@@ -74,8 +74,11 @@ const REGIONS: Record<MetaApiRegion, RegionInfo> = {
     label: "New York",
     description: "Americas — US, Canada, Latin America",
     countries: ["US", "CA", "MX", "BR", "AR", "CL", "CO", "PE"],
+    // Measured 2026-11-20: the vzsrmwxzqcwfarnn host answers only in London.
+    // In New York it serves a self-signed certificate (every call fails) and
+    // in Singapore it has no DNS, so those regions use MetaApi's v1 host.
     clientApiHost:
-      "https://mt-client-api-vzsrmwxzqcwfarnn.new-york.agiliumtrade.ai",
+      "https://mt-client-api-v1.new-york.agiliumtrade.ai",
     marketDataHost:
       "https://mt-market-data-client-api-v1.new-york.agiliumtrade.ai",
   },
@@ -85,7 +88,7 @@ const REGIONS: Record<MetaApiRegion, RegionInfo> = {
     description: "Asia-Pacific — SG, HK, JP, AU, IN",
     countries: ["SG", "HK", "JP", "KR", "CN", "TW", "AU", "NZ", "IN", "ID", "TH", "VN", "MY", "PH"],
     clientApiHost:
-      "https://mt-client-api-vzsrmwxzqcwfarnn.singapore.agiliumtrade.ai",
+      "https://mt-client-api-v1.singapore.agiliumtrade.ai",
     marketDataHost:
       "https://mt-market-data-client-api-v1.singapore.agiliumtrade.ai",
   },
@@ -114,10 +117,26 @@ export function defaultRegionForCountry(country: string | null | undefined): Met
   return "london";
 }
 
+/**
+ * A region MetaApi reports that this table does not list (it adds regions over
+ * time, e.g. "vint-hill"). Its hosts follow MetaApi's own pattern; falling back
+ * to London would send every call for that account to a host where it does not
+ * live, which is exactly the "region does not match" failure.
+ */
+function unlistedRegion(region: string | null | undefined): string | null {
+  const key = String(region ?? "").trim().toLowerCase();
+  if (!key || (META_API_REGIONS as string[]).includes(key)) return null;
+  return /^[a-z0-9-]{2,32}$/.test(key) ? key : null;
+}
+
 export function clientApiHostForRegion(region: string | null | undefined): string {
+  const other = unlistedRegion(region);
+  if (other) return `https://mt-client-api-v1.${other}.agiliumtrade.ai`;
   return getRegionInfo(region).clientApiHost;
 }
 
 export function marketDataHostForRegion(region: string | null | undefined): string {
+  const other = unlistedRegion(region);
+  if (other) return `https://mt-market-data-client-api-v1.${other}.agiliumtrade.ai`;
   return getRegionInfo(region).marketDataHost;
 }

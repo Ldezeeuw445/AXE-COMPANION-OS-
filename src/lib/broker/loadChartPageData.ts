@@ -1209,7 +1209,7 @@ export async function loadChartPageData(
     const failure: ChartFailureKind =
       code === "not_found"
         ? "broker_symbol_not_found"
-        : code === "metaapi_region_error" || code === "metaapi_auth_failed"
+        : code === "metaapi_region_error" || code === "metaapi_auth_failed" || code === "terminal_not_connected"
           ? "market_data_unavailable"
           : "candles_unavailable";
 

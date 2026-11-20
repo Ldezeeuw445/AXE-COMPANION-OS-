@@ -24,6 +24,7 @@ export function friendlyProviderStatus(raw: string | null | undefined): string {
     not_found: "Needs setup",
     metaapi_auth_failed: "Connection issue",
     metaapi_region_error: "Connection issue",
+    terminal_not_connected: "Broker login failed",
     metaapi_timeout: "Data stale",
   };
   return map[v] ?? capitalizeWords(v.replace(/_/g, " "));
