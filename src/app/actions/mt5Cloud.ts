@@ -41,6 +41,7 @@ import {
   provisioningFindMt5CloudAccount,
   provisioningGetAccount,
   provisioningRedeployAccount,
+  provisioningUpdateAccount,
   provisioningSearchKnownServers,
   type MetaApiTradingAccount,
 } from "@/lib/mt5/metaApiClient";
@@ -147,6 +148,7 @@ async function findExistingMetaApiAccount(
 async function ensureMetaApiAccountDeployment(
   metaId: string,
   snapshot: MetaApiTradingAccount | null,
+  opts: { credentialsChanged?: boolean } = {},
 ): Promise<void> {
   const state = (snapshot?.state ?? "").toUpperCase();
   const connectionStatus = (snapshot?.connectionStatus ?? "").toUpperCase();
@@ -158,7 +160,8 @@ async function ensureMetaApiAccountDeployment(
     );
     return;
   }
-  if (connectionStatus !== "CONNECTED" || state !== "DEPLOYED") {
+  // New credentials only reach the terminal on a (re)deploy.
+  if (opts.credentialsChanged || connectionStatus !== "CONNECTED" || state !== "DEPLOYED") {
     await withActionBudget(
       "recovery_redeploy_account",
       provisioningRedeployAccount(metaId),
@@ -424,7 +427,14 @@ export async function createCloudMt5ConnectionAction(
     if (existing) {
       metaId = existing.id;
       existingMetaAccount = existing.account;
-      await ensureMetaApiAccountDeployment(metaId, existingMetaAccount);
+      // The trader just typed the current password: put it on the account
+      // MetaApi already has, or the terminal keeps logging in with the old one.
+      await withActionBudget(
+        "update_existing_metaapi_account",
+        provisioningUpdateAccount(metaId, { name: label, password: mt5Password, server: mt5Server }),
+        TEST_PROVISIONING_TIMEOUT_MS,
+      );
+      await ensureMetaApiAccountDeployment(metaId, existingMetaAccount, { credentialsChanged: true });
     } else {
       const created = await provisioningCreateMt5CloudAccount({
         login: mt5Login,
@@ -731,19 +741,38 @@ export async function testCloudMt5ConnectionAction(accountId: string): Promise<M
     // deployed region "for free" so we just persist it here — the next
     // chart / positions / order call will then route to the correct host
     // instead of falling back to env-default london.
-    const resolvedRegion =
-      accountRegion ??
-      (typeof acc.region === "string" && acc.region.length > 0 ? acc.region : null);
-    const info = await withActionBudget(
-      "test_account_information",
-      clientGetAccountInformation(extId, true, resolvedRegion),
-      TEST_ACCOUNT_INFO_TIMEOUT_MS,
-    );
+    //
+    // MetaApi's own answer wins over what we stored: a region saved wrong
+    // (e.g. from the form while the account already lived elsewhere) sent
+    // every later call to a host where the account does not exist.
+    const liveRegion = typeof acc.region === "string" && acc.region.length > 0 ? acc.region : null;
+    const resolvedRegion = liveRegion ?? accountRegion;
+    const terminalConnected = String(acc.connectionStatus ?? "").toUpperCase() === "CONNECTED";
+    let info: Record<string, unknown>;
+    try {
+      info = await withActionBudget(
+        "test_account_information",
+        clientGetAccountInformation(extId, true, resolvedRegion),
+        TEST_ACCOUNT_INFO_TIMEOUT_MS,
+      );
+    } catch (infoErr) {
+      // A terminal MetaApi reports as not connected cannot answer: that is a
+      // broker login problem, whatever status the client API returned.
+      if (!terminalConnected && !(infoErr instanceof MetaApiRequestError && infoErr.code === "metaapi_auth_failed")) {
+        throw new MetaApiRequestError(
+          "terminal_not_connected",
+          `Terminal ${String(acc.connectionStatus ?? "unknown")}`,
+          infoErr instanceof MetaApiRequestError ? infoErr.status : 0,
+          infoErr instanceof MetaApiRequestError ? infoErr.payload : null,
+        );
+      }
+      throw infoErr;
+    }
     const provider_status = mapConnectionToProviderStatus(acc.connectionStatus, acc.state);
 
     const meta = {
       ...prevMetaRow,
-      ...(resolvedRegion && !accountRegion ? { metaapiRegion: resolvedRegion } : {}),
+      ...(resolvedRegion && resolvedRegion !== accountRegion ? { metaapiRegion: resolvedRegion } : {}),
       ...(relinked ? { relinkedMetaapiAccountAt: new Date().toISOString() } : {}),
       accountSummary: {
         balance: info.balance,
@@ -1148,7 +1177,7 @@ export async function runCloudMt5DoctorAction(accountId: string): Promise<Mt5Clo
     } catch (e) {
       accountInfoError = compactMetaError(e);
       const mapped = mapMetaError(e);
-      credentialsStatus = mapped.code === "mt5_invalid_credentials" ? "fail" : "unknown";
+      credentialsStatus = mapped.code === "mt5_invalid_credentials" || mapped.code === "terminal_not_connected" ? "fail" : "unknown";
       serverStatus = mapped.code === "metaapi_region_error" || mapped.code === "not_found" ? "fail" : serverStatus;
       brokerStepStatus = "fail";
     }

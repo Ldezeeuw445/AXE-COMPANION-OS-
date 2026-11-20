@@ -10,7 +10,12 @@ import {
   getMetaApiProvisioningBaseUrl,
   getMetaApiToken,
 } from "@/lib/mt5/metaApiEnv";
-import { classifyHttpStatus, classifyMetaApiProvisioningError, type Mt5CloudErrorCode } from "@/lib/mt5/metaApiErrors";
+import {
+  classifyClientApiError,
+  classifyHttpStatus,
+  classifyMetaApiProvisioningError,
+  type Mt5CloudErrorCode,
+} from "@/lib/mt5/metaApiErrors";
 
 export type MetaApiTradingAccount = {
   _id?: string;
@@ -219,6 +224,34 @@ async function provisioningPostAccountOperation(
     throw new MetaApiRequestError(code, `${operation} account failed (${res.status})`, res.status, body);
   }
   return (body ?? {}) as MetaApiTradingAccount;
+}
+
+/**
+ * Put the trader's current credentials on an existing MetaApi account
+ * (`PUT /users/current/accounts/{id}`; name, password and server are required).
+ *
+ * Reconnecting an account MetaApi already has used to reuse it as it was, so
+ * the password typed into the form never reached the terminal: an account
+ * whose password had changed — or that was first linked with the other kind
+ * of password — stayed DEPLOYED but DISCONNECTED forever. Redeploy afterwards
+ * so the terminal logs in with the new password.
+ */
+export async function provisioningUpdateAccount(
+  accountId: string,
+  input: { name: string; password: string; server: string },
+): Promise<void> {
+  const base = getMetaApiProvisioningBaseUrl();
+  const res = await fetchWithTimeout(`${base}/users/current/accounts/${encodeURIComponent(accountId)}`, {
+    method: "PUT",
+    headers: authHeadersJson(),
+    body: JSON.stringify({ name: input.name, password: input.password, server: input.server.trim() }),
+    timeoutMs: 45_000,
+  });
+  if (res.ok) return;
+  const body = await readJson(res);
+  const classified = classifyMetaApiProvisioningError(body);
+  const code = classified !== "unknown" ? classified : res.status === 404 ? "not_found" : classifyHttpStatus(res.status);
+  throw new MetaApiRequestError(code, `Update account failed (${res.status})`, res.status, body);
 }
 
 export async function provisioningDeployAccount(accountId: string): Promise<MetaApiTradingAccount> {
@@ -466,8 +499,7 @@ export async function clientGetAccountInformation(
     throw new MetaApiRequestError("not_found", "Account not provisioned on this client region", res.status, body);
   }
   if (!res.ok) {
-    const code = res.status === 401 ? "metaapi_auth_failed" : "metaapi_region_error";
-    throw new MetaApiRequestError(code, `Client API error (${res.status})`, res.status, body);
+    throw new MetaApiRequestError(classifyClientApiError(res.status, body), `Client API error (${res.status})`, res.status, body);
   }
   return (body ?? {}) as Record<string, unknown>;
 }

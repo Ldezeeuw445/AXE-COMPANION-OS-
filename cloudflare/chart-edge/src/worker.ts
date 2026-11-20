@@ -37,8 +37,10 @@ const DEFAULT_MARKET = "https://mt-market-data-client-api-v1.london.agiliumtrade
 
 const REGION_CLIENT: Record<string, string> = {
   london: DEFAULT_CLIENT,
-  "new-york": "https://mt-client-api-vzsrmwxzqcwfarnn.new-york.agiliumtrade.ai",
-  singapore: "https://mt-client-api-vzsrmwxzqcwfarnn.singapore.agiliumtrade.ai",
+  // The vzsrmwxzqcwfarnn host answers only in London (2026-11-20: self-signed
+  // certificate in New York, no DNS in Singapore); the others use MetaApi's v1 host.
+  "new-york": "https://mt-client-api-v1.new-york.agiliumtrade.ai",
+  singapore: "https://mt-client-api-v1.singapore.agiliumtrade.ai",
 };
 
 const REGION_MARKET: Record<string, string> = {

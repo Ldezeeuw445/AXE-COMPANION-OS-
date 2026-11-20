@@ -5,6 +5,7 @@ export type Mt5CloudErrorCode =
   | "mt5_server_not_found"
   | "metaapi_resource_slots"
   | "metaapi_region_error"
+  | "terminal_not_connected"
   | "metaapi_timeout"
   | "sync_no_deals"
   | "sync_failed"
@@ -27,6 +28,8 @@ const USER_MESSAGES: Record<Mt5CloudErrorCode, string> = {
     "This account needs more MetaApi resource slots than allocated. Increase resourceSlots in MetaApi account settings or contact support per MetaApi pricing guidance.",
   metaapi_region_error:
     "MetaApi client URL or region does not match this account. Verify METAAPI_CLIENT_API_URL and METAAPI_DEFAULT_REGION (London defaults are built in).",
+  terminal_not_connected:
+    "The MetaApi terminal for this account is running but is not logged in at your broker. Usually the password or the server name is wrong or has changed. Connect the account again with the current password and the exact server name from MT5.",
   metaapi_timeout: "MetaApi or the broker terminal did not respond in time. Try Test or Sync again in a minute.",
   sync_no_deals: "Sync completed but no closed position deals were found in the last 90 days for this account.",
   sync_failed: "Sync could not finish. Check account status with Test, then try again.",
@@ -107,6 +110,28 @@ export function classifyMetaApiProvisioningError(payload: unknown): Mt5CloudErro
   if (msg.includes("authenticate") || msg.includes("invalid account")) return "mt5_invalid_credentials";
   if (msg.includes("server") && msg.includes("not found")) return "mt5_server_not_found";
   if (msg.includes("resource slot")) return "metaapi_resource_slots";
+  return "unknown";
+}
+
+/**
+ * A failed client-API call (account information, positions). Every non-401/404
+ * status used to be reported as a region mismatch, so a terminal that simply
+ * could not log in at the broker told the trader to check server environment
+ * variables. MetaApi names the real reason in the body; read it.
+ */
+export function classifyClientApiError(status: number, payload: unknown): Mt5CloudErrorCode {
+  if (status === 401) return "metaapi_auth_failed";
+  if (status === 404) return "not_found";
+  const p = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const name = String(p.error ?? p.name ?? "").toLowerCase();
+  const msg = (upstreamMessage(payload) ?? "").toLowerCase();
+  if (/notconnected|notsynchroni[sz]ed|disconnected/.test(name) || /not connected|not synchroni[sz]ed|disconnected|not logged in/.test(msg)) {
+    return "terminal_not_connected";
+  }
+  const provisioning = classifyMetaApiProvisioningError(payload);
+  if (provisioning !== "unknown") return provisioning;
+  if (status === 403) return "forbidden";
+  if (status === 408 || status === 504 || name.includes("timeout")) return "metaapi_timeout";
   return "unknown";
 }
 
