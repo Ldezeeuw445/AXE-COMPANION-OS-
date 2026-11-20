@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { tradingOsCors, userSupabaseFromRequest, withTradingOsCors } from "@/lib/auth/tradingOsBearer";
 import { placePaperOrder } from "@/services/paperOrderService";
 import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 import { decideAutoTradeAllowed } from "@/services/tradeGuardService";
@@ -65,14 +65,24 @@ type OrderBody = {
 const MAX_VOLUME_LOTS = 5;
 const MIN_VOLUME_LOTS = 0.01;
 
-export async function POST(request: NextRequest) {
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) return errJson(503, "supabase_not_configured", "Supabase is not configured.");
+/** Trading OS preflight: same app on another origin, Bearer token, no cookies. */
+export async function OPTIONS(request: NextRequest) {
+  return new Response(null, { status: 204, headers: tradingOsCors(request) });
+}
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return errJson(401, "unauthorized", "Sign in to place orders.");
+export async function POST(request: NextRequest) {
+  return withTradingOsCors(request, await placeOrder(request));
+}
+
+/**
+ * Guard 1 accepts the cookie session (Companion) or a Bearer access token
+ * (Trading OS, 20 Nov 2026: "one app, another interface"). Either way the
+ * client acts as the user under RLS, and guards 2-9 below are the same.
+ */
+async function placeOrder(request: NextRequest): Promise<Response> {
+  const authed = await userSupabaseFromRequest(request);
+  if (!authed) return errJson(401, "unauthorized", "Sign in to place orders.");
+  const { supabase, user } = authed;
 
   let body: OrderBody;
   try {
