@@ -1,0 +1,20 @@
+# The MT5 terminal on a virtual screen, restarted when it dies.
+# /etc/systemd/system/mt5-terminal.service  (user `mt5`, Wine prefix ~/.mt5)
+[Unit]
+Description=MetaTrader 5 terminal (Wine, Xvfb :99)
+After=network-online.target mt5-xvfb.service
+Requires=mt5-xvfb.service
+
+[Service]
+User=mt5
+Environment=DISPLAY=:99
+Environment=WINEPREFIX=/home/mt5/.mt5
+Environment=WINEDEBUG=-all
+ExecStart=/usr/bin/wine "C:\\Program Files\\MetaTrader 5\\terminal64.exe" /portable
+Restart=always
+RestartSec=10
+# The terminal plus Wine stay under this, leaving room for the bridge on a 4 GB box.
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

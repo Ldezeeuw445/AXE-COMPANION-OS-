@@ -1,0 +1,28 @@
+# The bridge, in the same Wine prefix as the terminal (MetaTrader5 is Windows-only).
+# /etc/systemd/system/mt5-bridge.service
+# Secrets in /etc/mt5-bridge.env (root:mt5, 0640):
+#   MT5_BRIDGE_TOKEN=<64 random hex>   (same value as Companion's MT5_BRIDGE_TOKEN)
+#   MT5_BRIDGE_ACCOUNT_ID=upcomers-12347717
+#   MT5_BRIDGE_TRADING=off             (on only after the demo order test)
+#   BROKER_UTC_OFFSET_HOURS=2          (fallback when no fresh tick, e.g. weekends)
+#   MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
+# deploy/install.sh writes this file with a fresh token.
+[Unit]
+Description=MT5 bridge (MetaApi-compatible REST on 127.0.0.1:8765)
+After=mt5-terminal.service
+Wants=mt5-terminal.service
+
+[Service]
+User=mt5
+EnvironmentFile=/etc/mt5-bridge.env
+Environment=DISPLAY=:99
+Environment=WINEPREFIX=/home/mt5/.mt5
+Environment=WINEDEBUG=-all
+WorkingDirectory=/opt/mt5-bridge
+# 127.0.0.1 only: the Cloudflare tunnel is the one way in.
+ExecStart=/usr/bin/wine "C:\\Program Files\\Python311\\python.exe" -m uvicorn --factory mt5_bridge.app:create_app --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

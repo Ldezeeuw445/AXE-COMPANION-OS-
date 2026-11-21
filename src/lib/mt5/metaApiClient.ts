@@ -16,6 +16,13 @@ import {
   classifyMetaApiProvisioningError,
   type Mt5CloudErrorCode,
 } from "@/lib/mt5/metaApiErrors";
+import {
+  getMt5BridgeConfig,
+  isBridgeAccountId,
+  isBridgeBase,
+  MT5_BRIDGE_REGION,
+  readMt5BridgeStatus,
+} from "@/lib/mt5/mt5Bridge";
 
 export type MetaApiTradingAccount = {
   _id?: string;
@@ -87,26 +94,64 @@ async function fetchWithTimeout(
   }
 }
 
-function authHeadersJson(): HeadersInit {
+/**
+ * The token for the host a request goes to. `base` is the client/market-data
+ * base URL of that request: our own MT5 bridge gets its own token, everything
+ * else MetaApi's. Omitted for provisioning calls, which only MetaApi has.
+ */
+function tokenFor(base?: string): string {
+  if (base === "") {
+    throw new MetaApiRequestError(
+      "provider_not_configured",
+      "MT5 bridge account, but MT5_BRIDGE_URL / MT5_BRIDGE_TOKEN / MT5_BRIDGE_ACCOUNT_ID are not all set",
+      0,
+      null,
+    );
+  }
+  if (base && isBridgeBase(base)) return getMt5BridgeConfig()!.token;
   const token = getMetaApiToken();
   if (!token) throw new MetaApiRequestError("provider_not_configured", "Missing MetaApi token", 0, null);
+  return token;
+}
+
+function authHeadersJson(base?: string): HeadersInit {
   return {
     Accept: "application/json",
     "Content-Type": "application/json",
-    "auth-token": token,
+    "auth-token": tokenFor(base),
   };
 }
 
-function authHeadersGet(): HeadersInit {
-  const token = getMetaApiToken();
-  if (!token) throw new MetaApiRequestError("provider_not_configured", "Missing MetaApi token", 0, null);
+function authHeadersGet(base?: string): HeadersInit {
   return {
     Accept: "application/json",
-    "auth-token": token,
+    "auth-token": tokenFor(base),
+  };
+}
+
+/**
+ * What provisioning reports for the bridge account: MetaApi's account shape,
+ * built from the bridge's own status. DEPLOYED always (there is nothing to
+ * deploy), CONNECTED only while the terminal is logged in to the broker, and
+ * region "bridge" so every later call is routed back to the bridge.
+ */
+async function bridgeTradingAccount(accountId: string): Promise<MetaApiTradingAccount> {
+  const status = await readMt5BridgeStatus();
+  return {
+    _id: accountId,
+    id: accountId,
+    state: "DEPLOYED",
+    connectionStatus: status.connected ? "CONNECTED" : "DISCONNECTED",
+    region: MT5_BRIDGE_REGION,
+    login: status.login != null ? String(status.login) : undefined,
+    server: status.server ?? undefined,
+    name: "MT5 bridge",
+    type: "bridge",
   };
 }
 
 export async function provisioningGetAccount(accountId: string): Promise<MetaApiTradingAccount> {
+  if (isBridgeAccountId(accountId)) return bridgeTradingAccount(accountId);
   const base = getMetaApiProvisioningBaseUrl();
   const res = await fetchWithTimeout(`${base}/users/current/accounts/${encodeURIComponent(accountId)}`, {
     method: "GET",
@@ -182,6 +227,20 @@ export async function provisioningFindMt5CloudAccount(input: {
   const targetServer = normalizeMt5Server(input.server);
   if (!targetLogin || !targetServer) return null;
 
+  // The bridge first: when its terminal is logged in to this very login and
+  // server, linking the account uses the bridge, not a (new) MetaApi account.
+  const bridge = getMt5BridgeConfig();
+  if (bridge) {
+    const status = await readMt5BridgeStatus();
+    if (
+      status.login != null &&
+      normalizeMt5Login(status.login) === targetLogin &&
+      normalizeMt5Server(status.server) === targetServer
+    ) {
+      return bridgeTradingAccount(bridge.accountId);
+    }
+  }
+
   const accounts = await provisioningListAccounts();
   return (
     accounts.find((account) => {
@@ -193,6 +252,8 @@ export async function provisioningFindMt5CloudAccount(input: {
 }
 
 export async function provisioningDeleteAccount(accountId: string): Promise<void> {
+  // The bridge's terminal is ours; there is no cloud account to delete.
+  if (isBridgeAccountId(accountId)) return;
   const base = getMetaApiProvisioningBaseUrl();
   const res = await fetchWithTimeout(`${base}/users/current/accounts/${encodeURIComponent(accountId)}`, {
     method: "DELETE",
@@ -209,6 +270,8 @@ async function provisioningPostAccountOperation(
   accountId: string,
   operation: "deploy" | "redeploy",
 ): Promise<MetaApiTradingAccount> {
+  // Nothing to deploy: report the terminal as it is.
+  if (isBridgeAccountId(accountId)) return bridgeTradingAccount(accountId);
   const base = getMetaApiProvisioningBaseUrl();
   const res = await fetchWithTimeout(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/${operation}`,
@@ -240,6 +303,15 @@ export async function provisioningUpdateAccount(
   accountId: string,
   input: { name: string; password: string; server: string },
 ): Promise<void> {
+  // A password never goes to the bridge: Luka logs in on its terminal himself.
+  if (isBridgeAccountId(accountId)) {
+    throw new MetaApiRequestError(
+      "provider_not_configured",
+      "This account runs on our own MT5 terminal; change its password in that terminal, not here",
+      0,
+      null,
+    );
+  }
   const base = getMetaApiProvisioningBaseUrl();
   const res = await fetchWithTimeout(`${base}/users/current/accounts/${encodeURIComponent(accountId)}`, {
     method: "PUT",
@@ -490,7 +562,7 @@ export async function clientGetAccountInformation(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/account-information${q}`,
     {
       method: "GET",
-      headers: authHeadersGet(),
+      headers: authHeadersGet(base),
       timeoutMs: refreshTerminalState ? 90_000 : 45_000,
     },
   );
@@ -515,7 +587,7 @@ export async function clientGetPositions(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/positions${q}`,
     {
       method: "GET",
-      headers: authHeadersGet(),
+      headers: authHeadersGet(base),
       timeoutMs: 60_000,
     },
   );
@@ -542,7 +614,7 @@ export async function clientGetOrders(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/orders${q}`,
     {
       method: "GET",
-      headers: authHeadersGet(),
+      headers: authHeadersGet(base),
       timeoutMs: 60_000,
     },
   );
@@ -562,7 +634,7 @@ export async function clientListSymbols(
     `${base}/users/current/accounts/${encodeURIComponent(accountId)}/symbols`,
     {
       method: "GET",
-      headers: authHeadersGet(),
+      headers: authHeadersGet(base),
       timeoutMs: 20_000,
     },
   );
@@ -603,7 +675,7 @@ export async function clientGetSymbolPrice(
   const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/symbols/${sym}/current-price`;
   const res = await fetchWithTimeout(url, {
     method: "GET",
-    headers: authHeadersGet(),
+    headers: authHeadersGet(base),
     timeoutMs: 20_000,
   });
   const body = await readJson(res);
@@ -636,7 +708,7 @@ export async function clientGetHistoryOrdersRange(
     const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/history-orders/time/${s}/${e}?offset=${offset}&limit=${limit}`;
     const res = await fetchWithTimeout(url, {
       method: "GET",
-      headers: authHeadersGet(),
+      headers: authHeadersGet(base),
       timeoutMs: 120_000,
     });
     const body = await readJson(res);
@@ -667,7 +739,7 @@ export async function clientGetHistoryDealsRange(
     const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/history-deals/time/${s}/${e}?offset=${offset}&limit=${limit}`;
     const res = await fetchWithTimeout(url, {
       method: "GET",
-      headers: authHeadersGet(),
+      headers: authHeadersGet(base),
       timeoutMs: 120_000,
     });
     const body = await readJson(res);
@@ -796,7 +868,7 @@ export async function clientPlaceOrder(input: PlaceOrderInput): Promise<PlaceOrd
 
   const res = await fetchWithTimeout(url, {
     method: "POST",
-    headers: authHeadersJson(),
+    headers: authHeadersJson(base),
     body: JSON.stringify(body),
     timeoutMs: 45_000,
   });
@@ -859,7 +931,7 @@ export async function clientModifyPosition(
 
   const res = await fetchWithTimeout(url, {
     method: "POST",
-    headers: authHeadersJson(),
+    headers: authHeadersJson(base),
     body: JSON.stringify(body),
     timeoutMs: 45_000,
   });
@@ -926,7 +998,7 @@ export async function clientModifyOrder(
 
   const res = await fetchWithTimeout(url, {
     method: "POST",
-    headers: authHeadersJson(),
+    headers: authHeadersJson(base),
     body: JSON.stringify(body),
     timeoutMs: 45_000,
   });
@@ -980,7 +1052,7 @@ export async function clientCancelOrder(
 
   const res = await fetchWithTimeout(url, {
     method: "POST",
-    headers: authHeadersJson(),
+    headers: authHeadersJson(base),
     body: JSON.stringify(body),
     timeoutMs: 45_000,
   });
@@ -1050,7 +1122,7 @@ export async function clientClosePosition(
 
   const res = await fetchWithTimeout(url, {
     method: "POST",
-    headers: authHeadersJson(),
+    headers: authHeadersJson(base),
     body: JSON.stringify(body),
     timeoutMs: 45_000,
   });
@@ -1096,7 +1168,7 @@ export async function clientGetHistoricalCandles(
   const url = `${base}/users/current/accounts/${encodeURIComponent(accountId)}/historical-market-data/symbols/${sym}/timeframes/${tf}/candles?limit=${lim}`;
   const res = await fetchWithTimeout(url, {
     method: "GET",
-    headers: authHeadersGet(),
+    headers: authHeadersGet(base),
     timeoutMs: 120_000,
   });
   const body = await readJson(res);

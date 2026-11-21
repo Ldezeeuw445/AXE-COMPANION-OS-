@@ -1,0 +1,5 @@
+# Installed into the Windows Python that runs inside Wine (or on real Windows).
+# MetaTrader5 only ships Windows wheels; that is why the bridge runs there.
+MetaTrader5==5.0.6180
+fastapi==0.115.6
+uvicorn==0.34.0
