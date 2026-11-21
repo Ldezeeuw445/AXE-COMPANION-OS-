@@ -8,6 +8,7 @@ import { createCloudMt5ConnectionAction } from "@/app/actions/mt5Cloud";
 import { BrokerSupportCheck } from "@/components/accounts/BrokerSupportCheck";
 import { MetaApiComplianceCheckboxes } from "@/components/legal/MetaApiComplianceCheckboxes";
 import { lookupBrokerSupport } from "@/lib/mt5/knownBrokers";
+import { regionForTimeZone } from "@/lib/mt5/metaApiRegions";
 
 type WizardStep = 1 | 2 | 3;
 
@@ -39,6 +40,20 @@ export function BrokerConnectWizard({
   const [region, setRegion] = useState<"london" | "new-york" | "singapore">(
     isValidRegion(defaultRegion) ? defaultRegion : "london",
   );
+  const [regionTouched, setRegionTouched] = useState(false);
+  // The server has no geo header (nginx), so its default is the env value.
+  // The device's time zone is a better guess; a region the trader picks wins.
+  useEffect(() => {
+    if (regionTouched) return;
+    try {
+      const guess = regionForTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      if (guess) setRegion(guess);
+    } catch {
+      /* keep the server default */
+    }
+    // Only on mount: after that the trader's own choice stands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [passwordType, setPasswordType] = useState<"investor" | "master">("investor");
   const [state, action] = useActionState(createCloudMt5ConnectionAction, undefined);
 
@@ -126,7 +141,7 @@ export function BrokerConnectWizard({
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => setRegion(opt.value)}
+                  onClick={() => { setRegion(opt.value); setRegionTouched(true); }}
                   className={`flex-1 rounded-xl border px-2 py-2 text-center transition-all ${
                     region === opt.value
                       ? "border-cyan-400/25 bg-cyan-400/10 text-cyan-200"

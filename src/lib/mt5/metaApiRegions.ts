@@ -129,6 +129,23 @@ function unlistedRegion(region: string | null | undefined): string | null {
   return /^[a-z0-9-]{2,32}$/.test(key) ? key : null;
 }
 
+/**
+ * Best guess from the device's IANA time zone ("Europe/Amsterdam" → london).
+ * The app runs behind nginx without geo headers, so without this every
+ * trader got METAAPI_DEFAULT_REGION, and a European broker was provisioned in
+ * New York: the terminal deployed but never logged in (21 Nov 2026, an
+ * Upcomers account whose earlier London account had worked).
+ */
+const MIDDLE_EAST = /^Asia\/(Dubai|Riyadh|Qatar|Bahrain|Kuwait|Muscat|Jerusalem|Tel_Aviv|Beirut|Amman|Baghdad|Tehran|Nicosia|Famagusta)$/;
+export function regionForTimeZone(tz: string | null | undefined): MetaApiRegion | null {
+  const z = String(tz ?? "").trim();
+  if (!z) return null;
+  if (/^(Europe|Africa)\//.test(z) || /^Atlantic\/(Reykjavik|Canary|Madeira|Faroe|Azores)$/.test(z) || MIDDLE_EAST.test(z) || z === "GB" || z === "Etc/UTC" || z === "UTC") return "london";
+  if (/^(America|US|Canada|Brazil|Mexico|Chile)\//.test(z)) return "new-york";
+  if (/^(Asia|Australia|Pacific\/(Auckland|Fiji|Guam))\//.test(z)) return "singapore";
+  return null;
+}
+
 export function clientApiHostForRegion(region: string | null | undefined): string {
   const other = unlistedRegion(region);
   if (other) return `https://mt-client-api-v1.${other}.agiliumtrade.ai`;

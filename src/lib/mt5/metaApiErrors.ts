@@ -29,7 +29,7 @@ const USER_MESSAGES: Record<Mt5CloudErrorCode, string> = {
   metaapi_region_error:
     "MetaApi client URL or region does not match this account. Verify METAAPI_CLIENT_API_URL and METAAPI_DEFAULT_REGION (London defaults are built in).",
   terminal_not_connected:
-    "The MetaApi terminal for this account is running but is not logged in at your broker. Usually the password or the server name is wrong or has changed. Connect the account again with the current password and the exact server name from MT5.",
+    "The MetaApi terminal for this account is running but is not logged in at your broker. Usually the password or the server name is wrong or has changed. Connect the account again with the current password and the exact server name from MT5. A broker in Europe works best with London as region.",
   metaapi_timeout: "MetaApi or the broker terminal did not respond in time. Try Test or Sync again in a minute.",
   sync_no_deals: "Sync completed but no closed position deals were found in the last 90 days for this account.",
   sync_failed: "Sync could not finish. Check account status with Test, then try again.",
