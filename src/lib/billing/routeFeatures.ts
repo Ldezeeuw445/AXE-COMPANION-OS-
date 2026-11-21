@@ -94,6 +94,10 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "chart/drawings": "Manual chart drawings are basic charting on Free; chart_actions gates AI-routed overlays only",
   "context": "Context the client needs to render anything at all",
   "feed": "The feed itself; its paid items are gated where they are produced",
+  "actions/catalog":
+    "The Actions list itself, read by signed-in Trading OS. Listing an action is not running " +
+    "it: each one enforces its own feature at dispatch (tools/call), and the runtime flags in " +
+    "the reply are about what the account can do, not what the plan paid for",
   "market/context": "Market context for the chart",
   "quotes/prices": "Price quotes — the chart must work for everyone",
   "shell/status": "App shell status",
