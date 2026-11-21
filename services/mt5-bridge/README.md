@@ -4,7 +4,7 @@ Our own MT5 terminal, answering **MetaApi's client REST API**, so Companion and
 Trading OS keep working when MetaApi is down (it was, from 19 Nov 2026).
 
 ```text
-Hetzner box (Linux)
+Strato VPS S (Ubuntu 24.04)
   Xvfb :99 → MT5 terminal in Wine (Luka logs in once, by hand)
           → mt5-bridge: Windows Python in the same Wine, FastAPI on 127.0.0.1:8765
           → cloudflared tunnel → https://mt5-bridge.<domain>
@@ -50,6 +50,16 @@ it keeps the last measurement, else `BROKER_UTC_OFFSET_HOURS`.
   only way in, and only Companion's server calls it.
 
 ## Install on the box (Ubuntu 24.04)
+
+Steps 1–4 are one script, safe to run again:
+
+```bash
+rsync -a services/mt5-bridge/ root@HOST:/opt/mt5-bridge/
+ssh root@HOST bash /opt/mt5-bridge/deploy/install.sh
+```
+
+What it does, by hand:
+
 
 1. A user and the packages:
    ```bash

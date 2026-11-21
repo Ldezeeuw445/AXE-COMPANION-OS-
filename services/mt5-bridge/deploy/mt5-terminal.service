@@ -13,7 +13,7 @@ Environment=WINEDEBUG=-all
 ExecStart=/usr/bin/wine "C:\\Program Files\\MetaTrader 5\\terminal64.exe" /portable
 Restart=always
 RestartSec=10
-# The terminal plus Wine stay under this; the box also runs Companion and AXE.
+# The terminal plus Wine stay under this, leaving room for the bridge on a 4 GB box.
 MemoryMax=2G
 
 [Install]
