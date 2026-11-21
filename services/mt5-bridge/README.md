@@ -85,9 +85,12 @@ What it does, by hand:
    `ssh -L 5900:localhost:5900` from the Mac, open `vnc://localhost:5900`,
    log in to Upcomers-Server in the terminal with "save password". Allow
    algorithmic trading under Tools → Options → Expert Advisors.
-6. A Cloudflare tunnel hostname to `http://127.0.0.1:8765`, then in Companion's
-   env `MT5_BRIDGE_URL`, `MT5_BRIDGE_TOKEN`, `MT5_BRIDGE_ACCOUNT_ID`.
-7. Point the account at the bridge: on its `broker_accounts` row, external id =
+6. A Cloudflare tunnel hostname to `http://127.0.0.1:8765`. Then, from the Mac,
+   `bash deploy/activate.sh HOST https://mt5-bridge.<domain>` checks the bridge,
+   sets Companion's env and Trading OS's Supabase secrets (token never shown),
+   and prints the SQL for step 7.
+7. Point the account at the bridge (only with Luka's yes): on its `user_broker_accounts` row,
+   shared by Companion and Trading OS,, external id =
    `MT5_BRIDGE_ACCOUNT_ID` and `metadata.metaapiRegion = "bridge"`.
 8. Check: `curl https://mt5-bridge.<domain>/health` → `{"ok": true, ...}`, prices
    next to the MT5 app, then one 0.01-lot **demo** order with Luka's yes, and
