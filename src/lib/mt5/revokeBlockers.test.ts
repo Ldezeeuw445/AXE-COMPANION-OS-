@@ -17,10 +17,13 @@
  *     the P&L ledger AXE scores traders on, so a trader who can write it can
  *     rewrite their own score. Its INSERT/UPDATE/UPSERT grant is revocable
  *     today, and this test fails if a new write puts it back.
- *   - `user_broker_accounts` is not, and the entries below say why. They are
- *     user-initiated edits (naming an account, saving risk rules, mapping a
- *     symbol), not background-job writes. Revoking that grant means moving
- *     each one, which is a separate change from this prep.
+ *   - `user_broker_accounts` is at zero for UPDATE, now that the hub adapter's
+ *     `saveAccount` goes out elevated — that was the last provider/sync write
+ *     left on a trader's client, so the UPDATE grant is revocable too. The
+ *     entries below hold open INSERT and DELETE only: a trader adding their own
+ *     EA-linked account and removing it with its history are the owner acting
+ *     on their own row, not a background job, so those grants are meant to
+ *     stay. `accountWriteSurface.test.ts` fails if an UPDATE comes back.
  *
  * A failure here is not necessarily a bug. It means the inventory moved: either
  * a write was added, in which case decide which column it belongs in, or one
@@ -67,13 +70,11 @@ const REVOKE_BLOCKERS: Record<string, { tables: Record<string, number>; why: str
       "that table does not break it — revoking DELETE would",
   },
   "lib/broker/hub/adapters/supabaseDatabase.ts": {
-    tables: { user_broker_accounts: 2 },
+    tables: { user_broker_accounts: 1 },
     why:
-      "the hub's generic save/delete, still on whichever client its caller built — but no " +
-      "longer *because* of the client: it is bound to an owner and filters user_id on every " +
-      "statement, which `adapters/supabaseDatabase.test.ts` holds it to against a fake with " +
-      "no RLS at all. What keeps it listed is that its caller still hands it the trader's " +
-      "client; moving that is the same user-initiated-edit question as the entries above",
+      "the hub's deleteAccount: the trader removing their own account, so it needs DELETE, " +
+      "not INSERT/UPDATE. saveAccount (hub/provider columns) now goes out elevated after an " +
+      "owner-scoped read, which `adapters/supabaseDatabase.test.ts` holds it to",
   },
 };
 
