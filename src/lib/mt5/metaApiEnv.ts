@@ -6,6 +6,7 @@ import {
   marketDataHostForRegion,
   type MetaApiRegion,
 } from "@/lib/mt5/metaApiRegions";
+import { getMt5BridgeConfig, isBridgeRegion } from "@/lib/mt5/mt5Bridge";
 
 const DEFAULT_PROVISIONING = "https://mt-provisioning-api-v1.agiliumtrade.agiliumtrade.ai";
 
@@ -40,6 +41,9 @@ export function getMetaApiProvisioningBaseUrl(): string {
  * single-region deployments — but new code should always pass the region.
  */
 export function getMetaApiClientBaseUrl(region?: MetaApiRegion | string | null): string {
+  // Our own bridge answers the same API. "" when it is not configured; the
+  // client turns that into provider_not_configured instead of calling MetaApi.
+  if (isBridgeRegion(region)) return getMt5BridgeConfig()?.url ?? "";
   if (region) return clientApiHostForRegion(region).replace(/\/$/, "");
   const override = process.env.METAAPI_CLIENT_API_URL?.trim();
   if (override) return override.replace(/\/$/, "");
@@ -49,6 +53,8 @@ export function getMetaApiClientBaseUrl(region?: MetaApiRegion | string | null):
 export function getMetaApiMarketDataBaseUrl(
   region?: MetaApiRegion | string | null,
 ): string {
+  // The bridge serves candles from the same host as everything else.
+  if (isBridgeRegion(region)) return getMt5BridgeConfig()?.url ?? "";
   if (region) return marketDataHostForRegion(region).replace(/\/$/, "");
   const override = process.env.METAAPI_MARKET_DATA_URL?.trim();
   if (override) return override.replace(/\/$/, "");
