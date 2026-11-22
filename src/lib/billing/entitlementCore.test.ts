@@ -120,3 +120,28 @@ test("anonymity resolver caches definitive answers and retries errors", async ()
   assert.equal(await resolve("u1"), false, "cache expires");
   assert.equal(calls, 4);
 });
+
+test("a core row is Core: paid, every feature except unlimited chat and multi-account", () => {
+  const ent = entitlementFromRow({ plan: "core" });
+  assert.equal(ent.plan, "core");
+  assert.equal(ent.isPaid, true);
+  assert.equal(ent.label, "Core");
+  assert.equal(hasEntitlementFeature(ent, "unlimited_chat"), false);
+  assert.equal(hasEntitlementFeature(ent, "multi_account"), false);
+  for (const f of ALL_FEATURES.filter((x) => x !== "unlimited_chat" && x !== "multi_account")) {
+    assert.equal(hasEntitlementFeature(ent, f), true, f);
+  }
+});
+
+test("a running pro_until on a core row is Pro, like the chat RPCs", () => {
+  const ent = entitlementFromRow({ plan: "core", pro_until: "2999-01-01T00:00:00Z" });
+  assert.equal(ent.plan, "pro");
+  assert.equal(ent.label, "Pro");
+  assert.equal(hasEntitlementFeature(ent, "multi_account"), true);
+});
+
+test("an anonymous core row is held to Free", () => {
+  const ent = applyAnonymousRule(entitlementFromRow({ plan: "core" }), true);
+  assert.equal(ent.plan, "free");
+  assert.equal(hasEntitlementFeature(ent, "cockpit_learning"), false);
+});

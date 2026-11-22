@@ -1,12 +1,11 @@
 import type { AxePlanId } from "@/lib/billing/tiers";
-import { isPaidAxePlan, planDisplayLabel, tierById } from "@/lib/billing/tiers";
+import { isAxePlanId, isMeteredAxePlan, planDisplayLabel, tierById } from "@/lib/billing/tiers";
 
 /** Chat daily counters use UTC calendar days (aligned with Supabase RPCs). */
 export const CHAT_QUOTA_TIMEZONE = "UTC" as const;
 
 function normalizePlan(plan: string | null | undefined): AxePlanId {
-  if (plan === "pro" || plan === "founder" || plan === "elite") return plan;
-  return "free";
+  return isAxePlanId(plan) ? plan : "free";
 }
 
 /**
@@ -18,6 +17,7 @@ export function enforcedDailyChatLimit(plan: string | null | undefined, exempt =
   const id = normalizePlan(plan);
   const tier = tierById(id);
   if (id === "free") return tier.dailyChatCap ?? 20;
+  if (id === "core") return tier.dailyChatCap ?? 50;
   return tier.fairUseSoftCapPerDay ?? 200;
 }
 
@@ -39,13 +39,16 @@ export function chatQuotaFriendlyNotice(opts: {
   if (opts.limit <= 0) {
     return `You've reached today's AXE chat allowance. ${reset}`;
   }
-  if (!isPaidAxePlan(plan)) {
+  if (plan === "free") {
     return `You've used your ${opts.limit} free AXE messages for today. ${reset} Upgrade for a higher daily allowance.`;
+  }
+  if (plan === "core") {
+    return `You've used your ${opts.limit} Core AXE messages for today. ${reset} Pro gives you a much higher daily allowance.`;
   }
   const label = planDisplayLabel(plan);
   return `You've reached today's ${label} fair-use ceiling (${opts.limit} messages). ${reset}`;
 }
 
 export function shouldOfferChatUpgrade(plan?: string | null): boolean {
-  return !isPaidAxePlan(normalizePlan(plan));
+  return isMeteredAxePlan(normalizePlan(plan));
 }

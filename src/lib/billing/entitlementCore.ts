@@ -38,8 +38,11 @@ export function entitlementFromRow(data: EntitlementRow | undefined, nowMs = Dat
   // chat exemption are deliberately NOT part of this: see featurePlanForEntitlement.
   const isPaid = isPaidAxePlan(plan) || (plan === "free" && paidUntilActive);
 
+  // A running pro_until lifts Free and Core to Pro (same order as axe_chat_daily_limit).
+  const effective = (plan === "free" || plan === "core") && paidUntilActive ? "pro" : plan;
+
   return {
-    plan: isPaid && plan === "free" && paidUntilActive ? "pro" : plan,
+    plan: effective,
     isPaid,
     founderBadge,
     proUntil,
@@ -49,7 +52,7 @@ export function entitlementFromRow(data: EntitlementRow | undefined, nowMs = Dat
     // The label names the plan. The Founder marker is shown separately from
     // `founderBadge`, so a cancelled Founder reads "Free" with a badge.
     label:
-      plan === "founder" ? "Founder" : plan === "elite" ? "Elite" : isPaid ? "Pro" : "Free",
+      effective === "founder" ? "Founder" : effective === "elite" ? "Elite" : effective === "core" ? "Core" : isPaid ? "Pro" : "Free",
   };
 }
 
