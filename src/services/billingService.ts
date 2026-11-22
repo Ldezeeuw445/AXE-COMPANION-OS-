@@ -67,7 +67,9 @@ export function paymentLinkForTier(
   userId: string | null,
 ): string | null {
   const envKey =
-    tierId === "pro"
+    tierId === "core"
+      ? process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK_CORE?.trim()
+      : tierId === "pro"
       ? process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK_PRO?.trim() ||
         process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK?.trim()
       : tierId === "founder"

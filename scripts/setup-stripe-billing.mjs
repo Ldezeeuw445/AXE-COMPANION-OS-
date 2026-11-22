@@ -2,7 +2,10 @@
  * One-shot Stripe catalog for AXE Companion billing tiers.
  *
  * Creates (or reuses) Products + recurring EUR prices + Payment Links for:
- *   Pro €20/mo · Founder €40/mo · Elite €50/mo
+ *   Core €29/mo · Pro €20/mo · Founder €40/mo · Elite €50/mo
+ *
+ * Only some tiers (e.g. just Core, without touching the rest):
+ *   STRIPE_SETUP_ONLY=core node scripts/setup-stripe-billing.mjs
  *
  * Optionally registers the production webhook endpoint and prints env vars
  * for IONOS `.env.local`.
@@ -20,6 +23,14 @@
 import Stripe from "stripe";
 
 const TIERS = [
+  {
+    id: "core",
+    label: "AXE Core",
+    description: "Trading OS desk + AXE Companion on your phone — 50 AXE queries a day, 1 live account, 20 alerts with push.",
+    amountEur: 2900,
+    priceEnv: "STRIPE_PRICE_CORE",
+    linkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_CORE",
+  },
   {
     id: "pro",
     label: "AXE Companion Pro",
@@ -207,8 +218,18 @@ async function main() {
 
   await ensureBillingPortal(stripe);
 
+  const only = (process.env.STRIPE_SETUP_ONLY ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const tiers = only.length ? TIERS.filter((t) => only.includes(t.id)) : TIERS;
+  if (only.length && tiers.length === 0) {
+    console.error(`STRIPE_SETUP_ONLY=${only.join(",")} matches no tier (known: ${TIERS.map((t) => t.id).join(", ")}).`);
+    process.exit(1);
+  }
+
   const envLines = [];
-  for (const tier of TIERS) {
+  for (const tier of tiers) {
     console.log(`\n${tier.label}`);
     const result = await ensureTier(stripe, tier, successUrl);
     envLines.push(`${result.priceEnv}=${result.priceId}`);

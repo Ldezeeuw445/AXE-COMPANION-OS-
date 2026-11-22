@@ -6,6 +6,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import {
   AXE_BILLING_TIERS,
+  CORE_TIER,
   TRADING_OS_FOUNDER_TIER,
   type AxeBillingTier,
   type AxePlanId,
@@ -22,8 +23,14 @@ type Props = {
   founderReturnNotice?: string | null;
 };
 
-function tierVisible(tier: AxeBillingTier, catalog: BillingCatalogState): boolean {
+function tierVisible(
+  tier: AxeBillingTier,
+  catalog: BillingCatalogState,
+  billingReady: Partial<Record<AxePlanId, boolean>>,
+): boolean {
   if (tier.id === "free") return true;
+  // Core shows once its Stripe payment link is configured; never as a dead card.
+  if (tier.id === "core") return billingReady.core === true;
   if (tier.id === "pro") return true;
   if (tier.id === "founder") return catalog.founderAvailable;
   if (tier.id === "elite") return catalog.eliteAvailable;
@@ -38,7 +45,8 @@ export function UpgradeTierGrid({
   billingReady,
   founderReturnNotice = null,
 }: Props) {
-  const visibleTiers = AXE_BILLING_TIERS.filter((t) => tierVisible(t, catalog));
+  const [free, ...paid] = AXE_BILLING_TIERS;
+  const visibleTiers = [free!, CORE_TIER, ...paid].filter((t) => tierVisible(t, catalog, billingReady));
 
   return (
     <div className="space-y-4">

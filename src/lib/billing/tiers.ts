@@ -191,9 +191,10 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
 
 /**
  * Core (€29, the Trading OS + Companion bundle's entry tier). Granted through
- * `axe_user_entitlements.plan = 'core'`. Not listed in AXE_BILLING_TIERS on
- * purpose: it has no Stripe price yet, so the pricing page and the upgrade grid
- * do not offer it. Limits match the database (axe_chat_daily_limit = 50) and
+ * `axe_user_entitlements.plan = 'core'` (Stripe: STRIPE_PRICE_CORE, created by
+ * `STRIPE_SETUP_ONLY=core node scripts/setup-stripe-billing.mjs`). Not listed in
+ * AXE_BILLING_TIERS, so the public pricing page is unchanged; the upgrade grid
+ * shows it once NEXT_PUBLIC_STRIPE_PAYMENT_LINK_CORE is set. Limits match the database (axe_chat_daily_limit = 50) and
  * Trading OS (`PLAN_LIMITS.core` in @axe/trading-core).
  */
 export const CORE_TIER: AxeBillingTier = {
@@ -203,6 +204,8 @@ export const CORE_TIER: AxeBillingTier = {
   dailyChatCap: 50,
   fairUseSoftCapPerDay: null,
   liveAccountsCap: 1,
+  stripePriceIdEnv: "STRIPE_PRICE_CORE",
+  stripePaymentLinkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_CORE",
   headline: "Desk and phone — the full workflow with a daily AXE allowance.",
   includes: [
     "Everything in Free",

@@ -57,7 +57,7 @@ export default async function SubscriptionsPage() {
     }
   }
 
-  const paidTiers: AxePlanId[] = ["pro", "founder", "elite"];
+  const paidTiers: AxePlanId[] = ["core", "pro", "founder", "elite"];
   const founderPriceOk = isEligibleForFounderPrice(entitlement);
   const checkoutLinks = Object.fromEntries(
     paidTiers.map((id) => {
