@@ -12,7 +12,7 @@ export function RefundsPageContent() {
 
       <h2>Subscriptions</h2>
       <p>Paid subscriptions renew automatically unless cancelled before the next billing date.</p>
-      <p>The Pro plan may be offered at €19/month unless changed.</p>
+      <p>One subscription covers Trading OS and AXE Companion. Current plans and prices are listed on the pricing page and shown again at checkout before you pay.</p>
       <p>Prices may exclude VAT or other taxes.</p>
 
       <h2>Cancellation</h2>

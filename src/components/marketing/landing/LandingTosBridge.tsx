@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Layout } from "lucide-react";
 import { LANDING_TOS_BRIDGE } from "@/lib/marketing/landingCopy";
-import { TRADING_OS_FOUNDER_TIER } from "@/lib/billing/tiers";
+import { ONE_SUBSCRIPTION_NOTE } from "@/lib/billing/tiers";
 import { availabilityLabel, ecosystemApp, isReachable } from "@/lib/ecosystem/apps";
 
 export function LandingTosBridge() {
@@ -34,16 +34,7 @@ export function LandingTosBridge() {
           ))}
         </ul>
 
-        <p className="mt-6 text-sm leading-relaxed text-white/70">
-          {TRADING_OS_FOUNDER_TIER.label} — €{TRADING_OS_FOUNDER_TIER.priceEurMonthly}/mo full desktop
-          terminal. Active AXE Founder members qualify for €{TRADING_OS_FOUNDER_TIER.axeFounderPriceEurMonthly}/mo
-          Founder pricing (not available on Pro or Elite). Not sold in Companion checkout yet.
-        </p>
-        <ul className="mt-3 space-y-1 text-[12.5px] text-white/55">
-          {TRADING_OS_FOUNDER_TIER.includes.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
+        <p className="mt-6 text-sm leading-relaxed text-white/70">{ONE_SUBSCRIPTION_NOTE}</p>
 
         {tradingOs && isReachable(tradingOs.availability) ? (
           <Link

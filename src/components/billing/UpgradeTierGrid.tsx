@@ -6,8 +6,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import {
   AXE_BILLING_TIERS,
-  CORE_TIER,
-  TRADING_OS_FOUNDER_TIER,
+  ONE_SUBSCRIPTION_NOTE,
   type AxeBillingTier,
   type AxePlanId,
 } from "@/lib/billing/tiers";
@@ -45,8 +44,7 @@ export function UpgradeTierGrid({
   billingReady,
   founderReturnNotice = null,
 }: Props) {
-  const [free, ...paid] = AXE_BILLING_TIERS;
-  const visibleTiers = [free!, CORE_TIER, ...paid].filter((t) => tierVisible(t, catalog, billingReady));
+  const visibleTiers = AXE_BILLING_TIERS.filter((t) => tierVisible(t, catalog, billingReady));
 
   return (
     <div className="space-y-4">
@@ -90,15 +88,11 @@ export function UpgradeTierGrid({
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-            Trading OS · coming soon
+            Trading OS · included
           </h3>
-          <Badge variant="warm">Separate product</Badge>
+          <Badge variant="long">Same subscription</Badge>
         </div>
-        <p className="mt-2 text-xs leading-relaxed text-tos-muted">
-          {TRADING_OS_FOUNDER_TIER.label} — €{TRADING_OS_FOUNDER_TIER.priceEurMonthly}/mo full desktop
-          terminal. Active AXE Founder members qualify for €{TRADING_OS_FOUNDER_TIER.axeFounderPriceEurMonthly}
-          /mo Founder pricing (not available on Pro or Elite).
-        </p>
+        <p className="mt-2 text-xs leading-relaxed text-tos-muted">{ONE_SUBSCRIPTION_NOTE}</p>
       </GlassPanel>
     </div>
   );

@@ -1,5 +1,5 @@
 /**
- * Founder lock-in: €40 only while the Founder subscription is continuous.
+ * Founder lock-in: €59 only while the Founder subscription is continuous.
  * Cancelling keeps the Founder badge; returning later pays the normal rate
  * (Elite/Pro payment links — never the Founder payment link again).
  *

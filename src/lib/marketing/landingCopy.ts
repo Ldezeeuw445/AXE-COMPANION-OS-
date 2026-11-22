@@ -422,7 +422,7 @@ export const LANDING_TOS_BRIDGE = {
   kicker: "with Trading OS",
   title: "The desk Companion plugs into.",
   body:
-    "These belong to Trading OS, the desktop terminal — not to the phone OS. Same login, same account, when the desk is what you need.",
+    "These belong to Trading OS, the desktop terminal — not to the phone OS. Same login, same account, same subscription, when the desk is what you need.",
   features: [
     "Multi-chart layouts and a command palette",
     "QuantLab, Intel Center, News and Macro terminals",

@@ -14,7 +14,7 @@ export function LandingPricing({ catalog }: Props) {
   const founderUsed = catalog?.founderSeatsUsed;
   const founderCap = catalog?.founderSeatsCap ?? FOUNDER_SEAT_CAP;
   const founderTier = AXE_BILLING_TIERS.find((tier) => tier.id === "founder");
-  const founderPrice = founderTier?.priceEurMonthly ?? 40;
+  const founderPrice = founderTier?.priceEurMonthly ?? 59;
 
   return (
     <section id="pricing" className="relative z-10 scroll-mt-24 border-t border-white/[0.04] px-5 py-14 md:py-20">

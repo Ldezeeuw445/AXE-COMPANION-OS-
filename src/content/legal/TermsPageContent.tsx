@@ -157,8 +157,8 @@ export function TermsPageContent() {
         <strong>Free plan example:</strong> 20 AI queries per period, unless changed.
       </p>
       <p>
-        <strong>Pro plan example:</strong> €19/month, unless changed. Features may include increased or unlimited AI
-        usage, account insights, journal analytics, memory and advanced context.
+        <strong>Paid plans:</strong> Core, Pro, Founder and Elite. One subscription covers both Trading OS and AXE
+        Companion. Current prices and what each plan includes are listed on the pricing page and shown at checkout.
       </p>
       <p>Paid subscriptions renew automatically until cancelled. Prices may exclude VAT or other taxes where applicable.</p>
       <p>
