@@ -21,7 +21,19 @@
  * existing accounts above the cap are grandfathered (never disconnected / blocked).
  */
 
-export type AxePlanId = "free" | "pro" | "founder" | "elite";
+export type AxePlanId = "free" | "core" | "pro" | "founder" | "elite";
+
+/** Every plan id, in order: free < core < pro < elite = founder. */
+export const AXE_PLAN_IDS: readonly AxePlanId[] = ["free", "core", "pro", "founder", "elite"];
+
+export function isAxePlanId(plan: unknown): plan is AxePlanId {
+  return typeof plan === "string" && (AXE_PLAN_IDS as readonly string[]).includes(plan);
+}
+
+/** Free and Core are metered plans: a hard daily chat cap, an upgrade offer at the limit. */
+export function isMeteredAxePlan(plan: string | null | undefined): boolean {
+  return plan !== "pro" && plan !== "founder" && plan !== "elite" && plan !== "exempt";
+}
 
 export const FOUNDER_SEAT_CAP = 100;
 
@@ -177,6 +189,35 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
   },
 ];
 
+/**
+ * Core (€29, the Trading OS + Companion bundle's entry tier). Granted through
+ * `axe_user_entitlements.plan = 'core'`. Not listed in AXE_BILLING_TIERS on
+ * purpose: it has no Stripe price yet, so the pricing page and the upgrade grid
+ * do not offer it. Limits match the database (axe_chat_daily_limit = 50) and
+ * Trading OS (`PLAN_LIMITS.core` in @axe/trading-core).
+ */
+export const CORE_TIER: AxeBillingTier = {
+  id: "core",
+  label: "Core",
+  priceEurMonthly: 29,
+  dailyChatCap: 50,
+  fairUseSoftCapPerDay: null,
+  liveAccountsCap: 1,
+  headline: "Desk and phone — the full workflow with a daily AXE allowance.",
+  includes: [
+    "Everything in Free",
+    "Up to 50 AXE queries per day",
+    "Full Cockpit access, Learning Arc and trade preparation",
+    "Chart actions",
+    "Push notifications, up to 20 alerts",
+    "Full auto journal",
+    "Daily + weekly briefing",
+    "1 live broker account",
+    "Trading OS desk and AXE Companion on your phone",
+  ],
+  restrictions: ["No unlimited AXE chat", "No multi-account management"],
+};
+
 /** Future Trading OS SKUs — not sold in Companion checkout yet. */
 export const TRADING_OS_FOUNDER_TIER = {
   label: "Trading OS Founder",
@@ -192,6 +233,7 @@ export const TRADING_OS_FOUNDER_TIER = {
 } as const;
 
 export function tierById(id: AxePlanId): AxeBillingTier {
+  if (id === "core") return CORE_TIER;
   return AXE_BILLING_TIERS.find((t) => t.id === id) ?? AXE_BILLING_TIERS[0];
 }
 
@@ -203,13 +245,13 @@ export function fairUseSoftCapForPlan(plan: AxePlanId | string | null | undefine
 }
 
 export function liveAccountsCapForPlan(plan: AxePlanId | string | null | undefined): number {
-  if (plan === "pro" || plan === "founder" || plan === "elite") {
+  if (plan === "core" || plan === "pro" || plan === "founder" || plan === "elite") {
     return tierById(plan).liveAccountsCap;
   }
   return tierById("free").liveAccountsCap;
 }
 
-export const PAID_AXE_PLANS = new Set<AxePlanId>(["pro", "founder", "elite"]);
+export const PAID_AXE_PLANS = new Set<AxePlanId>(["core", "pro", "founder", "elite"]);
 
 export function isPaidAxePlan(plan: string | null | undefined): boolean {
   return PAID_AXE_PLANS.has(plan as AxePlanId);
@@ -219,6 +261,7 @@ export function planDisplayLabel(plan: string | null | undefined): string {
   if (plan === "founder") return "Founder";
   if (plan === "elite") return "Elite";
   if (plan === "pro") return "Pro";
+  if (plan === "core") return "Core";
   if (plan === "exempt") return "Pro";
   return "Free";
 }

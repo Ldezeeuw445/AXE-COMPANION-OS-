@@ -1,5 +1,6 @@
 import type { AxePlanId } from "@/lib/billing/tiers";
 import {
+  isAxePlanId,
   liveAccountsCapForPlan,
   planDisplayLabel,
   tierById,
@@ -43,8 +44,7 @@ export function isLiveBrokerAccount(row: LiveAccountLike): boolean {
 }
 
 export function normalizePlanId(plan: string | null | undefined): AxePlanId {
-  if (plan === "pro" || plan === "founder" || plan === "elite") return plan;
-  return "free";
+  return isAxePlanId(plan) ? plan : "free";
 }
 
 export function countLiveBrokerAccounts(rows: LiveAccountLike[]): number {

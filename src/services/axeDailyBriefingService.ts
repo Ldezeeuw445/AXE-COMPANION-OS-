@@ -154,7 +154,7 @@ export interface TraderBriefingContext {
    * Null until there are enough of them to mean anything.
    */
   sessionHistory: ArcSessionHistory | null;
-  tier: "free" | "pro" | "founder" | "elite";
+  tier: "free" | "core" | "pro" | "founder" | "elite";
   weather: WeatherSnapshot | null;
   preferences: Record<string, unknown>;
   engineConfidence: {
@@ -238,7 +238,7 @@ type ProfileBrief = {
   displayName: string;
   timezone: string;
   preferences: Record<string, unknown>;
-  tier: "free" | "pro" | "founder" | "elite";
+  tier: "free" | "core" | "pro" | "founder" | "elite";
 };
 
 async function fetchProfileDirect(supabase: SupabaseClient, userId: string): Promise<ProfileBrief> {

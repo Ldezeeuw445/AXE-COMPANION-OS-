@@ -161,3 +161,28 @@ describe("chat daily limits", () => {
     assert.equal(shouldOfferChatUpgrade("pro"), false);
   });
 });
+
+describe("core plan", () => {
+  it("core: 1 live account, 50 chats/day, upgrade offer at the limit", () => {
+    assert.equal(liveAccountsCapForPlan("core"), 1);
+    assert.equal(enforcedDailyChatLimit("core"), 50);
+    assert.equal(enforcedDailyChatLimit("core", true), -1);
+    assert.equal(shouldOfferChatUpgrade("core"), true);
+    assert.equal(shouldOfferChatUpgrade("pro"), false);
+    assert.match(chatQuotaFriendlyNotice({ plan: "core", limit: 50 }), /50 Core AXE messages/);
+    assert.match(liveAccountsIncludedNotice("core"), /1 live account\./);
+  });
+
+  it("core blocks a second live account; pro and above keep their caps", () => {
+    const one = [{ id: "a", connection_method: "cloud_mt5" }];
+    const gate = canConnectLiveAccount({ plan: "core", existingAccounts: one });
+    assert.equal(gate.allowed, false);
+    assert.match(gate.allowed ? "" : gate.message, /Core plan includes 1 live account/);
+    assert.equal(liveAccountsCapForPlan("pro"), 3);
+    assert.equal(liveAccountsCapForPlan("founder"), 5);
+    assert.equal(liveAccountsCapForPlan("elite"), 10);
+    assert.equal(enforcedDailyChatLimit("pro"), 200);
+    assert.equal(enforcedDailyChatLimit("elite"), 500);
+    assert.equal(enforcedDailyChatLimit("free"), 20);
+  });
+});
