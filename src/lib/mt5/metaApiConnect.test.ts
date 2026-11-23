@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { classifyClientApiError, userMessageForCode } from "./metaApiErrors";
+import { classifyClientApiError, unknownFailureDetail, unknownMessageWithDetail, userMessageForCode } from "./metaApiErrors";
 import { clientApiHostForRegion, marketDataHostForRegion } from "./metaApiRegions";
 
 const read = (p: string) => readFileSync(new URL(`../../../${p}`, import.meta.url), "utf8");
@@ -58,5 +58,29 @@ describe("reconnecting an account MetaApi already has", () => {
   it("trusts MetaApi's own region over the stored one when testing an account", () => {
     assert.match(action, /const resolvedRegion = liveRegion \?\? accountRegion;/);
     assert.doesNotMatch(client, /"metaapi_auth_failed" : "metaapi_region_error"/);
+  });
+});
+
+describe("an unknown failure says what happened (22 Nov: \"unknown\" and nothing else)", () => {
+  it("names MetaApi's status and its own words", () => {
+    const e = Object.assign(new Error("Unexpected 503"), { status: 503, payload: { message: "Service temporarily unavailable" } });
+    assert.equal(unknownFailureDetail(e), "MetaApi 503: Service temporarily unavailable");
+    assert.match(unknownMessageWithDetail(e), /^Something went wrong talking to MetaApi\..*\(MetaApi 503: Service temporarily unavailable\)$/);
+  });
+  it("names a network failure instead of hiding it", () => {
+    const e = new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }) });
+    assert.equal(unknownFailureDetail(e), "TypeError: fetch failed (ENOTFOUND)");
+  });
+  it("keeps a MetaApi status without a message", () => {
+    assert.equal(unknownFailureDetail(Object.assign(new Error("x"), { status: 429, payload: null })), "MetaApi 429");
+  });
+  it("falls back to the plain message when there is nothing to add", () => {
+    assert.equal(unknownMessageWithDetail(null), userMessageForCode("unknown"));
+  });
+  it("records a failed connect without the password", () => {
+    const code = read("src/lib/mt5/recordMt5Failure.ts").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    assert.doesNotMatch(code, /password|mt5Login|login|token/i);
+    const action = read("src/app/actions/mt5Cloud.ts");
+    assert.match(action, /recordMt5ConnectFailure\(\{\s*userId: user\.id,\s*step: existingMetaAccount/);
   });
 });
