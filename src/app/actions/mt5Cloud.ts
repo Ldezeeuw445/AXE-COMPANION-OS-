@@ -21,9 +21,12 @@ import {
   userMessageForCode,
   isOperatorFault,
   upstreamMessage,
+  unknownFailureDetail,
+  unknownMessageWithDetail,
   type Mt5CloudErrorCode,
 } from "@/lib/mt5/metaApiErrors";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
+import { recordMt5ConnectFailure } from "@/lib/mt5/recordMt5Failure";
 import {
   clientGetAccountInformation,
   clientGetHistoryDealsRange,
@@ -370,7 +373,9 @@ export async function createCloudMt5ConnectionAction(
       }
       await provisioningUploadProfileFile(provisioningProfileId, "servers.dat", bytes);
     } catch (e) {
-      return mapMetaError(e);
+      const failed = mapMetaError(e);
+      await recordMt5ConnectFailure({ userId: user.id, step: "provisioning_profile", code: failed.code, error: e, server: mt5Server, region });
+      return failed;
     }
   }
 
@@ -447,7 +452,16 @@ export async function createCloudMt5ConnectionAction(
       metaId = created.id;
     }
   } catch (e) {
-    return mapMetaError(e);
+    const failed = mapMetaError(e);
+    await recordMt5ConnectFailure({
+      userId: user.id,
+      step: existingMetaAccount ? "update_existing_account" : "create_account",
+      code: failed.code,
+      error: e,
+      server: mt5Server,
+      region,
+    });
+    return failed;
   }
 
   // Block briefly so the user doesn't see a green "connected" badge before
@@ -1683,10 +1697,15 @@ function mapMetaError(e: unknown): { ok: false; code: Mt5CloudErrorCode; message
         return { ok: false, code: alt, message: userMessageForCode(alt, upstream) };
       }
     }
+    if (code === "unknown") {
+      console.error("[mt5Cloud] unknown MetaApi failure:", unknownFailureDetail(e));
+      return { ok: false, code, message: unknownMessageWithDetail(e) };
+    }
     return { ok: false, code, message: userMessageForCode(code, upstream) };
   }
   if (e instanceof Error && e.name === "AbortError") {
     return { ok: false, code: "metaapi_timeout", message: userMessageForCode("metaapi_timeout") };
   }
-  return { ok: false, code: "unknown", message: userMessageForCode("unknown") };
+  console.error("[mt5Cloud] unknown failure:", unknownFailureDetail(e));
+  return { ok: false, code: "unknown", message: unknownMessageWithDetail(e) };
 }

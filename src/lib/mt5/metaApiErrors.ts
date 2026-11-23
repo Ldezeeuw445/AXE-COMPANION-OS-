@@ -93,6 +93,42 @@ export function upstreamMessage(payload: unknown): string | null {
   return null;
 }
 
+/**
+ * What actually went wrong behind an "unknown", in a few words.
+ *
+ * 22 Nov 2026: Luka's connect failed with "Something went wrong talking to
+ * MetaApi. Try again or check server logs. unknown", and nothing anyone could
+ * read said why. The server logs need SSH; the trader has no way to see them.
+ * An HTTP status MetaApi gave (429, 500, 503) or a network failure
+ * ("fetch failed", ENOTFOUND) is not a secret and is the whole diagnosis, so it
+ * goes in the message. Never the request: no password, no token.
+ */
+export function unknownFailureDetail(e: unknown): string | null {
+  if (!e || typeof e !== "object") return typeof e === "string" && e.trim() ? cleanDetail(e) : null;
+  const err = e as { name?: unknown; message?: unknown; status?: unknown; payload?: unknown; cause?: unknown };
+  const status = typeof err.status === "number" && err.status > 0 ? err.status : null;
+  if ("payload" in err && status != null) {
+    const up = upstreamMessage(err.payload);
+    return cleanDetail(`MetaApi ${status}${up ? `: ${up}` : ""}`);
+  }
+  const name = typeof err.name === "string" && err.name ? err.name : "Error";
+  const msg = typeof err.message === "string" ? err.message : "";
+  const cause = err.cause && typeof err.cause === "object" ? (err.cause as { code?: unknown }).code : null;
+  const text = `${name}${msg ? `: ${msg}` : ""}${typeof cause === "string" ? ` (${cause})` : ""}`;
+  return cleanDetail(text);
+}
+
+function cleanDetail(t: string): string | null {
+  const out = t.replace(/\s+/g, " ").trim().slice(0, 200);
+  return out || null;
+}
+
+/** The "unknown" message with what went wrong, so it can be acted on without server logs. */
+export function unknownMessageWithDetail(e: unknown): string {
+  const detail = unknownFailureDetail(e);
+  return detail ? `${USER_MESSAGES.unknown} (${detail})` : USER_MESSAGES.unknown;
+}
+
 export function classifyMetaApiProvisioningError(payload: unknown): Mt5CloudErrorCode {
   if (!payload || typeof payload !== "object") return "unknown";
   const p = payload as Record<string, unknown>;
