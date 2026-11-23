@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import type {
   AccountConnection,
   BrokerSymbolMapping,
@@ -81,9 +82,25 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
     return dbRowToAccountConnection(data as BrokerAccountDbRow);
   }
 
+  /**
+   * The hub's save writes hub/provider columns (`hub_status`, `hub_permissions`,
+   * `provider_status`, `metadata`), the same sync-owned state every other
+   * account writer now sends elevated. Left on the trader's client it was the
+   * last thing holding the UPDATE grant on `user_broker_accounts` open.
+   *
+   * `syncWriteClient`'s two rules, in order: ownership is read first on the
+   * caller's own client (`getAccount`, RLS-scoped and user_id-filtered), and
+   * the elevated write still filters `user_id`. A foreign id stops at the read
+   * and nothing is written.
+   */
   async saveAccount(account: AccountConnection): Promise<AccountConnection> {
+    if (!(await this.getAccount(account.id))) {
+      throw new Error("Broker account not found for this user");
+    }
+
     const patch = accountConnectionToDbPatch(account);
-    const { data, error } = await this.supabase
+    const accountWriter = syncWriteClient(this.supabase);
+    const { data, error } = await accountWriter
       .from("user_broker_accounts")
       .update(patch)
       .eq("id", account.id)

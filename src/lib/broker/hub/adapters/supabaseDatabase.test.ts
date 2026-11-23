@@ -274,6 +274,34 @@ describe("SupabaseDatabaseAdapter is owner-scoped without RLS", () => {
     assert.equal(theirs?.hub_status, "connected", "the other trader's row was modified");
   });
 
+  it("saveAccount reads ownership before the elevated write, and stops there for a foreign id", async () => {
+    // saveAccount writes through syncWriteClient, which bypasses RLS in
+    // production. Its first rule is that ownership is read before any write, so
+    // a foreign id must never get as far as sending an update at all.
+    const { adapter, fake } = setup();
+    const mine = await adapter.getAccount("acct-own");
+    assert.ok(mine);
+    fake.statements.length = 0;
+
+    await adapter.saveAccount({ ...mine, status: "disconnected" });
+    assert.deepEqual(
+      fake.statements.map((s) => s.op),
+      ["select", "update"],
+      "the owner's save must read the row before writing it",
+    );
+
+    fake.statements.length = 0;
+    await assert.rejects(
+      () => adapter.saveAccount({ ...mine, id: "acct-other", status: "disconnected" }),
+      /not found for this user/,
+    );
+    assert.deepEqual(
+      fake.statements.map((s) => s.op),
+      ["select"],
+      "a foreign id reached the elevated update",
+    );
+  });
+
   it("deleteAccount removes the owner's row", async () => {
     const { adapter, state } = setup();
     await adapter.deleteAccount("acct-own");
