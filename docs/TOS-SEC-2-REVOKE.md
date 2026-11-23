@@ -36,6 +36,10 @@ is deliberate, so local and preview environments keep working. Once these grants
 are gone, that fallback no longer *can* work: the sync would fail its writes
 instead of degrading. Check the key is present on the VPS first.
 
+A production process that takes the fallback logs it once, at the first sync:
+`[sync-write] SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is missing`.
+If that line is in the host's log, do not run the revoke.
+
 ## The statement
 
 Idempotent, like the earlier grant migrations — safe to re-run, and safe to run
