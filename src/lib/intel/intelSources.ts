@@ -25,7 +25,8 @@ export type IntelSource = "unusual_whales" | "alphavantage" | "free";
  * Since 9 Nov 2026 the shared intel-proxy (deployed from
  * Ldezeeuw445/trading-os-app, the one function for Trading OS and this app)
  * fills every feed from real sources that cost nothing: FMP for insiders and
- * Congress, CBOE delayed chains for options and tide, FINRA for off-exchange
+ * Congress, Nasdaq delayed option chains for options and tide (CBOE blocks
+ * automated clients since Nov 2026 and is only the fallback), FINRA for off-exchange
  * volume, adsb.lol for military and emergency aircraft, CISA for exploited
  * vulnerabilities, EIA for energy. Unusual Whales is no longer needed.
  */
