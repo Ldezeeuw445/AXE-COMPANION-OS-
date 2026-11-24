@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { classifyClientApiError, unknownFailureDetail, unknownMessageWithDetail, userMessageForCode } from "./metaApiErrors";
+import { classifyClientApiError, isAlreadyDeploying, isNoAnswerInTime, unknownFailureDetail, unknownMessageWithDetail, userMessageForCode } from "./metaApiErrors";
 import { clientApiHostForRegion, marketDataHostForRegion } from "./metaApiRegions";
 
 const read = (p: string) => readFileSync(new URL(`../../../${p}`, import.meta.url), "utf8");
@@ -82,5 +82,47 @@ describe("an unknown failure says what happened (22 Nov: \"unknown\" and nothing
     assert.doesNotMatch(code, /password|mt5Login|login|token/i);
     const action = read("src/app/actions/mt5Cloud.ts");
     assert.match(action, /recordMt5ConnectFailure\(\{\s*userId: user\.id,\s*step: existingMetaAccount/);
+  });
+});
+
+describe("reconnecting while MetaApi is already redeploying (23 Nov: every reconnect failed)", () => {
+  const said = {
+    error: "ValidationError",
+    message:
+      "Account 1e9bf1a0-413b-41a5-a503-e57b5fa827e2 can not be redeployed for user Lu..uw <suppo..p.com> because it is in the process of being deployed (3d037445157c401a87e1bcbd823b8e01)",
+  };
+  it("recognises MetaApi's 'already deploying' answer", () => {
+    assert.equal(isAlreadyDeploying(said), true);
+    assert.equal(isAlreadyDeploying({ message: "Validation failed" }), false);
+    assert.equal(isAlreadyDeploying(null), false);
+  });
+  it("treats a deploy or redeploy of an account that is already deploying as done", () => {
+    const src = read("src/lib/mt5/metaApiClient.ts");
+    assert.match(src, /res\.status === 400 && isAlreadyDeploying\(body\)\) return \{ state: "DEPLOYING" \}/);
+  });
+  it("never shows the trader our own MetaApi user", () => {
+    const detail = unknownFailureDetail(Object.assign(new Error("x"), { status: 400, payload: said })) ?? "";
+    assert.doesNotMatch(detail, /for user|suppo|<|>/);
+    assert.match(detail, /^MetaApi 400: Account .* can not be redeployed because it is in the process of being deployed/);
+  });
+});
+
+describe("a slow MetaApi after the new password does not fail the connect (23 Nov: 60 s, no answer)", () => {
+  const named = (name: string) => Object.assign(new Error("x"), { name });
+  it("knows a request that got no answer in time from a real failure", () => {
+    assert.equal(isNoAnswerInTime(named("AbortError")), true);
+    assert.equal(isNoAnswerInTime(named("TimeoutError")), true);
+    assert.equal(isNoAnswerInTime(named("Mt5ActionTimeoutError")), true);
+    assert.equal(isNoAnswerInTime(new Error("Update account failed (401)")), false);
+    assert.equal(isNoAnswerInTime({ name: "AbortError" }), false);
+    assert.equal(isNoAnswerInTime(null), false);
+  });
+  it("lets only a missing answer to the redeploy through, and only after the password update", () => {
+    const src = read("src/app/actions/mt5Cloud.ts");
+    const step = src.slice(src.indexOf('"update_existing_metaapi_account"'), src.indexOf("provisioningCreateMt5CloudAccount({"));
+    // The password update itself still has to succeed.
+    assert.match(step, /provisioningUpdateAccount\(metaId[\s\S]*?UPDATE_ACCOUNT_TIMEOUT_MS,\s*\);/);
+    assert.match(step, /"redeploy_after_update"[\s\S]*?REDEPLOY_AFTER_UPDATE_BUDGET_MS/);
+    assert.match(step, /if \(!isNoAnswerInTime\(e\)\) throw e;/);
   });
 });
