@@ -146,6 +146,15 @@ export function isAlreadyDeploying(payload: unknown): boolean {
   return /in the process of being deployed|is being deployed|already (being )?deploy/.test(msg);
 }
 
+/**
+ * MetaApi did not answer in time: our own fetch was aborted, or the action's
+ * budget ran out first. Says nothing about whether MetaApi did the work.
+ */
+export function isNoAnswerInTime(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  return e.name === "AbortError" || e.name === "TimeoutError" || e.name === "Mt5ActionTimeoutError";
+}
+
 export function classifyMetaApiProvisioningError(payload: unknown): Mt5CloudErrorCode {
   if (!payload || typeof payload !== "object") return "unknown";
   const p = payload as Record<string, unknown>;
