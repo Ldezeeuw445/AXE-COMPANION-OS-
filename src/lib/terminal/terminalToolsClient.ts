@@ -73,6 +73,8 @@ export const AXE_INTEL_FEED_NAMES = [
   "energyFlows",
   "vesselTracking",
   "conflictEvents",
+  // Crypto perpetuals (OKX funding, open interest, long/short) + CoinGecko totals and trending.
+  "cryptoMarket",
 ] as const;
 
 /** Known write tools — never invoked from Companion, even if a stale proxy lists them. */
@@ -264,7 +266,7 @@ export const FALLBACK_READONLY_AXE_TOOLS: ReadOnlyAxeTool[] = [
   tool(
     "get_intel_feed",
     "intel",
-    "Read one intel-proxy snapshot feed (jets, vessels, insiders, whales, senate, dark pool, options, tide, GDELT, weather, health, quotes, …). Failed or empty feeds return the provider reason — never invented rows.",
+    "Read one intel-proxy snapshot feed (jets, vessels, insiders, whales, senate, dark pool, options, tide, GDELT, weather, health, quotes, crypto funding / open interest / long-short via cryptoMarket, …). Failed or empty feeds return the provider reason — never invented rows.",
     {
       required: ["feed"],
       properties: {
