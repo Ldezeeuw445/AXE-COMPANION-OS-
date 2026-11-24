@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { classifyClientApiError, isAlreadyDeploying, unknownFailureDetail, unknownMessageWithDetail, userMessageForCode } from "./metaApiErrors";
+import { classifyClientApiError, isAlreadyDeploying, isNoAnswerInTime, unknownFailureDetail, unknownMessageWithDetail, userMessageForCode } from "./metaApiErrors";
 import { clientApiHostForRegion, marketDataHostForRegion } from "./metaApiRegions";
 
 const read = (p: string) => readFileSync(new URL(`../../../${p}`, import.meta.url), "utf8");
@@ -104,5 +104,25 @@ describe("reconnecting while MetaApi is already redeploying (23 Nov: every recon
     const detail = unknownFailureDetail(Object.assign(new Error("x"), { status: 400, payload: said })) ?? "";
     assert.doesNotMatch(detail, /for user|suppo|<|>/);
     assert.match(detail, /^MetaApi 400: Account .* can not be redeployed because it is in the process of being deployed/);
+  });
+});
+
+describe("a slow MetaApi after the new password does not fail the connect (23 Nov: 60 s, no answer)", () => {
+  const named = (name: string) => Object.assign(new Error("x"), { name });
+  it("knows a request that got no answer in time from a real failure", () => {
+    assert.equal(isNoAnswerInTime(named("AbortError")), true);
+    assert.equal(isNoAnswerInTime(named("TimeoutError")), true);
+    assert.equal(isNoAnswerInTime(named("Mt5ActionTimeoutError")), true);
+    assert.equal(isNoAnswerInTime(new Error("Update account failed (401)")), false);
+    assert.equal(isNoAnswerInTime({ name: "AbortError" }), false);
+    assert.equal(isNoAnswerInTime(null), false);
+  });
+  it("lets only a missing answer to the redeploy through, and only after the password update", () => {
+    const src = read("src/app/actions/mt5Cloud.ts");
+    const step = src.slice(src.indexOf('"update_existing_metaapi_account"'), src.indexOf("provisioningCreateMt5CloudAccount({"));
+    // The password update itself still has to succeed.
+    assert.match(step, /provisioningUpdateAccount\(metaId[\s\S]*?UPDATE_ACCOUNT_TIMEOUT_MS,\s*\);/);
+    assert.match(step, /"redeploy_after_update"[\s\S]*?REDEPLOY_AFTER_UPDATE_BUDGET_MS/);
+    assert.match(step, /if \(!isNoAnswerInTime\(e\)\) throw e;/);
   });
 });
