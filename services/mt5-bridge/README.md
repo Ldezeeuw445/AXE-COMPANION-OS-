@@ -74,8 +74,11 @@ What it does, by hand:
 3. Windows Python 3.11 in the same prefix, then the packages:
    ```bash
    sudo -u mt5 env WINEPREFIX=/home/mt5/.mt5 wine python-3.11.9-amd64.exe /quiet InstallAllUsers=1 PrependPath=1
-   sudo -u mt5 env WINEPREFIX=/home/mt5/.mt5 wine python -m pip install -r /opt/mt5-bridge/requirements.txt
+   sudo -u mt5 env WINEPREFIX=/home/mt5/.mt5 wine python -m pip install -r /opt/mt5-bridge/requirements.txt 2>&1 | cat
    ```
+   Windows Python under Wine refuses to start when its output goes to a file
+   (`[WinError 6] Invalid handle`), hence `| cat`. `requirements.txt` pins numpy
+   to 1.26.4: numpy 2.x needs a function Wine 9.0 lacks.
 4. This folder to `/opt/mt5-bridge`, the three units from `deploy/` to
    `/etc/systemd/system/`, the env file as in `mt5-bridge.service`, then:
    ```bash

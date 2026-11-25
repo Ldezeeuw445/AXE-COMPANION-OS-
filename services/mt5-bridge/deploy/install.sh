@@ -86,7 +86,12 @@ if [ ! -f "$PREFIX/drive_c/Program Files/Python311/python.exe" ]; then
   as_mt5 wine "$DL/python-$PY_VERSION-amd64.exe" /quiet InstallAllUsers=1 PrependPath=0 Include_test=0
   as_mt5 wineserver -w || true
 fi
-as_mt5 wine "$PY_EXE" -m pip install --disable-pip-version-check -q -r 'Z:\opt\mt5-bridge\requirements.txt'
+# Windows Python under Wine stops at start-up ("init_sys_streams ... [WinError 6]
+# Invalid handle") when its output goes to a file, as it does when this script runs
+# with `> log`. A pipe works, so its output goes through cat. pipefail keeps a pip
+# failure a failure.
+as_mt5 wine "$PY_EXE" -m pip install --disable-pip-version-check -q -r 'Z:\opt\mt5-bridge\requirements.txt' 2>&1 | cat
+as_mt5 wine "$PY_EXE" -c "import numpy, MetaTrader5, fastapi, uvicorn; print('bridge packages import:', 'numpy', numpy.__version__, 'MetaTrader5', MetaTrader5.__version__)" 2>&1 | cat
 
 say "terminal and bridge services"
 install -m 0644 "$APP/deploy/mt5-terminal.service" "$APP/deploy/mt5-bridge.service" /etc/systemd/system/

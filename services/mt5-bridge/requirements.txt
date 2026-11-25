@@ -3,3 +3,8 @@
 MetaTrader5==5.0.6180
 fastapi==0.115.6
 uvicorn==0.34.0
+# MetaTrader5 pulls in the newest numpy (2.x), which calls ucrtbase's crealf:
+# Ubuntu 24.04's Wine 9.0 does not have it, and importing MetaTrader5 then aborts
+# ("unimplemented function ucrtbase.dll.crealf"). 1.26.4 imports cleanly there
+# (tried 25 Nov 2026: Wine 9.0, Windows Python 3.11.9, MetaTrader5 5.0.6180).
+numpy==1.26.4
