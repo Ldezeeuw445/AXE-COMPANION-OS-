@@ -2,49 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseConfig, getSupabaseKey } from "@/lib/env";
 import { isAnonymousUser } from "@/lib/auth/anonymousSessions";
+import {
+  isProtectedPath,
+  loginRedirectSearch,
+} from "@/lib/auth/protectedPath";
 import { SESSION_COOKIE, parseActiveSession, pathForTab } from "@/lib/session/activeSession";
-
-const PROTECTED_PREFIXES = [
-  "/chart",
-  "/chat",
-  "/cockpit",
-  "/history",
-  "/intel",
-  "/journal",
-  "/market",
-  "/accounts",
-  "/alerts",
-  "/positions",
-  "/vault",
-  "/watchlist",
-  "/actions",
-  "/settings",
-  "/upgrade",
-];
-
-/**
- * A prefix has to end at a path boundary.
- *
- * Measured 2026-10-17: a bare `startsWith` meant `/market` also matched
- * `/marketing/...`, so every dev screenshot route redirected to /login — and
- * `npm run capture:marketing`, which is in package.json and documented at the
- * top of scripts/capture-marketing.mjs, had been quietly photographing the
- * login page. Nothing said so, because a redirect to login looks exactly like
- * "you are not signed in".
- *
- * `/market` and `/market/anything` stay protected; `/marketing/anything` is a
- * different route and is not.
- */
-function isProtectedPath(pathname: string): boolean {
-  // A prefix has to end at a path boundary. A bare `startsWith` meant
-  // `/market` also matched `/marketing/...`, which is why the dev screenshot
-  // routes needed an explicit bypass above — and why `npm run capture:marketing`
-  // had been quietly photographing the login page. The bypass stays (it is
-  // cheaper than an auth round-trip), but the matcher is no longer wrong.
-  return PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
 
 export async function proxy(request: NextRequest) {
   const pathEarly = request.nextUrl.pathname;
@@ -153,6 +115,8 @@ export async function proxy(request: NextRequest) {
   if (isProtectedPath(path) && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = loginRedirectSearch(path);
+    url.hash = "";
     return NextResponse.redirect(url);
   }
 
