@@ -5,7 +5,7 @@
 #   MT5_BRIDGE_ACCOUNT_ID=upcomers-12347717
 #   MT5_BRIDGE_TRADING=off             (on only after the demo order test)
 #   BROKER_UTC_OFFSET_HOURS=2          (fallback when no fresh tick, e.g. weekends)
-#   MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
+#   MT5_TERMINAL_PATH='C:\Program Files\MetaTrader 5\terminal64.exe'   (single quotes: systemd drops bare backslashes)
 # deploy/install.sh writes this file with a fresh token.
 [Unit]
 Description=MT5 bridge (MetaApi-compatible REST on 127.0.0.1:8765)
