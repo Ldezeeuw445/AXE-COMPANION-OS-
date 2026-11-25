@@ -33,6 +33,7 @@ async function handleWeeklyBriefingCron() {
       status: "success",
       processed: result.processed,
       failed: result.failed,
+      deferred: result.deferred,
       latency_ms,
     });
   } catch (error) {
