@@ -35,6 +35,10 @@ offset from a fresh tick (every 10 min) and returns `time` in UTC and
 `brokerTime` as the server's clock, like MetaApi. With no fresh tick (weekend)
 it keeps the last measurement, else `BROKER_UTC_OFFSET_HOURS`.
 
+The bridge attaches to the running terminal with `initialize(path, portable=True,
+timeout=MT5_INIT_TIMEOUT_MS)` (default 10 s), so a terminal that does not answer
+makes `/health` say `ok: false` within seconds instead of blocking every call.
+
 ## Safety
 
 - **No password ever reaches the bridge.** Luka logs in in the terminal itself
@@ -65,8 +69,13 @@ What it does, by hand:
    ```bash
    adduser --disabled-password mt5
    dpkg --add-architecture i386 && apt update
-   apt install -y wine64 wine32 xvfb x11vnc winbind cabextract
+   apt install -y xvfb x11vnc winbind cabextract
    ```
+   Wine itself comes from WineHQ (`winehq-stable`, 11.0 on 25 Nov 2026), not
+   from Ubuntu: Ubuntu's Wine 9.0 makes MT5 build 6331 stop with "A debugger
+   has been found running in your system". After a Wine change the prefix is
+   updated once with `WINEDLLOVERRIDES="mscoree,mshtml=" wineboot -u`, so no
+   Mono/Gecko question waits on the invisible screen.
 2. The MT5 terminal into the Wine prefix (MetaQuotes' own installer):
    ```bash
    sudo -u mt5 env WINEPREFIX=/home/mt5/.mt5 DISPLAY=:99 wine mt5setup.exe /auto

@@ -35,7 +35,15 @@ class Terminal:
     # ── connection ──────────────────────────────────────────────────────────
     def _ensure(self) -> None:
         if not self._initialized:
-            ok = self.mt5.initialize(path=self.terminal_path) if self.terminal_path else self.mt5.initialize()
+            # Bounded: without a timeout, initialize() can wait about a minute for a
+            # terminal that does not answer, holding the lock, so /health and
+            # every other call pile up behind it. portable=True matches how
+            # mt5-terminal.service starts the terminal (/portable).
+            timeout_ms = int(os.environ.get("MT5_INIT_TIMEOUT_MS", "10000"))
+            if self.terminal_path:
+                ok = self.mt5.initialize(path=self.terminal_path, portable=True, timeout=timeout_ms)
+            else:
+                ok = self.mt5.initialize(timeout=timeout_ms)
             if not ok:
                 raise NotConnected(f"MT5 terminal not available: {self.mt5.last_error()}")
             self._initialized = True

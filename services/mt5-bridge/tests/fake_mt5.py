@@ -65,7 +65,8 @@ class FakeTerminal:
         ]
 
     # module functions
-    def initialize(self, path=None):
+    def initialize(self, path=None, **kwargs):
+        self.initialize_calls = getattr(self, "initialize_calls", []) + [dict(path=path, **kwargs)]
         return True
 
     def last_error(self):
