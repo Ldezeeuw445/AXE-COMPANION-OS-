@@ -35,7 +35,25 @@ say "packages"
 dpkg --add-architecture i386
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq wine wine64 wine32:i386 xvfb x11vnc winbind cabextract curl ca-certificates ufw unattended-upgrades >/dev/null
+apt-get install -y -qq xvfb x11vnc winbind cabextract curl ca-certificates gpg ufw unattended-upgrades >/dev/null
+
+say "Wine from WineHQ"
+# Ubuntu's own Wine (9.0) is too old for today's MT5: build 6331 stops at start
+# with "A debugger has been found running in your system" (25 Nov 2026, also
+# reproduced off the box). WineHQ's stable Wine (11.0) runs it.
+if [ ! -x /opt/wine-stable/bin/wine ]; then
+  mkdir -pm755 /etc/apt/keyrings
+  curl -fsSL https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor --yes -o /etc/apt/keyrings/winehq-archive.key
+  curl -fsSL -o "/etc/apt/sources.list.d/winehq-${VERSION_CODENAME:-noble}.sources" \
+    "https://dl.winehq.org/wine-builds/ubuntu/dists/${VERSION_CODENAME:-noble}/winehq-${VERSION_CODENAME:-noble}.sources"
+  apt-get update -qq
+  # A box set up before this step has Ubuntu's Wine: stop what runs on it and
+  # take it out, so the two never mix. Nothing else here uses it.
+  systemctl stop mt5-bridge mt5-terminal 2>/dev/null || true
+  apt-get remove -y -qq wine wine64 wine32:i386 libwine libwine:i386 >/dev/null 2>&1 || true
+  apt-get install -y -qq --install-recommends winehq-stable >/dev/null
+fi
+wine --version
 
 say "firewall: only SSH in (the bridge listens on 127.0.0.1, the tunnel dials out)"
 ufw allow OpenSSH >/dev/null
@@ -65,7 +83,16 @@ systemctl enable --now mt5-xvfb >/dev/null
 sleep 2
 
 say "Wine prefix"
-[ -d "$PREFIX/drive_c" ] || as_mt5 wineboot --init
+# The terminal and the bridge must not run while the prefix is made or updated.
+systemctl stop mt5-bridge mt5-terminal 2>/dev/null || true
+# A new Wine updates the prefix on its first start and then asks, on a screen
+# nobody watches, to install Mono and Gecko. MT5 needs neither, so the update
+# runs here, once, with both switched off.
+if [ -d "$PREFIX/drive_c" ]; then
+  as_mt5 env WINEDLLOVERRIDES="mscoree,mshtml=" wineboot -u
+else
+  as_mt5 env WINEDLLOVERRIDES="mscoree,mshtml=" wineboot --init
+fi
 as_mt5 wineserver -w || true
 
 mkdir -p "$DL"

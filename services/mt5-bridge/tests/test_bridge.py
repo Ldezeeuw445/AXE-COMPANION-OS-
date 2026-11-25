@@ -40,6 +40,19 @@ def test_refuses_to_start_with_a_short_token(mt5, monkeypatch):
         create_app(mt5=mt5)
 
 
+def test_attaching_to_the_terminal_is_bounded_and_portable(mt5, monkeypatch):
+    # The terminal runs as `terminal64.exe /portable`; a terminal that does not
+    # answer must cost seconds, not the minute that blocks every other call.
+    monkeypatch.delenv("MT5_INIT_TIMEOUT_MS", raising=False)
+    Terminal(mt5, r"C:\\Program Files\\MetaTrader 5\\terminal64.exe").status()
+    assert mt5.state.initialize_calls[-1] == {
+        "path": r"C:\\Program Files\\MetaTrader 5\\terminal64.exe", "portable": True, "timeout": 10000,
+    }
+    monkeypatch.setenv("MT5_INIT_TIMEOUT_MS", "4000")
+    Terminal(mt5).status()
+    assert mt5.state.initialize_calls[-1] == {"path": None, "timeout": 4000}
+
+
 def test_every_data_route_needs_the_token(client):
     assert client.get(BASE + "/positions").status_code == 401
     assert client.get(BASE + "/positions", headers={"auth-token": "x" * 40}).status_code == 401
