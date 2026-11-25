@@ -8,6 +8,7 @@ itself (over remote desktop / VNC, "save password" on); `initialize()` then
 attaches to that running, logged-in terminal.
 """
 
+import ntpath
 import os
 import threading
 import time
@@ -24,7 +25,8 @@ class NotConnected(RuntimeError):
 class Terminal:
     def __init__(self, mt5: Any, terminal_path: Optional[str] = None):
         self.mt5 = mt5
-        self.terminal_path = terminal_path
+        # A Windows path, also when it was written with forward slashes.
+        self.terminal_path = ntpath.normpath(terminal_path) if terminal_path else None
         self.lock = threading.RLock()
         self._initialized = False
         self._offset: Optional[int] = None

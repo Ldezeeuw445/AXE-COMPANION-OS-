@@ -19,8 +19,9 @@ BRIDGE_URL="${BRIDGE_URL%/}"
 COMPANION_HOST="${COMPANION_HOST:-212.227.91.79}"
 SUPABASE_REF="${SUPABASE_REF:-pqnngpcgbdwxavbatbia}"
 KEY="${BRIDGE_SSH_KEY:-$HOME/.ssh/mt5_bridge}"
-# user_broker_accounts.id of the Upcomers account (looked up 21 Nov 2026).
-ROW_ID="${ROW_ID:-d75fb5ac-c48c-434f-89ca-15cbbab95795}"
+# user_broker_accounts.id of the Upcomers account. Reconnecting it in Companion on
+# 24 Nov 2026 made a new row (the 21 Nov one, d75fb5ac-…, is gone).
+ROW_ID="${ROW_ID:-3f38709a-f2f2-40e4-abf1-172e38999498}"
 
 say() { printf '\n== %s\n' "$*"; }
 
@@ -66,7 +67,9 @@ TMP=$(mktemp)
 chmod 600 "$TMP"
 trap 'rm -f "$TMP"' EXIT
 printf 'MT5_BRIDGE_URL=%s\nMT5_BRIDGE_TOKEN=%s\n' "$BRIDGE_URL" "$TOKEN" > "$TMP"
-npx --yes supabase@latest secrets set --env-file "$TMP" --remote="$SUPABASE_REF" --yes >/dev/null
+# The same pinned CLI as Trading OS's release script: version 3 hangs without a
+# terminal to ask in.
+npx --yes "${SUPABASE_CLI:-supabase@2.122.1}" secrets set --env-file "$TMP" --project-ref "$SUPABASE_REF" >/dev/null
 echo "secrets set (functions pick them up on their next cold start)"
 
 say "last step, only after Luka's yes"

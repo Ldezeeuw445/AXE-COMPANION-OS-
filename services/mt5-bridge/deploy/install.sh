@@ -70,9 +70,16 @@ MT5_BRIDGE_TOKEN=$(openssl rand -hex 32)
 MT5_BRIDGE_ACCOUNT_ID=upcomers-12347717
 MT5_BRIDGE_TRADING=off
 BROKER_UTC_OFFSET_HOURS=2
-MT5_TERMINAL_PATH=$TERMINAL_EXE
+MT5_TERMINAL_PATH='$TERMINAL_EXE'
 EOF
   umask 022
+fi
+# systemd drops the backslashes from an unquoted value in an EnvironmentFile, so
+# the path must stay in single quotes. Runs before 25 Nov 2026 wrote it bare
+# ("Process create failed 'C:Program FilesMetaTrader 5terminal64.exe'"): fix that.
+if ! grep -qxF "MT5_TERMINAL_PATH='$TERMINAL_EXE'" "$ENV_FILE"; then
+  { grep -v '^MT5_TERMINAL_PATH=' "$ENV_FILE" || true; printf '%s\n' "MT5_TERMINAL_PATH='$TERMINAL_EXE'"; } > "$ENV_FILE.new"
+  mv "$ENV_FILE.new" "$ENV_FILE"
 fi
 chown root:mt5 "$ENV_FILE" && chmod 0640 "$ENV_FILE"
 

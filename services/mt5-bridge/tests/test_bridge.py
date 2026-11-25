@@ -44,13 +44,21 @@ def test_attaching_to_the_terminal_is_bounded_and_portable(mt5, monkeypatch):
     # The terminal runs as `terminal64.exe /portable`; a terminal that does not
     # answer must cost seconds, not the minute that blocks every other call.
     monkeypatch.delenv("MT5_INIT_TIMEOUT_MS", raising=False)
-    Terminal(mt5, r"C:\\Program Files\\MetaTrader 5\\terminal64.exe").status()
+    Terminal(mt5, r"C:\Program Files\MetaTrader 5\terminal64.exe").status()
     assert mt5.state.initialize_calls[-1] == {
-        "path": r"C:\\Program Files\\MetaTrader 5\\terminal64.exe", "portable": True, "timeout": 10000,
+        "path": r"C:\Program Files\MetaTrader 5\terminal64.exe", "portable": True, "timeout": 10000,
     }
     monkeypatch.setenv("MT5_INIT_TIMEOUT_MS", "4000")
     Terminal(mt5).status()
     assert mt5.state.initialize_calls[-1] == {"path": None, "timeout": 4000}
+
+
+def test_terminal_path_with_forward_slashes_becomes_a_windows_path(mt5, monkeypatch):
+    # An EnvironmentFile value written with / (or quoted wrongly) must still find
+    # terminal64.exe; a path with its backslashes stripped never does.
+    monkeypatch.delenv("MT5_INIT_TIMEOUT_MS", raising=False)
+    Terminal(mt5, "C:/Program Files/MetaTrader 5/terminal64.exe").status()
+    assert mt5.state.initialize_calls[-1]["path"] == r"C:\Program Files\MetaTrader 5\terminal64.exe"
 
 
 def test_every_data_route_needs_the_token(client):
