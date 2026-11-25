@@ -22,6 +22,7 @@
 #     axe-companion-user-knowledge-sync 40 5 * * *
 #     axe-companion-paper-stops         */2 * * * *
 #     axe-companion-trailing-stops      */2 * * * *
+#     axe-companion-bridge-quotes       * * * * *   (runs ~55 s: live prices for MT5-bridge accounts)
 #
 #   host cron (this file) — jobs that are NOT in cron.job:
 #     congress-trades-sync              20 6 * * *
