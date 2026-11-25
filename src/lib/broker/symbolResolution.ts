@@ -50,8 +50,8 @@ export const SYMBOL_ALIASES: Record<string, string[]> = {
   NVDA: ["NVDA"],
   PLTR: ["PLTR"],
   TSLA: ["TSLA"],
-  WTI: ["WTI", "USOIL", "XTIUSD"],
-  BRENT: ["BRENT", "UKOIL", "XBRUSD"],
+  WTI: ["WTI", "USOIL", "XTIUSD", "USOUSD"],
+  BRENT: ["BRENT", "UKOIL", "XBRUSD", "UKOUSD"],
   NASDAQ: ["NASDAQ", "NAS100", "US100", "USTEC", "NDX100", "NAS"],
   NAS100: ["NAS100", "US100", "NASDAQ", "USTEC", "NDX100", "NAS"],
   US100: ["US100", "NAS100", "NASDAQ", "USTEC", "NDX100", "NAS"],
@@ -79,8 +79,10 @@ const DISPLAY_PREF_BY_ALIAS_BASE: Record<string, string> = {
   WS30: "US30",
   USOIL: "WTI",
   XTIUSD: "WTI",
+  USOUSD: "WTI",
   UKOIL: "BRENT",
   XBRUSD: "BRENT",
+  UKOUSD: "BRENT",
 };
 
 export type SymbolResolutionResult = {
@@ -101,6 +103,52 @@ function baseOf(sym: string): string {
 
 function canonicalKey(sym: string): string {
   return baseOf(sym);
+}
+
+/** The decorations brokers put around a name (".micro" → MICRO), always allowed. */
+const KNOWN_DECORATIONS = new Set(
+  [...COMMON_SUFFIXES, ...COMMON_PREFIXES].map((d) => d.replace(/[^A-Z0-9]/gi, "").toUpperCase()).filter(Boolean),
+);
+
+const CURRENCY_CODES = new Set([
+  "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "HKD", "SGD", "CNH",
+  "ZAR", "SEK", "NOK", "DKK", "PLN", "MXN", "TRY", "HUF", "CZK",
+]);
+
+/**
+ * True when `symbol` is `alias` with at most a short broker decoration around
+ * it: EURUSD.c, #AAPL, GOLDm, BTCUSD.nx, USOIL.c. Not when the extra part is a
+ * currency (BTCEUR.nx is bitcoin in euros, AAPLEUR.nx Apple in euros), and
+ * never for a short alias inside a longer name: on 25 Nov 2026 the old
+ * "contains" match gave UKOUSD the Coca-Cola stock (KO) and USOUSD Dominion
+ * Energy (D) on Luka's Upcomers account, so the watchlist showed stock prices
+ * as oil.
+ */
+export function isDecoratedForm(symbol: string, alias: string): boolean {
+  const s = baseOf(symbol);
+  const a = baseOf(alias);
+  if (!s || !a) return false;
+  if (s === a) return true;
+  if (a.length < 3) return false;
+  let rest: string | null = null;
+  if (s.startsWith(a)) rest = s.slice(a.length);
+  else if (s.endsWith(a)) rest = s.slice(0, s.length - a.length);
+  if (rest == null) return false;
+  if (KNOWN_DECORATIONS.has(rest)) return true;
+  if (CURRENCY_CODES.has(rest.slice(0, 3))) {
+    // BTC + USD (BTCUSD.nx) and NAS100 + USD are the same instrument in
+    // dollars; any other currency, or a second currency after a pair, is not.
+    if (rest.slice(0, 3) !== "USD" || CURRENCY_CODES.has(a.slice(-3))) return false;
+    rest = rest.slice(3);
+    if (!rest || KNOWN_DECORATIONS.has(rest)) return true;
+  }
+  return rest.length <= 4;
+}
+
+/** True when `brokerSymbol` can stand for `displaySymbol` (one of its aliases, decorated or not). */
+export function brokerSymbolMatchesDisplay(displaySymbol: string, brokerSymbol: string): boolean {
+  if (!brokerSymbol.trim()) return false;
+  return displaySymbolAliases(displaySymbol).some((alias) => isDecoratedForm(brokerSymbol, alias));
 }
 
 export function displaySymbolAliases(symbol: string): string[] {
@@ -200,12 +248,10 @@ export function candidateBrokerSymbols(requestedDisplaySymbol: string, knownSymb
     if (aliasBases.has(symbolBase)) push(symbol);
   }
 
+  // Broker names with a decoration this list does not know (USOIL.spot, #EURUSD.v).
+  // Only decorated forms: a plain "contains" also matched KO inside UKOUSD.
   for (const symbol of known) {
-    const symbolBase = baseOf(symbol);
-    for (const alias of aliases) {
-      const aliasBase = baseOf(alias);
-      if (symbolBase.includes(aliasBase) || aliasBase.includes(symbolBase)) push(symbol);
-    }
+    if (aliases.some((alias) => isDecoratedForm(symbol, alias))) push(symbol);
   }
 
   return attempted.slice(0, 48);
@@ -245,7 +291,10 @@ export function resolveBrokerSymbol(
 
   const requestBase = baseOf(request);
   for (const candidate of attempted) {
-    if (known.includes(candidate)) {
+    // A candidate the account offers is used only when it is really this
+    // instrument: a pattern suffix learned from BTCEUR.nx must not turn
+    // BTCUSD into bitcoin-in-euros.
+    if (known.includes(candidate) && brokerSymbolMatchesDisplay(request, candidate)) {
       return {
         brokerSymbol: candidate,
         displaySymbol: request,

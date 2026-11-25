@@ -5,6 +5,7 @@ import {
   type MetaApiSymbolPrice,
 } from "@/lib/mt5/metaApiClient";
 import {
+  brokerSymbolMatchesDisplay,
   candidateBrokerSymbols,
   cleanDisplaySymbol,
   detectSymbolPatterns,
@@ -67,10 +68,20 @@ function uniqueSymbols(symbols: string[]): string[] {
 export function getMetadataSymbolMap(meta: Record<string, unknown> | null | undefined): Record<string, string> {
   const raw = meta?.symbol_map;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const out: Record<string, string> = {};
+  const entries: Array<{ key: string; display: string; broker: string }> = [];
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof v === "string" && v.trim()) out[cleanDisplaySymbol(k) || k.toUpperCase()] = v.trim();
+    if (typeof v !== "string" || !v.trim()) continue;
+    const display = cleanDisplaySymbol(k) || k.toUpperCase();
+    // A mapping saved by the old "contains" match (UKOUSD → KO, the Coca-Cola
+    // stock) is not this instrument: drop it so it is resolved again.
+    if (!brokerSymbolMatchesDisplay(display, v.trim())) continue;
+    entries.push({ key: k.trim().toUpperCase(), display, broker: v.trim() });
   }
+  // Several saved keys can clean to one display (BRENT, UKOIL.C, UKOUSD). The
+  // key that already is that display wins; among the rest, the first.
+  const out: Record<string, string> = {};
+  for (const e of entries) if (e.key === e.display) out[e.display] = e.broker;
+  for (const e of entries) out[e.display] ??= e.broker;
   return out;
 }
 
@@ -120,9 +131,12 @@ export function buildBrokerSymbolRuntimeMetadata(input: {
     ...(input.displaySymbols ?? []).map((s) => cleanDisplaySymbol(s) || s.toUpperCase()),
   ]);
   const map: Record<string, string> = { ...existingMap };
-  const report: Record<string, BrokerSymbolReportEntry> = {
-    ...getMetadataSymbolReport(input.existingMetadata),
-  };
+  const report: Record<string, BrokerSymbolReportEntry> = {};
+  for (const [display, entry] of Object.entries(getMetadataSymbolReport(input.existingMetadata))) {
+    // Same rule as the map: a report row naming another instrument goes.
+    if (entry?.brokerSymbol && !brokerSymbolMatchesDisplay(display, entry.brokerSymbol)) continue;
+    report[display] = entry;
+  }
 
   for (const display of displaySymbols) {
     const cached = map[display];
