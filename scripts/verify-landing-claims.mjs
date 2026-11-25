@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP, TRADING_OS_FOUNDER_TIER } from "../src/lib/billing/tiers.ts";
+import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP } from "../src/lib/billing/tiers.ts";
 import { INTEL_ACTION_SOURCE } from "../src/lib/intel/intelSources.ts";
 import {
   ECOSYSTEM_APPS,
@@ -212,8 +212,6 @@ check("no stale price is hardcoded anywhere on the page", () => {
   const prices = new Set(
     AXE_BILLING_TIERS.map((t) => t.priceEurMonthly).filter((p) => p !== null && p !== 0),
   );
-  prices.add(TRADING_OS_FOUNDER_TIER.priceEurMonthly);
-  prices.add(TRADING_OS_FOUNDER_TIER.axeFounderPriceEurMonthly);
   for (const [, amount] of landing.matchAll(/€(\d+)/g)) {
     const n = Number(amount);
     const known = prices.has(n) || n === 0;
@@ -224,7 +222,7 @@ check("no stale price is hardcoded anywhere on the page", () => {
 
 check("every billed tier is on the page, including Elite", () => {
   const ids = AXE_BILLING_TIERS.map((t) => t.id);
-  assert.deepEqual(ids, ["free", "pro", "founder", "elite"]);
+  assert.deepEqual(ids, ["free", "core", "pro", "founder", "elite"]);
   for (const tier of AXE_BILLING_TIERS) {
     assert.ok(landing.includes(`€{tier.priceEurMonthly`) || landing.includes("tier.priceEurMonthly"), "price field");
     assert.ok(
@@ -232,6 +230,19 @@ check("every billed tier is on the page, including Elite", () => {
       `tier ${tier.id} must be renderable`,
     );
   }
+});
+
+check("Free is desk-only; the phone OS starts at Core", () => {
+  assert.ok(!/Start free on the full mobile OS/i.test(landing), "Free is not the full mobile OS");
+  assert.ok(
+    !/Companion itself is available now via Start free/i.test(landing),
+    "Start free is desk-only, not Companion on the phone",
+  );
+  const pricing = read("src/components/marketing/landing/LandingPricing.tsx");
+  assert.match(pricing, /xl:grid-cols-5|lg:grid-cols-5/, "five tiers need a five-column layout at desktop");
+  assert.match(pricing, /coreTier/, "daily-chat facts must read Core from the tier map");
+  assert.equal(AXE_BILLING_TIERS.find((t) => t.id === "core")?.liveAccountsCap, 1);
+  assert.equal(AXE_BILLING_TIERS.find((t) => t.id === "core")?.dailyChatCap, 50);
 });
 
 check("the founder seat cap is read, not retyped, and 0/100 is not hardcoded", () => {
@@ -344,15 +355,15 @@ check("the page claims the systems that actually run", () => {
   assert.match(landing, /LandingBehaviorMap/);
 });
 
-check("Founder is €40/mo limited to the seat cap, in copy and checkout", () => {
+check("Founder is €59/mo limited to the seat cap, in copy and checkout", () => {
   const founder = AXE_BILLING_TIERS.find((t) => t.id === "founder");
-  assert.equal(founder?.priceEurMonthly, 40);
+  assert.equal(founder?.priceEurMonthly, 59);
   assert.equal(FOUNDER_SEAT_CAP, 100);
   assert.equal(founder?.badge, "100 spots");
   assert.match(founder?.headline ?? "", /limited to 100/);
   assert.ok(
-    (founder?.extraBenefits ?? []).some((line) => /€40\/mo/.test(line)),
-    "checkout/tier copy must name €40/mo",
+    (founder?.extraBenefits ?? []).some((line) => /€59\/mo/.test(line)),
+    "checkout/tier copy must name €59/mo",
   );
   assert.ok(landing.includes("LANDING_CHECKOUT_HREF"), "paid CTAs must use the checkout href");
   assert.match(landing, /founderPrice/);

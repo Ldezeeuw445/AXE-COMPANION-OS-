@@ -55,6 +55,10 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   // all. Gating it behind a plan would mean nobody could ever reach one.
   waitlist: "Public landing-page signup; there is no user to charge yet",
 
+  // The list of actions Trading OS may show (names and runtimes, no market or
+  // account data). Each action still runs through its own gated route.
+  "actions/catalog": "Lists actions only; running one goes through that action's own gate",
+
   // Telling AXE what your own account's rules are is how the guard protects
   // you. Charging for that would be charging for the brakes.
   "preferences/account-rules": "Stating your own account's trading rules",

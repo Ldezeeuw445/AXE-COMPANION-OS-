@@ -1,16 +1,20 @@
 /**
  * AXE Companion pricing — product source of truth for UI, entitlements, and Stripe.
  *
+ * Prices (Luka, 2026-11-22 — Trading OS and AXE Companion become one subscription):
+ *   Free €0 (desk only) · Core €29 · Pro €39 · Founder €59 (100 seats) · Elite €89.
+ *   Existing subscribers keep the price they signed up at (Stripe keeps their price).
+ *
  * Copy-only clarity rules (customer feedback 2026-10-29):
- * - Do NOT change prices or which features sit in which tier.
+ * - Do NOT change which features sit in which tier without Luka.
  * - Translate internal tech (RAG, vector, provider names) into customer value.
  * - Mark Elite items that are not shipping today as Roadmap.
  *
  * Signed off by Luka (2026-10-29):
  * - Fair-use soft ceilings: Pro 200/day, Founder & Elite 500/day (friendly notice, not a hard surprise block).
- * - Live broker accounts: Free 1, Pro 3, Founder 5, Elite 10.
+ * - Live broker accounts: Free 1, Core 1, Pro 3, Founder 5, Elite 10. Core: 50 AXE sends/day.
  * - MetaApi cloud connection is included in the subscription (no AXE surcharge).
- * - Founder: keep €40 forever while continuously subscribed; badge survives cancel;
+ * - Founder: keep €59 forever while continuously subscribed; badge survives cancel;
  *   returning later pays the normal rate (not the Founder lock).
  * - Demo session: honest placeholder until a 60–90s recording lands in public/marketing/.
  *
@@ -72,19 +76,20 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     dailyChatCap: 20,
     fairUseSoftCapPerDay: null,
     liveAccountsCap: 1,
-    headline: "Start with the full mobile OS — capped chat and core tools.",
+    headline: "Trading OS on your desk — free, with capped AXE chat.",
     includes: [
+      "Trading OS desk terminal",
       "1 live broker account (MT5 via MetaApi, or Alpaca when configured)",
       "Unlimited demo / paper accounts",
       "Basic charting",
       "Basic journal (manual — not AXE auto-journal)",
-      "Weekly market snapshot",
       "Up to 20 AXE queries per day",
       "Basic indicators",
       "Basic news feed (included — no own API keys)",
-      "Basic market data",
+      "1 custom workspace",
     ],
     restrictions: [
+      "No AXE Companion on your phone",
       "No Cockpit learning",
       "No trade preparation",
       "No proactive notifications",
@@ -94,30 +99,49 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     ],
   },
   {
+    id: "core",
+    label: "Core",
+    priceEurMonthly: 29,
+    dailyChatCap: 50,
+    fairUseSoftCapPerDay: null,
+    liveAccountsCap: 1,
+    stripePriceIdEnv: "STRIPE_PRICE_CORE",
+    stripePaymentLinkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_CORE",
+    headline: "Desk and phone — the full workflow with a daily AXE allowance.",
+    includes: [
+      "Everything in Free",
+      "AXE Companion on your phone",
+      "Up to 50 AXE queries per day",
+      "Full Cockpit access, Learning Arc and trade preparation",
+      "Chart actions",
+      "Push notifications",
+      "Up to 20 price alerts",
+      "Full auto journal",
+      "Daily + weekly briefing",
+      "1 live broker account",
+      "Up to 5 custom workspaces",
+    ],
+    restrictions: ["No unlimited AXE chat", "No multi-account management"],
+  },
+  {
     id: "pro",
     label: "Pro",
-    priceEurMonthly: 20,
+    priceEurMonthly: 39,
     dailyChatCap: null,
     fairUseSoftCapPerDay: 200,
     liveAccountsCap: 3,
     stripePriceIdEnv: "STRIPE_PRICE_PRO",
     stripePaymentLinkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_PRO",
     badge: "Recommended",
-    headline: "Full AXE Companion — unlimited chat and the complete workflow stack.",
+    headline: "Full desk and phone — unlimited AXE chat and the complete workflow stack.",
     includes: [
-      "Everything in Free",
+      "Everything in Core",
       "Unlimited AXE queries — fair use soft ceiling 200 sends/day (plenty for daily trading; friendly notice at the limit)",
-      "Full Cockpit access",
-      "Learning Arc",
-      "Trade preparation",
-      "Chart actions",
       "Pair awareness",
       "Trading space context",
-      "Push notifications",
-      "Full auto journal",
       "Full indicator suite",
       "Up to 3 live broker accounts",
-      "Daily + 1 weekly briefing",
+      "Unlimited alerts and custom workspaces",
       "Persistent memory of your journal, rules and chat",
       "AXE remembers your trading context across sessions",
       "Advanced news & intelligence (included; no extra keys for default feed)",
@@ -127,7 +151,7 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
   {
     id: "founder",
     label: "Founder",
-    priceEurMonthly: 40,
+    priceEurMonthly: 59,
     dailyChatCap: null,
     fairUseSoftCapPerDay: 500,
     liveAccountsCap: 5,
@@ -142,14 +166,13 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     ],
     extraBenefits: [
       "Founder badge (kept even if you cancel)",
-      "Keep your Founder price (€40/mo) forever while you stay subscribed",
+      "Keep your Founder price (€59/mo) forever while you stay subscribed",
       "Priority support",
       "Early access features",
       "Founder Discord access",
       "Direct product feedback channel",
       "Roadmap voting access",
       "Closed beta feature access",
-      "Trading OS Founder pricing eligibility (€69/mo vs €79/mo) while subscribed",
     ],
     notes: [
       "Maximum 100 Founder memberships.",
@@ -160,7 +183,7 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
   {
     id: "elite",
     label: "Elite",
-    priceEurMonthly: 50,
+    priceEurMonthly: 89,
     dailyChatCap: null,
     fairUseSoftCapPerDay: 500,
     liveAccountsCap: 10,
@@ -182,58 +205,17 @@ export const AXE_BILLING_TIERS: AxeBillingTier[] = [
     ],
     notes: [
       "No Founder badge or Founder status.",
-      "No Trading OS Founder pricing eligibility.",
       "Available only after all 100 Founder spots are taken.",
       "Roadmap items are not current benefits — they ship when ready.",
     ],
   },
 ];
 
-/**
- * Core (€29, the Trading OS + Companion bundle's entry tier). Granted through
- * `axe_user_entitlements.plan = 'core'`. Not listed in AXE_BILLING_TIERS on
- * purpose: it has no Stripe price yet, so the pricing page and the upgrade grid
- * do not offer it. Limits match the database (axe_chat_daily_limit = 50) and
- * Trading OS (`PLAN_LIMITS.core` in @axe/trading-core).
- */
-export const CORE_TIER: AxeBillingTier = {
-  id: "core",
-  label: "Core",
-  priceEurMonthly: 29,
-  dailyChatCap: 50,
-  fairUseSoftCapPerDay: null,
-  liveAccountsCap: 1,
-  headline: "Desk and phone — the full workflow with a daily AXE allowance.",
-  includes: [
-    "Everything in Free",
-    "Up to 50 AXE queries per day",
-    "Full Cockpit access, Learning Arc and trade preparation",
-    "Chart actions",
-    "Push notifications, up to 20 alerts",
-    "Full auto journal",
-    "Daily + weekly briefing",
-    "1 live broker account",
-    "Trading OS desk and AXE Companion on your phone",
-  ],
-  restrictions: ["No unlimited AXE chat", "No multi-account management"],
-};
-
-/** Future Trading OS SKUs — not sold in Companion checkout yet. */
-export const TRADING_OS_FOUNDER_TIER = {
-  label: "Trading OS Founder",
-  priceEurMonthly: 79,
-  axeFounderPriceEurMonthly: 69,
-  includes: [
-    "Full Trading OS terminal",
-    "All intelligence modules",
-    "Multi-chart layouts",
-    "QuantLab, Intel Center, News & Macro terminals",
-    "Sentiment suite & wallet integration",
-  ],
-} as const;
+/** One subscription covers both apps: every paid plan includes the Trading OS desk and AXE Companion on the phone. */
+export const ONE_SUBSCRIPTION_NOTE =
+  "One subscription for both apps: Trading OS on your desk and AXE Companion on your phone, on the same login.";
 
 export function tierById(id: AxePlanId): AxeBillingTier {
-  if (id === "core") return CORE_TIER;
   return AXE_BILLING_TIERS.find((t) => t.id === id) ?? AXE_BILLING_TIERS[0];
 }
 

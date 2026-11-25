@@ -6,7 +6,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Badge } from "@/components/ui/Badge";
 import {
   AXE_BILLING_TIERS,
-  TRADING_OS_FOUNDER_TIER,
+  ONE_SUBSCRIPTION_NOTE,
   type AxeBillingTier,
   type AxePlanId,
 } from "@/lib/billing/tiers";
@@ -22,8 +22,14 @@ type Props = {
   founderReturnNotice?: string | null;
 };
 
-function tierVisible(tier: AxeBillingTier, catalog: BillingCatalogState): boolean {
+function tierVisible(
+  tier: AxeBillingTier,
+  catalog: BillingCatalogState,
+  billingReady: Partial<Record<AxePlanId, boolean>>,
+): boolean {
   if (tier.id === "free") return true;
+  // Core shows once its Stripe payment link is configured; never as a dead card.
+  if (tier.id === "core") return billingReady.core === true;
   if (tier.id === "pro") return true;
   if (tier.id === "founder") return catalog.founderAvailable;
   if (tier.id === "elite") return catalog.eliteAvailable;
@@ -38,7 +44,7 @@ export function UpgradeTierGrid({
   billingReady,
   founderReturnNotice = null,
 }: Props) {
-  const visibleTiers = AXE_BILLING_TIERS.filter((t) => tierVisible(t, catalog));
+  const visibleTiers = AXE_BILLING_TIERS.filter((t) => tierVisible(t, catalog, billingReady));
 
   return (
     <div className="space-y-4">
@@ -82,15 +88,11 @@ export function UpgradeTierGrid({
       <GlassPanel className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-            Trading OS · coming soon
+            Trading OS · included
           </h3>
-          <Badge variant="warm">Separate product</Badge>
+          <Badge variant="long">Same subscription</Badge>
         </div>
-        <p className="mt-2 text-xs leading-relaxed text-tos-muted">
-          {TRADING_OS_FOUNDER_TIER.label} — €{TRADING_OS_FOUNDER_TIER.priceEurMonthly}/mo full desktop
-          terminal. Active AXE Founder members qualify for €{TRADING_OS_FOUNDER_TIER.axeFounderPriceEurMonthly}
-          /mo Founder pricing (not available on Pro or Elite).
-        </p>
+        <p className="mt-2 text-xs leading-relaxed text-tos-muted">{ONE_SUBSCRIPTION_NOTE}</p>
       </GlassPanel>
     </div>
   );

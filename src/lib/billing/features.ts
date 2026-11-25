@@ -1,4 +1,10 @@
-import { isAxePlanId, isPaidAxePlan, type AxePlanId } from "@/lib/billing/tiers";
+import {
+  AXE_PLAN_IDS,
+  isAxePlanId,
+  isPaidAxePlan,
+  planDisplayLabel,
+  type AxePlanId,
+} from "@/lib/billing/tiers";
 
 /** Companion capabilities gated behind Pro / Founder / Elite. */
 export type AxeFeature =
@@ -59,5 +65,8 @@ export function hasAxeFeature(plan: string | null | undefined, feature: AxeFeatu
 }
 
 export function requiredPlanLabelForFeature(feature: AxeFeature): string {
-  return PRO_FEATURES.has(feature) ? "Pro" : "Free";
+  for (const plan of AXE_PLAN_IDS) {
+    if (hasAxeFeature(plan, feature)) return planDisplayLabel(plan);
+  }
+  return "Free";
 }

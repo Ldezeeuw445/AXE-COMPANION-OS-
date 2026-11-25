@@ -74,7 +74,7 @@ export const LANDING_DISCIPLINE = {
   kicker: "Behavior map",
   title: "Execution discipline, from your fills.",
   body:
-    "Cockpit (Pro) builds a behavior map from your MT5 fills — sessions, instruments, the rules you keep. Fills arrive on the ten-minute MetaApi sync, not tick by tick. Alignment is a Cockpit score, labelled as example chrome on this page.",
+    "Cockpit (Core) builds a behavior map from your MT5 fills — sessions, instruments, the rules you keep. Fills arrive on the ten-minute MetaApi sync, not tick by tick. Alignment is a Cockpit score, labelled as example chrome on this page.",
   aside:
     "The background watcher fires price, drawdown and trailing-stop alerts. Firm rule presets (FTMO models, Upcomers Oracle, and others by name) live in Settings, and AXE autonomy has a daily-limit guard before any automatic order.",
   quote:
@@ -132,7 +132,7 @@ export const LANDING_SHOWCASE: ReadonlyArray<{
   {
     step: "03 · Cockpit",
     title: "It reads your fills.",
-    body: "A behavior map from MT5 fills on the ten-minute sync. Alignment is a Cockpit score for Pro and above — example chrome on this page, live numbers in your own workspace. Daily and weekly briefings are part of that stack.",
+    body: "A behavior map from MT5 fills on the ten-minute sync. Alignment is a Cockpit score for Core and above — example chrome on this page, live numbers in your own workspace. Daily and weekly briefings are part of that stack.",
     href: "#cockpit",
     cta: "See your Cockpit",
     image: "/landing/photos/482_1x_shots_so.png",
@@ -388,7 +388,7 @@ export const COMPANION_FEATURES: ReadonlyArray<{
   },
   {
     title: "Journal from your fills",
-    desc: "Trades land from the broker on the ten-minute sync. You tap an outcome, attach a voice note, a photo or a chart snapshot. Pro also runs AXE auto-journal labels on closed trades. Win rate and calendar come from those rows.",
+    desc: "Trades land from the broker on the ten-minute sync. You tap an outcome, attach a voice note, a photo or a chart snapshot. Core also runs AXE auto-journal labels on closed trades. Win rate and calendar come from those rows.",
     icon: "journal",
   },
   {
@@ -408,7 +408,7 @@ export const COMPANION_FEATURES: ReadonlyArray<{
   },
   {
     title: "Learning Arc and Cockpit",
-    desc: "Pro and above: Cockpit, Learning Arc, trade prep, chart actions, daily and weekly briefings. Alignment is a Cockpit score from your own workspace, not a generic FIT gauge.",
+    desc: "Core and above: Cockpit, Learning Arc, trade prep, chart actions, daily and weekly briefings. Alignment is a Cockpit score from your own workspace, not a generic FIT gauge.",
     icon: "arc",
   },
   {
@@ -422,7 +422,7 @@ export const LANDING_TOS_BRIDGE = {
   kicker: "with Trading OS",
   title: "The desk Companion plugs into.",
   body:
-    "These belong to Trading OS, the desktop terminal — not to the phone OS. Same login, same account, when the desk is what you need.",
+    "These belong to Trading OS, the desktop terminal — not to the phone OS. Same login, same account, same subscription, when the desk is what you need.",
   features: [
     "Multi-chart layouts and a command palette",
     "QuantLab, Intel Center, News and Macro terminals",
@@ -462,7 +462,7 @@ export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: "Do push notifications, auto-journal labels, AXE memory or the watcher work?",
-    a: "Yes. Price alerts evaluate in the app. Push notification delivery is live. Pro auto-journals closed trades. AXE memory, journal, rules and chat context persist across sessions on paid plans. The background watcher fires price, drawdown and trailing-stop alerts. Daily and weekly briefings, the AXE Feed, Cockpit and Learning Arc (Pro) run on that same stack.",
+    a: "Yes. Price alerts evaluate in the app. Push notification delivery is live. Core auto-journals closed trades. AXE memory, journal, rules and chat context persist across sessions on paid plans. The background watcher fires price, drawdown and trailing-stop alerts. Daily and weekly briefings, the AXE Feed, Cockpit and Learning Arc (Core) run on that same stack.",
   },
   {
     q: "Is my data private?",
@@ -489,7 +489,7 @@ export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
 export const LANDING_FINAL_CTA = {
   titleLead: "One account.",
   titleAccent: "One trading brain.",
-  body: "Start with AXE Companion today — Trading OS terminal access widens through the same waitlist when you want the desk.",
+  body: "Start free on the Trading OS desk. Core unlocks AXE Companion on your phone — same login, one subscription.",
 } as const;
 
 /** Off by default. Flip NEXT_PUBLIC_LANDING_TESTIMONIALS=1 when real, reviewed quotes exist. */

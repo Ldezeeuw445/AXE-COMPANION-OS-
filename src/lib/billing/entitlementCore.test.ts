@@ -8,7 +8,7 @@ import {
   isPaidShaped,
 } from "./entitlementCore";
 import { hasEntitlementFeature } from "./access";
-import type { AxeFeature } from "./features";
+import { requiredPlanLabelForFeature, type AxeFeature } from "./features";
 import { FEATURE_ENFORCEMENT } from "./featureEnforcement";
 
 const ALL_FEATURES = Object.keys(FEATURE_ENFORCEMENT) as AxeFeature[];
@@ -144,4 +144,12 @@ test("an anonymous core row is held to Free", () => {
   const ent = applyAnonymousRule(entitlementFromRow({ plan: "core" }), true);
   assert.equal(ent.plan, "free");
   assert.equal(hasEntitlementFeature(ent, "cockpit_learning"), false);
+});
+
+test("requiredPlanLabelForFeature names Core for Core features and Pro for the rest", () => {
+  assert.equal(requiredPlanLabelForFeature("cockpit_learning"), "Core");
+  assert.equal(requiredPlanLabelForFeature("briefings"), "Core");
+  assert.equal(requiredPlanLabelForFeature("full_auto_journal"), "Core");
+  assert.equal(requiredPlanLabelForFeature("unlimited_chat"), "Pro");
+  assert.equal(requiredPlanLabelForFeature("multi_account"), "Pro");
 });

@@ -2,7 +2,16 @@
  * One-shot Stripe catalog for AXE Companion billing tiers.
  *
  * Creates (or reuses) Products + recurring EUR prices + Payment Links for:
- *   Pro €20/mo · Founder €40/mo · Elite €50/mo
+ *   Core €29/mo · Pro €39/mo · Founder €59/mo · Elite €89/mo
+ *   (one subscription for Trading OS + AXE Companion, Luka 2026-11-22)
+ *
+ * When a tier's price changes, a new price + payment link is created on the
+ * same product, and the old payment links for that tier are deactivated so
+ * nobody can still buy at the old price. Existing subscriptions keep their
+ * price; nothing is archived or migrated.
+ *
+ * Only some tiers (e.g. just Core, without touching the rest):
+ *   STRIPE_SETUP_ONLY=core node scripts/setup-stripe-billing.mjs
  *
  * Optionally registers the production webhook endpoint and prints env vars
  * for IONOS `.env.local`.
@@ -21,10 +30,18 @@ import Stripe from "stripe";
 
 const TIERS = [
   {
+    id: "core",
+    label: "AXE Core",
+    description: "Trading OS desk + AXE Companion on your phone — 50 AXE queries a day, 1 live account, 20 alerts with push.",
+    amountEur: 2900,
+    priceEnv: "STRIPE_PRICE_CORE",
+    linkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_CORE",
+  },
+  {
     id: "pro",
     label: "AXE Companion Pro",
     description: "Full AXE Companion — unlimited chat and complete workflow stack.",
-    amountEur: 2000,
+    amountEur: 3900,
     priceEnv: "STRIPE_PRICE_PRO",
     linkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_PRO",
     legacyLinkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK",
@@ -33,7 +50,7 @@ const TIERS = [
     id: "founder",
     label: "AXE Companion Founder",
     description: "Everything in Pro plus permanent Founder status (limited to 100).",
-    amountEur: 4000,
+    amountEur: 5900,
     priceEnv: "STRIPE_PRICE_FOUNDER",
     linkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_FOUNDER",
   },
@@ -41,7 +58,7 @@ const TIERS = [
     id: "elite",
     label: "AXE Companion Elite",
     description: "Everything in Pro with premium support and early access.",
-    amountEur: 5000,
+    amountEur: 8900,
     priceEnv: "STRIPE_PRICE_ELITE",
     linkEnv: "NEXT_PUBLIC_STRIPE_PAYMENT_LINK_ELITE",
   },
@@ -137,6 +154,8 @@ async function ensureTier(stripe, tier, successUrl) {
     console.log(`  ✓ payment link ${tier.id}: ${paymentLink.url}`);
   }
 
+  await deactivateStaleLinks(stripe, tier, price.id);
+
   return {
     priceId: price.id,
     paymentLinkUrl: paymentLink.url,
@@ -144,6 +163,21 @@ async function ensureTier(stripe, tier, successUrl) {
     linkEnv: tier.linkEnv,
     legacyLinkEnv: tier.legacyLinkEnv,
   };
+}
+
+/** Payment links for this tier that sell any other price: switch them off (they stay in Stripe's history). */
+async function deactivateStaleLinks(stripe, tier, currentPriceId) {
+  const links = await stripe.paymentLinks.list({ limit: 100, active: true });
+  for (const link of links.data) {
+    if (link.metadata?.axe_plan !== tier.id) continue;
+    const full = await stripe.paymentLinks.retrieve(link.id, { expand: ["line_items"] });
+    const priceIds = (full.line_items?.data ?? []).map((item) =>
+      typeof item.price === "string" ? item.price : item.price?.id,
+    );
+    if (priceIds.includes(currentPriceId)) continue;
+    await stripe.paymentLinks.update(link.id, { active: false });
+    console.log(`  - old payment link ${tier.id} switched off: ${link.url}`);
+  }
 }
 
 async function ensureWebhook(stripe, webhookUrl) {
@@ -207,8 +241,18 @@ async function main() {
 
   await ensureBillingPortal(stripe);
 
+  const only = (process.env.STRIPE_SETUP_ONLY ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const tiers = only.length ? TIERS.filter((t) => only.includes(t.id)) : TIERS;
+  if (only.length && tiers.length === 0) {
+    console.error(`STRIPE_SETUP_ONLY=${only.join(",")} matches no tier (known: ${TIERS.map((t) => t.id).join(", ")}).`);
+    process.exit(1);
+  }
+
   const envLines = [];
-  for (const tier of TIERS) {
+  for (const tier of tiers) {
     console.log(`\n${tier.label}`);
     const result = await ensureTier(stripe, tier, successUrl);
     envLines.push(`${result.priceEnv}=${result.priceId}`);

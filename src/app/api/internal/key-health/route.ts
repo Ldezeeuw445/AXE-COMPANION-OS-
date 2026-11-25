@@ -129,7 +129,7 @@ function vercelChecks(): Array<Promise<Check>> {
   const finnhub = getFinnhubKey();
   const eodhd = getEodhdKey();
 
-  const stripePrices = (["STRIPE_PRICE_PRO", "STRIPE_PRICE_FOUNDER", "STRIPE_PRICE_ELITE"] as const).map((n) =>
+  const stripePrices = (["STRIPE_PRICE_CORE", "STRIPE_PRICE_PRO", "STRIPE_PRICE_FOUNDER", "STRIPE_PRICE_ELITE"] as const).map((n) =>
     httpCheck(
       { name: `Stripe price ${n.replace("STRIPE_PRICE_", "").toLowerCase()}`, area: "billing", env: [n, "STRIPE_SECRET_KEY"] },
       stripe && env(n) ? stripe : null,

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP } from "@/lib/billing/tiers";
+import { AXE_BILLING_TIERS, FOUNDER_SEAT_CAP, tierById } from "@/lib/billing/tiers";
 import { LANDING_CHECKOUT_HREF } from "@/lib/marketing/landingCopy";
 import type { BillingCatalogState } from "@/lib/billing/types";
 import { LEGAL_COPY } from "@/lib/legal/constants";
@@ -13,19 +13,21 @@ type Props = {
 export function LandingPricing({ catalog }: Props) {
   const founderUsed = catalog?.founderSeatsUsed;
   const founderCap = catalog?.founderSeatsCap ?? FOUNDER_SEAT_CAP;
-  const founderTier = AXE_BILLING_TIERS.find((tier) => tier.id === "founder");
-  const founderPrice = founderTier?.priceEurMonthly ?? 40;
+  const founderPrice = tierById("founder").priceEurMonthly ?? 59;
+  const freeTier = tierById("free");
+  const coreTier = tierById("core");
+  const proTier = tierById("pro");
 
   return (
     <section id="pricing" className="relative z-10 scroll-mt-24 border-t border-white/[0.04] px-5 py-14 md:py-20">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-7xl">
         <h2 className="mb-3 text-center text-3xl font-bold text-white md:text-4xl">Simple pricing.</h2>
         <p className="mx-auto mb-10 max-w-2xl text-center text-sm text-tos-muted">
-          Start free on the full mobile OS — upgrade when you need unlimited AXE and the complete workflow
-          stack.
+          Start free on the Trading OS desk. Core unlocks AXE Companion on your phone — upgrade further
+          for unlimited AXE and more live accounts.
         </p>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {AXE_BILLING_TIERS.map((tier) => {
             const highlight = tier.badge === "Recommended";
             const lines = [
@@ -36,7 +38,7 @@ export function LandingPricing({ catalog }: Props) {
             return (
               <div
                 key={tier.id}
-                className={`axe-landing-card-glow flex flex-col p-6 ${highlight ? "ring-1 ring-cyan-400/25" : ""}`}
+                className={`axe-landing-card-glow flex min-w-0 flex-col p-5 ${highlight ? "ring-1 ring-cyan-400/25" : ""}`}
               >
                 <div className="flex flex-wrap items-center gap-1.5">
                   <h3
@@ -107,12 +109,16 @@ export function LandingPricing({ catalog }: Props) {
           </p>
           <ul className="mt-3 list-disc space-y-1.5 pl-4">
             <li>
-              <strong className="font-medium text-white/85">Broker accounts:</strong> Free{" "}
-              <strong className="font-medium text-white/85">1</strong> live, Pro{" "}
-              <strong className="font-medium text-white/85">3</strong>, Founder{" "}
-              <strong className="font-medium text-white/85">5</strong>, Elite{" "}
-              <strong className="font-medium text-white/85">10</strong> — plus unlimited demo/paper on
-              every plan.
+              <strong className="font-medium text-white/85">Broker accounts:</strong>{" "}
+              {AXE_BILLING_TIERS.map((tier, i) => (
+                <span key={tier.id}>
+                  {i > 0 ? ", " : null}
+                  {tier.label}{" "}
+                  <strong className="font-medium text-white/85">{tier.liveAccountsCap}</strong>
+                  {i === 0 ? " live" : null}
+                </span>
+              ))}{" "}
+              — plus unlimited demo/paper on every plan.
             </li>
             <li>
               <strong className="font-medium text-white/85">Brokers that work today:</strong> MT5 via
@@ -125,11 +131,18 @@ export function LandingPricing({ catalog }: Props) {
               connection. Your broker may still charge its own fees.
             </li>
             <li>
-              <strong className="font-medium text-white/85">Unlimited — fair use:</strong> paid plans have
-              no hard daily chat cut-off. Soft ceilings: Pro{" "}
-              <strong className="font-medium text-white/85">200</strong> AXE sends/day, Founder &amp; Elite{" "}
-              <strong className="font-medium text-white/85">500</strong>/day — plenty for daily trading. At
-              the limit we show a friendly notice, not a hard surprise block. Free stays at 20/day.
+              <strong className="font-medium text-white/85">Daily AXE chat:</strong> {freeTier.label}{" "}
+              <strong className="font-medium text-white/85">{freeTier.dailyChatCap}</strong>/day,{" "}
+              {coreTier.label}{" "}
+              <strong className="font-medium text-white/85">{coreTier.dailyChatCap}</strong>/day
+              (hard caps). {proTier.label} has no hard cut-off — fair-use soft ceiling{" "}
+              <strong className="font-medium text-white/85">{proTier.fairUseSoftCapPerDay}</strong>
+              /day, Founder &amp; Elite{" "}
+              <strong className="font-medium text-white/85">
+                {tierById("founder").fairUseSoftCapPerDay}
+              </strong>
+              /day — plenty for daily trading. At the limit we show a friendly notice, not a hard
+              surprise block.
             </li>
             <li>
               <strong className="font-medium text-white/85">Founder:</strong> €{founderPrice}/mo, limited
@@ -171,7 +184,8 @@ export function LandingPricing({ catalog }: Props) {
         <div className="mx-auto mt-14 max-w-2xl" id="waitlist">
           <p className="mb-3 text-center text-xs text-tos-dim">
             Waitlist is for <strong className="font-medium text-white/70">Trading OS</strong> (desktop
-            terminal) and other coming-soon surfaces — Companion itself is available now via Start free.
+            terminal) private beta and other coming-soon surfaces. Free is desk-only; AXE Companion on
+            your phone starts at Core.
           </p>
           <LandingWaitlist />
         </div>

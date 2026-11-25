@@ -57,7 +57,7 @@ export default async function SubscriptionsPage() {
     }
   }
 
-  const paidTiers: AxePlanId[] = ["pro", "founder", "elite"];
+  const paidTiers: AxePlanId[] = ["core", "pro", "founder", "elite"];
   const founderPriceOk = isEligibleForFounderPrice(entitlement);
   const checkoutLinks = Object.fromEntries(
     paidTiers.map((id) => {
@@ -121,7 +121,7 @@ export default async function SubscriptionsPage() {
       />
       <AxeTopBarInjector
         title="Subscriptions"
-        subtitle={entitlement.isPaid ? `You’re on ${entitlement.label}` : "Free → Pro → Founder → Elite"}
+        subtitle={entitlement.isPaid ? `You’re on ${entitlement.label}` : "Free → Core → Pro → Founder → Elite"}
         sections={toolbarSections}
         center={
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
@@ -149,7 +149,7 @@ export default async function SubscriptionsPage() {
             {entitlement.plan === "free"
               ? "Legacy active period on file."
               : entitlement.plan === "founder"
-                ? "Founder status is permanent — including Trading OS Founder pricing eligibility."
+                ? "Founder status is permanent — keep the Founder price while you stay subscribed."
                 : "Thank you for supporting AXE."}
           </p>
           {entitlement.stripeCustomerId ? (
