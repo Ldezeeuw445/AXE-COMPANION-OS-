@@ -62,6 +62,26 @@ class Terminal:
             self._ensure()
             return getattr(self.mt5, fn_name)(*args, **kwargs)
 
+    def order_send(self, request: dict) -> Any:
+        """Send one trade request.
+
+        MetaTrader5 5.0.6180 (on the box, 25 Nov 2026) refuses the request as one
+        dict ("Unnamed arguments not allowed", error -2) and takes its fields as
+        keywords; order_check takes both. The documented form is the dict, so a
+        call the package rejects before sending anything (TypeError, or error -2)
+        is tried once more as the dict. A request is never sent twice: -2 means
+        the arguments were refused, not that an order went out.
+        """
+        with self.lock:
+            self._ensure()
+            try:
+                result = self.mt5.order_send(**request)
+            except TypeError:
+                return self.mt5.order_send(request)
+            if result is None and (self.mt5.last_error() or (0,))[0] == -2:
+                return self.mt5.order_send(request)
+            return result
+
     def status(self) -> dict:
         with self.lock:
             try:

@@ -183,7 +183,7 @@ def create_app(mt5: Any = None, terminal: Optional[Terminal] = None) -> FastAPI:
             if action == "ORDER_CANCEL" and not found:
                 raise mapping.BadRequest(f"Order {body.get('orderId')} not found")
         request = mapping.trade_request(mt5, body, **kwargs)
-        result = term.call("order_send", request)
+        result = term.order_send(request)
         return mapping.trade_result(mt5, result, None if result is not None else mt5.last_error())
 
     return app

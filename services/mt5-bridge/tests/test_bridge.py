@@ -153,6 +153,45 @@ def test_market_buy_uses_ask_and_ioc(client, mt5, monkeypatch):
     assert req["type_filling"] == fake_mt5.ORDER_FILLING_IOC
 
 
+def _order_send_like(mt5, monkeypatch, accepts):
+    """A package whose order_send takes only `accepts` ("fields" or "dict")."""
+    calls, err = [], [(1, "Success")]
+
+    def order_send(*args, **kwargs):
+        form = "dict" if args else "fields"
+        calls.append(form)
+        if form != accepts:
+            err[0] = (-2, "Unnamed arguments not allowed")
+            return None
+        mt5.state.sent.append(args[0] if args else kwargs)
+        return fake_mt5.NS(retcode=fake_mt5.TRADE_RETCODE_DONE, comment="Request executed", order=9001, deal=0)
+
+    monkeypatch.setattr(mt5, "order_send", order_send)
+    monkeypatch.setattr(mt5, "last_error", lambda: err[0])
+    return calls
+
+
+def test_a_trade_request_goes_as_keyword_fields_like_mt5_5_0_6180(client, mt5, monkeypatch):
+    # 25 Nov 2026 on the box: order_send(dict) -> None, (-2, "Unnamed arguments not allowed").
+    monkeypatch.setenv("MT5_BRIDGE_TRADING", "on")
+    calls = _order_send_like(mt5, monkeypatch, "fields")
+    r = client.post(BASE + "/trade", headers=H, json={
+        "actionType": "ORDER_TYPE_BUY_LIMIT", "symbol": "EURUSD", "volume": 0.01, "openPrice": 1.04,
+    })
+    assert r.json()["stringCode"] == "TRADE_RETCODE_DONE" and r.json()["orderId"] == "9001"
+    assert calls == ["fields"]
+    [req] = mt5.state.sent
+    assert req["price"] == 1.04 and req["type"] == fake_mt5.ORDER_TYPE_BUY_LIMIT
+
+
+def test_a_package_that_wants_the_dict_still_gets_it_once(client, mt5, monkeypatch):
+    monkeypatch.setenv("MT5_BRIDGE_TRADING", "on")
+    calls = _order_send_like(mt5, monkeypatch, "dict")
+    r = client.post(BASE + "/trade", headers=H, json={"actionType": "ORDER_TYPE_BUY", "symbol": "XAUUSD", "volume": 0.01})
+    assert r.json()["stringCode"] == "TRADE_RETCODE_DONE"
+    assert calls == ["fields", "dict"] and len(mt5.state.sent) == 1
+
+
 def test_full_close_sells_a_buy_at_the_bid(client, mt5, monkeypatch):
     monkeypatch.setenv("MT5_BRIDGE_TRADING", "on")
     client.post(BASE + "/trade", headers=H, json={"actionType": "POSITION_CLOSE_ID", "positionId": "501"})
