@@ -14,6 +14,7 @@ import {
   classifyClientApiError,
   classifyHttpStatus,
   classifyMetaApiProvisioningError,
+  isAlreadyDeploying,
   type Mt5CloudErrorCode,
 } from "@/lib/mt5/metaApiErrors";
 import {
@@ -283,11 +284,17 @@ async function provisioningPostAccountOperation(
   );
   const body = await readJson(res);
   if (!res.ok) {
+    // Already starting: that is what we asked for. 23 Nov 2026: putting the new
+    // password on an existing account makes MetaApi redeploy it by itself, and
+    // our own redeploy right after came back 400 "can not be redeployed ...
+    // because it is in the process of being deployed" — every reconnect failed.
+    if (res.status === 400 && isAlreadyDeploying(body)) return { state: "DEPLOYING" } as MetaApiTradingAccount;
     const code = res.status === 404 ? "not_found" : classifyHttpStatus(res.status);
     throw new MetaApiRequestError(code, `${operation} account failed (${res.status})`, res.status, body);
   }
   return (body ?? {}) as MetaApiTradingAccount;
 }
+
 
 /**
  * Put the trader's current credentials on an existing MetaApi account

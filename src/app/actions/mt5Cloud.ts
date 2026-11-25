@@ -21,9 +21,13 @@ import {
   userMessageForCode,
   isOperatorFault,
   upstreamMessage,
+  unknownFailureDetail,
+  unknownMessageWithDetail,
+  isNoAnswerInTime,
   type Mt5CloudErrorCode,
 } from "@/lib/mt5/metaApiErrors";
 import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
+import { recordMt5ConnectFailure } from "@/lib/mt5/recordMt5Failure";
 import {
   clientGetAccountInformation,
   clientGetHistoryDealsRange,
@@ -174,6 +178,11 @@ const PROVISIONING_POLL_INTERVAL_MS = 1_500;
 const PROVISIONING_POLL_BUDGET_MS = 10_000;
 const PROVISIONING_PROBE_STEP_TIMEOUT_MS = 4_000;
 const TEST_PROVISIONING_TIMEOUT_MS = 20_000;
+// Putting a new password on an account: MetaApi needs longer than a lookup.
+// Lookup, update, redeploy and poll together stay under about 80 s, so the
+// trader gets an answer instead of a form that hangs.
+const UPDATE_ACCOUNT_TIMEOUT_MS = 30_000;
+const REDEPLOY_AFTER_UPDATE_BUDGET_MS = 20_000;
 const TEST_ACCOUNT_INFO_TIMEOUT_MS = 35_000;
 const RECOVERY_OPERATION_TIMEOUT_MS = 70_000;
 const RECOVERY_POLL_BUDGET_MS = 60_000;
@@ -370,7 +379,9 @@ export async function createCloudMt5ConnectionAction(
       }
       await provisioningUploadProfileFile(provisioningProfileId, "servers.dat", bytes);
     } catch (e) {
-      return mapMetaError(e);
+      const failed = mapMetaError(e);
+      await recordMt5ConnectFailure({ userId: user.id, step: "provisioning_profile", code: failed.code, error: e, server: mt5Server, region });
+      return failed;
     }
   }
 
@@ -432,9 +443,24 @@ export async function createCloudMt5ConnectionAction(
       await withActionBudget(
         "update_existing_metaapi_account",
         provisioningUpdateAccount(metaId, { name: label, password: mt5Password, server: mt5Server }),
-        TEST_PROVISIONING_TIMEOUT_MS,
+        UPDATE_ACCOUNT_TIMEOUT_MS,
       );
-      await ensureMetaApiAccountDeployment(metaId, existingMetaAccount, { credentialsChanged: true });
+      // The new password is on the account and MetaApi redeploys it by itself;
+      // our redeploy only makes sure. 23 Nov 2026 MetaApi left that call
+      // unanswered for 60 s while it was already redeploying, and the whole
+      // connect failed although nothing was wrong. A slow answer is not a
+      // failure: the row is saved as provisioning below and the poll and the
+      // Test action take it from there. Any real error still stops here.
+      try {
+        await withActionBudget(
+          "redeploy_after_update",
+          ensureMetaApiAccountDeployment(metaId, existingMetaAccount, { credentialsChanged: true }),
+          REDEPLOY_AFTER_UPDATE_BUDGET_MS,
+        );
+      } catch (e) {
+        if (!isNoAnswerInTime(e)) throw e;
+        console.warn("[mt5Cloud] redeploy after password update not answered in time; saving as provisioning");
+      }
     } else {
       const created = await provisioningCreateMt5CloudAccount({
         login: mt5Login,
@@ -447,7 +473,16 @@ export async function createCloudMt5ConnectionAction(
       metaId = created.id;
     }
   } catch (e) {
-    return mapMetaError(e);
+    const failed = mapMetaError(e);
+    await recordMt5ConnectFailure({
+      userId: user.id,
+      step: existingMetaAccount ? "update_existing_account" : "create_account",
+      code: failed.code,
+      error: e,
+      server: mt5Server,
+      region,
+    });
+    return failed;
   }
 
   // Block briefly so the user doesn't see a green "connected" badge before
@@ -1683,10 +1718,15 @@ function mapMetaError(e: unknown): { ok: false; code: Mt5CloudErrorCode; message
         return { ok: false, code: alt, message: userMessageForCode(alt, upstream) };
       }
     }
+    if (code === "unknown") {
+      console.error("[mt5Cloud] unknown MetaApi failure:", unknownFailureDetail(e));
+      return { ok: false, code, message: unknownMessageWithDetail(e) };
+    }
     return { ok: false, code, message: userMessageForCode(code, upstream) };
   }
   if (e instanceof Error && e.name === "AbortError") {
     return { ok: false, code: "metaapi_timeout", message: userMessageForCode("metaapi_timeout") };
   }
-  return { ok: false, code: "unknown", message: userMessageForCode("unknown") };
+  console.error("[mt5Cloud] unknown failure:", unknownFailureDetail(e));
+  return { ok: false, code: "unknown", message: unknownMessageWithDetail(e) };
 }

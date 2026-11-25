@@ -450,7 +450,7 @@ export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
   {
     q: "Which market intelligence is actually live?",
-    a: "Charting, depth, and the news chain (Polygon → Perigon → Finnhub → EODHD, plus FRED macro) are live, and so is every intel feed, from free sources: SEC EDGAR insider filings, congressional STOCK Act disclosures from Alpha Vantage (House and Senate), dark-pool prints from FINRA's daily off-exchange volume, options flow and market tide from CBOE's delayed option chains, GDELT event data, flight and vessel tracking. None of these need a paid Unusual Whales subscription, which we have not bought. When one source is down, only its panel says so, with the reason, and shows its last good rows marked cached.",
+    a: "Charting, depth, and the news chain (Polygon → Perigon → Finnhub → EODHD, plus FRED macro) are live, and so is every intel feed, from free sources: SEC EDGAR insider filings, congressional STOCK Act disclosures from Alpha Vantage (House and Senate), dark-pool prints from FINRA's daily off-exchange volume, options flow and market tide from Nasdaq's delayed option chains, GDELT event data, flight and vessel tracking. None of these need a paid Unusual Whales subscription, which we have not bought. When one source is down, only its panel says so, with the reason, and shows its last good rows marked cached.",
   },
   {
     q: "How does MT5 connect?",

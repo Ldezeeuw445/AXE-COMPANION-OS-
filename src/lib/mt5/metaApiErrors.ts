@@ -93,6 +93,68 @@ export function upstreamMessage(payload: unknown): string | null {
   return null;
 }
 
+/**
+ * What actually went wrong behind an "unknown", in a few words.
+ *
+ * 22 Nov 2026: Luka's connect failed with "Something went wrong talking to
+ * MetaApi. Try again or check server logs. unknown", and nothing anyone could
+ * read said why. The server logs need SSH; the trader has no way to see them.
+ * An HTTP status MetaApi gave (429, 500, 503) or a network failure
+ * ("fetch failed", ENOTFOUND) is not a secret and is the whole diagnosis, so it
+ * goes in the message. Never the request: no password, no token.
+ */
+export function unknownFailureDetail(e: unknown): string | null {
+  if (!e || typeof e !== "object") return typeof e === "string" && e.trim() ? cleanDetail(e) : null;
+  const err = e as { name?: unknown; message?: unknown; status?: unknown; payload?: unknown; cause?: unknown };
+  const status = typeof err.status === "number" && err.status > 0 ? err.status : null;
+  if ("payload" in err && status != null) {
+    const up = upstreamMessage(err.payload);
+    return cleanDetail(`MetaApi ${status}${up ? `: ${up}` : ""}`);
+  }
+  const name = typeof err.name === "string" && err.name ? err.name : "Error";
+  const msg = typeof err.message === "string" ? err.message : "";
+  const cause = err.cause && typeof err.cause === "object" ? (err.cause as { code?: unknown }).code : null;
+  const text = `${name}${msg ? `: ${msg}` : ""}${typeof cause === "string" ? ` (${cause})` : ""}`;
+  return cleanDetail(text);
+}
+
+function cleanDetail(t: string): string | null {
+  const out = t
+    // MetaApi names the platform's own MetaApi user ("for user Lu..uw <suppo..p.com>");
+    // that is ours, not the trader's, and has no place in their message.
+    .replace(/\s+for user [^<(]*<[^>]*>/gi, "")
+    .replace(/<[^>]*@[^>]*>|\S+@\S+\.\w+/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+  return out || null;
+}
+
+/** The "unknown" message with what went wrong, so it can be acted on without server logs. */
+export function unknownMessageWithDetail(e: unknown): string {
+  const detail = unknownFailureDetail(e);
+  return detail ? `${USER_MESSAGES.unknown} (${detail})` : USER_MESSAGES.unknown;
+}
+
+/**
+ * MetaApi's 400 for a deploy or redeploy while the account is already deploying.
+ * 23 Nov 2026: "Account … can not be redeployed … because it is in the process
+ * of being deployed" — that is the state we asked for, not a failure.
+ */
+export function isAlreadyDeploying(payload: unknown): boolean {
+  const msg = (upstreamMessage(payload) ?? "").toLowerCase();
+  return /in the process of being deployed|is being deployed|already (being )?deploy/.test(msg);
+}
+
+/**
+ * MetaApi did not answer in time: our own fetch was aborted, or the action's
+ * budget ran out first. Says nothing about whether MetaApi did the work.
+ */
+export function isNoAnswerInTime(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  return e.name === "AbortError" || e.name === "TimeoutError" || e.name === "Mt5ActionTimeoutError";
+}
+
 export function classifyMetaApiProvisioningError(payload: unknown): Mt5CloudErrorCode {
   if (!payload || typeof payload !== "object") return "unknown";
   const p = payload as Record<string, unknown>;
