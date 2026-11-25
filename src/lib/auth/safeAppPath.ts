@@ -21,6 +21,13 @@ const ALLOWED = new Set([
   "/watchlist",
   "/positions",
   "/history",
+  "/vault",
+  "/market",
+  "/actions",
+  "/wallets",
+  "/trading-team",
+  "/onboarding",
+  "/admin",
 ]);
 
 export const DEFAULT_AFTER_LOGIN = "/chat";
