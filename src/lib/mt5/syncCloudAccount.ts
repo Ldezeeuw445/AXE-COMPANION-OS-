@@ -45,6 +45,7 @@ import {
   notRunningMessage,
 } from "@/lib/mt5/accountDeployment";
 import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
+import { syncBrokerHubFromAccountRow } from "@/lib/broker/hub/sync";
 
 export type CloudMt5SyncResult =
   | { ok: true; data: { dealsFetched: number; dealsUpserted: number; tradesNormalized: number } }
@@ -198,6 +199,25 @@ export async function runCloudMt5Sync(
   userId: string,
   accountId: string,
   opts: RunCloudMt5SyncOptions = {},
+): Promise<CloudMt5SyncResult> {
+  const result = await runCloudMt5SyncOnce(supabase, userId, accountId, opts);
+  // The hub columns (hub_status, hub_permissions) follow provider_status, but
+  // only connect and disconnect used to set them. A sync never did, so on
+  // 25 Nov 2026 Luka's Upcomers account read hub_status "disconnected" for
+  // hours while every sync succeeded, and Trading OS, which trusts that
+  // column, showed the whole account as unavailable. Every sync that reached
+  // the account now brings them in line; a failed one reads "error".
+  if (result.ok || (result.code !== "validation" && result.code !== "provider_not_configured")) {
+    await syncBrokerHubFromAccountRow(supabase, accountId).catch(() => undefined);
+  }
+  return result;
+}
+
+async function runCloudMt5SyncOnce(
+  supabase: SupabaseClient,
+  userId: string,
+  accountId: string,
+  opts: RunCloudMt5SyncOptions,
 ): Promise<CloudMt5SyncResult> {
   if (!getMetaApiToken()) {
     return { ok: false, code: "provider_not_configured", message: userMessageForCode("provider_not_configured") };
