@@ -425,10 +425,10 @@ export default async function SettingsPage() {
         <PlanStatusLine label={entitlementLabel} founderBadge={founderBadge} />
         <p className="mt-1 text-xs text-tos-muted">
           {entitlementPlan === "founder"
-            ? "Founder status is permanent — full Companion access plus Trading OS Founder pricing while you stay subscribed."
+            ? "Founder status is permanent — full Companion access and your Founder price while you stay subscribed."
             : founderBadge
               ? "Your Founder badge stays. Features come with a plan — see Subscriptions to pick one."
-              : "Free includes core tools with a daily chat cap. Pro unlocks Cockpit learning, trade prep, and unlimited chat."}
+              : "Free is desk-only with a daily chat cap. Core unlocks the phone OS, Cockpit learning and trade prep. Pro adds unlimited chat."}
         </p>
         <Link
           href="/upgrade"

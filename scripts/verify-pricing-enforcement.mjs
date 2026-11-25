@@ -24,10 +24,12 @@ console.log("pricing enforcement");
 
 check("tier caps match signed pricing (live + chat soft ceilings)", () => {
   assert.equal(liveAccountsCapForPlan("free"), 1);
+  assert.equal(liveAccountsCapForPlan("core"), 1);
   assert.equal(liveAccountsCapForPlan("pro"), 3);
   assert.equal(liveAccountsCapForPlan("founder"), 5);
   assert.equal(liveAccountsCapForPlan("elite"), 10);
   assert.equal(enforcedDailyChatLimit("free"), 20);
+  assert.equal(enforcedDailyChatLimit("core"), 50);
   assert.equal(enforcedDailyChatLimit("pro"), 200);
   assert.equal(enforcedDailyChatLimit("founder"), 500);
   assert.equal(enforcedDailyChatLimit("elite"), 500);
@@ -83,6 +85,13 @@ check("grandfather: at-cap user can reconnect excluded id", () => {
 check("AXE_BILLING_TIERS still list MetaApi as included (no surcharge copy)", () => {
   const free = AXE_BILLING_TIERS.find((t) => t.id === "free");
   assert.ok(free?.includes.some((line) => /MetaApi/i.test(line)));
+});
+
+check("key-health probes every billed Stripe price, including Core", () => {
+  const src = read("src/app/api/internal/key-health/route.ts");
+  for (const env of ["STRIPE_PRICE_CORE", "STRIPE_PRICE_PRO", "STRIPE_PRICE_FOUNDER", "STRIPE_PRICE_ELITE"]) {
+    assert.ok(src.includes(`"${env}"`), `key-health must check ${env}`);
+  }
 });
 
 console.log(`\n${passed} checks passed`);

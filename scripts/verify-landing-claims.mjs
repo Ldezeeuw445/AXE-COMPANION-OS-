@@ -232,6 +232,19 @@ check("every billed tier is on the page, including Elite", () => {
   }
 });
 
+check("Free is desk-only; the phone OS starts at Core", () => {
+  assert.ok(!/Start free on the full mobile OS/i.test(landing), "Free is not the full mobile OS");
+  assert.ok(
+    !/Companion itself is available now via Start free/i.test(landing),
+    "Start free is desk-only, not Companion on the phone",
+  );
+  const pricing = read("src/components/marketing/landing/LandingPricing.tsx");
+  assert.match(pricing, /xl:grid-cols-5|lg:grid-cols-5/, "five tiers need a five-column layout at desktop");
+  assert.match(pricing, /coreTier/, "daily-chat facts must read Core from the tier map");
+  assert.equal(AXE_BILLING_TIERS.find((t) => t.id === "core")?.liveAccountsCap, 1);
+  assert.equal(AXE_BILLING_TIERS.find((t) => t.id === "core")?.dailyChatCap, 50);
+});
+
 check("the founder seat cap is read, not retyped, and 0/100 is not hardcoded", () => {
   assert.ok(landing.includes("{FOUNDER_SEAT_CAP}"), "print the cap from the constant");
   assert.equal(FOUNDER_SEAT_CAP, 100);
