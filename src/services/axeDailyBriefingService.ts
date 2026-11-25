@@ -46,6 +46,7 @@ import {
 import type { MarketContext } from "@/lib/market/marketTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterUsersWithFeature } from "@/services/entitledUsers";
+import { runBatchWithinBudget } from "@/lib/briefing/cronBudget";
 
 // ─── Timezone helpers ─────────────────────────────────────────────────────────
 
@@ -970,15 +971,18 @@ export async function runDailyBriefingCron(): Promise<{
   processed: number;
   failed: number;
   latency_ms: number;
+  /** Traders left for the next tick because the time budget ran out. */
+  deferred: number;
 }> {
   const startTime = Date.now();
   let processed = 0;
   let failed = 0;
+  let deferred = 0;
 
   const supabase = createServiceRoleSupabaseClient();
   if (!supabase) {
     console.error("[Briefing] Service role client unavailable — aborting cron");
-    return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
+    return { processed: 0, failed: 0, deferred: 0, latency_ms: Date.now() - startTime };
   }
 
   // Pre-generate at 06:00 local; catch-up 07:00–11:00 if that run missed
@@ -989,21 +993,24 @@ export async function runDailyBriefingCron(): Promise<{
   });
   console.log(`[Briefing] Daily cron starting for ${traders.length} traders`);
 
-  for (const traderId of traders) {
-    try {
-      await generateMorningBrief(traderId, supabase, { weekly: false });
-      processed++;
-    } catch (error) {
-      console.error(`[Briefing] Failed for trader ${traderId}, retrying:`, error);
-      try {
-        await new Promise((r) => setTimeout(r, 1500));
-        await generateMorningBrief(traderId, supabase, { weekly: false });
-        processed++;
-      } catch (retryError) {
-        console.error(`[Briefing] Retry failed for trader ${traderId}:`, retryError);
-        failed++;
-      }
-    }
+  const batch = await runBatchWithinBudget(
+    traders,
+    (traderId) => generateMorningBrief(traderId, supabase, { weekly: false }).then(() => undefined),
+    {
+      onError: (traderId, error, attempt) =>
+        console.error(
+          attempt === 1
+            ? `[Briefing] Failed for trader ${traderId}, retrying:`
+            : `[Briefing] Retry failed for trader ${traderId}:`,
+          error,
+        ),
+    },
+  );
+  processed = batch.processed;
+  failed = batch.failed;
+  deferred = batch.deferred;
+  if (deferred > 0) {
+    console.log(`[Briefing] cron budget reached: ${deferred} traders deferred to the next tick`);
   }
 
   const latency_ms = Date.now() - startTime;
@@ -1011,7 +1018,7 @@ export async function runDailyBriefingCron(): Promise<{
     `[Briefing] Daily cron complete: ${processed} processed, ${failed} failed in ${latency_ms}ms`
   );
 
-  return { processed, failed, latency_ms };
+  return { processed, failed, deferred, latency_ms };
 }
 
 // ─── Weekly cron entry point ──────────────────────────────────────────────────
@@ -1020,15 +1027,18 @@ export async function runWeeklyBriefingCron(): Promise<{
   processed: number;
   failed: number;
   latency_ms: number;
+  /** Traders left for the next tick because the time budget ran out. */
+  deferred: number;
 }> {
   const startTime = Date.now();
   let processed = 0;
   let failed = 0;
+  let deferred = 0;
 
   const supabase = createServiceRoleSupabaseClient();
   if (!supabase) {
     console.error("[Briefing] Service role client unavailable — aborting cron");
-    return { processed: 0, failed: 0, latency_ms: Date.now() - startTime };
+    return { processed: 0, failed: 0, deferred: 0, latency_ms: Date.now() - startTime };
   }
 
   // Monday 06:00 local (+ catch-up through 11:00) — weekly outlook for paid tiers.
@@ -1040,21 +1050,24 @@ export async function runWeeklyBriefingCron(): Promise<{
   });
   console.log(`[Briefing] Weekly cron starting for ${traders.length} traders`);
 
-  for (const traderId of traders) {
-    try {
-      await generateMorningBrief(traderId, supabase, { weekly: true });
-      processed++;
-    } catch (error) {
-      console.error(`[Briefing] Weekly failed for trader ${traderId}, retrying:`, error);
-      try {
-        await new Promise((r) => setTimeout(r, 1500));
-        await generateMorningBrief(traderId, supabase, { weekly: true });
-        processed++;
-      } catch (retryError) {
-        console.error(`[Briefing] Weekly retry failed for trader ${traderId}:`, retryError);
-        failed++;
-      }
-    }
+  const batch = await runBatchWithinBudget(
+    traders,
+    (traderId) => generateMorningBrief(traderId, supabase, { weekly: true }).then(() => undefined),
+    {
+      onError: (traderId, error, attempt) =>
+        console.error(
+          attempt === 1
+            ? `[Briefing] Weekly failed for trader ${traderId}, retrying:`
+            : `[Briefing] Weekly retry failed for trader ${traderId}:`,
+          error,
+        ),
+    },
+  );
+  processed = batch.processed;
+  failed = batch.failed;
+  deferred = batch.deferred;
+  if (deferred > 0) {
+    console.log(`[Briefing] Weekly cron budget reached: ${deferred} traders deferred to the next tick`);
   }
 
   const latency_ms = Date.now() - startTime;
@@ -1062,7 +1075,7 @@ export async function runWeeklyBriefingCron(): Promise<{
     `[Briefing] Weekly cron complete: ${processed} processed, ${failed} failed in ${latency_ms}ms`
   );
 
-  return { processed, failed, latency_ms };
+  return { processed, failed, deferred, latency_ms };
 }
 
 export type { TraderBriefingContext as BriefingContext };
