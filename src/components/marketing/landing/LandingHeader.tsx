@@ -5,7 +5,8 @@ import { AppSwitcher } from "@/components/marketing/AppSwitcher";
 import { LandingNavGlow } from "@/components/marketing/landing/LandingNavGlow";
 
 const NAV = [
-  { href: "#product", label: "Product" },
+  { href: "#features", label: "Product" },
+  { href: "#intel", label: "Intel" },
   { href: "#pricing", label: "Pricing" },
   { href: "#faq", label: "FAQ" },
 ] as const;

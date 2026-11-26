@@ -23,7 +23,7 @@ export function LandingPricing({ catalog }: Props) {
       <div className="mx-auto max-w-7xl">
         <h2 className="mb-3 text-center text-3xl font-bold text-white md:text-4xl">Simple pricing.</h2>
         <p className="mx-auto mb-10 max-w-2xl text-center text-sm text-tos-muted">
-          Start free on the Trading OS desk. Core unlocks AXE Companion on your phone — upgrade further
+          Start free on the Trading OS desk (in beta). Core unlocks AXE Companion on your phone — upgrade further
           for unlimited AXE and more live accounts.
         </p>
 
@@ -67,8 +67,8 @@ export function LandingPricing({ catalog }: Props) {
                     <span className="text-sm font-normal text-tos-dim">/mo</span>
                   ) : null}
                 </p>
-                <p className="mt-1.5 text-[11.5px] leading-snug text-tos-dim">{tier.headline}</p>
-                <p className="mt-1 text-[11.5px] leading-snug text-tos-dim">
+                <p className="mt-1.5 text-[12px] leading-snug text-white/65">{tier.headline}</p>
+                <p className="mt-1 text-[12px] leading-snug text-white/55">
                   {tier.dailyChatCap === null
                     ? `Unlimited AXE chat — fair use soft ceiling ${tier.fairUseSoftCapPerDay}/day (plenty for daily trading)`
                     : `${tier.dailyChatCap} AXE sends per day`}
@@ -181,12 +181,7 @@ export function LandingPricing({ catalog }: Props) {
           {LEGAL_COPY.tradingShort} {LEGAL_COPY.pricing}
         </p>
 
-        <div className="mx-auto mt-14 max-w-2xl" id="waitlist">
-          <p className="mb-3 text-center text-xs text-tos-dim">
-            Waitlist is for <strong className="font-medium text-white/70">Trading OS</strong> (desktop
-            terminal) private beta and other coming-soon surfaces. Free is desk-only; AXE Companion on
-            your phone starts at Core.
-          </p>
+        <div className="mx-auto mt-14 max-w-2xl">
           <LandingWaitlist />
         </div>
 
