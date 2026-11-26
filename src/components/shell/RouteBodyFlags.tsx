@@ -13,15 +13,21 @@ export function RouteBodyFlags() {
   const pathname = usePathname();
   const isChart = pathname === "/chart" || pathname.startsWith("/chart/");
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
+  const isHome =
+    pathname === "/cockpit" ||
+    pathname.startsWith("/cockpit/") ||
+    pathname.startsWith("/marketing/home-probe");
 
   useLayoutEffect(() => {
     document.body.classList.toggle("tos-route-chart", isChart);
     document.body.classList.toggle("tos-route-chat", isChat);
+    document.body.classList.toggle("tos-route-home", isHome);
     return () => {
       document.body.classList.remove("tos-route-chart");
       document.body.classList.remove("tos-route-chat");
+      document.body.classList.remove("tos-route-home");
     };
-  }, [isChart, isChat]);
+  }, [isChart, isChat, isHome]);
 
   return null;
 }

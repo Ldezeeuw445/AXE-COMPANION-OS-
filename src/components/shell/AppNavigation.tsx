@@ -7,8 +7,8 @@ import {
   BarChart3,
   Bell,
   BookOpen,
-  Brain,
   Briefcase,
+  Home,
   CreditCard,
   Layers,
   LineChart,
@@ -61,7 +61,7 @@ const NAV: NavItem[] = [
   { href: "/vault", label: "Vault", Icon: Vault },
   { href: "/actions", label: "Actions", Icon: Briefcase },
   { href: "/trading-team", label: "Team", Icon: Briefcase },
-  { href: "/cockpit", label: "Cockpit", Icon: Brain },
+  { href: "/cockpit", label: "Home", Icon: Home },
   { href: "/upgrade", label: "Subscriptions", Icon: CreditCard },
   { href: "/settings", label: "Settings", Icon: Settings },
 ];

@@ -13,6 +13,8 @@ import { CockpitIntelSection } from "@/components/cockpit/CockpitIntelSection";
 import { CockpitMorningBrief } from "@/components/cockpit/CockpitMorningBrief";
 import { CockpitEngineStatus } from "@/components/cockpit/CockpitEngineStatus";
 import { CockpitAdaptiveSuggestions } from "@/components/adaptive/CockpitAdaptiveSuggestions";
+import { HomeDashboard } from "@/components/home/HomeDashboard";
+import { CockpitLearningSection } from "@/components/home/CockpitLearningSection";
 import { PageTitleInjector } from "@/components/shell/PageTitleInjector";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
@@ -26,6 +28,7 @@ import type { UserAxeEntitlement } from "@/lib/billing/types";
 import { getCockpitDashboard } from "@/services/cockpitService";
 import { getUserKnowledgeOverview, type UserKnowledgeOverview } from "@/services/userKnowledgeReadService";
 import { loadAdaptiveSuggestions } from "@/lib/adaptive/server";
+import { loadHomePageData } from "@/lib/home/loadHomePageData";
 import type { AdaptiveSuggestionState } from "@/types/adaptive";
 
 const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
@@ -40,7 +43,7 @@ const EMPTY_ENTITLEMENT: UserAxeEntitlement = {
 };
 
 export default async function CockpitPage() {
-  const dash = await getCockpitDashboard();
+  const [dash, home] = await Promise.all([getCockpitDashboard(), loadHomePageData()]);
   const supabase = await createServerSupabaseClient();
   let entitlement = EMPTY_ENTITLEMENT;
   let userId: string | undefined;
@@ -85,6 +88,17 @@ export default async function CockpitPage() {
   return (
     <div className="axe-stagger-enter flex flex-col gap-5 pb-2">
       <ActiveSessionSeed userId={userId ?? null} lastTab="home" />
+      <PageTitleInjector title="Home" />
+      <HomeDashboard data={home} />
+
+      <CockpitLearningSection
+        badge={
+          cockpitCalibrated ? "Calibrated" : cockpitPreview ? "Early snapshot" : "Learning"
+        }
+        alignmentScore={hasSnapshot && canLearn ? dash.alignment.score : null}
+        signalCount={dash.calibration.signalCount}
+        message={dash.calibration.message}
+      >
       <ActiveSessionChip />
       <LiveStatusReporter
         liveCount={hasSnapshot ? 1 : 0}
@@ -107,14 +121,6 @@ export default async function CockpitPage() {
         }
         scope="cockpit"
       />
-      <PageTitleInjector title="Cockpit" />
-      <div className="-mt-1 border-l-2 border-tos-warm/35 pl-3.5">
-        <p className="text-[13px] leading-relaxed text-tos-text/95">
-          A quiet read on the same brain you message in Chat — pacing, doubt,
-          and what stuck after feedback.
-        </p>
-      </div>
-
       <CockpitAutoRefresh shouldRefresh={dash.shouldAutoRefresh} />
 
       {userId ? <CockpitIntelSection userId={userId} /> : null}
@@ -273,6 +279,7 @@ export default async function CockpitPage() {
           </div>
         </>
       )}
+      </CockpitLearningSection>
     </div>
   );
 }

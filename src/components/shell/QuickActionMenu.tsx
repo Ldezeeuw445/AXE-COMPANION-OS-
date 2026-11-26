@@ -14,8 +14,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   BookOpen,
-  Brain,
   Briefcase,
+  Home,
   CreditCard,
   LineChart,
   MessageSquare,
@@ -39,7 +39,7 @@ const ACTIONS = [
   { href: "/journal", label: "Journal", Icon: BookOpen },
   { href: "/market", label: "Market", Icon: Sparkles },
   { href: "/vault", label: "Vault", Icon: Vault },
-  { href: "/cockpit", label: "Cockpit", Icon: Brain },
+  { href: "/cockpit", label: "Home", Icon: Home },
   { href: "/upgrade", label: "Upgrade", Icon: CreditCard },
   { href: "/settings", label: "Settings", Icon: Settings },
 ] as const;
